@@ -76,6 +76,19 @@ class TestClaudeCodeBackend:
         assert isinstance(parser, ClaudeStreamParser)
         assert parser.completion_marker == expected
 
+    def test_stream_parser_factory_returns_fresh_products(self) -> None:
+        factory = ClaudeCodeBackend().stream_parser_factory("%%DONE%%")
+        first = factory()
+        second = factory()
+
+        assert isinstance(first, ClaudeStreamParser)
+        assert isinstance(second, ClaudeStreamParser)
+        assert first is not second
+
+    def test_parent_candidate_normalizer_is_callable(self) -> None:
+        normalizer = ClaudeCodeBackend().parent_candidate_normalizer("%%DONE%%")
+        assert callable(normalizer)
+
     def test_result_parser_returns_result_parser(self) -> None:
         backend = ClaudeCodeBackend()
         result = backend.result_parser()

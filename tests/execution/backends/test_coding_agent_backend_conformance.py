@@ -156,6 +156,19 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         parser = self.backend.stream_parser(completion_marker="%%DONE%%")
         assert parser.completion_marker == "%%DONE%%"  # type: ignore[attr-defined]
 
+    def test_stream_parser_factory_returns_fresh_products(self) -> None:
+        factory = self.backend.stream_parser_factory(completion_marker="%%DONE%%")
+        first = factory()
+        second = factory()
+
+        assert isinstance(first, StreamParser)
+        assert isinstance(second, StreamParser)
+        assert first is not second
+
+    def test_parent_candidate_normalizer_returns_callable(self) -> None:
+        normalizer = self.backend.parent_candidate_normalizer(completion_marker="%%DONE%%")
+        assert callable(normalizer)
+
     def test_result_parser_returns_result_parser(self) -> None:
         """BackendCapabilities.session_record_types — parser extracts content from entries."""
         result = self.backend.result_parser()

@@ -9,7 +9,7 @@ import traceback
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import anyio
 
@@ -115,16 +115,9 @@ async def _execute_claude_headless(
     on_session_id_resolved: Callable[[str], None] | None = None,
     cleanup_budget_seconds: float = DEFAULT_CLEANUP_BUDGET_SECONDS,
 ) -> SkillResult:
-    """Shared subprocess execution for headless Claude sessions.
-
-    Accepts an already-built CmdSpec and handles runner invocation,
-    exception handling, _build_skill_result, and session log flushing.
-    Used by both run_headless_core (leaf path) and
-    DefaultHeadlessExecutor.dispatch_food_truck (food truck path).
-    """
+    """Run a built headless command for skill and fleet paths."""
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-
     cfg = ctx.config.run_skill
     if idle_output_timeout is not None:
         _raw_idle = idle_output_timeout
@@ -151,7 +144,6 @@ async def _execute_claude_headless(
     current_provider_name: str = provider_name
     fallback_activated: bool = False
     remaining_attempts = ctx.config.providers.provider_retry_limit if provider_fallback_env else 0
-
     runner = ctx.runner
     if runner is None:
         raise RuntimeError("No subprocess runner configured")
@@ -159,7 +151,6 @@ async def _execute_claude_headless(
     _step_backend: CodingAgentBackend = (
         step_backend if step_backend is not None else cast(CodingAgentBackend, ctx.backend)
     )
-
     if spec.cmd:
         _binary = Path(spec.cmd[0]).stem
         _expected = _step_backend.capabilities.process_name
@@ -174,6 +165,22 @@ async def _execute_claude_headless(
                 )
     assert_headless_cmd(spec)
 
+    _lifecycle_runner_kwargs: dict[str, Any] = {}
+    if completion_marker:
+        _stream_parser_factory = _step_backend.stream_parser_factory(
+            completion_marker=completion_marker
+        )
+        _parent_candidate_normalizer = _step_backend.parent_candidate_normalizer(
+            completion_marker=completion_marker
+        )
+        if not callable(_stream_parser_factory):
+            raise TypeError("stream_parser_factory must be callable for a nonempty marker")
+        if not callable(_parent_candidate_normalizer):
+            raise TypeError("parent_candidate_normalizer must be callable for a nonempty marker")
+        _lifecycle_runner_kwargs = {
+            "stream_parser_factory": _stream_parser_factory,
+            "parent_candidate_normalizer": _parent_candidate_normalizer,
+        }
     linux_tracing_cfg = ctx.config.linux_tracing
     _start_ts = datetime.now(UTC).isoformat()
     _start_mono = time.monotonic()
@@ -234,8 +241,6 @@ async def _execute_claude_headless(
                 logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
                 _temp_snapshots_pre[_wd] = None
         else:
-            # {} sentinel: dir missing at pre-scan. Distinct from None (OSError): {} allows
-            # post-scan comparison so session-created files are detected as writes.
             _temp_snapshots_pre[_wd] = {}
 
     _pre_session_sha = _capture_git_head_sha(cwd)
@@ -244,9 +249,6 @@ async def _execute_claude_headless(
     skill_result: SkillResult
     while True:
         try:
-            _stream_parser_factory = _step_backend.stream_parser_factory(
-                completion_marker=completion_marker
-            )
             _result = await runner(
                 list(spec.cmd),
                 cwd=Path(cwd),
@@ -268,12 +270,12 @@ async def _execute_claude_headless(
                 marker_dir=marker_dir,
                 marker_scope_session_id=marker_scope_session_id,
                 on_session_id_resolved=on_session_id_resolved,
-                stream_parser_factory=_stream_parser_factory,
                 cleanup_budget_seconds=cleanup_budget_seconds,
                 completion_record_types=_step_backend.capabilities.completion_record_types,
                 session_record_types=_step_backend.capabilities.session_record_types,
                 inspector_callback=None,
                 workload_basenames=_step_backend.capabilities.process_name_aliases or None,
+                **_lifecycle_runner_kwargs,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)

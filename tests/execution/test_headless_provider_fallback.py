@@ -7,6 +7,7 @@ no fallback_env suppresses retry, and empty provider (Anthropic) never falls bac
 from __future__ import annotations
 
 from collections import deque
+from unittest.mock import Mock
 
 import pytest
 
@@ -71,10 +72,14 @@ class TestProviderFallbackLoop:
 
         _sub_result = _sr()
         call_count: list[int] = [0]
+        call_kwargs: list[dict[str, object]] = []
 
         async def fake_runner(cmd, **kwargs):  # noqa: ARG001
             call_count[0] += 1
+            call_kwargs.append(kwargs)
             return _sub_result
+
+        setattr(fake_runner, "call_kwargs", call_kwargs)
 
         if ctx is not None:
             monkeypatch.setattr(
@@ -133,6 +138,49 @@ class TestProviderFallbackLoop:
         assert call_count[0] == 2
         assert result.provider.fallback_activated is True
         assert result.provider.provider_used == "anthropic"
+
+    @pytest.mark.anyio
+    async def test_lifecycle_callables_bound_once_and_reused_across_retry(
+        self, minimal_ctx, tmp_path, monkeypatch
+    ):
+        from autoskillit.execution.commands import ClaudeHeadlessCmd
+        from autoskillit.execution.headless import _execute_claude_headless
+
+        fake_runner, call_count = self._patch_common(
+            monkeypatch,
+            tmp_path,
+            _make_queued_build_result(_STALE_RESULT, _SUCCESS_RESULT),
+            ctx=minimal_ctx,
+        )
+        factory = Mock()
+        normalizer = Mock()
+        backend = _mock_backend(pty_required=True, channel_b_capable=True)
+        backend.stream_parser_factory.return_value = factory
+        backend.parent_candidate_normalizer.return_value = normalizer
+        minimal_ctx.runner = fake_runner
+        minimal_ctx.backend = backend
+
+        await _execute_claude_headless(
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            str(tmp_path),
+            minimal_ctx,
+            timeout=30.0,
+            stale_threshold=5.0,
+            completion_marker="%%ORDER_UP%%",
+            provider_name="minimax",
+            provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
+            provider_fallback_name="anthropic",
+        )
+
+        assert call_count[0] == 2
+        calls = getattr(fake_runner, "call_kwargs")
+        assert len(calls) == 2
+        assert all(call["stream_parser_factory"] is factory for call in calls)
+        assert all(call["parent_candidate_normalizer"] is normalizer for call in calls)
+        backend.stream_parser_factory.assert_called_once_with(completion_marker="%%ORDER_UP%%")
+        backend.parent_candidate_normalizer.assert_called_once_with(
+            completion_marker="%%ORDER_UP%%"
+        )
 
     @pytest.mark.anyio
     async def test_budget_exhausted_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):

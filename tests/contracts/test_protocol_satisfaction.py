@@ -10,9 +10,11 @@ import dataclasses
 import inspect
 import re
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
+import autoskillit.execution as execution
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
     run_managed_async,
@@ -411,8 +413,8 @@ class TestGroupDApiContractPreservation:
             "max_extension_seconds",
             "marker_dir",
             "marker_scope_session_id",
-            "stream_parser",
             "stream_parser_factory",
+            "parent_candidate_normalizer",
             "inspector_callback",
             "workload_basenames",
             "on_session_id_resolved",
@@ -483,8 +485,8 @@ class TestGroupDApiContractPreservation:
             "max_extension_seconds",
             "marker_dir",
             "marker_scope_session_id",
-            "stream_parser",
             "stream_parser_factory",
+            "parent_candidate_normalizer",
             "completion_record_types",
             "session_record_types",
             "inspector_callback",
@@ -504,6 +506,16 @@ class TestGroupDApiContractPreservation:
         assert sig.parameters["marker_dir"].default is None
         assert sig.parameters["marker_scope_session_id"].default is None
 
+    def test_run_managed_async_lifecycle_callable_defaults_and_order(self):
+        """Factory and Channel B normalizer are adjacent optional callables."""
+        sig = inspect.signature(run_managed_async)
+        params = list(sig.parameters)
+        factory_idx = params.index("stream_parser_factory")
+        normalizer_idx = params.index("parent_candidate_normalizer")
+        assert normalizer_idx == factory_idx + 1
+        assert sig.parameters["stream_parser_factory"].default is None
+        assert sig.parameters["parent_candidate_normalizer"].default is None
+
     def test_run_managed_async_marker_params_after_session_id_timeout(self):
         """Marker scope parameters follow _session_id_timeout in run_managed_async."""
         sig = inspect.signature(run_managed_async)
@@ -518,6 +530,15 @@ class TestGroupDApiContractPreservation:
         sig = inspect.signature(DefaultSubprocessRunner.__call__)
         assert sig.parameters["marker_dir"].default is None
         assert sig.parameters["marker_scope_session_id"].default is None
+
+    def test_default_runner_lifecycle_callable_defaults_and_order(self):
+        sig = inspect.signature(DefaultSubprocessRunner.__call__)
+        params = list(sig.parameters)
+        factory_idx = params.index("stream_parser_factory")
+        normalizer_idx = params.index("parent_candidate_normalizer")
+        assert normalizer_idx == factory_idx + 1
+        assert sig.parameters["stream_parser_factory"].default is None
+        assert sig.parameters["parent_candidate_normalizer"].default is None
 
     def test_default_subprocess_runner_marker_params_after_max_extension(self):
         """Marker scope parameters follow max_extension_seconds."""
@@ -536,6 +557,39 @@ class TestGroupDApiContractPreservation:
         assert isinstance(runner, SubprocessRunner), (
             "DefaultSubprocessRunner no longer satisfies the SubprocessRunner protocol"
         )
+
+    @pytest.mark.anyio
+    async def test_default_subprocess_runner_forwards_lifecycle_callable_identity(
+        self, tmp_path, monkeypatch
+    ):
+        captured: dict[str, object] = {}
+        result = object()
+
+        async def fake_run_managed_async(*args, **kwargs):
+            captured.update(kwargs)
+            return result
+
+        monkeypatch.setattr("autoskillit.execution.run_managed_async", fake_run_managed_async)
+        monkeypatch.setitem(
+            DefaultSubprocessRunner.__call__.__globals__,
+            "run_managed_async",
+            execution.run_managed_async,
+        )
+        factory = Mock()
+        normalizer = Mock()
+
+        actual = await DefaultSubprocessRunner()(
+            ["command"],
+            cwd=tmp_path,
+            timeout=1.0,
+            completion_marker="%%DONE%%",
+            stream_parser_factory=factory,
+            parent_candidate_normalizer=normalizer,
+        )
+
+        assert actual is result
+        assert captured["stream_parser_factory"] is factory
+        assert captured["parent_candidate_normalizer"] is normalizer
 
     # ------------------------------------------------------------------
     # REQ-API-003: run_managed_sync unchanged

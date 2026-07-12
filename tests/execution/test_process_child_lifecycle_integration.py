@@ -18,6 +18,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import anyio
 import psutil
@@ -244,6 +245,7 @@ async def test_production_runner_defers_early_marker_until_five_children_finish(
             timeout=20,
             completion_marker=marker,
             stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(marker),
             completion_drain_timeout=1.0,
             natural_exit_grace_seconds=0.05,
             cleanup_budget_seconds=5.0,
@@ -310,6 +312,7 @@ async def test_production_runner_no_child_fast_path(tmp_path: Path) -> None:
         timeout=10,
         completion_marker=marker,
         stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
+        parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(marker),
         completion_drain_timeout=1.0,
         natural_exit_grace_seconds=0.05,
         cleanup_budget_seconds=3.0,
@@ -322,6 +325,160 @@ async def test_production_runner_no_child_fast_path(tmp_path: Path) -> None:
     assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
     assert result.cleanup_outcome is not None and result.cleanup_outcome.succeeded
     assert not psutil.pid_exists(result.pid)
+
+
+@pytest.mark.anyio
+async def test_stream_parser_factory_constructed_once_after_successful_spawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker = "%autoskillit:factory-order-marker:abc12345%"
+    script = tmp_path / "factory_order_shim.py"
+    script.write_text(
+        textwrap.dedent(
+            f"""
+            import json
+            import signal
+
+            marker = {marker!r}
+            print(json.dumps({{
+                "type": "assistant", "uuid": "parent-factory", "session_id": "sid",
+                "message": {{"id": "message-factory", "content": [
+                    {{"type": "text", "text": marker}}
+                ]}}
+            }}), flush=True)
+            print(json.dumps({{
+                "type": "result", "subtype": "success", "is_error": False,
+                "session_id": "sid", "result": marker
+            }}), flush=True)
+            signal.pause()
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    backend = ClaudeCodeBackend()
+    parser = backend.stream_parser(marker)
+    events: list[str] = []
+
+    def parser_factory():
+        events.append("factory")
+        return parser
+
+    real_open_process = anyio.open_process
+
+    async def tracked_open_process(*args, **kwargs):
+        proc = await real_open_process(*args, **kwargs)
+        events.append("spawn")
+        return proc
+
+    monkeypatch.setattr(anyio, "open_process", tracked_open_process)
+
+    result = await run_managed_async(
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        timeout=10,
+        completion_marker=marker,
+        stream_parser_factory=parser_factory,
+        parent_candidate_normalizer=backend.parent_candidate_normalizer(marker),
+        completion_drain_timeout=1.0,
+        cleanup_budget_seconds=3.0,
+        _heartbeat_poll=0.01,
+    )
+
+    assert result.termination is TerminationReason.COMPLETED
+    assert events == ["spawn", "factory"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("missing", ["factory", "normalizer"])
+async def test_nonempty_marker_requires_both_lifecycle_callables(
+    tmp_path: Path, missing: str
+) -> None:
+    marker = "%autoskillit:required-callables:abc12345%"
+    backend = ClaudeCodeBackend()
+    factory = backend.stream_parser_factory(marker)
+    normalizer = backend.parent_candidate_normalizer(marker)
+
+    with pytest.raises(TypeError, match=missing):
+        await run_managed_async(
+            [sys.executable, "-c", "raise AssertionError('must not spawn')"],
+            cwd=tmp_path,
+            timeout=1.0,
+            completion_marker=marker,
+            stream_parser_factory=None if missing == "factory" else factory,
+            parent_candidate_normalizer=(None if missing == "normalizer" else normalizer),
+        )
+
+
+@pytest.mark.anyio
+async def test_empty_marker_starts_no_lifecycle_machinery(
+    minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.core import CmdSpec, RetryReason, SkillResult
+    from autoskillit.execution.headless import PostSessionMetrics
+    from autoskillit.execution.headless._headless_execute import _execute_claude_headless
+    from autoskillit.execution.process import DefaultSubprocessRunner
+
+    backend = ClaudeCodeBackend()
+    stream_parser_factory = Mock()
+    parent_candidate_normalizer = Mock()
+    monkeypatch.setattr(ClaudeCodeBackend, "stream_parser_factory", stream_parser_factory)
+    monkeypatch.setattr(
+        ClaudeCodeBackend, "parent_candidate_normalizer", parent_candidate_normalizer
+    )
+
+    lifecycle_entries = {
+        name: AsyncMock()
+        for name in (
+            "run_lifecycle_actor",
+            "run_channel_a_pump",
+            "_watch_process_with_lifecycle",
+            "_watch_session_log_with_lifecycle",
+        )
+    }
+    for name, entry in lifecycle_entries.items():
+        monkeypatch.setattr(f"autoskillit.execution.process.{name}", entry)
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
+        lambda *args, **kwargs: SkillResult(
+            success=True,
+            result="",
+            session_id="",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
+        lambda *args, **kwargs: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
+        lambda *args: "",
+    )
+
+    minimal_ctx.backend = backend
+    minimal_ctx.runner = DefaultSubprocessRunner()
+    await _execute_claude_headless(
+        CmdSpec(cmd=(sys.executable, "-c", "print('done')"), env={}),
+        str(tmp_path),
+        minimal_ctx,
+        timeout=5.0,
+        stale_threshold=1.0,
+        completion_marker="",
+        pty_override=False,
+        step_backend=backend,
+    )
+
+    stream_parser_factory.assert_not_called()
+    parent_candidate_normalizer.assert_not_called()
+    for entry in lifecycle_entries.values():
+        entry.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -377,6 +534,7 @@ async def test_child_failure_releases_deferral_and_cleans_process_tree(tmp_path:
         timeout=10,
         completion_marker=marker,
         stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
+        parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(marker),
         completion_drain_timeout=1.0,
         cleanup_budget_seconds=3.0,
         _heartbeat_poll=0.01,

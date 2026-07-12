@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -362,6 +363,27 @@ def test_executor_fake_captures_all_protocol_parameters():
     missing_in_call = protocol_params - call_fields - {"self"}
     assert not missing_in_fake, f"InMemoryHeadlessExecutor.run() missing params: {missing_in_fake}"
     assert not missing_in_call, f"ExecutorCall missing fields: {missing_in_call}"
+
+
+@pytest.mark.anyio
+async def test_mock_subprocess_runner_preserves_lifecycle_callable_identity(tmp_path):
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    factory = Mock()
+    normalizer = Mock()
+
+    await runner(
+        ["command"],
+        cwd=tmp_path,
+        timeout=1.0,
+        stream_parser_factory=factory,
+        parent_candidate_normalizer=normalizer,
+    )
+
+    kwargs = runner.call_args_list[0][3]
+    assert kwargs["stream_parser_factory"] is factory
+    assert kwargs["parent_candidate_normalizer"] is normalizer
 
 
 @pytest.mark.anyio

@@ -288,6 +288,20 @@ class TestCodexBackendFactories:
         assert isinstance(parser, CodexStreamParser)
         assert parser.completion_marker == ""
 
+    def test_stream_parser_factory_returns_fresh_products(self) -> None:
+        factory = CodexBackend().stream_parser_factory("%%DONE%%")
+        first = factory()
+        second = factory()
+
+        assert isinstance(first, CodexStreamParser)
+        assert isinstance(second, CodexStreamParser)
+        assert first is not second
+
+    def test_parent_candidate_normalizer_is_callable_and_noop(self) -> None:
+        normalizer = CodexBackend().parent_candidate_normalizer("%%DONE%%")
+        assert callable(normalizer)
+        assert normalizer({"type": "assistant"}, 17) is None
+
 
 class TestCodexEnvPolicy:
     def test_build_env_preserves_non_denied_vars(self) -> None:

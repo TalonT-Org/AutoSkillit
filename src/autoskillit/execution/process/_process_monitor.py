@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import anyio
 import psutil
@@ -209,6 +209,7 @@ async def _session_log_monitor(
     marker_dir: Path | None = None,
     caller_session_id: str | None = None,
     activity_tracker: ProcessActivityTracker | None = None,
+    completion_record_callback: Callable[[dict[str, Any], int], bool] | None = None,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -228,6 +229,10 @@ async def _session_log_monitor(
 
     *_on_poll* is a test-only callback invoked after each Phase 2 sleep iteration.
     Pass ``None`` (the default) in production — zero overhead.
+
+    ``completion_record_callback`` is invoked for a structurally matching record
+    with that record's exclusive binary file offset. Returning ``False`` rejects
+    the record and keeps the monitor running.
     """
     import time as _time
 
@@ -302,9 +307,9 @@ async def _session_log_monitor(
     # prior session. Starting at the current file boundary ensures Phase 2 only
     # scans content written AFTER monitoring began.
     try:
-        _initial_content = session_file.read_text(errors="replace")
+        _initial_content = session_file.read_bytes()
         scan_pos = len(_initial_content)
-        last_size = len(_initial_content.encode("utf-8"))
+        last_size = len(_initial_content)
     except OSError:
         logger.warning(
             "session_log_phase2_init_read_failed",
@@ -345,10 +350,17 @@ async def _session_log_monitor(
 
             # Check new content for completion marker (structured)
             try:
-                content = session_file.read_text(errors="replace")
+                content = session_file.read_bytes()
                 new_content = content[scan_pos:]
+                chunk_start = scan_pos
                 scan_pos = len(content)
-                if _jsonl_contains_marker(new_content, completion_marker, record_types):
+                if _jsonl_contains_marker(
+                    new_content,
+                    completion_marker,
+                    record_types,
+                    base_byte_offset=chunk_start,
+                    completion_record_callback=completion_record_callback,
+                ):
                     logger.debug(
                         "session_log_phase2_marker_found",
                         file=str(session_file),
@@ -356,7 +368,9 @@ async def _session_log_monitor(
                         scan_pos=scan_pos,
                     )
                     return SessionMonitorResult(ChannelBStatus.COMPLETION, _session_id)
-                last_type_in_chunk = _jsonl_last_record_type(new_content)
+                last_type_in_chunk = _jsonl_last_record_type(
+                    new_content.decode("utf-8", errors="replace")
+                )
                 if last_type_in_chunk is not None:
                     _last_record_type = last_type_in_chunk
             except OSError:

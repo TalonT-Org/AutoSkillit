@@ -48,6 +48,13 @@ def test_coding_agent_backend_has_setup_session_dir_method():
     assert callable(getattr(CodingAgentBackend, "setup_session_dir", None))
 
 
+def test_coding_agent_backend_has_lifecycle_callable_factories():
+    from autoskillit.core import CodingAgentBackend
+
+    assert callable(getattr(CodingAgentBackend, "stream_parser_factory", None))
+    assert callable(getattr(CodingAgentBackend, "parent_candidate_normalizer", None))
+
+
 def test_session_locator_has_project_log_dir_method():
     from autoskillit.core import SessionLocator
 

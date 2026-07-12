@@ -629,6 +629,8 @@ async def test_recording_runner_forwards_marker_scope_session_id(tmp_path):
     runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
 
     marker = tmp_path / "markers"
+    parser_factory = Mock()
+    parent_normalizer = Mock()
     cmd = ["pytest", "tests/"]
     env = {"SCENARIO_STEP_NAME": "test-check"}
 
@@ -640,6 +642,8 @@ async def test_recording_runner_forwards_marker_scope_session_id(tmp_path):
         pty_mode=False,
         marker_dir=marker,
         marker_scope_session_id="sess-abc",
+        stream_parser_factory=parser_factory,
+        parent_candidate_normalizer=parent_normalizer,
         cleanup_budget_seconds=7.5,
     )
 
@@ -647,6 +651,8 @@ async def test_recording_runner_forwards_marker_scope_session_id(tmp_path):
     kwargs = inner.call_args_list[0][3]
     assert kwargs["marker_dir"] == marker
     assert kwargs["marker_scope_session_id"] == "sess-abc"
+    assert kwargs["stream_parser_factory"] is parser_factory
+    assert kwargs["parent_candidate_normalizer"] is parent_normalizer
     assert kwargs["cleanup_budget_seconds"] == 7.5
 
 
@@ -693,6 +699,8 @@ async def test_replaying_runner_accepts_marker_params(tmp_path):
 
     cmd = ["task", "test-check"]
     env = {"SCENARIO_STEP_NAME": "check"}
+    parser_factory = Mock()
+    parent_normalizer = Mock()
     result = await runner(
         cmd,
         cwd=tmp_path,
@@ -700,6 +708,8 @@ async def test_replaying_runner_accepts_marker_params(tmp_path):
         env=env,
         marker_dir=tmp_path / "markers",
         marker_scope_session_id="sess-123",
+        stream_parser_factory=parser_factory,
+        parent_candidate_normalizer=parent_normalizer,
     )
 
     assert result.returncode == 0

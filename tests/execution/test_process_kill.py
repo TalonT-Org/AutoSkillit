@@ -18,6 +18,7 @@ import psutil
 import pytest
 
 from autoskillit.core.types import TerminationReason
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.process import (
     async_kill_process_tree,
     kill_process_tree,
@@ -192,6 +193,10 @@ class TestDualWinnerRace:
             session_log_dir=session_dir,
             stale_threshold=0.001,  # fires immediately once file is found
             completion_marker="NONEXISTENT",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("NONEXISTENT"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "NONEXISTENT"
+            ),
         )
         assert result.termination != TerminationReason.STALE
         assert result.returncode == 0
@@ -219,6 +224,8 @@ class TestRunManagedAsyncPassesPidToMonitor:
         """
         from unittest.mock import patch
 
+        from autoskillit.core.types import ChannelBStatus
+
         captured = {}
 
         async def capturing_monitor(*args, **kwargs):
@@ -226,14 +233,12 @@ class TestRunManagedAsyncPassesPidToMonitor:
 
             captured["pid"] = kwargs.get("pid")
             captured["positional_pid"] = args[5] if len(args) > 5 else None
-            return SessionMonitorResult("stale", "")
+            return SessionMonitorResult(ChannelBStatus.STALE, "")
 
         session_file = tmp_path / "fake_session.jsonl"
         session_file.write_text("")
 
-        with patch(
-            "autoskillit.execution.process._process_race._session_log_monitor", capturing_monitor
-        ):
+        with patch("autoskillit.execution.process._session_log_monitor", capturing_monitor):
             result = await run_managed_async(
                 ["sleep", "5"],
                 cwd=tmp_path,
@@ -241,6 +246,10 @@ class TestRunManagedAsyncPassesPidToMonitor:
                 session_log_dir=tmp_path,
                 stale_threshold=0.1,
                 completion_marker="DONE",
+                stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("DONE"),
+                parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                    "DONE"
+                ),
             )
 
         assert result.termination == TerminationReason.STALE

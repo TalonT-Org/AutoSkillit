@@ -33,6 +33,7 @@ import anyio
 from anyio.streams.memory import MemoryObjectSendStream
 
 from autoskillit.core import (
+    CandidateSighting,
     ChildLifecycleSnapshot,
     CompletionCandidate,
     CompletionCandidateState,
@@ -74,6 +75,7 @@ class ChannelBProposal:
     byte_offset: int
     required_byte_offset: int
     orphan_diagnostic: bool = False
+    candidate_sighting: CandidateSighting | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +127,7 @@ class LifecycleActorEnvelope:
 
     handle: ChildLifecycleCoordinatorHandle
     pending_requests: dict[str, ChannelACatchUpCommand] = field(default_factory=dict)
+    pending_channel_b_sightings: dict[str, CandidateSighting] = field(default_factory=dict)
     pending_deadlines: dict[str, float] = field(default_factory=dict)
     last_decision: LifecycleDecision = LifecycleDecision.CONTINUE
     last_snapshot: ChildLifecycleSnapshot | None = None
@@ -246,6 +249,9 @@ async def run_lifecycle_actor(
                 ]
                 for req_id in completed:
                     envelope.pending_requests.pop(req_id, None)
+                    sighting = envelope.pending_channel_b_sightings.pop(req_id, None)
+                    if sighting is not None:
+                        envelope.handle.register_candidate_sighting(sighting)
                     expired_dl = [dl for dl, rid in deadline_to_request.items() if rid == req_id]
                     for dl in expired_dl:
                         deadline_to_request.pop(dl, None)
@@ -266,6 +272,10 @@ async def run_lifecycle_actor(
                 )
                 # Channel B proposals carry their own required offset (captured at send time).
                 if await _dispatch_catch_up(envelope, cmd, pump_command_send):
+                    if fact.candidate_sighting is not None:
+                        envelope.pending_channel_b_sightings[fact.request_id] = (
+                            fact.candidate_sighting
+                        )
                     deadline = anyio.current_time() + completion_drain_timeout
                     deadline_to_request[deadline] = cmd.request_id
                 else:
@@ -304,6 +314,7 @@ async def run_lifecycle_actor(
                 continue
             if isinstance(fact, CatchUpTimeoutFact):
                 envelope.pending_requests.pop(fact.request_id, None)
+                envelope.pending_channel_b_sightings.pop(fact.request_id, None)
                 envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
                 envelope.last_snapshot = envelope.handle.snapshot()
                 if on_snapshot is not None:
@@ -312,9 +323,11 @@ async def run_lifecycle_actor(
                 continue
             if isinstance(fact, CatchUpCancellationFact):
                 envelope.pending_requests.pop(fact.request_id, None)
+                envelope.pending_channel_b_sightings.pop(fact.request_id, None)
                 continue
             if isinstance(fact, CatchUpAck):
                 envelope.pending_requests.pop(fact.request_id, None)
+                envelope.pending_channel_b_sightings.pop(fact.request_id, None)
                 continue
         # Drain: evaluate any remaining candidate after end-of-stream.
         _evaluate_candidates(envelope, on_decision, on_snapshot=on_snapshot)

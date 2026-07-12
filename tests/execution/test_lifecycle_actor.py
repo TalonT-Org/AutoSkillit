@@ -21,8 +21,10 @@ import pytest
 
 from autoskillit.core import (
     BackendEventKind,
+    CandidateSighting,
     ChildAttemptState,
     ChildLifecycleObservation,
+    CompletionCandidateSource,
     CompletionCandidateState,
     LifecycleDecision,
     LifecycleEvidenceIssue,
@@ -468,6 +470,69 @@ class TestCatchUpTimeout:
 
         await _call()
         assert envelope.last_decision == LifecycleDecision.CATCH_UP_FAILED
+
+
+class TestChannelBCandidateTransport:
+    @pytest.mark.anyio
+    async def test_registers_sighting_only_after_channel_a_catch_up(self) -> None:
+        fact_send, fact_receive = anyio.create_memory_object_stream[Any](4)
+        pump_send, pump_receive = anyio.create_memory_object_stream[Any](1)
+        reply_send, reply_receive = anyio.create_memory_object_stream[Any](1)
+        decisions: list[tuple[LifecycleDecision, Any]] = []
+
+        async def _produce() -> None:
+            await fact_send.send(
+                ChannelBProposal(
+                    request_id="proposal",
+                    status="completion",
+                    session_id="sid",
+                    byte_offset=27,
+                    required_byte_offset=10,
+                    candidate_sighting=CandidateSighting(
+                        source=CompletionCandidateSource.CHANNEL_B,
+                        native_uuid="channel-b-parent",
+                        native_message_id="message-b",
+                        channel_relative_byte_offset=27,
+                        backend_session_id="sid",
+                        record_provenance="session_log_parent_assistant_record",
+                    ),
+                )
+            )
+            command = await pump_receive.receive()
+            assert command.required_byte_offset == 10
+            assert decisions == []
+            await fact_send.send(
+                ChannelABatch(
+                    records=(),
+                    observations=(),
+                    parent_markers=(),
+                    byte_offset=10,
+                )
+            )
+            await reply_receive.receive()
+            await fact_send.aclose()
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_produce)
+            tg.start_soon(
+                run_lifecycle_actor,
+                fact_receive,
+                pump_send,
+                lambda request_id: reply_send if request_id == "proposal" else None,
+                lambda decision, candidate: decisions.append((decision, candidate)),
+            )
+
+        await pump_send.aclose()
+        await pump_receive.aclose()
+        await reply_send.aclose()
+        await reply_receive.aclose()
+        assert len(decisions) == 1
+        decision, candidate = decisions[0]
+        assert decision is LifecycleDecision.ELIGIBLE
+        assert candidate is not None
+        assert candidate.candidate_id == "channel-b-parent"
+        assert candidate.sources == (CompletionCandidateSource.CHANNEL_B,)
+        assert candidate.sightings[0].channel_relative_byte_offset == 27
 
 
 class TestSaturatedCommandStream:

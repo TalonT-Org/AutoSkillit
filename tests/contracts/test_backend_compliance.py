@@ -72,6 +72,26 @@ class TestBackendCompliance:
         for cls in BACKEND_REGISTRY.values():
             assert isinstance(cls().stream_parser(), StreamParser)
 
+    def test_all_backend_factories_return_fresh_stream_parsers(self):
+        from autoskillit.core import StreamParser
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            factory = cls().stream_parser_factory("%%TEST%%")
+            first = factory()
+            second = factory()
+            assert isinstance(first, StreamParser)
+            assert isinstance(second, StreamParser)
+            assert first is not second
+
+    def test_all_backend_parent_candidate_normalizers_are_callable(self):
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            assert callable(cls().parent_candidate_normalizer("%%TEST%%"))
+
     def test_all_backends_result_parser_satisfies_protocol(self):
         from autoskillit.core import ResultParser
         from autoskillit.execution.backends import BACKEND_REGISTRY

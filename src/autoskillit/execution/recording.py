@@ -40,7 +40,7 @@ from autoskillit.execution.backends.codex_scenario_player import CodexScenarioPl
 if TYPE_CHECKING:
     from api_simulator.claude import ScenarioPlayer, ScenarioRecorder
 
-    from autoskillit.core import StreamParser, StreamParserFactory
+    from autoskillit.core import StreamParserFactory
 
 logger = get_logger(__name__)
 
@@ -137,8 +137,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
         marker_scope_session_id: str | None = None,
-        stream_parser: StreamParser | None = None,
         stream_parser_factory: StreamParserFactory | None = None,
+        parent_candidate_normalizer: Callable[[dict[str, Any], int], Any] | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,
@@ -177,8 +177,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     max_extension_seconds=max_extension_seconds,
                     marker_dir=marker_dir,
                     marker_scope_session_id=marker_scope_session_id,
-                    stream_parser=stream_parser,
                     stream_parser_factory=stream_parser_factory,
+                    parent_candidate_normalizer=parent_candidate_normalizer,
                     step_name=step_name,
                     completion_record_types=completion_record_types,
                     session_record_types=session_record_types,
@@ -208,8 +208,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 max_extension_seconds=max_extension_seconds,
                 marker_dir=marker_dir,
                 marker_scope_session_id=marker_scope_session_id,
-                stream_parser=stream_parser,
                 stream_parser_factory=stream_parser_factory,
+                parent_candidate_normalizer=parent_candidate_normalizer,
                 completion_record_types=completion_record_types,
                 session_record_types=session_record_types,
                 inspector_callback=inspector_callback,
@@ -247,8 +247,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
             max_extension_seconds=max_extension_seconds,
             marker_dir=marker_dir,
             marker_scope_session_id=marker_scope_session_id,
-            stream_parser=stream_parser,
             stream_parser_factory=stream_parser_factory,
+            parent_candidate_normalizer=parent_candidate_normalizer,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
             inspector_callback=inspector_callback,
@@ -326,8 +326,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
         max_extension_seconds: float,
         marker_dir: Path | None,
         marker_scope_session_id: str | None,
-        stream_parser: StreamParser | None,
         stream_parser_factory: StreamParserFactory | None,
+        parent_candidate_normalizer: Callable[[dict[str, Any], int], Any] | None,
         step_name: str,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
@@ -356,8 +356,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
             max_extension_seconds=max_extension_seconds,
             marker_dir=marker_dir,
             marker_scope_session_id=marker_scope_session_id,
-            stream_parser=stream_parser,
             stream_parser_factory=stream_parser_factory,
+            parent_candidate_normalizer=parent_candidate_normalizer,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
             inspector_callback=inspector_callback,
@@ -455,8 +455,8 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
         marker_scope_session_id: str | None = None,
-        stream_parser: StreamParser | None = None,
         stream_parser_factory: StreamParserFactory | None = None,
+        parent_candidate_normalizer: Callable[[dict[str, Any], int], Any] | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,

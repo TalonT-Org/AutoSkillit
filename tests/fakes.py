@@ -25,6 +25,7 @@ from autoskillit.core.types import (
     RecipeRepository,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
+    StreamParserFactory,
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
@@ -844,8 +845,14 @@ class MockSubprocessRunner(SubprocessRunner):
         *,
         cwd: Path,
         timeout: float,
+        stream_parser_factory: StreamParserFactory | None = None,
+        parent_candidate_normalizer: Callable[[dict[str, Any], int], Any] | None = None,
         **kwargs: object,
     ) -> SubprocessResult:
+        if stream_parser_factory is not None:
+            kwargs["stream_parser_factory"] = stream_parser_factory
+        if parent_candidate_normalizer is not None:
+            kwargs["parent_candidate_normalizer"] = parent_candidate_normalizer
         self.call_args_list.append((cmd, cwd, timeout, kwargs))
         self.last_pty_mode = bool(kwargs.get("pty_mode", False))
         result = self._queue.popleft() if self._queue else self._default

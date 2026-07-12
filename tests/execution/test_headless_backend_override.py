@@ -250,7 +250,7 @@ class TestBackendOverrideEnvPolicy:
 
 
 class TestBackendOverrideParserSelection:
-    """Tests verifying stream_parser is called on the override backend, not ctx.backend."""
+    """Lifecycle callables come from the override backend, not ctx.backend."""
 
     @pytest.mark.anyio
     async def test_step_backend_parser_used_not_ctx_backend(self, minimal_ctx):
@@ -288,4 +288,6 @@ class TestBackendOverrideParserSelection:
             )
 
             step_backend.stream_parser_factory.assert_called_once()
+            step_backend.parent_candidate_normalizer.assert_called_once()
             ctx_backend.stream_parser_factory.assert_not_called()
+            ctx_backend.parent_candidate_normalizer.assert_not_called()

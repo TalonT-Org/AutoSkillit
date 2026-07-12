@@ -18,6 +18,7 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import Mock
 from uuid import uuid4
 
 import anyio
@@ -156,6 +157,8 @@ class FleetTestRunner:
     def __init__(self) -> None:
         self.call_count: int = 0
         self.last_pid: int = 0
+        self.last_stream_parser_factory: Any = None
+        self.last_parent_candidate_normalizer: Any = None
 
     async def __call__(
         self,
@@ -177,6 +180,8 @@ class FleetTestRunner:
         from autoskillit.execution import kill_process_tree
 
         self.call_count += 1
+        self.last_stream_parser_factory = kwargs.get("stream_parser_factory")
+        self.last_parent_candidate_normalizer = kwargs.get("parent_candidate_normalizer")
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -452,6 +457,24 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
         assert d.status == DispatchStatus.SUCCESS
         assert d.dispatched_pid > 0
         assert d.ended_at > d.started_at
+
+
+@pytest.mark.anyio
+async def test_fleet_runner_preserves_lifecycle_callable_identity(tmp_path: Path) -> None:
+    runner = FleetTestRunner()
+    factory = Mock()
+    normalizer = Mock()
+
+    await runner(
+        [sys.executable, "-c", "print('done')"],
+        cwd=tmp_path,
+        timeout=5.0,
+        stream_parser_factory=factory,
+        parent_candidate_normalizer=normalizer,
+    )
+
+    assert runner.last_stream_parser_factory is factory
+    assert runner.last_parent_candidate_normalizer is normalizer
 
 
 @pytest.mark.anyio

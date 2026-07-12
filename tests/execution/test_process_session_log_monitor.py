@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import json
 import time
+from unittest.mock import Mock
 
 import anyio
 import pytest
 
 from autoskillit.core.types import ChannelBStatus
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.process import (
     RaceAccumulator,
     _session_log_monitor,
     _watch_session_log,
+    _watch_session_log_with_lifecycle,
 )
 from autoskillit.execution.process._process_monitor import SessionMonitorResult
 
@@ -82,6 +85,123 @@ class TestSessionLogMonitor:
 
         assert monitor_result[0].status == ChannelBStatus.COMPLETION
         assert monitor_result[0].session_id == "abc123"
+
+    @pytest.mark.anyio
+    async def test_completion_callback_receives_parsed_record_and_exclusive_offset(self, tmp_path):
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        session_file = log_dir / "callback-session.jsonl"
+        initial_record = {"type": "assistant", "message": {"content": "working é"}}
+        marker_record = {
+            "type": "assistant",
+            "uuid": "parent-callback",
+            "message": {"content": "%%CALLBACK_DONE%%"},
+        }
+        initial_line = (json.dumps(initial_record, ensure_ascii=False) + "\n").encode()
+        marker_line = (json.dumps(marker_record) + "\n").encode()
+        session_file.write_bytes(initial_line)
+
+        callback_calls: list[tuple[dict[str, object], int]] = []
+
+        def callback(record: dict[str, object], exclusive_offset: int) -> bool:
+            callback_calls.append((record, exclusive_offset))
+            return True
+
+        async def append_marker() -> None:
+            await anyio.sleep(0.05)
+            with session_file.open("ab") as stream:
+                stream.write(marker_line)
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor() -> None:
+            result_box.append(
+                await _session_log_monitor(
+                    log_dir,
+                    "%%CALLBACK_DONE%%",
+                    stale_threshold=1.0,
+                    spawn_time=time.time() - 1,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.01,
+                    completion_record_callback=callback,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_marker)
+
+        assert result_box[0].status is ChannelBStatus.COMPLETION
+        assert callback_calls == [(marker_record, len(initial_line) + len(marker_line))]
+
+    @pytest.mark.anyio
+    async def test_lifecycle_monitor_rejects_invalid_normalized_marker(self, tmp_path):
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        session_file = log_dir / "invalid-normalized.jsonl"
+        initial_line = b'{"type":"assistant","message":{"content":"working"}}\n'
+        marker_record = {
+            "type": "assistant",
+            "uuid": "parent-invalid",
+            "message": {"content": "%%INVALID_NORMALIZED%%"},
+        }
+        marker_line = (json.dumps(marker_record) + "\n").encode()
+        session_file.write_bytes(initial_line)
+
+        normalizer = Mock(
+            wraps=ClaudeCodeBackend().parent_candidate_normalizer("%%INVALID_NORMALIZED%%")
+        )
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+        channel_b_ready = anyio.Event()
+        stdout_session_id_ready = anyio.Event()
+        stdout_session_id_ready.set()
+        fact_send, fact_receive = anyio.create_memory_object_stream[object](1)
+        stdout_path = tmp_path / "stdout.ndjson"
+        stdout_path.write_bytes(b"")
+
+        async def append_marker() -> None:
+            await anyio.sleep(0.05)
+            with session_file.open("ab") as stream:
+                stream.write(marker_line)
+
+        async def run_lifecycle_monitor() -> None:
+            await _watch_session_log_with_lifecycle(
+                session_log_dir=log_dir,
+                completion_marker="%%INVALID_NORMALIZED%%",
+                stale_threshold=0.15,
+                spawn_time=time.time() - 1,
+                session_record_types=frozenset({"assistant"}),
+                pid=0,
+                completion_drain_timeout=0.01,
+                acc=acc,
+                trigger=trigger,
+                channel_b_ready=channel_b_ready,
+                phase1_poll=0.01,
+                phase2_poll=0.01,
+                phase1_timeout=1.0,
+                session_id_timeout=0.01,
+                stdout_session_id_ready=stdout_session_id_ready,
+                max_suppression_seconds=None,
+                marker_dir=None,
+                marker_scope_session_id=None,
+                stdout_path=stdout_path,
+                fact_send=fact_send,
+                reply_sends={},
+                parent_candidate_normalizer=normalizer,
+            )
+
+        try:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(append_marker)
+                tg.start_soon(run_lifecycle_monitor)
+        finally:
+            await fact_send.aclose()
+            await fact_receive.aclose()
+
+        assert acc.channel_b_status is ChannelBStatus.STALE
+        assert trigger.is_set()
+        normalizer.assert_called_once_with(marker_record, len(initial_line) + len(marker_line))
 
     @pytest.mark.anyio
     async def test_session_log_monitor_detects_staleness(self, tmp_path):

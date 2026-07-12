@@ -89,6 +89,25 @@ def test_claude_code_backend_stream_parser_forwards_completion_marker():
     assert parser.completion_marker == "%%ORDER_UP%%"
 
 
+def test_claude_code_backend_factory_returns_fresh_parsers():
+    from autoskillit.core import StreamParser
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    factory = ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%")
+    first = factory()
+    second = factory()
+
+    assert isinstance(first, StreamParser)
+    assert isinstance(second, StreamParser)
+    assert first is not second
+
+
+def test_claude_code_backend_parent_candidate_normalizer_is_callable():
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    assert callable(ClaudeCodeBackend().parent_candidate_normalizer("%%ORDER_UP%%"))
+
+
 # -- isinstance conformance: CodexBackend ------------------------------------
 
 
@@ -118,6 +137,25 @@ def test_codex_backend_env_policy_satisfies_protocol():
     from autoskillit.execution.backends import CodexBackend
 
     assert isinstance(CodexBackend().env_policy(), EnvPolicy)
+
+
+def test_codex_backend_factory_returns_fresh_parsers():
+    from autoskillit.core import StreamParser
+    from autoskillit.execution.backends import CodexBackend
+
+    factory = CodexBackend().stream_parser_factory("%%ORDER_UP%%")
+    first = factory()
+    second = factory()
+
+    assert isinstance(first, StreamParser)
+    assert isinstance(second, StreamParser)
+    assert first is not second
+
+
+def test_codex_backend_parent_candidate_normalizer_is_callable():
+    from autoskillit.execution.backends import CodexBackend
+
+    assert callable(CodexBackend().parent_candidate_normalizer("%%ORDER_UP%%"))
 
 
 # -- Signature conformance: EnvPolicy.build_env -------------------------------

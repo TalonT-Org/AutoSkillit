@@ -384,6 +384,10 @@ class TestStaleRecoveryPipelineAdjudication:
             timeout=20,
             session_log_dir=session_dir,
             completion_marker="%%NONEXISTENT%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%NONEXISTENT%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%NONEXISTENT%%"
+            ),
             stale_threshold=0.3,
             _phase1_poll=0.01,
             _phase2_poll=0.05,

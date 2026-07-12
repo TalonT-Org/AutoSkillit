@@ -3,6 +3,8 @@ forwarding through the headless call chain."""
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult
@@ -848,7 +850,7 @@ async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
     assert execute_kwargs["marker_dir"] is None
 
 
-# ── stream_parser injection tests ────────────────────────────────────────────
+# ── lifecycle callable injection tests ──────────────────────────────────────
 
 
 @pytest.mark.anyio
@@ -868,9 +870,11 @@ async def test_execute_claude_headless_passes_stream_parser_factory_to_runner(
 
     minimal_ctx.runner = fake_runner
 
-    sentinel = object()
+    factory = Mock()
+    normalizer = Mock()
     backend = _mock_backend(pty_required=True, channel_b_capable=True)
-    backend.stream_parser_factory.return_value = sentinel
+    backend.stream_parser_factory.return_value = factory
+    backend.parent_candidate_normalizer.return_value = normalizer
     minimal_ctx.backend = backend
 
     monkeypatch.setattr(
@@ -887,11 +891,18 @@ async def test_execute_claude_headless_passes_stream_parser_factory_to_runner(
     )
 
     await _execute_claude_headless(
-        spec, str(tmp_path), minimal_ctx, timeout=60, stale_threshold=30
+        spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=60,
+        stale_threshold=30,
+        completion_marker="%%ORDER_UP%%",
     )
 
-    assert runner_kwargs["stream_parser_factory"] is sentinel
-    backend.stream_parser_factory.assert_called()
+    assert runner_kwargs["stream_parser_factory"] is factory
+    assert runner_kwargs["parent_candidate_normalizer"] is normalizer
+    backend.stream_parser_factory.assert_called_once_with(completion_marker="%%ORDER_UP%%")
+    backend.parent_candidate_normalizer.assert_called_once_with(completion_marker="%%ORDER_UP%%")
 
 
 @pytest.mark.anyio
@@ -937,6 +948,9 @@ async def test_execute_claude_headless_stream_parser_factory_receives_completion
     )
 
     backend.stream_parser_factory.assert_called_once_with(completion_marker="%%TEST_MARKER%%")
+    backend.parent_candidate_normalizer.assert_called_once_with(
+        completion_marker="%%TEST_MARKER%%"
+    )
 
 
 @pytest.mark.anyio

@@ -1,13 +1,4 @@
-"""Subprocess lifecycle utilities providing pipe-blocking immunity.
-
-Shared building blocks for all subprocess-spawning code in the project.
-Uses temp file I/O (not pipes) to eliminate FD-inheritance blocking, and
-psutil-based process tree cleanup with SIGTERM→SIGKILL escalation.
-
-Two composed functions wire the utilities together correctly:
-- ``run_managed_async`` for async callers
-- ``run_managed_sync`` for sync callers
-"""
+"""Subprocess lifecycle utilities providing pipe-blocking immunity."""
 
 from __future__ import annotations
 
@@ -18,7 +9,7 @@ import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING, Any, assert_never
 
 import anyio
 import anyio.abc
@@ -27,12 +18,15 @@ from anyio.streams.memory import MemoryObjectSendStream
 
 from autoskillit.core import (
     DEFAULT_CLEANUP_BUDGET_SECONDS,
+    CandidateSighting,
     ChannelBStatus,
     ChannelConfirmation,
     ChildLifecycleSnapshot,
     CompletionCandidate,
+    CompletionCandidateSource,
     KillReason,
     LifecycleDecision,
+    ParentAssistantMarker,
     StreamParserFactory,
     SubprocessResult,
     TerminationAction,
@@ -88,16 +82,12 @@ if TYPE_CHECKING:
     import structlog
 
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.core import InspectorCallback, StreamParser
+    from autoskillit.core import InspectorCallback
     from autoskillit.execution.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
 
 
-# Aggregate __all__ collects all public symbols from the execution sub-modules
-# (_process_io, _process_jsonl, etc.) into a single facade. This keeps the
-# internal sub-module split private — callers import from the facade, not from
-# internal sub-module paths.
 __all__ = [
     "DefaultSubprocessRunner",
     "ProcessActivityTracker",
@@ -230,9 +220,16 @@ def _apply_lifecycle_completion_authority(
     termination: TerminationReason,
     channel_confirmation: ChannelConfirmation,
     lifecycle_decision: LifecycleDecision,
+    lifecycle_candidate: CompletionCandidate | None = None,
 ) -> tuple[TerminationReason, ChannelConfirmation]:
     """Require actor authorization before raw channel evidence can complete."""
     if lifecycle_decision is LifecycleDecision.ELIGIBLE:
+        if (
+            lifecycle_candidate is not None
+            and CompletionCandidateSource.CHANNEL_A not in lifecycle_candidate.sources
+            and CompletionCandidateSource.CHANNEL_B in lifecycle_candidate.sources
+        ):
+            return TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_B
         return TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_A
     if lifecycle_decision in {
         LifecycleDecision.CHILD_WORK_FAILED,
@@ -297,31 +294,67 @@ async def _watch_session_log_with_lifecycle(
     stdout_path: Path,
     fact_send: anyio.abc.ObjectSendStream[object],
     reply_sends: dict[str, MemoryObjectSendStream[object]],
+    parent_candidate_normalizer: Callable[[dict[str, Any], int], Any],
 ) -> None:
-    local_trigger = anyio.Event()
-    await _watch_session_log(
+    if stdout_session_id_ready is not None:
+        with anyio.move_on_after(session_id_timeout):
+            await stdout_session_id_ready.wait()
+
+    channel_b_byte_offset: int | None = None
+    channel_b_candidate_sighting: CandidateSighting | None = None
+
+    def _accept_completion_record(record: dict[str, Any], byte_offset: int) -> bool:
+        nonlocal channel_b_byte_offset, channel_b_candidate_sighting
+        normalized = parent_candidate_normalizer(record, byte_offset)
+        marker = getattr(normalized, "marker", None)
+        if not isinstance(marker, ParentAssistantMarker):
+            return False
+        channel_b_byte_offset = byte_offset
+        channel_b_candidate_sighting = CandidateSighting(
+            source=CompletionCandidateSource.CHANNEL_B,
+            native_uuid=marker.native_uuid,
+            native_message_id=marker.message_id,
+            channel_relative_byte_offset=byte_offset,
+            backend_session_id=marker.backend_session_id,
+            record_provenance="session_log_parent_assistant_record",
+        )
+        return True
+
+    monitor_kwargs: dict[str, object] = {
+        "pid": pid,
+        "_phase1_poll": phase1_poll,
+        "_phase2_poll": phase2_poll,
+        "_phase1_timeout": phase1_timeout,
+        "expected_session_id": acc.stdout_session_id,
+        "completion_record_callback": _accept_completion_record,
+    }
+    if max_suppression_seconds is not None:
+        monitor_kwargs["max_suppression_seconds"] = max_suppression_seconds
+    if marker_dir is not None:
+        monitor_kwargs["marker_dir"] = marker_dir
+    if marker_scope_session_id is not None:
+        monitor_kwargs["caller_session_id"] = marker_scope_session_id
+
+    monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,
         stale_threshold,
         spawn_time,
         session_record_types,
-        pid,
-        completion_drain_timeout,
-        acc,
-        local_trigger,
-        channel_b_ready,
-        phase1_poll,
-        phase2_poll,
-        phase1_timeout,
-        session_id_timeout,
-        stdout_session_id_ready,
-        max_suppression_seconds,
-        marker_dir,
-        marker_scope_session_id,
+        **monitor_kwargs,  # type: ignore[arg-type]
     )
+
+    acc.channel_b_status = monitor_result.status
+    acc.channel_b_session_id = monitor_result.session_id
+    acc.channel_b_orphaned_tool_result = monitor_result.orphaned_tool_result
+    channel_b_ready.set()
+
     if acc.channel_b_status is not ChannelBStatus.COMPLETION:
         trigger.set()
         return
+
+    if channel_b_byte_offset is None or channel_b_candidate_sighting is None:
+        raise RuntimeError("Channel B completion did not retain its normalized candidate")
 
     request_id = f"channel-b-{uuid.uuid4()}"
     reply_send, reply_receive = anyio.create_memory_object_stream[object](1)
@@ -332,9 +365,10 @@ async def _watch_session_log_with_lifecycle(
                 request_id=request_id,
                 status="completion",
                 session_id=acc.channel_b_session_id,
-                byte_offset=0,
+                byte_offset=channel_b_byte_offset,
                 required_byte_offset=_stdout_size(stdout_path),
                 orphan_diagnostic=acc.channel_b_orphaned_tool_result,
+                candidate_sighting=channel_b_candidate_sighting,
             )
         )
         with anyio.move_on_after(completion_drain_timeout) as scope:
@@ -376,8 +410,8 @@ async def run_managed_async(
     _session_id_timeout: float = 1.0,
     marker_dir: Path | None = None,
     marker_scope_session_id: str | None = None,
-    stream_parser: StreamParser | None = None,
     stream_parser_factory: StreamParserFactory | None = None,
+    parent_candidate_normalizer: Callable[[dict[str, Any], int], Any] | None = None,
     inspector_callback: InspectorCallback | None = None,
     workload_basenames: frozenset[str] | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
@@ -394,6 +428,13 @@ async def run_managed_async(
     6. read_temp_output for results
     7. cleanup temp files via context manager
     """
+    lifecycle_enabled = bool(completion_marker)
+    if lifecycle_enabled:
+        if not callable(stream_parser_factory):
+            raise TypeError("stream_parser_factory must be callable for a nonempty marker")
+        if not callable(parent_candidate_normalizer):
+            raise TypeError("parent_candidate_normalizer must be callable for a nonempty marker")
+
     # Capture workload basename before PTY wrapping rewrites cmd (#806)
     _workload_basename = Path(cmd[0]).name if cmd else ""
 
@@ -430,6 +471,11 @@ async def run_managed_async(
                 env=_env,
                 start_new_session=True,
             )
+            if lifecycle_enabled:
+                assert stream_parser_factory is not None
+                lifecycle_parser = stream_parser_factory()
+            else:
+                lifecycle_parser = None
             _ownership_tracker = make_tracker()
             _ownership_tracker.register_root(
                 proc.pid,
@@ -509,16 +555,6 @@ async def run_managed_async(
             lifecycle_candidate: CompletionCandidate | None = None
             lifecycle_snapshot: ChildLifecycleSnapshot | None = None
             reply_sends: dict[str, MemoryObjectSendStream[object]] = {}
-            fact_send, fact_receive = anyio.create_memory_object_stream[object](64)
-            pump_command_send, pump_command_receive = anyio.create_memory_object_stream(8)
-
-            lifecycle_enabled = stream_parser_factory is not None or stream_parser is not None
-            if stream_parser_factory is not None:
-                lifecycle_parser = stream_parser_factory()
-            elif stream_parser is not None:
-                lifecycle_parser = stream_parser
-            else:
-                lifecycle_parser = None
 
             def _record_stdout_session_id(resolved_session_id: str) -> None:
                 if acc.stdout_session_id:
@@ -550,7 +586,8 @@ async def run_managed_async(
                 return reply_sends.get(request_id)
 
             pump_state: ChannelAPumpState | None = None
-            if lifecycle_parser is not None:
+            if lifecycle_enabled:
+                assert lifecycle_parser is not None
                 pump_state = ChannelAPumpState(
                     completion_marker=completion_marker,
                     stdout_path=stdout_path,
@@ -560,6 +597,9 @@ async def run_managed_async(
 
             async with anyio.create_task_group() as tg:
                 if lifecycle_enabled and pump_state is not None:
+                    assert parent_candidate_normalizer is not None
+                    fact_send, fact_receive = anyio.create_memory_object_stream[object](64)
+                    pump_command_send, pump_command_receive = anyio.create_memory_object_stream(8)
                     tg.start_soon(
                         functools.partial(
                             run_lifecycle_actor,
@@ -613,6 +653,7 @@ async def run_managed_async(
                                 stdout_path=stdout_path,
                                 fact_send=fact_send,
                                 reply_sends=reply_sends,
+                                parent_candidate_normalizer=parent_candidate_normalizer,
                             )
                         )
                 else:
@@ -620,7 +661,6 @@ async def run_managed_async(
                     tg.start_soon(
                         functools.partial(
                             _watch_heartbeat,
-                            stream_parser=stream_parser,
                             _poll_interval=_heartbeat_poll,
                         ),
                         stdout_path,
@@ -633,7 +673,6 @@ async def run_managed_async(
                         tg.start_soon(
                             functools.partial(
                                 _extract_stdout_session_id,
-                                stream_parser=stream_parser,
                                 on_session_id_resolved=on_session_id_resolved,
                             ),
                             stdout_path,
@@ -729,6 +768,7 @@ async def run_managed_async(
                     termination,
                     _channel_confirmation,
                     lifecycle_decision,
+                    lifecycle_candidate,
                 )
 
             snapshots_data: list[dict[str, object]] | None = None
@@ -921,8 +961,8 @@ class DefaultSubprocessRunner:
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
         marker_scope_session_id: str | None = None,
-        stream_parser: StreamParser | None = None,
         stream_parser_factory: StreamParserFactory | None = None,
+        parent_candidate_normalizer: Callable[[dict[str, Any], int], Any] | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,
@@ -949,8 +989,8 @@ class DefaultSubprocessRunner:
             max_extension_seconds=max_extension_seconds,
             marker_dir=marker_dir,
             marker_scope_session_id=marker_scope_session_id,
-            stream_parser=stream_parser,
             stream_parser_factory=stream_parser_factory,
+            parent_candidate_normalizer=parent_candidate_normalizer,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
             inspector_callback=inspector_callback,

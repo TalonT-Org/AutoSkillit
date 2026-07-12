@@ -662,7 +662,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_result_write_reconciliation.py",
             "execution/test_planner_write_isolation.py",
             "execution/test_session_log_flush.py",
-            # execution/ — fixture-mediated pipeline dependents (16 files):
+            # execution/ — fixture-mediated pipeline dependents (18 files):
             # These use minimal_ctx or tool_ctx fixtures which import
             # autoskillit.pipeline at call time. Validated by REQ-GUARD-007.
             "execution/test_backend_dispatch.py",
@@ -679,6 +679,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_provider_fallback.py",
             "execution/test_headless_synthesis.py",
             "execution/test_idle_output_env.py",
+            "execution/test_process_child_lifecycle_integration.py",
             "execution/test_write_evidence.py",
             "execution/test_zero_write_detection.py",
             "execution/test_session_log_fields.py",
@@ -935,12 +936,11 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
 # ---------------------------------------------------------------------------
 # Entries in LAYER_CASCADE_CONSERVATIVE whose test files do NOT import the
 # cascade package directly at AST level — they are transitively reachable via
-# deferred imports in recipe source modules (e.g. recipe/_api.py ->
-# autoskillit.workspace.DefaultSkillResolver).  These are exempt from the
-# direct-import check in test_file_level_entries_import_their_cascade_package.
+# deferred source imports or shared fixtures. These are exempt from the direct-import
+# check in test_file_level_entries_import_their_cascade_package.
 #
 # COUPLING: each set here is a strict subset of the corresponding
-# LAYER_CASCADE_CONSERVATIVE entry — only the recipe/* transitive entries.
+# LAYER_CASCADE_CONSERVATIVE entry — only the transitively coupled test files.
 # Excluded from "workspace": the two direct-import entries
 # ("recipe/test_contracts.py", "recipe/test_rules_skill_content.py") and all
 # non-recipe entries ("workspace", "fleet", "server", "cli", "skills",
@@ -949,6 +949,11 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
 # otherwise test_file_level_entries_import_their_cascade_package will
 # incorrectly require a direct AST import from those test files.
 _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
+    "pipeline": frozenset(
+        {
+            "execution/test_process_child_lifecycle_integration.py",
+        }
+    ),
     "workspace": frozenset(
         {
             "recipe/test_api.py",

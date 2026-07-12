@@ -190,7 +190,7 @@ class TestStepBackendOverride:
             assert mock_exec.call_args.kwargs["step_backend"] is codex_backend
 
     @pytest.mark.anyio
-    async def test_step_backend_flows_to_stream_parser_and_build_result(self, minimal_ctx):
+    async def test_step_backend_flows_to_lifecycle_callables_and_build_result(self, minimal_ctx):
         ctx_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         step_backend_mock = _mock_backend(
             pty_required=False, channel_b_capable=False, process_name="codex"
@@ -233,7 +233,18 @@ class TestStepBackendOverride:
                 step_backend=step_backend_mock,
             )
         step_backend_mock.stream_parser_factory.assert_called_once()
+        step_backend_mock.parent_candidate_normalizer.assert_called_once()
         ctx_backend.stream_parser_factory.assert_not_called()
+        ctx_backend.parent_candidate_normalizer.assert_not_called()
+        runner_kwargs = minimal_ctx.runner.call_args.kwargs
+        assert (
+            runner_kwargs["stream_parser_factory"]
+            is step_backend_mock.stream_parser_factory.return_value
+        )
+        assert (
+            runner_kwargs["parent_candidate_normalizer"]
+            is step_backend_mock.parent_candidate_normalizer.return_value
+        )
         assert mock_build.call_args.kwargs["backend"] is step_backend_mock
 
     @pytest.mark.anyio

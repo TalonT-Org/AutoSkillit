@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from autoskillit.core import ClaudeContentBlockType, get_logger
 from autoskillit.core import fast_loads as _fast_loads
 
@@ -37,9 +40,12 @@ def _extract_record_text(obj: dict, record_type: str) -> str:
 
 
 def _jsonl_contains_marker(
-    content: str,
+    content: str | bytes,
     marker: str,
     record_types: frozenset[str],
+    *,
+    base_byte_offset: int = 0,
+    completion_record_callback: Callable[[dict[str, Any], int], bool] | None = None,
 ) -> bool:
     """Check if any JSONL record of an allowed type contains the marker.
 
@@ -53,8 +59,12 @@ def _jsonl_contains_marker(
     Thinking blocks are excluded — a marker inside a thinking block is internal
     reasoning, not a structural completion signal.
     """
-    for line in content.splitlines():
-        line = line.strip()
+    raw_content = content.encode("utf-8") if isinstance(content, str) else content
+    line_start = base_byte_offset
+    for raw_line in raw_content.splitlines(keepends=True):
+        exclusive_byte_offset = line_start + len(raw_line)
+        line_start = exclusive_byte_offset
+        line = raw_line.strip()
         if not line:
             continue
         try:
@@ -69,6 +79,10 @@ def _jsonl_contains_marker(
 
         text = _extract_record_text(obj, record_type)
         if _marker_is_standalone(text, marker):
+            if completion_record_callback is not None and not completion_record_callback(
+                obj, exclusive_byte_offset
+            ):
+                continue
             return True
     return False
 

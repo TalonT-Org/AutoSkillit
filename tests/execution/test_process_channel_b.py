@@ -39,8 +39,10 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     # scheduling jitter can delay Phase 1 discovery by >1s.
     time.sleep(3.0)
     with open(jsonl_path, "a") as f:
-        record = {"type": "assistant", "message": {"role": "assistant",
-                  "content": "%%ORDER_UP%%"}}
+        record = {"type": "assistant", "uuid": "parent-channel-b-then-a",
+                  "session_id": "session", "message": {"id": "message-channel-b-then-a",
+                  "role": "assistant", "content": [{"type": "text",
+                  "text": "%%ORDER_UP%%"}]}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
     # Wait until after Channel B fires (phase1_poll + phase2_poll), then write stdout.
@@ -69,8 +71,10 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
         f.flush()
     time.sleep(3.0)
     with open(jsonl_path, "a") as f:
-        record = {"type": "assistant", "message": {"role": "assistant",
-                  "content": "%%ORDER_UP%%"}}
+        record = {"type": "assistant", "uuid": "parent-channel-b-no-stdout",
+                  "session_id": "session", "message": {"id": "message-channel-b-no-stdout",
+                  "role": "assistant", "content": [{"type": "text",
+                  "text": "%%ORDER_UP%%"}]}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
     time.sleep(3600)
@@ -103,8 +107,10 @@ CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
     # scheduling jitter can delay Phase 1 discovery by >1s.
     time.sleep(3.0)
     with open(jsonl_path, "a") as f:
-        record = {"type": "assistant", "message": {"role": "assistant",
-                  "content": "%%ORDER_UP%%"}}
+        record = {"type": "assistant", "uuid": "parent-channel-b-empty",
+                  "session_id": "session", "message": {"id": "message-channel-b-empty",
+                  "role": "assistant", "content": [{"type": "text",
+                  "text": "%%ORDER_UP%%"}]}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
     # Short delay then write an empty-result type=result record
@@ -138,8 +144,10 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
     # scan_pos from discovery boundary before the marker arrives.
     time.sleep(2.0)
     with open(jsonl_path, "a") as f:
-        record = {"type": "assistant", "message": {"role": "assistant",
-                  "content": "%%ORDER_UP%%"}}
+        record = {"type": "assistant", "uuid": "parent-process-exit",
+                  "session_id": "test-stop-delay",
+                  "message": {"id": "message-process-exit", "role": "assistant",
+                  "content": [{"type": "text", "text": "%%ORDER_UP%%"}]}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
     payload = {"type": "result", "subtype": "success", "is_error": False,
@@ -189,6 +197,10 @@ class TestChannelBDrainWait:
             timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%ORDER_UP%%"
+            ),
             completion_drain_timeout=5.0,
             _phase1_timeout=400,
             _phase1_poll=0.01,
@@ -238,6 +250,10 @@ class TestChannelBDrainWait:
             timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%ORDER_UP%%"
+            ),
             completion_drain_timeout=0.5,
             natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
@@ -302,6 +318,10 @@ class TestChannelBDrainWait:
             timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%ORDER_UP%%"
+            ),
             completion_drain_timeout=2.0,
             natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
@@ -377,6 +397,10 @@ class TestChannelBDrainWait:
             timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%ORDER_UP%%"
+            ),
             completion_drain_timeout=2.0,
             natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
@@ -426,6 +450,10 @@ class TestChannelBFullPipelineAdjudication:
             timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%ORDER_UP%%"
+            ),
             completion_drain_timeout=2.0,
             natural_exit_grace_seconds=0.1,
             _phase1_timeout=400,
@@ -480,6 +508,10 @@ class TestChannelBDrainRacePipelineAdjudication:
             timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%ORDER_UP%%"
+            ),
             completion_drain_timeout=0.5,
             natural_exit_grace_seconds=0.1,
             _phase1_timeout=400,
@@ -564,6 +596,10 @@ class TestPostExitDrainWindow:
             timeout=120,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%ORDER_UP%%"
+            ),
             completion_drain_timeout=60.0,
             _phase1_timeout=250,
             _phase1_poll=0.01,
@@ -603,6 +639,10 @@ class TestPostExitDrainWindow:
             timeout=10,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("%%ORDER_UP%%"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                "%%ORDER_UP%%"
+            ),
             completion_drain_timeout=0.2,
             _phase1_poll=0.05,
             _phase2_poll=0.05,
@@ -645,8 +685,10 @@ CHANNEL_B_SUB_SKILL_COLLISION_SCRIPT = textwrap.dedent("""\
     time.sleep(0.3)
     with open(jsonl_path, "a") as f:
         # Parent emits its unique marker — SHOULD trigger completion
-        parent_record = {"type": "assistant", "message": {"role": "assistant",
-                  "content": unique_marker}}
+        parent_record = {"type": "assistant", "uuid": "parent-unique-marker",
+                  "session_id": "session", "message": {"id": "message-unique-marker",
+                  "role": "assistant", "content": [{"type": "text",
+                  "text": unique_marker}]}}
         f.write(json.dumps(parent_record) + "\\n")
         f.flush()
     time.sleep(0.15)
@@ -688,6 +730,10 @@ class TestChannelBSubSkillCollision:
             timeout=300,
             session_log_dir=session_dir,
             completion_marker=unique_marker,
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(unique_marker),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                unique_marker
+            ),
             completion_drain_timeout=5.0,
             _phase1_timeout=600,
             _phase1_poll=0.05,

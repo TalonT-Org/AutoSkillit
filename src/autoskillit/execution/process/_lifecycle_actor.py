@@ -26,7 +26,7 @@ offsets; each channel keeps its own offset universe.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 import anyio
@@ -36,6 +36,7 @@ from autoskillit.core import (
     CandidateSighting,
     ChildLifecycleSnapshot,
     CompletionCandidate,
+    CompletionCandidateSource,
     CompletionCandidateState,
     LifecycleDecision,
     ParentAssistantMarker,
@@ -114,6 +115,17 @@ class CatchUpAck:
     processed_channel_a_byte_offset: int
 
 
+@dataclass(frozen=True, slots=True)
+class _LifecycleActorState:
+    """Atomic callback value published by the sole lifecycle authority."""
+
+    snapshot: ChildLifecycleSnapshot | None
+    decision: LifecycleDecision = LifecycleDecision.CONTINUE
+    eligible_candidate: CompletionCandidate | None = None
+    eligible_source: CompletionCandidateSource | None = None
+    sightings: tuple[CandidateSighting, ...] = ()
+
+
 @dataclass
 class LifecycleActorEnvelope:
     """Wrapper exposing the actor's mutable reducer to its private transport.
@@ -132,6 +144,7 @@ class LifecycleActorEnvelope:
     last_decision: LifecycleDecision = LifecycleDecision.CONTINUE
     last_snapshot: ChildLifecycleSnapshot | None = None
     last_eligible_candidate: CompletionCandidate | None = None
+    last_sightings: tuple[CandidateSighting, ...] = ()
     last_processed_offset: int = 0
 
 
@@ -197,19 +210,18 @@ async def run_lifecycle_actor(
     fact_receive: anyio.abc.ObjectReceiveStream[Any],
     pump_command_send: MemoryObjectSendStream[ChannelACatchUpCommand],
     reply_send_by_request: Callable[[str], MemoryObjectSendStream[Any] | None],
-    on_decision: Callable[[LifecycleDecision, CompletionCandidate | None], None],
+    on_state: Callable[[_LifecycleActorState], None],
     *,
     completion_drain_timeout: float = 5.0,
-    on_snapshot: Callable[[ChildLifecycleSnapshot], None] | None = None,
 ) -> None:
     """Consume the bounded fact stream and drive lifecycle adjudication.
 
     Each fact reduces through ``envelope.handle``. When a candidate
-    becomes eligible (or fails), ``on_decision`` fires with the
-    canonical decision and (for ELIGIBLE) the candidate. ``on_decision``
-    is the single race-wakeup vs completion-authority seam — only the
+    ``on_state`` publishes one atomic frozen view of the snapshot, decision,
+    eligible candidate/source, and deterministic sightings. It is the single
+    race-wakeup vs completion-authority boundary: only the
     actor classifies a wakeup as ``COMPLETED``; race wakes from other
-    conditions (idle, stale, timeout) do not call back here.
+    conditions do not originate eligible state here.
     """
     envelope = make_actor_envelope()
     deadline_to_request: dict[float, str] = {}
@@ -224,8 +236,7 @@ async def run_lifecycle_actor(
                     envelope,
                     req,
                     reply_send_by_request,
-                    on_decision,
-                    on_snapshot=on_snapshot,
+                    on_state,
                 )
                 pending_replies.pop(req, None)
                 deadline_to_request.pop(dl, None)
@@ -255,6 +266,8 @@ async def run_lifecycle_actor(
                     expired_dl = [dl for dl, rid in deadline_to_request.items() if rid == req_id]
                     for dl in expired_dl:
                         deadline_to_request.pop(dl, None)
+                _evaluate_candidates(envelope, on_state)
+                for req_id in completed:
                     await _reply(
                         reply_send_by_request,
                         req_id,
@@ -263,7 +276,6 @@ async def run_lifecycle_actor(
                             processed_channel_a_byte_offset=fact.byte_offset,
                         ),
                     )
-                _evaluate_candidates(envelope, on_decision, on_snapshot=on_snapshot)
                 continue
             if isinstance(fact, ChannelBProposal):
                 cmd = ChannelACatchUpCommand(
@@ -279,11 +291,11 @@ async def run_lifecycle_actor(
                     deadline = anyio.current_time() + completion_drain_timeout
                     deadline_to_request[deadline] = cmd.request_id
                 else:
-                    envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
-                    envelope.last_snapshot = envelope.handle.snapshot()
-                    if on_snapshot is not None:
-                        on_snapshot(envelope.last_snapshot)
-                    on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
+                    _publish_actor_state(
+                        envelope,
+                        on_state,
+                        LifecycleDecision.CATCH_UP_FAILED,
+                    )
                     await _reply(
                         reply_send_by_request,
                         fact.request_id,
@@ -299,27 +311,27 @@ async def run_lifecycle_actor(
                     deadline = anyio.current_time() + completion_drain_timeout
                     deadline_to_request[deadline] = cmd.request_id
                 else:
-                    envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
-                    envelope.last_snapshot = envelope.handle.snapshot()
-                    if on_snapshot is not None:
-                        on_snapshot(envelope.last_snapshot)
-                    on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
+                    _publish_actor_state(
+                        envelope,
+                        on_state,
+                        LifecycleDecision.CATCH_UP_FAILED,
+                    )
                     await _reply(
                         reply_send_by_request,
                         fact.request_id,
                         CatchUpTimeoutFact(request_id=fact.request_id),
                     )
                 # Once the exit is consumed, snapshot obligations.
-                _evaluate_candidates(envelope, on_decision, on_snapshot=on_snapshot)
+                _evaluate_candidates(envelope, on_state)
                 continue
             if isinstance(fact, CatchUpTimeoutFact):
                 envelope.pending_requests.pop(fact.request_id, None)
                 envelope.pending_channel_b_sightings.pop(fact.request_id, None)
-                envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
-                envelope.last_snapshot = envelope.handle.snapshot()
-                if on_snapshot is not None:
-                    on_snapshot(envelope.last_snapshot)
-                on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
+                _publish_actor_state(
+                    envelope,
+                    on_state,
+                    LifecycleDecision.CATCH_UP_FAILED,
+                )
                 continue
             if isinstance(fact, CatchUpCancellationFact):
                 envelope.pending_requests.pop(fact.request_id, None)
@@ -330,7 +342,7 @@ async def run_lifecycle_actor(
                 envelope.pending_channel_b_sightings.pop(fact.request_id, None)
                 continue
         # Drain: evaluate any remaining candidate after end-of-stream.
-        _evaluate_candidates(envelope, on_decision, on_snapshot=on_snapshot)
+        _evaluate_candidates(envelope, on_state)
         tg.cancel_scope.cancel()
 
 
@@ -354,24 +366,66 @@ async def _dispatch_catch_up_timeout(
     envelope: LifecycleActorEnvelope,
     request_id: str,
     reply_send_by_request: Callable[[str], MemoryObjectSendStream[Any] | None],
-    on_decision: Callable[[LifecycleDecision, CompletionCandidate | None], None],
-    *,
-    on_snapshot: Callable[[ChildLifecycleSnapshot], None] | None = None,
+    on_state: Callable[[_LifecycleActorState], None],
 ) -> None:
     """Emit a typed catch-up timeout decision and reply to the producer."""
-    envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
-    envelope.last_snapshot = envelope.handle.snapshot()
-    if on_snapshot is not None:
-        on_snapshot(envelope.last_snapshot)
-    on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
+    _publish_actor_state(envelope, on_state, LifecycleDecision.CATCH_UP_FAILED)
     await _reply(reply_send_by_request, request_id, CatchUpTimeoutFact(request_id=request_id))
+
+
+def _all_candidate_sightings(
+    envelope: LifecycleActorEnvelope,
+    snapshot: ChildLifecycleSnapshot,
+) -> tuple[CandidateSighting, ...]:
+    """Return sightings in deterministic candidate/state order."""
+    candidates = tuple(
+        candidate
+        for candidate_id, _state in snapshot.candidate_states
+        if (candidate := envelope.handle.get_candidate(candidate_id)) is not None
+    )
+    if len(candidates) == 1:
+        return candidates[0].sightings
+    return tuple(sighting for candidate in candidates for sighting in candidate.sightings)
+
+
+def _publish_actor_state(
+    envelope: LifecycleActorEnvelope,
+    on_state: Callable[[_LifecycleActorState], None],
+    decision: LifecycleDecision,
+    eligible_candidate: CompletionCandidate | None = None,
+) -> None:
+    """Freeze and publish every lifecycle field as one callback value."""
+    snapshot = envelope.handle.snapshot()
+    if eligible_candidate is not None:
+        snapshot = replace(snapshot, eligible_candidate=eligible_candidate)
+    sightings = _all_candidate_sightings(envelope, snapshot)
+    eligible_source: CompletionCandidateSource | None = None
+    if decision is LifecycleDecision.ELIGIBLE and eligible_candidate is not None:
+        eligible_source = (
+            CompletionCandidateSource.CHANNEL_A
+            if any(
+                sighting.source is CompletionCandidateSource.CHANNEL_A
+                for sighting in eligible_candidate.sightings
+            )
+            else CompletionCandidateSource.CHANNEL_B
+        )
+    state = _LifecycleActorState(
+        snapshot=snapshot,
+        decision=decision,
+        eligible_candidate=eligible_candidate,
+        eligible_source=eligible_source,
+        sightings=sightings,
+    )
+    envelope.last_snapshot = state.snapshot
+    envelope.last_decision = state.decision
+    envelope.last_eligible_candidate = state.eligible_candidate
+    envelope.last_sightings = state.sightings
+    on_state(state)
 
 
 def _evaluate_candidates(
     envelope: LifecycleActorEnvelope,
-    on_decision: Callable[[LifecycleDecision, CompletionCandidate | None], None],
-    *,
-    on_snapshot: Callable[[ChildLifecycleSnapshot], None] | None = None,
+    on_state: Callable[[_LifecycleActorState], None],
 ) -> None:
     """Walk every candidate state and emit a typed decision when warranted.
 
@@ -380,19 +434,31 @@ def _evaluate_candidates(
     cleared and whose parent-turn generation exceeds the deferred
     generation emits ``ELIGIBLE``. All other states keep ``CONTINUE``.
     """
+    if envelope.last_decision is not LifecycleDecision.CONTINUE:
+        published_eligible = envelope.last_eligible_candidate
+        if published_eligible is not None:
+            published_eligible = (
+                envelope.handle.get_candidate(published_eligible.candidate_id)
+                or published_eligible
+            )
+        snapshot = envelope.handle.snapshot()
+        if published_eligible is not None:
+            snapshot = replace(snapshot, eligible_candidate=published_eligible)
+        sightings = _all_candidate_sightings(envelope, snapshot)
+        if snapshot == envelope.last_snapshot and sightings == envelope.last_sightings:
+            return
+        _publish_actor_state(
+            envelope,
+            on_state,
+            envelope.last_decision,
+            published_eligible,
+        )
+        return
     snapshot = envelope.handle.snapshot()
-    envelope.last_snapshot = snapshot
-    if on_snapshot is not None:
-        on_snapshot(snapshot)
     decision: LifecycleDecision = LifecycleDecision.CONTINUE
     eligible: CompletionCandidate | None = None
     if envelope.handle.has_pending_issues():
-        snapshot = envelope.handle.snapshot()
-        envelope.last_snapshot = snapshot
-        if on_snapshot is not None:
-            on_snapshot(snapshot)
-        envelope.last_decision = LifecycleDecision.CONTINUE
-        envelope.last_eligible_candidate = None
+        _publish_actor_state(envelope, on_state, LifecycleDecision.CONTINUE)
         return
     for candidate_id, state in snapshot.candidate_states:
         if state is not CompletionCandidateState.DEFERRED:
@@ -403,18 +469,10 @@ def _evaluate_candidates(
         if snapshot.has_unresolved_terminal:
             envelope.handle.note_child_work_failed(candidate_id)
             decision = LifecycleDecision.CHILD_WORK_FAILED
-            envelope.last_decision = decision
-            envelope.last_eligible_candidate = None
-            on_decision(decision, None)
+            _publish_actor_state(envelope, on_state, decision)
             return
         promoted = envelope.handle.evaluate_candidate(candidate_id)
         if promoted is not None:
             eligible = promoted
             decision = LifecycleDecision.ELIGIBLE
-    envelope.last_decision = decision
-    envelope.last_eligible_candidate = eligible
-    if decision is LifecycleDecision.ELIGIBLE:
-        envelope.last_snapshot = envelope.handle.snapshot()
-        if on_snapshot is not None:
-            on_snapshot(envelope.last_snapshot)
-        on_decision(decision, eligible)
+    _publish_actor_state(envelope, on_state, decision, eligible)

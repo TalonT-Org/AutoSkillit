@@ -681,7 +681,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 17 canonical fields."""
+        """SubprocessResult must have exactly the canonical carrier fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -706,6 +706,8 @@ class TestGroupDApiContractPreservation:
             "lifecycle_snapshot",
             "lifecycle_decision",
             "lifecycle_candidate",
+            "eligible_source",
+            "sightings",
         }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"

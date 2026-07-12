@@ -1508,7 +1508,6 @@ class TestGroupCMigration:
         assert fields == {
             "process_exited",
             "process_returncode",
-            "channel_a_confirmed",
             "channel_b_status",
             "channel_b_session_id",
             "stdout_session_id",
@@ -1517,6 +1516,11 @@ class TestGroupCMigration:
             "channel_b_orphaned_tool_result",
             "exit_snapshot",
             "inspector_verdict",
+            "snapshot",
+            "decision",
+            "eligible_candidate",
+            "eligible_source",
+            "sightings",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):
@@ -1530,7 +1534,6 @@ class TestGroupCMigration:
         sig = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=False,
             channel_b_status=None,
             channel_b_session_id="",
         )

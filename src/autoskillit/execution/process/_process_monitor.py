@@ -4,13 +4,22 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any
 
 import anyio
 import psutil
 
-from autoskillit.core import ChannelBStatus, get_logger
+from autoskillit.core import (
+    CandidateSighting,
+    ChannelBStatus,
+    ChildLifecycleSnapshot,
+    CompletionCandidate,
+    CompletionCandidateSource,
+    LifecycleDecision,
+    get_logger,
+)
 from autoskillit.execution.process._process_jsonl import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
@@ -23,12 +32,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class SessionMonitorResult(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class SessionMonitorResult:
     """Result from _session_log_monitor with discovered session identity."""
 
-    status: ChannelBStatus
+    status: ChannelBStatus | None
     session_id: str  # Claude Code session ID from JSONL filename stem, or ""
     orphaned_tool_result: bool = False
+    snapshot: ChildLifecycleSnapshot | None = None
+    decision: LifecycleDecision = LifecycleDecision.CONTINUE
+    eligible_candidate: CompletionCandidate | None = None
+    eligible_source: CompletionCandidateSource | None = None
+    sightings: tuple[CandidateSighting, ...] = ()
 
 
 async def _heartbeat(
@@ -210,6 +225,7 @@ async def _session_log_monitor(
     caller_session_id: str | None = None,
     activity_tracker: ProcessActivityTracker | None = None,
     completion_record_callback: Callable[[dict[str, Any], int], bool] | None = None,
+    eligible_source_on_completion: CompletionCandidateSource | None = None,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -367,7 +383,16 @@ async def _session_log_monitor(
                         file_size=current_size,
                         scan_pos=scan_pos,
                     )
-                    return SessionMonitorResult(ChannelBStatus.COMPLETION, _session_id)
+                    return SessionMonitorResult(
+                        ChannelBStatus.COMPLETION,
+                        _session_id,
+                        decision=(
+                            LifecycleDecision.ELIGIBLE
+                            if eligible_source_on_completion is not None
+                            else LifecycleDecision.CONTINUE
+                        ),
+                        eligible_source=eligible_source_on_completion,
+                    )
                 last_type_in_chunk = _jsonl_last_record_type(
                     new_content.decode("utf-8", errors="replace")
                 )

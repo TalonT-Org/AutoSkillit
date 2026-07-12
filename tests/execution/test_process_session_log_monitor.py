@@ -9,17 +9,100 @@ from unittest.mock import Mock
 import anyio
 import pytest
 
-from autoskillit.core.types import ChannelBStatus
+from autoskillit.core.types import (
+    CandidateSighting,
+    ChannelBStatus,
+    ChildLifecycleSnapshot,
+    CompletionCandidate,
+    CompletionCandidateSource,
+    LifecycleDecision,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.process import (
     RaceAccumulator,
     _session_log_monitor,
+    _watch_heartbeat,
     _watch_session_log,
     _watch_session_log_with_lifecycle,
 )
 from autoskillit.execution.process._process_monitor import SessionMonitorResult
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def _channel_b_state() -> tuple[
+    ChildLifecycleSnapshot, CompletionCandidate, tuple[CandidateSighting, ...]
+]:
+    from autoskillit.execution.process._child_lifecycle import make_coordinator_handle
+
+    sighting = CandidateSighting(
+        source=CompletionCandidateSource.CHANNEL_B,
+        native_uuid="candidate-b",
+        native_message_id="message-b",
+        channel_relative_byte_offset=73,
+        backend_session_id="candidate-session-b",
+    )
+    handle = make_coordinator_handle()
+    handle.register_candidate_sighting(sighting)
+    candidate = handle.evaluate_candidate("candidate-b")
+    assert candidate is not None
+    snapshot = handle.snapshot()
+    return snapshot, candidate, candidate.sightings
+
+
+class TestSessionMonitorResultCarrier:
+    def test_defaults_do_not_grant_completion_authority(self) -> None:
+        result = SessionMonitorResult(status=None, session_id="")
+
+        assert result.status is None
+        assert result.snapshot is None
+        assert result.decision is LifecycleDecision.CONTINUE
+        assert result.eligible_candidate is None
+        assert result.eligible_source is None
+        assert result.sightings == ()
+
+    def test_accepts_exact_frozen_actor_state(self) -> None:
+        snapshot, candidate, sightings = _channel_b_state()
+        result = SessionMonitorResult(
+            status=ChannelBStatus.COMPLETION,
+            session_id="channel-b-log-session",
+            snapshot=snapshot,
+            decision=LifecycleDecision.ELIGIBLE,
+            eligible_candidate=candidate,
+            eligible_source=CompletionCandidateSource.CHANNEL_B,
+            sightings=sightings,
+        )
+
+        assert result.snapshot is snapshot
+        assert result.eligible_candidate is candidate
+        assert result.sightings is sightings
+
+
+class TestParserlessCarrierSemantics:
+    @pytest.mark.anyio
+    async def test_parserless_channel_a_is_authoritative_without_candidate(self, tmp_path):
+        stdout_path = tmp_path / "stdout.ndjson"
+        stdout_path.write_text('{"type":"result","result":"done"}\n')
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+
+        await _watch_heartbeat(
+            stdout_path,
+            frozenset({"result"}),
+            "",
+            acc,
+            trigger,
+            stream_parser=None,
+            _poll_interval=0.001,
+        )
+
+        assert trigger.is_set()
+        assert acc.channel_b_status is None
+        assert acc.decision is LifecycleDecision.ELIGIBLE
+        assert acc.eligible_candidate is None
+        assert acc.eligible_source is CompletionCandidateSource.CHANNEL_A
+        assert acc.sightings == ()
+
 
 # Script that writes non-matching output then hangs
 PARTIAL_OUTPUT_THEN_HANG_SCRIPT = (
@@ -85,6 +168,10 @@ class TestSessionLogMonitor:
 
         assert monitor_result[0].status == ChannelBStatus.COMPLETION
         assert monitor_result[0].session_id == "abc123"
+        assert monitor_result[0].decision is LifecycleDecision.CONTINUE
+        assert monitor_result[0].eligible_candidate is None
+        assert monitor_result[0].eligible_source is None
+        assert monitor_result[0].sightings == ()
 
     @pytest.mark.anyio
     async def test_completion_callback_receives_parsed_record_and_exclusive_offset(self, tmp_path):
@@ -1082,3 +1169,123 @@ async def test_watch_session_log_omits_marker_kwargs_when_none(
 
     assert "marker_dir" not in captured_kwargs
     assert "caller_session_id" not in captured_kwargs
+
+
+@pytest.mark.anyio
+async def test_explicit_parserless_channel_b_copies_frozen_monitor_state(
+    tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot, candidate, sightings = _channel_b_state()
+
+    async def fake_session_log_monitor(*args, **kwargs) -> SessionMonitorResult:
+        return SessionMonitorResult(
+            status=ChannelBStatus.COMPLETION,
+            session_id="channel-b-log-session",
+            snapshot=snapshot,
+            decision=LifecycleDecision.ELIGIBLE,
+            eligible_candidate=candidate,
+            eligible_source=CompletionCandidateSource.CHANNEL_B,
+            sightings=sightings,
+        )
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._session_log_monitor",
+        fake_session_log_monitor,
+    )
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    await _watch_session_log(
+        session_log_dir=tmp_path,
+        completion_marker="DONE",
+        stale_threshold=60.0,
+        spawn_time=time.time(),
+        session_record_types=frozenset({"assistant"}),
+        pid=12345,
+        completion_drain_timeout=0.0,
+        acc=acc,
+        trigger=trigger,
+        channel_b_ready=anyio.Event(),
+        _phase1_poll=0.01,
+        _phase2_poll=0.01,
+        _phase1_timeout=0.1,
+    )
+
+    assert acc.channel_b_status is ChannelBStatus.COMPLETION
+    assert acc.channel_b_session_id == "channel-b-log-session"
+    assert acc.snapshot is snapshot
+    assert acc.decision is LifecycleDecision.ELIGIBLE
+    assert acc.eligible_candidate is candidate
+    assert acc.eligible_source is CompletionCandidateSource.CHANNEL_B
+    assert acc.sightings is sightings
+
+
+@pytest.mark.anyio
+async def test_channel_a_authority_wins_while_channel_b_metadata_is_copied(
+    tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot, candidate, sightings = _channel_b_state()
+    a_sighting = CandidateSighting(
+        source=CompletionCandidateSource.CHANNEL_A,
+        native_uuid="candidate-a",
+        native_message_id="message-a",
+        channel_relative_byte_offset=41,
+        backend_session_id="candidate-session-a",
+    )
+    from autoskillit.execution.process._child_lifecycle import make_coordinator_handle
+
+    a_handle = make_coordinator_handle()
+    a_handle.register_candidate_sighting(a_sighting)
+    a_candidate = a_handle.evaluate_candidate("candidate-a")
+    assert a_candidate is not None
+    a_snapshot = a_handle.snapshot()
+    a_sightings = a_candidate.sightings
+
+    async def fake_session_log_monitor(*args, **kwargs) -> SessionMonitorResult:
+        return SessionMonitorResult(
+            status=ChannelBStatus.COMPLETION,
+            session_id="channel-b-log-session",
+            snapshot=snapshot,
+            decision=LifecycleDecision.ELIGIBLE,
+            eligible_candidate=candidate,
+            eligible_source=CompletionCandidateSource.CHANNEL_B,
+            sightings=sightings,
+        )
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._session_log_monitor",
+        fake_session_log_monitor,
+    )
+    acc = RaceAccumulator(
+        snapshot=a_snapshot,
+        decision=LifecycleDecision.ELIGIBLE,
+        eligible_candidate=a_candidate,
+        eligible_source=CompletionCandidateSource.CHANNEL_A,
+        sightings=a_sightings,
+    )
+    trigger = anyio.Event()
+    trigger.set()
+
+    await _watch_session_log(
+        session_log_dir=tmp_path,
+        completion_marker="DONE",
+        stale_threshold=60.0,
+        spawn_time=time.time(),
+        session_record_types=frozenset({"assistant"}),
+        pid=12345,
+        completion_drain_timeout=1.0,
+        acc=acc,
+        trigger=trigger,
+        channel_b_ready=anyio.Event(),
+        _phase1_poll=0.01,
+        _phase2_poll=0.01,
+        _phase1_timeout=0.1,
+    )
+
+    assert acc.channel_b_status is ChannelBStatus.COMPLETION
+    assert acc.channel_b_session_id == "channel-b-log-session"
+    assert acc.snapshot is a_snapshot
+    assert acc.eligible_candidate is a_candidate
+    assert acc.sightings is a_sightings
+    assert acc.decision is LifecycleDecision.ELIGIBLE
+    assert acc.eligible_source is CompletionCandidateSource.CHANNEL_A

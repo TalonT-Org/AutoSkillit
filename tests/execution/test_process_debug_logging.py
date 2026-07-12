@@ -7,7 +7,12 @@ import textwrap
 import pytest
 import structlog.testing
 
-from autoskillit.core.types import TerminationReason
+from autoskillit.core.types import (
+    ChannelBStatus,
+    CompletionCandidateSource,
+    LifecycleDecision,
+    TerminationReason,
+)
 from autoskillit.execution.process import RaceAccumulator, RaceSignals
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -56,7 +61,6 @@ def test_resolve_termination_logs_signals():
     signals = RaceSignals(
         process_exited=True,
         process_returncode=0,
-        channel_a_confirmed=False,
         channel_b_status=None,
         channel_b_session_id="",
     )
@@ -70,6 +74,8 @@ def test_resolve_termination_logs_signals():
     r = resolve_logs[0]
     assert r["process_exited"] is True
     assert r["process_returncode"] == 0
+    assert r["decision"] is LifecycleDecision.CONTINUE
+    assert r["eligible_source"] is None
     assert "resolved_termination" in r
     assert "resolved_channel" in r
 
@@ -79,9 +85,10 @@ def test_race_signals_includes_channel_b_session_id():
     signals = RaceSignals(
         process_exited=True,
         process_returncode=0,
-        channel_a_confirmed=False,
-        channel_b_status="completion",
+        channel_b_status=ChannelBStatus.COMPLETION,
         channel_b_session_id="abc-123",
+        decision=LifecycleDecision.ELIGIBLE,
+        eligible_source=CompletionCandidateSource.CHANNEL_B,
     )
     assert signals.channel_b_session_id == "abc-123"
 
@@ -89,10 +96,14 @@ def test_race_signals_includes_channel_b_session_id():
 def test_race_accumulator_threads_session_id():
     """RaceAccumulator.to_race_signals() preserves channel_b_session_id."""
     acc = RaceAccumulator()
-    acc.channel_b_status = "completion"
+    acc.channel_b_status = ChannelBStatus.COMPLETION
     acc.channel_b_session_id = "def-456"
+    acc.decision = LifecycleDecision.ELIGIBLE
+    acc.eligible_source = CompletionCandidateSource.CHANNEL_B
     signals = acc.to_race_signals()
     assert signals.channel_b_session_id == "def-456"
+    assert signals.decision is LifecycleDecision.ELIGIBLE
+    assert signals.eligible_source is CompletionCandidateSource.CHANNEL_B
 
 
 @pytest.mark.anyio

@@ -13,6 +13,7 @@ Covers:
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -237,8 +238,8 @@ class TestActorDecisions:
         """No parent marker -> actor emits CONTINUE; no candidate eligible."""
         decisions: list[tuple[LifecycleDecision, Any]] = []
 
-        def on_decision(decision: LifecycleDecision, candidate: Any) -> None:
-            decisions.append((decision, candidate))
+        def on_decision(state: Any) -> None:
+            decisions.append((state.decision, state.eligible_candidate))
 
         fact_send, fact_receive = anyio.create_memory_object_stream(max_buffer_size=8)
         pump_send, pump_receive = anyio.create_memory_object_stream(max_buffer_size=8)
@@ -281,6 +282,12 @@ class TestActorDecisions:
 
         envelope = make_actor_envelope()
         decisions: list[LifecycleDecision] = []
+        states: list[Any] = []
+
+        def capture_state(state: Any) -> None:
+            states.append(state)
+            decisions.append(state.decision)
+
         _register_observations(
             envelope,
             ChannelABatch(
@@ -313,10 +320,24 @@ class TestActorDecisions:
 
         _evaluate_candidates(
             envelope,
-            lambda decision, _candidate: decisions.append(decision),
+            capture_state,
         )
 
         assert decisions == [LifecycleDecision.CHILD_WORK_FAILED]
+        assert len(states) == 1
+        state = states[0]
+        assert dataclasses.is_dataclass(state)
+        assert state.snapshot is envelope.last_snapshot
+        assert state.snapshot is not None
+        assert state.snapshot.has_unresolved_terminal
+        assert state.eligible_candidate is None
+        assert state.eligible_source is None
+        assert tuple(sighting.native_uuid for sighting in state.sightings) == (
+            "a-old",
+            "z-new",
+        )
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            state.decision = LifecycleDecision.CONTINUE
         assert envelope.last_snapshot is not None
         assert envelope.handle.snapshot().candidate_states == (
             ("a-old", CompletionCandidateState.SUPERSEDED),
@@ -358,11 +379,15 @@ class TestActorDecisions:
         )
         _evaluate_candidates(
             envelope,
-            lambda decision, candidate: decisions.append(
-                (decision, candidate.candidate_id if candidate else None)
+            lambda state: decisions.append(
+                (
+                    state.decision,
+                    state.eligible_candidate.candidate_id if state.eligible_candidate else None,
+                )
             ),
         )
-        assert decisions == []
+        assert decisions == [(LifecycleDecision.CONTINUE, None)]
+        decisions.clear()
 
         _register_observations(
             envelope,
@@ -394,8 +419,11 @@ class TestActorDecisions:
         )
         _evaluate_candidates(
             envelope,
-            lambda decision, candidate: decisions.append(
-                (decision, candidate.candidate_id if candidate else None)
+            lambda state: decisions.append(
+                (
+                    state.decision,
+                    state.eligible_candidate.candidate_id if state.eligible_candidate else None,
+                )
             ),
         )
 
@@ -442,10 +470,10 @@ class TestActorDecisions:
 
         _evaluate_candidates(
             envelope,
-            lambda decision, _candidate: decisions.append(decision),
+            lambda state: decisions.append(state.decision),
         )
 
-        assert decisions == []
+        assert decisions == [LifecycleDecision.CONTINUE]
         assert envelope.handle.has_pending_issues()
 
 
@@ -465,7 +493,7 @@ class TestCatchUpTimeout:
                 envelope,
                 "req-1",
                 lambda _req_id: None,
-                lambda _decision, _candidate: None,
+                lambda _state: None,
             )
 
         await _call()
@@ -473,12 +501,53 @@ class TestCatchUpTimeout:
 
 
 class TestChannelBCandidateTransport:
+    def test_terminal_state_republishes_after_later_same_uuid_sighting(self) -> None:
+        from autoskillit.execution.process._lifecycle_actor import (
+            _evaluate_candidates,
+            _register_parent_markers,
+        )
+
+        envelope = make_actor_envelope()
+        states: list[Any] = []
+        _register_parent_markers(
+            envelope,
+            (ParentAssistantMarker("shared-parent", "message-a", 10, "session-a"),),
+        )
+        _evaluate_candidates(envelope, states.append)
+
+        envelope.handle.register_candidate_sighting(
+            CandidateSighting(
+                source=CompletionCandidateSource.CHANNEL_B,
+                native_uuid="shared-parent",
+                native_message_id="message-b",
+                channel_relative_byte_offset=27,
+                backend_session_id="session-b",
+            )
+        )
+        _evaluate_candidates(envelope, states.append)
+
+        assert [state.decision for state in states] == [
+            LifecycleDecision.ELIGIBLE,
+            LifecycleDecision.ELIGIBLE,
+        ]
+        assert states[1].eligible_source is CompletionCandidateSource.CHANNEL_A
+        assert tuple(sighting.source for sighting in states[1].sightings) == (
+            CompletionCandidateSource.CHANNEL_A,
+            CompletionCandidateSource.CHANNEL_B,
+        )
+        assert states[1].eligible_candidate is not states[0].eligible_candidate
+
     @pytest.mark.anyio
     async def test_registers_sighting_only_after_channel_a_catch_up(self) -> None:
         fact_send, fact_receive = anyio.create_memory_object_stream[Any](4)
         pump_send, pump_receive = anyio.create_memory_object_stream[Any](1)
         reply_send, reply_receive = anyio.create_memory_object_stream[Any](1)
-        decisions: list[tuple[LifecycleDecision, Any]] = []
+        states: list[Any] = []
+        event_order: list[str] = []
+
+        def capture_state(state: Any) -> None:
+            event_order.append("callback")
+            states.append(state)
 
         async def _produce() -> None:
             await fact_send.send(
@@ -500,16 +569,33 @@ class TestChannelBCandidateTransport:
             )
             command = await pump_receive.receive()
             assert command.required_byte_offset == 10
-            assert decisions == []
+            assert states == []
             await fact_send.send(
                 ChannelABatch(
                     records=(),
                     observations=(),
-                    parent_markers=(),
+                    parent_markers=(
+                        ParentAssistantMarker(
+                            "channel-b-parent",
+                            "message-a",
+                            10,
+                            "stdout-session",
+                        ),
+                    ),
                     byte_offset=10,
                 )
             )
-            await reply_receive.receive()
+            ack = await reply_receive.receive()
+            event_order.append("ack")
+            assert dataclasses.is_dataclass(ack)
+            assert {field.name for field in dataclasses.fields(ack)} == {
+                "request_id",
+                "processed_channel_a_byte_offset",
+            }
+            assert ack.request_id == "proposal"
+            assert ack.processed_channel_a_byte_offset == 10
+            with pytest.raises(dataclasses.FrozenInstanceError):
+                ack.processed_channel_a_byte_offset = 11
             await fact_send.aclose()
 
         async with anyio.create_task_group() as tg:
@@ -519,20 +605,34 @@ class TestChannelBCandidateTransport:
                 fact_receive,
                 pump_send,
                 lambda request_id: reply_send if request_id == "proposal" else None,
-                lambda decision, candidate: decisions.append((decision, candidate)),
+                capture_state,
             )
 
         await pump_send.aclose()
         await pump_receive.aclose()
         await reply_send.aclose()
         await reply_receive.aclose()
-        assert len(decisions) == 1
-        decision, candidate = decisions[0]
-        assert decision is LifecycleDecision.ELIGIBLE
+        assert event_order == ["callback", "ack"]
+        assert len(states) == 1
+        state = states[0]
+        assert state.decision is LifecycleDecision.ELIGIBLE
+        assert state.eligible_source is CompletionCandidateSource.CHANNEL_A
+        candidate = state.eligible_candidate
         assert candidate is not None
         assert candidate.candidate_id == "channel-b-parent"
-        assert candidate.sources == (CompletionCandidateSource.CHANNEL_B,)
-        assert candidate.sightings[0].channel_relative_byte_offset == 27
+        assert candidate.sources == (
+            CompletionCandidateSource.CHANNEL_A,
+            CompletionCandidateSource.CHANNEL_B,
+        )
+        assert state.sightings is candidate.sightings
+        assert tuple(sighting.source for sighting in state.sightings) == (
+            CompletionCandidateSource.CHANNEL_A,
+            CompletionCandidateSource.CHANNEL_B,
+        )
+        assert tuple(sighting.channel_relative_byte_offset for sighting in state.sightings) == (
+            10,
+            27,
+        )
 
 
 class TestSaturatedCommandStream:
@@ -581,7 +681,7 @@ class TestSaturatedCommandStream:
                 fact_receive,
                 pump_send,
                 lambda _request_id: None,
-                lambda decision, _candidate: decisions.append(decision),
+                lambda state: decisions.append(state.decision),
             )
 
         await pump_send.aclose()

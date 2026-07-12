@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
+from typing import Any
 
 import anyio
 import pytest
 
 from autoskillit.core.types import (
+    CandidateSighting,
     ChannelBStatus,
     ChannelConfirmation,
-    CompletionCandidate,
+    CompletionCandidateSource,
     InspectorVerdict,
     LifecycleDecision,
     TerminationReason,
@@ -46,11 +48,8 @@ async def test_process_exit_drain_expiry_fails_closed(tmp_path: Path) -> None:
     trigger = anyio.Event()
     decisions: list[LifecycleDecision] = []
 
-    def _record_decision(
-        decision: LifecycleDecision,
-        candidate: CompletionCandidate | None,  # noqa: ARG001
-    ) -> None:
-        decisions.append(decision)
+    def _record_decision(state: Any) -> None:
+        decisions.append(state.decision)
         actor_decision_event.set()
 
     fact_send, fact_receive = anyio.create_memory_object_stream[object](1)
@@ -81,18 +80,54 @@ def test_raw_channel_completion_requires_lifecycle_authorization(
     termination, confirmation = _apply_lifecycle_completion_authority(
         TerminationReason.COMPLETED,
         channel_confirmation,
-        LifecycleDecision.CONTINUE,
+        RaceSignals(process_exited=False, process_returncode=None),
     )
     assert termination is TerminationReason.HEALTH_INSPECTOR
     assert confirmation is ChannelConfirmation.UNMONITORED
 
 
-def test_eligible_lifecycle_decision_authorizes_completion() -> None:
+@pytest.mark.parametrize(
+    "source,expected_confirmation",
+    [
+        (CompletionCandidateSource.CHANNEL_A, ChannelConfirmation.CHANNEL_A),
+        (CompletionCandidateSource.CHANNEL_B, ChannelConfirmation.CHANNEL_B),
+    ],
+)
+def test_eligible_lifecycle_decision_authorizes_completion(
+    source: CompletionCandidateSource,
+    expected_confirmation: ChannelConfirmation,
+) -> None:
     termination, confirmation = _apply_lifecycle_completion_authority(
         TerminationReason.NATURAL_EXIT,
         ChannelConfirmation.UNMONITORED,
-        LifecycleDecision.ELIGIBLE,
+        RaceSignals(
+            process_exited=False,
+            process_returncode=None,
+            decision=LifecycleDecision.ELIGIBLE,
+            eligible_source=source,
+        ),
     )
+    assert termination is TerminationReason.COMPLETED
+    assert confirmation is expected_confirmation
+
+
+@pytest.mark.parametrize("returncode", [0, -15])
+def test_actor_eligible_caught_up_exit_remains_completed(returncode: int) -> None:
+    """Stamped Step 4.7 makes caught-up actor eligibility authoritative at exit."""
+    signals = RaceSignals(
+        process_exited=True,
+        process_returncode=returncode,
+        decision=LifecycleDecision.ELIGIBLE,
+        eligible_source=CompletionCandidateSource.CHANNEL_A,
+    )
+    raw_termination, raw_confirmation = resolve_termination(signals)
+
+    termination, confirmation = _apply_lifecycle_completion_authority(
+        raw_termination,
+        raw_confirmation,
+        signals,
+    )
+
     assert termination is TerminationReason.COMPLETED
     assert confirmation is ChannelConfirmation.CHANNEL_A
 
@@ -105,8 +140,8 @@ class TestChannelBStatusExhaustiveCoverage:
         [
             (
                 ChannelBStatus.COMPLETION,
-                TerminationReason.COMPLETED,
-                ChannelConfirmation.CHANNEL_B,
+                TerminationReason.NATURAL_EXIT,
+                ChannelConfirmation.UNMONITORED,
             ),
             (
                 ChannelBStatus.STALE,
@@ -129,7 +164,6 @@ class TestChannelBStatusExhaustiveCoverage:
         signals = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=False,
             channel_b_status=status,
             channel_b_session_id="test-session",
             stdout_session_id=None,
@@ -151,7 +185,6 @@ class TestChannelBStatusExhaustiveCoverage:
         signals = RaceSignals(
             process_exited=True,
             process_returncode=0,
-            channel_a_confirmed=False,
             channel_b_status=ChannelBStatus.DIR_MISSING,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -168,21 +201,18 @@ class TestResolveTerminationPriority:
         signals = RaceSignals(
             process_exited=True,
             process_returncode=0,
-            channel_a_confirmed=False,
             channel_b_status=ChannelBStatus.COMPLETION,
             channel_b_session_id="s1",
             stdout_session_id=None,
         )
         termination, channel = resolve_termination(signals)
         assert termination == TerminationReason.NATURAL_EXIT
-        # Channel B still gets credit even though process exited
-        assert channel == ChannelConfirmation.CHANNEL_B
+        assert channel == ChannelConfirmation.UNMONITORED
 
     def test_process_exit_overrides_stale(self) -> None:
         signals = RaceSignals(
             process_exited=True,
             process_returncode=1,
-            channel_a_confirmed=False,
             channel_b_status=ChannelBStatus.STALE,
             channel_b_session_id="s1",
             stdout_session_id=None,
@@ -195,10 +225,11 @@ class TestResolveTerminationPriority:
         signals = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=True,
             channel_b_status=ChannelBStatus.STALE,
             channel_b_session_id="s1",
             stdout_session_id=None,
+            decision=LifecycleDecision.ELIGIBLE,
+            eligible_source=CompletionCandidateSource.CHANNEL_A,
         )
         termination, channel = resolve_termination(signals)
         assert termination == TerminationReason.STALE
@@ -209,10 +240,11 @@ class TestResolveTerminationPriority:
         signals = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=True,
             channel_b_status=None,
             channel_b_session_id="",
             stdout_session_id=None,
+            decision=LifecycleDecision.ELIGIBLE,
+            eligible_source=CompletionCandidateSource.CHANNEL_A,
         )
         termination, channel = resolve_termination(signals)
         assert termination == TerminationReason.COMPLETED
@@ -222,7 +254,6 @@ class TestResolveTerminationPriority:
         signals = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=False,
             channel_b_status=None,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -282,7 +313,6 @@ class TestResolveTerminationIdleStall:
         signals = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=False,
             channel_b_status=None,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -296,7 +326,6 @@ class TestResolveTerminationIdleStall:
         signals = RaceSignals(
             process_exited=True,
             process_returncode=0,
-            channel_a_confirmed=False,
             channel_b_status=None,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -309,7 +338,6 @@ class TestResolveTerminationIdleStall:
         signals = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=False,
             channel_b_status=ChannelBStatus.STALE,
             channel_b_session_id="s1",
             stdout_session_id=None,
@@ -319,14 +347,82 @@ class TestResolveTerminationIdleStall:
         assert termination == TerminationReason.IDLE_STALL
 
 
-class TestRaceSignalsFieldCount:
-    """Sentinel test: breaks when RaceSignals fields change."""
+class TestLifecycleCarrierContract:
+    """Race carriers preserve the actor's frozen state without reconstruction."""
 
-    def test_race_signals_field_count(self) -> None:
-        assert len(dataclasses.fields(RaceSignals)) == 11, (
-            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 11). "
-            "Update tests to cover the new field."
+    _EXPECTED_FIELDS = {
+        "process_exited",
+        "process_returncode",
+        "channel_b_status",
+        "channel_b_session_id",
+        "stdout_session_id",
+        "idle_stall",
+        "channel_b_orphaned_tool_result",
+        "process_exited_event",
+        "exit_snapshot",
+        "inspector_verdict",
+        "snapshot",
+        "decision",
+        "eligible_candidate",
+        "eligible_source",
+        "sightings",
+    }
+
+    @pytest.mark.parametrize("carrier", [RaceAccumulator, RaceSignals])
+    def test_exact_field_set(self, carrier: type[object]) -> None:
+        assert {field.name for field in dataclasses.fields(carrier)} == self._EXPECTED_FIELDS
+
+    def test_lifecycle_defaults_do_not_imply_authority(self) -> None:
+        acc = RaceAccumulator()
+        signals = acc.to_race_signals()
+
+        assert acc.snapshot is None
+        assert acc.decision is LifecycleDecision.CONTINUE
+        assert acc.eligible_candidate is None
+        assert acc.eligible_source is None
+        assert acc.sightings == ()
+        assert signals.snapshot is None
+        assert signals.decision is LifecycleDecision.CONTINUE
+        assert signals.eligible_candidate is None
+        assert signals.eligible_source is None
+        assert signals.sightings == ()
+
+    def test_to_race_signals_preserves_exact_actor_objects(self) -> None:
+        from autoskillit.execution.process._child_lifecycle import make_coordinator_handle
+
+        sighting = CandidateSighting(
+            source=CompletionCandidateSource.CHANNEL_A,
+            native_uuid="candidate-a",
+            native_message_id="message-a",
+            channel_relative_byte_offset=41,
+            backend_session_id="candidate-session",
         )
+        handle = make_coordinator_handle()
+        handle.register_candidate_sighting(sighting)
+        candidate = handle.evaluate_candidate("candidate-a")
+        assert candidate is not None
+        snapshot = handle.snapshot()
+        sightings = candidate.sightings
+        acc = RaceAccumulator(
+            snapshot=snapshot,
+            decision=LifecycleDecision.ELIGIBLE,
+            eligible_candidate=candidate,
+            eligible_source=CompletionCandidateSource.CHANNEL_A,
+            sightings=sightings,
+        )
+
+        signals = acc.to_race_signals()
+
+        assert signals.snapshot is snapshot
+        assert signals.eligible_candidate is candidate
+        assert signals.sightings is sightings
+        assert signals.decision is LifecycleDecision.ELIGIBLE
+        assert signals.eligible_source is CompletionCandidateSource.CHANNEL_A
+
+    def test_race_signals_is_frozen(self) -> None:
+        signals = RaceSignals(process_exited=False, process_returncode=None)
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            signals.decision = LifecycleDecision.ELIGIBLE
 
 
 class TestInspectorVerdictField:
@@ -336,7 +432,6 @@ class TestInspectorVerdictField:
         rs = RaceSignals(
             process_exited=True,
             process_returncode=0,
-            channel_a_confirmed=False,
             channel_b_status=None,
         )
         assert rs.inspector_verdict is None
@@ -351,16 +446,6 @@ class TestInspectorVerdictField:
         assert signals.inspector_verdict is verdict
 
 
-class TestRaceAccumulatorFieldCount:
-    """Sentinel test: breaks when RaceAccumulator fields change."""
-
-    def test_race_accumulator_field_count(self) -> None:
-        n = len(dataclasses.fields(RaceAccumulator))
-        assert n == 11, (
-            f"RaceAccumulator has {n} fields (expected 11). Update tests for new fields."
-        )
-
-
 class TestResolveTerminationInspector:
     """resolve_termination produces HEALTH_INSPECTOR when inspector_verdict + idle_stall."""
 
@@ -368,7 +453,6 @@ class TestResolveTerminationInspector:
         signals = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=False,
             channel_b_status=None,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -384,7 +468,6 @@ class TestResolveTerminationInspector:
         signals = RaceSignals(
             process_exited=False,
             process_returncode=None,
-            channel_a_confirmed=False,
             channel_b_status=None,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -398,7 +481,6 @@ class TestResolveTerminationInspector:
         signals = RaceSignals(
             process_exited=True,
             process_returncode=0,
-            channel_a_confirmed=False,
             channel_b_status=None,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -727,7 +809,6 @@ class TestResolveTerminationSignalDeath:
         signals = RaceSignals(
             process_exited=True,
             process_returncode=returncode,
-            channel_a_confirmed=False,
             channel_b_status=ChannelBStatus.STALE,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -740,7 +821,6 @@ class TestResolveTerminationSignalDeath:
         signals = RaceSignals(
             process_exited=True,
             process_returncode=0,
-            channel_a_confirmed=False,
             channel_b_status=ChannelBStatus.STALE,
             channel_b_session_id="",
             stdout_session_id=None,
@@ -753,7 +833,6 @@ class TestResolveTerminationSignalDeath:
         signals = RaceSignals(
             process_exited=True,
             process_returncode=-9,
-            channel_a_confirmed=False,
             channel_b_status=ChannelBStatus.STALE,
             channel_b_session_id="",
             stdout_session_id=None,

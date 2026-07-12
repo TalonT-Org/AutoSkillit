@@ -11,15 +11,21 @@ import anyio
 import anyio.abc
 
 from autoskillit.core import (
+    CandidateSighting,
     ChannelBStatus,
     ChannelConfirmation,
+    ChildLifecycleSnapshot,
+    CompletionCandidate,
+    CompletionCandidateSource,
     InspectorEvidence,
+    LifecycleDecision,
     TerminationReason,
     get_logger,
 )
 from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.execution.process._process_monitor import (
     ProcessActivityTracker,
+    SessionMonitorResult,
     _has_active_api_connection,
     _has_active_execution_marker,
     _heartbeat,
@@ -64,8 +70,7 @@ class RaceSignals:
 
     process_exited: bool
     process_returncode: int | None
-    channel_a_confirmed: bool
-    channel_b_status: ChannelBStatus | None
+    channel_b_status: ChannelBStatus | None = None
     channel_b_session_id: str = ""  # Claude Code session ID from JSONL filename stem, or ""
     stdout_session_id: str | None = None  # Session ID extracted from stdout type=system record
     idle_stall: bool = False
@@ -73,6 +78,11 @@ class RaceSignals:
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
     exit_snapshot: dict[str, object] | None = None
     inspector_verdict: InspectorVerdict | None = None
+    snapshot: ChildLifecycleSnapshot | None = None
+    decision: LifecycleDecision = LifecycleDecision.CONTINUE
+    eligible_candidate: CompletionCandidate | None = None
+    eligible_source: CompletionCandidateSource | None = None
+    sightings: tuple[CandidateSighting, ...] = ()
 
 
 @dataclass
@@ -91,7 +101,6 @@ class RaceAccumulator:
 
     process_exited: bool = False
     process_returncode: int | None = None
-    channel_a_confirmed: bool = False
     channel_b_status: ChannelBStatus | None = None
     channel_b_session_id: str = ""
     stdout_session_id: str | None = None
@@ -100,12 +109,16 @@ class RaceAccumulator:
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
     exit_snapshot: dict[str, object] | None = None
     inspector_verdict: InspectorVerdict | None = None
+    snapshot: ChildLifecycleSnapshot | None = None
+    decision: LifecycleDecision = LifecycleDecision.CONTINUE
+    eligible_candidate: CompletionCandidate | None = None
+    eligible_source: CompletionCandidateSource | None = None
+    sightings: tuple[CandidateSighting, ...] = ()
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
             process_exited=self.process_exited,
             process_returncode=self.process_returncode,
-            channel_a_confirmed=self.channel_a_confirmed,
             channel_b_status=self.channel_b_status,
             channel_b_session_id=self.channel_b_session_id,
             stdout_session_id=self.stdout_session_id,
@@ -114,7 +127,44 @@ class RaceAccumulator:
             process_exited_event=self.process_exited_event,
             exit_snapshot=self.exit_snapshot,
             inspector_verdict=self.inspector_verdict,
+            snapshot=self.snapshot,
+            decision=self.decision,
+            eligible_candidate=self.eligible_candidate,
+            eligible_source=self.eligible_source,
+            sightings=self.sightings,
         )
+
+
+def _apply_session_monitor_result(
+    acc: RaceAccumulator,
+    result: SessionMonitorResult,
+) -> None:
+    """Copy one immutable monitor result without reconstructing authority."""
+    incoming_has_lifecycle_state = (
+        result.snapshot is not None
+        or result.decision is not LifecycleDecision.CONTINUE
+        or result.eligible_candidate is not None
+        or result.eligible_source is not None
+        or bool(result.sightings)
+    )
+    channel_a_won = (
+        acc.decision is LifecycleDecision.ELIGIBLE
+        and acc.eligible_source is CompletionCandidateSource.CHANNEL_A
+    )
+    incoming_reaffirms_channel_a = (
+        result.decision is LifecycleDecision.ELIGIBLE
+        and result.eligible_source is CompletionCandidateSource.CHANNEL_A
+    )
+    acc.channel_b_status = result.status
+    acc.channel_b_session_id = result.session_id
+    acc.channel_b_orphaned_tool_result = result.orphaned_tool_result
+    if not incoming_has_lifecycle_state or (channel_a_won and not incoming_reaffirms_channel_a):
+        return
+    acc.snapshot = result.snapshot
+    acc.decision = result.decision
+    acc.eligible_candidate = result.eligible_candidate
+    acc.eligible_source = result.eligible_source
+    acc.sightings = result.sightings
 
 
 async def _watch_process(
@@ -168,11 +218,12 @@ async def _watch_heartbeat(
         stream_parser=stream_parser,
     )
     logger.debug(
-        "channel_a_confirmed",
+        "channel_a_eligible",
         stdout_path=str(stdout_path),
         record_types=list(completion_record_types),
     )
-    acc.channel_a_confirmed = True
+    acc.decision = LifecycleDecision.ELIGIBLE
+    acc.eligible_source = CompletionCandidateSource.CHANNEL_A
     trigger.set()
 
 
@@ -474,6 +525,7 @@ async def _watch_session_log(
         _monitor_kwargs["caller_session_id"] = marker_scope_session_id
     if activity_tracker is not None:
         _monitor_kwargs["activity_tracker"] = activity_tracker
+    _monitor_kwargs["eligible_source_on_completion"] = CompletionCandidateSource.CHANNEL_B
     monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,
@@ -496,9 +548,7 @@ async def _watch_session_log(
     )
     # These writes execute atomically before any cancellation delivery:
     # there is no await between them and the function return.
-    acc.channel_b_status = monitor_result.status
-    acc.channel_b_session_id = monitor_result.session_id
-    acc.channel_b_orphaned_tool_result = monitor_result.orphaned_tool_result
+    _apply_session_monitor_result(acc, monitor_result)
     channel_b_ready.set()
     trigger.set()
 
@@ -519,18 +569,20 @@ def resolve_termination(
     that is added without updating the resolution logic.
     """
     # Channel confirmation: independent of termination reason
-    if signals.channel_a_confirmed:
+    if (
+        signals.decision is LifecycleDecision.ELIGIBLE
+        and signals.eligible_source is CompletionCandidateSource.CHANNEL_A
+    ):
         channel = ChannelConfirmation.CHANNEL_A
+    elif (
+        signals.decision is LifecycleDecision.ELIGIBLE
+        and signals.eligible_source is CompletionCandidateSource.CHANNEL_B
+    ):
+        channel = ChannelConfirmation.CHANNEL_B
+    elif signals.channel_b_status is ChannelBStatus.DIR_MISSING:
+        channel = ChannelConfirmation.DIR_MISSING
     else:
-        match signals.channel_b_status:
-            case ChannelBStatus.COMPLETION:
-                channel = ChannelConfirmation.CHANNEL_B
-            case ChannelBStatus.STALE | None:
-                channel = ChannelConfirmation.UNMONITORED
-            case ChannelBStatus.DIR_MISSING:
-                channel = ChannelConfirmation.DIR_MISSING
-            case _ as unreachable:
-                assert_never(unreachable)
+        channel = ChannelConfirmation.UNMONITORED
 
     # Termination reason: priority order (process exit > idle stall > stale > channel win)
     if signals.process_exited:
@@ -556,13 +608,20 @@ def resolve_termination(
                 # The DIR_MISSING structural distinction is preserved at the
                 # ChannelConfirmation level for recovery-gate decisions.
                 termination = TerminationReason.STALE
-            case ChannelBStatus.COMPLETION:
-                termination = TerminationReason.COMPLETED
-            case None:
-                if signals.channel_a_confirmed:
+            case ChannelBStatus.COMPLETION | None:
+                if (
+                    signals.decision is LifecycleDecision.ELIGIBLE
+                    and signals.eligible_source is not None
+                ):
                     termination = TerminationReason.COMPLETED
+                elif signals.decision in {
+                    LifecycleDecision.ELIGIBLE,
+                    LifecycleDecision.CHILD_WORK_FAILED,
+                    LifecycleDecision.CATCH_UP_FAILED,
+                }:
+                    termination = TerminationReason.HEALTH_INSPECTOR
                 else:
-                    termination = TerminationReason.NATURAL_EXIT  # fallback
+                    termination = TerminationReason.NATURAL_EXIT
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -570,11 +629,47 @@ def resolve_termination(
         "resolve_termination",
         process_exited=signals.process_exited,
         process_returncode=signals.process_returncode,
-        channel_a_confirmed=signals.channel_a_confirmed,
         channel_b_status=signals.channel_b_status,
         channel_b_session_id=signals.channel_b_session_id,
         idle_stall=signals.idle_stall,
+        decision=signals.decision,
+        eligible_source=signals.eligible_source,
         resolved_termination=str(termination),
         resolved_channel=str(channel),
     )
     return termination, channel
+
+
+def _apply_lifecycle_completion_authority(
+    termination: TerminationReason,
+    channel_confirmation: ChannelConfirmation,
+    signals: RaceSignals,
+) -> tuple[TerminationReason, ChannelConfirmation]:
+    """Apply actor authority after the raw race classification.
+
+    A caught-up eligible exit remains actor-authorized ``COMPLETED`` per the
+    stamped lifecycle decision table, including when the raw race observed
+    process exit in the same tick.
+    """
+    if (
+        signals.decision is LifecycleDecision.ELIGIBLE
+        and signals.eligible_source is CompletionCandidateSource.CHANNEL_A
+    ):
+        return TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_A
+    if (
+        signals.decision is LifecycleDecision.ELIGIBLE
+        and signals.eligible_source is CompletionCandidateSource.CHANNEL_B
+    ):
+        return TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_B
+    if signals.decision in {
+        LifecycleDecision.ELIGIBLE,
+        LifecycleDecision.CHILD_WORK_FAILED,
+        LifecycleDecision.CATCH_UP_FAILED,
+    }:
+        return TerminationReason.HEALTH_INSPECTOR, ChannelConfirmation.UNMONITORED
+    if channel_confirmation in {
+        ChannelConfirmation.CHANNEL_A,
+        ChannelConfirmation.CHANNEL_B,
+    }:
+        return TerminationReason.HEALTH_INSPECTOR, ChannelConfirmation.UNMONITORED
+    return termination, channel_confirmation

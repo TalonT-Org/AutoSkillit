@@ -21,8 +21,6 @@ from autoskillit.core import (
     CandidateSighting,
     ChannelBStatus,
     ChannelConfirmation,
-    ChildLifecycleSnapshot,
-    CompletionCandidate,
     CompletionCandidateSource,
     KillReason,
     LifecycleDecision,
@@ -43,6 +41,7 @@ from autoskillit.execution.process._lifecycle_actor import (
     CatchUpCancellationFact,
     ChannelBProposal,
     ProcessExitFact,
+    _LifecycleActorState,
     run_lifecycle_actor,
 )
 from autoskillit.execution.process._process_io import create_temp_io, read_temp_output
@@ -59,6 +58,7 @@ from autoskillit.execution.process._process_kill import (
 )
 from autoskillit.execution.process._process_monitor import (
     ProcessActivityTracker,
+    SessionMonitorResult,
     _has_active_api_connection,
     _has_active_execution_marker,
     _heartbeat,
@@ -69,6 +69,8 @@ from autoskillit.execution.process._process_pty import pty_wrap_command
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
+    _apply_lifecycle_completion_authority,
+    _apply_session_monitor_result,
     _extract_stdout_session_id,
     _watch_child_activity,
     _watch_heartbeat,
@@ -216,34 +218,6 @@ def _stdout_size(path: Path) -> int:
         return 0
 
 
-def _apply_lifecycle_completion_authority(
-    termination: TerminationReason,
-    channel_confirmation: ChannelConfirmation,
-    lifecycle_decision: LifecycleDecision,
-    lifecycle_candidate: CompletionCandidate | None = None,
-) -> tuple[TerminationReason, ChannelConfirmation]:
-    """Require actor authorization before raw channel evidence can complete."""
-    if lifecycle_decision is LifecycleDecision.ELIGIBLE:
-        if (
-            lifecycle_candidate is not None
-            and CompletionCandidateSource.CHANNEL_A not in lifecycle_candidate.sources
-            and CompletionCandidateSource.CHANNEL_B in lifecycle_candidate.sources
-        ):
-            return TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_B
-        return TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_A
-    if lifecycle_decision in {
-        LifecycleDecision.CHILD_WORK_FAILED,
-        LifecycleDecision.CATCH_UP_FAILED,
-    }:
-        return TerminationReason.HEALTH_INSPECTOR, ChannelConfirmation.UNMONITORED
-    if channel_confirmation in {
-        ChannelConfirmation.CHANNEL_A,
-        ChannelConfirmation.CHANNEL_B,
-    }:
-        return TerminationReason.HEALTH_INSPECTOR, ChannelConfirmation.UNMONITORED
-    return termination, channel_confirmation
-
-
 async def _watch_process_with_lifecycle(
     proc: anyio.abc.Process,
     acc: RaceAccumulator,
@@ -252,7 +226,7 @@ async def _watch_process_with_lifecycle(
     actor_decision_event: anyio.Event,
     trigger: anyio.Event,
     completion_drain_timeout: float,
-    on_decision: Callable[[LifecycleDecision, CompletionCandidate | None], None],
+    on_state: Callable[[_LifecycleActorState], None],
 ) -> None:
     local_trigger = anyio.Event()
     await _watch_process(proc, acc, local_trigger)
@@ -267,7 +241,13 @@ async def _watch_process_with_lifecycle(
     with anyio.move_on_after(completion_drain_timeout) as drain_scope:
         await actor_decision_event.wait()
     if drain_scope.cancel_called and not actor_decision_event.is_set():
-        on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
+        on_state(
+            _LifecycleActorState(
+                snapshot=acc.snapshot,
+                decision=LifecycleDecision.CATCH_UP_FAILED,
+                sightings=acc.sightings,
+            )
+        )
     trigger.set()
 
 
@@ -344,9 +324,7 @@ async def _watch_session_log_with_lifecycle(
         **monitor_kwargs,  # type: ignore[arg-type]
     )
 
-    acc.channel_b_status = monitor_result.status
-    acc.channel_b_session_id = monitor_result.session_id
-    acc.channel_b_orphaned_tool_result = monitor_result.orphaned_tool_result
+    _apply_session_monitor_result(acc, monitor_result)
     channel_b_ready.set()
 
     if acc.channel_b_status is not ChannelBStatus.COMPLETION:
@@ -551,9 +529,6 @@ async def run_managed_async(
             stdout_session_id_ready = anyio.Event()
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
             actor_decision_event = anyio.Event()
-            lifecycle_decision = LifecycleDecision.CONTINUE
-            lifecycle_candidate: CompletionCandidate | None = None
-            lifecycle_snapshot: ChildLifecycleSnapshot | None = None
             reply_sends: dict[str, MemoryObjectSendStream[object]] = {}
 
             def _record_stdout_session_id(resolved_session_id: str) -> None:
@@ -564,21 +539,23 @@ async def run_managed_async(
                 if on_session_id_resolved is not None:
                     on_session_id_resolved(resolved_session_id)
 
-            def _record_lifecycle_snapshot(snapshot: ChildLifecycleSnapshot) -> None:
-                nonlocal lifecycle_snapshot
-                lifecycle_snapshot = snapshot
-
-            def _record_lifecycle_decision(
-                decision: LifecycleDecision,
-                candidate: CompletionCandidate | None,
-            ) -> None:
-                nonlocal lifecycle_decision, lifecycle_candidate
-                lifecycle_decision = decision
-                lifecycle_candidate = candidate
-                if decision is LifecycleDecision.ELIGIBLE:
-                    acc.channel_a_confirmed = True
-                actor_decision_event.set()
-                trigger.set()
+            def _record_lifecycle_state(state: _LifecycleActorState) -> None:
+                _apply_session_monitor_result(
+                    acc,
+                    SessionMonitorResult(
+                        status=acc.channel_b_status,
+                        session_id=acc.channel_b_session_id,
+                        orphaned_tool_result=acc.channel_b_orphaned_tool_result,
+                        snapshot=state.snapshot,
+                        decision=state.decision,
+                        eligible_candidate=state.eligible_candidate,
+                        eligible_source=state.eligible_source,
+                        sightings=state.sightings,
+                    ),
+                )
+                if state.decision is not LifecycleDecision.CONTINUE:
+                    actor_decision_event.set()
+                    trigger.set()
 
             def _reply_send_for_request(
                 request_id: str,
@@ -604,12 +581,11 @@ async def run_managed_async(
                         functools.partial(
                             run_lifecycle_actor,
                             completion_drain_timeout=completion_drain_timeout,
-                            on_snapshot=_record_lifecycle_snapshot,
                         ),
                         fact_receive,
                         pump_command_send,
                         _reply_send_for_request,
-                        _record_lifecycle_decision,
+                        _record_lifecycle_state,
                     )
                     tg.start_soon(
                         functools.partial(run_channel_a_pump, poll_interval=_heartbeat_poll),
@@ -626,7 +602,7 @@ async def run_managed_async(
                         actor_decision_event,
                         trigger,
                         completion_drain_timeout,
-                        _record_lifecycle_decision,
+                        _record_lifecycle_state,
                     )
                     if session_log_dir is not None:
                         tg.start_soon(
@@ -755,8 +731,13 @@ async def run_managed_async(
                     and timeout_scope is not None
                     and timeout_scope.cancelled_caught
                 ):
-                    lifecycle_decision = LifecycleDecision.CATCH_UP_FAILED
-                    actor_decision_event.set()
+                    _record_lifecycle_state(
+                        _LifecycleActorState(
+                            snapshot=acc.snapshot,
+                            decision=LifecycleDecision.CATCH_UP_FAILED,
+                            sightings=acc.sightings,
+                        )
+                    )
                 if pump_state is not None:
                     pump_state.closed = True
                 tg.cancel_scope.cancel()
@@ -767,8 +748,7 @@ async def run_managed_async(
                 termination, _channel_confirmation = _apply_lifecycle_completion_authority(
                     termination,
                     _channel_confirmation,
-                    lifecycle_decision,
-                    lifecycle_candidate,
+                    signals,
                 )
 
             snapshots_data: list[dict[str, object]] | None = None
@@ -793,7 +773,8 @@ async def run_managed_async(
                 action=str(action),
                 reason=str(action),
                 process_exited=signals.process_exited,
-                channel_a=signals.channel_a_confirmed,
+                lifecycle_decision=signals.decision,
+                eligible_source=signals.eligible_source,
                 channel_b=signals.channel_b_status,
             )
             kill_reason = await execute_termination_action(
@@ -828,9 +809,11 @@ async def run_managed_async(
                 orphaned_tool_result=signals.channel_b_orphaned_tool_result,
                 inspector_verdict=signals.inspector_verdict,
                 cleanup_outcome=_finalizer.outcome,
-                lifecycle_snapshot=lifecycle_snapshot,
-                lifecycle_decision=lifecycle_decision,
-                lifecycle_candidate=lifecycle_candidate,
+                lifecycle_snapshot=signals.snapshot,
+                lifecycle_decision=signals.decision,
+                lifecycle_candidate=signals.eligible_candidate,
+                eligible_source=signals.eligible_source,
+                sightings=signals.sightings,
             )
             proc_log.debug(
                 "run_managed_async_result",

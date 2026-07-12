@@ -7,7 +7,13 @@ import textwrap
 
 import pytest
 
-from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
+from autoskillit.core.types import (
+    ChannelConfirmation,
+    CompletionCandidateSource,
+    LifecycleDecision,
+    SubprocessResult,
+    TerminationReason,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.process import run_managed_async
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
@@ -23,11 +29,12 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     import sys, time, json, os
     session_dir = sys.argv[1]
     os.makedirs(session_dir, exist_ok=True)
-    sys.stdout.write(json.dumps({"type": "system", "session_id": "session"}) + "\\n")
+    sys.stdout.write(json.dumps({"type": "system", "subtype": "init",
+                                "session_id": "stdout-session"}) + "\\n")
     sys.stdout.flush()
     # Small delay to ensure file ctime > spawn_time recorded in run_managed_async
     time.sleep(0.1)
-    jsonl_path = os.path.join(session_dir, "session.jsonl")
+    jsonl_path = os.path.join(session_dir, "channel-b-log-session.jsonl")
     with open(jsonl_path, "w") as f:
         init = {"type": "assistant", "message": {"role": "assistant",
                 "content": "working..."}}
@@ -38,9 +45,17 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     # 3s margin handles xdist -n 4 event-loop saturation on WSL2 where coroutine
     # scheduling jitter can delay Phase 1 discovery by >1s.
     time.sleep(3.0)
+    channel_a_record = {"type": "assistant", "uuid": "parent-channel-b-then-a",
+                        "session_id": "channel-a-candidate-session",
+                        "message": {"id": "message-channel-a",
+                        "role": "assistant", "content": [{"type": "text",
+                        "text": "%%ORDER_UP%%"}]}}
+    sys.stdout.write(json.dumps(channel_a_record) + "\\n")
+    sys.stdout.flush()
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "uuid": "parent-channel-b-then-a",
-                  "session_id": "session", "message": {"id": "message-channel-b-then-a",
+                  "session_id": "channel-b-candidate-session",
+                  "message": {"id": "message-channel-b",
                   "role": "assistant", "content": [{"type": "text",
                   "text": "%%ORDER_UP%%"}]}}
         f.write(json.dumps(record) + "\\n")
@@ -49,7 +64,7 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     # Callers pass this delay as sys.argv[2]; default 4.0 matches production poll defaults.
     time.sleep(float(sys.argv[2]) if len(sys.argv) > 2 else 4.0)
     result = {"type": "result", "subtype": "success", "is_error": False,
-              "result": "done", "session_id": "s1"}
+              "result": "done", "session_id": "result-envelope-session"}
     sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
     sys.stdout.flush()
     time.sleep(3600)
@@ -201,15 +216,42 @@ class TestChannelBDrainWait:
             parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
                 "%%ORDER_UP%%"
             ),
-            completion_drain_timeout=5.0,
+            marker_scope_session_id="marker-scope-session",
+            completion_drain_timeout=10.0,
             _phase1_timeout=400,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
-            _heartbeat_poll=0.05,
+            _heartbeat_poll=5.0,
             _session_id_timeout=0.01,
         )
 
         assert result.termination == TerminationReason.COMPLETED
+        assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
+        assert result.eligible_source is CompletionCandidateSource.CHANNEL_A
+        assert result.channel_confirmation is ChannelConfirmation.CHANNEL_A
+        assert result.session_id == "stdout-session"
+        assert result.channel_b_session_id == "channel-b-log-session"
+        assert tuple(sighting.source for sighting in result.sightings) == (
+            CompletionCandidateSource.CHANNEL_A,
+            CompletionCandidateSource.CHANNEL_B,
+        )
+        assert tuple(sighting.backend_session_id for sighting in result.sightings) == (
+            "channel-a-candidate-session",
+            "channel-b-candidate-session",
+        )
+        assert "result-envelope-session" in result.stdout
+        assert (
+            len(
+                {
+                    "marker-scope-session",
+                    result.session_id,
+                    result.channel_b_session_id,
+                    *(sighting.backend_session_id for sighting in result.sightings),
+                    "result-envelope-session",
+                }
+            )
+            == 6
+        )
         # Drain wait confirmed Channel A fired: stdout is non-empty
         assert result.stdout.strip()
 
@@ -263,6 +305,12 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
+        assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
+        assert result.eligible_source is CompletionCandidateSource.CHANNEL_B
+        assert result.channel_confirmation is ChannelConfirmation.CHANNEL_B
+        assert tuple(sighting.source for sighting in result.sightings) == (
+            CompletionCandidateSource.CHANNEL_B,
+        )
         # Drain timed out: CLI hung and never flushed its result record
         assert not result.stdout.strip()
 
@@ -288,6 +336,10 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
+        assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
+        assert result.eligible_source is CompletionCandidateSource.CHANNEL_A
+        assert result.lifecycle_candidate is None
+        assert result.sightings == ()
         assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty
 
     @pytest.mark.timeout(360)
@@ -332,6 +384,7 @@ class TestChannelBDrainWait:
 
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        assert result.eligible_source is CompletionCandidateSource.CHANNEL_B
 
     @pytest.mark.timeout(90)
     @pytest.mark.anyio
@@ -354,6 +407,9 @@ class TestChannelBDrainWait:
 
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
+        assert result.eligible_source is CompletionCandidateSource.CHANNEL_A
+        assert result.lifecycle_candidate is None
+        assert result.sightings == ()
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio

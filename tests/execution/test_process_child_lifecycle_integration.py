@@ -28,6 +28,7 @@ from autoskillit.core import (
     ChannelConfirmation,
     ChildAttemptState,
     ChildLifecycleObservation,
+    CompletionCandidateSource,
     KillReason,
     LifecycleDecision,
     ParentAssistantMarker,
@@ -272,8 +273,22 @@ async def test_production_runner_defers_early_marker_until_five_children_finish(
     assert result.channel_confirmation is ChannelConfirmation.CHANNEL_A
     assert result.kill_reason is KillReason.KILL_AFTER_COMPLETION
     assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
+    assert result.lifecycle_snapshot is not None
     assert result.lifecycle_candidate is not None
+    assert result.lifecycle_snapshot.eligible_candidate is result.lifecycle_candidate
     assert result.lifecycle_candidate.candidate_id == "parent-fresh"
+    assert result.eligible_source is CompletionCandidateSource.CHANNEL_A
+    assert result.sightings[-len(result.lifecycle_candidate.sightings) :] == (
+        result.lifecycle_candidate.sightings
+    )
+    assert tuple(sighting.native_uuid for sighting in result.sightings) == (
+        "parent-early",
+        "parent-fresh",
+    )
+    assert tuple(sighting.source for sighting in result.sightings) == (
+        CompletionCandidateSource.CHANNEL_A,
+        CompletionCandidateSource.CHANNEL_A,
+    )
     assert result.cleanup_outcome is not None and result.cleanup_outcome.succeeded
     assert all(not psutil.pid_exists(pid) for pid in child_pids)
 
@@ -323,6 +338,10 @@ async def test_production_runner_no_child_fast_path(tmp_path: Path) -> None:
     assert elapsed < 3.0
     assert result.termination is TerminationReason.COMPLETED
     assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
+    assert result.eligible_source is CompletionCandidateSource.CHANNEL_A
+    assert tuple(sighting.source for sighting in result.sightings) == (
+        CompletionCandidateSource.CHANNEL_A,
+    )
     assert result.cleanup_outcome is not None and result.cleanup_outcome.succeeded
     assert not psutil.pid_exists(result.pid)
 
@@ -543,5 +562,10 @@ async def test_child_failure_releases_deferral_and_cleans_process_tree(tmp_path:
 
     assert result.termination is TerminationReason.HEALTH_INSPECTOR
     assert result.lifecycle_decision is LifecycleDecision.CHILD_WORK_FAILED
+    assert result.eligible_source is None
+    assert tuple(sighting.native_uuid for sighting in result.sightings) == (
+        "parent-after-failure",
+    )
+    assert result.sightings[0].source is CompletionCandidateSource.CHANNEL_A
     assert result.cleanup_outcome is not None and result.cleanup_outcome.succeeded
     assert all(not psutil.pid_exists(pid) for pid in process_ids)

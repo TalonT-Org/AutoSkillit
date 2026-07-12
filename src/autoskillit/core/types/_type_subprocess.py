@@ -14,9 +14,11 @@ from typing import Any, Protocol, runtime_checkable
 from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 from ._type_inspector import InspectorCallback, InspectorVerdict
 from ._type_lifecycle import (
+    CandidateSighting,
     ChildLifecycleSnapshot,
     CleanupOutcome,
     CompletionCandidate,
+    CompletionCandidateSource,
     LifecycleDecision,
 )
 from ._type_protocols_backend import StreamParserFactory
@@ -41,7 +43,7 @@ DEFAULT_CLEANUP_BUDGET_SECONDS: float = 15.0
 #: These invariants are enforced by tests/test_process_lifecycle.py
 #: TestAdjudicationCoverageMatrix.
 #:
-#: NATURAL_EXIT:
+#: NATURAL_EXIT (raw parserless race only):
 #:   channel_confirmation=UNMONITORED (typical: process exited before channels fired)
 #:   channel_confirmation=CHANNEL_A (simultaneous: process exit + heartbeat in same tick)
 #:   channel_confirmation=CHANNEL_B (simultaneous: process exit + session monitor completion)
@@ -52,12 +54,12 @@ DEFAULT_CLEANUP_BUDGET_SECONDS: float = 15.0
 #:   When CHANNEL_A or CHANNEL_B: no kill anomaly; session completed.
 #:
 #: COMPLETED (Channel A):
-#:   channel_confirmation=CHANNEL_A (heartbeat confirmed type=result in stdout)
+#:   channel_confirmation=CHANNEL_A (typed eligibility names Channel A)
 #:   returncode=nonzero (SIGTERM/SIGKILL from async_kill_process_tree)
 #:   stdout=contains a complete type=result NDJSON record
 #:
 #: COMPLETED (Channel B, drain expired OR no heartbeat configured):
-#:   channel_confirmation=CHANNEL_B (session JSONL is sole authority)
+#:   channel_confirmation=CHANNEL_B (typed eligibility names Channel B)
 #:   returncode=nonzero (SIGTERM/SIGKILL)
 #:   stdout=may be empty (CLI not yet flushed type=result before kill)
 #:   _compute_success provenance bypass applies: return True immediately.
@@ -159,6 +161,8 @@ class SubprocessResult:
     lifecycle_snapshot: ChildLifecycleSnapshot | None = None
     lifecycle_decision: LifecycleDecision = LifecycleDecision.CONTINUE
     lifecycle_candidate: CompletionCandidate | None = None
+    eligible_source: CompletionCandidateSource | None = None
+    sightings: tuple[CandidateSighting, ...] = ()
 
 
 @runtime_checkable

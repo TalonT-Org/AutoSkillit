@@ -313,6 +313,29 @@ def test_subprocess_result_has_elapsed_seconds_field():
     assert result2.elapsed_seconds == pytest.approx(7.3)
 
 
+def test_subprocess_result_lifecycle_carrier_defaults():
+    """SubprocessResult defaults cannot imply actor completion authority."""
+    from autoskillit.core.types import (
+        LifecycleDecision,
+        SubprocessResult,
+        TerminationReason,
+    )
+
+    result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+    )
+
+    assert result.lifecycle_snapshot is None
+    assert result.lifecycle_decision is LifecycleDecision.CONTINUE
+    assert result.lifecycle_candidate is None
+    assert result.eligible_source is None
+    assert result.sightings == ()
+
+
 # ---------------------------------------------------------------------------
 # SkillResult.worktree_path field + to_json() conditional inclusion
 # ---------------------------------------------------------------------------

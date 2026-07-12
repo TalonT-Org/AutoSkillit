@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shlex
+import shutil
 import subprocess
 import tempfile
 from datetime import date
@@ -206,6 +207,25 @@ def _check_script_binary() -> DoctorResult:
             "script(1) present but -qefc flags unsupported — PTY wrapping may not work correctly",
         )
     return DoctorResult(Severity.OK, check_name, "script(1) available with -qefc support")
+
+
+def _check_claude_binary() -> DoctorResult:
+    """Check that the claude CLI is available on PATH for capability-driven rerouting."""
+    if shutil.which("claude"):
+        return DoctorResult(
+            Severity.OK,
+            "claude_binary",
+            "claude CLI found on PATH",
+        )
+    return DoctorResult(
+        Severity.WARNING,
+        "claude_binary",
+        (
+            "claude CLI not found on PATH — skills requiring Claude Code worker "
+            "routing (agent_subagent, agent_model, cross_skill_ref, "
+            "git_metadata_write) will crash at dispatch time on non-Anthropic backends"
+        ),
+    )
 
 
 def _check_codex_graduation(

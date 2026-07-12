@@ -60,6 +60,7 @@ from ._doctor_mcp import (
     _check_stale_mcp_servers,
 )
 from ._doctor_runtime import (
+    _check_claude_binary,
     _check_claude_process_state_breakdown,
     _check_cli_conformance_probes,
     _check_codex_graduation,
@@ -211,6 +212,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 31: script(1) PTY binary availability
     results.append(_check_script_binary())
+
+    # Check 31b: claude CLI binary availability (capability-driven rerouting)
+    results.append(_check_claude_binary())
 
     # Check 32: Codex MCP tool_timeout_sec coherence
     results.append(

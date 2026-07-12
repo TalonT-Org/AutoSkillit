@@ -329,17 +329,20 @@ class SkillCapabilityDef:
 # to block dispatch on backends whose applicable_guards don't cover the hook's scripts.
 # In SKILL_CAPABILITY_REGISTRY, fix-required is advisory only — it does NOT block dispatch
 # (required_backends returns frozenset() for all non-not-applicable statuses). Skills
-# declaring fix-required capabilities (agent_subagent, agent_model, cross_skill_ref) are
-# still Codex-dispatchable because the capability is documentary about the feature
-# being incomplete, not a hard blocker. Do not conflate the two registries' semantics.
+# declaring fix-required capabilities (github_api_write) are still Codex-dispatchable
+# because the capability is documentary about the feature being incomplete, not a hard
+# blocker. agent_subagent / agent_model / cross_skill_ref are routed via worker_routable
+# rather than fix-required. Do not conflate the two registries' semantics.
 SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
     "agent_subagent": SkillCapabilityDef(
         description="Agent(subagent_type=...) tool — delegates to specialized subagent",
-        codex_status="fix-required",
+        codex_status="not-applicable",
+        worker_routable=True,
     ),
     "agent_model": SkillCapabilityDef(
         description="Agent(model=...) tool — spawns model-specific subagent",
-        codex_status="fix-required",
+        codex_status="not-applicable",
+        worker_routable=True,
     ),
     "open_kitchen": SkillCapabilityDef(
         description="open_kitchen / close_kitchen lifecycle tools",
@@ -359,7 +362,8 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
     ),
     "cross_skill_ref": SkillCapabilityDef(
         description="Cross-skill /autoskillit: invocation via Skill tool",
-        codex_status="fix-required",
+        codex_status="not-applicable",
+        worker_routable=True,
     ),
     "git_metadata_write": SkillCapabilityDef(
         description=(

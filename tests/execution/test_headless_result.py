@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest.mock
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -1794,15 +1795,15 @@ class TestCodexPathContaminationParity:
         assert sr.subtype == "path_contamination"
         assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
 
-    def test_external_text_echo_plus_in_cwd_file_change_preserves_success(self):
-        """Round-6 immunity on Codex: external text echo + completed in-CWD FILE_CHANGE
-        remains successful. Boundary proof requires an out-of-CWD path."""
+    def test_external_text_echo_plus_tracked_tree_file_change_preserves_success(self):
+        """Round-6 immunity on Codex: external text echo + completed tracked-tree FILE_CHANGE
+        remains successful. Temp-only writes are no longer implementation evidence."""
         worktree_cwd = "/worktree/clone"
         external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
-        in_cwd_target = f"{worktree_cwd}/.autoskillit/temp/make-plan/foo.md"
+        tracked_target = f"{worktree_cwd}/src/autoskillit/foo.py"
         stdout = self._codex_ndjson(
             agent_text=f"plan_path = {external_plan}",
-            file_changes=[in_cwd_target],
+            file_changes=[tracked_target],
         )
         sr = _build_skill_result(
             _codex_subprocess_result(stdout),
@@ -1811,6 +1812,8 @@ class TestCodexPathContaminationParity:
                 "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
             ),
             cwd=worktree_cwd,
+            write_watch_dirs=[Path(worktree_cwd)],
+            write_behavior=WriteBehaviorSpec(mode="always"),
             supports_claude_format_stdout=False,
             backend=CodexBackend(),
         )
@@ -1819,11 +1822,14 @@ class TestCodexPathContaminationParity:
         assert sr.retry_reason != RetryReason.PATH_CONTAMINATION
         assert sr.evidence.has_implementation_evidence is True
 
-    def test_file_changes_count_provenance_is_recognized(self):
-        """Completed Codex changes populate write_call_count through synthetic tool uses;
-        has_implementation_evidence holds for either write_call_count OR file_changes_count."""
+    def test_temp_only_file_changes_triggers_zero_writes_demotion(self):
+        """For a worktree-skill dispatch, temp-only FILE_CHANGE files do not count.
+
+        Path-aware evidence: a temp-only `file_changes` list yields
+        has_implementation_evidence=False, which the gate at terminal-stage consumes
+        to demote success → zero_writes / needs_retry=True.
+        """
         worktree_cwd = "/worktree/clone"
-        # No agent_text echoing plan_path: only the in-CWD FILE_CHANGE.
         in_cwd_target = f"{worktree_cwd}/.autoskillit/temp/foo.md"
         stdout = self._codex_ndjson(
             agent_text="Done.",
@@ -1833,9 +1839,10 @@ class TestCodexPathContaminationParity:
             _codex_subprocess_result(stdout),
             skill_command="/autoskillit:no-such-skill-anywhere x",
             cwd=worktree_cwd,
+            write_watch_dirs=[Path(worktree_cwd)],
+            write_behavior=WriteBehaviorSpec(mode="always"),
             supports_claude_format_stdout=False,
             backend=CodexBackend(),
         )
-        # Provenance counts are recorded; no scoped text candidate → preserve result.
-        assert sr.evidence.has_implementation_evidence is True
+        assert sr.evidence.has_implementation_evidence is False
         assert sr.subtype != "path_contamination"

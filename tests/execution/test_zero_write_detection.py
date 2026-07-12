@@ -22,12 +22,26 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 FIXTURE_CONDITIONAL_PATTERN = r"verdict[ \t]*=[ \t]*real_fix"
 
 
-def _ndjson_with_tool_uses(tool_names: list[str]) -> str:
-    """Build NDJSON stdout with assistant tool_use blocks and a success result."""
+def _ndjson_with_tool_uses(
+    tool_names: list[str],
+    file_paths: list[str] | None = None,
+) -> str:
+    """Build NDJSON stdout with assistant tool_use blocks and a success result.
+
+    file_paths: optional list parallel to tool_names. When provided, populates
+    block["input"]["file_path"] for each tool_use so path-aware evidence tests
+    can exercise _compute_write_evidence path-filtering logic.
+    """
+    file_paths = file_paths or [""] * len(tool_names)
+    if len(file_paths) != len(tool_names):
+        raise ValueError("file_paths must be parallel to tool_names")
     lines: list[str] = []
-    content_blocks = [
-        {"type": "tool_use", "name": name, "id": f"tu_{i}"} for i, name in enumerate(tool_names)
-    ]
+    content_blocks: list[dict[str, object]] = []
+    for i, name in enumerate(tool_names):
+        block: dict[str, object] = {"type": "tool_use", "name": name, "id": f"tu_{i}"}
+        if file_paths[i]:
+            block["input"] = {"file_path": file_paths[i]}
+        content_blocks.append(block)
     if content_blocks:
         assistant = {
             "type": "assistant",
@@ -1201,3 +1215,85 @@ class TestHelperDiversityGuard:
             "TestFilesystemWriteDetection must include at least one test "
             "with 'Bash' tool_use to prevent the MCP-only counting blindspot"
         )
+
+
+# ---------------------------------------------------------------------------
+# AC3/AC4: Path-aware write-evidence tests
+# ---------------------------------------------------------------------------
+
+
+class TestPathAwareImplementationEvidence:
+    """Worktree-skill dispatches must distinguish tracked-tree writes from temp writes."""
+
+    def _worktree_cwd(self, tmp_path: Path) -> Path:
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        return wt
+
+    def test_temp_only_writes_not_implementation_evidence_output_dir_dot(
+        self, tmp_path: Path
+    ) -> None:
+        """output_dir="." → temp-only writes do NOT count as implementation evidence."""
+        wt = self._worktree_cwd(tmp_path)
+        temp_path = str(wt / ".autoskillit" / "temp" / "implement-worktree-no-merge" / "draft.py")
+        stdout = _ndjson_with_tool_uses(["Write", "Edit"], file_paths=[temp_path, temp_path])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:implement-worktree-no-merge /some/path.md",
+            cwd=str(wt),
+            write_watch_dirs=[wt],  # output_dir="." → cwd itself
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.evidence.has_implementation_evidence is False
+
+    def test_temp_only_writes_not_implementation_evidence_temp_fallback(
+        self, tmp_path: Path
+    ) -> None:
+        """Default temp-fallback shape → temp-only writes do NOT count."""
+        wt = self._worktree_cwd(tmp_path)
+        temp_path = str(wt / ".autoskillit" / "temp" / "implement-worktree-no-merge" / "draft.py")
+        stdout = _ndjson_with_tool_uses(["Write"], file_paths=[temp_path])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:implement-worktree-no-merge /some/path.md",
+            cwd=str(wt),
+            # Default fallback: watch dir is <cwd>/.autoskillit/temp/<skill>/
+            write_watch_dirs=[wt / ".autoskillit" / "temp" / "implement-worktree-no-merge"],
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.evidence.has_implementation_evidence is False
+
+    def test_mixed_temp_and_tracked_writes_is_implementation_evidence(
+        self, tmp_path: Path
+    ) -> None:
+        """A single tracked-tree Write among temp writes counts as implementation evidence."""
+        wt = self._worktree_cwd(tmp_path)
+        tracked_path = str(wt / "src" / "autoskillit" / "core" / "paths.py")
+        temp_path = str(wt / ".autoskillit" / "temp" / "implement-worktree-no-merge" / "notes.md")
+        stdout = _ndjson_with_tool_uses(["Write", "Write"], file_paths=[temp_path, tracked_path])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:implement-worktree-no-merge /some/path.md",
+            cwd=str(wt),
+            write_watch_dirs=[wt],
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.evidence.has_implementation_evidence is True
+
+    def test_non_worktree_skill_temp_writes_still_count(self, tmp_path: Path) -> None:
+        """For non-worktree skills (whose temp dir IS the target), temp writes DO count."""
+        wt = self._worktree_cwd(tmp_path)
+        report_path = str(wt / ".autoskillit" / "temp" / "investigate" / "report.md")
+        stdout = _ndjson_with_tool_uses(["Write"], file_paths=[report_path])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:investigate regression",
+            cwd=str(wt),
+            write_watch_dirs=[wt / ".autoskillit" / "temp" / "investigate"],
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.evidence.has_implementation_evidence is True

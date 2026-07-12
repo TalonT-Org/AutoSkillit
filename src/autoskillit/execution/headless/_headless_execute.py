@@ -424,6 +424,7 @@ async def _execute_claude_headless(
             git_writes_detected=_git_writes_detected,
             prior_completion_markers=prior_completion_markers,
             completion_required=completion_required,
+            write_watch_dirs=write_watch_dirs,
             provider_used=current_provider_name,
             supports_claude_format_stdout=_supports_fmt,
             backend=_step_backend,

@@ -276,15 +276,9 @@ def test_capability_routing_uses_registry_not_hardcoded_name() -> None:
             )
 
 
-_CROSS_SKILL_REF_ALLOWLIST: dict[str, str] = {
-    # Skills where the heuristic cannot reliably classify — override with justification.
-}
+_CROSS_SKILL_REF_ALLOWLIST: dict[str, str] = {}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Step 2 will fix ~24 over-declared cross_skill_ref entries",
-)
 def test_cross_skill_ref_declarations_are_genuine():
     """Skills declaring cross_skill_ref must have a genuine Skill-tool invocation."""
     violations: list[str] = []

@@ -1297,3 +1297,33 @@ class TestPathAwareImplementationEvidence:
             backend=ClaudeCodeBackend(),
         )
         assert sr.evidence.has_implementation_evidence is True
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "REQ-012: denied Write/Edit (is_error in tool_result) should not count "
+            "toward write_call_count. Requires _session_model.py user-record parsing "
+            "to correlate tool_use_id with tool_result.is_error — multi-file "
+            "cross-layer change deferred to dedicated task."
+        ),
+    )
+    def test_denied_write_not_counted(self, tmp_path: Path) -> None:
+        """An Edit/Write with is_error in tool_result must NOT count as implementation evidence."""
+        ndjson = _ndjson_with_tool_uses(
+            ["Write"], file_paths=[str(tmp_path / "src" / "real_file.py")]
+        )
+        wt = tmp_path / "worktrees" / "impl-test"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: ../../.git/worktrees/impl-test\n")
+
+        result = _build_skill_result(
+            _make_result(returncode=0, stdout=ndjson),
+            skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+            cwd=str(wt),
+            write_watch_dirs=[wt],
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+
+        assert result.evidence.write_call_count == 0
+        assert result.evidence.has_implementation_evidence is False

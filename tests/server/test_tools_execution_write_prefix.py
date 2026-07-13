@@ -110,11 +110,41 @@ def test_non_worktree_skill_no_worktree_prefix(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-# Note: test_fail_fast_when_scope_excludes_cwd was removed in the fix iteration.
-# The preflight fires only when target_name is resolved by the skill_resolver.
-# The kitchen_open fixture uses skill_resolver=None which bypasses preflight.
-# Testing the preflight rejection requires a fixture with a real skill resolver,
-# which is covered indirectly by the production code path (no_false_success tests).
+@pytest.mark.anyio
+async def test_fail_fast_when_scope_excludes_cwd(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """When write scope does NOT cover cwd for a WORKTREE_SKILLS dispatch, return gate_error."""
+    import json
+    from unittest.mock import MagicMock
+
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    clone_root, worktree = _make_worktree_layout(tmp_path)
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# plan")
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.skill_resolver = MagicMock()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: (cmd, "implement-worktree-no-merge"),
+    )
+
+    # write scope is temp-only — does NOT cover worktree cwd
+    temp_dir = tmp_path / "elsewhere"
+    temp_dir.mkdir()
+    result = await run_skill(
+        f"/autoskillit:implement-worktree-no-merge {plan_path}",
+        cwd=str(worktree),
+        output_dir=str(temp_dir),
+    )
+
+    assert len(executor.calls) == 0, "No session should be dispatched"
+    parsed = json.loads(result)
+    assert parsed["is_error"] is True
+    assert parsed["subtype"] == "gate_error"
 
 
 @pytest.mark.anyio
@@ -136,6 +166,38 @@ async def test_pass_when_scope_covers_cwd(tool_ctx_kitchen_open, monkeypatch, tm
         output_dir=output_dir,
     )
     # A session was dispatched
+    assert len(executor.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_preflight_fires_for_conditional_contract_worktree_skills(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """Preflight fires for worktree skills regardless of write-behavior mode."""
+    from unittest.mock import MagicMock
+
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    clone_root, worktree = _make_worktree_layout(tmp_path)
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# plan")
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.skill_resolver = MagicMock()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: (cmd, "implement-worktree-no-merge"),
+    )
+
+    # Scope covers cwd — preflight evaluates and passes (dispatch proceeds)
+    await run_skill(
+        f"/autoskillit:implement-worktree-no-merge {plan_path}",
+        cwd=str(worktree),
+        output_dir=str(worktree),
+    )
+
+    # Preflight passed → session dispatched
     assert len(executor.calls) == 1
 
 

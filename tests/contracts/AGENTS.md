@@ -100,6 +100,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_make_plan_echo_rule.py` | Contract test: make-plan SKILL.md must contain requirement echo validation rule and Requirements Map template section |
 | `test_make_plan_remediation_inventory.py` | Contract tests for make-plan SKILL.md remediation-mode inventory awareness |
 | `test_audit_impl_inventory.py` | Contract test: audit-impl SKILL.md must reference pinned requirement inventory persistence, round detection, and union extraction |
+| `test_audit_impl_closure_contracts.py` | Contract test: audit-impl SKILL.md must document closure mode behavior (XOR activation, inventory isolation, canonical report, secure file handling) |
 | `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 | `test_source_attribution_contracts.py` | Cross-skill contract: source-attribution prohibition in dual-source skills |
 | `test_project_local_skill_delivery_contract.py` | Symmetric delivery contract tests for project-local skill overrides |

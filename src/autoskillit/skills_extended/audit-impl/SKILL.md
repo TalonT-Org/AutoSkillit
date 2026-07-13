@@ -43,6 +43,13 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - `conflict_report_paths` (optional) — comma-separated list of absolute paths to conflict
   resolution reports produced by `resolve-merge-conflicts`. When provided and non-empty,
   cross-reference resolution decisions against plan intent in Step 2.5.
+- `closure_authority_path=<absolute_path>` (optional) — Absolute path to a frozen requirements
+  authority JSON file. When provided together with `closure_authority_hash`, activates closure mode.
+  In closure mode, the authority file is the read-only inventory (mutable-inventory extraction
+  is skipped entirely).
+- `closure_authority_hash=<sha256_hash>` (optional) — SHA-256 hash (`sha256:` followed by
+  64 lowercase hex chars) of the authority file content. Must be independently computed by
+  the caller before invocation. Activates closure mode when paired with `closure_authority_path`.
 
 ## Critical Constraints
 
@@ -134,6 +141,53 @@ Step 2.5 is skipped when the list is empty.
 exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
+
+## Closure Mode
+
+Closure mode activates hash-bound verification of the audit verdict. It is designed for
+pipelines where the requirements inventory must be frozen at audit time and the verdict
+must be independently verifiable after the session ends.
+
+**Activation gate:**
+- If exactly one of `closure_authority_path`/`closure_authority_hash` is provided (XOR) →
+  emit error and stop (fail closed). Both must be present or both absent.
+- If both absent → continue with normal mutable-inventory mode (all subsequent steps unchanged).
+- If both present → activate closure mode.
+
+**Authority verification (must complete before any audit step):**
+- Read the authority file. Verify the file is a regular file (not symlink/hardlink), within the
+  working directory tree, under 50 MB, and not world-writable (containment check).
+- Compute SHA-256 of file content. Compare with `closure_authority_hash`. Mismatch → emit
+  error and stop.
+- Parse as JSON. Validate it has `schema_version`, `requirement_ids`, `requirements` fields.
+
+**Inventory isolation (critical):**
+- In closure mode, NEVER read, write, extend, or consult `requirements_inventory.json`.
+- The authority file IS the frozen inventory. It is read-only.
+- Step 1 (Requirements Extraction) is SKIPPED entirely. Requirements are loaded from the
+  authority file only — no extraction subagents are invoked.
+
+**Step modifications in closure mode:**
+- Step 1 (Requirements Extraction): **SKIP**. Load requirements from the authority file only.
+- Step 2 (Diff Computation): Unchanged.
+- Step 3 (Slice Audit): Unchanged — slice and dispatch `audit-impl-slice-auditor` subagents
+  against authority requirements.
+- Step 3.5 (Deviation Evaluation): Unchanged if `deviation_manifest_path` provided.
+- Step 4 (Verdict Determination): Unchanged — determine GO/NO GO from findings.
+- Step 5 (Output — modified): In addition to emitting plain-text `verdict = GO/NO GO` tokens
+  (for backward compatibility), produce a canonical JSON report:
+  - Write to `{{AUTOSKILLIT_TEMP}}/audit-impl/closure_report.json`
+  - Report must contain all fields per the `ClosureReport` schema (`schema_version`,
+    `request_hash`, `authority_hash`, `plan_hashes`, `base_sha`, `diff_sha`, `target_sha`,
+    `requirement_ids`, `rows`, `verdict`, `report_hash`, `remediation_path`, `generated_at`)
+  - Compute all hash fields: `compute_file_hash` for authority and plans, `compute_row_hash`
+    for each requirement, `compute_request_hash` for the request, `compute_report_hash` for the report
+  - Use `write_versioned_json` with `schema_version=1`
+
+**Secure file handling throughout closure mode:**
+- All file reads (authority, plans, diff artifacts) must verify: file is regular (not symlink),
+  within the working directory or `{{AUTOSKILLIT_TEMP}}`, under 50 MB size limit, not
+  world-writable (containment checks via `path_containment.resolve_contained_path`).
 
 ### Step 1 — Load Plans via Parallel Subagents (SINGLE MESSAGE)
 

@@ -16,6 +16,7 @@ import anyio
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
+    ClosureAuthoritySpec,
     CmdSpec,
     CodingAgentBackend,
     KillReason,
@@ -113,6 +114,8 @@ async def _execute_claude_headless(
     inspector_model: str = "",
     backend_override_source: str | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
+    closure_spec: ClosureAuthoritySpec | None = None,
+    closure_report_root: Path | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -432,6 +435,8 @@ async def _execute_claude_headless(
             supports_claude_format_stdout=_supports_fmt,
             backend=_step_backend,
             readonly_skill=_readonly_skill,
+            closure_spec=closure_spec,
+            closure_report_root=closure_report_root,
         )
 
         if (

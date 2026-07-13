@@ -127,6 +127,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_write_evidence.py` | Write evidence: multi-directory fs snapshot and write_watch_dirs plumbing |
 | `test_write_evidence_invariants.py` | Write-evidence invariants: 'no work done' retry reasons must be overridden by write evidence |
 | `test_zero_write_detection.py` | Contract: sessions expected to write must actually write (behavioral write-count gate) |
+| `test_closure_gate.py` | Execution-layer closure verification gate tests — demote unverifiable closure reports, pass valid reports, no-op without spec |
 
 | `test_session_log_recovery_split_integrity.py` | Split integrity tests for `_session_log_recovery` module |
 | `test_assert_interactive_ordering.py` | Tests for the assert_interactive_ordering runtime gate — positional/variadic ordering validation |

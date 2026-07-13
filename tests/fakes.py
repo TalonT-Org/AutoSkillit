@@ -17,6 +17,7 @@ from typing import Any
 from autoskillit.core.types import (
     CIRunScope,
     CIWatcher,
+    ClosureAuthoritySpec,
     DatabaseReader,
     HeadlessExecutor,
     MergeQueueWatcher,
@@ -101,6 +102,8 @@ class ExecutorCall:
     inspector_eligible: bool = False
     inspector_model: str = ""
     network_access: bool = False
+    closure_spec: ClosureAuthoritySpec | None = None
+    closure_report_root: Path | None = None
 
 
 @dataclasses.dataclass
@@ -209,6 +212,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         inspector_eligible: bool = False,
         inspector_model: str = "",
         network_access: bool = False,
+        closure_spec: ClosureAuthoritySpec | None = None,
+        closure_report_root: Path | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -249,6 +254,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 inspector_eligible=inspector_eligible,
                 inspector_model=inspector_model,
                 network_access=network_access,
+                closure_spec=closure_spec,
+                closure_report_root=closure_report_root,
             )
         )
         if self._queue:

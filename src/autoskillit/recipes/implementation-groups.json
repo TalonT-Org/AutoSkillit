@@ -37,6 +37,14 @@
       "description": "Post-merge quality gate",
       "default": "false"
     },
+    "closure_authority_path": {
+      "description": "Absolute path to frozen requirements authority JSON for closure-mode audit",
+      "default": ""
+    },
+    "closure_authority_hash": {
+      "description": "SHA-256 lowercase hex hash of the authority file content",
+      "default": ""
+    },
     "open_pr": {
       "description": "PR instead of direct merge",
       "default": "true"
@@ -913,7 +921,13 @@
         "skill_command": "/autoskillit:audit-impl ${{ context.all_plan_paths }} ${{ context.base_sha }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "audit_impl",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl",
+        "closure_authority_path": "${{ inputs.closure_authority_path }}",
+        "closure_authority_hash": "${{ inputs.closure_authority_hash }}",
+        "closure_plan_paths": "${{ context.all_plan_paths }}",
+        "closure_base_sha": "${{ context.base_sha }}",
+        "closure_diff_sha": "",
+        "closure_target_sha": ""
       },
       "capture": {
         "remediation_path": "${{ result.remediation_path }}"

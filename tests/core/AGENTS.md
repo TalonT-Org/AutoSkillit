@@ -62,5 +62,6 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_closure_hashing.py` | Tests for core.closure_hashing — canonical hash utilities |
 | `test_path_containment.py` | Tests for core.path_containment — symlink/hardlink/traversal guards |
 | `test_closure_verifier.py` | Tests for core.closure_verifier — independent report verifier |
+| `test_closure_attacks.py` | Adversarial attack tests for closure-mode verification (forged verdicts, containment escape, ref drift, unauthorized rows, metadata stability) |
 | `test_closure_authority_spec.py` | Tests for ClosureAuthoritySpec and factory validation |
 | `test_closure_report.py` | Tests for ClosureRow and ClosureReport schema validation |

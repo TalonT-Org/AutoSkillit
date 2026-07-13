@@ -7,7 +7,14 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
-from ._type_results import InputSpec, SkillResult, TestResult, ValidatedAddDir, WriteBehaviorSpec
+from ._type_results import (
+    ClosureAuthoritySpec,
+    InputSpec,
+    SkillResult,
+    TestResult,
+    ValidatedAddDir,
+    WriteBehaviorSpec,
+)
 
 __all__ = [
     "CompletionRequiredResolver",
@@ -75,6 +82,8 @@ class HeadlessExecutor(Protocol):
         inspector_eligible: bool = False,
         inspector_model: str = "",
         network_access: bool = False,
+        closure_spec: ClosureAuthoritySpec | None = None,
+        closure_report_root: Path | None = None,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

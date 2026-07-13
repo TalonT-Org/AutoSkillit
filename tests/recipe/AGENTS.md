@@ -19,6 +19,8 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_audit_trail_artifacts.py` | Tests for audit/ directory creation and artifact copy in create_worktree.sh |
 | `test_audit_trail_format_doc.py` | Tests for audit-trail-format.md documentation |
 | `test_audit_trail_recipe_contracts.py` | Tests for research.yaml audit-trail captures and threading |
+| `test_closure_contracts_yaml.py` | Contract tests: skill_contracts.yaml audit-impl entry must expose closure inputs/output |
+| `test_closure_recipe_routing.py` | Structural tests: all six consuming recipes must wire closure ingredients to audit_impl |
 | `test_bem_wrapper_structure.py` | Tests for BEM wrapper recipe structure |
 | `test_bundled_model_field.py` | Tests that all run_skill steps declare a model: field across bundled recipes |
 | `test_bundled_recipes_behavioral_properties.py` | Behavioral property registry tests: on_context_limit coverage, parallel dispatch mode, explicit model for context-intensive steps |

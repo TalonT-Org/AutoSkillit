@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _make_fix_required_hook():
+    from autoskillit.hook_registry import HookDef
+
+    return HookDef(
+        matcher=r"Read|Write|Edit",
+        scripts=["guards/synthetic_test_hook.py"],
+        codex_status="fix-required",
+        mechanism="deny",
+    )
 
 
 def _make_step(step_name: str, tool: str = "run_skill", provider: str = ""):
@@ -29,12 +40,11 @@ def _make_backend(**kwargs):
 class TestPreflightExplicitBackend:
     def test_explicit_override_to_missing_binary_excluded(self, monkeypatch) -> None:
         """An explicit override pointing to a backend whose binary is not on
-        PATH excludes that step from feasibility (preflight won't fail on its
-        account, but it also won't be marked feasible)."""
+        PATH excludes that step from feasibility — with a synthetic fix-required
+        hook, preflight passes because the excluded step is not feasible."""
         from autoskillit.config.settings import ProvidersConfig
         from autoskillit.server.tools._preflight import _check_dispatch_feasibility
 
-        # Force shutil.which to return None for codex binary
         monkeypatch.setattr(
             "autoskillit.server.tools._preflight.shutil.which",
             lambda name: None if name in ("codex", "codex-cli") else f"/usr/bin/{name}",
@@ -42,7 +52,6 @@ class TestPreflightExplicitBackend:
 
         steps = {"step_a": _make_step("step_a")}
         providers = ProvidersConfig()
-        # Pin step_a to codex, but codex binary is absent.
         cfg = _make_backend(
             backend="codex",
             step_overrides={"step_a": "codex"},
@@ -51,21 +60,22 @@ class TestPreflightExplicitBackend:
         backend.name = "codex"
         backend.capabilities.anthropic_provider_capable = False
         backend.capabilities.applicable_guards = frozenset()
-        err = _check_dispatch_feasibility(
-            post_prune_step_names=["step_a"],
-            active_recipe_steps=cast(Any, steps),
-            backend=backend,
-            config_providers=providers,
-            recipe_name="remediation",
-            config_backend=cfg,
-        )
-        # No fix-required matchers → preflight returns None even though
-        # step_a is excluded from feasible_step_names.
+        synthetic = _make_fix_required_hook()
+        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+            err = _check_dispatch_feasibility(
+                post_prune_step_names=["step_a"],
+                active_recipe_steps=cast(Any, steps),
+                backend=backend,
+                config_providers=providers,
+                recipe_name="remediation",
+                config_backend=cfg,
+            )
         assert err is None
 
     def test_explicit_override_to_claude_exempts_from_fix_required(self, monkeypatch) -> None:
         """A step explicitly pinned to claude-code is exempted from the
-        orchestrator-level fix_required_matchers check."""
+        orchestrator-level fix_required_matchers check — with a synthetic
+        fix-required hook, the claude-pinned step is skipped so preflight passes."""
         from autoskillit.config.settings import ProvidersConfig
         from autoskillit.server.tools._preflight import _check_dispatch_feasibility
 
@@ -83,15 +93,16 @@ class TestPreflightExplicitBackend:
         backend.name = "codex"
         backend.capabilities.anthropic_provider_capable = False
         backend.capabilities.applicable_guards = frozenset({"some_guard"})
-        # No fix-required hooks in registry (empty) → preflight passes.
-        err = _check_dispatch_feasibility(
-            post_prune_step_names=["step_a"],
-            active_recipe_steps=cast(Any, steps),
-            backend=backend,
-            config_providers=providers,
-            recipe_name="remediation",
-            config_backend=cfg,
-        )
+        synthetic = _make_fix_required_hook()
+        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+            err = _check_dispatch_feasibility(
+                post_prune_step_names=["step_a"],
+                active_recipe_steps=cast(Any, steps),
+                backend=backend,
+                config_providers=providers,
+                recipe_name="remediation",
+                config_backend=cfg,
+            )
         assert err is None
 
     def test_explicit_override_backend_requirements_conflict(self):

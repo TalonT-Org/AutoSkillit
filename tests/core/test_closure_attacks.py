@@ -111,6 +111,7 @@ class TestAdversarialAttacks:
             target_sha="tgt",
         )
         assert result.success is False
+        assert any("MISSING" in e or "verdict" in e for e in result.errors)
 
     def test_attack_report_root_escape(self, tmp_path: Path) -> None:
         """Report path outside output_root → ContainmentError."""
@@ -251,6 +252,7 @@ class TestAdversarialAttacks:
             target_sha="tgt",
         )
         assert result.success is False
+        assert any("duplicate" in e for e in result.errors)
 
     def test_attack_reordered_rows(self, tmp_path: Path) -> None:
         """Rows in different order than authority's requirement_ids → row_hash mismatch."""
@@ -292,6 +294,7 @@ class TestAdversarialAttacks:
             target_sha="tgt",
         )
         assert result.success is False
+        assert any("requirement_id" in e for e in result.errors)
 
     def test_attack_no_go_missing_remediation(self, tmp_path: Path) -> None:
         """verdict="NO GO" with remediation_path=None → validate() error."""

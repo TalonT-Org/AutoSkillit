@@ -95,6 +95,7 @@ def _provider_aware_capability_overrides(
 
     if skill_resolver is not None:
         has_capability_requirement = False
+        has_explicit_pin_capability = False
         triggered_ingredients: set[str] = set()
         for step_name, step in recipe_steps.items():
             if getattr(step, "tool", None) not in SKILL_TOOLS:
@@ -120,11 +121,11 @@ def _provider_aware_capability_overrides(
                             cap_def = SKILL_CAPABILITY_REGISTRY.get(cap)
                             if cap_def and cap_def.worker_routable:
                                 has_capability_requirement = True
+                                has_explicit_pin_capability = True
                                 if cap in CAPABILITY_INGREDIENT_MAP:
                                     triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
                     continue
                 if _explicit_be is not None:
-                    # Pinned to a non-claude backend — excluded from aggregate.
                     continue
 
             cap_resolved = skill_resolver.resolve(skill_name)
@@ -137,7 +138,10 @@ def _provider_aware_capability_overrides(
                             triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
 
         if has_capability_requirement:
-            if shutil.which("claude") is not None:
+            # Explicit claude-code pins bypass the binary probe — the operator
+            # declared intent; the binary check is a safety gate for implicit
+            # capability routing only.
+            if has_explicit_pin_capability or shutil.which("claude") is not None:
                 for ingredient in triggered_ingredients:
                     base[ingredient] = "true"
                 return base, CapabilityResolutionDetail(

@@ -100,12 +100,19 @@ class TestExplicitCodexPinExcludedFromAggregate:
         # Single step pinned to codex is excluded — aggregate stays false.
         assert overrides["backend_supports_git_write"] == "false"
 
-    def test_explicit_codex_pin_sibling_unpinned_step_still_flips(self) -> None:
+    def test_explicit_codex_pin_sibling_unpinned_step_still_flips(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Two steps: A pinned to codex (excluded), B unpinned with same capability
         (contributes) → aggregate still flips (any-suffices semantics preserved)."""
         from autoskillit.config.settings import ProvidersConfig
         from autoskillit.server.tools._auto_overrides import (
             _provider_aware_capability_overrides,
+        )
+
+        # step_b's implicit capability routing requires the claude binary.
+        monkeypatch.setattr(
+            "shutil.which", lambda cmd: "/usr/bin/claude" if cmd == "claude" else None
         )
 
         steps = {

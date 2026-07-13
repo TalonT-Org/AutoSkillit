@@ -1027,6 +1027,18 @@ async def run_skill(
                 if not _closure_root.is_absolute():
                     _closure_root = Path(cwd) / output_dir
                 closure_report_root = _closure_root
+            elif closure_spec and not output_dir:
+                return json.dumps(
+                    ToolFailureEnvelope(
+                        success=False,
+                        error=(
+                            "closure_spec requires output_dir to locate"
+                            " the closure report, but output_dir is empty"
+                        ),
+                        stage="validate_args:run_skill",
+                        retriable=False,
+                    )
+                )
 
             write_watch_dirs: list[Path] = []
             if output_dir:

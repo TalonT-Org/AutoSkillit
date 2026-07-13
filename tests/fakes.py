@@ -95,6 +95,7 @@ class ExecutorCall:
     resume_checkpoint: SessionCheckpoint | None = None
     resume_message: str | None = None
     backend_override: str | None = None
+    backend_override_source: str | None = None
     marker_dir: Path | None = None
     caller_session_id: str | None = None
     inspector_eligible: bool = False
@@ -202,6 +203,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
         backend_override: str | None = None,
+        backend_override_source: str | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,
@@ -241,6 +243,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 resume_checkpoint=resume_checkpoint,
                 resume_message=resume_message,
                 backend_override=backend_override,
+                backend_override_source=backend_override_source,
                 marker_dir=marker_dir,
                 caller_session_id=caller_session_id,
                 inspector_eligible=inspector_eligible,

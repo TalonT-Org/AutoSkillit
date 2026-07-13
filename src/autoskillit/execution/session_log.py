@@ -156,6 +156,7 @@ def flush_session_log(
     session_locator: SessionLocator | None = None,
     backend: Literal["claude-code", "codex"] = "claude-code",
     channel_b_capable: bool = True,
+    backend_override_source: str | None = None,
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -440,6 +441,7 @@ def flush_session_log(
         "tracked_comm_drift": _tracked_comm_drift,
         "tracer_target_resolution_version": 2,
         "backend": backend,
+        "backend_override_source": backend_override_source,
         "orphaned_tool_result": orphaned_tool_result,
         "last_stop_reason": last_stop_reason,
         "request_ids": _cb_request_ids,
@@ -567,6 +569,7 @@ def flush_session_log(
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
         "backend": backend,
+        "backend_override_source": backend_override_source,
         "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
         "claude_code_version": versions.get("claude_code_version", "") if versions else "",
         "codex_version": versions.get("codex_version", "") if versions else "",
@@ -588,7 +591,7 @@ def flush_session_log(
         "model_identifier": effective_model_id,
         "configured_model": model_identity.configured_model,
         "profile_name": model_identity.profile_name,
-        "schema_version": 3,
+        "schema_version": 4,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

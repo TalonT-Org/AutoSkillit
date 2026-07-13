@@ -328,5 +328,7 @@ providers:
 
 agent_backend:
   backend: claude-code
+  step_overrides: {}
+  recipe_overrides: {}
 
 features: {}

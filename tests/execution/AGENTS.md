@@ -111,6 +111,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_session_env_contracts.py` | Cross-backend env contract tests: every build_*_cmd method must inject required env vars |
 | `test_session_state_persistence.py` | Tests for persist_session_state, read_session_state, and clear_session_state |
 | `test_session_index_roundtrip.py` | Tests verifying sessions.jsonl keys match SessionIndexEntry annotations |
+| `test_session_log_backend_source.py` | Tests verifying backend_override_source is recorded in sessions.jsonl (REQ-EVD-001) |
 | `test_session_log_fields.py` | Tests for flush_session_log field coverage: write warnings, kitchen/order IDs, crash exception, raw stdout, per-turn fields |
 | `test_session_log_flush.py` | Tests for flush_session_log: directory structure, proc-trace, summary/index, resolve_log_dir, temporal fields |
 | `test_session_log_integration.py` | Integration tests: full tracing pipeline (accumulation + flush) end-to-end |

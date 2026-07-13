@@ -69,6 +69,7 @@ class HeadlessExecutor(Protocol):
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
         backend_override: str | None = None,
+        backend_override_source: str | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,

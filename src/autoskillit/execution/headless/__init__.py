@@ -140,6 +140,7 @@ async def run_headless_core(
     resume_checkpoint: SessionCheckpoint | None = None,
     resume_message: str | None = None,
     backend_override: str | None = None,
+    backend_override_source: str | None = None,
     marker_dir: Path | None = None,
     caller_session_id: str | None = None,
     inspector_eligible: bool = False,
@@ -257,6 +258,7 @@ async def run_headless_core(
             session_id=caller_session_id,
             inspector_eligible=inspector_eligible,
             inspector_model=inspector_model,
+            backend_override_source=backend_override_source,
         )
 
 
@@ -300,6 +302,7 @@ class DefaultHeadlessExecutor:
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
         backend_override: str | None = None,
+        backend_override_source: str | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,
@@ -342,6 +345,7 @@ class DefaultHeadlessExecutor:
             resume_checkpoint=resume_checkpoint,
             resume_message=resume_message,
             backend_override=backend_override,
+            backend_override_source=backend_override_source,
             marker_dir=marker_dir,
             caller_session_id=caller_session_id,
             inspector_eligible=inspector_eligible,

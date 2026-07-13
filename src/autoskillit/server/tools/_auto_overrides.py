@@ -24,6 +24,7 @@ from autoskillit.core import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.config._config_dataclasses import AgentBackendConfig
     from autoskillit.core import CodingAgentBackend
     from autoskillit.core.types._type_protocols_workspace import SkillResolver
     from autoskillit.recipe.schema import RecipeStep
@@ -50,6 +51,7 @@ def _provider_aware_capability_overrides(
     recipe_steps: dict[str, RecipeStep] | None,
     *,
     skill_resolver: SkillResolver | None = None,
+    config_backend: AgentBackendConfig | None = None,
 ) -> tuple[dict[str, str], CapabilityResolutionDetail]:
     """Return capability overrides with per-step provider awareness.
 
@@ -93,6 +95,7 @@ def _provider_aware_capability_overrides(
 
     if skill_resolver is not None:
         has_capability_requirement = False
+        has_explicit_pin_capability = False
         triggered_ingredients: set[str] = set()
         for step_name, step in recipe_steps.items():
             if getattr(step, "tool", None) not in SKILL_TOOLS:
@@ -102,6 +105,29 @@ def _provider_aware_capability_overrides(
             skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
             if not skill_name:
                 continue
+
+            # Explicit config backend override short-circuits capability routing
+            # for this step. A claude-code pin contributes to the any-suffices
+            # aggregate; any other explicit pin is excluded from the aggregate
+            # (preserves sibling-step semantics documented above).
+            if config_backend is not None:
+                from autoskillit.server._guards import _resolve_backend_override  # circular-break
+
+                _explicit_be = _resolve_backend_override(step_name, recipe_name, config_backend)
+                if _explicit_be == AGENT_BACKEND_CLAUDE_CODE:
+                    cap_resolved = skill_resolver.resolve(skill_name)
+                    if cap_resolved:
+                        for cap in getattr(cap_resolved, "uses_capabilities", frozenset()):
+                            cap_def = SKILL_CAPABILITY_REGISTRY.get(cap)
+                            if cap_def and cap_def.worker_routable:
+                                has_capability_requirement = True
+                                has_explicit_pin_capability = True
+                                if cap in CAPABILITY_INGREDIENT_MAP:
+                                    triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
+                    continue
+                if _explicit_be is not None:
+                    continue
+
             cap_resolved = skill_resolver.resolve(skill_name)
             if cap_resolved:
                 for cap in getattr(cap_resolved, "uses_capabilities", frozenset()):
@@ -112,7 +138,10 @@ def _provider_aware_capability_overrides(
                             triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
 
         if has_capability_requirement:
-            if shutil.which("claude") is not None:
+            # Explicit claude-code pins bypass the binary probe — the operator
+            # declared intent; the binary check is a safety gate for implicit
+            # capability routing only.
+            if has_explicit_pin_capability or shutil.which("claude") is not None:
                 for ingredient in triggered_ingredients:
                     base[ingredient] = "true"
                 return base, CapabilityResolutionDetail(
@@ -203,6 +232,7 @@ def _compute_effective_backend_map(
     recipe_name: str,
     *,
     skill_resolver: SkillResolver | None = None,
+    config_backend: AgentBackendConfig | None = None,
 ) -> dict[str, str] | None:
     """Build a per-step effective backend map mirroring ``tools_execution`` dispatch logic.
 
@@ -232,6 +262,16 @@ def _compute_effective_backend_map(
     for step_name, step in recipe_steps.items():
         if getattr(step, "tool", None) not in SKILL_TOOLS:
             continue
+
+        # Explicit config backend override — highest authority; bypasses all
+        # capability/provider routing for this step (REQ-RES-001).
+        if config_backend is not None:
+            from autoskillit.server._guards import _resolve_backend_override  # circular-break
+
+            _explicit = _resolve_backend_override(step_name, recipe_name, config_backend)
+            if _explicit is not None:
+                result[step_name] = _explicit
+                continue
 
         has_base_url = False
         if config_providers is not None:

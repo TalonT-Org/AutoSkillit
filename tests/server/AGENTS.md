@@ -41,6 +41,10 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_research_smoke_pipeline.py` | Research recipe smoke pipeline: gated E2E tests (RESEARCH_SMOKE_TEST=1) |
 | `test_resolve_model_as_profile.py` | Tests for _resolve_model_as_profile — model-value-as-provider-profile resolution in _guards.py |
 | `test_resolve_provider_profile.py` | Tests for _resolve_provider_profile six-tier provider resolution in _guards.py |
+| `test_resolve_backend_override.py` | Tests for _resolve_backend_override four-tier backend override resolution in _guards.py |
+| `test_explicit_backend_override.py` | Tests for both routing directions and dry_walkthrough codex pin scenario (REQ-RES-003) |
+| `test_capability_overrides_explicit_backend.py` | Tests for ingredient computation with explicit overrides — any-suffices semantics |
+| `test_preflight_explicit_backend.py` | Tests for explicit-backend preflight validation in _check_dispatch_feasibility |
 | `test_run_skill_add_dirs.py` | Contract tests: run_skill passes correct add_dirs to executor (T-OVR-014) |
 | `test_run_skill_backend_compat.py` | Tests for dispatch-time backend compatibility gate in run_skill |
 | `test_run_skill_resume.py` | Tests for resume_session_id threading from run_skill through executor |

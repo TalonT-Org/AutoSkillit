@@ -115,10 +115,12 @@ def _provider_aware_capability_overrides(
                 if _explicit_be == AGENT_BACKEND_CLAUDE_CODE:
                     cap_resolved = skill_resolver.resolve(skill_name)
                     if cap_resolved:
-                        has_capability_requirement = True
                         for cap in getattr(cap_resolved, "uses_capabilities", frozenset()):
-                            if cap in CAPABILITY_INGREDIENT_MAP:
-                                triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
+                            cap_def = SKILL_CAPABILITY_REGISTRY.get(cap)
+                            if cap_def and cap_def.worker_routable:
+                                has_capability_requirement = True
+                                if cap in CAPABILITY_INGREDIENT_MAP:
+                                    triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
                     continue
                 if _explicit_be is not None:
                     # Pinned to a non-claude backend — excluded from aggregate.

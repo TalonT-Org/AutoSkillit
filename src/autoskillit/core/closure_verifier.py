@@ -44,7 +44,7 @@ def verify_closure_report(
     errors: list[str] = []
 
     try:
-        resolve_contained_path(report_path, output_root)
+        resolved_report_path = resolve_contained_path(report_path, output_root)
     except ContainmentError as exc:
         errors.append(f"report containment failed: {exc}")
         return VerificationResult(
@@ -56,7 +56,7 @@ def verify_closure_report(
             success=False, verdict=None, errors=tuple(errors), report_path=str(report_path)
         )
 
-    raw = read_versioned_json(Path(report_path), expected_version=1)
+    raw = read_versioned_json(resolved_report_path, expected_version=1)
     if raw is None:
         errors.append("report unreadable or schema_version mismatch")
         return VerificationResult(

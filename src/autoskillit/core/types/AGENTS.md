@@ -18,7 +18,8 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_subprocess.py` | `SubprocessResult` dataclass and `SubprocessRunner` protocol |
 | `_type_token.py` | `CanonicalTokenUsage` frozen dataclass with factory methods and merge |
 | `_type_results_execution.py` | Execution-scoped result dataclasses: `SessionTelemetry`, `RecipeIdentity`, `CIRunScope` |
-| `_type_results.py` | Core result dataclasses: `SkillResult`, `ProviderOutcome`, `LoadResult`, `FailureRecord`, `WriteBehaviorSpec` |
+| `_type_results.py` | Core result dataclasses: `SkillResult`, `ProviderOutcome`, `LoadResult`, `FailureRecord`, `WriteBehaviorSpec`, `ClosureAuthoritySpec`, `closure_authority_spec_from_args` |
+| `_type_closure_report.py` | Closure report dataclasses: `ClosureRow`, `ClosureReport`, `CLOSURE_REPORT_SCHEMA_VERSION` |
 | `_type_protocols_logging.py` | Protocols: `AuditLog`, `TokenLog`, `TimingLog`, `McpResponseLog`, `GitHubApiLog`, `SupportsDebug`, `SupportsLogger` |
 | `_type_protocols_execution.py` | Protocols: `TestRunner`, `HeadlessExecutor`, `OutputPatternResolver`, `WriteExpectedResolver` |
 | `_type_protocols_github.py` | Protocols: `GitHubFetcher`, `CIWatcher`, `MergeQueueWatcher` |

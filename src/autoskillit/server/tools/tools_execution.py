@@ -23,16 +23,19 @@ from autoskillit.core import (
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     ClaudeDirectoryConventions,
+    ClosureAuthoritySpec,
     CodingAgentBackend,
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
+    closure_authority_spec_from_args,
     execution_marker,
     extract_skill_name,
     find_caller_session_id,
     get_logger,
     is_feature_enabled,
     is_git_worktree,
+    parse_plan_paths,
     resolve_target_skill,
     truncate_text,
 )
@@ -573,6 +576,12 @@ async def run_skill(
     idle_output_timeout: int | None = None,
     output_dir: str = "",
     resume_session_id: str = "",
+    closure_authority_path: str = "",
+    closure_authority_hash: str = "",
+    closure_plan_paths: str = "",
+    closure_base_sha: str = "",
+    closure_diff_sha: str = "",
+    closure_target_sha: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Run a Claude Code headless session with a skill command.
@@ -946,6 +955,19 @@ async def run_skill(
             if tool_ctx.write_expected_resolver:
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
+            # Resolve closure spec from explicit MCP tool parameters.
+            # Closure args are first-class parameters (not embedded in skill_command text)
+            # because the skill_command string is prompt text consumed by the LLM session,
+            # not parsed by Python code.
+            closure_spec: ClosureAuthoritySpec | None = closure_authority_spec_from_args(
+                path=closure_authority_path or None,
+                hash_=closure_authority_hash or None,
+                plan_paths=parse_plan_paths(closure_plan_paths) if closure_plan_paths else (),
+                base_sha=closure_base_sha,
+                diff_sha=closure_diff_sha,
+                target_sha=closure_target_sha,
+            )
+
             # Build validated add_dirs via DefaultSessionSkillManager
             from uuid import uuid4
 
@@ -998,6 +1020,25 @@ async def run_skill(
                             step=step_name,
                             value=idle_output_timeout,
                         )
+
+            closure_report_root: Path | None = None
+            if output_dir and closure_spec:
+                _closure_root = Path(output_dir)
+                if not _closure_root.is_absolute():
+                    _closure_root = Path(cwd) / output_dir
+                closure_report_root = _closure_root
+            elif closure_spec and not output_dir:
+                return json.dumps(
+                    ToolFailureEnvelope(
+                        success=False,
+                        error=(
+                            "closure_spec requires output_dir to locate"
+                            " the closure report, but output_dir is empty"
+                        ),
+                        stage="validate_args:run_skill",
+                        retriable=False,
+                    )
+                )
 
             write_watch_dirs: list[Path] = []
             if output_dir:
@@ -1250,6 +1291,8 @@ async def run_skill(
                                 inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
                                 inspector_model=_inspector_model,
                                 network_access=_network_access,
+                                closure_spec=closure_spec,
+                                closure_report_root=closure_report_root,
                             )
                 except TimeoutError as exc:
                     logger.error(

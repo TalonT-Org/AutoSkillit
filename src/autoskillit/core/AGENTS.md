@@ -28,6 +28,9 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 | `feature_flags.py` | `is_feature_enabled()` — IL-0 feature gate resolution primitive |
 | `tool_sequence_analysis.py` | Cross-session tool call sequence DFG analysis (stdlib-only) |
 | `bash_write_targets.py` | Bash command write-target extraction (stdlib-only, IL-0) |
+| `closure_hashing.py` | Canonical hash utilities for closure-mode verdict verification (stdlib-only, IL-0) |
+| `path_containment.py` | Path containment guards — symlink/hardlink check, TOCTOU guard (stdlib-only, IL-0) |
+| `closure_verifier.py` | Independent verifier for closure-mode reports (stdlib-only, IL-0) |
 
 ## Architecture Notes
 

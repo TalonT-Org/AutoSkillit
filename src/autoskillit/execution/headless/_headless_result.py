@@ -12,6 +12,7 @@ from autoskillit.core import (
     ApiRetryOutcome,
     ChannelConfirmation,
     CliSubtype,
+    ClosureAuthoritySpec,
     InfraExitCategory,
     InfraOutcome,
     KillReason,
@@ -180,6 +181,8 @@ def _build_skill_result(
     supports_claude_format_stdout: bool = True,
     backend: CodingAgentBackend,
     readonly_skill: bool = False,
+    closure_spec: ClosureAuthoritySpec | None = None,
+    closure_report_root: Path | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
@@ -855,6 +858,37 @@ def _build_skill_result(
                 needs_retry=True,
                 retry_reason=RetryReason.ZERO_WRITES,
             )
+
+    # Closure verification gate: when a ClosureAuthoritySpec is active, independently
+    # verify the canonical closure report. On failure, demote to execution error so
+    # the recipe's on_failure route fires. This gate cannot be bypassed by the LLM
+    # orchestrator — it is enforced programmatically after session completion.
+    if closure_spec is not None and closure_report_root is not None:
+        from autoskillit.core import verify_closure_report
+
+        report_file = closure_report_root / "closure_report.json"
+        verification = verify_closure_report(
+            report_path=report_file,
+            authority_path=Path(closure_spec.authority_path),
+            authority_hash=closure_spec.authority_hash,
+            output_root=closure_report_root,
+            plan_paths=tuple(Path(p) for p in closure_spec.plan_paths),
+            base_sha=closure_spec.base_sha,
+            diff_sha=closure_spec.diff_sha,
+            target_sha=closure_spec.target_sha,
+        )
+        if not verification.success:
+            error_detail = "; ".join(verification.errors)
+            sr = dataclasses.replace(
+                sr,
+                success=False,
+                is_error=True,
+                subtype="closure_verification_failed",
+                result=f"Closure verification failed: {error_detail}",
+            )
+        else:
+            if sr.retry_reason == RetryReason.EMPTY_OUTPUT:
+                sr = dataclasses.replace(sr, is_error=False)
 
     if sr.needs_retry and sr.retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
         sr = dataclasses.replace(

@@ -4,8 +4,7 @@ IL-1 module (execution/). Owns the full lifecycle of a headless claude CLI sessi
 command preparation, subprocess invocation via the injected runner, and
 SkillResult construction.
 
-Public API:
-    run_headless_core(skill_command, cwd, ctx, *, ...) -> SkillResult
+Public API: run_headless_core(skill_command, cwd, ctx, *, ...) -> SkillResult
 """
 
 from __future__ import annotations
@@ -19,6 +18,7 @@ import structlog
 from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
+    ClosureAuthoritySpec,
     CodingAgentBackend,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
@@ -146,6 +146,8 @@ async def run_headless_core(
     inspector_eligible: bool = False,
     inspector_model: str = "",
     network_access: bool = False,
+    closure_spec: ClosureAuthoritySpec | None = None,
+    closure_report_root: Path | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -259,6 +261,8 @@ async def run_headless_core(
             inspector_eligible=inspector_eligible,
             inspector_model=inspector_model,
             backend_override_source=backend_override_source,
+            closure_spec=closure_spec,
+            closure_report_root=closure_report_root,
         )
 
 
@@ -308,6 +312,8 @@ class DefaultHeadlessExecutor:
         inspector_eligible: bool = False,
         inspector_model: str = "",
         network_access: bool = False,
+        closure_spec: ClosureAuthoritySpec | None = None,
+        closure_report_root: Path | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -351,6 +357,8 @@ class DefaultHeadlessExecutor:
             inspector_eligible=inspector_eligible,
             inspector_model=inspector_model,
             network_access=network_access,
+            closure_spec=closure_spec,
+            closure_report_root=closure_report_root,
         )
 
     async def dispatch_food_truck(

@@ -400,11 +400,19 @@ skills:
     - name: base_branch
       type: string
       required: false
+    - name: closure_authority_path
+      type: file_path
+      required: false
+    - name: closure_authority_hash
+      type: string
+      required: false
     outputs:
     - name: verdict
       type: string
     - name: remediation_path
       type: file_path
+    - name: verified_verdict
+      type: string
     expected_output_patterns:
     - "verdict[ \\t]*=[ \\t]*(GO|NO GO)"
     pattern_examples:

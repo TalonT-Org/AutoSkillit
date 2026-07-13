@@ -47,6 +47,12 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "idle_output_timeout",
             "output_dir",
             "resume_session_id",
+            "closure_authority_path",
+            "closure_authority_hash",
+            "closure_plan_paths",
+            "closure_base_sha",
+            "closure_diff_sha",
+            "closure_target_sha",
         }
     ),
     "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),

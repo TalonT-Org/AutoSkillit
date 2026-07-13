@@ -115,6 +115,10 @@ class TestModuleCascadeCore:
             "_execution_marker",
             "git_remote",
             "bash_write_targets",
+            "_type_closure_report",
+            "closure_hashing",
+            "path_containment",
+            "closure_verifier",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

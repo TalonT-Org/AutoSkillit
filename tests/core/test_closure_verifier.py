@@ -423,3 +423,42 @@ class TestRejection:
         )
         assert result.success is False
         assert any("remediation" in e for e in result.errors)
+
+    def test_verifier_reproduces_72_vs_83_divergence(self, tmp_path) -> None:
+        out_root = tmp_path / "out"
+        out_root.mkdir()
+        authority_path = _write_authority(tmp_path)
+        authority_hash = compute_file_hash(authority_path)
+
+        rows_72 = tuple(_row(f"REQ-{i:03d}") for i in range(1, 73))
+        req_ids_72 = tuple(f"REQ-{i:03d}" for i in range(1, 73))
+        report_72 = _make_report(authority_hash, rows_72, requirement_ids=req_ids_72)
+        report_path_72 = _write_report(report_72, out_root)
+        result_72 = verify_closure_report(
+            report_path=Path(report_path_72),
+            authority_path=Path(authority_path),
+            authority_hash=authority_hash,
+            output_root=out_root,
+            plan_paths=(),
+            base_sha="main",
+            diff_sha="diff",
+            target_sha="tgt",
+        )
+        assert result_72.success is True
+        assert result_72.verdict == "GO"
+
+        rows_83 = tuple(_row(f"REQ-{i:03d}") for i in range(1, 84))
+        report_83 = _make_report(authority_hash, rows_83, requirement_ids=req_ids_72)
+        report_path_83 = _write_report(report_83, out_root)
+        result_83 = verify_closure_report(
+            report_path=Path(report_path_83),
+            authority_path=Path(authority_path),
+            authority_hash=authority_hash,
+            output_root=out_root,
+            plan_paths=(),
+            base_sha="main",
+            diff_sha="diff",
+            target_sha="tgt",
+        )
+        assert result_83.success is False
+        assert any("length mismatch" in e for e in result_83.errors)

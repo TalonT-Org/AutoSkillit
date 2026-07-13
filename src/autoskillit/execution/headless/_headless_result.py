@@ -887,10 +887,7 @@ def _build_skill_result(
                 result=f"Closure verification failed: {error_detail}",
             )
         else:
-            # Valid canonical report produced by the session — the report's
-            # existence proves the session wrote structured output, so clear
-            # any prior is_error/empty-output classification.
-            sr = dataclasses.replace(sr, is_error=False)
+            pass
 
     if sr.needs_retry and sr.retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
         sr = dataclasses.replace(

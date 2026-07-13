@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -80,15 +79,13 @@ def _check_dispatch_feasibility(
         if config_backend is not None:
             _explicit = _resolve_backend_override(step_name, recipe_name, config_backend)
             if _explicit is not None:
-                _explicit_obj = get_backend(_explicit)
-                _explicit_binary = getattr(_explicit_obj.capabilities, "process_name", "")
-                if _explicit_binary and shutil.which(_explicit_binary) is None:
+                try:
+                    get_backend(_explicit)
+                except (ValueError, KeyError):
                     continue
-                if getattr(_explicit_obj.capabilities, "anthropic_provider_capable", False):
-                    continue
-                # Non-claude backend with present binary: skip orchestrator-level
-                # feasibility — the step runs on the pinned backend, not the
-                # orchestrator's, so checking orchestrator guards is wrong.
+                # Any explicitly-overridden step is excluded from
+                # orchestrator-level feasibility — the step runs on the
+                # pinned backend, not the orchestrator's.
                 continue
 
         step = active_recipe_steps.get(step_name)

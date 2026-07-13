@@ -380,3 +380,227 @@ def test_admission_dispatch_agreement_real_providers_config(
     assert not violations, "Agreement violated under real ProvidersConfig:\n  " + "\n  ".join(
         violations
     )
+
+
+# ---------------------------------------------------------------------------
+# Real-registry routing tests (audit remediation: Tests 1.2, 1.4)
+# ---------------------------------------------------------------------------
+
+
+def _real_skill_resolver():
+    """DefaultSkillResolver reading real SKILL.md files."""
+    return DefaultSkillResolver()
+
+
+def test_make_plan_reroutes_on_codex() -> None:
+    """make-plan declares [agent_model, agent_subagent, cross_skill_ref] —
+    all worker_routable post-fix — so it must reroute to claude-code on Codex."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.server.tools.tools_execution import _has_routing_capability
+
+    resolver = _real_skill_resolver()
+    skill_info = resolver.resolve("make-plan")
+    assert skill_info is not None, "make-plan must be resolvable from bundled SKILL.md"
+    assert _has_routing_capability(skill_info.uses_capabilities) is True, (
+        "make-plan declares agent_model, agent_subagent, cross_skill_ref — all worker_routable"
+    )
+
+    step = MagicMock()
+    step.tool = "run_skill"
+    step.provider = ""
+    step.with_args = {"skill_command": "/autoskillit:make-plan"}
+    step.skip_when_false = None
+
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+
+    eff_map = _compute_effective_backend_map(
+        {"plan": step},
+        "codex",
+        ProvidersConfig(),
+        "implementation",
+        skill_resolver=resolver,
+    )
+    assert eff_map is not None
+    assert eff_map.get("plan") == "claude-code", (
+        f"make-plan step must route to claude-code, got {eff_map.get('plan')!r}"
+    )
+
+
+def test_investigate_reroutes_on_codex() -> None:
+    """investigate declares [agent_model, claude_dir] —
+    agent_model is worker_routable, so it must reroute via that path."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.server.tools.tools_execution import _has_routing_capability
+
+    resolver = _real_skill_resolver()
+    skill_info = resolver.resolve("investigate")
+    assert skill_info is not None, "investigate must be resolvable from bundled SKILL.md"
+    assert _has_routing_capability(skill_info.uses_capabilities) is True, (
+        "investigate declares agent_model — worker_routable"
+    )
+    assert "cross_skill_ref" not in skill_info.uses_capabilities, (
+        "investigate must NOT declare cross_skill_ref (only documentary /autoskillit: mentions)"
+    )
+
+    step = MagicMock()
+    step.tool = "run_skill"
+    step.provider = ""
+    step.with_args = {"skill_command": "/autoskillit:investigate"}
+    step.skip_when_false = None
+
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+
+    eff_map = _compute_effective_backend_map(
+        {"inv": step},
+        "codex",
+        ProvidersConfig(),
+        "implementation",
+        skill_resolver=resolver,
+    )
+    assert eff_map is not None
+    assert eff_map.get("inv") == "claude-code", (
+        f"investigate step must route to claude-code, got {eff_map.get('inv')!r}"
+    )
+
+
+def test_prepare_issue_stays_on_codex() -> None:
+    """prepare-issue declares only [github_api_write] (fix-required, worker_routable=False).
+    Must NOT reroute on Codex — it runs on Codex with network_access=True injected."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.server.tools.tools_execution import _has_routing_capability
+
+    resolver = _real_skill_resolver()
+    skill_info = resolver.resolve("prepare-issue")
+    assert skill_info is not None
+    assert _has_routing_capability(skill_info.uses_capabilities) is False, (
+        "prepare-issue declares only github_api_write — not worker_routable"
+    )
+
+    step = MagicMock()
+    step.tool = "run_skill"
+    step.provider = ""
+    step.with_args = {"skill_command": "/autoskillit:prepare-issue"}
+    step.skip_when_false = None
+
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+
+    eff_map = _compute_effective_backend_map(
+        {"prep": step},
+        "codex",
+        ProvidersConfig(),
+        "implementation",
+        skill_resolver=resolver,
+    )
+    assert eff_map is not None
+    assert eff_map.get("prep") == "codex", (
+        f"prepare-issue must NOT reroute on Codex, got {eff_map.get('prep')!r}"
+    )
+
+
+def test_codex_compatible_control_stays_on_codex() -> None:
+    """open-kitchen declares only [open_kitchen] (not-applicable, worker_routable=False).
+    It is a hard-block (not a reroute) — _has_routing_capability must return False."""
+    from autoskillit.server.tools.tools_execution import _has_routing_capability
+
+    resolver = _real_skill_resolver()
+    skill_info = resolver.resolve("open-kitchen")
+    assert skill_info is not None
+    assert _has_routing_capability(skill_info.uses_capabilities) is False, (
+        "open-kitchen declares only open_kitchen — not worker_routable"
+    )
+
+
+def test_auto_overrides_git_ingredient_not_set_by_agent_capabilities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Agent-only capabilities (agent_subagent) must NOT flip backend_supports_git_write.
+    Only git_metadata_write maps to that ingredient per CAPABILITY_INGREDIENT_MAP."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+
+    info = MagicMock()
+    info.uses_capabilities = frozenset({"agent_subagent"})
+    info.backend_requirements = frozenset({"claude-code"})
+    resolver = MagicMock()
+    resolver.resolve.return_value = info
+
+    step = MagicMock()
+    step.tool = "run_skill"
+    step.provider = ""
+    step.with_args = {"skill_command": "/autoskillit:make-plan"}
+    step.skip_when_false = None
+
+    overrides, detail = _provider_aware_capability_overrides(
+        get_backend("codex"),
+        "implementation",
+        ProvidersConfig(),
+        {"plan": step},
+        skill_resolver=resolver,
+    )
+    assert overrides["backend_supports_git_write"] == "false", (
+        "agent_subagent must NOT flip backend_supports_git_write"
+    )
+    assert detail.resolution_path == "capability_route", (
+        "Routing path still activated, but only mapped ingredients are set"
+    )
+
+
+def test_auto_overrides_git_ingredient_set_by_git_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """git_metadata_write (worker_routable=True) MUST still flip backend_supports_git_write."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+
+    info = MagicMock()
+    info.uses_capabilities = frozenset({"git_metadata_write"})
+    info.backend_requirements = frozenset({"claude-code"})
+    resolver = MagicMock()
+    resolver.resolve.return_value = info
+
+    step = MagicMock()
+    step.tool = "run_skill"
+    step.provider = ""
+    step.with_args = {"skill_command": "/autoskillit:resolve-failures"}
+    step.skip_when_false = "inputs.backend_supports_git_write"
+
+    overrides, detail = _provider_aware_capability_overrides(
+        get_backend("codex"),
+        "implementation",
+        ProvidersConfig(),
+        {"fix": step},
+        skill_resolver=resolver,
+    )
+    assert overrides["backend_supports_git_write"] == "true", (
+        "git_metadata_write must flip backend_supports_git_write"
+    )
+    assert detail.resolution_path == "capability_route"

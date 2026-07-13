@@ -1,7 +1,7 @@
 ---
 name: run-experiment
 categories: [research]
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model]
 description: Execute a designed experiment in a worktree and collect structured results. Supports --adjust retry mode.
 hooks:
   PreToolUse:

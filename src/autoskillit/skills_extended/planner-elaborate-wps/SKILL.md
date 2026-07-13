@@ -1,6 +1,6 @@
 ---
 name: planner-elaborate-wps
-uses_capabilities: [cross_skill_ref, run_skill]
+uses_capabilities: [run_skill]
 categories: [planner]
 description: >
   Elaborate all work packages for a target phase via parallel L0 subagents.

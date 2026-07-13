@@ -1,6 +1,6 @@
 ---
 name: analyze-pipeline-health
-uses_capabilities: [cross_skill_ref, run_skill]
+uses_capabilities: [run_skill]
 categories: [diagnostics]
 description: Analyze pipeline session logs for anomalies and regressions. Spawns parallel Haiku scanner subagents per step group, each investigating its batch of sessions and reporting findings with evidence.
 hooks:

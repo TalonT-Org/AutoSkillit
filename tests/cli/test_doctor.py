@@ -113,7 +113,11 @@ class TestCLIDoctor:
         with (
             patch(
                 "autoskillit.cli.shutil.which",
-                side_effect=lambda cmd: local_bin if cmd == "autoskillit" else shutil.which(cmd),
+                side_effect=lambda cmd: (
+                    local_bin
+                    if cmd == "autoskillit"
+                    else (local_bin if cmd == "claude" else shutil.which(cmd))
+                ),
             ),
             patch(
                 "subprocess.run",

@@ -35,6 +35,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_doctor_scripts.py` | Tests for doctor script/recipe version health checks |
 | `test_doctor_fleet.py` | Tests for fleet state schema version doctor check |
 | `test_doctor_script.py` | Tests for the _check_script_binary doctor check — script(1) PTY binary availability |
+| `test_doctor_claude_binary.py` | Tests for the _check_claude_binary doctor check — claude CLI availability for capability-driven rerouting |
 | `test_doctor_runtime.py` | Tests for the _check_codex_model_alias_staleness doctor check — codex model alias staleness auditing (Check 36) |
 | `test_doctor_split.py` | Structural guards: test_doctor.py split into three files (P1-F02) |
 | `test_hook_drift_plugin_guard.py` | Tests for hook drift false-positive fix when plugin is marketplace-installed |

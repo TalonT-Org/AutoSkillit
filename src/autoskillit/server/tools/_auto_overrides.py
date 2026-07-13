@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS, ProvidersConfig
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
+    CAPABILITY_INGREDIENT_MAP,
     CAPABILITY_INGREDIENT_TO_SKIP_GUARD,
     SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
@@ -92,6 +93,7 @@ def _provider_aware_capability_overrides(
 
     if skill_resolver is not None:
         has_capability_requirement = False
+        triggered_ingredients: set[str] = set()
         for step_name, step in recipe_steps.items():
             if getattr(step, "tool", None) not in SKILL_TOOLS:
                 continue
@@ -101,17 +103,18 @@ def _provider_aware_capability_overrides(
             if not skill_name:
                 continue
             cap_resolved = skill_resolver.resolve(skill_name)
-            if cap_resolved and any(
-                SKILL_CAPABILITY_REGISTRY.get(cap) is not None
-                and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
-                for cap in getattr(cap_resolved, "uses_capabilities", frozenset())
-            ):
-                has_capability_requirement = True
-                break
+            if cap_resolved:
+                for cap in getattr(cap_resolved, "uses_capabilities", frozenset()):
+                    cap_def = SKILL_CAPABILITY_REGISTRY.get(cap)
+                    if cap_def and cap_def.worker_routable:
+                        has_capability_requirement = True
+                        if cap in CAPABILITY_INGREDIENT_MAP:
+                            triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
 
         if has_capability_requirement:
             if shutil.which("claude") is not None:
-                base["backend_supports_git_write"] = "true"
+                for ingredient in triggered_ingredients:
+                    base[ingredient] = "true"
                 return base, CapabilityResolutionDetail(
                     resolved_steps=(),
                     bail_step=None,

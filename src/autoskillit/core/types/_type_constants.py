@@ -35,6 +35,7 @@ __all__ = [
     "WORKTREE_SKILLS",
     "BACKEND_CAPABILITY_INGREDIENTS",
     "CAPABILITY_INGREDIENT_TO_SKIP_GUARD",
+    "CAPABILITY_INGREDIENT_MAP",
     "CAPABILITY_GATE_CALLABLES",
     "SkillFamilyDef",
     "GITHUB_API_SKILL_FAMILIES",
@@ -103,6 +104,14 @@ BACKEND_CAPABILITY_INGREDIENTS: frozenset[str] = frozenset(
 # to detect vacuous gates — a gate whose guarded steps were all pruned.
 CAPABILITY_INGREDIENT_TO_SKIP_GUARD: dict[str, str] = {
     "backend_supports_git_write": "inputs.backend_supports_git_write",
+}
+
+# Maps worker_routable capabilities to the specific recipe ingredients they
+# authorize. Capabilities not in this map (e.g. agent_subagent, agent_model,
+# cross_skill_ref) trigger backend rerouting but do not flip any ingredient
+# — they are routed but not git-write-gated.
+CAPABILITY_INGREDIENT_MAP: dict[str, str] = {
+    "git_metadata_write": "backend_supports_git_write",
 }
 
 # Bare (un-dotted) callable names whose run_python steps are capability gates.

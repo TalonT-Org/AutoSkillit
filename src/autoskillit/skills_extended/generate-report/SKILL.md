@@ -1,7 +1,7 @@
 ---
 name: generate-report
 categories: [research]
-uses_capabilities: [agent_model, cross_skill_ref, git_metadata_write]
+uses_capabilities: [agent_model, git_metadata_write]
 description: Synthesize experiment results into a structured research report in the research/ folder. Supports --inconclusive flag.
 hooks:
   PreToolUse:

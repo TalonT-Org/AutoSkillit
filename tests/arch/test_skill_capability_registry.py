@@ -323,3 +323,23 @@ def test_reclassified_skills_have_empty_backend_requirements():
         "Previously blocked skills must have empty backend_requirements:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_fix_required_without_worker_routable_is_only_github_api_write():
+    """Guard: any fix-required capability with worker_routable=False must be
+    exactly {"github_api_write"}. New fix-required capabilities must either
+    set worker_routable=True (if Claude Code is needed) or be added here with
+    documented justification."""
+    allowlist = {"github_api_write"}
+    fix_required_unrouted = {
+        name
+        for name, cap in SKILL_CAPABILITY_REGISTRY.items()
+        if cap.codex_status == "fix-required" and not cap.worker_routable
+    }
+    extra = fix_required_unrouted - allowlist
+    missing = allowlist - fix_required_unrouted
+    assert not extra, (
+        f"Unexpected fix-required + worker_routable=False capabilities: {sorted(extra)}. "
+        "Either set worker_routable=True or add to the allowlist with justification."
+    )
+    assert not missing, f"Allowlisted capabilities no longer match: {sorted(missing)}."

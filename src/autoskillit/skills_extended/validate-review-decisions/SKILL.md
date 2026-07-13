@@ -1,7 +1,7 @@
 ---
 name: validate-review-decisions
 categories: [audit]
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model]
 description: >-
   Validate review-decisions audit findings with mandatory intent analysis
   and seven evidence-gathering rules. Adds docstring-as-contract recognition,

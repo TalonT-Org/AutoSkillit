@@ -60,6 +60,7 @@ from ._doctor_mcp import (
     _check_stale_mcp_servers,
 )
 from ._doctor_runtime import (
+    _check_claude_binary,
     _check_claude_process_state_breakdown,
     _check_cli_conformance_probes,
     _check_codex_graduation,
@@ -92,7 +93,6 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     results.extend(_check_stale_mcp_servers(Path.home() / ".claude.json", backend=_backend))
-
     # Check 2: MCP server registered in ~/.claude.json or via plugin
     results.append(
         _check_mcp_server_registered(
@@ -117,19 +117,15 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 4: Config exists
     results.append(_check_project_config())
-
     # Check 4b: Config secrets placement
     results.append(_check_config_layers_for_secrets())
-
     # Check 5: Version consistency — cached plugin.json must match installed package
     results.append(_check_cache_version_mismatch())
 
     # Check 6: Hook executability — validates deployed scripts for all event types (all scopes)
     results.extend(_check_hook_health_all_scopes(Path.cwd()))
-
     # Check 7: Hook registration in settings.json
     results.append(_check_hook_registration(_claude_settings_path("user")))
-
     # Check 7b: Hook registry drift (multi-scope)
     results.extend(_check_hook_registry_drift_all_scopes(Path.cwd()))
 
@@ -211,6 +207,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 31: script(1) PTY binary availability
     results.append(_check_script_binary())
+
+    # Check 31b: claude CLI binary availability (capability-driven rerouting)
+    results.append(_check_claude_binary())
 
     # Check 32: Codex MCP tool_timeout_sec coherence
     results.append(

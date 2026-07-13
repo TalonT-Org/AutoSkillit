@@ -1,6 +1,6 @@
 ---
 name: investigate
-uses_capabilities: [agent_model, claude_dir, cross_skill_ref]
+uses_capabilities: [agent_model, claude_dir]
 description: Deep investigation of errors, bugs, or codebase questions without making any code changes. Use when user mentions investigate, understand, explore, analyze, or pastes error tracebacks. Spawns parallel subagents for comprehensive exploration.
 hooks:
   PreToolUse:

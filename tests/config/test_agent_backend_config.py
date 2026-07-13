@@ -132,3 +132,108 @@ class TestAgentBackendConfigLoading:
         (config_dir / "config.yaml").write_text("agent_backend:\n  invented_key: whatever\n")
         with pytest.raises(ConfigSchemaError, match="unrecognized key"):
             load_config(tmp_path)
+
+
+class TestAgentBackendConfigOverrides:
+    def test_recipe_overrides_field_exists(self) -> None:
+        from autoskillit.config.settings import AgentBackendConfig
+
+        cfg = AgentBackendConfig()
+        assert hasattr(cfg, "recipe_overrides")
+        assert cfg.recipe_overrides == {}
+
+    def test_step_overrides_field_exists(self) -> None:
+        from autoskillit.config.settings import AgentBackendConfig
+
+        cfg = AgentBackendConfig()
+        assert hasattr(cfg, "step_overrides")
+        assert cfg.step_overrides == {}
+
+    def test_step_overrides_type_validation(self) -> None:
+        from autoskillit.config.settings import AgentBackendConfig
+
+        with pytest.raises(ValueError, match="step_overrides"):
+            AgentBackendConfig(step_overrides={"foo": 123})  # type: ignore[dict-item]
+
+    def test_recipe_overrides_type_validation(self) -> None:
+        from autoskillit.config.settings import AgentBackendConfig
+
+        with pytest.raises(ValueError, match="recipe_overrides"):
+            AgentBackendConfig(recipe_overrides={"remediation": "codex"})  # type: ignore[dict-item]
+
+    def test_recipe_overrides_inner_value_validation(self) -> None:
+        from autoskillit.config.settings import AgentBackendConfig
+
+        with pytest.raises(ValueError, match="recipe_overrides"):
+            AgentBackendConfig(recipe_overrides={"remediation": {"foo": 123}})  # type: ignore[dict-item]
+
+    def test_unknown_backend_in_recipe_overrides_warns(self) -> None:
+        import structlog.testing
+
+        from autoskillit.config.settings import AgentBackendConfig
+
+        with structlog.testing.capture_logs() as cap_logs:
+            AgentBackendConfig(recipe_overrides={"remediation": {"dry_walkthrough": "aider"}})
+        events = [
+            e
+            for e in cap_logs
+            if e.get("log_level") == "warning"
+            and e.get("event") == "recipe_override_references_unknown_backend"
+            and e.get("recipe") == "remediation"
+            and e.get("step") == "dry_walkthrough"
+            and e.get("backend") == "aider"
+        ]
+        assert len(events) == 1, f"Expected one unknown-backend warning, got: {cap_logs}"
+
+    def test_unknown_backend_in_step_overrides_warns(self) -> None:
+        import structlog.testing
+
+        from autoskillit.config.settings import AgentBackendConfig
+
+        with structlog.testing.capture_logs() as cap_logs:
+            AgentBackendConfig(step_overrides={"dry_walkthrough": "aider"})
+        events = [
+            e
+            for e in cap_logs
+            if e.get("log_level") == "warning"
+            and e.get("event") == "step_override_references_unknown_backend"
+            and e.get("step") == "dry_walkthrough"
+            and e.get("backend") == "aider"
+        ]
+        assert len(events) == 1, f"Expected one unknown-backend warning, got: {cap_logs}"
+
+    def test_yaml_loading_with_recipe_overrides(self, tmp_path) -> None:
+        from autoskillit.config import load_config
+
+        monkeypatch = __import__("pytest").MonkeyPatch()
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+        try:
+            config_dir = tmp_path / ".autoskillit"
+            config_dir.mkdir()
+            (config_dir / "config.yaml").write_text(
+                yaml.dump(
+                    {
+                        "agent_backend": {
+                            "backend": "codex",
+                            "recipe_overrides": {"remediation": {"dry_walkthrough": "codex"}},
+                            "step_overrides": {"implement": "claude-code"},
+                        }
+                    }
+                )
+            )
+            cfg = load_config(tmp_path)
+            assert cfg.agent_backend.backend == "codex"
+            assert cfg.agent_backend.recipe_overrides == {
+                "remediation": {"dry_walkthrough": "codex"}
+            }
+            assert cfg.agent_backend.step_overrides == {"implement": "claude-code"}
+        finally:
+            monkeypatch.undo()
+
+    def test_string_shorthand_still_works(self) -> None:
+        from autoskillit.config.settings import AgentBackendConfig
+
+        cfg = AgentBackendConfig(backend="codex")
+        assert cfg.backend == "codex"
+        assert cfg.recipe_overrides == {}
+        assert cfg.step_overrides == {}

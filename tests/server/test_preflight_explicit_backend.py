@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any, cast
+from unittest.mock import MagicMock
+
+import pytest
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _make_step(step_name: str, tool: str = "run_skill", provider: str = ""):
+    return SimpleNamespace(
+        name=step_name,
+        tool=tool,
+        provider=provider,
+        with_args={},
+        skip_when_false="",
+        backend_requirements=None,
+    )
+
+
+def _make_backend(**kwargs):
+    from autoskillit.config.settings import AgentBackendConfig
+
+    return AgentBackendConfig(**kwargs)
+
+
+class TestPreflightExplicitBackend:
+    def test_explicit_override_to_missing_binary_excluded(self, monkeypatch) -> None:
+        """An explicit override pointing to a backend whose binary is not on
+        PATH excludes that step from feasibility (preflight won't fail on its
+        account, but it also won't be marked feasible)."""
+        from autoskillit.config.settings import ProvidersConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        # Force shutil.which to return None for codex binary
+        monkeypatch.setattr(
+            "autoskillit.server.tools._preflight.shutil.which",
+            lambda name: None if name in ("codex", "codex-cli") else f"/usr/bin/{name}",
+        )
+
+        steps = {"step_a": _make_step("step_a")}
+        providers = ProvidersConfig()
+        # Pin step_a to codex, but codex binary is absent.
+        cfg = _make_backend(
+            backend="codex",
+            step_overrides={"step_a": "codex"},
+        )
+        backend = MagicMock()
+        backend.name = "codex"
+        backend.capabilities.anthropic_provider_capable = False
+        backend.capabilities.applicable_guards = frozenset()
+        err = _check_dispatch_feasibility(
+            post_prune_step_names=["step_a"],
+            active_recipe_steps=cast(Any, steps),
+            backend=backend,
+            config_providers=providers,
+            recipe_name="remediation",
+            config_backend=cfg,
+        )
+        # No fix-required matchers → preflight returns None even though
+        # step_a is excluded from feasible_step_names.
+        assert err is None
+
+    def test_explicit_override_to_claude_exempts_from_fix_required(self, monkeypatch) -> None:
+        """A step explicitly pinned to claude-code is exempted from the
+        orchestrator-level fix_required_matchers check."""
+        from autoskillit.config.settings import ProvidersConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools._preflight.shutil.which",
+            lambda name: f"/usr/bin/{name}",
+        )
+        steps = {"step_a": _make_step("step_a")}
+        providers = ProvidersConfig()
+        cfg = _make_backend(
+            backend="codex",
+            step_overrides={"step_a": "claude-code"},
+        )
+        backend = MagicMock()
+        backend.name = "codex"
+        backend.capabilities.anthropic_provider_capable = False
+        backend.capabilities.applicable_guards = frozenset({"some_guard"})
+        # No fix-required hooks in registry (empty) → preflight passes.
+        err = _check_dispatch_feasibility(
+            post_prune_step_names=["step_a"],
+            active_recipe_steps=cast(Any, steps),
+            backend=backend,
+            config_providers=providers,
+            recipe_name="remediation",
+            config_backend=cfg,
+        )
+        assert err is None

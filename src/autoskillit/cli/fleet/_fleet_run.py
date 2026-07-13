@@ -79,6 +79,7 @@ async def _execute_fleet_run(
         ctx.config.providers,
         _raw_steps,
         skill_resolver=ctx.skill_resolver,
+        config_backend=ctx.config.agent_backend,
     )
     _effective_backend_map = _compute_effective_backend_map(
         _raw_steps,
@@ -86,6 +87,7 @@ async def _execute_fleet_run(
         ctx.config.providers,
         recipe,
         skill_resolver=ctx.skill_resolver,
+        config_backend=ctx.config.agent_backend,
     )
 
     effective_backend = dispatch_backend or ctx.backend

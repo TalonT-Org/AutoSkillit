@@ -111,6 +111,7 @@ async def _execute_claude_headless(
     model_identity: ModelIdentity = ModelIdentity.unknown(),
     inspector_eligible: bool = False,
     inspector_model: str = "",
+    backend_override_source: str | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
@@ -319,6 +320,7 @@ async def _execute_claude_headless(
                         step_name=step_name,
                         order_id=order_id,
                     ),
+                    backend_override_source=backend_override_source,
                 )
             except Exception:
                 logger.debug("flush_session_log during crash failed", exc_info=True)
@@ -383,6 +385,7 @@ async def _execute_claude_headless(
                             step_name=step_name,
                             order_id=order_id,
                         ),
+                        backend_override_source=backend_override_source,
                     )
             except Exception:
                 logger.debug("flush_session_log during cancel failed", exc_info=True)
@@ -572,6 +575,7 @@ async def _execute_claude_headless(
                 is_resume=spec.is_resume,
                 backend=cast(Literal["claude-code", "codex"], _step_backend.name),
                 channel_b_capable=_step_backend.capabilities.channel_b_capable,
+                backend_override_source=backend_override_source,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

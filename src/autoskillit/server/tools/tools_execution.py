@@ -821,6 +821,16 @@ async def run_skill(
                 and not tool_ctx.backend.capabilities.anthropic_provider_capable
             )
 
+            # Explicit config backend override — highest authority, suppresses
+            # capability-driven routing for this step (REQ-RES-001).
+            from autoskillit.server._guards import _resolve_backend_override  # circular-break
+
+            _explicit_backend_override: str | None = _resolve_backend_override(
+                step_name or "",
+                tool_ctx.recipe_name or "",
+                _cfg.agent_backend,
+            )
+
             _skill_caps: frozenset[str] = (
                 getattr(_skill_info, "uses_capabilities", frozenset())
                 if _skill_info
@@ -836,7 +846,10 @@ async def run_skill(
                 and not tool_ctx.backend.capabilities.anthropic_provider_capable
             )
 
-            if _skill_requires_claude:
+            # When an explicit backend override pins a step to a non-claude
+            # backend, capability-driven routing must NOT crash on the missing
+            # claude binary — the operator has explicitly chosen the backend.
+            if _skill_requires_claude and _explicit_backend_override is None:
                 if shutil.which("claude") is None:
                     return SkillResult.crashed(
                         exception=RuntimeError(
@@ -849,11 +862,36 @@ async def run_skill(
                         order_id=effective_order_id,
                     ).to_json()
 
-            backend_override: str | None = (
-                AGENT_BACKEND_CLAUDE_CODE
-                if (_provider_override or _skill_requires_claude)
-                else None
-            )
+            # If an explicit override points to a non-claude backend whose
+            # binary is absent, fail closed with a clear message.
+            if _explicit_backend_override is not None and _explicit_backend_override != (
+                tool_ctx.backend.name if tool_ctx.backend else None
+            ):
+                try:
+                    _explicit_backend_obj_check = _get_backend(_explicit_backend_override)
+                except Exception:
+                    _explicit_backend_obj_check = None
+                if _explicit_backend_obj_check is not None:
+                    _explicit_binary = getattr(
+                        _explicit_backend_obj_check.capabilities, "process_name", ""
+                    )
+                    if _explicit_binary and shutil.which(_explicit_binary) is None:
+                        return SkillResult.crashed(
+                            exception=RuntimeError(
+                                f"Step explicitly pinned to backend "
+                                f"{_explicit_backend_override!r} but required binary "
+                                f"{_explicit_binary!r} is not found on PATH."
+                            ),
+                            skill_command=resolved_command,
+                            order_id=effective_order_id,
+                        ).to_json()
+
+            if _explicit_backend_override is not None:
+                backend_override = _explicit_backend_override
+            elif _provider_override or _skill_requires_claude:
+                backend_override = AGENT_BACKEND_CLAUDE_CODE
+            else:
+                backend_override = None
 
             _effective_backend_obj: CodingAgentBackend | None = (
                 _get_backend(backend_override)
@@ -863,9 +901,11 @@ async def run_skill(
 
             if backend_override:
                 _override_reasons: list[str] = []
-                if _skill_requires_claude:
+                if _explicit_backend_override is not None:
+                    _override_reasons.append("explicit_config")
+                if _skill_requires_claude and _explicit_backend_override is None:
                     _override_reasons.append("skill_requirement")
-                if _provider_override:
+                if _provider_override and _explicit_backend_override is None:
                     _override_reasons.append("provider_profile")
                 logger.info(
                     "backend_override_activated",
@@ -877,6 +917,16 @@ async def run_skill(
                     target_backend=backend_override,
                     routing_capabilities=_routing_caps,
                 )
+
+            # Record the override source for evidence: distinguish explicit
+            # operator config from capability/provider routing.
+            _backend_override_source: str | None = None
+            if _explicit_backend_override is not None:
+                _backend_override_source = "explicit_config"
+            elif _skill_requires_claude:
+                _backend_override_source = "capability_route"
+            elif _provider_override:
+                _backend_override_source = "provider_route"
 
             # Look up artifact validation patterns from skill contract
             expected_output_patterns: list[str] = []
@@ -1185,6 +1235,7 @@ async def run_skill(
                                 profile_name=profile_name_out,
                                 provider_name=profile_name_out,
                                 backend_override=backend_override,
+                                backend_override_source=_backend_override_source,
                                 resume_session_id=resume_session_id,
                                 marker_dir=_marker_dir,
                                 caller_session_id=_orchestrator_sid,

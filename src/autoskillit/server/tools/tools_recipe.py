@@ -236,6 +236,7 @@ async def load_recipe(
                 tool_ctx.config.providers,
                 _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
                 skill_resolver=tool_ctx.skill_resolver,
+                config_backend=tool_ctx.config.agent_backend,
             )
             _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
@@ -247,6 +248,7 @@ async def load_recipe(
                 tool_ctx.config.providers,
                 name,
                 skill_resolver=tool_ctx.skill_resolver,
+                config_backend=tool_ctx.config.agent_backend,
             )
             result = serve_recipe(
                 tool_ctx,
@@ -366,6 +368,7 @@ async def validate_recipe(script_path: str) -> str:
                 tool_ctx.config.providers,
                 _validate_recipe_steps,
                 skill_resolver=tool_ctx.skill_resolver,
+                config_backend=tool_ctx.config.agent_backend,
             )
             _validate_effective_backend_map = _compute_effective_backend_map(
                 _validate_recipe_steps,
@@ -373,6 +376,7 @@ async def validate_recipe(script_path: str) -> str:
                 tool_ctx.config.providers,
                 _validate_recipe_name,
                 skill_resolver=tool_ctx.skill_resolver,
+                config_backend=tool_ctx.config.agent_backend,
             )
             result = tool_ctx.recipes.validate_from_path(
                 Path(script_path),

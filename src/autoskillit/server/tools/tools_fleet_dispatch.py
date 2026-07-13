@@ -362,6 +362,7 @@ async def dispatch_food_truck(
                     tool_ctx.config.providers,
                     _preflight_raw_steps,
                     skill_resolver=tool_ctx.skill_resolver,
+                    config_backend=tool_ctx.config.agent_backend,
                 )
                 _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
                 _effective_backend_map = _compute_effective_backend_map(
@@ -370,6 +371,7 @@ async def dispatch_food_truck(
                     tool_ctx.config.providers,
                     recipe,
                     skill_resolver=tool_ctx.skill_resolver,
+                    config_backend=tool_ctx.config.agent_backend,
                 )
                 _fleet_load_result = tool_ctx.recipes.load_and_validate(
                     recipe,
@@ -438,6 +440,7 @@ async def dispatch_food_truck(
                 backend=_override_backend,
                 config_providers=tool_ctx.config.providers,
                 recipe_name=recipe,
+                config_backend=tool_ctx.config.agent_backend,
             )
             if _preflight_err is not None:
                 return _preflight_err

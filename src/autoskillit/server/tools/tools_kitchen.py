@@ -498,6 +498,7 @@ def get_recipe(name: str) -> str:
             ctx.config.providers,
             _raw_recipe.steps,
             skill_resolver=ctx.skill_resolver,
+            config_backend=ctx.config.agent_backend,
         )
         _effective_backend_map = _compute_effective_backend_map(
             _raw_recipe.steps,
@@ -505,6 +506,7 @@ def get_recipe(name: str) -> str:
             ctx.config.providers,
             name,
             skill_resolver=ctx.skill_resolver,
+            config_backend=ctx.config.agent_backend,
         )
         _config_default = build_config_default_layer(_defaults)
         result = serve_recipe(
@@ -733,6 +735,7 @@ async def open_kitchen(
                 tool_ctx.config.providers,
                 _raw_recipe.steps if _raw_recipe is not None else None,
                 skill_resolver=tool_ctx.skill_resolver,
+                config_backend=tool_ctx.config.agent_backend,
             )
             _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
@@ -744,6 +747,7 @@ async def open_kitchen(
                 tool_ctx.config.providers,
                 name,
                 skill_resolver=tool_ctx.skill_resolver,
+                config_backend=tool_ctx.config.agent_backend,
             )
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":
@@ -832,6 +836,7 @@ async def open_kitchen(
                         backend=tool_ctx.backend,
                         config_providers=tool_ctx.config.providers,
                         recipe_name=name,
+                        config_backend=tool_ctx.config.agent_backend,
                     )
                     if _preflight_err is not None:
                         tool_ctx.gate.disable()
@@ -961,6 +966,7 @@ async def open_kitchen(
                     backend=tool_ctx.backend,
                     config_providers=tool_ctx.config.providers,
                     recipe_name=name,
+                    config_backend=tool_ctx.config.agent_backend,
                 )
                 if _preflight_err is not None:
                     tool_ctx.gate.disable()

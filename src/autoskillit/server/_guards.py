@@ -23,7 +23,11 @@ from autoskillit.hooks import command_has_blocked_protected_path_read
 from autoskillit.pipeline import gate_error_result, headless_error_result
 
 if TYPE_CHECKING:
-    from autoskillit.config._config_dataclasses import ProviderProfileDef, ProvidersConfig
+    from autoskillit.config._config_dataclasses import (
+        AgentBackendConfig,
+        ProviderProfileDef,
+        ProvidersConfig,
+    )
 
 logger = get_logger(__name__)
 
@@ -434,6 +438,69 @@ def _resolve_provider_profile(
         logger.warning("provider_profile_not_found", provider=name, tier="default")
         return (name, {})
     return (name, _profile_to_env(profile))
+
+
+def _resolve_backend_override(
+    step_name: str,
+    recipe_name: str,
+    config_backend: AgentBackendConfig,
+) -> str | None:
+    """Resolve explicit backend override from config.
+
+    Returns the backend name if an explicit override matches, or ``None``
+    to fall through to capability/provider routing.
+
+    Precedence (highest first):
+      Tier 0:  ``recipe_overrides[recipe][step]``  (exact)
+      Tier 0W: ``recipe_overrides[recipe]["*"]``   (recipe wildcard)
+      Tier 1:  ``step_overrides[step]``            (global per-step, requires recipe context)
+      Tier 2:  ``step_overrides["*"]``             (global wildcard, requires recipe context)
+
+    Tiers 1 and 2 require a non-empty ``recipe_name`` to match the gating used
+    by ``_resolve_provider_profile`` — without a recipe context, explicit
+    overrides are inert so that the same config produces the same effective
+    route whether invoked from admission or dispatch.
+    """
+    if recipe_name and recipe_name in config_backend.recipe_overrides:
+        recipe_map = config_backend.recipe_overrides[recipe_name]
+        if step_name and step_name in recipe_map:
+            logger.debug(
+                "backend_override_resolved",
+                tier="recipe_step",
+                recipe=recipe_name,
+                step=step_name,
+                backend=recipe_map[step_name],
+            )
+            return recipe_map[step_name]
+        if "*" in recipe_map:
+            logger.debug(
+                "backend_override_resolved",
+                tier="recipe_wildcard",
+                recipe=recipe_name,
+                step=step_name,
+                backend=recipe_map["*"],
+            )
+            return recipe_map["*"]
+
+    if recipe_name and step_name and step_name in config_backend.step_overrides:
+        logger.debug(
+            "backend_override_resolved",
+            tier="step_override",
+            step=step_name,
+            backend=config_backend.step_overrides[step_name],
+        )
+        return config_backend.step_overrides[step_name]
+
+    if recipe_name and "*" in config_backend.step_overrides:
+        logger.debug(
+            "backend_override_resolved",
+            tier="step_wildcard",
+            step=step_name,
+            backend=config_backend.step_overrides["*"],
+        )
+        return config_backend.step_overrides["*"]
+
+    return None
 
 
 def _resolve_model_as_profile(

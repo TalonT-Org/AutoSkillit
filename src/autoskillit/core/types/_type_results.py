@@ -635,6 +635,9 @@ class SessionIndexEntry(TypedDict):
     claude_code_log: str | None  # path to Claude Code JSONL, or None for non-Claude-Code sessions
     codex_log: str | None  # path to Codex rollout NDJSON, or None for non-Codex sessions
     backend: str  # "claude-code" or "codex" — unambiguous backend identifier
+    backend_override_source: (
+        str | None
+    )  # "explicit_config" | "capability_route" | "provider_route" | None
     skill_command: str
     success: bool
     subtype: str

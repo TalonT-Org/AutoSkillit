@@ -578,6 +578,8 @@ class ProvidersConfig:
 @dataclass
 class AgentBackendConfig:
     backend: str = "claude-code"
+    step_overrides: dict[str, str] = field(default_factory=dict)
+    recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.backend:
@@ -588,3 +590,55 @@ class AgentBackendConfig:
                 backend=self.backend,
                 valid_names=sorted(KNOWN_BACKEND_NAMES),
             )
+
+        # Validate step_overrides shape: values must be strings.
+        for step_name, override_backend in self.step_overrides.items():
+            if not isinstance(step_name, str):
+                raise ValueError(
+                    f"agent_backend.step_overrides keys must be strings; "
+                    f"got {type(step_name).__name__}"
+                )
+            if not isinstance(override_backend, str):
+                raise ValueError(
+                    f"agent_backend.step_overrides[{step_name!r}] must be a string; "
+                    f"got {type(override_backend).__name__}"
+                )
+            if override_backend not in KNOWN_BACKEND_NAMES:
+                logger.warning(
+                    "step_override_references_unknown_backend",
+                    step=step_name,
+                    backend=override_backend,
+                    valid_names=sorted(KNOWN_BACKEND_NAMES),
+                )
+
+        # Validate recipe_overrides shape: outer values are dicts, inner values are strings.
+        for recipe_name, recipe_map in self.recipe_overrides.items():
+            if not isinstance(recipe_name, str):
+                raise ValueError(
+                    f"agent_backend.recipe_overrides keys must be strings; "
+                    f"got {type(recipe_name).__name__}"
+                )
+            if not isinstance(recipe_map, dict):
+                raise ValueError(
+                    f"agent_backend.recipe_overrides[{recipe_name!r}] must be a dict; "
+                    f"got {type(recipe_map).__name__}"
+                )
+            for step_name, override_backend in recipe_map.items():
+                if not isinstance(step_name, str):
+                    raise ValueError(
+                        f"agent_backend.recipe_overrides[{recipe_name!r}] keys must be "
+                        f"strings; got {type(step_name).__name__}"
+                    )
+                if not isinstance(override_backend, str):
+                    raise ValueError(
+                        f"agent_backend.recipe_overrides[{recipe_name!r}][{step_name!r}] "
+                        f"must be a string; got {type(override_backend).__name__}"
+                    )
+                if override_backend not in KNOWN_BACKEND_NAMES:
+                    logger.warning(
+                        "recipe_override_references_unknown_backend",
+                        recipe=recipe_name,
+                        step=step_name,
+                        backend=override_backend,
+                        valid_names=sorted(KNOWN_BACKEND_NAMES),
+                    )

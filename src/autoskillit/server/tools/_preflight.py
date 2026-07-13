@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,8 @@ def _check_dispatch_feasibility(
     backend: Any | None,
     config_providers: Any,
     recipe_name: str = "",
+    *,
+    config_backend: Any | None = None,
 ) -> str | None:
     """Fail-closed dispatch-feasibility preflight.
 
@@ -59,10 +62,32 @@ def _check_dispatch_feasibility(
     if not run_skill_step_names:
         return None
 
-    from autoskillit.server._guards import _resolve_provider_profile  # circular-break
+    from autoskillit.server._guards import (  # circular-break
+        _resolve_backend_override,
+        _resolve_provider_profile,
+    )
 
     feasible_step_names: list[str] = []
     for step_name in run_skill_step_names:
+        # Explicit config backend override takes precedence over capability
+        # routing for preflight too (mirrors the dispatch path):
+        # - pinned to claude-code: feasible regardless of orchestrator backend
+        #   (effective backend enforces all fix-required hooks).
+        # - pinned to a non-claude backend: only feasible if its required
+        #   binary is on PATH; otherwise the step cannot run, so exclude it
+        #   from the feasibility check (preflight won't fire on its account).
+        if config_backend is not None:
+            _explicit = _resolve_backend_override(step_name, recipe_name, config_backend)
+            if _explicit is not None:
+                from autoskillit.execution.backends import get_backend
+
+                _explicit_obj = get_backend(_explicit)
+                _explicit_binary = getattr(_explicit_obj.capabilities, "process_name", "")
+                if _explicit_binary and shutil.which(_explicit_binary) is None:
+                    continue
+                if getattr(_explicit_obj.capabilities, "anthropic_provider_capable", False):
+                    continue
+
         step = active_recipe_steps.get(step_name)
         step_provider = getattr(step, "provider", "") or ""
         _profile_name, provider_extras = _resolve_provider_profile(

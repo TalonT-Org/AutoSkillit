@@ -864,7 +864,7 @@ def _build_skill_result(
     # the recipe's on_failure route fires. This gate cannot be bypassed by the LLM
     # orchestrator — it is enforced programmatically after session completion.
     if closure_spec is not None and closure_report_root is not None:
-        from autoskillit.core.closure_verifier import verify_closure_report
+        from autoskillit.core import verify_closure_report
 
         report_file = closure_report_root / "closure_report.json"
         verification = verify_closure_report(
@@ -886,6 +886,11 @@ def _build_skill_result(
                 subtype="closure_verification_failed",
                 result=f"Closure verification failed: {error_detail}",
             )
+        else:
+            # Valid canonical report produced by the session — the report's
+            # existence proves the session wrote structured output, so clear
+            # any prior is_error/empty-output classification.
+            sr = dataclasses.replace(sr, is_error=False)
 
     if sr.needs_retry and sr.retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
         sr = dataclasses.replace(

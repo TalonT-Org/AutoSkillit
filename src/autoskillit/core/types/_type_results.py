@@ -48,6 +48,7 @@ __all__ = [
     "ModelTotalEntry",
     "TokenUsageFileEntry",
     "SessionIndexEntry",
+    "parse_plan_paths",
 ]
 
 
@@ -226,6 +227,18 @@ def closure_authority_spec_from_args(
         diff_sha=diff_sha,
         target_sha=target_sha,
     )
+
+
+def parse_plan_paths(raw: str) -> tuple[str, ...]:
+    """Split plan paths on commas or newlines — handles both
+    context.all_plan_paths (comma-separated) and context.group_files
+    (newline-separated). Whitespace is stripped from each token; empty
+    tokens are filtered.
+    """
+    import re as _re
+
+    parts = _re.split(r"[,\n]+", raw)
+    return tuple(p.strip() for p in parts if p.strip())
 
 
 @dataclass(frozen=True, slots=True)

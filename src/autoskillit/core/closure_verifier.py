@@ -47,6 +47,8 @@ def verify_closure_report(
         resolve_contained_path(report_path, output_root)
     except ContainmentError as exc:
         errors.append(f"report containment failed: {exc}")
+    except OSError as exc:
+        errors.append(f"report path inaccessible: {exc}")
 
     raw = read_versioned_json(Path(report_path), expected_version=1)
     if raw is None:

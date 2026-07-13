@@ -447,6 +447,7 @@ last line of your text output:
 
 ```
 verdict = GO
+verified_verdict = GO
 ```
 
 ---
@@ -540,6 +541,7 @@ last lines of your text output:
 
 ```
 verdict = NO GO
+verified_verdict = NO GO
 remediation_path = {absolute_path_to_remediation_file}
 ```
 

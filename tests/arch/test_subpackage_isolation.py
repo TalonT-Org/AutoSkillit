@@ -997,7 +997,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; per-step backend override config_backend kwarg threading (+5 net lines)",
     ),
     "tools_execution.py": (
-        1386,
+        1418,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
@@ -1016,7 +1016,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "WORKTREE_SKILLS dispatch preflight + _scope_covers_cwd helper (+35 net lines)"
         "; per-step explicit backend override resolution, binary probe gating, "
         "override source evidence, and structured logging (+49 net lines)"
-        "; fail-closed error return for unregistered explicit backend override (+3 net lines)",
+        "; fail-closed error return for unregistered explicit backend override (+3 net lines)"
+        "; closure-mode MCP tool parameters: closure_authority_path/hash/plan_paths/"
+        "base_sha/diff_sha/target_sha threaded through run_skill handler for "
+        "execution-layer gate (+30 net lines)",
     ),
     "execution/backends/codex.py": (
         1155,

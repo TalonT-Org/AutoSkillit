@@ -35,6 +35,7 @@ from autoskillit.core import (
     get_logger,
     is_feature_enabled,
     is_git_worktree,
+    parse_plan_paths,
     resolve_target_skill,
     truncate_text,
 )
@@ -958,17 +959,10 @@ async def run_skill(
             # Closure args are first-class parameters (not embedded in skill_command text)
             # because the skill_command string is prompt text consumed by the LLM session,
             # not parsed by Python code.
-            def _parse_plan_paths(raw: str) -> tuple[str, ...]:
-                """Split plan paths on commas or newlines — handles both
-                context.all_plan_paths (comma-separated) and context.group_files
-                (newline-separated)."""
-                parts = re.split(r"[,\n]+", raw)
-                return tuple(p.strip() for p in parts if p.strip())
-
             closure_spec: ClosureAuthoritySpec | None = closure_authority_spec_from_args(
                 path=closure_authority_path or None,
                 hash_=closure_authority_hash or None,
-                plan_paths=_parse_plan_paths(closure_plan_paths) if closure_plan_paths else (),
+                plan_paths=parse_plan_paths(closure_plan_paths) if closure_plan_paths else (),
                 base_sha=closure_base_sha,
                 diff_sha=closure_diff_sha,
                 target_sha=closure_target_sha,

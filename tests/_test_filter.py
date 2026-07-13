@@ -267,7 +267,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_closure_report": frozenset({"core"}),
     "closure_hashing": frozenset({"core"}),
     "path_containment": frozenset({"core"}),
-    "closure_verifier": frozenset({"core"}),
+    "closure_verifier": frozenset({"core", "execution"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

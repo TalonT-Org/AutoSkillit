@@ -6,10 +6,12 @@ import dataclasses
 import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CODEX_CONTEXT_EXHAUSTION_MARKER,
+    WORKTREE_SKILLS,
     AgentSessionResult,
     CliSubtype,
     FailureRecord,
@@ -17,6 +19,7 @@ from autoskillit.core import (
     SessionTelemetry,
     SkillResult,
     WriteEvidence,
+    extract_skill_name,
     get_logger,
 )
 from autoskillit.execution.session._session_model import (
@@ -153,11 +156,63 @@ def _compute_write_evidence(
     git_writes_detected: bool,
     backend: CodingAgentBackend,
     file_changes: Sequence[str] = (),
+    write_watch_dirs: Sequence[Path] = (),
+    cwd: str = "",
+    skill_command: str = "",
 ) -> WriteEvidence:
     write_names = backend.write_tool_names()
-    write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
-    # Codex fallback: only count file_changes when no Write/Edit tool calls provide evidence.
-    file_changes_count = len(file_changes) if write_call_count == 0 else 0
+
+    # Determine if this dispatch requires tracked-tree writes:
+    # A worktree skill's implementation evidence must come from outside
+    # the .autoskillit/temp/ tree, regardless of how write_watch_dirs
+    # was constructed (output_dir="." or default temp fallback).
+    # For ~40 non-worktree skills, all writes count (temp IS their target).
+    extracted = extract_skill_name(skill_command) if skill_command else None
+    is_worktree_dispatch = bool(
+        extracted and extracted in WORKTREE_SKILLS and cwd and write_watch_dirs
+    )
+
+    if is_worktree_dispatch:
+        resolved_cwd = str(Path(cwd).resolve())
+        temp_prefix = resolved_cwd + "/.autoskillit/temp/"
+        tracked_write_count = 0
+        for t in session.tool_uses:
+            if t.get("name") not in write_names:
+                continue
+            tool_id = t.get("id")
+            if tool_id is not None and tool_id in session.denied_tool_use_ids:
+                continue
+            file_path = t.get("file_path", "")
+            if not file_path:
+                continue
+            resolved = str((Path(resolved_cwd) / file_path).resolve())
+            if resolved.startswith(temp_prefix):
+                continue
+            tracked_write_count += 1
+        write_call_count = tracked_write_count
+    else:
+        write_call_count = sum(
+            1
+            for t in session.tool_uses
+            if t.get("name") in write_names and t.get("id") not in session.denied_tool_use_ids
+        )
+
+    # Codex fallback: file_changes paths also need filtering for worktree skills
+    if write_call_count == 0 and file_changes:
+        if is_worktree_dispatch:
+            resolved_cwd = str(Path(cwd).resolve())
+            temp_prefix = resolved_cwd + "/.autoskillit/temp/"
+            tracked_file_changes = [
+                fc
+                for fc in file_changes
+                if not str((Path(resolved_cwd) / fc).resolve()).startswith(temp_prefix)
+            ]
+            file_changes_count = len(tracked_file_changes)
+        else:
+            file_changes_count = len(file_changes)
+    else:
+        file_changes_count = 0
+
     return WriteEvidence(
         write_call_count=write_call_count,
         fs_writes_detected=fs_writes_detected,

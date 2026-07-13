@@ -56,6 +56,8 @@ _IGNORE_PATTERNS: tuple[str, ...] = (
     "**/.gitkeep",
     "tests/*/CLAUDE.md",  # Per-subdirectory documentation (no test-routing signal)
     "tests/*/AGENTS.md",  # Per-subdirectory documentation (no test-routing signal)
+    # Per-session retry-worktree deviation manifests (session-scoped, no test signal)
+    ".autoskillit/temp/retry-worktree/deviation_manifest_*.json",
 )
 
 # Combined PathSpec built once from _IGNORE_PATTERNS to avoid O(files×patterns)

@@ -32,6 +32,7 @@ from autoskillit.core import (
     find_caller_session_id,
     get_logger,
     is_feature_enabled,
+    is_git_worktree,
     resolve_target_skill,
     truncate_text,
 )
@@ -39,6 +40,7 @@ from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
+from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -497,12 +499,35 @@ def _compute_write_prefixes(
     worktree_write_prefixes: list[str] = []
     extracted = extract_skill_name(skill_command)
     if write_watch_dirs and extracted and extracted in WORKTREE_SKILLS:
-        worktree_parent = Path(cwd).resolve().parent / "worktrees"
-        worktree_write_prefixes.append(str(worktree_parent) + "/")
+        resolved_cwd = Path(cwd).resolve()
+        if is_git_worktree(resolved_cwd):
+            # cwd IS the worktree — include cwd itself and its parent (the worktrees/ dir)
+            worktree_write_prefixes.append(str(resolved_cwd) + "/")
+            worktree_write_prefixes.append(str(resolved_cwd.parent) + "/")
+        else:
+            nested_wt = resolved_cwd / "worktrees"
+            sibling_wt = resolved_cwd.parent / "worktrees"
+            if nested_wt.is_dir():
+                worktree_write_prefixes.append(str(nested_wt) + "/")
+            if sibling_wt.is_dir():
+                worktree_write_prefixes.append(str(sibling_wt) + "/")
+            if not nested_wt.is_dir() and not sibling_wt.is_dir():
+                worktree_write_prefixes.append(str(sibling_wt) + "/")
 
     base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
     all_prefixes = base_prefixes + worktree_write_prefixes
     return base_prefixes[0] if base_prefixes else "", tuple(all_prefixes)
+
+
+def _scope_covers_cwd(allowed_write_prefixes: tuple[str, ...], cwd: str) -> bool:
+    """Return True if any allowed_write_prefix covers cwd (lexical prefix match)."""
+    if not allowed_write_prefixes or not cwd:
+        return False
+    resolved_cwd_str = str(Path(cwd).resolve()).rstrip("/") + "/"
+    for pfx in allowed_write_prefixes:
+        if resolved_cwd_str.startswith(pfx):
+            return True
+    return False
 
 
 def _aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
@@ -1097,6 +1122,18 @@ async def run_skill(
                     logger.warning(
                         "read_only_skill_no_target_name",
                         skill_command=skill_command[:SKILL_COMMAND_DISPLAY_MAX],
+                    )
+
+            # Preflight: for WORKTREE_SKILLS dispatches, the computed scope must cover cwd
+            # so the session can write to its own tracked tree. Fail-fast BEFORE spawning
+            # a session — otherwise the session locks itself out and burns N turns.
+            if allowed_write_prefixes and target_name and target_name in WORKTREE_SKILLS and cwd:
+                if not _scope_covers_cwd(allowed_write_prefixes, cwd):
+                    return gate_error_result(
+                        f"Write scope does not cover target worktree: "
+                        f"cwd={cwd!r} not under any allowed prefix "
+                        f"{allowed_write_prefixes!r}. "
+                        f"Likely missing output_dir or malformed dispatch."
                     )
 
             _sn_token = _current_step_name.set(_canonical_step_name(step_name))

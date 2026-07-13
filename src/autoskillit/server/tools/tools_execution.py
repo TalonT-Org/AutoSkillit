@@ -967,9 +967,6 @@ async def run_skill(
                 diff_sha=closure_diff_sha,
                 target_sha=closure_target_sha,
             )
-            closure_report_root: Path | None = (
-                Path(output_dir) if output_dir and closure_spec else None
-            )
 
             # Build validated add_dirs via DefaultSessionSkillManager
             from uuid import uuid4
@@ -1023,6 +1020,10 @@ async def run_skill(
                             step=step_name,
                             value=idle_output_timeout,
                         )
+
+            closure_report_root: Path | None = (
+                Path(output_dir) if output_dir and closure_spec else None
+            )
 
             write_watch_dirs: list[Path] = []
             if output_dir:

@@ -11,6 +11,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 __all__ = [
     "HASH_RE",
@@ -24,11 +25,13 @@ __all__ = [
 HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
-def _canonical_bytes(payload: dict) -> bytes:
+def _canonical_bytes(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def compute_canonical_hash(payload: dict, *, domain: str = "autoskillit-closure-v1") -> str:
+def compute_canonical_hash(
+    payload: dict[str, Any], *, domain: str = "autoskillit-closure-v1"
+) -> str:
     domain_prefix = domain.encode("utf-8") + b"\n"
     digest = hashlib.sha256(domain_prefix + _canonical_bytes(payload)).hexdigest()
     return f"sha256:{digest}"

@@ -39,6 +39,8 @@ from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryCon
 from .claude_conventions import LayoutError as LayoutError
 from .claude_conventions import validate_add_dir as validate_add_dir
 from .claude_conventions import validate_worktree_path as validate_worktree_path
+from .closure_verifier import VerificationResult as VerificationResult
+from .closure_verifier import verify_closure_report as verify_closure_report
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
 from .git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
@@ -140,6 +142,8 @@ from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
 from .types import CLAUDE_MODEL_ALIASES as CLAUDE_MODEL_ALIASES
+from .types import CLOSURE_AUTHORITY_SPEC_PLAN_HASHES as CLOSURE_AUTHORITY_SPEC_PLAN_HASHES
+from .types import CLOSURE_REPORT_SCHEMA_VERSION as CLOSURE_REPORT_SCHEMA_VERSION
 from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_MARKER
 from .types import CODEX_EFFORT_MAPPING as CODEX_EFFORT_MAPPING
 from .types import CODEX_INTERACTIVE_REQUIRED_ENV as CODEX_INTERACTIVE_REQUIRED_ENV
@@ -250,6 +254,9 @@ from .types import CloneGateUnpublished as CloneGateUnpublished
 from .types import CloneManager as CloneManager
 from .types import CloneResult as CloneResult
 from .types import CloneSuccessResult as CloneSuccessResult
+from .types import ClosureAuthoritySpec as ClosureAuthoritySpec
+from .types import ClosureReport as ClosureReport
+from .types import ClosureRow as ClosureRow
 from .types import CmdOrigin as CmdOrigin
 from .types import CmdSpec as CmdSpec
 from .types import CodexEventData as CodexEventData
@@ -364,6 +371,7 @@ from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
+from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_remaining as compute_remaining
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args

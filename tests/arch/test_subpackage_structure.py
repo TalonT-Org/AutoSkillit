@@ -17,6 +17,7 @@ class TestCoreSubpackages:
         expected = {
             "_type_backend",
             "_type_checkpoint",
+            "_type_closure_report",
             "_type_constants",
             "_type_constants_env",
             "_type_constants_features",

@@ -59,3 +59,8 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_version_snapshot_codex_routing.py` | Codex version snapshot routing tests — verifies collect_version_snapshot() routes codex_version correctly by AUTOSKILLIT_AGENT_BACKEND |
 | `test_backend_gating_core.py` | Backend gating tests for _version_snapshot.py — verifies empty fallbacks for non-claude-code backends |
 | `test_bash_write_targets.py` | Tests for core/bash_write_targets.py — write-target extraction and parity with hooks/_command_classification.py |
+| `test_closure_hashing.py` | Tests for core.closure_hashing — canonical hash utilities |
+| `test_path_containment.py` | Tests for core.path_containment — symlink/hardlink/traversal guards |
+| `test_closure_verifier.py` | Tests for core.closure_verifier — independent report verifier |
+| `test_closure_authority_spec.py` | Tests for ClosureAuthoritySpec and factory validation |
+| `test_closure_report.py` | Tests for ClosureRow and ClosureReport schema validation |

@@ -873,8 +873,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 14,
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 21,
-        "core/types": 31,  # +_type_invariant_registry.py (INVARIANT_REGISTRY)
+        "core": 24,  # +closure_hashing +path_containment +closure_verifier
+        "core/types": 32,  # +invariant_registry (INVARIANT_REGISTRY) +closure_report
         "cli": 21,
         "hooks": 14,  # +recipe_confirmed_post_hook.py
         "pipeline": 12,

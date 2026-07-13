@@ -12,6 +12,8 @@ from ._type_capture import *  # noqa: F401, F403
 from ._type_capture import __all__ as _capture_all
 from ._type_checkpoint import *  # noqa: F401, F403
 from ._type_checkpoint import __all__ as _checkpoint_all
+from ._type_closure_report import *  # noqa: F401, F403
+from ._type_closure_report import __all__ as _closure_report_all
 from ._type_constants import *  # noqa: F401, F403
 from ._type_constants import __all__ as _constants_all
 from ._type_constants_env import *  # noqa: F401, F403
@@ -71,6 +73,7 @@ __all__ = (
     _backend_all
     + _capture_all
     + _checkpoint_all
+    + _closure_report_all
     + _constants_all
     + _constants_env_all
     + _constants_features_all

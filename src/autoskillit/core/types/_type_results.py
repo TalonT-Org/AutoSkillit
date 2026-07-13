@@ -9,6 +9,7 @@ directories — a cross-import would undermine the cascade narrowing.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -19,7 +20,10 @@ from ._type_enums import KillReason, RetryReason, SessionOutcome
 T = TypeVar("T")
 
 __all__ = [
+    "CLOSURE_AUTHORITY_SPEC_PLAN_HASHES",
     "CapabilityResolutionDetail",
+    "ClosureAuthoritySpec",
+    "closure_authority_spec_from_args",
     "ContaminationOutcome",
     "InputSpec",
     "LoadReport",
@@ -45,6 +49,9 @@ __all__ = [
     "TokenUsageFileEntry",
     "SessionIndexEntry",
 ]
+
+
+CLOSURE_AUTHORITY_SPEC_PLAN_HASHES: tuple[str, ...] = ("authority_path", "authority_hash")
 
 
 @dataclass
@@ -148,6 +155,77 @@ class WriteBehaviorSpec:
 
     mode: str | None = None
     expected_when: tuple[str, ...] = ()
+
+
+_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True, slots=True)
+class ClosureAuthoritySpec:
+    """Caller-provided, hash-pinned authority file for closure-mode verification.
+
+    authority_path:
+        Absolute path to a frozen authority file (e.g. a pinned requirements inventory).
+    authority_hash:
+        Expected ``"sha256:<64-lowercase-hex>"`` digest of the authority file's bytes.
+    plan_paths:
+        Absolute paths to plan files whose hashes bind into the request hash.
+    base_sha / diff_sha / target_sha:
+        Git refs threaded into the request hash for ref-drift detection.
+    """
+
+    authority_path: str
+    authority_hash: str
+    plan_paths: tuple[str, ...] = ()
+    base_sha: str = ""
+    diff_sha: str = ""
+    target_sha: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.authority_path:
+            raise ValueError("ClosureAuthoritySpec.authority_path must be non-empty")
+        if not self.authority_path.startswith("/"):
+            raise ValueError(
+                f"ClosureAuthoritySpec.authority_path must be absolute, got "
+                f"{self.authority_path!r}"
+            )
+        if not self.authority_hash:
+            raise ValueError("ClosureAuthoritySpec.authority_hash must be non-empty")
+        if not _HASH_RE.match(self.authority_hash):
+            raise ValueError(
+                f"ClosureAuthoritySpec.authority_hash must match 'sha256:[0-9a-f]{{64}}', got "
+                f"{self.authority_hash!r}"
+            )
+
+
+def closure_authority_spec_from_args(
+    path: str | None,
+    hash_: str | None,
+    *,
+    plan_paths: tuple[str, ...] = (),
+    base_sha: str = "",
+    diff_sha: str = "",
+    target_sha: str = "",
+) -> ClosureAuthoritySpec | None:
+    """Construct a ClosureAuthoritySpec from caller-supplied arguments.
+
+    Returns None when both path and hash_ are None/empty (non-closure mode).
+    Raises ValueError on XOR (exactly one of path/hash_ provided).
+    """
+    path_present = bool(path)
+    hash_present = bool(hash_)
+    if not path_present and not hash_present:
+        return None
+    if path_present != hash_present:
+        raise ValueError("Closure mode requires both authority_path and authority_hash")
+    return ClosureAuthoritySpec(
+        authority_path=path or "",
+        authority_hash=hash_ or "",
+        plan_paths=plan_paths,
+        base_sha=base_sha,
+        diff_sha=diff_sha,
+        target_sha=target_sha,
+    )
 
 
 @dataclass(frozen=True, slots=True)

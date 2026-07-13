@@ -105,6 +105,8 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_project_local_skill_delivery_contract.py` | Symmetric delivery contract tests for project-local skill overrides |
 | `test_translate_model_suffix_contract.py` | Contract: translate_model suffix preservation tied to backend capability flag |
 | `test_backend_prompt_conventions.py` | Contract: backend prompt output must match declared skill_sigil capability |
+| `test_skill_md_no_has_implementation_progress_token.py` | Contract: no SKILL.md may emit `has_implementation_progress` (server-computed); allow-list wiring guard |
+| `test_worktree_skill_zero_changes_prohibition.py` | Contract: every WORKTREE_SKILLS entry must carry the zero-tracked-changes prohibition canary |
 
 ## Architecture Notes
 

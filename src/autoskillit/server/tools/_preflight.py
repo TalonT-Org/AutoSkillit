@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
+
+if TYPE_CHECKING:
+    from autoskillit.config._config_dataclasses import AgentBackendConfig
 
 
 def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[str]:
@@ -39,7 +42,7 @@ def _check_dispatch_feasibility(
     config_providers: Any,
     recipe_name: str = "",
     *,
-    config_backend: Any | None = None,
+    config_backend: AgentBackendConfig | None = None,
 ) -> str | None:
     """Fail-closed dispatch-feasibility preflight.
 

@@ -24,6 +24,7 @@ from autoskillit.core import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.config._config_dataclasses import AgentBackendConfig
     from autoskillit.core import CodingAgentBackend
     from autoskillit.core.types._type_protocols_workspace import SkillResolver
     from autoskillit.recipe.schema import RecipeStep
@@ -50,7 +51,7 @@ def _provider_aware_capability_overrides(
     recipe_steps: dict[str, RecipeStep] | None,
     *,
     skill_resolver: SkillResolver | None = None,
-    config_backend: Any | None = None,
+    config_backend: AgentBackendConfig | None = None,
 ) -> tuple[dict[str, str], CapabilityResolutionDetail]:
     """Return capability overrides with per-step provider awareness.
 
@@ -227,7 +228,7 @@ def _compute_effective_backend_map(
     recipe_name: str,
     *,
     skill_resolver: SkillResolver | None = None,
-    config_backend: Any | None = None,
+    config_backend: AgentBackendConfig | None = None,
 ) -> dict[str, str] | None:
     """Build a per-step effective backend map mirroring ``tools_execution`` dispatch logic.
 

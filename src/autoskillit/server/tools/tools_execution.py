@@ -875,7 +875,16 @@ async def run_skill(
                         backend=_explicit_backend_override,
                         exc_info=True,
                     )
-                    _explicit_backend_obj_check = None
+                    return SkillResult.crashed(
+                        exception=RuntimeError(
+                            f"Step explicitly pinned to backend "
+                            f"{_explicit_backend_override!r} but that backend "
+                            f"is not registered. Check step_overrides / "
+                            f"recipe_overrides for typos."
+                        ),
+                        skill_command=resolved_command,
+                        order_id=effective_order_id,
+                    ).to_json()
                 if _explicit_backend_obj_check is not None:
                     _explicit_binary = getattr(
                         _explicit_backend_obj_check.capabilities, "process_name", ""

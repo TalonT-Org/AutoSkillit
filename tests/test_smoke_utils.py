@@ -3241,8 +3241,13 @@ def test_detect_zero_changes_uncommitted_files(tmp_path: Path) -> None:
     assert result["has_uncommitted_changes"] == "true"
 
 
-def test_detect_zero_changes_write_evidence_override(tmp_path: Path) -> None:
-    """detect_zero_changes returns has_changes=true when write_evidence_override is set."""
+def test_detect_zero_changes_override_does_not_skip_git_on_clean_tree(tmp_path: Path) -> None:
+    """write_evidence_override=true must not short-circuit git verification.
+
+    On a clean repo, override=true forces has_changes=true via OR-combination,
+    but the git signals (commit_count, has_uncommitted_changes) must STILL be
+    populated — override is an OR-condition, not a bypass.
+    """
     from autoskillit.smoke_utils import detect_zero_changes
 
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
@@ -3253,12 +3258,92 @@ def test_detect_zero_changes_write_evidence_override(tmp_path: Path) -> None:
         check=True,
         env=_DZC_GIT_ENV,
     )
-    result_cap = detect_zero_changes(str(tmp_path), "HEAD", write_evidence_override="True")
-    assert result_cap["has_changes"] == "true"
-    assert result_cap["write_evidence_override"] == "true"
+    result = detect_zero_changes(str(tmp_path), "HEAD", write_evidence_override="True")
+    assert result["has_changes"] == "true"
+    assert result["write_evidence_override"] == "true"
+    assert result["commit_count"] == "0"
+    assert result["has_uncommitted_changes"] == "false"
 
-    result_low = detect_zero_changes(str(tmp_path), "HEAD", write_evidence_override="true")
-    assert result_low["has_changes"] == "true"
+
+def test_detect_zero_changes_override_false_with_commits(tmp_path: Path) -> None:
+    """write_evidence_override=false reports commits ahead via git."""
+    from autoskillit.smoke_utils import detect_zero_changes
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    base_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "second"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "third"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    result = detect_zero_changes(str(tmp_path), base_commit, write_evidence_override="false")
+    assert result["has_changes"] == "true"
+    assert result["commit_count"] == "2"
+
+
+def test_detect_zero_changes_override_true_with_commits(tmp_path: Path) -> None:
+    """Override and commit signals agree without skipping git."""
+    from autoskillit.smoke_utils import detect_zero_changes
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    base_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "second"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    result = detect_zero_changes(str(tmp_path), base_commit, write_evidence_override="True")
+    assert result["has_changes"] == "true"
+    assert result["write_evidence_override"] == "true"
+    assert result["commit_count"] == "1"
+
+
+def test_detect_zero_changes_git_error_fallback(tmp_path: Path) -> None:
+    """detect_zero_changes returns has_changes=true on git subprocess errors."""
+    from autoskillit.smoke_utils import detect_zero_changes
+
+    result = detect_zero_changes(str(tmp_path), "HEAD", write_evidence_override="false")
+    assert result["has_changes"] == "true"
+    assert "error" in result
+    assert result["commit_count"] == "error"
+    assert result["has_uncommitted_changes"] == "error"
 
 
 def test_detect_zero_changes_clean_repo(tmp_path: Path) -> None:

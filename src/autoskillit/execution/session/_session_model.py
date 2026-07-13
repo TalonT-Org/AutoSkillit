@@ -76,6 +76,7 @@ class ClaudeSessionResult:
     api_error_status: int | None = None
     seen_ndjson_unknown_event_count: int = 0
     seen_ndjson_unknown_item_count: int = 0
+    denied_tool_use_ids: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -329,6 +330,7 @@ class _ParseAccumulator:
     api_retry_last_status: int | None = None
     api_retry_exhausted: bool = False
     api_error_status: int | None = None
+    denied_tool_use_ids: set[str] = field(default_factory=set)
 
 
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
@@ -462,6 +464,18 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                             for block in flat_content
                         ):
                             acc.jsonl_context_exhausted = True
+            elif record_type == "user" and not obj.get("subagent_type"):
+                content = obj.get("message", {}).get("content", [])
+                if isinstance(content, list):
+                    for block in content:
+                        if (
+                            isinstance(block, dict)
+                            and block.get("type") == "tool_result"
+                            and block.get("is_error") is True
+                        ):
+                            tid = block.get("tool_use_id", "")
+                            if tid:
+                                acc.denied_tool_use_ids.add(tid)
         except json.JSONDecodeError:
             continue
 
@@ -515,4 +529,5 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         api_retry_last_status=acc.api_retry_last_status,
         api_retry_exhausted=acc.api_retry_exhausted,
         api_error_status=acc.api_error_status,
+        denied_tool_use_ids=frozenset(acc.denied_tool_use_ids),
     )

@@ -737,6 +737,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_factory.py",
             "server/test_tools_clone.py",
             "server/test_tools_execution_routing.py",
+            "server/test_tools_execution_write_prefix.py",
             "server/test_run_skill_add_dirs.py",
             "server/test_run_skill_backend_compat.py",
             "server/test_tools_workspace.py",

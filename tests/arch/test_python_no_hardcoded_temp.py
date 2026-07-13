@@ -71,6 +71,13 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     "core/runtime/kitchen_state.py": "IL-0 stdlib-only; reads hook config from canonical path",
     "workspace/skill_format.py": "write_paths validation accepts resolved canonical temp prefix",
     "hooks/guards/reset_resume_gate.py": "stdlib-only guard; cannot use resolve_temp_dir()",
+    # Justification: IL-1 evidence layer discriminates worktree-skill writes from temp
+    # writes by constructing the temp prefix for path-aware filtering. The literal mirrors
+    # the canonical default used by resolve_temp_dir — no resolve_temp_dir() available at
+    # this stage because path filtering runs on session.tool_uses captured before session ends.
+    "execution/headless/_headless_evidence.py": (
+        "path-aware write-evidence discriminator; mirrors canonical default"
+    ),
 }
 
 _LITERAL = ".autoskillit/temp"

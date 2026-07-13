@@ -101,6 +101,8 @@ Correct orchestration on `needs_retry=true`:
      > "🚧 SCOPE FENCE ACTIVE: I am implementing PART {X} ONLY. I MUST NOT open, read, or execute any other part files, regardless of what I encounter in {{AUTOSKILLIT_TEMP}}/ or any other directory. Sibling part files are out of scope for this entire session."
    - When launching subagents in Step 2, include this fence instruction explicitly in each subagent prompt so that the subagents do not open, read, or reference sibling part files.
 
+A scope fence limits WHAT you implement, not WHETHER you implement. Scope-fence language never authorizes finishing with zero tracked source changes when your write scope is intact. If you cannot produce any tracked changes within scope, report failure explicitly rather than completing with temp-only artifacts.
+
 ### Step 1: Create or Detect Git Worktree
 
 First, check if you are already inside a pre-created linked worktree (the recipe orchestrator may have created one via `run_cmd` before dispatching this skill). Run the following detection and creation logic:
@@ -139,7 +141,6 @@ if context is exhausted before Step 6:
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${BRANCH_NAME}
-has_implementation_progress = true
 ```
 
 **Why emit early?** If context exhaustion occurs during Steps 2–5, the
@@ -234,7 +235,6 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${BRANCH_NAME}
-has_implementation_progress = true
 ```
 
 **If this is a `_part_` plan file:** The orchestrator MUST merge this worktree

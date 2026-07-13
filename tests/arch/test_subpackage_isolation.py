@@ -1002,7 +1002,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "deferred-recall snapshot update guard (+3 net lines)",
     ),
     "tools_execution.py": (
-        1295,
+        1330,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
@@ -1016,7 +1016,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "R0 capability-driven routing: _skill_requires_claude computation, binary probe "
         "for fail-closed behavior, and composite log reason emission (+40 net lines); "
         "github_api_write capability: _aggregate_sandbox_overrides, _has_routing_capability, "
-        "_get_routing_caps helpers extracted from run_skill handler body (+30 net lines)",
+        "_get_routing_caps helpers extracted from run_skill handler body (+30 net lines); "
+        "shape-aware _compute_write_prefixes (worktree cwd vs clone root) and "
+        "WORKTREE_SKILLS dispatch preflight + _scope_covers_cwd helper (+35 net lines)",
     ),
     "execution/backends/codex.py": (
         1200,

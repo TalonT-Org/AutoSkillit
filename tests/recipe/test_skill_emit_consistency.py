@@ -11,6 +11,15 @@ from autoskillit.recipe.contracts import load_bundled_manifest
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
+# Outputs whose value is server-computed (read from SkillResult attributes, never
+# parsed from model output text). These exempt the SKILL.md emit-line requirement
+# because no model instruction can populate them — the harness already has them.
+SERVER_COMPUTED_OUTPUTS: frozenset[str] = frozenset(
+    {
+        "has_implementation_progress",
+    }
+)
+
 # Key pattern: if a contract output pattern requires an absolute path (contains
 # \s*=\s*/.+), verify that the SKILL.md does not assign the variable to a
 # relative path (i.e., assignments starting with ../ or a non-/ non-$ character).
@@ -127,6 +136,10 @@ def test_every_declared_output_has_emit_instruction_in_skill_md() -> None:
         content = skill_md.read_text()
         for output in outputs:
             output_name = output["name"]
+            # Server-computed outputs are populated by SkillResult attributes and
+            # never parsed from model text — skip the emit-line requirement.
+            if output_name in SERVER_COMPUTED_OUTPUTS:
+                continue
             # Accept both spaced and unspaced: key = value OR key=value
             pattern = re.compile(rf"{re.escape(output_name)}\s*=\s*")
             if not pattern.search(content):

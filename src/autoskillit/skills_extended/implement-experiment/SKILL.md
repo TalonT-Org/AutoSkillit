@@ -56,6 +56,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Blame pre-commit or lint failures on "pre-existing issues" — ALL pre-commit checks must pass on the committed code
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Consider implementation complete with zero tracked source changes — if you cannot produce any tracked changes, report failure explicitly rather than completing with temp-only artifacts. Temp-only writes (`{{AUTOSKILLIT_TEMP}}/`, draft files) never authorizes finishing with zero tracked source changes.
 
 **ALWAYS:**
 - Create a new worktree from the current branch

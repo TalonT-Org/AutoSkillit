@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.core import (
@@ -173,6 +174,7 @@ def _build_skill_result(
     git_writes_detected: bool = False,
     prior_completion_markers: Sequence[str] | None = None,
     completion_required: bool = False,
+    write_watch_dirs: Sequence[Path] = (),
     *,
     provider_used: str = "",
     supports_claude_format_stdout: bool = True,
@@ -209,6 +211,9 @@ def _build_skill_result(
             git_writes_detected,
             backend,
             file_changes=file_changes,
+            write_watch_dirs=write_watch_dirs,
+            cwd=cwd,
+            skill_command=skill_command,
         )
         stale_api_retry = _build_api_retry_outcome(stale_session)
         stale_returncode = result.returncode if result.returncode is not None else -1
@@ -316,6 +321,9 @@ def _build_skill_result(
             git_writes_detected,
             backend,
             file_changes=file_changes,
+            write_watch_dirs=write_watch_dirs,
+            cwd=cwd,
+            skill_command=skill_command,
         )
         idle_api_retry = _build_api_retry_outcome(idle_session)
         idle_returncode = result.returncode if result.returncode is not None else -1
@@ -436,7 +444,14 @@ def _build_skill_result(
         session = _parse_stdout(result.stdout, backend=backend)
 
     evidence = _compute_write_evidence(
-        session, fs_writes_detected, git_writes_detected, backend, file_changes=file_changes
+        session,
+        fs_writes_detected,
+        git_writes_detected,
+        backend,
+        file_changes=file_changes,
+        write_watch_dirs=write_watch_dirs,
+        cwd=cwd,
+        skill_command=skill_command,
     )
     _has_write_evidence = evidence.has_evidence
 

@@ -116,16 +116,19 @@ def detect_zero_changes(
     base_branch: str,
     write_evidence_override: str = "false",
 ) -> dict[str, str]:
-    """Multi-signal change detection: commits, uncommitted changes, and write evidence."""
+    """Multi-signal change detection: commits, uncommitted changes, and write evidence.
+
+    Always runs git verification — ``write_evidence_override`` is an OR-condition,
+    not a bypass. Downstream consumers that inspect ``commit_count`` can detect
+    contradictions between git evidence and the override flag (e.g., CodeX sandbox
+    scenarios where ``.git/`` is read-only).
+    """
     import subprocess  # noqa: PLC0415
 
-    if str(write_evidence_override).lower() == "true":
-        return {
-            "has_changes": "true",
-            "commit_count": "0",
-            "has_uncommitted_changes": "false",
-            "write_evidence_override": "true",
-        }
+    _override_active = str(write_evidence_override).lower() == "true"
+    result: dict[str, str] = {}
+    if _override_active:
+        result["write_evidence_override"] = "true"
 
     try:
         rev_result = subprocess.run(
@@ -133,31 +136,33 @@ def detect_zero_changes(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            check=True,
             timeout=60,
         )
-        count = int(rev_result.stdout.strip()) if rev_result.returncode == 0 else 0
+        commit_count = rev_result.stdout.strip()
+        result["commit_count"] = commit_count
 
         status_result = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            check=True,
             timeout=60,
         )
-        has_uncommitted = status_result.returncode == 0 and bool(status_result.stdout.strip())
-    except (subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired):
-        return {
-            "has_changes": "true",
-            "commit_count": "0",
-            "has_uncommitted_changes": "unknown",
-        }
+        has_uncommitted = bool(status_result.stdout.strip())
+        result["has_uncommitted_changes"] = str(has_uncommitted).lower()
 
-    has_changes = count > 0 or has_uncommitted
-    return {
-        "has_changes": "true" if has_changes else "false",
-        "commit_count": str(count),
-        "has_uncommitted_changes": "true" if has_uncommitted else "false",
-    }
+        git_has_changes = int(commit_count) > 0 or has_uncommitted
+        result["has_changes"] = str(git_has_changes or _override_active).lower()
+
+    except (subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        result["has_changes"] = "true"
+        result["commit_count"] = "error"
+        result["has_uncommitted_changes"] = "error"
+        result["error"] = str(exc)[:200]
+
+    return result
 
 
 def check_commits_ahead(cwd: str, base_branch: str) -> dict[str, str]:

@@ -887,7 +887,8 @@ def _build_skill_result(
                 result=f"Closure verification failed: {error_detail}",
             )
         else:
-            pass
+            if sr.retry_reason == RetryReason.EMPTY_OUTPUT:
+                sr = dataclasses.replace(sr, is_error=False)
 
     if sr.needs_retry and sr.retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
         sr = dataclasses.replace(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 class TestBackendOverrideSourceInSessionsJsonl:
@@ -73,4 +73,39 @@ class TestBackendOverrideSourceInSessionsJsonl:
             "ndjson_unknown_item_count": 0,
             "schema_version": 4,
         }
+        assert entry["backend_override_source"] is None
+
+    def test_backend_override_source_explicit_config_in_summary(self, tmp_path):
+        import json
+
+        from tests.execution.conftest import _flush
+
+        _flush(tmp_path, backend_override_source="explicit_config")
+        summary = json.loads(
+            (tmp_path / "sessions" / "test-session-001" / "summary.json").read_text()
+        )
+        assert summary["backend_override_source"] == "explicit_config"
+
+    def test_backend_override_source_explicit_config_in_sessions_jsonl(self, tmp_path):
+        import json
+
+        from tests.execution.conftest import _flush
+
+        _flush(tmp_path, backend_override_source="explicit_config")
+        lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+        entry = json.loads(lines[-1])
+        assert entry["backend_override_source"] == "explicit_config"
+
+    def test_backend_override_source_null_when_no_override_round_trip(self, tmp_path):
+        import json
+
+        from tests.execution.conftest import _flush
+
+        _flush(tmp_path)
+        summary = json.loads(
+            (tmp_path / "sessions" / "test-session-001" / "summary.json").read_text()
+        )
+        assert summary["backend_override_source"] is None
+        lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+        entry = json.loads(lines[-1])
         assert entry["backend_override_source"] is None

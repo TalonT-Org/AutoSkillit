@@ -123,35 +123,3 @@ class TestPreflightExplicitBackend:
                 config_backend=cfg,
             )
         assert err is None
-
-    def test_explicit_override_backend_requirements_conflict(self):
-        from unittest.mock import MagicMock
-
-        from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
-        from autoskillit.server.tools.tools_execution import _check_backend_compat
-
-        fake_backend = MagicMock(spec=CodingAgentBackend)
-        fake_backend.name = "codex"
-        fake_backend.capabilities.applicable_guards = frozenset()
-
-        skill_info = MagicMock()
-        skill_info.backend_requirements = frozenset({"claude-code"})
-
-        mock_resolver = MagicMock()
-
-        result = _check_backend_compat(
-            skill_command="/autoskillit:open-kitchen",
-            resolved_command="/autoskillit:open-kitchen",
-            effective_order_id="test-order",
-            target_name="open-kitchen",
-            skill_info=skill_info,
-            effective_backend_obj=fake_backend,
-            skill_resolver=mock_resolver,
-        )
-        assert result is not None
-        import json
-
-        parsed = json.loads(result)
-        assert parsed["subtype"] == "crashed"
-        assert "claude-code" in parsed["result"]
-        assert "codex" in parsed["result"]

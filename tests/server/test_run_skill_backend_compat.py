@@ -68,6 +68,37 @@ class TestBackendCompatGateFailClosed:
     against future callers or refactors that change the calling contract.
     """
 
+    def test_compat_check_rejects_incompatible_backend_requirements(self):
+        """_check_backend_compat rejects when the effective backend does not
+        satisfy the skill's backend_requirements."""
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        fake_backend = MagicMock(spec=CodingAgentBackend)
+        fake_backend.name = "codex"
+        fake_backend.capabilities.applicable_guards = frozenset()
+
+        skill_info = MagicMock()
+        skill_info.backend_requirements = frozenset({"claude-code"})
+
+        result = _check_backend_compat(
+            skill_command="/autoskillit:open-kitchen",
+            resolved_command="/autoskillit:open-kitchen",
+            effective_order_id="test-order",
+            target_name="open-kitchen",
+            skill_info=skill_info,
+            effective_backend_obj=fake_backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["subtype"] == "crashed"
+        assert "claude-code" in parsed["result"]
+        assert "codex" in parsed["result"]
+
     def test_compat_check_rejects_when_skill_resolver_is_none(self):
         """_check_backend_compat rejects when skill_resolver is None and target_name is set.
 

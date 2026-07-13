@@ -39,7 +39,7 @@ def _row(req_id: str, assessment: str = "COVERED") -> ClosureRow:
         source_section="Sec",
         assessment=assessment,
         evidence_summary=evidence,
-        row_hash=compute_row_hash(req_id, text, assessment, evidence),
+        row_hash=compute_row_hash(req_id, text, assessment, evidence, "/some/file.py", 1, "Sec"),
     )
 
 

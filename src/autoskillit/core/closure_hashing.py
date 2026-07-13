@@ -61,12 +61,18 @@ def compute_row_hash(
     requirement_text: str,
     assessment: str,
     evidence_summary: str,
+    source_file: str = "",
+    source_line: int = 0,
+    source_section: str = "",
 ) -> str:
     payload = {
         "assessment": assessment,
         "evidence_summary": evidence_summary,
         "requirement_id": requirement_id,
         "requirement_text": requirement_text,
+        "source_file": source_file,
+        "source_line": source_line,
+        "source_section": source_section,
     }
     return compute_canonical_hash(payload)
 

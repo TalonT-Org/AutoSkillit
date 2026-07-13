@@ -123,11 +123,17 @@ class TestComputeRequestHash:
 
 class TestComputeRowHash:
     def test_covers_content(self) -> None:
-        base = compute_row_hash("REQ-1", "text", "COVERED", "evidence")
-        assert base != compute_row_hash("REQ-2", "text", "COVERED", "evidence")
-        assert base != compute_row_hash("REQ-1", "other", "COVERED", "evidence")
-        assert base != compute_row_hash("REQ-1", "text", "MISSING", "evidence")
-        assert base != compute_row_hash("REQ-1", "text", "COVERED", "different")
+        base = compute_row_hash("REQ-1", "text", "COVERED", "evidence", "f.py", 1, "S")
+        assert base != compute_row_hash("REQ-2", "text", "COVERED", "evidence", "f.py", 1, "S")
+        assert base != compute_row_hash("REQ-1", "other", "COVERED", "evidence", "f.py", 1, "S")
+        assert base != compute_row_hash("REQ-1", "text", "MISSING", "evidence", "f.py", 1, "S")
+        assert base != compute_row_hash("REQ-1", "text", "COVERED", "different", "f.py", 1, "S")
+
+    def test_covers_source_fields(self) -> None:
+        base = compute_row_hash("REQ-1", "text", "COVERED", "evidence", "f.py", 1, "S")
+        assert base != compute_row_hash("REQ-1", "text", "COVERED", "evidence", "g.py", 1, "S")
+        assert base != compute_row_hash("REQ-1", "text", "COVERED", "evidence", "f.py", 2, "S")
+        assert base != compute_row_hash("REQ-1", "text", "COVERED", "evidence", "f.py", 1, "T")
 
 
 class TestComputeReportHash:

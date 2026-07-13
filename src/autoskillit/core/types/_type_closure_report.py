@@ -101,6 +101,9 @@ class ClosureReport:
                 row.requirement_text,
                 row.assessment,
                 row.evidence_summary,
+                row.source_file,
+                row.source_line,
+                row.source_section,
             )
             if row.row_hash != expected_row_hash:
                 errors.append(f"row[{idx}].row_hash mismatch (content tampered)")

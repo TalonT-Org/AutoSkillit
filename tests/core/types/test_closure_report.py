@@ -29,7 +29,9 @@ def _good_row(req_id: str = "REQ-1", assessment: str = "COVERED") -> ClosureRow:
         source_section="Section",
         assessment=assessment,
         evidence_summary=evidence,
-        row_hash=compute_row_hash(req_id, text, assessment, evidence),
+        row_hash=compute_row_hash(
+            req_id, text, assessment, evidence, "/some/file.py", 42, "Section"
+        ),
     )
 
 
@@ -105,7 +107,9 @@ class TestValidate:
             source_section="Section",
             assessment="COVERED",
             evidence_summary=evidence,
-            row_hash=compute_row_hash("WRONG-ID", text, "COVERED", evidence),
+            row_hash=compute_row_hash(
+                "WRONG-ID", text, "COVERED", evidence, "/some/file.py", 1, "Section"
+            ),
         )
         rows = (r1, bad)
         req_hash = "sha256:" + "a" * 64

@@ -86,6 +86,10 @@ def _check_dispatch_feasibility(
                     continue
                 if getattr(_explicit_obj.capabilities, "anthropic_provider_capable", False):
                     continue
+                # Non-claude backend with present binary: skip orchestrator-level
+                # feasibility — the step runs on the pinned backend, not the
+                # orchestrator's, so checking orchestrator guards is wrong.
+                continue
 
         step = active_recipe_steps.get(step_name)
         step_provider = getattr(step, "provider", "") or ""

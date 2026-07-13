@@ -505,10 +505,6 @@ def _compute_write_prefixes(
             worktree_write_prefixes.append(str(resolved_cwd) + "/")
             worktree_write_prefixes.append(str(resolved_cwd.parent) + "/")
         else:
-            # cwd is clone root — look for worktrees/ under cwd first, then as sibling.
-            # git worktree add can place worktrees either as a sibling of the main repo
-            # (e.g., /parent/repo + /parent/worktrees/<name>) or nested inside it
-            # (e.g., /parent/repo/worktrees/<name>) depending on the dispatch topology.
             nested_wt = resolved_cwd / "worktrees"
             sibling_wt = resolved_cwd.parent / "worktrees"
             if nested_wt.is_dir():

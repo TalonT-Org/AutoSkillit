@@ -29,7 +29,7 @@ def _load_emit_consistency_module():
     """Load test_skill_emit_consistency.py as a module without it being part of a package."""
     import sys
 
-    tests_root = pkg_root().parent / "tests"
+    tests_root = pkg_root().parents[1] / "tests"
     candidate = tests_root / "recipe" / "test_skill_emit_consistency.py"
     spec = importlib.util.spec_from_file_location("test_skill_emit_consistency", candidate)
     if spec is None or spec.loader is None:
@@ -41,7 +41,7 @@ def _load_emit_consistency_module():
 
 
 def test_no_skill_md_contains_has_implementation_progress_token() -> None:
-    """No SKILL.md in skills_extended/ may contain the emit line for has_implementation_progress."""
+    """No extended SKILL.md may emit has_implementation_progress."""
     token_pattern = re.compile(r"^has_implementation_progress\s*=", re.MULTILINE)
 
     violations: list[str] = []
@@ -58,7 +58,7 @@ def test_no_skill_md_contains_has_implementation_progress_token() -> None:
 
 
 def test_server_computed_outputs_allow_list_exempts_has_implementation_progress() -> None:
-    """SERVER_COMPUTED_OUTPUTS allow-list in test_skill_emit_consistency.py must include has_implementation_progress."""
+    """The allow-list must exempt has_implementation_progress."""
     module = _load_emit_consistency_module()
     allow_list = getattr(module, "SERVER_COMPUTED_OUTPUTS", None)
     assert allow_list is not None, (

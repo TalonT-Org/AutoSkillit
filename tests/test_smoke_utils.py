@@ -3266,7 +3266,7 @@ def test_detect_zero_changes_override_does_not_skip_git_on_clean_tree(tmp_path: 
 
 
 def test_detect_zero_changes_override_false_with_commits(tmp_path: Path) -> None:
-    """write_evidence_override=false with commits ahead reports has_changes=true via git."""
+    """write_evidence_override=false reports commits ahead via git."""
     from autoskillit.smoke_utils import detect_zero_changes
 
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
@@ -3277,6 +3277,13 @@ def test_detect_zero_changes_override_false_with_commits(tmp_path: Path) -> None
         check=True,
         env=_DZC_GIT_ENV,
     )
+    base_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "second"],
         cwd=tmp_path,
@@ -3284,13 +3291,20 @@ def test_detect_zero_changes_override_false_with_commits(tmp_path: Path) -> None
         check=True,
         env=_DZC_GIT_ENV,
     )
-    result = detect_zero_changes(str(tmp_path), "HEAD", write_evidence_override="false")
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "third"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    result = detect_zero_changes(str(tmp_path), base_commit, write_evidence_override="false")
     assert result["has_changes"] == "true"
     assert result["commit_count"] == "2"
 
 
 def test_detect_zero_changes_override_true_with_commits(tmp_path: Path) -> None:
-    """override=true AND commits ahead: both signals agree, commit_count still populated."""
+    """Override and commit signals agree without skipping git."""
     from autoskillit.smoke_utils import detect_zero_changes
 
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
@@ -3301,6 +3315,13 @@ def test_detect_zero_changes_override_true_with_commits(tmp_path: Path) -> None:
         check=True,
         env=_DZC_GIT_ENV,
     )
+    base_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "second"],
         cwd=tmp_path,
@@ -3308,7 +3329,7 @@ def test_detect_zero_changes_override_true_with_commits(tmp_path: Path) -> None:
         check=True,
         env=_DZC_GIT_ENV,
     )
-    result = detect_zero_changes(str(tmp_path), "HEAD", write_evidence_override="True")
+    result = detect_zero_changes(str(tmp_path), base_commit, write_evidence_override="True")
     assert result["has_changes"] == "true"
     assert result["write_evidence_override"] == "true"
     assert result["commit_count"] == "1"

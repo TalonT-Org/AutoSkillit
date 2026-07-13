@@ -136,9 +136,10 @@ def detect_zero_changes(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            check=True,
             timeout=60,
         )
-        commit_count = rev_result.stdout.strip() if rev_result.returncode == 0 else "0"
+        commit_count = rev_result.stdout.strip()
         result["commit_count"] = commit_count
 
         status_result = subprocess.run(
@@ -146,11 +147,10 @@ def detect_zero_changes(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            check=True,
             timeout=60,
         )
-        has_uncommitted = (
-            bool(status_result.stdout.strip()) if status_result.returncode == 0 else False
-        )
+        has_uncommitted = bool(status_result.stdout.strip())
         result["has_uncommitted_changes"] = str(has_uncommitted).lower()
 
         git_has_changes = int(commit_count) > 0 or has_uncommitted

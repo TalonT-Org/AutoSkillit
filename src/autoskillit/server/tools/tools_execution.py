@@ -913,14 +913,18 @@ async def run_skill(
                 else tool_ctx.backend
             )
 
+            _backend_override_source: str | None = None
+            if _explicit_backend_override is not None:
+                _backend_override_source = "explicit_config"
+            elif _skill_requires_claude:
+                _backend_override_source = "skill_requirement"
+            elif _provider_override:
+                _backend_override_source = "provider_profile"
+
             if backend_override:
-                _override_reasons: list[str] = []
-                if _explicit_backend_override is not None:
-                    _override_reasons.append("explicit_config")
-                if _skill_requires_claude and _explicit_backend_override is None:
-                    _override_reasons.append("skill_requirement")
-                if _provider_override and _explicit_backend_override is None:
-                    _override_reasons.append("provider_profile")
+                _override_reasons: list[str] = (
+                    [_backend_override_source] if _backend_override_source else []
+                )
                 logger.info(
                     "backend_override_activated",
                     reason=(
@@ -931,16 +935,6 @@ async def run_skill(
                     target_backend=backend_override,
                     routing_capabilities=_routing_caps,
                 )
-
-            # Record the override source for evidence: distinguish explicit
-            # operator config from capability/provider routing.
-            _backend_override_source: str | None = None
-            if _explicit_backend_override is not None:
-                _backend_override_source = "explicit_config"
-            elif _skill_requires_claude:
-                _backend_override_source = "capability_route"
-            elif _provider_override:
-                _backend_override_source = "provider_route"
 
             # Look up artifact validation patterns from skill contract
             expected_output_patterns: list[str] = []

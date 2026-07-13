@@ -21,7 +21,6 @@ from ._type_enums import KillReason, RetryReason, SessionOutcome
 T = TypeVar("T")
 
 __all__ = [
-    "CLOSURE_AUTHORITY_SPEC_PLAN_HASHES",
     "CapabilityResolutionDetail",
     "ClosureAuthoritySpec",
     "closure_authority_spec_from_args",
@@ -51,9 +50,6 @@ __all__ = [
     "SessionIndexEntry",
     "parse_plan_paths",
 ]
-
-
-CLOSURE_AUTHORITY_SPEC_PLAN_HASHES: tuple[str, ...] = ("authority_path", "authority_hash")
 
 
 @dataclass
@@ -183,7 +179,7 @@ class ClosureAuthoritySpec:
     def __post_init__(self) -> None:
         if not self.authority_path:
             raise ValueError("ClosureAuthoritySpec.authority_path must be non-empty")
-        if not self.authority_path.startswith("/"):
+        if not Path(self.authority_path).is_absolute():
             raise ValueError(
                 f"ClosureAuthoritySpec.authority_path must be absolute, got "
                 f"{self.authority_path!r}"
@@ -198,7 +194,7 @@ class ClosureAuthoritySpec:
         for idx, pp in enumerate(self.plan_paths):
             if not pp:
                 raise ValueError(f"ClosureAuthoritySpec.plan_paths[{idx}] must be non-empty")
-            if not pp.startswith("/"):
+            if not Path(pp).is_absolute():
                 raise ValueError(
                     f"ClosureAuthoritySpec.plan_paths[{idx}] must be absolute, got {pp!r}"
                 )

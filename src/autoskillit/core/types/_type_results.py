@@ -197,6 +197,13 @@ class ClosureAuthoritySpec:
                 f"ClosureAuthoritySpec.authority_hash must match 'sha256:[0-9a-f]{{64}}', got "
                 f"{self.authority_hash!r}"
             )
+        for idx, pp in enumerate(self.plan_paths):
+            if not pp:
+                raise ValueError(f"ClosureAuthoritySpec.plan_paths[{idx}] must be non-empty")
+            if not pp.startswith("/"):
+                raise ValueError(
+                    f"ClosureAuthoritySpec.plan_paths[{idx}] must be absolute, got {pp!r}"
+                )
 
 
 def closure_authority_spec_from_args(

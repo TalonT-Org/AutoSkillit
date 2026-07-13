@@ -87,7 +87,8 @@ def verify_closure_report(
             f"{authority_hash}"
         )
 
-    plan_file_hashes: list[str] = []
+    plan_file_hashes: list[str | None] = []
+    can_compute_request = True
     if len(report.plan_hashes) != len(plan_paths):
         errors.append(
             f"plan_hashes count mismatch: report has {len(report.plan_hashes)}, "
@@ -100,32 +101,26 @@ def verify_closure_report(
             except OSError as exc:
                 errors.append(f"plan_paths[{idx}] unreadable: {exc}")
                 computed = None
-            plan_file_hashes.append(computed or "")
+                can_compute_request = False
+            plan_file_hashes.append(computed)
             if computed is not None and report.plan_hashes[idx] != computed:
                 errors.append(
                     f"plan_hashes[{idx}] mismatch: report says {report.plan_hashes[idx]}, "
                     f"computed {computed}"
                 )
 
-    if plan_file_hashes and all(plan_file_hashes):
-        request_plan_hashes = plan_file_hashes
-    else:
-        request_plan_hashes = []
-        try:
-            request_plan_hashes = [compute_file_hash(p) for p in plan_paths]
-        except OSError:
-            errors.append("cannot compute request_hash: plan file(s) unreadable")
-
-    if request_plan_hashes:
+    if can_compute_request:
+        valid_hashes = [h for h in plan_file_hashes if h is not None]
         computed_request_hash: str | None = compute_request_hash(
             authority_hash,
-            request_plan_hashes,
+            valid_hashes,
             base_sha,
             diff_sha,
             target_sha,
         )
     else:
         computed_request_hash = None
+        errors.append("cannot compute request_hash: plan file(s) unreadable")
     if computed_request_hash is not None and report.request_hash != computed_request_hash:
         errors.append(
             f"request_hash mismatch: report says {report.request_hash}, "

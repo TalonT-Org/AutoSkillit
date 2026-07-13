@@ -245,6 +245,7 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${CURRENT_BRANCH}
 phases_implemented = ${PHASES_IMPLEMENTED}
+has_implementation_progress = true
 ```
 
 If deviations were recorded during Step 4 (i.e., the deviation manifest file exists at `{{AUTOSKILLIT_TEMP}}/retry-worktree/deviation_manifest_{SESSION_TS}.json`), also emit:

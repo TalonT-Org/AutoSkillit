@@ -202,33 +202,27 @@ class TestAgentBackendConfigOverrides:
         ]
         assert len(events) == 1, f"Expected one unknown-backend warning, got: {cap_logs}"
 
-    def test_yaml_loading_with_recipe_overrides(self, tmp_path) -> None:
+    def test_yaml_loading_with_recipe_overrides(self, tmp_path, monkeypatch) -> None:
         from autoskillit.config import load_config
 
-        monkeypatch = __import__("pytest").MonkeyPatch()
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
-        try:
-            config_dir = tmp_path / ".autoskillit"
-            config_dir.mkdir()
-            (config_dir / "config.yaml").write_text(
-                yaml.dump(
-                    {
-                        "agent_backend": {
-                            "backend": "codex",
-                            "recipe_overrides": {"remediation": {"dry_walkthrough": "codex"}},
-                            "step_overrides": {"implement": "claude-code"},
-                        }
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.dump(
+                {
+                    "agent_backend": {
+                        "backend": "codex",
+                        "recipe_overrides": {"remediation": {"dry_walkthrough": "codex"}},
+                        "step_overrides": {"implement": "claude-code"},
                     }
-                )
+                }
             )
-            cfg = load_config(tmp_path)
-            assert cfg.agent_backend.backend == "codex"
-            assert cfg.agent_backend.recipe_overrides == {
-                "remediation": {"dry_walkthrough": "codex"}
-            }
-            assert cfg.agent_backend.step_overrides == {"implement": "claude-code"}
-        finally:
-            monkeypatch.undo()
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.agent_backend.backend == "codex"
+        assert cfg.agent_backend.recipe_overrides == {"remediation": {"dry_walkthrough": "codex"}}
+        assert cfg.agent_backend.step_overrides == {"implement": "claude-code"}
 
     def test_string_shorthand_still_works(self) -> None:
         from autoskillit.config.settings import AgentBackendConfig

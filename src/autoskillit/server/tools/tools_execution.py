@@ -1021,9 +1021,12 @@ async def run_skill(
                             value=idle_output_timeout,
                         )
 
-            closure_report_root: Path | None = (
-                Path(output_dir) if output_dir and closure_spec else None
-            )
+            closure_report_root: Path | None = None
+            if output_dir and closure_spec:
+                _closure_root = Path(output_dir)
+                if not _closure_root.is_absolute():
+                    _closure_root = Path(cwd) / output_dir
+                closure_report_root = _closure_root
 
             write_watch_dirs: list[Path] = []
             if output_dir:

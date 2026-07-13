@@ -13,6 +13,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution.backends import CodexBackend
 
 from .conftest import _mock_backend
 
@@ -139,6 +140,53 @@ class TestBackendOverrideCommandRouting:
 
             codex_backend.build_skill_session_cmd.assert_called_once()
             claude_code_backend.build_skill_session_cmd.assert_not_called()
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        ("readonly_skill", "expected_sandbox"),
+        [(False, "workspace-write"), (True, "read-only")],
+    )
+    async def test_codex_override_uses_effective_backend_sandbox(
+        self,
+        minimal_ctx,
+        readonly_skill,
+        expected_sandbox,
+    ):
+        """Codex overrides derive sandbox defaults from Codex, not the Claude parent."""
+        claude_code_backend = _mock_backend(pty_required=True, channel_b_capable=True)
+        claude_code_backend.name = "claude-code"
+        minimal_ctx.backend = claude_code_backend
+
+        captured_spec = None
+
+        async def capture_exec(spec, *args, **kwargs):
+            nonlocal captured_spec
+            captured_spec = spec
+            return _stub_result()
+
+        with (
+            patch("autoskillit.execution.headless.get_backend", return_value=CodexBackend()),
+            patch(
+                "autoskillit.execution.headless._execute_claude_headless", side_effect=capture_exec
+            ),
+        ):
+            from autoskillit.execution.headless import run_headless_core
+
+            await run_headless_core(
+                "/autoskillit:dry-walkthrough /tmp/plan.md",
+                "/tmp/cwd",
+                minimal_ctx,
+                completion_marker="%%DONE%%",
+                backend_override="codex",
+                readonly_skill=readonly_skill,
+            )
+
+        assert captured_spec is not None
+        sandbox_positions = [
+            index for index, value in enumerate(captured_spec.cmd) if value == "--sandbox"
+        ]
+        assert len(sandbox_positions) == 1
+        assert captured_spec.cmd[sandbox_positions[0] + 1] == expected_sandbox
 
 
 class TestBackendOverrideEnvPolicy:

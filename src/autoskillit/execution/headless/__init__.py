@@ -176,6 +176,17 @@ async def run_headless_core(
         assert ctx.backend is not None, (
             "ctx.backend must be set before run_headless_core is called"
         )
+        step_backend: CodingAgentBackend | None = None
+        if backend_override is not None:
+            step_backend = get_backend(backend_override)
+            logger.info(
+                "step_backend_override_resolved",
+                override=backend_override,
+                step_backend=step_backend.name,
+                ctx_backend=ctx.backend.name,
+            )
+
+        _cmd_backend = step_backend if step_backend is not None else ctx.backend
         config = SkillSessionConfig(
             completion_marker=effective_marker,
             model=model_identity.configured_model or None,
@@ -195,20 +206,9 @@ async def run_headless_core(
             resume_message=resume_message,
             sandbox_mode="read-only"
             if readonly_skill
-            else ctx.backend.capabilities.default_skill_sandbox_mode,
+            else _cmd_backend.capabilities.default_skill_sandbox_mode,
             network_access=network_access,
         )
-        step_backend: CodingAgentBackend | None = None
-        if backend_override is not None:
-            step_backend = get_backend(backend_override)
-            logger.info(
-                "step_backend_override_resolved",
-                override=backend_override,
-                step_backend=step_backend.name,
-                ctx_backend=ctx.backend.name,
-            )
-
-        _cmd_backend = step_backend if step_backend is not None else ctx.backend
         spec = _cmd_backend.build_skill_session_cmd(skill_command, cwd, config)
         logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)
 

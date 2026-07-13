@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import stat
 
 import pytest
 
@@ -64,8 +63,6 @@ class TestResolveContainedPath:
             os.chmod(f, 0o600)
 
     def test_blocks_hardlink(self, tmp_path) -> None:
-        if not hasattr(stat, "SF_IMMUTABLE"):
-            pytest.skip("hardlink test requires hardlink support")
         allowed = tmp_path / "root"
         allowed.mkdir()
         source = tmp_path / "source.txt"

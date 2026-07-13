@@ -173,17 +173,19 @@ def _compute_write_evidence(
     )
 
     if is_worktree_dispatch:
-        temp_prefix = str(Path(cwd) / ".autoskillit" / "temp") + "/"
+        resolved_cwd = str(Path(cwd).resolve())
+        temp_prefix = resolved_cwd + "/.autoskillit/temp/"
         tracked_write_count = 0
         for t in session.tool_uses:
             if t.get("name") not in write_names:
                 continue
-            if t.get("id") in session.denied_tool_use_ids:
+            tool_id = t.get("id")
+            if tool_id is not None and tool_id in session.denied_tool_use_ids:
                 continue
             file_path = t.get("file_path", "")
             if not file_path:
                 continue
-            resolved = str(Path(file_path).resolve())
+            resolved = str((Path(resolved_cwd) / file_path).resolve())
             if resolved.startswith(temp_prefix):
                 continue
             tracked_write_count += 1
@@ -198,9 +200,12 @@ def _compute_write_evidence(
     # Codex fallback: file_changes paths also need filtering for worktree skills
     if write_call_count == 0 and file_changes:
         if is_worktree_dispatch:
-            temp_prefix = str(Path(cwd) / ".autoskillit" / "temp") + "/"
+            resolved_cwd = str(Path(cwd).resolve())
+            temp_prefix = resolved_cwd + "/.autoskillit/temp/"
             tracked_file_changes = [
-                fc for fc in file_changes if not str(Path(fc).resolve()).startswith(temp_prefix)
+                fc
+                for fc in file_changes
+                if not str((Path(resolved_cwd) / fc).resolve()).startswith(temp_prefix)
             ]
             file_changes_count = len(tracked_file_changes)
         else:

@@ -47,6 +47,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Default to `main` as the base branch — always discover it from git's upstream structure or the explicit base-branch store file
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Consider implementation complete with zero tracked source changes — if you cannot produce any tracked changes, report failure explicitly rather than completing with temp-only artifacts. Temp-only writes (`.autoskillit/temp/`, draft files) never authorizes finishing with zero tracked source changes.
 
 **ALWAYS:**
 - Use the provided worktree path (do NOT create a new one)
@@ -245,7 +246,6 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${CURRENT_BRANCH}
 phases_implemented = ${PHASES_IMPLEMENTED}
-has_implementation_progress = true
 ```
 
 If deviations were recorded during Step 4 (i.e., the deviation manifest file exists at `{{AUTOSKILLIT_TEMP}}/retry-worktree/deviation_manifest_{SESSION_TS}.json`), also emit:

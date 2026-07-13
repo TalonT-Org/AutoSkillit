@@ -54,6 +54,35 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
         )
         assert admission_map == {"dry_walkthrough": "codex"}
 
+    def test_dry_walkthrough_codex_pin_model_alias_translation(self):
+        """The full composed scenario: when dry_walkthrough is pinned to codex
+        and model is set to 'opus', the Codex backend translates 'opus' via
+        CODEX_MODEL_ALIASES with corresponding CODEX_EFFORT_MAPPING effort.
+
+        This completes the end-to-end verification started by
+        test_dry_walkthrough_codex_pin (which covers the backend resolution
+        half) — together they prove REQ-MDL-002.
+        """
+        from autoskillit.core.types._type_backend import (
+            CODEX_EFFORT_MAPPING,
+            CODEX_MODEL_ALIASES,
+        )
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        backend = CodexBackend()
+        expected_model = CODEX_MODEL_ALIASES["opus"]
+        expected_effort = CODEX_EFFORT_MAPPING["opus"]
+        translated_model = backend.translate_model("opus")
+        assert translated_model == expected_model, (
+            f"Expected 'opus' to translate to {expected_model!r} on Codex, "
+            f"got {translated_model!r}"
+        )
+        config_overrides = backend.model_config_overrides("opus")
+        assert config_overrides == (f"model_reasoning_effort={expected_effort}",), (
+            f"Expected 'opus' to produce {expected_effort!r} effort on Codex, "
+            f"got {config_overrides!r}"
+        )
+
     def test_explicit_override_suppresses_capability_routing(self) -> None:
         """A step pinned to codex with a worker_routable capability must NOT
         be rerouted to claude-code by capability routing."""

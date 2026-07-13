@@ -235,9 +235,7 @@ def parse_plan_paths(raw: str) -> tuple[str, ...]:
     (newline-separated). Whitespace is stripped from each token; empty
     tokens are filtered.
     """
-    import re as _re
-
-    parts = _re.split(r"[,\n]+", raw)
+    parts = re.split(r"[,\n]+", raw)
     return tuple(p.strip() for p in parts if p.strip())
 
 

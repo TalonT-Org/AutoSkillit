@@ -178,6 +178,8 @@ def _compute_write_evidence(
         for t in session.tool_uses:
             if t.get("name") not in write_names:
                 continue
+            if t.get("id") in session.denied_tool_use_ids:
+                continue
             file_path = t.get("file_path", "")
             if not file_path:
                 continue
@@ -187,7 +189,11 @@ def _compute_write_evidence(
             tracked_write_count += 1
         write_call_count = tracked_write_count
     else:
-        write_call_count = sum(1 for t in session.tool_uses if t.get("name") in write_names)
+        write_call_count = sum(
+            1
+            for t in session.tool_uses
+            if t.get("name") in write_names and t.get("id") not in session.denied_tool_use_ids
+        )
 
     # Codex fallback: file_changes paths also need filtering for worktree skills
     if write_call_count == 0 and file_changes:

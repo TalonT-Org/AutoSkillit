@@ -1846,3 +1846,30 @@ class TestCodexPathContaminationParity:
         )
         assert sr.evidence.has_implementation_evidence is False
         assert sr.subtype == "zero_writes"
+
+    def test_external_text_echo_plus_temp_only_file_change_triggers_demotion(self):
+        """External text echo with temp-only FILE_CHANGE yields zero_writes, not
+        path_contamination — Factor 2 boundary proof is absent (in-CWD) and the
+        sole file change is under .autoskillit/temp/ so has_implementation_evidence
+        is False."""
+        worktree_cwd = "/worktree/clone"
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        temp_target = f"{worktree_cwd}/.autoskillit/temp/foo.md"
+        stdout = self._codex_ndjson(
+            agent_text=f"plan_path = {external_plan}",
+            file_changes=[temp_target],
+        )
+        sr = _build_skill_result(
+            _codex_subprocess_result(stdout),
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd=worktree_cwd,
+            write_watch_dirs=[Path(worktree_cwd)],
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            supports_claude_format_stdout=False,
+            backend=CodexBackend(),
+        )
+        assert sr.evidence.has_implementation_evidence is False
+        assert sr.subtype == "zero_writes"

@@ -24,13 +24,17 @@ FIXTURE_CONDITIONAL_PATTERN = r"verdict[ \t]*=[ \t]*real_fix"
 
 def _ndjson_with_tool_uses(
     tool_names: list[str],
+    *,
     file_paths: list[str] | None = None,
+    denied_ids: set[str] | None = None,
 ) -> str:
     """Build NDJSON stdout with assistant tool_use blocks and a success result.
 
     file_paths: optional list parallel to tool_names. When provided, populates
     block["input"]["file_path"] for each tool_use so path-aware evidence tests
     can exercise _compute_write_evidence path-filtering logic.
+    denied_ids: optional set of tool_use_ids whose tool_result had is_error=True.
+    Injects a parent-session user record with tool_result blocks for each.
     """
     file_paths = file_paths or [""] * len(tool_names)
     if len(file_paths) != len(tool_names):
@@ -48,6 +52,19 @@ def _ndjson_with_tool_uses(
             "message": {"content": content_blocks},
         }
         lines.append(json.dumps(assistant))
+    if denied_ids:
+        user_content = [
+            {
+                "type": "tool_result",
+                "tool_use_id": tid,
+                "is_error": True,
+                "content": "Permission denied by user.",
+            }
+            for tid in sorted(denied_ids)
+        ]
+        lines.append(
+            json.dumps({"type": "user", "message": {"role": "user", "content": user_content}})
+        )
     result_record = {
         "type": "result",
         "subtype": "success",
@@ -1298,19 +1315,12 @@ class TestPathAwareImplementationEvidence:
         )
         assert sr.evidence.has_implementation_evidence is True
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "REQ-012: denied Write/Edit (is_error in tool_result) should not count "
-            "toward write_call_count. Requires _session_model.py user-record parsing "
-            "to correlate tool_use_id with tool_result.is_error — multi-file "
-            "cross-layer change deferred to dedicated task."
-        ),
-    )
     def test_denied_write_not_counted(self, tmp_path: Path) -> None:
         """An Edit/Write with is_error in tool_result must NOT count as implementation evidence."""
         ndjson = _ndjson_with_tool_uses(
-            ["Write"], file_paths=[str(tmp_path / "src" / "real_file.py")]
+            ["Write"],
+            file_paths=[str(tmp_path / "src" / "real_file.py")],
+            denied_ids={"tu_0"},
         )
         wt = tmp_path / "worktrees" / "impl-test"
         wt.mkdir(parents=True)

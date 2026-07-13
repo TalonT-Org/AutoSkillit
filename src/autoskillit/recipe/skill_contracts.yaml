@@ -226,8 +226,6 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
-    - name: has_implementation_progress
-      type: string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
@@ -360,8 +358,6 @@ skills:
       type: integer
     - name: deviation_manifest_path
       type: optional_string
-    - name: has_implementation_progress
-      type: string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"

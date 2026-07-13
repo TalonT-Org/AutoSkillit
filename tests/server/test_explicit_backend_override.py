@@ -239,14 +239,15 @@ class TestBothRoutingDirections:
 
     def test_explicit_codex_pin_skips_claude_binary_check(self, monkeypatch) -> None:
         """When explicit override pins to codex on a worker_routable step, the
-        ``_skill_requires_claude`` claude binary check must NOT fire — but
-        we still verify the override itself suppresses capability reroute."""
+        ``_skill_requires_claude`` claude binary check must NOT fire — the
+        explicit pin keeps the step on codex even when the claude binary is
+        absent (simulated at the _provider_aware_capability_overrides level
+        where shutil.which is actually called)."""
         from autoskillit.server.tools._auto_overrides import (
             AGENT_BACKEND_CLAUDE_CODE,
             _compute_effective_backend_map,
         )
 
-        # Force shutil.which('claude') to return None — simulating absent claude binary.
         monkeypatch.setattr(
             "autoskillit.server.tools._auto_overrides.shutil.which",
             lambda name: None if name == "claude" else f"/usr/bin/{name}",
@@ -257,7 +258,6 @@ class TestBothRoutingDirections:
             recipe_overrides={"remediation": {"dry_walkthrough": "codex"}},
         )
         resolver = _make_resolver("dry-walkthrough")
-        # No exception: the explicit pin keeps the step on codex.
         admission_map = _compute_effective_backend_map(
             cast(Any, steps),
             "codex",
@@ -268,3 +268,4 @@ class TestBothRoutingDirections:
         )
         assert admission_map is not None
         assert admission_map["dry_walkthrough"] != AGENT_BACKEND_CLAUDE_CODE
+        assert admission_map["dry_walkthrough"] == "codex"

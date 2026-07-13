@@ -3219,6 +3219,12 @@ callable_contracts:
       type: str
     - name: has_uncommitted_changes
       type: str
+    - name: write_evidence_override
+      type: str
+      required: false
+    - name: error
+      type: str
+      required: false
   autoskillit.smoke_utils.check_commits_ahead:
     inputs:
     - name: cwd

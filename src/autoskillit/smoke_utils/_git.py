@@ -156,7 +156,7 @@ def detect_zero_changes(
         git_has_changes = int(commit_count) > 0 or has_uncommitted
         result["has_changes"] = str(git_has_changes or _override_active).lower()
 
-    except (subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired) as exc:
+    except (subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired, ValueError) as exc:
         result["has_changes"] = "true"
         result["commit_count"] = "error"
         result["has_uncommitted_changes"] = "error"

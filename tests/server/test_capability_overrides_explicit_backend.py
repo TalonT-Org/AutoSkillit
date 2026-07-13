@@ -108,14 +108,19 @@ class TestExplicitCodexPinExcludedFromAggregate:
             _provider_aware_capability_overrides,
         )
 
-        steps = _make_recipe_steps("step_a", "step_b")
+        steps = {
+            "step_a": _make_recipe_step("step_a", skill_command="/skill_a"),
+            "step_b": _make_recipe_step("step_b", skill_command="/skill_b"),
+        }
         # Pin step_a to codex, leave step_b unpinned.
         cfg = _make_backend(
             backend="codex",
             step_overrides={"step_a": "codex"},
         )
         # Both skills declare the same routable capability.
-        resolver = _make_resolver({"a": ("git_metadata_write",), "b": ("git_metadata_write",)})
+        resolver = _make_resolver(
+            {"skill_a": ("git_metadata_write",), "skill_b": ("git_metadata_write",)}
+        )
         providers = ProvidersConfig()
         overrides, _detail = _provider_aware_capability_overrides(
             cast(Any, _make_mock_codex_backend()),

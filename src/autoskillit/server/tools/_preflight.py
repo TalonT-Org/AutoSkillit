@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.hook_registry import HOOK_REGISTRY
+from autoskillit.server._misc import get_backend
 
 
 def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[str]:
@@ -79,8 +80,6 @@ def _check_dispatch_feasibility(
         if config_backend is not None:
             _explicit = _resolve_backend_override(step_name, recipe_name, config_backend)
             if _explicit is not None:
-                from autoskillit.execution.backends import get_backend
-
                 _explicit_obj = get_backend(_explicit)
                 _explicit_binary = getattr(_explicit_obj.capabilities, "process_name", "")
                 if _explicit_binary and shutil.which(_explicit_binary) is None:

@@ -870,6 +870,11 @@ async def run_skill(
                 try:
                     _explicit_backend_obj_check = _get_backend(_explicit_backend_override)
                 except Exception:
+                    logger.warning(
+                        "explicit_backend_resolve_failed",
+                        backend=_explicit_backend_override,
+                        exc_info=True,
+                    )
                     _explicit_backend_obj_check = None
                 if _explicit_backend_obj_check is not None:
                     _explicit_binary = getattr(

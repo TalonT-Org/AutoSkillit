@@ -969,7 +969,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1413,
+        1418,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -993,10 +993,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; config-default ingredient layer: build_config_default_layer call and "
         "docstring update for post_run_diagnostics demotion (+10 net lines)"
         "; get_recipe session_serve_overrides replay via serve_recipe; "
-        "deferred-recall snapshot update guard (+3 net lines)",
+        "deferred-recall snapshot update guard (+3 net lines)"
+        "; per-step backend override config_backend kwarg threading (+5 net lines)",
     ),
     "tools_execution.py": (
-        1330,
+        1379,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
@@ -1012,7 +1013,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "github_api_write capability: _aggregate_sandbox_overrides, _has_routing_capability, "
         "_get_routing_caps helpers extracted from run_skill handler body (+30 net lines); "
         "shape-aware _compute_write_prefixes (worktree cwd vs clone root) and "
-        "WORKTREE_SKILLS dispatch preflight + _scope_covers_cwd helper (+35 net lines)",
+        "WORKTREE_SKILLS dispatch preflight + _scope_covers_cwd helper (+35 net lines)"
+        "; per-step explicit backend override resolution, binary probe gating, "
+        "override source evidence, and structured logging (+49 net lines)",
     ),
     "execution/backends/codex.py": (
         1155,

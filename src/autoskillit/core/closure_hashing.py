@@ -9,15 +9,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 __all__ = [
+    "HASH_RE",
     "compute_canonical_hash",
     "compute_file_hash",
     "compute_request_hash",
     "compute_row_hash",
     "compute_report_hash",
 ]
+
+HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def _canonical_bytes(payload: dict) -> bytes:

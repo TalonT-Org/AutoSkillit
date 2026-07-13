@@ -15,6 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
+from ..closure_hashing import HASH_RE as _HASH_RE
 from ._type_enums import KillReason, RetryReason, SessionOutcome
 
 T = TypeVar("T")
@@ -156,9 +157,6 @@ class WriteBehaviorSpec:
 
     mode: str | None = None
     expected_when: tuple[str, ...] = ()
-
-
-_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True, slots=True)

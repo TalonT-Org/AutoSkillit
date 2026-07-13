@@ -7,9 +7,9 @@ verifier can independently reconstruct.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
+from ..closure_hashing import HASH_RE as _HASH_RE
 from ..closure_hashing import compute_report_hash, compute_row_hash
 
 __all__ = [
@@ -24,7 +24,6 @@ CLOSURE_ROW_ALLOWED_ASSESSMENTS: frozenset[str] = frozenset(
     {"COVERED", "MISSING", "ODD", "CONFLICT", "NAMED_DEVIATION"}
 )
 
-_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _ALLOWED_ASSESSMENTS = CLOSURE_ROW_ALLOWED_ASSESSMENTS
 
 

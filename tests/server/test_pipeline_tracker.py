@@ -274,6 +274,60 @@ class TestOpenKitchenAutoInitTracker:
         assert tracker_after["steps"]["rectify"]["status"] == "complete"
         assert tracker_after["dependencies"].get("review_approach") == ["rectify"]
 
+    @pytest.mark.anyio
+    async def test_open_kitchen_auto_init_multi_pipeline(self, tmp_path):
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import RecipeStep
+        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+        from tests.server.conftest import _make_mock_ctx
+
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        steps = {
+            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
+            "review_approach": RecipeStep(name="review_approach", on_success="dry_walkthrough"),
+        }
+
+        ctx = _make_mock_ctx()
+        ctx.gate.enabled = True
+        ctx.gate_infrastructure_ready = True
+        ctx.recipe_name = ""
+        ctx.kitchen_id = "kitchen-multi"
+        _configure_open_kitchen_mock(ctx, steps, tmp_path)
+
+        tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+        tracker_dir.mkdir(parents=True, exist_ok=True)
+        tracker_dir.joinpath("other-pipeline.json").write_text(
+            json.dumps(
+                {
+                    "pipeline_id": "other-pipeline",
+                    "kitchen_id": "kitchen-multi",
+                    "steps": {
+                        "rectify": {"status": "complete"},
+                        "review_approach": {"status": "pending"},
+                    },
+                    "dependencies": {"review_approach": ["rectify"]},
+                }
+            )
+        )
+
+        with patch("autoskillit.server._get_ctx", return_value=ctx):
+            result = json.loads(await open_kitchen(name="remediation", ctx=ctx))
+            assert result["success"] is True
+            tracker_path = tracker_dir / "kitchen-multi.json"
+            assert tracker_path.exists()
+
+            deny_result = _check_pipeline_deps("review_approach", "")
+
+        assert deny_result is not None
+        parsed = json.loads(deny_result)
+        assert parsed["success"] is False
+        assert "order_id" in parsed["error"]
+
 
 class TestCheckPipelineDepsMultiPipelineFallback:
     @pytest.mark.anyio

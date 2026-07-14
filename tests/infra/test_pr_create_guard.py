@@ -426,3 +426,93 @@ class TestInteractiveKitchenExemption:
         assert _is_denied(buf.getvalue()), (
             "Kitchen open with recipe_allows_pr_create=false must be denied"
         )
+
+
+# ---------------------------------------------------------------------------
+# Nested-shell structured-tokenization regressions
+# ---------------------------------------------------------------------------
+
+
+class TestNestedShellStructuredDetection:
+    """False-positive allow cases for the nested-shell fallback.
+
+    These exercise commands where raw substring membership would falsely deny
+    but structured payload-segment classification must allow.
+    """
+
+    def test_allows_bash_c_prose_without_gh_pr_create(self, tmp_path):
+        out = _run_guard(
+            'bash -c "echo create a pr for the ghost project"',
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert out.strip() == "", "Prose inside bash -c must not be denied"
+
+    def test_allows_bash_c_grep_pattern(self, tmp_path):
+        out = _run_guard(
+            "bash -c \"grep -r 'gh pr create' docs/\"",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert out.strip() == "", "Grep pattern inside bash -c must not be denied"
+
+    def test_allows_sh_c_prose_words(self, tmp_path):
+        out = _run_guard(
+            'sh -c "echo create a printer ghost"',
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert out.strip() == "", "Words inside sh -c prose must not be denied"
+
+    def test_allows_malformed_inner_payload(self, tmp_path):
+        """Malformed inner shell text must remain fail-open (no deny)."""
+        out = _run_guard(
+            "bash -c \"echo 'unclosed",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert out.strip() == "", "Malformed inner payload must fail open"
+
+
+class TestNestedShellDenyRegressions:
+    """Real nested-shell `gh pr create` invocations must still be denied."""
+
+    def test_denies_bash_c_gh_pr_create(self, tmp_path):
+        out = _run_guard(
+            'bash -c "gh pr create --fill"',
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert _is_denied(out)
+
+    def test_denies_absolute_bash_path_with_sudo(self, tmp_path):
+        out = _run_guard(
+            '/bin/bash -c "sudo -u root gh pr create --fill"',
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert _is_denied(out)
+
+    def test_denies_nested_bash_c(self, tmp_path):
+        out = _run_guard(
+            """bash -c 'bash -c "gh pr create --fill"'""",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert _is_denied(out)
+
+    def test_denies_operator_separated_in_payload(self, tmp_path):
+        out = _run_guard(
+            'bash -c "echo ready && gh pr create --fill"',
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert _is_denied(out)
+
+    def test_denies_nested_shell_via_bash_tool(self, tmp_path):
+        out = _run_bash_guard(
+            'bash -c "gh pr create --fill"',
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert _is_denied(out)

@@ -364,6 +364,65 @@ class TestExtractShellCommandPayloads:
         ]
 
 
+class TestTokenizeShellPayloadSegments:
+    def test_bash_c_direct_payload(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('bash -c "gh pr create --fill"')
+        assert result == [["gh", "pr", "create", "--fill"]]
+
+    def test_absolute_bash_path(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('/bin/bash -c "gh pr create --fill"')
+        assert result == [["gh", "pr", "create", "--fill"]]
+
+    def test_env_prefix_wrapper(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('env FOO=1 bash -c "gh pr create --fill"')
+        assert result == [["gh", "pr", "create", "--fill"]]
+
+    def test_sudo_wrapper(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('sudo /bin/bash -c "gh pr create --fill"')
+        assert result == [["gh", "pr", "create", "--fill"]]
+
+    def test_nested_bash_c_payload(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments("""bash -c 'bash -c "gh pr create --fill"'""")
+        assert ["gh", "pr", "create", "--fill"] in result
+
+    def test_operator_separated_commands_inside_payload(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('bash -c "echo ready && gh pr create --fill"')
+        assert ["echo", "ready"] in result
+        assert ["gh", "pr", "create", "--fill"] in result
+
+    def test_dedupes_repeated_payload_strings(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments(
+            """bash -c 'gh pr create' && bash -c "gh pr create --fill\""""
+        )
+        flat = [tuple(s) for s in result]
+        assert flat.count(("gh", "pr", "create")) == 1
+
+    def test_malformed_inner_payload_returns_none(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments("bash -c \"echo 'unclosed")
+        assert result is None
+
+    def test_no_evaluated_shell_payload_returns_empty_list(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        assert tokenize_shell_payload_segments("gh pr create --fill") == []
+
+
 class TestExtractInterpreterCommandPayloads:
     def test_shell_string_pip_install(self):
         from autoskillit.hooks._command_classification import (

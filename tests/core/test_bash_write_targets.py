@@ -114,6 +114,16 @@ _PARITY_CORPUS: list[tuple[str, str]] = [
     ("python3 - <<'EOF'\nif x > 3:\n    pass\nEOF", "/workspace"),
     # Heredoc with real redirect on opening line — must produce write target
     ("cat <<'EOF' > /workspace/out.txt\nbody content\nEOF", "/workspace"),
+    # Adjacent && boundaries
+    ("echo ok&&pip install -e .", "/workspace"),
+    ("echo ok;pip install -e .", "/workspace"),
+    # Quoted operator text remains argument
+    ('echo "pip && install -e"', "/workspace"),
+    # Leading assignment
+    ("FOO=bar pip install -e . > /tmp/x", "/workspace"),
+    # Wrapper-bound verb
+    ("sudo pip install -e . > /tmp/x", "/workspace"),
+    ("env PIP_CACHE_DIR=/tmp pip install -e . > /tmp/x", "/workspace"),
 ]
 
 

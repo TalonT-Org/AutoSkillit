@@ -643,6 +643,17 @@ class TestVenvExemptionBinding:
     def test_venv_poison_substring_not_exempt_bash_guard(self) -> None:
         assert _is_denied(_run_bash_guard("pip install -e . --python .venv-poison/bin/python"))
 
+    def test_absolute_venv_poison_not_exempt_run_guard(self) -> None:
+        """Absolute /.venv-poison prefix is NOT a .venv path component."""
+        assert _is_denied(_run_guard("pip install -e . --python /.venv-poison/bin/python"))
+
+    def test_absolute_venv_poison_not_exempt_bash_guard(self) -> None:
+        assert _is_denied(_run_bash_guard("pip install -e . --python /.venv-poison/bin/python"))
+
+    def test_absolute_root_venv_still_exempt_run_guard(self) -> None:
+        """A genuine absolute /.venv/... interpreter path remains exempt."""
+        assert not _is_denied(_run_guard("pip install -e . --python /.venv/bin/python"))
+
     def test_later_unsafe_compound_after_safe_run_guard(self) -> None:
         """Safe install followed by unsafe install must deny."""
         assert _is_denied(

@@ -66,7 +66,7 @@ def _is_venv_path(value: str) -> bool:
         return False
     if value == ".venv" or value.startswith(".venv/") or value.startswith(".venv\\"):
         return True
-    if "/.venv/" in ("/" + value) or value.startswith("/.venv"):
+    if "/.venv/" in ("/" + value) or value == "/.venv":
         return True
     parts = value.replace("\\", "/").split("/")
     return any(part == ".venv" for part in parts)

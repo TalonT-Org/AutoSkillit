@@ -9,6 +9,7 @@ run_cmd at all — they are blocked by skill_orchestration_guard.py).
 import json
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
@@ -164,7 +165,7 @@ def _classify_install_invocation(
     return None
 
 
-def _iter_install_segments(command: str):
+def _iter_install_segments(command: str) -> Iterator[tuple[str, list[str], list[str]]]:
     """Yield (kind, install_args, post_install) for every matched invocation.
 
     Walks the top-level command, then nested shell payloads (recursively),

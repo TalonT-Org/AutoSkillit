@@ -199,6 +199,15 @@ class TestCommandVerbAndArgs:
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
+    def test_env_split_string_consumes_value(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(
+            ["env", "--split-string", "FOOBAR", "pip", "install", "-e", "."]
+        )
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
     def test_env_double_dash_terminator(self):
         from autoskillit.hooks._command_classification import command_verb_and_args
 

@@ -98,7 +98,6 @@ _ENV_NO_VALUE_FLAGS: frozenset[str] = frozenset(
         "--ignore-environment",
         "--null",
         "--debug",
-        "--split-string",
     }
 )
 _ENV_VALUE_FLAGS: frozenset[str] = frozenset(

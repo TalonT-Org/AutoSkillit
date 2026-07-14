@@ -97,6 +97,10 @@ def _expr_is_tainted(expr: ast.expr, tainted: set[str]) -> bool:
     if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.BitOr):
         # Allow ``or`` joins of command reads.
         return _expr_is_tainted(expr.left, tainted) and _expr_is_tainted(expr.right, tainted)
+    if isinstance(expr, ast.BoolOp) and isinstance(expr.op, ast.Or):
+        # Boolean ``or`` joins (e.g. ``cmd or ''``) propagate taint if any
+        # operand is tainted — Python short-circuits to the first truthy value.
+        return any(_expr_is_tainted(v, tainted) for v in expr.values)
     if isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute):
         if expr.func.attr in {"lower", "casefold"} and isinstance(expr.func.value, ast.Name):
             return expr.func.value.id in tainted

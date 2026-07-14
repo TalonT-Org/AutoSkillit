@@ -948,6 +948,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
+    "_command_classification.py": (
+        1100,
+        "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
+        "command-inspecting guards — tokenization, shell-payload extraction, "
+        "interpreter-write detection, protected-path reads, and recursive "
+        "payload segmentation for nested-shell verb-position enforcement; "
+        "stdlib-only stdlib boundary prevents splitting across modules.",
+    ),
     "session.py": (
         1060,
         "REQ-CNST-010-E3: session adjudication pipeline — exhaustive match arms "

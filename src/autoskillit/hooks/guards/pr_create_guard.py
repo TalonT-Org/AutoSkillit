@@ -21,8 +21,9 @@ if _HOOKS_DIR not in sys.path:
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     _SHELL_OPS,
+    command_verb_and_args,
     has_interpreter_wrapped_command,
-    has_nested_shell,
+    tokenize_shell_payload_segments,
 )
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
@@ -71,8 +72,12 @@ def _is_gh_pr_create(cmd: str) -> bool:
                     return True
     if has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"]):
         return True
-    if has_nested_shell(cmd):
-        if "gh" in cmd and "pr" in cmd and "create" in cmd:
+    segments = tokenize_shell_payload_segments(cmd)
+    if segments is None:
+        return False
+    for segment in segments:
+        verb, args = command_verb_and_args(segment)
+        if verb == "gh" and args[:2] == ["pr", "create"]:
             return True
     return False
 

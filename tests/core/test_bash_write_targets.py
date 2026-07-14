@@ -83,6 +83,43 @@ class TestExtractBashWriteTargets:
         result = extract_bash_write_targets("echo x > $MY_DIR/out.txt", cwd="/workspace")
         assert result == ["/workspace/.autoskillit/temp/out.txt"]
 
+    def test_sudo_wrapped_git_checkout(self):
+        result = extract_bash_write_targets(
+            "sudo git checkout -- ../outside/evil.txt", cwd="/workspace"
+        )
+        assert result == ["/workspace/../outside/evil.txt"]
+
+    def test_sudo_flag_wrapped_git_checkout(self):
+        result = extract_bash_write_targets(
+            "sudo -u root git checkout -- /path/file.txt", cwd="/workspace"
+        )
+        assert result == ["/path/file.txt"]
+
+    def test_sudo_attached_flag_wrapped_rm(self):
+        result = extract_bash_write_targets("sudo --user=root rm /path/file.txt", cwd="/workspace")
+        assert result == ["/path/file.txt"]
+
+    def test_nice_flag_wrapped_tee(self):
+        assert extract_bash_write_targets("nice -n 5 tee /path/out.txt") == ["/path/out.txt"]
+
+    def test_assignment_prefixed_git_checkout(self):
+        result = extract_bash_write_targets(
+            "FOO=bar git checkout -- ../outside/evil.txt", cwd="/workspace"
+        )
+        assert result == ["/workspace/../outside/evil.txt"]
+
+    def test_env_flag_prefixed_git_checkout(self):
+        result = extract_bash_write_targets(
+            "env -C /tmp git checkout -- /path/file.txt", cwd="/workspace"
+        )
+        assert result == ["/path/file.txt"]
+
+    def test_timeout_wrapped_tee(self):
+        assert extract_bash_write_targets("timeout 30 tee /path/out.txt") == ["/path/out.txt"]
+
+    def test_wrapper_only_segment_clean(self):
+        assert extract_bash_write_targets("sudo nohup") == []
+
 
 _PARITY_CORPUS: list[tuple[str, str]] = [
     ("echo x > /path/out.txt", "/workspace"),
@@ -114,6 +151,16 @@ _PARITY_CORPUS: list[tuple[str, str]] = [
     ("python3 - <<'EOF'\nif x > 3:\n    pass\nEOF", "/workspace"),
     # Heredoc with real redirect on opening line — must produce write target
     ("cat <<'EOF' > /workspace/out.txt\nbody content\nEOF", "/workspace"),
+    # Adjacent && boundaries
+    ("echo ok&&pip install -e .", "/workspace"),
+    ("echo ok;pip install -e .", "/workspace"),
+    # Quoted operator text remains argument
+    ('echo "pip && install -e"', "/workspace"),
+    # Leading assignment
+    ("FOO=bar pip install -e . > /tmp/x", "/workspace"),
+    # Wrapper-bound verb
+    ("sudo pip install -e . > /tmp/x", "/workspace"),
+    ("env PIP_CACHE_DIR=/tmp pip install -e . > /tmp/x", "/workspace"),
 ]
 
 

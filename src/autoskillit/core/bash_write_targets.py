@@ -15,12 +15,17 @@ import os
 import re
 import shlex
 
-_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
+_SPLIT_TOKENS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 
 _HEREDOC_BODY_RE = re.compile(
     r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
     re.DOTALL,
 )
+
+# After _strip_heredoc_bodies() a heredoc collapses to "<<WORD ...\nWORD".
+# This removes the marker and terminator, keeping the rest of the opening
+# line (real redirects), so segments carry only executable tokens.
+_HEREDOC_MARKER_RE = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?([^\n]*)\n\t*\1(?=[ \t]*(?:\n|$))")
 
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
@@ -52,6 +57,31 @@ _WRITE_VERBS: frozenset[str] = frozenset(
 
 _GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset({"-C", "--git-dir", "--work-tree", "-c"})
 
+_COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo", "nohup"})
+_WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
+_WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
+
+_ENV_VALUE_FLAGS: frozenset[str] = frozenset(
+    {"-u", "--unset", "-C", "--chdir", "-S", "--split-string", "--argv0"}
+)
+
+_WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
+    {
+        "-u",
+        "--user",
+        "-n",
+        "--adjustment",
+        "-k",
+        "--kill-after",
+        "-s",
+        "--signal",
+        "-g",
+        "--group",
+        "-p",
+        "--priority",
+    }
+)
+
 
 def _resolve_write_target(path: str, cwd: str = "") -> str | None:
     if not path:
@@ -73,15 +103,47 @@ def _strip_heredoc_bodies(command: str) -> str:
     return _HEREDOC_BODY_RE.sub(r"\1\n\3", command)
 
 
+def _normalize_newlines(command: str) -> str:
+    result: list[str] = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if c == "\\" and not in_single and i + 1 < len(command):
+            result.append(c)
+            result.append(command[i + 1])
+            i += 2
+            continue
+        if c == "'" and not in_double:
+            in_single = not in_single
+        elif c == '"' and not in_single:
+            in_double = not in_double
+        elif c == "\n" and not in_single and not in_double:
+            result.append(" ; ")
+            i += 1
+            continue
+        result.append(c)
+        i += 1
+    return "".join(result)
+
+
 def _tokenize_command_segments(command: str) -> list[list[str]]:
     try:
-        tokens = shlex.split(_strip_heredoc_bodies(command))
+        stripped = _HEREDOC_MARKER_RE.sub(r"\2", _strip_heredoc_bodies(command))
+        lexer = shlex.shlex(
+            _normalize_newlines(stripped),
+            posix=True,
+            punctuation_chars=";&|",
+        )
+        lexer.whitespace_split = True
+        tokens = list(lexer)
     except (ValueError, TypeError):
         return []
     segments: list[list[str]] = []
     current: list[str] = []
     for token in tokens:
-        if token in _SHELL_OPS:
+        if token in _SPLIT_TOKENS:
             if current:
                 segments.append(current)
                 current = []
@@ -150,15 +212,87 @@ def _extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
     return targets
 
 
-def _command_verb(segment: list[str]) -> str:
+def _is_posix_assignment(token: str) -> bool:
+    if "=" not in token or token.startswith("="):
+        return False
+    name, _sep, _value = token.partition("=")
+    if not name:
+        return False
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False
+    return all(c.isalnum() or c == "_" for c in name)
+
+
+def _consume_wrapper_options(start: int, segment: list[str]) -> int:
+    """Skip past a wrapper's attached/detached value options.
+
+    Wrappers (sudo, nice, nohup, time, command) accept option flags before
+    the inner command. Many take values either attached (--user=root) or as
+    the next detached token (-u root). Returns the index of the first
+    non-option token.
+    """
+    i = start
+    while i < len(segment):
+        token = segment[i]
+        if token == "--":
+            return i + 1
+        if not token.startswith("-"):
+            return i
+        if "=" in token:
+            i += 1
+            continue
+        if token in _WRAPPER_VALUE_FLAGS_DETACHED and i + 1 < len(segment):
+            i += 2
+            continue
+        i += 1
+    return i
+
+
+def _command_start_index(segment: list[str]) -> int | None:
     if not segment:
-        return ""
+        return None
     start = 0
-    if segment[0] == "env" and len(segment) > 1:
-        start = 1
-        while start < len(segment) and (segment[start].startswith("-") or "=" in segment[start]):
+    while start < len(segment):
+        token = segment[start]
+        if _is_posix_assignment(token):
             start += 1
-    return segment[start] if start < len(segment) else ""
+            continue
+        if token == "env":
+            start += 1
+            while start < len(segment) and (
+                segment[start].startswith("-") or "=" in segment[start]
+            ):
+                if segment[start] in _ENV_VALUE_FLAGS and start + 1 < len(segment):
+                    start += 2
+                    continue
+                start += 1
+            continue
+        if token in _COMMAND_WRAPPERS:
+            new_start = _consume_wrapper_options(start + 1, segment)
+            if new_start <= start + 1:
+                start += 1
+                continue
+            start = new_start
+            continue
+        if token in _WRAPPERS_WITH_DURATION and start + 1 < len(segment):
+            start += 2
+            continue
+        if (
+            token in _WRAPPERS_WITH_SHORT_FLAG
+            and start + 1 < len(segment)
+            and segment[start + 1].startswith("-")
+        ):
+            start += 2
+            continue
+        break
+    return start if start < len(segment) else None
+
+
+def _command_verb(segment: list[str]) -> str:
+    start = _command_start_index(segment)
+    if start is None:
+        return ""
+    return segment[start]
 
 
 def _is_gh_command(segment: list[str]) -> bool:
@@ -166,6 +300,11 @@ def _is_gh_command(segment: list[str]) -> bool:
 
 
 def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
+    start = _command_start_index(segment)
+    if start is None:
+        return None
+    segment = segment[start:]
+
     if _is_gh_command(segment):
         return None
 

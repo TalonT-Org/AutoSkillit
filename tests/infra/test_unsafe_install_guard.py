@@ -182,3 +182,526 @@ class TestUnsafeInstallGuardEdgeCases:
         )
         output = _run_guard("irrelevant", raw_stdin=stdin)
         assert output == ""
+
+
+# --- Quoted/read-only false-positive cases ---
+# Each entry exercises a quoted reader/search that mentions an install pattern
+# without actually invoking one. Both _run_guard and _run_bash_guard must allow.
+
+
+_QUOTED_ALLOWED: list[tuple[str, str]] = [
+    ("rg 'pip install -e' docs/", "rg-quoted-single"),
+    ('rg "pip install -e" docs/', "rg-quoted-double"),
+    ('grep -r "pip install --editable" .', "grep-double-quoted"),
+    ("grep -r 'pip install --editable' .", "grep-single-quoted-search"),
+    ("git log --grep='pip install -e'", "git-log-single-quoted"),
+    ('git log --grep="pip install -e"', "git-log-double-quoted"),
+    ('echo "Run: pip install -e ."', "echo-double-quoted"),
+    ("echo 'Run: pip install -e .'", "echo-single-quoted"),
+    ("gh issue list --search '\"pip install -e\" guard'", "gh-issue-search"),
+    ('cat "pip install -e"', "cat-double-quoted"),
+    ("cat 'pip install -e'", "cat-single-quoted"),
+    (
+        'git commit -m "docs: pip install -e example"',
+        "git-commit-message",
+    ),
+    (
+        "rg '$(pip install -e .)' docs/",
+        "rg-single-quoted-substitution-inert",
+    ),
+    (
+        'echo "\\$(pip install -e .)"',
+        "echo-escaped-substitution-inert",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _QUOTED_ALLOWED],
+    ids=[c[1] for c in _QUOTED_ALLOWED],
+)
+def test_quoted_read_only_run_guard_allowed(cmd: str) -> None:
+    assert not _is_denied(_run_guard(cmd)), f"run_cmd should allow: {cmd!r}"
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _QUOTED_ALLOWED],
+    ids=[c[1] for c in _QUOTED_ALLOWED],
+)
+def test_quoted_read_only_bash_guard_allowed(cmd: str) -> None:
+    assert not _is_denied(_run_bash_guard(cmd)), f"Bash tool should allow: {cmd!r}"
+
+
+# --- System-install false-positive cases ---
+# Each has --system as a real token in argument position but no actual pip install.
+
+_SYSTEM_FALSE_POSITIVES: list[tuple[str, str]] = [
+    ('rg "pip install" -- --system', "rg-double-dash-system"),
+    ('echo "avoid pip install" --system', "echo-system-as-arg"),
+    ('grep "pip install" -- --system', "grep-double-dash-system"),
+    ("uv run -- echo install --system", "uv-run-echo-system"),
+    ("uv tool install demo --system", "uv-tool-install-system"),
+]
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _SYSTEM_FALSE_POSITIVES],
+    ids=[c[1] for c in _SYSTEM_FALSE_POSITIVES],
+)
+def test_system_install_false_positive_run_guard_allowed(cmd: str) -> None:
+    assert not _is_denied(_run_guard(cmd)), f"run_cmd should allow: {cmd!r}"
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _SYSTEM_FALSE_POSITIVES],
+    ids=[c[1] for c in _SYSTEM_FALSE_POSITIVES],
+)
+def test_system_install_false_positive_bash_guard_allowed(cmd: str) -> None:
+    assert not _is_denied(_run_bash_guard(cmd)), f"Bash tool should allow: {cmd!r}"
+
+
+# --- Direct and wrapped deny regressions ---
+
+
+_DIRECT_DENIED: list[tuple[str, str]] = [
+    ("pip install -e .", "pip-install-e-dot"),
+    ("pip install --editable .", "pip-install-editable-dot"),
+    ("uv pip install -e .", "uv-pip-install-e-dot"),
+    ("maturin develop", "maturin-develop"),
+    ("/usr/bin/pip install -e .", "absolute-pip-install-e"),
+    ("/usr/local/bin/uv pip install --editable .", "absolute-uv-pip-install-editable"),
+    ("python -m pip install -e .", "python-m-pip-install-e"),
+    ("python3 -m pip install --editable .", "python3-m-pip-install-editable"),
+    ("pip3 install -e .", "pip3-install-e-dot"),
+    ("FOO=bar pip install -e .", "foo-assignment-pip-install-e"),
+    ("env PIP_CACHE_DIR=/tmp pip install -e .", "env-pip-cache-dir"),
+    ("sudo -u root pip install -e .", "sudo-pip-install-e"),
+    ("nice -n 5 pip install -e .", "nice-pip-install-e"),
+    ("timeout 30 pip install -e .", "timeout-pip-install-e"),
+    ("stdbuf -o0 pip install -e .", "stdbuf-pip-install-e"),
+    # Attached --python=<path> form: must remain unsafe when path is not .venv.
+    ("pip install -e . --python=/usr/bin/python3", "attached-system-python"),
+]
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _DIRECT_DENIED],
+    ids=[c[1] for c in _DIRECT_DENIED],
+)
+def test_direct_denied_run_guard(cmd: str) -> None:
+    assert _is_denied(_run_guard(cmd)), f"run_cmd should deny: {cmd!r}"
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _DIRECT_DENIED],
+    ids=[c[1] for c in _DIRECT_DENIED],
+)
+def test_direct_denied_bash_guard(cmd: str) -> None:
+    assert _is_denied(_run_bash_guard(cmd)), f"Bash tool should deny: {cmd!r}"
+
+
+# --- Compound-command deny regressions ---
+
+
+_COMPOUND_DENIED: list[tuple[str, str]] = [
+    ("pip install -e . && echo done", "pip-then-echo-spaced"),
+    ("echo ok&&pip install -e .", "echo-then-pip-adjacent"),
+    ("echo ok;pip install -e .", "echo-then-pip-semicolon-adjacent"),
+    ("echo ok || pip install -e .", "echo-or-pip"),
+    ("echo ok | pip install -e .", "echo-pipe-pip"),
+    ("echo ok\npip install -e .", "echo-newline-pip"),
+    ("pip install -e . > /dev/null", "pip-with-redirect"),
+    (
+        "uv pip install -e . --python .venv/bin/python && pip install -e .",
+        "safe-then-unsafe-compound",
+    ),
+    (
+        "rg docs/ && pip install -e .",
+        "reader-then-install",
+    ),
+    (
+        "pip install -e . && rg 'pip install' docs/",
+        "install-then-reader",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _COMPOUND_DENIED],
+    ids=[c[1] for c in _COMPOUND_DENIED],
+)
+def test_compound_denied_run_guard(cmd: str) -> None:
+    assert _is_denied(_run_guard(cmd)), f"run_cmd should deny compound: {cmd!r}"
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _COMPOUND_DENIED],
+    ids=[c[1] for c in _COMPOUND_DENIED],
+)
+def test_compound_denied_bash_guard(cmd: str) -> None:
+    assert _is_denied(_run_bash_guard(cmd)), f"Bash tool should deny compound: {cmd!r}"
+
+
+# --- Ordered-grammar allow cases ---
+# A token mentioning 'install' must not be confused with a subcommand argument.
+
+
+_GRAMMAR_ALLOWED: list[tuple[str, str]] = [
+    ("pip help install -e", "pip-help-install-e"),
+    ("uv run echo install --system", "uv-run-echo-install-system"),
+    ("uv tool install demo --system", "uv-tool-install-demo"),
+    ("maturin --help develop", "maturin-help-develop"),
+]
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _GRAMMAR_ALLOWED],
+    ids=[c[1] for c in _GRAMMAR_ALLOWED],
+)
+def test_grammar_allowed_run_guard(cmd: str) -> None:
+    assert not _is_denied(_run_guard(cmd)), f"run_cmd should allow: {cmd!r}"
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _GRAMMAR_ALLOWED],
+    ids=[c[1] for c in _GRAMMAR_ALLOWED],
+)
+def test_grammar_allowed_bash_guard(cmd: str) -> None:
+    assert not _is_denied(_run_bash_guard(cmd)), f"Bash tool should allow: {cmd!r}"
+
+
+# --- Nested shell payload cases ---
+
+
+class TestNestedShellDeny:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            'bash -c "pip install -e ."',
+            'sh -c "pip install -e ."',
+            'zsh -c "uv pip install --editable ."',
+            'dash -c "pip install --editable ."',
+            'bash -c "maturin develop"',
+            'eval "pip install -e ."',
+        ],
+        ids=[
+            "bash-c-pip",
+            "sh-c-pip",
+            "zsh-c-uv-pip",
+            "dash-c-pip-editable",
+            "bash-c-maturin",
+            "eval-pip",
+        ],
+    )
+    def test_run_guard_denies_nested_shell(self, cmd: str) -> None:
+        assert _is_denied(_run_guard(cmd))
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            'bash -c "pip install -e ."',
+            'sh -c "pip install -e ."',
+            'zsh -c "uv pip install --editable ."',
+            'dash -c "pip install --editable ."',
+            'bash -c "maturin develop"',
+            'eval "pip install -e ."',
+        ],
+        ids=[
+            "bash-c-pip",
+            "sh-c-pip",
+            "zsh-c-uv-pip",
+            "dash-c-pip-editable",
+            "bash-c-maturin",
+            "eval-pip",
+        ],
+    )
+    def test_bash_guard_denies_nested_shell(self, cmd: str) -> None:
+        assert _is_denied(_run_bash_guard(cmd))
+
+
+class TestNestedShellAllow:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "bash -c \"rg 'pip install -e' docs/\"",
+            'sh -c "rg docs/"',
+            'eval "rg docs/"',
+        ],
+        ids=[
+            "bash-rg-quoted",
+            "sh-rg",
+            "eval-rg",
+        ],
+    )
+    def test_run_guard_allows_inert_nested_shell(self, cmd: str) -> None:
+        assert not _is_denied(_run_guard(cmd))
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "bash -c \"rg 'pip install -e' docs/\"",
+            'sh -c "rg docs/"',
+            'eval "rg docs/"',
+        ],
+        ids=[
+            "bash-rg-quoted",
+            "sh-rg",
+            "eval-rg",
+        ],
+    )
+    def test_bash_guard_allows_inert_nested_shell(self, cmd: str) -> None:
+        assert not _is_denied(_run_bash_guard(cmd))
+
+
+# --- Command substitution cases ---
+
+
+class TestCommandSubstitutionDeny:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "echo $(pip install -e .)",
+            'echo "$(pip install -e .)"',
+            "echo `pip install -e .`",
+            'echo "`pip install -e .`"',
+        ],
+        ids=[
+            "dollar-paren",
+            "dollar-paren-in-double",
+            "backtick",
+            "backtick-in-double",
+        ],
+    )
+    def test_run_guard_denies_active_substitution(self, cmd: str) -> None:
+        assert _is_denied(_run_guard(cmd))
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "echo $(pip install -e .)",
+            'echo "$(pip install -e .)"',
+            "echo `pip install -e .`",
+            'echo "`pip install -e .`"',
+        ],
+        ids=[
+            "dollar-paren",
+            "dollar-paren-in-double",
+            "backtick",
+            "backtick-in-double",
+        ],
+    )
+    def test_bash_guard_denies_active_substitution(self, cmd: str) -> None:
+        assert _is_denied(_run_bash_guard(cmd))
+
+
+class TestCommandSubstitutionAllow:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "echo '$(pip install -e .)'",
+            'echo "\\$(pip install -e .)"',
+        ],
+        ids=[
+            "single-quoted-inert",
+            "escaped-inert",
+        ],
+    )
+    def test_run_guard_allows_inert_substitution(self, cmd: str) -> None:
+        assert not _is_denied(_run_guard(cmd))
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "echo '$(pip install -e .)'",
+            'echo "\\$(pip install -e .)"',
+        ],
+        ids=[
+            "single-quoted-inert",
+            "escaped-inert",
+        ],
+    )
+    def test_bash_guard_allows_inert_substitution(self, cmd: str) -> None:
+        assert not _is_denied(_run_bash_guard(cmd))
+
+
+# --- Interpreter subprocess cases ---
+
+
+class TestInterpreterSubprocessDeny:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "python -c \"import subprocess; subprocess.run('pip install -e .', shell=True)\"",
+            "python3 -c \"import subprocess; subprocess.run(['pip','install','-e','.'])\"",
+            "python3 -c \"import subprocess; subprocess.run(('pip','install','--editable','.'))\"",
+            "python3 -c \"import os; os.system('pip install -e .')\"",
+            "python3 -c \"import subprocess; subprocess.run(['uv','pip','install','-e','.'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['python3','-m','pip','install','-e','.'])\"",
+            "python3 -c \"import subprocess; subprocess.run(['maturin','develop'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['pip','install','--system','requests'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['uv','pip','install','foo','--system'])\"",
+        ],
+        ids=[
+            "shell-string-pip",
+            "argv-list-pip",
+            "argv-tuple-pip",
+            "os-system-pip",
+            "argv-list-uv-pip",
+            "argv-list-module-pip",
+            "argv-list-maturin",
+            "argv-list-pip-system",
+            "argv-list-uv-pip-system",
+        ],
+    )
+    def test_run_guard_denies_interpreter_subprocess(self, cmd: str) -> None:
+        assert _is_denied(_run_guard(cmd))
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "python -c \"import subprocess; subprocess.run('pip install -e .', shell=True)\"",
+            "python3 -c \"import subprocess; subprocess.run(['pip','install','-e','.'])\"",
+            "python3 -c \"import subprocess; subprocess.run(('pip','install','--editable','.'))\"",
+            "python3 -c \"import os; os.system('pip install -e .')\"",
+            "python3 -c \"import subprocess; subprocess.run(['uv','pip','install','-e','.'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['python3','-m','pip','install','-e','.'])\"",
+            "python3 -c \"import subprocess; subprocess.run(['maturin','develop'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['pip','install','--system','requests'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['uv','pip','install','foo','--system'])\"",
+        ],
+        ids=[
+            "shell-string-pip",
+            "argv-list-pip",
+            "argv-tuple-pip",
+            "os-system-pip",
+            "argv-list-uv-pip",
+            "argv-list-module-pip",
+            "argv-list-maturin",
+            "argv-list-pip-system",
+            "argv-list-uv-pip-system",
+        ],
+    )
+    def test_bash_guard_denies_interpreter_subprocess(self, cmd: str) -> None:
+        assert _is_denied(_run_bash_guard(cmd))
+
+
+class TestInterpreterSubprocessAllow:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "python3 -c \"import subprocess; subprocess.run(['rg', 'pip install -e', 'docs/'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['pip','install','-e','.','--python','.venv/bin/python'])\"",
+        ],
+        ids=["argv-reader-rg", "argv-pip-venv-exempt"],
+    )
+    def test_run_guard_allows_interpreter_reader(self, cmd: str) -> None:
+        assert not _is_denied(_run_guard(cmd))
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "python3 -c \"import subprocess; subprocess.run(['rg', 'pip install -e', 'docs/'])\"",
+        ],
+        ids=["argv-reader-rg"],
+    )
+    def test_bash_guard_allows_interpreter_reader(self, cmd: str) -> None:
+        assert not _is_denied(_run_bash_guard(cmd))
+
+
+# --- .venv exemption binding ---
+
+
+class TestVenvExemptionBinding:
+    def test_attached_python_venv_allowed_run_guard(self) -> None:
+        """Attached --python=.venv/bin/python is an explicit .venv exemption."""
+        assert not _is_denied(_run_guard("pip install -e . --python=.venv/bin/python"))
+
+    def test_attached_python_venv_allowed_bash_guard(self) -> None:
+        assert not _is_denied(_run_bash_guard("pip install -e . --python=.venv/bin/python"))
+
+    def test_venv_poison_substring_not_exempt_run_guard(self) -> None:
+        """.venv-poison is NOT a .venv path component."""
+        assert _is_denied(_run_guard("pip install -e . --python .venv-poison/bin/python"))
+
+    def test_venv_poison_substring_not_exempt_bash_guard(self) -> None:
+        assert _is_denied(_run_bash_guard("pip install -e . --python .venv-poison/bin/python"))
+
+    def test_absolute_venv_poison_not_exempt_run_guard(self) -> None:
+        """Absolute /.venv-poison prefix is NOT a .venv path component."""
+        assert _is_denied(_run_guard("pip install -e . --python /.venv-poison/bin/python"))
+
+    def test_absolute_venv_poison_not_exempt_bash_guard(self) -> None:
+        assert _is_denied(_run_bash_guard("pip install -e . --python /.venv-poison/bin/python"))
+
+    def test_absolute_root_venv_still_exempt_run_guard(self) -> None:
+        """A genuine absolute /.venv/... interpreter path remains exempt."""
+        assert not _is_denied(_run_guard("pip install -e . --python /.venv/bin/python"))
+
+    def test_later_unsafe_compound_after_safe_run_guard(self) -> None:
+        """Safe install followed by unsafe install must deny."""
+        assert _is_denied(
+            _run_guard("pip install -e . --python .venv/bin/python && pip install -e .")
+        )
+
+    def test_later_unsafe_compound_after_safe_bash_guard(self) -> None:
+        assert _is_denied(
+            _run_bash_guard("pip install -e . --python .venv/bin/python && pip install -e .")
+        )
+
+
+# --- System install scope ---
+
+
+class TestSystemInstallScope:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "pip install --system requests",
+            "pip install foo --system",
+            "uv pip install --system foo",
+            "uv pip install foo --system",
+        ],
+        ids=[
+            "pip-system-leading",
+            "pip-system-trailing",
+            "uv-pip-system-leading",
+            "uv-pip-system-trailing",
+        ],
+    )
+    def test_run_guard_denies_scoped_system(self, cmd: str) -> None:
+        assert _is_denied(_run_guard(cmd))
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "pip install --system requests",
+            "pip install foo --system",
+            "uv pip install --system foo",
+            "uv pip install foo --system",
+        ],
+        ids=[
+            "pip-system-leading",
+            "pip-system-trailing",
+            "uv-pip-system-leading",
+            "uv-pip-system-trailing",
+        ],
+    )
+    def test_bash_guard_denies_scoped_system(self, cmd: str) -> None:
+        assert _is_denied(_run_bash_guard(cmd))

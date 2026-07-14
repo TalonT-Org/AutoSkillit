@@ -119,6 +119,409 @@ class TestTokenizeCommandSegments:
         result = tokenize_command_segments("cat file | tee /tmp/out")
         assert result == [["cat", "file"], ["tee", "/tmp/out"]]
 
+    def test_adjacent_ampersand_ampersand(self):
+        result = tokenize_command_segments("echo ok&&pip install -e .")
+        assert len(result) == 2
+        assert result[1] == ["pip", "install", "-e", "."]
+
+    def test_adjacent_semicolon(self):
+        result = tokenize_command_segments("echo ok;pip install -e .")
+        assert len(result) == 2
+        assert result[1] == ["pip", "install", "-e", "."]
+
+    def test_adjacent_pipe(self):
+        result = tokenize_command_segments("echo ok|pip install -e .")
+        assert len(result) == 2
+
+    def test_adjacent_double_pipe(self):
+        result = tokenize_command_segments("echo ok||pip install -e .")
+        assert len(result) == 2
+
+    def test_adjacent_background_ampersand(self):
+        result = tokenize_command_segments("echo ok&pip install -e .")
+        assert len(result) == 2
+
+    def test_bare_newline_separates_segments(self):
+        result = tokenize_command_segments("echo ok\npip install -e .")
+        assert len(result) == 2
+        assert result[1] == ["pip", "install", "-e", "."]
+
+    def test_quoted_operator_remains_argument(self):
+        result = tokenize_command_segments("echo 'pip && install -e .'")
+        assert result == [["echo", "pip && install -e ."]]
+
+    def test_double_quoted_operator_remains_argument(self):
+        result = tokenize_command_segments('echo "a || b"')
+        assert result == [["echo", "a || b"]]
+
+    def test_heredoc_body_stripped_before_tokenize(self):
+        result = tokenize_command_segments("cat <<'EOF'\nbody content with > symbols\nEOF")
+        assert result == [["cat"]]
+
+    def test_op_only_run_is_boundary(self):
+        result = tokenize_command_segments("pip install -e . ; && uv pip install -e .")
+        assert len(result) == 2
+        assert result[1] == ["uv", "pip", "install", "-e", "."]
+
+    def test_parenthesized_subshell(self):
+        result = tokenize_command_segments("(echo hi; echo bye)")
+        assert len(result) == 2
+
+
+class TestCommandVerbAndArgs:
+    def test_returns_verb_and_args(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_strips_env_assignments(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["env", "FOO=bar", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_strips_leading_posix_assignment(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["FOO=bar", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_env_with_value_taking_flag(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(
+            ["env", "-u", "FOO", "--chdir", "/tmp", "-S", "x", "pip", "install", "-e", "."]
+        )
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_env_split_string_consumes_value(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(
+            ["env", "--split-string", "FOOBAR", "pip", "install", "-e", "."]
+        )
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_env_attached_value_flag(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(
+            ["env", "--chdir=/tmp", "--unset=FOO", "pip", "install", "-e", "."]
+        )
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_env_double_dash_terminator(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["env", "--", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_sudo_wrapper(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["sudo", "-u", "root", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_nice_wrapper(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["nice", "-n", "5", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_timeout_wrapper_mandatory_duration(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["timeout", "30", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_stdbuf_wrapper_short_flag(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["stdbuf", "-o0", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_command_wrapper(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["command", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_nohup_wrapper(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["nohup", "pip", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["install", "-e", "."]
+
+    def test_double_dash_terminator(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["pip", "--", "install", "-e", "."])
+        assert verb == "pip"
+        assert args == ["--", "install", "-e", "."]
+
+    def test_empty_segment_returns_empty(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args([])
+        assert verb == ""
+        assert args == []
+
+    def test_wrapper_only_returns_empty(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["env"])
+        assert verb == ""
+        assert args == []
+
+    def test_timeout_missing_duration_returns_empty(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["timeout"])
+        assert verb == ""
+        assert args == []
+
+    def test_bare_env_wrapper(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        verb, args = command_verb_and_args(["env"])
+        assert verb == ""
+        assert args == []
+
+    def test_command_verb_delegates_to_command_verb_and_args(self):
+        from autoskillit.hooks._command_classification import command_verb_and_args
+
+        seg = ["env", "FOO=bar", "pip", "install", "-e", "."]
+        verb_from_helper, _ = command_verb_and_args(seg)
+        assert verb_from_helper == command_verb(seg)
+
+
+class TestExtractShellCommandPayloads:
+    def test_bash_c_payload(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads('bash -c "pip install -e ."') == ["pip install -e ."]
+
+    def test_sh_c_payload(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads('sh -c "pip install -e ."') == ["pip install -e ."]
+
+    def test_zsh_c_payload(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads('zsh -c "pip install -e ."') == ["pip install -e ."]
+
+    def test_dash_c_payload(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads('dash -c "pip install -e ."') == ["pip install -e ."]
+
+    def test_eval_payload(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads('eval "pip install -e ."') == ["pip install -e ."]
+
+    def test_dollar_paren_payload(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        payloads = extract_shell_command_payloads("echo $(pip install -e .)")
+        assert payloads == ["pip install -e ."]
+
+    def test_backtick_payload(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        payloads = extract_shell_command_payloads("echo `pip install -e .`")
+        assert payloads == ["pip install -e ."]
+
+    def test_double_quoted_substitution_payload(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        payloads = extract_shell_command_payloads('echo "$(pip install -e .)"')
+        assert payloads == ["pip install -e ."]
+
+    def test_single_quoted_substitution_inert(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads("echo '$(pip install -e .)'") == []
+
+    def test_escaped_substitution_inert(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads('echo "\\$(pip install -e .)"') == []
+
+    def test_nested_substitution(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        payloads = extract_shell_command_payloads('bash -c "echo $(pip install -e .)"')
+        assert "pip install -e ." in payloads
+
+    def test_no_payloads_returns_empty_list(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads("echo hi") == []
+
+    def test_absolute_bash_path_normalized(self):
+        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+
+        assert extract_shell_command_payloads('/bin/bash -c "pip install -e ."') == [
+            "pip install -e ."
+        ]
+
+
+class TestTokenizeShellPayloadSegments:
+    def test_bash_c_direct_payload(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('bash -c "gh pr create --fill"')
+        assert result == [["gh", "pr", "create", "--fill"]]
+
+    def test_absolute_bash_path(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('/bin/bash -c "gh pr create --fill"')
+        assert result == [["gh", "pr", "create", "--fill"]]
+
+    def test_env_prefix_wrapper(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('env FOO=1 bash -c "gh pr create --fill"')
+        assert result == [["gh", "pr", "create", "--fill"]]
+
+    def test_sudo_wrapper(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('sudo /bin/bash -c "gh pr create --fill"')
+        assert result == [["gh", "pr", "create", "--fill"]]
+
+    def test_nested_bash_c_payload(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments("""bash -c 'bash -c "gh pr create --fill"'""")
+        assert ["gh", "pr", "create", "--fill"] in result
+
+    def test_operator_separated_commands_inside_payload(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('bash -c "echo ready && gh pr create --fill"')
+        assert ["echo", "ready"] in result
+        assert ["gh", "pr", "create", "--fill"] in result
+
+    def test_dedupes_repeated_payload_strings(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments(
+            """bash -c 'gh pr create' && bash -c "gh pr create --fill\""""
+        )
+        flat = [tuple(s) for s in result]
+        assert flat.count(("gh", "pr", "create")) == 1
+
+    def test_malformed_inner_payload_returns_none(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments("bash -c \"echo 'unclosed")
+        assert result is None
+
+    def test_quoted_close_paren_does_not_truncate_substitution(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('echo $(echo "a) b" && gh pr create --fill)')
+        assert result is not None
+        assert ["gh", "pr", "create", "--fill"] in result
+
+    def test_no_evaluated_shell_payload_returns_empty_list(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        assert tokenize_shell_payload_segments("gh pr create --fill") == []
+
+
+class TestExtractInterpreterCommandPayloads:
+    def test_shell_string_pip_install(self):
+        from autoskillit.hooks._command_classification import (
+            extract_interpreter_command_payloads,
+        )
+
+        payloads, has_unresolved = extract_interpreter_command_payloads(
+            "python -c \"import subprocess; subprocess.run('pip install -e .', shell=True)\""
+        )
+        assert has_unresolved is False
+        assert payloads == ["pip install -e ."]
+
+    def test_argv_list_pip(self):
+        from autoskillit.hooks._command_classification import (
+            extract_interpreter_command_payloads,
+        )
+
+        payloads, has_unresolved = extract_interpreter_command_payloads(
+            "python3 -c \"import subprocess; subprocess.run(['pip','install','-e','.'])\""
+        )
+        assert has_unresolved is False
+        assert payloads == [["pip", "install", "-e", "."]]
+
+    def test_argv_tuple_pip(self):
+        from autoskillit.hooks._command_classification import (
+            extract_interpreter_command_payloads,
+        )
+
+        payloads, has_unresolved = extract_interpreter_command_payloads(
+            "python3 -c \"import subprocess; subprocess.run(('pip','install','--editable','.'))\""
+        )
+        assert has_unresolved is False
+        assert payloads == [["pip", "install", "--editable", "."]]
+
+    def test_argv_list_rg_reader(self):
+        from autoskillit.hooks._command_classification import (
+            extract_interpreter_command_payloads,
+        )
+
+        payloads, has_unresolved = extract_interpreter_command_payloads(
+            "python3 -c \"import subprocess; subprocess.run(['rg', 'pip install -e', 'docs/'])\""
+        )
+        assert has_unresolved is False
+        assert payloads == [["rg", "pip install -e", "docs/"]]
+
+    def test_unresolved_payload_returns_flag(self):
+        from autoskillit.hooks._command_classification import (
+            extract_interpreter_command_payloads,
+        )
+
+        cmd = "python3 -c \"import subprocess; subprocess.run(['pip', cmd, '-e', '.'])\""
+        _payloads, has_unresolved = extract_interpreter_command_payloads(cmd)
+        assert has_unresolved is True
+
+    def test_no_subprocess_returns_empty(self):
+        from autoskillit.hooks._command_classification import (
+            extract_interpreter_command_payloads,
+        )
+
+        payloads, has_unresolved = extract_interpreter_command_payloads(
+            "python3 -c \"print('hello')\""
+        )
+        assert payloads == []
+        assert has_unresolved is False
+
+    def test_non_python_returns_empty(self):
+        from autoskillit.hooks._command_classification import (
+            extract_interpreter_command_payloads,
+        )
+
+        payloads, has_unresolved = extract_interpreter_command_payloads("echo pip install -e .")
+        assert payloads == []
+        assert has_unresolved is False
+
 
 class TestCommandVerb:
     def test_simple_verb(self):

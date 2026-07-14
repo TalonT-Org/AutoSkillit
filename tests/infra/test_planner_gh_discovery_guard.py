@@ -221,3 +221,58 @@ class TestHeadlessGate:
             headless=True,
         )
         assert _is_denied(out)
+
+
+# ---------------------------------------------------------------------------
+# Nested-shell structured-tokenization regressions
+# ---------------------------------------------------------------------------
+
+
+class TestNestedShellAllow:
+    """Nested-shell fallback must not falsely deny prose / grep / view / api-specific."""
+
+    def test_allows_bash_c_prose(self):
+        out = _run_guard('bash -c "echo listing issue tracker items"')
+        assert out.strip() == "", "Words inside bash -c prose must not be denied"
+
+    def test_allows_bash_c_grep_pattern(self):
+        out = _run_guard("sh -c \"grep 'gh issue list' docs/\"")
+        assert out.strip() == "", "Grep pattern inside sh -c must not be denied"
+
+    def test_allows_bash_c_targeted_view(self):
+        out = _run_guard('bash -c "gh issue view 1"')
+        assert out.strip() == "", "Targeted view inside bash -c must not be denied"
+
+    def test_allows_bash_c_api_specific(self):
+        out = _run_guard('bash -c "gh api /repos/o/r/issues/1"')
+        assert out.strip() == "", "Specific API inside bash -c must not be denied"
+
+    def test_allows_malformed_inner_payload(self):
+        """Malformed inner shell text must remain fail-open (no deny)."""
+        out = _run_guard("bash -c \"echo 'unclosed")
+        assert out.strip() == "", "Malformed inner payload must fail open"
+
+
+class TestNestedShellDeny:
+    """Real nested-shell discovery commands must still be denied."""
+
+    def test_denies_bash_c_gh_issue_list(self):
+        out = _run_guard('bash -c "gh issue list --state open"')
+        assert _is_denied(out)
+
+    def test_denies_absolute_bash_with_sudo(self):
+        out = _run_guard('/bin/bash -c "sudo -u root gh pr list"')
+        assert _is_denied(out)
+
+    def test_denies_nested_bash_c(self):
+        out = _run_guard("""bash -c 'bash -c "gh search issues bug"'""")
+        assert _is_denied(out)
+
+    def test_denies_targeted_then_discovery(self):
+        """A targeted read in one segment must not suppress a later discovery segment."""
+        out = _run_guard('bash -c "gh issue view 1 && gh issue list"')
+        assert _is_denied(out)
+
+    def test_denies_bash_c_api_listing(self):
+        out = _run_guard('bash -c "gh api /repos/o/r/issues"')
+        assert _is_denied(out)

@@ -193,7 +193,7 @@ _QUOTED_ALLOWED: list[tuple[str, str]] = [
     ("rg 'pip install -e' docs/", "rg-quoted-single"),
     ('rg "pip install -e" docs/', "rg-quoted-double"),
     ('grep -r "pip install --editable" .', "grep-double-quoted"),
-    ('grep -r "pip install --editable" .', "grep-single-quoted-search"),
+    ("grep -r 'pip install --editable' .", "grep-single-quoted-search"),
     ("git log --grep='pip install -e'", "git-log-single-quoted"),
     ('git log --grep="pip install -e"', "git-log-double-quoted"),
     ('echo "Run: pip install -e ."', "echo-double-quoted"),

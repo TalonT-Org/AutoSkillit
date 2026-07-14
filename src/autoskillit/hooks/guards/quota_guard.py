@@ -65,6 +65,20 @@ def main(*, cache_path_override: str | None = None) -> None:
     log_dir = resolve_quota_log_dir(caller="quota_guard")
     ts = datetime.now(UTC).isoformat()
 
+    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
+    if backend == "codex":
+        write_quota_log_event(
+            {
+                "ts": ts,
+                "event": "backend_bypass",
+                "backend": backend,
+                "cache_path": cache_path_str,
+            },
+            log_dir,
+            caller="quota_guard",
+        )
+        sys.exit(0)
+
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()
     if profile and profile.casefold() != "anthropic":
         write_quota_log_event(

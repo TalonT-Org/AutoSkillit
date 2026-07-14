@@ -18,6 +18,7 @@ from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
     NON_VARIADIC_CLAUDE_FLAGS,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
+    PROVIDER_PROFILE_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
@@ -598,7 +599,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                 if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
                     extras[k] = v
         if profile_name:
-            extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name
+            extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}

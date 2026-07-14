@@ -511,3 +511,105 @@ def test_post_anthropic_profile_does_not_bypass(tmp_path, monkeypatch):
     out, _ = _run_hook(event=event, cache_path=cache)
     data = json.loads(out)
     assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+
+def _setup_backend_env(monkeypatch, agent_backend):
+    """Set or remove AUTOSKILLIT_AGENT_BACKEND for matrix rows.
+
+    The root ``_clear_private_env`` fixture already deletes the variable
+    before every test; this helper re-deletes for row-level isolation
+    before optionally setting it.
+    """
+    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+    if agent_backend is not None:
+        monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", agent_backend)
+
+
+def _read_quota_events(log_dir):
+    return [json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()]
+
+
+@pytest.mark.parametrize(
+    ("agent_backend", "profile", "expected_event"),
+    [
+        ("codex", "anthropic", "post_backend_bypass"),
+        ("claude-code", "anthropic", "post_check_warning"),
+        ("claude-code", "minimax", "post_provider_bypass"),
+        ("codex", "", "post_backend_bypass"),
+        ("claude-code", "", "post_check_warning"),
+        (None, "anthropic", "post_check_warning"),
+        (None, "minimax", "post_provider_bypass"),
+        ("unexpected", "anthropic", "post_check_warning"),
+    ],
+    ids=[
+        "codex+anthropic_blocked_backend_bypasses",
+        "claude-code+anthropic_warns",
+        "claude-code+minimax_provider_bypasses",
+        "codex+empty_profile_backend_bypasses",
+        "claude-code+empty_profile_warns",
+        "unset_backend+anthropic_warns",
+        "unset_backend+minimax_provider_bypasses",
+        "unexpected_backend+anthropic_warns",
+    ],
+)
+def test_post_backend_profile_matrix(
+    tmp_path, monkeypatch, agent_backend, profile, expected_event
+):
+    """Backend × profile matrix for post-hook quota enforcement.
+
+    Codex steps with an Anthropic provider profile (the bug case) MUST
+    bypass the post-hook warning — Codex cannot have consumed Anthropic
+    quota. Unset or unrecognized backend values do not silently inherit
+    Codex's exemption.
+    """
+    _setup_backend_env(monkeypatch, agent_backend)
+    if profile:
+        monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", profile)
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    event = _build_event()
+    out, _ = _run_hook(event=event, cache_path=cache)
+
+    if expected_event == "post_check_warning":
+        data = json.loads(out)
+        assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
+    else:
+        assert out.strip() == "", f"Bypass row must emit empty stdout (got {out!r})"
+
+    events = _read_quota_events(log_dir)
+    assert len(events) == 1, f"Exactly one event expected, got {events!r}"
+    assert events[0]["event"] == expected_event
+    assert events[0].get("tool_name") == _build_event()["tool_name"]
+
+
+def test_post_backend_bypass_payload_includes_backend(tmp_path, monkeypatch):
+    """post_backend_bypass event payload must include the backend field."""
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "anthropic")
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    _run_hook(event=_build_event(), cache_path=cache)
+    events = _read_quota_events(log_dir)
+    assert events[0]["backend"] == "codex"
+    assert events[0]["tool_name"] == _build_event()["tool_name"]
+
+
+def test_post_backend_bypass_with_empty_profile(tmp_path, monkeypatch):
+    """Codex with empty provider profile: backend bypass fires (backend check wins)."""
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+    monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(event=_build_event(), cache_path=cache)
+    assert out.strip() == ""
+    events = _read_quota_events(log_dir)
+    assert events[0]["event"] == "post_backend_bypass"

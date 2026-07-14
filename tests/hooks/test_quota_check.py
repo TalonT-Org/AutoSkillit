@@ -689,3 +689,76 @@ def test_anthropic_profile_does_not_bypass(tmp_path, monkeypatch):
     out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def _setup_backend_env(monkeypatch, agent_backend: str | None) -> None:
+    """Set or remove AUTOSKILLIT_AGENT_BACKEND for matrix rows.
+
+    The root ``_clear_private_env`` fixture already deletes
+    ``AUTOSKILLIT_AGENT_BACKEND`` before every test. When ``agent_backend``
+    is ``None`` we must explicitly delete it again to be safe (the fixture
+    only deletes, never sets), and any future ``setenv`` must replace the
+    cleared baseline rather than stack on top of it.
+    """
+    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+    if agent_backend is not None:
+        monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", agent_backend)
+
+
+def _read_quota_events(log_dir: Path) -> list[dict]:
+    return [json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()]
+
+
+@pytest.mark.parametrize(
+    ("agent_backend", "profile", "expected_event"),
+    [
+        ("codex", "anthropic", "backend_bypass"),
+        ("claude-code", "anthropic", "blocked"),
+        ("claude-code", "minimax", "provider_bypass"),
+        ("codex", "", "backend_bypass"),
+        ("claude-code", "", "blocked"),
+        (None, "anthropic", "blocked"),
+        (None, "minimax", "provider_bypass"),
+        ("unexpected", "anthropic", "blocked"),
+    ],
+    ids=[
+        "codex+anthropic_blocked_bypasses",
+        "claude-code+anthropic_blocks",
+        "claude-code+minimax_provider_bypasses",
+        "codex+empty_profile_bypasses",
+        "claude-code+empty_profile_blocks",
+        "unset_backend+anthropic_blocks",
+        "unset_backend+minimax_provider_bypasses",
+        "unexpected_backend+anthropic_blocks",
+    ],
+)
+def test_backend_profile_matrix(tmp_path, monkeypatch, agent_backend, profile, expected_event):
+    """Backend × profile matrix: backend identity gates quota, profile is secondary.
+
+    Rows assert the dominant signal (``AUTOSKILLIT_AGENT_BACKEND``) wins over
+    the proxy signal (``AUTOSKILLIT_PROVIDER_PROFILE``): Codex + Anthropic
+    profile must NOT enforce Anthropic quota because Codex cannot consume it.
+    Profile-based bypass only fires for Claude-backend steps with non-Anthropic
+    profiles. Unset or unknown backends fall through to the profile decision.
+    """
+    _setup_backend_env(monkeypatch, agent_backend)
+    if profile:
+        monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", profile)
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+
+    if expected_event == "blocked":
+        data = json.loads(out)
+        assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    else:
+        assert out.strip() == "", f"Bypass row must emit empty stdout (got {out!r})"
+
+    events = _read_quota_events(log_dir)
+    assert len(events) == 1, f"Exactly one event expected, got {events!r}"
+    assert events[0]["event"] == expected_event

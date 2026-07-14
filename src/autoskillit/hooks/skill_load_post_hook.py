@@ -50,6 +50,10 @@ def main() -> None:
     if data.get("agent_id"):
         sys.exit(0)
 
+    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
+    if backend == "codex":
+        sys.exit(0)
+
     if not os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip():
         sys.exit(0)
 

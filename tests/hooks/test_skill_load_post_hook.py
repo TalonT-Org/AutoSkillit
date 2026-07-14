@@ -22,15 +22,22 @@ def _run_hook(
     stdin_data: dict | str,
     tmp_dir: Path,
     provider_profile: str | None = None,
+    agent_backend: str | None = "claude-code",
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main(), return (stdout, exit_code)."""
     from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
 
     stdin_content = stdin_data if isinstance(stdin_data, str) else json.dumps(stdin_data)
 
-    env_base = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_PROVIDER_PROFILE"}
+    env_base = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("AUTOSKILLIT_PROVIDER_PROFILE", "AUTOSKILLIT_AGENT_BACKEND")
+    }
     if provider_profile is not None:
         env_base["AUTOSKILLIT_PROVIDER_PROFILE"] = provider_profile
+    if agent_backend is not None:
+        env_base["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
 
     buf = io.StringIO()
     exit_code = 0
@@ -137,6 +144,7 @@ def _run_hook_with_marker(
     stdin_data: dict | str,
     tmp_dir: Path,
     provider_profile: str | None = None,
+    agent_backend: str | None = "claude-code",
     completion_marker: str | None = None,
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main() with AUTOSKILLIT_COMPLETION_MARKER support."""
@@ -147,10 +155,17 @@ def _run_hook_with_marker(
     env_base = {
         k: v
         for k, v in os.environ.items()
-        if k not in ("AUTOSKILLIT_PROVIDER_PROFILE", "AUTOSKILLIT_COMPLETION_MARKER")
+        if k
+        not in (
+            "AUTOSKILLIT_PROVIDER_PROFILE",
+            "AUTOSKILLIT_AGENT_BACKEND",
+            "AUTOSKILLIT_COMPLETION_MARKER",
+        )
     }
     if provider_profile is not None:
         env_base["AUTOSKILLIT_PROVIDER_PROFILE"] = provider_profile
+    if agent_backend is not None:
+        env_base["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
     if completion_marker is not None:
         env_base["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
 
@@ -214,3 +229,72 @@ def test_writes_flag_to_project_root_via_ancestor_walk(tmp_path: Path) -> None:
     flag = project / ".autoskillit" / "temp" / "skill_guard_abc123.flag"
     assert flag.exists(), "Flag must be written to project root, not CWD"
     assert "implement-worktree-no-merge" in flag.read_text()
+
+
+@pytest.mark.parametrize(
+    ("agent_backend", "expected_flag"),
+    [
+        ("codex", False),
+        ("claude-code", True),
+        (None, True),
+        ("unexpected", True),
+    ],
+    ids=[
+        "codex_bypasses_flag_write",
+        "claude-code_writes_flag",
+        "unset_backend_writes_flag",
+        "unrecognized_backend_writes_flag",
+    ],
+)
+def test_skill_load_post_hook_backend_authority(
+    tmp_path: Path, agent_backend: str | None, expected_flag: bool
+) -> None:
+    """Backend identity is the primary gate; provider profile is secondary.
+
+    Codex backend must NEVER trigger the skill-load flag even when the
+    provider profile would otherwise suggest a provider-aware session.
+    Unset and unrecognized backends do not silently inherit Codex's
+    exemption — they fall through to the existing profile check.
+    """
+    (tmp_path / ".autoskillit").mkdir(parents=True)
+    _run_hook(
+        stdin_data=_make_skill_event(),
+        tmp_dir=tmp_path,
+        provider_profile="anthropic",
+        agent_backend=agent_backend,
+    )
+    flag = tmp_path / _FLAG_RELPATH
+    if expected_flag:
+        assert flag.exists(), "Flag file must be written for non-Codex backends"
+    else:
+        assert not flag.exists(), "Flag file must NOT be written for Codex backend"
+
+
+def test_codex_bypass_with_nonempty_profile_writes_no_flag(tmp_path: Path) -> None:
+    """The specific bug case: Codex + non-empty Anthropic profile → no flag."""
+    (tmp_path / ".autoskillit").mkdir(parents=True)
+    _run_hook(
+        stdin_data=_make_skill_event(),
+        tmp_dir=tmp_path,
+        provider_profile="anthropic",
+        agent_backend="codex",
+    )
+    flag = tmp_path / _FLAG_RELPATH
+    assert not flag.exists(), "Backend check must win over provider profile"
+
+
+def test_unrecognized_backend_does_not_inherit_codex_exemption(tmp_path: Path) -> None:
+    """An unrecognized backend + non-empty profile must still write the flag.
+
+    Unknown/future backend values fall through to the profile check
+    rather than being silently exempted as if they were Codex.
+    """
+    (tmp_path / ".autoskillit").mkdir(parents=True)
+    _run_hook(
+        stdin_data=_make_skill_event(),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        agent_backend="future-backend",
+    )
+    flag = tmp_path / _FLAG_RELPATH
+    assert flag.exists(), "Unrecognized backend must not silently bypass the flag write"

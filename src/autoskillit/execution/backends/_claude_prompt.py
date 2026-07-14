@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 from autoskillit.core import (
+    PROVIDER_PROFILE_ENV_VAR,
     ClaudeFlags,
     OutputFormat,
     SessionCheckpoint,
@@ -57,7 +58,7 @@ _SKILL_SESSION_EXTRAS_DENYLIST: frozenset[str] = _PROVIDER_EXTRAS_BASE_DENYLIST 
 # Note: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY, SCENARIO_STEP_NAME, and
 # MAX_MCP_OUTPUT_TOKENS also overlap with IDE_ENV_DENYLIST in
 # core/_claude_env.py. AUTOSKILLIT_SESSION_TYPE, AUTOSKILLIT_CAMPAIGN_ID, and
-# AUTOSKILLIT_PROVIDER_PROFILE overlap with AUTOSKILLIT_PRIVATE_ENV_VARS
+# PROVIDER_PROFILE_ENV_VAR overlap with AUTOSKILLIT_PRIVATE_ENV_VARS
 # (scrubbed by build_agent_env). CLAUDE_CODE_SUBAGENT_MODEL also overlaps with
 # IDE_ENV_PREFIX_DENYLIST via the CLAUDE_CODE_SUBAGENT_ prefix in _claude_env.py,
 # providing structural immunity against future CLAUDE_CODE_SUBAGENT_* variables.
@@ -74,7 +75,7 @@ _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_COMPLETION_MARKER",
         "AUTOSKILLIT_KITCHEN_SESSION_ID",
         "AUTOSKILLIT_LAUNCH_ID",
-        "AUTOSKILLIT_PROVIDER_PROFILE",
+        PROVIDER_PROFILE_ENV_VAR,
         "AUTOSKILLIT_SESSION_TYPE",
         "AUTOSKILLIT_SKILL_NAME",
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",

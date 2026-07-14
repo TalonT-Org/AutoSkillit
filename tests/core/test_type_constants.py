@@ -319,10 +319,12 @@ def test_config_authority_keys_constant() -> None:
 
 
 def test_provider_profile_in_private_env_vars() -> None:
-    """AUTOSKILLIT_PROVIDER_PROFILE must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
-    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+    """PROVIDER_PROFILE_ENV_VAR is the canonical name for the provider-profile env var
+    and must be a member of AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS, PROVIDER_PROFILE_ENV_VAR
 
-    assert "AUTOSKILLIT_PROVIDER_PROFILE" in AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert PROVIDER_PROFILE_ENV_VAR == "AUTOSKILLIT_PROVIDER_PROFILE"
+    assert PROVIDER_PROFILE_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS
 
 
 def test_headless_tools_contains_expected_names():

@@ -20,7 +20,9 @@ MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 | `tools_clone.py` | `clone_repo`, `remove_clone`, `push_to_remote`, `register_clone_status`, `batch_cleanup_clones`, `bootstrap_clone` |
 | `_claim_helpers.py` | `ClaimDecision`, `_try_claim_with_liveness`, `_get_campaign_state_paths` — shared claiming logic for `claim_issue` and `claim_and_resolve_issue` |
 | `_execution_helpers.py` | `_import_and_call`, `_coerce_scalar`, `maybe_promote_work_dir`, `validate_path_arg_anchoring`, `resolve_relative_path_args` — execution helpers for `run_python` (no MCP tools) |
+| `_pipeline_deps.py` | `_derive_phase_a_deps` — curated Phase A pipeline dependency derivation from a recipe's routing graph (`open_kitchen` auto-init) |
 | `_preflight.py` | `_check_dispatch_feasibility`, `_get_fix_required_hook_matchers`, `filter_steps_by_post_prune` — shared preflight for `open_kitchen` and `dispatch_food_truck` |
+| `_ordering_telemetry.py` | `detect_ordering_violations`, `read_session_index_records` — REVIEW_BEFORE_PLAN ordering-violation detection over `sessions.jsonl` records |
 | `_serve_helpers.py` | Shared serve-pipeline helpers: `_build_serve_override_stack()`, `_resolve_serve_defer_unresolved()`, `serve_recipe()` — the only legal call site for `load_and_validate` in `server/tools/` |
 | `tools_execution.py` | `run_cmd`, `run_python`, `run_skill` |
 | `tools_fleet_dispatch.py` | `dispatch_food_truck`, `record_gate_dispatch` |

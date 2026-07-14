@@ -104,3 +104,37 @@ class TestPipelineStepGuard:
         code, stdout = _run(event, cwd=tmp_path)
         assert code == 0
         assert stdout.strip() == ""
+
+    def test_order_id_discovered_from_single_tracker_file(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _write_tracker(
+            tmp_path,
+            "kitchen-1",
+            {"a": {"status": "pending"}, "b": {"status": "pending"}},
+            {"b": ["a"]},
+        )
+        event = json.dumps({"tool_input": {"step_name": "b", "order_id": ""}})
+        code, stdout = _run(event, cwd=tmp_path)
+        assert code == 0
+        output = json.loads(stdout)
+        assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "a" in output["hookSpecificOutput"]["additionalContext"]
+
+    def test_order_id_discovery_skipped_when_multiple_trackers(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _write_tracker(
+            tmp_path,
+            "kitchen-1",
+            {"a": {"status": "pending"}, "b": {"status": "pending"}},
+            {"b": ["a"]},
+        )
+        _write_tracker(
+            tmp_path,
+            "kitchen-2",
+            {"a": {"status": "pending"}, "b": {"status": "pending"}},
+            {"b": ["a"]},
+        )
+        event = json.dumps({"tool_input": {"step_name": "b", "order_id": ""}})
+        code, stdout = _run(event, cwd=tmp_path)
+        assert code == 0
+        assert stdout.strip() == ""

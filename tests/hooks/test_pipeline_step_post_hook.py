@@ -146,3 +146,24 @@ class TestPipelineStepPostHook:
         assert exit_code == 0
         tracker = _read_tracker(tmp_path, "AB")
         assert tracker["steps"]["review"]["status"] == "pending"
+
+    def test_order_id_discovered_from_single_tracker_file(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _write_tracker(tmp_path, "kitchen-1", {"review": {"status": "pending"}})
+        event = _build_event("review", "", success=True)
+        _run_hook(event, tmp_dir=tmp_path)
+
+        tracker = _read_tracker(tmp_path, "kitchen-1")
+        assert tracker["steps"]["review"]["status"] == "complete"
+
+    def test_order_id_discovery_skipped_when_multiple_trackers(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _write_tracker(tmp_path, "kitchen-1", {"review": {"status": "pending"}})
+        _write_tracker(tmp_path, "kitchen-2", {"review": {"status": "pending"}})
+        event = _build_event("review", "", success=True)
+        stdout, exit_code = _run_hook(event, tmp_dir=tmp_path)
+
+        assert exit_code == 0
+        assert stdout.strip() == ""
+        assert _read_tracker(tmp_path, "kitchen-1")["steps"]["review"]["status"] == "pending"
+        assert _read_tracker(tmp_path, "kitchen-2")["steps"]["review"]["status"] == "pending"

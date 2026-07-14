@@ -61,14 +61,8 @@ _COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo"
 _WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
 _WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
 
-_ENV_NO_VALUE_FLAGS: frozenset[str] = frozenset(
-    {"-i", "-0", "-v", "-V", "--help", "--version", "--ignore-environment", "--null", "--debug"}
-)
 _ENV_VALUE_FLAGS: frozenset[str] = frozenset(
     {"-u", "--unset", "-C", "--chdir", "-S", "--split-string", "--argv0"}
-)
-_ENV_VALUE_FLAGS_ATTACHED: frozenset[str] = frozenset(
-    {"-u", "--unset", "-C", "--chdir", "--argv0"}
 )
 
 
@@ -249,14 +243,10 @@ def _command_start_index(segment: list[str]) -> int | None:
 
 
 def _command_verb(segment: list[str]) -> str:
-    if not segment:
+    start = _command_start_index(segment)
+    if start is None:
         return ""
-    start = 0
-    if segment[0] == "env" and len(segment) > 1:
-        start = 1
-        while start < len(segment) and (segment[start].startswith("-") or "=" in segment[start]):
-            start += 1
-    return segment[start] if start < len(segment) else ""
+    return segment[start]
 
 
 def _is_gh_command(segment: list[str]) -> bool:
@@ -264,6 +254,11 @@ def _is_gh_command(segment: list[str]) -> bool:
 
 
 def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
+    start = _command_start_index(segment)
+    if start is None:
+        return None
+    segment = segment[start:]
+
     if _is_gh_command(segment):
         return None
 

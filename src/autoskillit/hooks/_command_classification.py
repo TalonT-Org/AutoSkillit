@@ -997,7 +997,7 @@ def _literal_to_string(node: ast.AST) -> str | None:
     return None
 
 
-def extract_interpreter_command_payloads(command: str) -> tuple[list, bool]:
+def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[str]], bool]:
     """Return (literal command payloads, has_unresolved_subprocess).
 
     Each payload is either a shell-command string (for `shell=True` calls or
@@ -1005,7 +1005,7 @@ def extract_interpreter_command_payloads(command: str) -> tuple[list, bool]:
     calls). has_unresolved_subprocess is True when a matching process-launch
     call was present but its arguments could not be statically resolved.
     """
-    payloads: list = []
+    payloads: list[str | list[str]] = []
     has_unresolved = False
     if not _INTERPRETER_RE.search(command):
         return (payloads, has_unresolved)

@@ -89,6 +89,19 @@ class TestExtractBashWriteTargets:
         )
         assert result == ["/workspace/../outside/evil.txt"]
 
+    def test_sudo_flag_wrapped_git_checkout(self):
+        result = extract_bash_write_targets(
+            "sudo -u root git checkout -- /path/file.txt", cwd="/workspace"
+        )
+        assert result == ["/path/file.txt"]
+
+    def test_sudo_attached_flag_wrapped_rm(self):
+        result = extract_bash_write_targets("sudo --user=root rm /path/file.txt", cwd="/workspace")
+        assert result == ["/path/file.txt"]
+
+    def test_nice_flag_wrapped_tee(self):
+        assert extract_bash_write_targets("nice -n 5 tee /path/out.txt") == ["/path/out.txt"]
+
     def test_assignment_prefixed_git_checkout(self):
         result = extract_bash_write_targets(
             "FOO=bar git checkout -- ../outside/evil.txt", cwd="/workspace"

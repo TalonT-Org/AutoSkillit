@@ -65,6 +65,23 @@ _ENV_VALUE_FLAGS: frozenset[str] = frozenset(
     {"-u", "--unset", "-C", "--chdir", "-S", "--split-string", "--argv0"}
 )
 
+_WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
+    {
+        "-u",
+        "--user",
+        "-n",
+        "--adjustment",
+        "-k",
+        "--kill-after",
+        "-s",
+        "--signal",
+        "-g",
+        "--group",
+        "-p",
+        "--priority",
+    }
+)
+
 
 def _resolve_write_target(path: str, cwd: str = "") -> str | None:
     if not path:
@@ -206,6 +223,31 @@ def _is_posix_assignment(token: str) -> bool:
     return all(c.isalnum() or c == "_" for c in name)
 
 
+def _consume_wrapper_options(start: int, segment: list[str]) -> int:
+    """Skip past a wrapper's attached/detached value options.
+
+    Wrappers (sudo, nice, nohup, time, command) accept option flags before
+    the inner command. Many take values either attached (--user=root) or as
+    the next detached token (-u root). Returns the index of the first
+    non-option token.
+    """
+    i = start
+    while i < len(segment):
+        token = segment[i]
+        if token == "--":
+            return i + 1
+        if not token.startswith("-"):
+            return i
+        if "=" in token:
+            i += 1
+            continue
+        if token in _WRAPPER_VALUE_FLAGS_DETACHED and i + 1 < len(segment):
+            i += 2
+            continue
+        i += 1
+    return i
+
+
 def _command_start_index(segment: list[str]) -> int | None:
     if not segment:
         return None
@@ -226,7 +268,11 @@ def _command_start_index(segment: list[str]) -> int | None:
                 start += 1
             continue
         if token in _COMMAND_WRAPPERS:
-            start += 1
+            new_start = _consume_wrapper_options(start + 1, segment)
+            if new_start <= start + 1:
+                start += 1
+                continue
+            start = new_start
             continue
         if token in _WRAPPERS_WITH_DURATION and start + 1 < len(segment):
             start += 2

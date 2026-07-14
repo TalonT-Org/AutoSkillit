@@ -52,6 +52,7 @@ run_skill:
   max_suppression_seconds: 1800
   stream_idle_timeout_ms: 600000
   mcp_tool_timeout_sec: 14364.0
+  completion_child_deferral_ceiling_seconds: 120.0
 
 model:
   default: sonnet

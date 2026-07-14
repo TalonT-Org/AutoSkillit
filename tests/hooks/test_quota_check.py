@@ -689,3 +689,214 @@ def test_anthropic_profile_does_not_bypass(tmp_path, monkeypatch):
     out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
     data = json.loads(out)
     assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def _setup_backend_env(monkeypatch, agent_backend: str | None) -> None:
+    """Set or remove AUTOSKILLIT_AGENT_BACKEND for matrix rows.
+
+    The root ``_clear_private_env`` fixture already deletes
+    ``AUTOSKILLIT_AGENT_BACKEND`` before every test. When ``agent_backend``
+    is ``None`` we must explicitly delete it again to be safe (the fixture
+    only deletes, never sets), and any future ``setenv`` must replace the
+    cleared baseline rather than stack on top of it.
+    """
+    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+    if agent_backend is not None:
+        monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", agent_backend)
+
+
+def _read_quota_events(log_dir: Path) -> list[dict]:
+    return [json.loads(line) for line in (log_dir / "quota_events.jsonl").read_text().splitlines()]
+
+
+@pytest.mark.parametrize(
+    ("agent_backend", "profile", "expected_event"),
+    [
+        ("codex", "anthropic", "backend_bypass"),
+        ("claude-code", "anthropic", "blocked"),
+        ("claude-code", "minimax", "provider_bypass"),
+        ("codex", "", "backend_bypass"),
+        ("claude-code", "", "blocked"),
+        (None, "anthropic", "blocked"),
+        (None, "minimax", "provider_bypass"),
+        ("unexpected", "anthropic", "blocked"),
+    ],
+    ids=[
+        "codex+anthropic_blocked_bypasses",
+        "claude-code+anthropic_blocks",
+        "claude-code+minimax_provider_bypasses",
+        "codex+empty_profile_bypasses",
+        "claude-code+empty_profile_blocks",
+        "unset_backend+anthropic_blocks",
+        "unset_backend+minimax_provider_bypasses",
+        "unexpected_backend+anthropic_blocks",
+    ],
+)
+def test_backend_profile_matrix(tmp_path, monkeypatch, agent_backend, profile, expected_event):
+    """Backend × profile matrix: backend identity gates quota, profile is secondary.
+
+    Rows assert the dominant signal (``AUTOSKILLIT_AGENT_BACKEND``) wins over
+    the proxy signal (``AUTOSKILLIT_PROVIDER_PROFILE``): Codex + Anthropic
+    profile must NOT enforce Anthropic quota because Codex cannot consume it.
+    Profile-based bypass only fires for Claude-backend steps with non-Anthropic
+    profiles. Unset or unknown backends fall through to the profile decision.
+    """
+    _setup_backend_env(monkeypatch, agent_backend)
+    if profile:
+        monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", profile)
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+
+    log_dir = tmp_path / "logs"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(log_dir))
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(event={"tool_name": "run_skill"}, cache_path=cache)
+
+    if expected_event == "blocked":
+        data = json.loads(out)
+        assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    else:
+        assert out.strip() == "", f"Bypass row must emit empty stdout (got {out!r})"
+
+    events = _read_quota_events(log_dir)
+    assert len(events) == 1, f"Exactly one event expected, got {events!r}"
+    assert events[0]["event"] == expected_event
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped quota-disable marker integration (PART B)
+# ---------------------------------------------------------------------------
+
+
+def _write_disable_marker(state_dir: Path, session_id: str) -> None:
+    marker = state_dir / "kitchen_state" / f"{session_id}_quota_guard_disabled.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(
+        json.dumps(
+            {
+                "session_id": session_id,
+                "disabled_at": datetime.now(UTC).isoformat(),
+                "marker_version": 1,
+            }
+        )
+    )
+
+
+def test_fresh_marker_matching_session_approves_call(tmp_path, monkeypatch):
+    """A fresh quota-disable marker matching the event session_id bypasses quota enforcement."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    _write_disable_marker(tmp_path, "session-aaa")
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+
+    event = {"session_id": "session-aaa", "tool_name": "run_skill"}
+    out, _ = _run_hook(event=event, cache_path=cache)
+    assert out.strip() == ""
+
+
+def test_marker_for_different_session_still_blocks(tmp_path, monkeypatch):
+    """A quota-disable marker for session B must NOT bypass quota enforcement for session A."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    _write_disable_marker(tmp_path, "session-bbb")
+
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    event = {"session_id": "session-aaa", "tool_name": "run_skill"}
+    out, _ = _run_hook(event=event, cache_path=cache)
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_expired_marker_still_blocks(tmp_path, monkeypatch):
+    """An expired quota-disable marker must NOT bypass quota enforcement."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker = state_dir / "session-aaa_quota_guard_disabled.json"
+    old = datetime.fromtimestamp(datetime.now(UTC).timestamp() - 25 * 3600, tz=UTC).isoformat()
+    marker.write_text(
+        json.dumps({"session_id": "session-aaa", "disabled_at": old, "marker_version": 1})
+    )
+
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    event = {"session_id": "session-aaa", "tool_name": "run_skill"}
+    out, _ = _run_hook(event=event, cache_path=cache)
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_malformed_marker_still_blocks(tmp_path, monkeypatch):
+    """A malformed quota-disable marker must NOT bypass quota enforcement."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker = state_dir / "session-aaa_quota_guard_disabled.json"
+    marker.write_text("not-json-{{{")
+
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    event = {"session_id": "session-aaa", "tool_name": "run_skill"}
+    out, _ = _run_hook(event=event, cache_path=cache)
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_legacy_overlay_quota_guard_disabled_does_not_bypass(tmp_path, monkeypatch):
+    """A legacy overlay ``quota_guard.disabled=true`` must NOT bypass quota enforcement.
+
+    The base hook config has ``disabled=false``; the explicit env override is absent.
+    The overlay's quota_guard.disabled is no longer a quota-settings source.
+    """
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    overlay = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS).parent / ".hook_config_overlay.json"
+    overlay.parent.mkdir(parents=True, exist_ok=True)
+    overlay.write_text(
+        json.dumps(
+            {
+                "quota_guard": {"disabled": True},
+                "sentinel": {"keep": True},
+            }
+        )
+    )
+
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    event = {"session_id": "session-aaa", "tool_name": "run_skill"}
+    out, _ = _run_hook(event=event, cache_path=cache)
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    # Unrelated overlay data must be preserved byte-for-byte.
+    assert json.loads(overlay.read_text())["sentinel"] == {"keep": True}
+
+
+def test_base_config_disabled_true_still_approves(tmp_path, monkeypatch):
+    """Base-config ``disabled=true`` continues to approve (configured-disable path)."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    _write_hook_config(
+        tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS),
+        cache_max_age=300,
+        cache_path=str(cache),
+        extra={"disabled": True},
+    )
+    out, _ = _run_hook(event={"session_id": "session-aaa", "tool_name": "run_skill"})
+    assert out.strip() == ""
+
+
+def test_explicit_env_override_still_approves(tmp_path, monkeypatch):
+    """``AUTOSKILLIT_QUOTA_GUARD__DISABLED=1`` env override continues to approve."""
+    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", "1")
+    cache = tmp_path / "blocking_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(
+        event={"session_id": "session-aaa", "tool_name": "run_skill"}, cache_path=cache
+    )
+    assert out.strip() == ""

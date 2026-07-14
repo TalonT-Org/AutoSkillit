@@ -15,12 +15,17 @@ import json
 import os
 import sys
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_settings import (  # noqa: E402
+    resolve_quota_log_dir,
+    write_quota_log_event,
+)
 from _hook_utils import find_project_root  # type: ignore[import-not-found]  # noqa: E402
 
 
@@ -48,6 +53,20 @@ def main() -> None:
         sys.exit(0)
 
     if data.get("agent_id"):
+        sys.exit(0)
+
+    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
+    if backend == "codex":
+        log_dir = resolve_quota_log_dir(caller="skill_load_post_hook")
+        write_quota_log_event(
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "event": "skill_load_backend_bypass",
+                "backend": backend,
+            },
+            log_dir,
+            caller="skill_load_post_hook",
+        )
         sys.exit(0)
 
     if not os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip():

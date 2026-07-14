@@ -28,6 +28,7 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
+    PROVIDER_PROFILE_ENV_VAR,
     RESUME_SESSION_BASELINE_KEYS,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
@@ -773,7 +774,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
                     extras[k] = v
         if profile_name:
-            extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name
+            extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
         if add_dirs:
             extras["CODEX_HOME"] = add_dirs[0].path

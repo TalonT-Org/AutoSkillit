@@ -151,6 +151,7 @@ def cook(
     from autoskillit.core import (
         _AUTOSKILLIT_PLUGIN_KEY,
         LAUNCH_ID_ENV_VAR,
+        PROVIDER_PROFILE_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
         BareResume,
         DirectInstall,
@@ -219,7 +220,7 @@ def cook(
         LAUNCH_ID_ENV_VAR: session_id_local,
     }
     if profile is not None:
-        _cook_env_extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile
+        _cook_env_extras[PROVIDER_PROFILE_ENV_VAR] = profile
         _cook_env_extras.update(
             {k: v for k, v in config.providers.profiles[profile].items() if v is not None}
         )

@@ -1116,6 +1116,12 @@ async def disable_quota_guard() -> str:
     threshold. Invoke this tool when you decide the work is worth the quota
     spend and want to override the guard for the current session.
 
+    The caller-session disable is recorded by a PostToolUse hook that reads
+    the caller's ``session_id`` from the hook event. The MCP tool itself
+    only enforces the local-server lifecycle (orchestrator-exact guard,
+    open-kitchen gate) and returns success. The hook writes the marker
+    immediately after this response is rendered.
+
     Session-scoped only: the guard re-activates when the kitchen is closed
     and reopened. Does not modify persistent configuration.
 
@@ -1127,24 +1133,13 @@ async def disable_quota_guard() -> str:
         from autoskillit.server import _get_ctx  # circular-break
 
         ctx = _get_ctx()
-        hook_cfg_path = _hook_config_path(ctx.project_dir)
-        if not hook_cfg_path.exists():
+        if not ctx.gate.enabled:
             return json.dumps(
                 {
                     "success": False,
-                    "error": "Kitchen is not open — hook config file absent.",
+                    "error": "Kitchen is not open — gate is closed.",
                 }
             )
-        overlay_path = _hook_config_overlay_path(ctx.project_dir)
-        overlay_path.parent.mkdir(parents=True, exist_ok=True)
-        existing = {}
-        if overlay_path.exists():
-            try:
-                existing = json.loads(overlay_path.read_text())
-            except (json.JSONDecodeError, OSError):
-                pass
-        existing["quota_guard"] = {"disabled": True}
-        atomic_write(overlay_path, json.dumps(existing))
         return json.dumps(
             {
                 "success": True,

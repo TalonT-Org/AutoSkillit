@@ -857,7 +857,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             for hook scripts that need common path resolution logic.
             _command_classification.py adds shared command classification primitives
             (interpreter/wrapper detection) for all command-classifying guards.
-            Exempt at 11 files.
+            quota_guard_state_post_hook.py is a stdlib-only PostToolUse script that
+            maintains the per-session quota-disable marker. Exempt at 15 files.
           pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
             GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
             Exempt at 12 files.
@@ -876,7 +877,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 24,  # +closure_hashing +path_containment +closure_verifier
         "core/types": 32,  # +invariant_registry (INVARIANT_REGISTRY) +closure_report
         "cli": 21,
-        "hooks": 14,  # +recipe_confirmed_post_hook.py
+        "hooks": 15,  # +recipe_confirmed_post_hook.py, +quota_guard_state_post_hook.py
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501

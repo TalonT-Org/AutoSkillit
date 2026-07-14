@@ -187,18 +187,37 @@ def test_open_kitchen_handler_is_async():
 
 @pytest.mark.anyio
 async def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
-    """disable_quota_guard() sets quota_guard.disabled=True in the overlay file."""
+    """disable_quota_guard() succeeds with a gate-open local context and is no-op for storage.
+
+    Replaces the prior overlay-mutation assertion. The session-scoped disable
+    is now written by a PostToolUse hook reading the caller's session_id from
+    the hook event, NOT by the MCP tool itself. The tool must NOT mutate the
+    overlay or the base config.
+    """
     monkeypatch.chdir(tmp_path)
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(
-        json.dumps({"quota_guard": {"cache_path": "/some/path.json", "cache_max_age": 300}})
-    )
+    base_content = {
+        "quota_guard": {"cache_path": "/some/path.json", "cache_max_age": 300},
+        "kitchen_id": "test-kitchen-id",
+    }
+    hook_cfg_path.write_text(json.dumps(base_content))
+    base_bytes_before = hook_cfg_path.read_bytes()
+
+    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    pre_overlay_content = {
+        "locked_ingredients": {"pipeline-x": {"step-a": "value-a"}},
+        "locked_steps": {"pipeline-x": {"step-a": True}},
+    }
+    overlay_path.write_text(json.dumps(pre_overlay_content))
+    overlay_bytes_before = overlay_path.read_bytes()
 
     from autoskillit.server import _state
 
     mock_state_ctx = _make_mock_ctx()
     mock_state_ctx.project_dir = tmp_path
+    mock_state_ctx.gate.enabled = True
     monkeypatch.setattr(_state, "_ctx", mock_state_ctx)
 
     from autoskillit.server.tools.tools_kitchen import disable_quota_guard
@@ -207,11 +226,46 @@ async def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
     parsed = json.loads(result_str)
     assert parsed["success"] is True
 
+    # Base config and overlay must remain byte-for-byte unchanged.
+    assert hook_cfg_path.read_bytes() == base_bytes_before
+    assert overlay_path.read_bytes() == overlay_bytes_before
+
+    # No overlay should be created if it did not exist before.
+    # (Asserted by the next test — here it pre-exists and must be untouched.)
+
+
+@pytest.mark.anyio
+async def test_disable_quota_guard_does_not_create_overlay(tmp_path, monkeypatch):
+    """disable_quota_guard() does not create or touch the overlay when no overlay exists."""
+    monkeypatch.chdir(tmp_path)
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(
+        json.dumps(
+            {
+                "quota_guard": {"cache_path": "/some/path.json", "cache_max_age": 300},
+                "kitchen_id": "test-kitchen-id",
+            }
+        )
+    )
     overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
-    overlay_payload = json.loads(overlay_path.read_text())
-    assert overlay_payload["quota_guard"]["disabled"] is True
-    base_payload = json.loads(hook_cfg_path.read_text())
-    assert "disabled" not in base_payload.get("quota_guard", {})
+    assert not overlay_path.exists()
+
+    from autoskillit.server import _state
+
+    mock_state_ctx = _make_mock_ctx()
+    mock_state_ctx.project_dir = tmp_path
+    mock_state_ctx.gate.enabled = True
+    monkeypatch.setattr(_state, "_ctx", mock_state_ctx)
+
+    from autoskillit.server.tools.tools_kitchen import disable_quota_guard
+
+    result_str = await disable_quota_guard()
+    parsed = json.loads(result_str)
+    assert parsed["success"] is True
+    assert not overlay_path.exists(), (
+        "disable_quota_guard must NOT create an overlay — the marker transport is the post hook."
+    )
 
 
 @pytest.mark.anyio
@@ -229,8 +283,15 @@ async def test_disable_quota_guard_denies_headless(tmp_path, monkeypatch):
 
 @pytest.mark.anyio
 async def test_disable_quota_guard_returns_error_when_kitchen_not_open(tmp_path, monkeypatch):
-    """disable_quota_guard() returns an error when the kitchen is not open."""
+    """disable_quota_guard() returns an error when the local gate is closed."""
     monkeypatch.chdir(tmp_path)
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    # Foreign / stale base hook-config file exists, but the gate is closed.
+    hook_cfg_path.write_text(
+        json.dumps({"quota_guard": {"cache_path": "/some/path.json", "cache_max_age": 300}})
+    )
+
     from autoskillit.server import _state
 
     monkeypatch.setattr(_state, "_ctx", None)
@@ -371,10 +432,16 @@ async def test_hook_config_git_ops_policy_skipped_when_recipe_raises(tmp_path, m
 
 @pytest.mark.anyio
 async def test_disable_quota_guard_survives_write_hook_config(tmp_path, monkeypatch):
-    """disable_quota_guard writes to overlay; subsequent _write_hook_config cannot erase it."""
+    """disable_quota_guard must NOT mutate the overlay or base hook config.
+
+    The session-scoped disable marker is written by the PostToolUse hook,
+    not by the MCP tool. After disable_quota_guard returns success, both
+    files must remain byte-for-byte identical.
+    """
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.gate.enabled = True
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/some/path.json"
     mock_ctx.config.quota_guard.buffer_seconds = 60
@@ -382,6 +449,9 @@ async def test_disable_quota_guard_survives_write_hook_config(tmp_path, monkeypa
     from autoskillit.server import _state
 
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
+
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -395,16 +465,25 @@ async def test_disable_quota_guard_survives_write_hook_config(tmp_path, monkeypa
                 )
 
                 await _open_kitchen_handler()
+                base_bytes_after_open = hook_cfg_path.read_bytes()
+                overlay_bytes_after_open = (
+                    overlay_path.read_bytes() if overlay_path.exists() else None
+                )
+
                 result_str = await disable_quota_guard()
                 parsed = json.loads(result_str)
                 assert parsed["success"] is True
 
+                assert hook_cfg_path.read_bytes() == base_bytes_after_open
+                overlay_after_disable = (
+                    overlay_path.read_bytes() if overlay_path.exists() else None
+                )
+                assert overlay_after_disable == overlay_bytes_after_open
+
                 _write_hook_config()
-
-    from autoskillit.hooks._hook_settings import read_merged_hook_config
-
-    merged = read_merged_hook_config(tmp_path)
-    assert merged["quota_guard"]["disabled"] is True
+                assert hook_cfg_path.read_bytes() == base_bytes_after_open
+                overlay_after_write = overlay_path.read_bytes() if overlay_path.exists() else None
+                assert overlay_after_write == overlay_bytes_after_open
 
 
 def test_write_hook_config_does_not_touch_overlay(tmp_path, monkeypatch):

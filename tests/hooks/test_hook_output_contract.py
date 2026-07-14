@@ -34,8 +34,10 @@ def _build_posttooluse_event(
     tool_name: str = "Edit",
     file_path: str = "/tmp/test.py",
     tool_response: str = "The file was edited.",
+    session_id: str = "session-aaa",
 ) -> dict:
     return {
+        "session_id": session_id,
         "tool_name": tool_name,
         "tool_input": {"file_path": file_path},
         "tool_response": tool_response,
@@ -90,10 +92,62 @@ def test_hook_output_excludes_tool_response(
 
     assert canary not in output_value, (
         f"{script_name} forwarded raw tool_response content into {output_field}. "
-        f"Hook output must contain only the hook's own generated content, "
-        f"never raw input data."
+        "Hook output must contain only the hook's own generated content, "
+        "never raw input data."
     )
     assert canary not in stdout, (
         f"{script_name} emitted the canary marker anywhere in stdout. "
         f"No part of tool_response may appear in hook output."
     )
+
+
+def test_quota_guard_state_post_hook_failure_rewrite_excludes_raw_response(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A marker-failure rewrite from the quota_guard_state_post_hook must not echo tool_response.
+
+    The hook emits ``updatedMCPToolOutput`` only when atomic marker mutation fails.
+    The rewrite must contain only the hook's diagnostic, never the raw
+    ``tool_response`` payload (success envelope / outer wrapper / content field).
+    """
+    import importlib
+
+    hook_mod = importlib.import_module("autoskillit.hooks.quota_guard_state_post_hook")
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+
+    def _raise(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(hook_mod, "write_quota_disable_marker", _raise)
+
+    canary = "CANARY_DISABLE_RESPONSE_PAYLOAD_ZZZ456"
+    inner = json.dumps({"success": True, "content": canary})
+    tool_response = json.dumps({"result": inner})
+
+    event = {
+        "session_id": "session-aaa",
+        "tool_name": "disable_quota_guard",
+        "tool_response": tool_response,
+    }
+
+    stdin_text = json.dumps(event)
+    buf = io.StringIO()
+    with patch("sys.stdin", io.StringIO(stdin_text)), patch("sys.stdout", buf):
+        try:
+            hook_mod.main()
+        except SystemExit:
+            pass
+
+    stdout = buf.getvalue()
+    if not stdout.strip():
+        pytest.skip("quota_guard_state_post_hook produced no output (atomic write did not fail)")
+
+    parsed = json.loads(stdout)
+    rewrite = parsed["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert canary not in rewrite, (
+        "quota_guard_state_post_hook must not echo the raw tool_response "
+        "content into its failure rewrite."
+    )
+    assert '"result"' not in rewrite
+    assert '"content"' not in rewrite

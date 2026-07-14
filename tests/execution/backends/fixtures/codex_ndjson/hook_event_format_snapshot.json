@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "cf12c32c7990708aedb676d6fcf239fb2b7c1a90d61444d5cb367daf0cfa7795",
+  "_registry_hash": "098b3c2938aefd3ed36b0a204b698a10b7ca75ac8ae45d05a5b0053a963969b4",
   "hooks": {
     "PostToolUse": [
       {
@@ -36,6 +36,16 @@
           }
         ],
         "matcher": "mcp__.*autoskillit.*__run_skill.*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py quota_guard_state_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__(disable_quota_guard|close_kitchen).*"
       },
       {
         "hooks": [

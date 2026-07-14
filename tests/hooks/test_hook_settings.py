@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import pathlib
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -374,3 +375,204 @@ def test_write_quota_log_event_prints_stderr_with_caller(tmp_path, capsys):
         write_quota_log_event({}, tmp_path, caller="test_hook")
     captured = capsys.readouterr()
     assert "test_hook" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped quota-disable marker helpers
+# ---------------------------------------------------------------------------
+
+
+def _write_quota_disable_marker(monkeypatch, *, state_dir: Path, session_id: str) -> None:
+    """Helper: write a fresh quota-disable marker via the public helper."""
+    from autoskillit.hooks._hook_settings import write_quota_disable_marker
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(state_dir))
+    write_quota_disable_marker(session_id)
+
+
+def test_quota_disable_marker_path_uses_kitchen_state(tmp_path, monkeypatch):
+    """Marker path must be <state_dir>/kitchen_state/<session_id>_quota_guard_disabled.json."""
+    from autoskillit.hooks._hook_settings import quota_disable_marker_path
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    path = quota_disable_marker_path("session-aaa")
+    assert path == tmp_path / "kitchen_state" / "session-aaa_quota_guard_disabled.json"
+
+
+def test_quota_disable_marker_path_rejects_empty_session_id(tmp_path, monkeypatch):
+    """quota_disable_marker_path("") raises — empty session IDs are not allowed."""
+    from autoskillit.hooks._hook_settings import quota_disable_marker_path
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    with pytest.raises(ValueError):
+        quota_disable_marker_path("")
+
+
+def test_quota_disable_marker_path_rejects_traversal_shapes(tmp_path, monkeypatch):
+    """Path-separator and parent-relative session IDs are rejected."""
+    from autoskillit.hooks._hook_settings import quota_disable_marker_path
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    for bad in ("../escape", "sub/dir", "..", "/abs", "with space", "."):
+        with pytest.raises(ValueError):
+            quota_disable_marker_path(bad)
+
+
+def test_write_quota_disable_marker_round_trips_for_exact_session(tmp_path, monkeypatch):
+    """Fresh marker is read back only for its exact session ID."""
+    from autoskillit.hooks._hook_settings import (
+        clear_quota_disable_marker,
+        quota_disable_marker_path,
+        read_quota_disable_marker,
+        write_quota_disable_marker,
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    write_quota_disable_marker("session-aaa")
+    marker = quota_disable_marker_path("session-aaa")
+    assert marker.exists()
+
+    payload = read_quota_disable_marker("session-aaa")
+    assert payload is not None
+    assert payload["session_id"] == "session-aaa"
+    assert "disabled_at" in payload
+    assert payload.get("marker_version") == 1
+
+    # Other session ID sees no marker
+    assert read_quota_disable_marker("session-bbb") is None
+
+    # Cleanup
+    clear_quota_disable_marker("session-aaa")
+    assert not marker.exists()
+
+
+def test_read_quota_disable_marker_returns_none_for_other_session(tmp_path, monkeypatch):
+    """A marker for session A is invisible to session B."""
+    from autoskillit.hooks._hook_settings import (
+        read_quota_disable_marker,
+    )
+
+    _write_quota_disable_marker(monkeypatch, state_dir=tmp_path, session_id="session-aaa")
+    assert read_quota_disable_marker("session-bbb") is None
+
+
+def test_read_quota_disable_marker_returns_none_for_malformed_payload(tmp_path, monkeypatch):
+    """A malformed marker must NOT grant a quota bypass."""
+    from autoskillit.hooks._hook_settings import (
+        quota_disable_marker_path,
+        read_quota_disable_marker,
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker = quota_disable_marker_path("session-aaa")
+    marker.write_text("not-json-{{{")
+    assert read_quota_disable_marker("session-aaa") is None
+
+
+def test_read_quota_disable_marker_returns_none_for_session_id_mismatch(tmp_path, monkeypatch):
+    """Marker whose payload session_id disagrees with the query session must NOT grant bypass."""
+    from autoskillit.hooks._hook_settings import (
+        quota_disable_marker_path,
+        read_quota_disable_marker,
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker = quota_disable_marker_path("session-aaa")
+    marker.write_text(
+        json.dumps(
+            {
+                "session_id": "session-bbb",
+                "disabled_at": "2026-01-01T00:00:00+00:00",
+                "marker_version": 1,
+            }
+        )
+    )
+    assert read_quota_disable_marker("session-aaa") is None
+
+
+def test_read_quota_disable_marker_returns_none_for_traversal_session_id(tmp_path, monkeypatch):
+    """A session ID containing path separators is rejected outright."""
+    from autoskillit.hooks._hook_settings import read_quota_disable_marker
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    assert read_quota_disable_marker("../escape") is None
+
+
+def test_read_quota_disable_marker_returns_none_for_expired_marker(tmp_path, monkeypatch):
+    """A 25-hour-old marker must NOT grant a quota bypass (24h TTL)."""
+    from autoskillit.hooks._hook_settings import (
+        quota_disable_marker_path,
+        read_quota_disable_marker,
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker = quota_disable_marker_path("session-aaa")
+    old = datetime.fromtimestamp(datetime.now(UTC).timestamp() - 25 * 3600, tz=UTC).isoformat()
+    marker.write_text(
+        json.dumps({"session_id": "session-aaa", "disabled_at": old, "marker_version": 1})
+    )
+    assert read_quota_disable_marker("session-aaa") is None
+
+
+def test_clear_quota_disable_marker_leaves_other_session_intact(tmp_path, monkeypatch):
+    """Clearing session A's marker leaves session B's marker intact."""
+    from autoskillit.hooks._hook_settings import (
+        clear_quota_disable_marker,
+        quota_disable_marker_path,
+        read_quota_disable_marker,
+        write_quota_disable_marker,
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    write_quota_disable_marker("session-aaa")
+    write_quota_disable_marker("session-bbb")
+
+    clear_quota_disable_marker("session-aaa")
+    assert not quota_disable_marker_path("session-aaa").exists()
+    assert read_quota_disable_marker("session-bbb") is not None
+
+
+def test_clear_quota_disable_marker_missing_file_is_noop(tmp_path, monkeypatch):
+    """clear_quota_disable_marker on a non-existent marker is silently tolerated."""
+    from autoskillit.hooks._hook_settings import clear_quota_disable_marker
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    clear_quota_disable_marker("session-aaa")  # must not raise
+
+
+def test_write_quota_disable_marker_respects_state_dir_override(tmp_path, monkeypatch):
+    """AUTOSKILLIT_STATE_DIR controls the marker directory (used in tests + campaigns)."""
+    from autoskillit.hooks._hook_settings import (
+        quota_disable_marker_path,
+        read_quota_disable_marker,
+        write_quota_disable_marker,
+    )
+
+    state_dir = tmp_path / "campaign_state"
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(state_dir))
+    write_quota_disable_marker("session-aaa")
+    expected = state_dir / "kitchen_state" / "session-aaa_quota_guard_disabled.json"
+    assert expected.exists()
+    assert quota_disable_marker_path("session-aaa") == expected
+    assert read_quota_disable_marker("session-aaa") is not None
+
+
+def test_write_quota_disable_marker_respects_campaign_id(tmp_path, monkeypatch):
+    """AUTOSKILLIT_CAMPAIGN_ID nests the marker under a campaign subdirectory."""
+    from autoskillit.hooks._hook_settings import (
+        quota_disable_marker_path,
+        write_quota_disable_marker,
+    )
+
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "campaign-42")
+    write_quota_disable_marker("session-aaa")
+    expected = tmp_path / "kitchen_state" / "campaign-42" / "session-aaa_quota_guard_disabled.json"
+    assert expected.exists()
+    assert quota_disable_marker_path("session-aaa") == expected

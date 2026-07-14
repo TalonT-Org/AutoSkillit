@@ -101,7 +101,8 @@ class TestDrainWindowEscalatesToKill:
 
         async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
             kill_calls.append(pid)
-            await proc.aclose()
+            proc.kill()
+            await proc.wait()
 
         import structlog
 
@@ -138,7 +139,8 @@ class TestImmediateKillSkipsDrain:
         async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
             call_time.append(time.monotonic())
             kill_calls.append(pid)
-            await proc.aclose()
+            proc.kill()
+            await proc.wait()
 
         import structlog
 
@@ -219,7 +221,8 @@ class TestChildLivenessDefersKill:
 
         async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
             kill_calls.append(pid)
-            await proc.aclose()
+            proc.kill()
+            await proc.wait()
 
         import structlog
 
@@ -269,7 +272,8 @@ class TestChildLivenessFastKillUnchanged:
 
         async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
             kill_calls.append(pid)
-            await proc.aclose()
+            proc.kill()
+            await proc.wait()
 
         import structlog
 
@@ -317,7 +321,8 @@ class TestChildLivenessCeilingExceeded:
 
         async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
             kill_calls.append(pid)
-            await proc.aclose()
+            proc.kill()
+            await proc.wait()
 
         import structlog
 
@@ -370,7 +375,8 @@ class TestChildLivenessChildExitsDuringDeferral:
 
         async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
             kill_calls.append(pid)
-            await proc.aclose()
+            proc.kill()
+            await proc.wait()
 
         import structlog
 

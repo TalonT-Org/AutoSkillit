@@ -217,6 +217,7 @@ async def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
 
     mock_state_ctx = _make_mock_ctx()
     mock_state_ctx.project_dir = tmp_path
+    mock_state_ctx.gate.enabled = True
     monkeypatch.setattr(_state, "_ctx", mock_state_ctx)
 
     from autoskillit.server.tools.tools_kitchen import disable_quota_guard
@@ -254,6 +255,7 @@ async def test_disable_quota_guard_does_not_create_overlay(tmp_path, monkeypatch
 
     mock_state_ctx = _make_mock_ctx()
     mock_state_ctx.project_dir = tmp_path
+    mock_state_ctx.gate.enabled = True
     monkeypatch.setattr(_state, "_ctx", mock_state_ctx)
 
     from autoskillit.server.tools.tools_kitchen import disable_quota_guard
@@ -439,6 +441,7 @@ async def test_disable_quota_guard_survives_write_hook_config(tmp_path, monkeypa
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.gate.enabled = True
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/some/path.json"
     mock_ctx.config.quota_guard.buffer_seconds = 60

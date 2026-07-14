@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import subprocess as sp
+import tempfile
 from contextlib import redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -252,16 +255,27 @@ class TestLintBehavior:
         # The import must survive — ruff should NOT have removed it
         assert "import asyncio" in f.read_text()
 
-    def test_unfixable_error_reported(self, tmp_path, monkeypatch):
-        f = tmp_path / "long_line.py"
-        long_var = "a" * 200
-        f.write_text(f'{long_var} = "x"\n')
-        out, code = _run_hook(
-            _build_event("Edit", str(f)),
-            headless=True,
-            skill_name="implement-worktree",
-            monkeypatch=monkeypatch,
-        )
+    def test_unfixable_error_reported(self, monkeypatch):
+        """E501 detection depends on the project's ruff config (select includes 'E').
+
+        The linted file must resolve to this config via its own ancestor directories
+        rather than the ambient CWD — the autouse `_isolate_hook_cwd` fixture moves
+        CWD to a per-test tmp_path outside the repo, and ruff's config discovery does
+        not otherwise reach back into the repo for a file located elsewhere.
+        """
+        scratch = Path(tempfile.mkdtemp(dir=Path(__file__).resolve().parent))
+        try:
+            f = scratch / "long_line.py"
+            long_var = "a" * 200
+            f.write_text(f'{long_var} = "x"\n')
+            out, code = _run_hook(
+                _build_event("Edit", str(f)),
+                headless=True,
+                skill_name="implement-worktree",
+                monkeypatch=monkeypatch,
+            )
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
         assert code == 0
         from autoskillit.hooks.lint_after_edit_hook import LINT_ERROR_TRIGGER
 

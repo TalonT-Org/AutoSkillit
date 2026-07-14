@@ -787,6 +787,7 @@ def test_fresh_marker_matching_session_approves_call(tmp_path, monkeypatch):
     """A fresh quota-disable marker matching the event session_id bypasses quota enforcement."""
     monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    _write_disable_marker(tmp_path, "session-aaa")
     cache = tmp_path / "blocking_cache.json"
     _write_cache(cache, utilization=99.0, should_block=True)
 

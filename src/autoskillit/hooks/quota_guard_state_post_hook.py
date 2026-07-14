@@ -107,7 +107,7 @@ def main() -> None:
                 }
             )
             _atomic_write_marker(marker_path, payload)
-        except Exception as exc:  # noqa: BLE001 — surface as hook rewrite, fail closed
+        except (OSError, ValueError) as exc:
             sys.stderr.write(
                 f"quota_guard_state_post_hook: marker write failed for {session_id}: {exc}\n"
             )
@@ -126,12 +126,7 @@ def main() -> None:
     if tool_name == "close_kitchen":
         if not _is_close_success(tool_response):
             sys.exit(0)
-        try:
-            clear_quota_disable_marker(session_id)
-        except Exception as exc:  # noqa: BLE001 — clear is best-effort
-            sys.stderr.write(
-                f"quota_guard_state_post_hook: marker clear failed for {session_id}: {exc}\n"
-            )
+        clear_quota_disable_marker(session_id)
         sys.exit(0)
 
     sys.exit(0)

@@ -165,6 +165,8 @@ def _validate_session_id(session_id: str) -> str:
         raise ValueError(f"session_id must not contain path separators: {session_id!r}")
     if session_id in {".", ".."} or session_id.startswith("./") or session_id.startswith("../"):
         raise ValueError(f"session_id must not be a path-relative segment: {session_id!r}")
+    if any(c.isspace() for c in session_id):
+        raise ValueError(f"session_id must not contain whitespace: {session_id!r}")
     return session_id
 
 

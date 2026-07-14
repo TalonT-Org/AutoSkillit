@@ -200,6 +200,20 @@ class TestPreRemediationMergePredicateRouting:
             == "commit_guard_pre_remediation"
         )
 
+    def test_ref_push_guard_uses_shared_bounded_budget(self) -> None:
+        step = self.recipe.steps["check_ref_push_loop_pre_remediation"]
+        assert step.with_args["current_iteration"] == "${{ context.ref_push_count }}"
+        assert step.with_args["max_iterations"] == "2"
+        assert step.capture["ref_push_count"].from_ == "${{ result.next_iteration }}"
+        assert step.on_result is not None
+        exceeded = [
+            condition
+            for condition in step.on_result.conditions
+            if condition.when and "max_exceeded" in condition.when
+        ]
+        assert len(exceeded) == 1
+        assert exceeded[0].route == "release_issue_failure"
+
 
 class TestLoopBudgetSeparation:
     """Budget separation: merge-fix and audit-remediation use independent counters."""

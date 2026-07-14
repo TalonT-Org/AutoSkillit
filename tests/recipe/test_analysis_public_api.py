@@ -43,6 +43,13 @@ def test_bfs_reachable_traverses_graph() -> None:
     assert bfs_reachable(graph, "d") == set()
 
 
+def test_build_success_step_graph_is_available_from_analysis_facade() -> None:
+    """Rules can build success graphs without importing analysis internals."""
+    from autoskillit.recipe._analysis import _build_success_step_graph
+
+    assert callable(_build_success_step_graph)
+
+
 # ---------------------------------------------------------------------------
 # ValidationContext.skill_resolver tests
 # ---------------------------------------------------------------------------

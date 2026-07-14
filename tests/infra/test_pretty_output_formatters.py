@@ -362,6 +362,27 @@ def test_fmt_merge_worktree_success_shows_metadata():
     assert "\u2713" in text
 
 
+def test_fmt_merge_worktree_shows_ref_coherence_diagnostics():
+    """merge_worktree must preserve SHA and false ancestry diagnostics."""
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__merge_worktree",
+        "tool_response": json.dumps(
+            {
+                "error": "local and remote refs diverged",
+                "failed_step": "ref_coherence",
+                "local_sha": "a" * 40,
+                "remote_sha": "b" * 40,
+                "remote_is_ancestor": False,
+            }
+        ),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert f"local_sha: {'a' * 40}" in text
+    assert f"remote_sha: {'b' * 40}" in text
+    assert "remote_is_ancestor: False" in text
+
+
 # PHK-25
 def test_fmt_merge_worktree_dirty_tree_shows_files():
     """merge_worktree dirty tree must show dirty_files content."""

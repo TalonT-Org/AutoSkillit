@@ -44,6 +44,7 @@ def _minimal_recipe(steps: dict[str, RecipeStep]) -> Recipe:
             "result.failed_step == 'ref_coherence' and not result.remote_is_ancestor",
             ("ref_coherence", False),
         ),
+        ("not result.failed_step == 'ref_coherence'", (None, False)),
         ("failed_step == 'rebase'", (None, False)),
         (None, (None, False)),
     ],

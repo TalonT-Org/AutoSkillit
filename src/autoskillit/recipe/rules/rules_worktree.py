@@ -14,7 +14,11 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_success_step_graph
-from autoskillit.recipe._rule_helpers import _find_cycle_members, parse_merge_failure_condition
+from autoskillit.recipe._rule_helpers import (
+    _find_cycle_members,
+    has_positive_result_error,
+    parse_merge_failure_condition,
+)
 from autoskillit.recipe.contracts import INPUT_REF_RE, load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
@@ -320,11 +324,6 @@ def _is_worktree_barrier(step_name: str, ctx_vars: frozenset[str], recipe: Recip
     return False
 
 
-# Conditions matched as explicit merge failure arms for barrier transparency.
-# path_validation is excluded: it occurs before any live worktree is acquired.
-_RESULT_ERROR_CONDITION_RE = re.compile(r"\bresult\.error\b")
-
-
 def _merge_failure_arms(barrier_step: RecipeStep) -> list[StepResultCondition]:
     """Return the explicit merge failure conditions on a merge_worktree barrier.
 
@@ -340,7 +339,7 @@ def _merge_failure_arms(barrier_step: RecipeStep) -> list[StepResultCondition]:
         failed_step_value, _ = parse_merge_failure_condition(condition.when)
         if failed_step_value == MergeFailedStep.PATH_VALIDATION:
             continue
-        if failed_step_value is not None or _RESULT_ERROR_CONDITION_RE.search(condition.when):
+        if failed_step_value is not None or has_positive_result_error(condition.when):
             arms.append(condition)
     return arms
 
@@ -348,6 +347,7 @@ def _merge_failure_arms(barrier_step: RecipeStep) -> list[StepResultCondition]:
 def _barrier_has_orphaning_arm(
     barrier_step_name: str,
     creator_step_name: str,
+    captured_vars: frozenset[str],
     recipe: Recipe,
     success_graph: dict[str, set[str]],
 ) -> bool:
@@ -364,11 +364,13 @@ def _barrier_has_orphaning_arm(
     barrier_step = recipe.steps.get(barrier_step_name)
     if barrier_step is None or barrier_step.tool != "merge_worktree":
         return False
-    # Any merge_worktree step in the recipe is treated as a barrier boundary:
-    # crossing any merge barrier consumes the live worktree, so a route that
-    # re-enters a different merge before reaching the creator is a safe retry.
+    # Only merges consuming this creator's captured reference are boundaries.
+    # Crossing a merge for another worktree does not consume the live resource
+    # tracked here and therefore cannot make re-entry to the creator safe.
     merge_barriers: frozenset[str] = frozenset(
-        name for name, step in recipe.steps.items() if step.tool == "merge_worktree"
+        name
+        for name, step in recipe.steps.items()
+        if step.tool == "merge_worktree" and _is_worktree_barrier(name, captured_vars, recipe)
     )
     for condition in _merge_failure_arms(barrier_step):
         route = condition.route
@@ -448,7 +450,13 @@ def _check_worktree_clobber_without_merge(ctx: ValidationContext) -> list[RuleFi
                 for s in barrier_steps
                 if recipe.steps.get(s) is None
                 or recipe.steps[s].tool != "merge_worktree"
-                or not _barrier_has_orphaning_arm(s, step_name, recipe, success_graph)
+                or not _barrier_has_orphaning_arm(
+                    s,
+                    step_name,
+                    captured_vars,
+                    recipe,
+                    success_graph,
+                )
             }
 
             # BFS from successors of the worktree step (within the cycle only)

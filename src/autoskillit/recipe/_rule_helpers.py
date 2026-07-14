@@ -20,9 +20,16 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_MERGE_FAILED_STEP_RE = re.compile(r"\bresult\.failed_step\b\s*==\s*['\"](\w+)['\"]")
-_REMOTE_ANCESTOR_TRUE_RE = re.compile(
-    r"\bresult\.remote_is_ancestor\b\s*==\s*(?:true|['\"]true['\"])",
+_CONDITION_OPERATOR_RE = re.compile(r"\b(?:and|or)\b", re.IGNORECASE)
+_MERGE_FAILED_STEP_ATOM_RE = re.compile(
+    r"\s*\(?\s*result\.failed_step\s*==\s*['\"](\w+)['\"]\s*\)?\s*"
+)
+_REMOTE_ANCESTOR_TRUE_ATOM_RE = re.compile(
+    r"\s*\(?\s*result\.remote_is_ancestor\s*==\s*(?:true|['\"]true['\"])\s*\)?\s*",
+    re.IGNORECASE,
+)
+_RESULT_ERROR_TRUE_ATOM_RE = re.compile(
+    r"\s*\(?\s*result\.error(?:\s*==\s*(?:true|['\"]true['\"]))?\s*\)?\s*",
     re.IGNORECASE,
 )
 
@@ -37,10 +44,29 @@ def parse_merge_failure_condition(condition_when: str | None) -> tuple[str | Non
     """
     if condition_when is None:
         return None, False
-    match = _MERGE_FAILED_STEP_RE.search(condition_when)
-    if match is None:
+    atoms = _CONDITION_OPERATOR_RE.split(condition_when)
+    failed_step = None
+    for atom in atoms:
+        match = _MERGE_FAILED_STEP_ATOM_RE.fullmatch(atom)
+        if match is not None:
+            failed_step = match.group(1)
+            break
+    if failed_step is None:
         return None, False
-    return match.group(1), bool(_REMOTE_ANCESTOR_TRUE_RE.search(condition_when))
+    remote_is_ancestor = any(
+        _REMOTE_ANCESTOR_TRUE_ATOM_RE.fullmatch(atom) is not None for atom in atoms
+    )
+    return failed_step, remote_is_ancestor
+
+
+def has_positive_result_error(condition_when: str | None) -> bool:
+    """Return whether a condition contains a positive ``result.error`` atom."""
+    if condition_when is None:
+        return False
+    return any(
+        _RESULT_ERROR_TRUE_ATOM_RE.fullmatch(atom) is not None
+        for atom in _CONDITION_OPERATOR_RE.split(condition_when)
+    )
 
 
 def _find_cycle_members(

@@ -17,7 +17,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
 
-from autoskillit.recipe._analysis_bfs import _bfs_with_facts, bfs_reachable
+from autoskillit.recipe._analysis_bfs import (
+    _bfs_with_facts,
+    _build_success_step_graph,
+    bfs_reachable,
+)
 from autoskillit.recipe._analysis_blocks import extract_blocks
 from autoskillit.recipe._analysis_detectors import (
     _detect_dead_outputs,
@@ -47,6 +51,7 @@ __all__ = [
     "_build_step_graph",
     "_is_infrastructure_step",
     "bfs_reachable",
+    "_build_success_step_graph",
     "_bfs_with_facts",
     "extract_blocks",
     "_detect_dead_outputs",

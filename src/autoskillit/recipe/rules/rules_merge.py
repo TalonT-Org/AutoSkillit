@@ -7,8 +7,11 @@ from collections import deque
 import regex as re
 
 from autoskillit.core import MergeFailedStep, Severity, get_logger
-from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
-from autoskillit.recipe._analysis_bfs import _build_success_step_graph
+from autoskillit.recipe._analysis import (
+    ValidationContext,
+    _build_success_step_graph,
+    bfs_reachable,
+)
 from autoskillit.recipe._rule_helpers import _is_loop_guard_step, parse_merge_failure_condition
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
@@ -91,6 +94,8 @@ _RECOVERY_SIGNATURES_SKILL: dict[str, str] = {
 _RECOVERY_SIGNATURES_CALLABLE: dict[str, str] = {
     "autoskillit.recipe._cmd_rpc.main_repo_guard": "dirty_retry",
 }
+_CANONICAL_PUSH_CLONE_PATH = "${{ context.work_dir }}"
+_CANONICAL_PUSH_REMOTE_URL = "${{ context.remote_url }}"
 
 
 @semantic_rule(
@@ -316,6 +321,7 @@ def _classify_recovery_class(
     *,
     max_depth: int = 4,
     success_graph: dict[str, set[str]] | None = None,
+    source_merge_step_name: str | None = None,
 ) -> str | None:
     """Classify a recovery route by its nearest-depth recovery signature.
 
@@ -328,6 +334,9 @@ def _classify_recovery_class(
     is ambiguous, return ``None``.
     """
     graph = success_graph if success_graph is not None else _build_success_step_graph(ctx.recipe)
+    source_merge_step = (
+        ctx.recipe.steps.get(source_merge_step_name) if source_merge_step_name else None
+    )
     if route not in graph:
         return None
     visited: set[str] = {route}
@@ -338,7 +347,13 @@ def _classify_recovery_class(
         for node in frontier:
             step = ctx.recipe.steps.get(node)
             if step is not None:
-                if step.tool in _RECOVERY_SIGNATURES_TOOL:
+                push_matches_source = source_merge_step is None or (
+                    step.with_args.get("clone_path") == _CANONICAL_PUSH_CLONE_PATH
+                    and step.with_args.get("remote_url") == _CANONICAL_PUSH_REMOTE_URL
+                    and step.with_args.get("branch")
+                    == source_merge_step.with_args.get("base_branch")
+                )
+                if step.tool in _RECOVERY_SIGNATURES_TOOL and push_matches_source:
                     depth_signatures.add(_RECOVERY_SIGNATURES_TOOL[step.tool])
                 if step.tool == "run_skill":
                     skill_cmd = (step.with_args or {}).get("skill_command", "")
@@ -366,6 +381,33 @@ def _classify_recovery_class(
     return None
 
 
+def _route_terminates(route: str, ctx: ValidationContext) -> bool:
+    """Return whether every route path reaches a stop without cycling."""
+    memo: dict[str, bool] = {}
+    visiting: set[str] = set()
+
+    def visit(step_name: str) -> bool:
+        if step_name in memo:
+            return memo[step_name]
+        if step_name in visiting:
+            return False
+        step = ctx.recipe.steps.get(step_name)
+        if step is None:
+            return False
+        if step.action == "stop":
+            return True
+        successors = ctx.step_graph.get(step_name, set())
+        if not successors:
+            return False
+        visiting.add(step_name)
+        terminates = all(visit(successor) for successor in successors)
+        visiting.remove(step_name)
+        memo[step_name] = terminates
+        return terminates
+
+    return visit(route)
+
+
 @semantic_rule(
     name="merge-failure-skill-domain-mismatch",
     description=(
@@ -389,6 +431,53 @@ def _check_merge_failure_skill_domain_mismatch(
         if not step.on_result or not step.on_result.conditions:
             continue
 
+        ref_coherence_arms: list[tuple[int, str, bool, bool]] = []
+        for index, condition in enumerate(step.on_result.conditions):
+            failed_step_value, remote_is_ancestor = parse_merge_failure_condition(condition.when)
+            if failed_step_value != MergeFailedStep.REF_COHERENCE:
+                continue
+            is_overlapping_fallback = bool(
+                condition.when and "remote_is_ancestor" not in condition.when.lower()
+            )
+            ref_coherence_arms.append(
+                (index, condition.route, remote_is_ancestor, is_overlapping_fallback)
+            )
+
+        ancestry_indexes = [index for index, _, ancestry, _ in ref_coherence_arms if ancestry]
+        fallback_arms = [arm for arm in ref_coherence_arms if not arm[2]]
+        overlapping_fallback_indexes = [
+            index for index, _, _, overlapping in fallback_arms if overlapping
+        ]
+        if ancestry_indexes and overlapping_fallback_indexes:
+            if min(overlapping_fallback_indexes) < max(ancestry_indexes):
+                findings.append(
+                    make_finding(
+                        rule_name="merge-failure-skill-domain-mismatch",
+                        step_name=step_name,
+                        message=(
+                            "The ref_coherence ancestry arm must precede its overlapping "
+                            "fallback arm so first-match routing cannot shadow push recovery."
+                        ),
+                    )
+                )
+
+        for _, fallback_route, _, _ in fallback_arms:
+            recovery_class = _classify_recovery_class(
+                fallback_route, ctx, success_graph=success_graph
+            )
+            if recovery_class is None and _route_terminates(fallback_route, ctx):
+                continue
+            findings.append(
+                make_finding(
+                    rule_name="merge-failure-skill-domain-mismatch",
+                    step_name=step_name,
+                    message=(
+                        f"The ref_coherence fallback arm routes to '{fallback_route}', "
+                        "which must terminate without entering a recovery workflow."
+                    ),
+                )
+            )
+
         for condition in step.on_result.conditions:
             failed_step_value, remote_is_ancestor = parse_merge_failure_condition(condition.when)
             if failed_step_value is None:
@@ -397,9 +486,8 @@ def _check_merge_failure_skill_domain_mismatch(
             if domain is None:
                 continue
 
-            # For REF_COHERENCE only the ancestry-aware arm is validated; the
-            # fallback arm is an intentional escalation terminal whose target
-            # differs from the ancestry arm by design.
+            # The fallback arm is validated above as a terminating escalation;
+            # only the ancestry-aware arm must enter push recovery.
             if failed_step_value == MergeFailedStep.REF_COHERENCE:
                 if not remote_is_ancestor:
                     continue
@@ -407,7 +495,10 @@ def _check_merge_failure_skill_domain_mismatch(
                 if required_class is None:
                     continue
                 actual_class = _classify_recovery_class(
-                    condition.route, ctx, success_graph=success_graph
+                    condition.route,
+                    ctx,
+                    success_graph=success_graph,
+                    source_merge_step_name=step_name,
                 )
                 if actual_class != required_class:
                     findings.append(

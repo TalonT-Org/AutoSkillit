@@ -211,6 +211,60 @@ class TestBundledRecipesPassFailureDomainCheck:
 # ---------------------------------------------------------------------------
 
 
+def _make_ref_coherence_recipe():
+    return _make_workflow(
+        {
+            "merge": {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_result": [
+                    {
+                        "when": (
+                            "result.failed_step == 'ref_coherence' "
+                            "and result.remote_is_ancestor == true"
+                        ),
+                        "route": "check_ref_push_loop",
+                    },
+                    {
+                        "when": "result.failed_step == 'ref_coherence'",
+                        "route": "release_issue_failure",
+                    },
+                    {"when": "result.error", "route": "release_issue_failure"},
+                    {"route": "done"},
+                ],
+            },
+            "check_ref_push_loop": {
+                "tool": "run_python",
+                "with": {
+                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                    "current_iteration": "${{ context.ref_push_count }}",
+                    "max_iterations": "3",
+                },
+                "on_success": "ref_push",
+                "on_failure": "release_issue_failure",
+            },
+            "ref_push": {
+                "tool": "push_to_remote",
+                "with": {
+                    "clone_path": "${{ context.work_dir }}",
+                    "remote_url": "${{ context.remote_url }}",
+                    "branch": "main",
+                },
+                "on_success": "retry_merge",
+                "on_failure": "release_issue_failure",
+            },
+            "retry_merge": {
+                "tool": "merge_worktree",
+                "with": {"worktree_path": "/tmp/wt", "base_branch": "main"},
+                "on_success": "done",
+                "on_failure": "release_issue_failure",
+            },
+            "release_issue_failure": {"action": "stop", "message": "Escalate."},
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+
+
 @pytest.mark.medium
 class TestRefCoherenceDomainValidation:
     """REF_COHERENCE must be validated through recovery-class classification, not
@@ -279,7 +333,7 @@ class TestRefCoherenceDomainValidation:
                     "tool": "push_to_remote",
                     "with": {
                         "clone_path": "${{ context.work_dir }}",
-                        "remote_url": "git@example.com",
+                        "remote_url": "${{ context.remote_url }}",
                         "branch": "main",
                     },
                     "on_success": "retry_merge",
@@ -367,6 +421,29 @@ class TestRefCoherenceDomainValidation:
             f"direct_remediate, got: {msg}"
         )
 
+    @pytest.mark.parametrize(
+        ("argument", "unrelated_value"),
+        [
+            ("clone_path", "${{ context.other_work_dir }}"),
+            ("remote_url", "${{ context.other_remote_url }}"),
+            ("branch", "other-branch"),
+        ],
+    )
+    def test_ancestry_arm_pushing_unrelated_target_fires_mismatch(
+        self, argument: str, unrelated_value: str
+    ) -> None:
+        """Push recovery must target the failing merge's clone, remote, and branch."""
+        recipe = _make_ref_coherence_recipe()
+        recipe.steps["ref_push"].with_args[argument] = unrelated_value
+
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-failure-skill-domain-mismatch"]
+        assert any(
+            "classifies as None" in finding.message
+            and "expected 'push_recovery'" in finding.message
+            for finding in errors
+        )
+
     def test_fallback_arm_is_not_misclassified_as_ancestry_arm(self):
         """The fallback ref_coherence arm (without remote_is_ancestor) must not
         be classified against the recovery-class requirement.
@@ -411,7 +488,7 @@ class TestRefCoherenceDomainValidation:
                     "tool": "push_to_remote",
                     "with": {
                         "clone_path": "${{ context.work_dir }}",
-                        "remote_url": "git@example.com",
+                        "remote_url": "${{ context.remote_url }}",
                         "branch": "main",
                     },
                     "on_success": "retry_merge",
@@ -433,3 +510,33 @@ class TestRefCoherenceDomainValidation:
             f"Fallback escalation arm must not be flagged when ancestry arm is correct, "
             f"got: {[e.message for e in errors]}"
         )
+
+    def test_overlapping_fallback_before_ancestry_arm_fires(self):
+        """A broad fallback cannot shadow the ancestry-qualified recovery arm."""
+        recipe = _make_ref_coherence_recipe()
+        merge_step = recipe.steps["merge"]
+        assert merge_step.on_result is not None
+        conditions = merge_step.on_result.conditions
+        conditions[0], conditions[1] = conditions[1], conditions[0]
+
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-failure-skill-domain-mismatch"]
+        assert any("must precede" in finding.message for finding in errors)
+
+    def test_fallback_entering_recovery_instead_of_terminating_fires(self):
+        """Divergence fallback must escalate instead of reusing push recovery."""
+        recipe = _make_ref_coherence_recipe()
+        merge_step = recipe.steps["merge"]
+        assert merge_step.on_result is not None
+        fallback = next(
+            condition
+            for condition in merge_step.on_result.conditions
+            if condition.when
+            and "ref_coherence" in condition.when
+            and "remote_is_ancestor" not in condition.when
+        )
+        fallback.route = "check_ref_push_loop"
+
+        findings = run_semantic_rules(recipe)
+        errors = [f for f in findings if f.rule == "merge-failure-skill-domain-mismatch"]
+        assert any("must terminate" in finding.message for finding in errors)

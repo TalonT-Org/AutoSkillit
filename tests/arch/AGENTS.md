@@ -110,6 +110,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_hook_env_var_authority.py` | AST guard: every hook script that reads `AUTOSKILLIT_PROVIDER_PROFILE` must also read `AUTOSKILLIT_AGENT_BACKEND` so backend identity is checked independently of provider routing |
 | `test_serve_surface_registry.py` | Structural tests for `SERVE_SURFACES` frozenset: membership completeness, AST guard that `load_and_validate` is only called from `_serve_helpers.py` |
 | `test_session_type_exhaustive.py` | AST guard: _apply_session_type_visibility must use exhaustive match/assert_never dispatch |
+| `test_input_spec_type_exhaustive.py` | AST guard: InputSpec type dispatch (match/assert_never) and YAML coverage of VALID_INPUT_SPEC_TYPES |
 | `test_notification_fallback_coverage.py` | AST guard: every ctx.enable_components call in server/tools/ must have a non-notification fallback or be in an exempt session-scoped unlock function |
 | `test_cmd_spec_resume_no_string_match.py` | AST guard: no `"--resume" in <expr>` patterns in production code — use CmdSpec.is_resume instead |
 | `test_subagent_filter_guard.py` | AST guard: all assistant-record NDJSON processing sites must use _is_parent_assistant_record or _is_parent_assistant predicate |

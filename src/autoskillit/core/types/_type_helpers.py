@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import warnings
 from typing import Any
 
@@ -47,16 +48,21 @@ def is_path_like_token(token: str) -> bool:
 def extract_positional_args(skill_command: str) -> list[str]:
     """Extract all positional tokens from a skill_command string.
 
-    Returns tokens after the skill name, split on whitespace, with
-    enclosing quotes stripped. Path-like and non-path tokens are both
-    included, preserving positional order.
+    Returns tokens after the skill name, tokenized with ``shlex.split`` so
+    quoted arguments (including those containing whitespace or newlines)
+    remain one logical argument. Unmatched quotes raise ``ValueError``.
+
+    Path-like and non-path tokens are both included, preserving positional
+    order.
     """
     stripped = skill_command.strip()
     m = _SKILL_CMD_RE.match(stripped)
     if m is None:
         return []
-    tokens = stripped[m.end() :].split()
-    return [t.strip('"').strip("'") for t in tokens]
+    remainder = stripped[m.end() :]
+    if not remainder:
+        return []
+    return shlex.split(remainder)
 
 
 def extract_path_arg(skill_command: str) -> str | None:

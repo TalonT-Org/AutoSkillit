@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -493,12 +493,19 @@ def _collect_all_path_input_specs() -> list[tuple[str, str, str]]:
     result = []
     for skill_name, contract in sorted(raw.get("skills", {}).items()):
         for inp in contract.get("inputs", []):
-            if inp.get("type") in ("file_path", "directory_path"):
+            if inp.get("type") in ("file_path", "directory_path", "file_path_list"):
                 result.append((skill_name, inp["name"], inp["type"]))
     return result
 
 
 _ALL_PATH_INPUT_SPECS = _collect_all_path_input_specs()
+
+
+def _collect_file_path_list_specs() -> list[tuple[str, str, str]]:
+    return [(s, i, t) for (s, i, t) in _ALL_PATH_INPUT_SPECS if t == "file_path_list"]
+
+
+_FILE_PATH_LIST_SPECS = _collect_file_path_list_specs()
 
 
 class TestInputContractRealContracts:
@@ -516,18 +523,24 @@ class TestInputContractRealContracts:
         from autoskillit.core import InputSpec
         from autoskillit.server._guards import _check_input_contracts
 
-        narrowed: Literal["file_path", "directory_path"] = (
-            "file_path" if declared_type == "file_path" else "directory_path"
-        )
+        narrowed = cast("Literal['file_path', 'directory_path', 'file_path_list']", declared_type)
         if narrowed == "file_path":
             target = tmp_path / "test_input.md"
             target.write_text("test")
-        else:
+            cmd_value = str(target)
+        elif narrowed == "directory_path":
             target = tmp_path / "test_input_dir"
             target.mkdir()
+            cmd_value = str(target)
+        else:
+            member_a = tmp_path / "test_input_a.md"
+            member_a.write_text("a")
+            member_b = tmp_path / "test_input_b.md"
+            member_b.write_text("b")
+            cmd_value = f"{member_a},{member_b}"
         spec = InputSpec(name=input_name, type=narrowed, required=True, position=0)
         result = _check_input_contracts(
-            f"/autoskillit:{skill_name} {target}",
+            f"/autoskillit:{skill_name} {cmd_value}",
             str(tmp_path),
             resolver=lambda skill_command, _s=spec: (_s,),
         )
@@ -545,24 +558,181 @@ class TestInputContractRealContracts:
         from autoskillit.core import InputSpec
         from autoskillit.server._guards import _check_input_contracts
 
-        narrowed: Literal["file_path", "directory_path"] = (
-            "file_path" if declared_type == "file_path" else "directory_path"
-        )
+        narrowed = cast("Literal['file_path', 'directory_path', 'file_path_list']", declared_type)
         if narrowed == "file_path":
             wrong_target = tmp_path / "wrong_dir"
             wrong_target.mkdir()
-        else:
+            cmd_value = str(wrong_target)
+        elif narrowed == "directory_path":
             wrong_target = tmp_path / "wrong_file.md"
             wrong_target.write_text("test")
+            cmd_value = str(wrong_target)
+        else:
+            existing = tmp_path / "existing_member.md"
+            existing.write_text("ok")
+            missing = tmp_path / "missing_member.md"
+            cmd_value = f"{existing},{missing}"
         spec = InputSpec(name=input_name, type=narrowed, required=True, position=0)
         result = _check_input_contracts(
-            f"/autoskillit:{skill_name} {wrong_target}",
+            f"/autoskillit:{skill_name} {cmd_value}",
             str(tmp_path),
             resolver=lambda skill_command, _s=spec: (_s,),
         )
         assert result is not None
         parsed = json.loads(result)
         assert parsed["success"] is False
+
+
+class TestFilePathListRealResolver:
+    """Real-resolver coverage for declared file_path_list specs."""
+
+    @pytest.mark.parametrize(
+        "skill_name,input_name,declared_type",
+        _FILE_PATH_LIST_SPECS,
+        ids=[f"{s}-{i}" for s, i, _ in _FILE_PATH_LIST_SPECS],
+    )
+    def test_gate_real_resolver_for_file_path_list_specs(
+        self, tmp_path, skill_name: str, input_name: str, declared_type: str
+    ) -> None:
+        """For every file_path_list spec, the real resolver must validate comma-joined members."""
+        from autoskillit.recipe._contracts_manifest import resolve_input_specs
+        from autoskillit.server._guards import _check_input_contracts
+
+        assert declared_type == "file_path_list", "parametrize filter precondition"
+        specs = resolve_input_specs(f"/autoskillit:{skill_name}")
+        target_spec = next((s for s in specs if s.name == input_name), None)
+        assert target_spec is not None, (
+            f"resolver did not surface {skill_name}.{input_name} (specs={specs!r})"
+        )
+
+        cmd_args: list[str] = []
+        for spec in specs:
+            if spec.position < target_spec.position:
+                if spec.type == "file_path":
+                    predecessor = tmp_path / f"pre_{spec.name}.md"
+                    predecessor.write_text("pre")
+                    cmd_args.append(str(predecessor))
+                elif spec.type == "directory_path":
+                    pred_dir = tmp_path / f"pre_{spec.name}_dir"
+                    pred_dir.mkdir()
+                    cmd_args.append(str(pred_dir))
+                else:
+                    a = tmp_path / f"pre_{spec.name}_a.md"
+                    a.write_text("a")
+                    b = tmp_path / f"pre_{spec.name}_b.md"
+                    b.write_text("b")
+                    cmd_args.append(f"{a},{b}")
+        member_a = tmp_path / f"target_{input_name}_a.md"
+        member_a.write_text("a")
+        member_b = tmp_path / f"target_{input_name}_b.md"
+        member_b.write_text("b")
+        cmd_args.append(f"{member_a},{member_b}")
+
+        cmd = f"/autoskillit:{skill_name} {' '.join(cmd_args)}"
+        result = _check_input_contracts(cmd, str(tmp_path), resolve_input_specs)
+        assert result is None, (
+            f"Expected gate acceptance for {skill_name}.{input_name}, got: {result!r}"
+        )
+
+
+class TestPreparePrCrossBinding:
+    """Bundled prepare-pr cross-binding: comma-joined plans must bind plan_paths at position 0."""
+
+    def test_prepare_pr_actual_recipe_shape_accepts_comma_plan_paths(self, tmp_path) -> None:
+        """Bundled recipe shape with comma-joined plans must clear the gate."""
+        from autoskillit.recipe._contracts_manifest import resolve_input_specs
+        from autoskillit.server._guards import _check_input_contracts
+
+        plan_a = tmp_path / "plan_a.md"
+        plan_a.write_text("plan a")
+        plan_b = tmp_path / "plan_b.md"
+        plan_b.write_text("plan b")
+        joined = f"{plan_a},{plan_b}"
+        cmd = f"/autoskillit:prepare-pr {joined} my-run main 123 true"
+        result = _check_input_contracts(cmd, str(tmp_path), resolve_input_specs)
+        assert result is None, f"Expected acceptance, got: {result!r}"
+
+    def test_prepare_pr_plan_list_and_conflict_report_bind_separately(self, tmp_path) -> None:
+        """Comma-joined plans plus optional conflict-report must bind as two path specs."""
+        from autoskillit.recipe._contracts_manifest import resolve_input_specs
+        from autoskillit.server._guards import _check_input_contracts
+
+        plan_a = tmp_path / "plan_a.md"
+        plan_a.write_text("plan a")
+        plan_b = tmp_path / "plan_b.md"
+        plan_b.write_text("plan b")
+        conflict = tmp_path / "conflict.md"
+        conflict.write_text("conflict")
+        joined = f"{plan_a},{plan_b}"
+        cmd = f"/autoskillit:prepare-pr {joined} my-run main 123 true {conflict}"
+        result = _check_input_contracts(cmd, str(tmp_path), resolve_input_specs)
+        assert result is None, f"Expected acceptance, got: {result!r}"
+
+    def test_prepare_pr_missing_conflict_report_is_rejected(self, tmp_path) -> None:
+        """When conflict-report is missing, the scalar spec at path position 1 fails."""
+        from autoskillit.recipe._contracts_manifest import resolve_input_specs
+        from autoskillit.server._guards import _check_input_contracts
+
+        plan_a = tmp_path / "plan_a.md"
+        plan_a.write_text("plan a")
+        plan_b = tmp_path / "plan_b.md"
+        plan_b.write_text("plan b")
+        joined = f"{plan_a},{plan_b}"
+        cmd = f"/autoskillit:prepare-pr {joined} my-run main 123 true /tmp/does-not-exist.md"
+        result = _check_input_contracts(cmd, str(tmp_path), resolve_input_specs)
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["success"] is False
+        assert "conflict_report_path" in parsed["result"]
+
+
+class TestOpenIntegrationPrExactShape:
+    """Bundled open-integration-pr shape: conflict_report_paths must bind path position 1."""
+
+    def _make_recipe_shape_files(self, tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+        pr_order = tmp_path / "pr_order.json"
+        pr_order.write_text("{}")
+        conflict_a = tmp_path / "conflict_a.md"
+        conflict_a.write_text("a")
+        conflict_b = tmp_path / "conflict_b.md"
+        conflict_b.write_text("b")
+        domain_partitions = tmp_path / "domain_partitions.json"
+        domain_partitions.write_text("{}")
+        return pr_order, conflict_a, conflict_b, domain_partitions
+
+    def test_open_integration_pr_recipe_shape_accepts_conflict_list(self, tmp_path: Path) -> None:
+        """Comma-joined conflict reports + named domain partitions must validate."""
+        from autoskillit.recipe._contracts_manifest import resolve_input_specs
+        from autoskillit.server._guards import _check_input_contracts
+
+        pr_order, conflict_a, conflict_b, domain_partitions = self._make_recipe_shape_files(
+            tmp_path
+        )
+        cmd = (
+            f"/autoskillit:open-integration-pr batch-branch main {pr_order} GO "
+            f'"{conflict_a},{conflict_b}" domain_partitions_path={domain_partitions}'
+        )
+        result = _check_input_contracts(cmd, str(tmp_path), resolve_input_specs)
+        assert result is None, f"Expected acceptance, got: {result!r}"
+
+    def test_open_integration_pr_missing_conflict_member_rejected(self, tmp_path: Path) -> None:
+        """Missing conflict-report member must be rejected as conflict_report_paths."""
+        from autoskillit.recipe._contracts_manifest import resolve_input_specs
+        from autoskillit.server._guards import _check_input_contracts
+
+        pr_order, conflict_a, _conflict_b, domain_partitions = self._make_recipe_shape_files(
+            tmp_path
+        )
+        missing = tmp_path / "missing_conflict.md"
+        cmd = (
+            f"/autoskillit:open-integration-pr batch-branch main {pr_order} GO "
+            f'"{conflict_a},{missing}" domain_partitions_path={domain_partitions}'
+        )
+        result = _check_input_contracts(cmd, str(tmp_path), resolve_input_specs)
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["success"] is False
+        assert "conflict_report_paths" in parsed["result"]
 
 
 class TestInputContractIntegration:

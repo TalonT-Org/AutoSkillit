@@ -662,7 +662,7 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:audit-impl ${{ context.group_files }} ${{ context.impl_base_sha }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:audit-impl \"${{ context.group_files }}\" ${{ context.impl_base_sha }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: audit_impl
       output_dir: "{{AUTOSKILLIT_TEMP}}/audit-impl"

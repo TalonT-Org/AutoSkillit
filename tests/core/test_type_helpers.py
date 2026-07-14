@@ -42,6 +42,20 @@ def test_extract_positional_args_returns_non_path_only():
     assert result == ["foo", "bar"]
 
 
+def test_extract_positional_args_preserves_quoted_newline_value():
+    from autoskillit.core import extract_positional_args
+
+    result = extract_positional_args('/skill "/path/a.md\n/path/b.md" branch')
+    assert result == ["/path/a.md\n/path/b.md", "branch"]
+
+
+def test_extract_positional_args_raises_on_unmatched_quote():
+    from autoskillit.core import extract_positional_args
+
+    with pytest.raises(ValueError):
+        extract_positional_args('/skill "/unclosed branch')
+
+
 class TestExtractSkillName:
     def test_slash_prefix(self):
         from autoskillit.core import extract_skill_name

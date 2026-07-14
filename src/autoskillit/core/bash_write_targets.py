@@ -22,6 +22,11 @@ _HEREDOC_BODY_RE = re.compile(
     re.DOTALL,
 )
 
+# After _strip_heredoc_bodies() a heredoc collapses to "<<WORD ...\nWORD".
+# This removes the marker and terminator, keeping the rest of the opening
+# line (real redirects), so segments carry only executable tokens.
+_HEREDOC_MARKER_RE = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?([^\n]*)\n\t*\1(?=[ \t]*(?:\n|$))")
+
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
@@ -114,8 +119,9 @@ def _normalize_newlines(command: str) -> str:
 
 def _tokenize_command_segments(command: str) -> list[list[str]]:
     try:
+        stripped = _HEREDOC_MARKER_RE.sub(r"\2", _strip_heredoc_bodies(command))
         lexer = shlex.shlex(
-            _normalize_newlines(_strip_heredoc_bodies(command)),
+            _normalize_newlines(stripped),
             posix=True,
             punctuation_chars=";&|",
         )

@@ -45,13 +45,16 @@ _WRITE_CALL_SITE_RE = re.compile(
     r"|shutil\.(?:copy|move|copyfile|copytree)\s*\("
 )
 
-# Operators that terminate a shell token (shlex punctuation_chars set).
+# Operators that terminate a shlex token and split command segments.
+# Parentheses are tracked by the lexer as fused tokens (`(cmd` or `cmd)`)
+# and handled separately in extract_redirect_targets.
 _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 
-# Operators that are emitted as standalone tokens. Parentheses are tracked by
-# the lexer as fused tokens (`(cmd` or `cmd)`) and handled separately in
-# extract_redirect_targets; we only need to split on these here.
-_SPLIT_TOKENS: frozenset[str] = _SHELL_OPERATORS
+# Boundary-adjacency operator set for guards that scan raw shlex.split token
+# streams (pr_create, git_ops, planner_gh_discovery, artifact_download,
+# compose_pr_body): `!` and `(` may precede a fresh command verb there but
+# are not split tokens for the segment lexer above.
+_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 
 # Command wrappers whose only effect is to invoke the next command with
 # adjusted environment/priority. The verb is the token after the wrapper.
@@ -166,8 +169,12 @@ _HEREDOC_BODY_RE = re.compile(
     re.DOTALL,
 )
 
+# After strip_heredoc_bodies() a heredoc collapses to "<<WORD ...\nWORD".
+# This removes the marker and terminator, keeping the rest of the opening
+# line (real redirects), so segments carry only executable tokens.
+_HEREDOC_MARKER_RE = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?([^\n]*)\n\t*\1(?=[ \t]*(?:\n|$))")
+
 _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
-_COMMAND_WRAPPERS_DICT: frozenset[str] = _COMMAND_WRAPPERS
 
 _GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
     {
@@ -281,8 +288,9 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     Returns [] on shlex parse error (unclosed quotes).
     """
     try:
+        stripped = _HEREDOC_MARKER_RE.sub(r"\2", strip_heredoc_bodies(command))
         lexer = shlex.shlex(
-            _normalize_newlines_for_tokenize(strip_heredoc_bodies(command)),
+            _normalize_newlines_for_tokenize(stripped),
             posix=True,
             punctuation_chars=";&|",
         )
@@ -294,7 +302,7 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     segments: list[list[str]] = []
     current: list[str] = []
     for token in tokens:
-        if token in _SPLIT_TOKENS:
+        if token in _SHELL_OPERATORS:
             if current:
                 segments.append(current)
                 current = []
@@ -451,28 +459,6 @@ def _consume_wrapper_options(start: int, segment: list[str]) -> int:
     return i
 
 
-def _consume_wrapper(token: str, start: int, segment: list[str]) -> int | None:
-    """Advance *start* past a single wrapper's required and optional args.
-
-    Returns None if a required argument is absent.
-    """
-    if token in _COMMAND_WRAPPERS_DICT:
-        return start
-    if token in _WRAPPERS_WITH_DURATION:
-        if start + 1 >= len(segment):
-            return None
-        return start + 2
-    if token in _WRAPPERS_WITH_SHORT_FLAG:
-        if start + 1 >= len(segment):
-            return None
-        if not segment[start + 1].startswith("-"):
-            return None
-        return start + 2
-    if token == "env":
-        return _consume_env(start + 1, segment)
-    return start
-
-
 def _command_start_index(segment: list[str]) -> int | None:
     if not segment:
         return None
@@ -485,7 +471,7 @@ def _command_start_index(segment: list[str]) -> int | None:
         if token == "env":
             start = _consume_env(start + 1, segment)
             continue
-        if token in _COMMAND_WRAPPERS_DICT:
+        if token in _COMMAND_WRAPPERS:
             start += 1
             continue
         if token in _WRAPPERS_WITH_DURATION and start + 1 < len(segment):
@@ -523,7 +509,7 @@ def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
                 return ("", [])
             start = new_start
             continue
-        if token in _COMMAND_WRAPPERS_DICT:
+        if token in _COMMAND_WRAPPERS:
             # Wrappers (sudo, nice, etc.) may consume attached/detached value options.
             new_start = _consume_wrapper_options(start + 1, segment)
             if new_start <= start + 1:
@@ -760,11 +746,7 @@ def has_nested_shell(command: str) -> bool:
     return bool(_NESTED_SHELL_RE.search(command))
 
 
-# --- Phase 2/3 helpers for unsafe install detection ---
-
-
 _SHELL_INTERPRETERS: frozenset[str] = frozenset({"bash", "sh", "zsh", "dash"})
-_PYTHON_INTERPRETERS: frozenset[str] = frozenset({"python", "python3"})
 
 
 def _normalize_executable(token: str) -> str:
@@ -780,105 +762,6 @@ def _is_shell_interpreter(token: str) -> bool:
         if base.startswith(name) and base[len(name) :].isdigit():
             return True
     return False
-
-
-def _is_python_interpreter(token: str) -> bool:
-    base = _normalize_executable(token)
-    if base in _PYTHON_INTERPRETERS:
-        return True
-    if base.startswith("python") and base[len("python") :].replace(".", "").isdigit():
-        return True
-    return False
-
-
-def _is_pip_executable(token: str) -> bool:
-    base = _normalize_executable(token)
-    if base == "pip":
-        return True
-    if base.startswith("pip") and base[3:].replace(".", "").isdigit():
-        return True
-    return False
-
-
-def _is_uv_executable(token: str) -> bool:
-    return _normalize_executable(token) == "uv"
-
-
-def _is_maturin_executable(token: str) -> bool:
-    return _normalize_executable(token) == "maturin"
-
-
-# Sentinel install subcommand tokens; ordered matchers consume these in sequence.
-_PIP_INSTALL_SUBCOMMAND = "install"
-_UV_PIP_SUBCOMMAND_CHAIN = ("pip", "install")
-_PYTHON_MODULE_PIP_SUBCOMMAND_CHAIN = ("-m", "pip", "install")
-_MATURIN_DEVELOP_SUBCOMMAND = "develop"
-
-
-# Sentinel install subcommand tokens; ordered matchers consume these in sequence.
-_PIP_INSTALL_SUBCOMMAND = "install"
-_UV_PIP_SUBCOMMAND_CHAIN = ("pip", "install")
-_PYTHON_MODULE_PIP_SUBCOMMAND_CHAIN = ("-m", "pip", "install")
-_MATURIN_DEVELOP_SUBCOMMAND = "develop"
-
-
-_PIP_DETACHED_VALUE_FLAGS: frozenset[str] = frozenset(
-    {
-        "-r",
-        "-c",
-        "-t",
-        "-b",
-        "--requirement",
-        "--constraint",
-        "--target",
-        "--prefix",
-        "--src",
-        "--build",
-        "--download",
-        "--index-url",
-        "--extra-index-url",
-        "--find-links",
-        "--editable",
-        "-e",
-    }
-)
-
-
-def _match_pip_install(args: list[str]) -> tuple[list[str], list[str]] | None:
-    """Return (install_args, post_install_args) for `pip install` if matched.
-
-    Consumes leading global pip options then verifies the next non-option
-    token is exactly 'install'. Returns None when the grammar does not match
-    (e.g. `pip help install` or `pip install --help`).
-    """
-    i = 0
-    while i < len(args):
-        token = args[i]
-        if token == "--":
-            i += 1
-            break
-        if token.startswith("-"):
-            if "=" in token:
-                i += 1
-                continue
-            if token in _PIP_DETACHED_VALUE_FLAGS and i + 1 < len(args):
-                i += 2
-                continue
-            i += 1
-            continue
-        break
-    if i >= len(args) or args[i] != _PIP_INSTALL_SUBCOMMAND:
-        return None
-    install_args = args[: i + 1]
-    post_install_args = args[i + 1 :]
-    return (install_args, post_install_args)
-
-
-def _shlex_split_safe(payload: str) -> list[str]:
-    try:
-        return shlex.split(payload)
-    except (ValueError, TypeError):
-        return []
 
 
 def extract_shell_command_payloads(command: str) -> list[str]:
@@ -937,6 +820,7 @@ def _extract_substitution_payloads(command: str) -> list[str]:
                     while inner_end < n and command[inner_end] != "`":
                         inner_end += 1
                     inner = command[j + 1 : inner_end]
+                    payloads.append(inner)
                     payloads.extend(_extract_substitution_payloads(inner))
                     j = inner_end + 1
                     continue

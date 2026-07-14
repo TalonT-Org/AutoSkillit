@@ -791,6 +791,42 @@ def extract_shell_command_payloads(command: str) -> list[str]:
     return payloads
 
 
+def tokenize_shell_payload_segments(command: str) -> list[list[str]] | None:
+    """Return tokenized segments for every evaluated shell payload in *command*.
+
+    Walks the outer command and every extracted payload recursively with a
+    ``seen`` set so nested ``bash -c``, ``eval``, and active-substitution
+    payloads are tokenized once without loops. Each successfully parsed
+    segment of every payload is appended to the result so callers can apply
+    verb-position policies like ``command_verb_and_args`` to each segment.
+
+    Returns ``None`` when the outer command or any non-empty evaluated
+    payload cannot be tokenized; callers interpret ``None`` as no deny
+    match (fail-open). Returns ``[]`` when the command has no evaluated
+    shell payload to traverse.
+    """
+    outer = tokenize_command_segments(command)
+    if not outer and command.strip():
+        return None
+
+    result: list[list[str]] = []
+    seen: set[str] = set()
+    queue: list[str] = list(extract_shell_command_payloads(command))
+    while queue:
+        payload = queue.pop(0)
+        if payload in seen:
+            continue
+        seen.add(payload)
+        if not payload.strip():
+            continue
+        segments = tokenize_command_segments(payload)
+        if not segments and payload.strip():
+            return None
+        result.extend(segments)
+        queue.extend(extract_shell_command_payloads(payload))
+    return result
+
+
 def _extract_substitution_payloads(command: str) -> list[str]:
     """Quote/escape-aware state machine that returns active substitution bodies."""
     payloads: list[str] = []

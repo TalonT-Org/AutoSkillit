@@ -1318,7 +1318,7 @@ def _make_worktree_creator_cycle(
                     "base_branch": "main",
                 },
                 "on_result": [
-                    {"when": "result.failed_step == 'dirty_tree'", "route": "implement"},
+                    {"when": "result.failed_step == 'dirty_tree'", "route": "fail_stop"},
                     {"when": fail_arm_when, "route": fail_arm_route},
                     {"when": "result.error", "route": "fail_stop"},
                     {"route": "done"},

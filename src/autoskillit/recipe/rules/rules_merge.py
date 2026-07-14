@@ -224,12 +224,13 @@ def _check_merge_routing_cross_site_consistency(
             continue
 
         failed_step_value = key.split("::", 1)[0]
-        if all(
-            failed_step_value in _CROSS_SITE_SITE_PAIR_EXEMPTIONS.get((a, b), frozenset())
-            for a in sites_with_key
-            for b in sites_with_key
-            if a != b and (a, b) in _CROSS_SITE_SITE_PAIR_EXEMPTIONS
-        ):
+        site_set = frozenset(sites_with_key)
+        exemption_match = False
+        for pair, exempt_steps in _CROSS_SITE_SITE_PAIR_EXEMPTIONS.items():
+            if frozenset(pair) == site_set and failed_step_value in exempt_steps:
+                exemption_match = True
+                break
+        if exemption_match:
             continue
 
         classifications: dict[str, str | None] = {}

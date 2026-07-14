@@ -353,36 +353,39 @@ def _barrier_has_orphaning_arm(
     success_graph: dict[str, set[str]],
 ) -> bool:
     """Return True if the merge barrier has an explicit failure arm whose route
-    reaches the current worktree creator before re-entering the barrier.
+    reaches the current worktree creator before crossing any merge_worktree barrier.
 
     An arm is unsafe when the creator is reachable from ``cond.route`` without
-    first crossing the barrier itself — that path orphans the current worktree.
-    A route that re-enters the barrier first (bounded retry) is safe; a route
-    that exits to a terminal or reaches a different worktree creator is safe.
+    first crossing any ``merge_worktree`` step — that path orphans the current
+    worktree. A route that re-enters any merge barrier first (bounded retry or
+    secondary merge) is safe; a route that exits to a terminal or reaches a
+    different worktree creator is safe. path_validation is excluded from the
+    failure arms that drive this analysis.
     """
     barrier_step = recipe.steps.get(barrier_step_name)
     if barrier_step is None or barrier_step.tool != "merge_worktree":
         return False
+    # Any merge_worktree step in the recipe is treated as a barrier boundary:
+    # crossing any merge barrier consumes the live worktree, so a route that
+    # re-enters a different merge before reaching the creator is a safe retry.
+    merge_barriers: frozenset[str] = frozenset(
+        name for name, step in recipe.steps.items() if step.tool == "merge_worktree"
+    )
     for condition in _merge_failure_arms(barrier_step):
         route = condition.route
         if route not in success_graph:
             continue
-        # Traverse from cond.route, treating the barrier itself as a non-expanding
-        # boundary. If the creator is visited before the barrier is re-entered,
-        # this arm is unsafe.
         visited: set[str] = {route}
         frontier: set[str] = {route}
         while frontier:
             next_frontier: set[str] = set()
             for node in frontier:
-                if node == barrier_step_name:
-                    continue
                 if node == creator_step_name:
                     return True
                 for successor in success_graph.get(node, ()):
                     if successor in visited:
                         continue
-                    if successor == barrier_step_name:
+                    if successor in merge_barriers:
                         continue
                     visited.add(successor)
                     next_frontier.add(successor)

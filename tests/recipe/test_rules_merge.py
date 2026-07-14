@@ -852,14 +852,21 @@ def test_bundled_recipes_push_between_parts(recipe_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _push_recovery_subgraph(steps: dict, terminal: str = "done") -> dict:
+def _push_recovery_subgraph(terminal: str = "done", *, prefix: str = "") -> dict:
     """Build a subgraph whose ancestry arm reaches a real push_to_remote step.
 
     check_ref_push_loop -> check_loop_iteration guard -> ref_push (push_to_remote)
     -> retry the merge barrier. This satisfies _classify_recovery_class == "push_recovery".
+
+    When *prefix* is provided, step names and successor references are prefixed
+    (e.g. ``"a"`` -> ``"check_ref_push_loop_a"``, ``"ref_push_a"``) so the same
+    subgraph can be reused for both merge sites in a single recipe.
     """
+    loop_name = f"check_ref_push_loop{prefix}"
+    push_name = f"ref_push{prefix}"
+    retry_name = f"retry_merge{prefix}"
     return {
-        "check_ref_push_loop": RecipeStep(
+        loop_name: RecipeStep(
             tool="run_python",
             with_args={
                 "callable": "autoskillit.smoke_utils.check_loop_iteration",
@@ -874,20 +881,20 @@ def _push_recovery_subgraph(steps: dict, terminal: str = "done") -> dict:
                     ),
                 ]
             ),
-            on_success="ref_push",
+            on_success=push_name,
             on_failure="release_issue_failure",
         ),
-        "ref_push": RecipeStep(
+        push_name: RecipeStep(
             tool="push_to_remote",
             with_args={
                 "clone_path": "${{ context.work_dir }}",
                 "remote_url": "${{ context.remote_url }}",
                 "branch": "${{ context.merge_target }}",
             },
-            on_success="retry_merge",
+            on_success=retry_name,
             on_failure="release_issue_failure",
         ),
-        "retry_merge": RecipeStep(
+        retry_name: RecipeStep(
             tool="merge_worktree",
             with_args={
                 "worktree_path": "${{ context.implementation_ref }}",
@@ -900,13 +907,18 @@ def _push_recovery_subgraph(steps: dict, terminal: str = "done") -> dict:
     }
 
 
-def _direct_remediation_subgraph(terminal: str = "done") -> dict:
+def _direct_remediation_subgraph(terminal: str = "done", *, prefix: str = "") -> dict:
     """Build a subgraph whose ancestry arm reaches make-plan (direct_remediate).
 
     check_loop_iteration -> make-plan (autoskillit skill) -> terminal.
+
+    When *prefix* is provided, step names and successor references are prefixed
+    (e.g. ``"a"`` -> ``"check_direct_loop_a"``, ``"make_plan_a"``).
     """
+    loop_name = f"check_direct_loop{prefix}"
+    plan_name = f"make_plan{prefix}"
     return {
-        "check_direct_loop": RecipeStep(
+        loop_name: RecipeStep(
             tool="run_python",
             with_args={
                 "callable": "autoskillit.smoke_utils.check_loop_iteration",
@@ -921,10 +933,10 @@ def _direct_remediation_subgraph(terminal: str = "done") -> dict:
                     ),
                 ]
             ),
-            on_success="make_plan",
+            on_success=plan_name,
             on_failure="release_issue_failure",
         ),
-        "make_plan": RecipeStep(
+        plan_name: RecipeStep(
             tool="run_skill",
             with_args={
                 "skill_command": "/autoskillit:make-plan plan.md",
@@ -944,14 +956,14 @@ def _two_merge_recipe(*, site_a_class: str, site_b_class: str) -> Recipe:
     ref_coherence arm at each site reaches: "push" or "direct".
     """
     site_a = (
-        _push_recovery_subgraph({}, terminal="retry_merge_b")
+        _push_recovery_subgraph(terminal="retry_merge_b", prefix="_a")
         if site_a_class == "push"
-        else _direct_remediation_subgraph("retry_merge_b")
+        else _direct_remediation_subgraph("retry_merge_b", prefix="_a")
     )
     site_b = (
-        _push_recovery_subgraph({}, terminal="done")
+        _push_recovery_subgraph(terminal="done", prefix="_b")
         if site_b_class == "push"
-        else _direct_remediation_subgraph("done")
+        else _direct_remediation_subgraph("done", prefix="_b")
     )
 
     common = {
@@ -1053,62 +1065,29 @@ def _two_merge_recipe(*, site_a_class: str, site_b_class: str) -> Recipe:
         "done": RecipeStep(action="stop", message="done"),
     }
 
-    # Wire per-site guard names to the matching subgraph
+    # Wire per-site guard names to the matching subgraph. The subgraph helpers
+    # already produced prefixed step names when called with prefix="_a"/"_b".
     if site_a_class == "push":
         site_a_subgraph = {
-            "check_ref_push_loop_a": site_a["check_ref_push_loop"],
-            "ref_push_a": RecipeStep(
-                tool="push_to_remote",
-                with_args={
-                    "clone_path": "${{ context.work_dir }}",
-                    "remote_url": "${{ context.remote_url }}",
-                    "branch": "main",
-                },
-                on_success="retry_merge_a",
-                on_failure="release_issue_failure",
-            ),
-            "retry_merge_a": RecipeStep(
-                tool="merge_worktree",
-                with_args={
-                    "worktree_path": "${{ context.implementation_ref }}",
-                    "base_branch": "main",
-                },
-                on_success="merge_b",
-                on_failure="release_issue_failure",
-            ),
+            "check_ref_push_loop_a": site_a["check_ref_push_loop_a"],
+            "ref_push_a": site_a["ref_push_a"],
+            "retry_merge_a": site_a["retry_merge_a"],
         }
     else:
         site_a_subgraph = {
-            "check_direct_loop_a": site_a["check_direct_loop"],
-            "make_plan_a": site_a["make_plan"],
+            "check_direct_loop_a": site_a["check_direct_loop_a"],
+            "make_plan_a": site_a["make_plan_a"],
         }
     if site_b_class == "push":
         site_b_subgraph = {
-            "check_ref_push_loop_b": site_b["check_ref_push_loop"],
-            "ref_push_b": RecipeStep(
-                tool="push_to_remote",
-                with_args={
-                    "clone_path": "${{ context.work_dir }}",
-                    "remote_url": "${{ context.remote_url }}",
-                    "branch": "main",
-                },
-                on_success="retry_merge_b",
-                on_failure="release_issue_failure",
-            ),
-            "retry_merge_b": RecipeStep(
-                tool="merge_worktree",
-                with_args={
-                    "worktree_path": "${{ context.implementation_ref }}",
-                    "base_branch": "main",
-                },
-                on_success="done",
-                on_failure="release_issue_failure",
-            ),
+            "check_ref_push_loop_b": site_b["check_ref_push_loop_b"],
+            "ref_push_b": site_b["ref_push_b"],
+            "retry_merge_b": site_b["retry_merge_b"],
         }
     else:
         site_b_subgraph = {
-            "check_direct_loop_b": site_b["check_direct_loop"],
-            "make_plan_b": site_b["make_plan"],
+            "check_direct_loop_b": site_b["check_direct_loop_b"],
+            "make_plan_b": site_b["make_plan_b"],
         }
 
     steps = {**common, **site_a_subgraph, **site_b_subgraph}

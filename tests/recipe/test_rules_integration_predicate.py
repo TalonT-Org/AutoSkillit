@@ -44,15 +44,15 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond1 = step.on_result.conditions[1]
         assert cond1.when == "result.failed_step == 'test_gate'"
-        assert cond1.route == "check_merge_fix_loop"
+        assert cond1.route == "release_issue_failure"
 
         cond2 = step.on_result.conditions[2]
         assert cond2.when == "result.failed_step == 'post_rebase_test_gate'"
-        assert cond2.route == "check_merge_fix_loop"
+        assert cond2.route == "release_issue_failure"
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "check_merge_rebase_loop"
+        assert cond3.route == "release_issue_failure"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.failed_step == 'dirty_main_repo'"
@@ -249,18 +249,31 @@ class TestLoopBudgetSeparation:
             "check_dirty_main_retry",
         }
         guard_steps = merge_fix_guard_steps | {"check_ref_push_loop"}
+        terminal_steps = {"release_issue_failure"}
         for cond in merge_step.on_result.conditions:
             if not cond.when or "failed_step" not in cond.when:
                 continue
             if "ref_coherence" in cond.when and "remote_is_ancestor" not in cond.when:
                 assert cond.route == "release_issue_failure"
+            elif recipe_name == "remediation" and cond.when in (
+                "result.failed_step == 'test_gate'",
+                "result.failed_step == 'post_rebase_test_gate'",
+                "result.failed_step == 'rebase'",
+            ):
+                # After PART B step 5, remediation.yaml's pre_remediation_merge
+                # routes these to terminal escalation so live-worktree merge
+                # failures no longer orphan the next worktree creator.
+                assert cond.route in terminal_steps, (
+                    f"{cond.when} routes to {cond.route}, expected a terminal escalation"
+                )
             else:
                 assert cond.route in guard_steps, (
                     f"{cond.when} routes to {cond.route}, expected a guard step"
                 )
         for name in merge_fix_guard_steps:
-            step = recipe.steps[name]
-            assert step.with_args.get("current_iteration") == "${{ context.merge_fix_count }}"
+            if name in recipe.steps:
+                step = recipe.steps[name]
+                assert step.with_args.get("current_iteration") == "${{ context.merge_fix_count }}"
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
     def test_loop_budget_ingredients_exist(self, recipe_name: str) -> None:

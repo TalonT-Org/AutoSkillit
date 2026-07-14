@@ -162,11 +162,21 @@ async def execute_termination_action(
     process_exited_event: anyio.Event,
     grace_seconds: float,
     proc_log: structlog.BoundLogger,
+    pid: int | None = None,
+    marker_dir: Path | None = None,
+    session_id: str | None = None,
+    child_deferral_ceiling: float = 0.0,
 ) -> KillReason:
     """Single authorized executor for all kill decisions in run_managed_async.
 
     This is the ONLY function in process.py permitted to call
     async_kill_process_tree (enforced by test_no_direct_async_kill_process_tree_outside_executor).
+
+    On the DRAIN_THEN_KILL_IF_ALIVE path, when *pid* is provided and
+    *child_deferral_ceiling* > 0, the kill is deferred (bounded by the ceiling)
+    while child processes, an API connection, or an execution marker indicate
+    the subagent is still doing active work — mirroring the stale-kill
+    suppression pattern in _session_log_monitor.
 
     Returns the KillReason that surfaces to SubprocessResult.kill_reason.
     """
@@ -179,10 +189,40 @@ async def execute_termination_action(
             if proc.returncode is not None:
                 proc_log.debug("natural_exit_after_drain", returncode=proc.returncode)
                 return KillReason.NATURAL_EXIT
+            # Child-liveness deferral: same pattern as _session_log_monitor stale-kill suppression
+            if pid is not None and child_deferral_ceiling > 0:
+                deferral_start = anyio.current_time()
+                _poll_interval = 2.0
+                while (anyio.current_time() - deferral_start) < child_deferral_ceiling:
+                    if proc.returncode is not None:
+                        proc_log.debug("natural_exit_during_deferral", returncode=proc.returncode)
+                        return KillReason.NATURAL_EXIT
+                    active = (
+                        _has_active_child_processes(pid)
+                        or _has_active_api_connection(pid)
+                        or (
+                            marker_dir is not None
+                            and _has_active_execution_marker(marker_dir, session_id=session_id)
+                        )
+                    )
+                    if not active:
+                        proc_log.debug("no_active_children_proceeding_to_kill")
+                        break
+                    proc_log.debug(
+                        "child_liveness_deferral",
+                        elapsed=anyio.current_time() - deferral_start,
+                        ceiling=child_deferral_ceiling,
+                    )
+                    await anyio.sleep(_poll_interval)
             proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
             await async_kill_process_tree(proc.pid)
             return KillReason.KILL_AFTER_COMPLETION
         case TerminationAction.IMMEDIATE_KILL:
+            if pid is not None and _has_active_child_processes(pid):
+                proc_log.warning(
+                    "immediate_kill_with_active_children",
+                    pid=pid,
+                )
             await async_kill_process_tree(proc.pid)
             return KillReason.INFRA_KILL
         case _ as unreachable:
@@ -221,6 +261,7 @@ async def run_managed_async(
     inspector_callback: InspectorCallback | None = None,
     workload_basenames: frozenset[str] | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
+    child_deferral_ceiling: float = 0.0,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -477,6 +518,10 @@ async def run_managed_async(
                 process_exited_event=signals.process_exited_event,
                 grace_seconds=natural_exit_grace_seconds,
                 proc_log=proc_log,
+                pid=_observed_pid,
+                marker_dir=marker_dir,
+                session_id=session_id,
+                child_deferral_ceiling=child_deferral_ceiling,
             )
 
             # Flush and close before reading
@@ -635,6 +680,7 @@ class DefaultSubprocessRunner:
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        child_deferral_ceiling: float = 0.0,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -653,6 +699,7 @@ class DefaultSubprocessRunner:
             on_pid_resolved=on_pid_resolved,
             enable_deadline_extension=enable_deadline_extension,
             max_extension_seconds=max_extension_seconds,
+            child_deferral_ceiling=child_deferral_ceiling,
             marker_dir=marker_dir,
             session_id=session_id,
             stream_parser=stream_parser,

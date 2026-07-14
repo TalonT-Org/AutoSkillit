@@ -105,6 +105,7 @@ class RunSkillConfig:
     max_suppression_seconds: int = 1800
     stream_idle_timeout_ms: int = 600000
     mcp_tool_timeout_sec: float = 14364.0
+    completion_child_deferral_ceiling_seconds: float = 120.0
 
     # Safety margin (ms) above exit_after_stop_delay_ms that
     # natural_exit_grace_seconds must cover so the drain window can absorb
@@ -118,6 +119,11 @@ class RunSkillConfig:
             raise ValueError(
                 f"stream_idle_timeout_ms={self.stream_idle_timeout_ms} must be >= 0 "
                 "(use 0 to disable injection)."
+            )
+        if self.completion_child_deferral_ceiling_seconds < 0:
+            raise ValueError(
+                f"completion_child_deferral_ceiling_seconds="
+                f"{self.completion_child_deferral_ceiling_seconds} must be >= 0."
             )
         required_ms = self.exit_after_stop_delay_ms + self._EXIT_GRACE_BUFFER_MS
         # Convert seconds → ms for the comparison

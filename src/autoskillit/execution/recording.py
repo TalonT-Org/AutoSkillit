@@ -142,6 +142,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        child_deferral_ceiling: float = 0.0,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -178,6 +179,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     step_name=step_name,
                     completion_record_types=completion_record_types,
                     session_record_types=session_record_types,
+                    child_deferral_ceiling=child_deferral_ceiling,
                 )
 
             # Non-Codex, non-PTY with step_name: run inner + record summary.
@@ -203,6 +205,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 stream_parser=stream_parser,
                 completion_record_types=completion_record_types,
                 session_record_types=session_record_types,
+                child_deferral_ceiling=child_deferral_ceiling,
             )
             self.recorder.record_non_session_step(
                 step_name=step_name,
@@ -237,6 +240,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             stream_parser=stream_parser,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
+            child_deferral_ceiling=child_deferral_ceiling,
         )
 
     async def _record_session(
@@ -312,6 +316,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         step_name: str,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
+        child_deferral_ceiling: float = 0.0,
     ) -> SubprocessResult:
         """Record a non-PTY (Codex) session step via cassette files."""
         result = await self._inner(
@@ -336,6 +341,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             stream_parser=stream_parser,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
+            child_deferral_ceiling=child_deferral_ceiling,
         )
 
         if self._scenario_dir is None:
@@ -433,6 +439,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        child_deferral_ceiling: float = 0.0,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

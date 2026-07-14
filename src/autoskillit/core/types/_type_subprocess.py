@@ -176,4 +176,5 @@ class SubprocessRunner(Protocol):
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        child_deferral_ceiling: float = 0.0,
     ) -> Awaitable[SubprocessResult]: ...

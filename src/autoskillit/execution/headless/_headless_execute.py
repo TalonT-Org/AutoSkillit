@@ -262,6 +262,7 @@ async def _execute_claude_headless(
                 linux_tracing_config=linux_tracing_cfg,
                 idle_output_timeout=effective_idle,
                 max_suppression_seconds=cfg.max_suppression_seconds,
+                child_deferral_ceiling=cfg.completion_child_deferral_ceiling_seconds,
                 on_pid_resolved=on_spawn,
                 enable_deadline_extension=enable_deadline_extension,
                 max_extension_seconds=max_extension_seconds,

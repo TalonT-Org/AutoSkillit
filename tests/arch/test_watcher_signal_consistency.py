@@ -12,6 +12,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _CLI_APP = Path("src/autoskillit/cli/app.py")
 _PROCESS_RACE = Path("src/autoskillit/execution/process/_process_race.py")
 _PROCESS_MONITOR = Path("src/autoskillit/execution/process/_process_monitor.py")
+_PROCESS_INIT = Path("src/autoskillit/execution/process/__init__.py")
 
 _WATCHERS_THAT_MUST_CHECK_EXECUTION_MARKER = frozenset(
     {
@@ -60,5 +61,23 @@ def test_signal_guard_activity_check_calls_has_active_execution_marker(fn_name: 
     callers = _functions_calling_predicate(_CLI_APP, "_has_active_execution_marker")
     assert fn_name in callers, (
         f"{fn_name} in cli/app.py does not call _has_active_execution_marker. "
+        f"Functions that do: {sorted(callers)}"
+    )
+
+
+_KILL_EXECUTORS_THAT_MUST_CHECK_CHILD_LIVENESS = frozenset(
+    {
+        "execute_termination_action",
+    }
+)
+
+
+@pytest.mark.parametrize("executor", sorted(_KILL_EXECUTORS_THAT_MUST_CHECK_CHILD_LIVENESS))
+def test_kill_executor_checks_child_liveness(executor: str) -> None:
+    """Kill executors authorized to call async_kill_process_tree must consult
+    _has_active_child_processes before killing on the COMPLETED path."""
+    callers = _functions_calling_predicate(_PROCESS_INIT, "_has_active_child_processes")
+    assert executor in callers, (
+        f"{executor} does not call _has_active_child_processes. "
         f"Functions that do: {sorted(callers)}"
     )

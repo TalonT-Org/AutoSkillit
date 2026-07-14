@@ -244,7 +244,7 @@ def test_atomic_write_failure_surfaces_diagnostic_and_leaves_no_marker(
         raise OSError("disk full")
 
     monkeypatch.setattr(
-        "autoskillit.hooks.quota_guard_state_post_hook._atomic_write_marker", _raise
+        "autoskillit.hooks.quota_guard_state_post_hook.write_quota_disable_marker", _raise
     )
 
     event = {

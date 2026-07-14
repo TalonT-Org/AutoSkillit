@@ -119,7 +119,7 @@ def test_quota_guard_state_post_hook_failure_rewrite_excludes_raw_response(
     def _raise(*_args, **_kwargs):
         raise OSError("disk full")
 
-    monkeypatch.setattr(hook_mod, "_atomic_write_marker", _raise)
+    monkeypatch.setattr(hook_mod, "write_quota_disable_marker", _raise)
 
     canary = "CANARY_DISABLE_RESPONSE_PAYLOAD_ZZZ456"
     inner = json.dumps({"success": True, "content": canary})

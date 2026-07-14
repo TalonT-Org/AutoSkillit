@@ -602,6 +602,8 @@ def load_and_validate(
         "suggestions": suggestions,
         "valid": valid,
     }
+    if _serving_recipe is not None and _serving_recipe.summary:
+        result["summary"] = _serving_recipe.summary
     if _serving_recipe is not None and _serving_recipe.kitchen_rules:
         result["kitchen_rules"] = _serving_recipe.kitchen_rules
     if _serving_recipe is not None and _serving_recipe.requires_packs:

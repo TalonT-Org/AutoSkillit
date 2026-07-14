@@ -78,6 +78,7 @@ from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _FMT_RECIPE_LIST_ITEM_RENDERED,
     _FMT_RECIPE_LIST_ITEM_SUPPRESSED,
     _LOAD_RECIPE_CONTENT_DERIVED_FROM,
+    _OPEN_KITCHEN_OUTPUT_BUDGET_BYTES,
     _fmt_list_recipes,
     _fmt_load_recipe,
     _fmt_open_kitchen,

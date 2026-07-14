@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -426,8 +427,8 @@ def test_fmt_open_kitchen_plain_text():
 # PHK-42/43/44: _fmt_load_recipe tests
 
 
-def test_fmt_load_recipe_suppresses_diagram():
-    """Diagram is suppressed — user sees it in terminal, agent doesn't need it."""
+def test_fmt_load_recipe_includes_diagram():
+    """Diagram is rendered — the step-flow chain must survive preview truncation."""
     formatted = _format_response(
         "mcp__autoskillit__load_recipe",
         json.dumps(
@@ -441,7 +442,7 @@ def test_fmt_load_recipe_suppresses_diagram():
         pipeline=False,
     )
     assert formatted is not None
-    assert "some diagram graph" not in formatted
+    assert "some diagram graph" in formatted
     assert "--- RECIPE ---" in formatted
 
 
@@ -816,4 +817,194 @@ def test_fmt_open_kitchen_ingredients_only_no_recipe_block():
     }
     output = _fmt_open_kitchen(data, pipeline=False)
     assert "--- RECIPE ---" not in output
-    assert "INGREDIENTS TABLE" in output
+
+
+# Issue #4253 Part A: STEP FLOW head, diagram inclusion, compaction, and payload budget
+
+
+def test_open_kitchen_output_leads_with_step_flow():
+    """STEP FLOW must be the first section, before FLOW DIAGRAM and RECIPE, and must
+    survive any truncation to the first 2KB of the response."""
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
+
+    data = {
+        "summary": "first > second",
+        "content": (
+            "name: x\nsteps:\n  first:\n    tool: run_cmd\n    on_success: second\n"
+            "  second:\n    action: stop\n"
+        ),
+        "diagram": "## x\nfirst --> second",
+        "ingredients_table": "| Name | Description | Default |",
+        "orchestration_rules": "STEP EXECUTION IS NOT DISCRETIONARY:\nsome rules",
+        "valid": True,
+        "suggestions": [],
+        "version": "0.1.0",
+    }
+    formatted = _fmt_open_kitchen(data, pipeline=False)
+    assert formatted.startswith("## open_kitchen")
+    idx_flow = formatted.index("--- STEP FLOW ---")
+    idx_diagram = formatted.index("--- FLOW DIAGRAM ---")
+    idx_recipe = formatted.index("--- RECIPE ---")
+    assert idx_flow < idx_diagram < idx_recipe
+
+    head_bytes = formatted.encode("utf-8")[:2048]
+    assert b"--- STEP FLOW ---" in head_bytes
+    assert b"first > second" in head_bytes
+    assert b"--- END STEP FLOW ---" in head_bytes
+
+
+def test_open_kitchen_output_includes_diagram():
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
+
+    data = {
+        "diagram": "## x\nfirst --> second diagram content",
+        "valid": True,
+        "suggestions": [],
+        "version": "0.1.0",
+    }
+    formatted = _fmt_open_kitchen(data, pipeline=False)
+    assert "first --> second diagram content" in formatted
+
+
+def _strip_presentation_fields(parsed: dict) -> dict:
+    """Expected projection: original parsed YAML minus presentation-only fields
+    compact_recipe_display() is allowed to drop (top-level description/summary,
+    direct step description)."""
+    projected = dict(parsed)
+    projected.pop("description", None)
+    projected.pop("summary", None)
+    steps = projected.get("steps")
+    if isinstance(steps, dict):
+        new_steps = {}
+        for name, step in steps.items():
+            if isinstance(step, dict):
+                step = {k: v for k, v in step.items() if k != "description"}
+            new_steps[name] = step
+        projected["steps"] = new_steps
+    return projected
+
+
+_COMPACT_TEST_OVERRIDES = {
+    "default": {
+        "task": "test task",
+        "issue_url": "https://github.com/test/test/issues/1",
+    },
+    "all_truthy": {
+        "task": "test task",
+        "issue_url": "https://github.com/test/test/issues/1",
+        "is_fleet_dispatch": "true",
+        "adversarial_review_level": "true",
+        "local_review_rounds": "true",
+        "base_branch": "true",
+        "post_run_diagnostics": "true",
+    },
+}
+
+
+def _served_content(
+    recipe_name: str, project_root, overrides: dict, tmp_path, monkeypatch
+) -> str | None:
+    """Load a bundled recipe's served content in isolation from the shared cache."""
+    from autoskillit.recipe import _api_cache, load_and_validate
+    from autoskillit.recipe._api_cache import LoadCache
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+    result = load_and_validate(
+        recipe_name,
+        project_dir=project_root,
+        ingredient_overrides=dict(overrides, source_dir=str(project_root)),
+        temp_dir=tmp_path,
+    )
+    return result.get("content")
+
+
+def test_compact_recipe_display_preserves_execution_semantics(tmp_path, monkeypatch):
+    """compact_recipe_display() must not alter any parsed value except the
+    explicitly allowlisted presentation-only fields, for every runtime-discoverable
+    recipe under both ingredient modes."""
+    from autoskillit.core import load_yaml
+    from autoskillit.hooks.formatters._fmt_recipe_compact import compact_recipe_display
+    from autoskillit.recipe import all_validated_recipe_names
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    remediation_note_checked = False
+
+    for recipe_name in all_validated_recipe_names(project_root):
+        for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
+            content = _served_content(recipe_name, project_root, overrides, tmp_path, monkeypatch)
+            if not content:
+                continue
+            original_parsed = load_yaml(content)
+            if not isinstance(original_parsed, dict):
+                continue
+            compacted = compact_recipe_display(content)
+            compacted_parsed = load_yaml(compacted)
+            expected = _strip_presentation_fields(original_parsed)
+            assert compacted_parsed == expected, (
+                f"{recipe_name} ({mode_name}): compaction altered parsed recipe semantics"
+            )
+            if recipe_name == "remediation":
+                remediation_note_checked = True
+                rectify_note = original_parsed["steps"]["rectify"]["note"]
+                assert "all_plan_paths accumulates" in rectify_note
+                assert compacted_parsed["steps"]["rectify"]["note"] == rectify_note
+                assert "all_plan_paths accumulates" in compacted
+
+    assert remediation_note_checked, "remediation recipe was not exercised by this test"
+
+
+def test_open_kitchen_payload_warning_uses_formatted_byte_count(capsys):
+    """When the rendered payload exceeds budget, the stdlib-only warning must report
+    the tool name, content_hash, actual formatted byte count, and the budget."""
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
+
+    huge_note_body = "x" * 100_000
+    content = (
+        f"name: huge\nsteps:\n  only:\n    tool: run_cmd\n    note: |\n      {huge_note_body}\n"
+    )
+    data = {
+        "content": content,
+        "valid": True,
+        "suggestions": [],
+        "version": "0.1.0",
+        "content_hash": "deadbeef",
+    }
+    formatted = _fmt_open_kitchen(data, pipeline=False)
+    captured = capsys.readouterr()
+    byte_len = len(formatted.encode("utf-8"))
+    assert byte_len > 95_000
+    assert "open_kitchen" in captured.err
+    assert "content_hash=deadbeef" in captured.err
+    assert str(byte_len) in captured.err
+    assert "95000" in captured.err
+
+
+def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
+    """Regression gate (issue #4253): the fully rendered open_kitchen payload for every
+    runtime-discoverable recipe, under both default and all-truthy ingredient
+    resolution, must stay at or under the 95,000 UTF-8 byte regression budget — a
+    margin below the last empirically observed ~100KB Claude Code CLI disk-persistence
+    gate (measured on CLI 2.1.197). Re-measure after CLI upgrades; this is not a claim
+    that the external gate is stable."""
+    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
+    from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
+    from autoskillit.recipe._api_cache import LoadCache
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    over_budget: list[str] = []
+
+    for recipe_name in all_validated_recipe_names(project_root):
+        for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
+            monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+            result = load_and_validate(
+                recipe_name,
+                project_dir=project_root,
+                ingredient_overrides=dict(overrides, source_dir=str(project_root)),
+                temp_dir=tmp_path,
+            )
+            rendered = _fmt_open_kitchen(result, pipeline=False)
+            byte_len = len(rendered.encode("utf-8"))
+            if byte_len > 95_000:
+                over_budget.append(f"{recipe_name} ({mode_name}): {byte_len} bytes > 95000")
+
+    assert not over_budget, "\n".join(over_budget)

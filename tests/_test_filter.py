@@ -441,6 +441,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "rules_graph_output": frozenset({"recipe"}),
     "rules_graph_review": frozenset({"recipe"}),
     "rules_graph_routes": frozenset({"recipe"}),
+    "rules_graph_summary": frozenset({"recipe"}),
     "rules_inline_script": frozenset({"recipe"}),
     "rules_inputs": frozenset({"recipe"}),
     "rules_isolation": frozenset({"recipe"}),

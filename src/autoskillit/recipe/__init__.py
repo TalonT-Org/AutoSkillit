@@ -239,6 +239,9 @@ from autoskillit.recipe.rules.graph import (
 from autoskillit.recipe.rules.graph import (
     rules_graph_routes as _rules_graph_routes,  # noqa: E402 F401
 )
+from autoskillit.recipe.rules.graph import (
+    rules_graph_summary as _rules_graph_summary,  # noqa: E402 F401
+)
 from autoskillit.recipe.schema import (  # noqa: E402
     AUTOSKILLIT_VERSION_KEY,
     CAMPAIGN_REF_RE,

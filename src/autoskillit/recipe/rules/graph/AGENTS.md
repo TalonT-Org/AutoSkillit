@@ -1,6 +1,6 @@
 # rules/graph/
 
-Graph semantic rule modules (4 rule files).
+Graph semantic rule modules (5 rule files).
 
 ## Files
 
@@ -11,6 +11,7 @@ Graph semantic rule modules (4 rule files).
 | `rules_graph_output.py` | Merge-base unpublished, tool output routing, skill result routing gap |
 | `rules_graph_review.py` | Pass-through validity, review waypoint guards, context limit |
 | `rules_graph_routes.py` | Route completeness, structural ordering, clone root validation |
+| `rules_graph_summary.py` | Summary-vs-graph divergence: phase waypoint disclosure, optional-marker agreement, success-path ordering |
 
 ## Architecture Notes
 

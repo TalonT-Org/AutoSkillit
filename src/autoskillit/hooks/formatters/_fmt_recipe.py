@@ -7,6 +7,7 @@ runtime.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -15,10 +16,20 @@ from _fmt_primitives import (  # type: ignore[import-not-found]
     _CROSS_MARK,
     _WARN_MARK,
 )
+from _fmt_recipe_compact import (  # type: ignore[import-not-found]
+    compact_orchestration_rules,
+    compact_recipe_display,
+)
 
 if TYPE_CHECKING:
     from autoskillit.recipe import ListRecipesResult, LoadRecipeResult, OpenKitchenResult
 
+
+# Regression budget for the rendered open_kitchen payload — see _fmt_open_kitchen.
+# Empirically below the ~100KB Claude Code CLI disk-persistence gate (measured on
+# CLI 2.1.197); re-measure after CLI upgrades rather than treating this as a
+# protocol constant. See issue #4253.
+_OPEN_KITCHEN_OUTPUT_BUDGET_BYTES = 95_000
 
 # Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
 _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
@@ -26,6 +37,8 @@ _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
         "valid",
         "suggestions",
         "content",
+        "summary",
+        "diagram",
         "ingredients_table",
         "orchestration_rules",
         "warnings",
@@ -35,7 +48,6 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
     {
         "greeting",  # delivered via positional CLI arg, not MCP response
         "errors",  # structural validation errors; internal to load_and_validate
-        "diagram",  # user sees it in terminal preview; agent doesn't need it
         "kitchen_rules",  # already in the YAML content
         "requires_packs",  # internal field; used for skill gating, not display
         "requires_features",  # internal feature gate enablement field
@@ -93,8 +105,24 @@ def _strip_yaml_ingredients_block(yaml_text: str) -> str:
 
 
 def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
-    """Shared recipe content rendering for load_recipe and open_kitchen+recipe."""
+    """Shared recipe content rendering for load_recipe and open_kitchen+recipe.
+
+    Renders STEP FLOW (structured summary) before FLOW DIAGRAM before RECIPE
+    so the step-ordering chain survives even if only the first ~2KB of the
+    response is delivered (see issue #4253). load_recipe and named-recipe
+    open_kitchen intentionally share this same head ordering.
+    """
     lines: list[str] = []
+    summary = data.get("summary")
+    if summary:
+        lines.append("\n--- STEP FLOW ---")
+        lines.append(" ".join(str(summary).split()))
+        lines.append("--- END STEP FLOW ---")
+    diagram = data.get("diagram")
+    if diagram:
+        lines.append("\n--- FLOW DIAGRAM ---")
+        lines.append(diagram)
+        lines.append("--- END DIAGRAM ---")
     content = data.get("content")
     if content:
         # When a derived field is present, strip its source block from content
@@ -103,6 +131,7 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
         for derived_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM:
             if data.get(derived_field):
                 display_content = _strip_yaml_ingredients_block(display_content)
+        display_content = compact_recipe_display(display_content)
         lines.append("\n--- RECIPE ---")
         lines.append(display_content)
         lines.append("--- END RECIPE ---")
@@ -119,7 +148,7 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
         lines.append(f"\n{len(errors)} finding(s)")
     orch_rules = data.get("orchestration_rules")
     if orch_rules:
-        lines.append(f"\n{orch_rules}")
+        lines.append(f"\n{compact_orchestration_rules(orch_rules)}")
     warnings = data.get("warnings") or []
     for warning in warnings:
         lines.append(f"\n{_WARN_MARK} {warning}")
@@ -169,6 +198,8 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
         "valid",
         "suggestions",
         "content",
+        "summary",
+        "diagram",
         "ingredients_table",
         "orchestration_rules",
         "version",
@@ -181,7 +212,6 @@ _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
         "kitchen",  # metadata — model knows kitchen state from context
         "errors",  # structural validation errors; internal to load_and_validate
         "greeting",  # delivered via CLI preview, not MCP response
-        "diagram",  # rendered in terminal preview, not needed by agent
         "kitchen_rules",  # already embedded in YAML content
         "requires_packs",  # internal gating field
         "requires_features",  # internal feature gate enablement field
@@ -210,7 +240,17 @@ def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
     mark = _CHECK_MARK if valid else _CROSS_MARK
     lines: list[str] = [f"## open_kitchen {mark} v{version}"]
     lines.extend(_fmt_recipe_body(data))
-    return "\n".join(lines)
+    formatted = "\n".join(lines)
+
+    byte_len = len(formatted.encode("utf-8"))
+    if byte_len > _OPEN_KITCHEN_OUTPUT_BUDGET_BYTES:
+        content_hash = data.get("content_hash", "")
+        print(
+            f"open_kitchen payload over budget: content_hash={content_hash} "
+            f"bytes={byte_len} budget={_OPEN_KITCHEN_OUTPUT_BUDGET_BYTES}",
+            file=sys.stderr,
+        )
+    return formatted
 
 
 def _fmt_open_kitchen_plain_text(text: str, _pipeline: bool) -> str:

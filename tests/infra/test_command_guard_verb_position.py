@@ -213,3 +213,8 @@ class TestDetectorSyntheticSelfTests:
         source = "def f(cmd):\n    alt = cmd or ''\n    return 'create' in alt\n"
         sites = _raw_membership_sites(source, {"cmd"})
         assert sites, "Taint must propagate through ``or`` joins"
+
+    def test_rejects_bitor_joined_taint(self) -> None:
+        source = "def f(cmd, command):\n    alt = cmd | command\n    return 'create' in alt\n"
+        sites = _raw_membership_sites(source, {"cmd"})
+        assert sites, "Taint must propagate through ``|`` joins"

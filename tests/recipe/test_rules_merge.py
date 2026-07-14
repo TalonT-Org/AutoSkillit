@@ -845,3 +845,494 @@ def test_bundled_recipes_push_between_parts(recipe_name: str) -> None:
             f"{step_name} success route {success_route} must be a push_to_remote step, "
             f"got tool={getattr(push_step, 'tool', None)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Step 1a: merge-routing-cross-site-consistency rule tests
+# ---------------------------------------------------------------------------
+
+
+def _push_recovery_subgraph(steps: dict, terminal: str = "done") -> dict:
+    """Build a subgraph whose ancestry arm reaches a real push_to_remote step.
+
+    check_ref_push_loop -> check_loop_iteration guard -> ref_push (push_to_remote)
+    -> retry the merge barrier. This satisfies _classify_recovery_class == "push_recovery".
+    """
+    return {
+        "check_ref_push_loop": RecipeStep(
+            tool="run_python",
+            with_args={
+                "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                "current_iteration": "${{ context.ref_push_count }}",
+                "max_iterations": "3",
+            },
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="${{ result.max_exceeded }} == true",
+                    ),
+                ]
+            ),
+            on_success="ref_push",
+            on_failure="release_issue_failure",
+        ),
+        "ref_push": RecipeStep(
+            tool="push_to_remote",
+            with_args={
+                "clone_path": "${{ context.work_dir }}",
+                "remote_url": "${{ context.remote_url }}",
+                "branch": "${{ context.merge_target }}",
+            },
+            on_success="retry_merge",
+            on_failure="release_issue_failure",
+        ),
+        "retry_merge": RecipeStep(
+            tool="merge_worktree",
+            with_args={
+                "worktree_path": "${{ context.implementation_ref }}",
+                "base_branch": "${{ context.merge_target }}",
+            },
+            on_success=terminal,
+            on_failure="release_issue_failure",
+        ),
+        "release_issue_failure": RecipeStep(action="stop", message="failed"),
+    }
+
+
+def _direct_remediation_subgraph(terminal: str = "done") -> dict:
+    """Build a subgraph whose ancestry arm reaches make-plan (direct_remediate).
+
+    check_loop_iteration -> make-plan (autoskillit skill) -> terminal.
+    """
+    return {
+        "check_direct_loop": RecipeStep(
+            tool="run_python",
+            with_args={
+                "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                "current_iteration": "${{ context.direct_count }}",
+                "max_iterations": "3",
+            },
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="${{ result.max_exceeded }} == true",
+                    ),
+                ]
+            ),
+            on_success="make_plan",
+            on_failure="release_issue_failure",
+        ),
+        "make_plan": RecipeStep(
+            tool="run_skill",
+            with_args={
+                "skill_command": "/autoskillit:make-plan plan.md",
+                "cwd": "${{ context.worktree_path }}",
+            },
+            on_success=terminal,
+            on_failure="release_issue_failure",
+        ),
+        "release_issue_failure": RecipeStep(action="stop", message="failed"),
+    }
+
+
+def _two_merge_recipe(*, site_a_class: str, site_b_class: str) -> Recipe:
+    """Build a recipe with two merge_worktree steps.
+
+    site_a_class and site_b_class pick which recovery subgraph the ancestry-aware
+    ref_coherence arm at each site reaches: "push" or "direct".
+    """
+    site_a = (
+        _push_recovery_subgraph({}, terminal="retry_merge_b")
+        if site_a_class == "push"
+        else _direct_remediation_subgraph("retry_merge_b")
+    )
+    site_b = (
+        _push_recovery_subgraph({}, terminal="done")
+        if site_b_class == "push"
+        else _direct_remediation_subgraph("done")
+    )
+
+    common = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={
+                "worktree_path": "${{ context.implementation_ref }}",
+                "base_branch": "main",
+            },
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="check_ref_push_loop_a"
+                        if site_a_class == "push"
+                        else "check_direct_loop_a",
+                        when=(
+                            "result.failed_step == 'ref_coherence' "
+                            "and result.remote_is_ancestor == true"
+                        ),
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'ref_coherence'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'dirty_tree'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'test_gate'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'post_rebase_test_gate'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'rebase'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'dirty_main_repo'",
+                    ),
+                    StepResultCondition(route="done", when=None),
+                ]
+            ),
+            on_success="done",
+            on_failure="release_issue_failure",
+        ),
+        "merge_b": RecipeStep(
+            tool="merge_worktree",
+            with_args={
+                "worktree_path": "${{ context.implementation_ref }}",
+                "base_branch": "main",
+            },
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="check_ref_push_loop_b"
+                        if site_b_class == "push"
+                        else "check_direct_loop_b",
+                        when=(
+                            "result.failed_step == 'ref_coherence' "
+                            "and result.remote_is_ancestor == true"
+                        ),
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'ref_coherence'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'dirty_tree'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'test_gate'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'post_rebase_test_gate'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'rebase'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'dirty_main_repo'",
+                    ),
+                    StepResultCondition(route="done", when=None),
+                ]
+            ),
+            on_success="done",
+            on_failure="release_issue_failure",
+        ),
+        "release_issue_failure": RecipeStep(action="stop", message="failed"),
+        "done": RecipeStep(action="stop", message="done"),
+    }
+
+    # Wire per-site guard names to the matching subgraph
+    if site_a_class == "push":
+        site_a_subgraph = {
+            "check_ref_push_loop_a": site_a["check_ref_push_loop"],
+            "ref_push_a": RecipeStep(
+                tool="push_to_remote",
+                with_args={
+                    "clone_path": "${{ context.work_dir }}",
+                    "remote_url": "${{ context.remote_url }}",
+                    "branch": "main",
+                },
+                on_success="retry_merge_a",
+                on_failure="release_issue_failure",
+            ),
+            "retry_merge_a": RecipeStep(
+                tool="merge_worktree",
+                with_args={
+                    "worktree_path": "${{ context.implementation_ref }}",
+                    "base_branch": "main",
+                },
+                on_success="merge_b",
+                on_failure="release_issue_failure",
+            ),
+        }
+    else:
+        site_a_subgraph = {
+            "check_direct_loop_a": site_a["check_direct_loop"],
+            "make_plan_a": site_a["make_plan"],
+        }
+    if site_b_class == "push":
+        site_b_subgraph = {
+            "check_ref_push_loop_b": site_b["check_ref_push_loop"],
+            "ref_push_b": RecipeStep(
+                tool="push_to_remote",
+                with_args={
+                    "clone_path": "${{ context.work_dir }}",
+                    "remote_url": "${{ context.remote_url }}",
+                    "branch": "main",
+                },
+                on_success="retry_merge_b",
+                on_failure="release_issue_failure",
+            ),
+            "retry_merge_b": RecipeStep(
+                tool="merge_worktree",
+                with_args={
+                    "worktree_path": "${{ context.implementation_ref }}",
+                    "base_branch": "main",
+                },
+                on_success="done",
+                on_failure="release_issue_failure",
+            ),
+        }
+    else:
+        site_b_subgraph = {
+            "check_direct_loop_b": site_b["check_direct_loop"],
+            "make_plan_b": site_b["make_plan"],
+        }
+
+    steps = {**common, **site_a_subgraph, **site_b_subgraph}
+    return _make_recipe(steps)
+
+
+def test_cross_site_consistency_drifts_between_merge_worktree_sites() -> None:
+    """Two merge_worktree steps with ancestry arms reaching different recovery
+    classes (push vs direct) trigger exactly one cross-site finding.
+
+    The finding must identify both merge steps, their routes, and the observed classes.
+    """
+    recipe = _two_merge_recipe(site_a_class="push", site_b_class="direct")
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
+    assert len(flagged) == 1, f"Expected exactly 1 finding, got: {flagged}"
+    msg = flagged[0].message
+    assert "merge_a" in msg and "merge_b" in msg, (
+        f"Finding message must identify both merge steps, got: {msg}"
+    )
+    assert "push_recovery" in msg and "direct_remediate" in msg, (
+        f"Finding message must identify both recovery classes, got: {msg}"
+    )
+
+
+def test_cross_site_consistency_matching_arms_is_clean() -> None:
+    """Two merge_worktree steps whose ancestry arms reach the same recovery class
+    (push) emit no cross-site finding."""
+    recipe = _two_merge_recipe(site_a_class="push", site_b_class="push")
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
+    assert flagged == [], f"Expected no finding, got: {flagged}"
+
+
+def test_cross_site_consistency_classified_vs_unclassified_is_mismatch() -> None:
+    """A classified-vs-unclassified pair is a mismatch, not silently equivalent.
+
+    site_a reaches push_recovery (classified); site_b has the ancestry arm route
+    going to a non-recovery target (unclassified). Different unclassified routes
+    at multiple sites also constitute a mismatch.
+    """
+    # site_b uses an unclassified terminal target for its ancestry arm
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={
+                "worktree_path": "${{ context.implementation_ref }}",
+                "base_branch": "main",
+            },
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="check_ref_push_loop_a",
+                        when=(
+                            "result.failed_step == 'ref_coherence' "
+                            "and result.remote_is_ancestor == true"
+                        ),
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'ref_coherence'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'dirty_tree'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'test_gate'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'post_rebase_test_gate'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'rebase'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'dirty_main_repo'",
+                    ),
+                    StepResultCondition(route="done", when=None),
+                ]
+            ),
+            on_success="done",
+            on_failure="release_issue_failure",
+        ),
+        "merge_b": RecipeStep(
+            tool="merge_worktree",
+            with_args={
+                "worktree_path": "${{ context.implementation_ref }}",
+                "base_branch": "main",
+            },
+            on_result=StepResultRoute(
+                conditions=[
+                    StepResultCondition(
+                        route="merge_b_recovery",
+                        when=(
+                            "result.failed_step == 'ref_coherence' "
+                            "and result.remote_is_ancestor == true"
+                        ),
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'ref_coherence'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'dirty_tree'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'test_gate'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'post_rebase_test_gate'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'rebase'",
+                    ),
+                    StepResultCondition(
+                        route="release_issue_failure",
+                        when="result.failed_step == 'dirty_main_repo'",
+                    ),
+                    StepResultCondition(route="done", when=None),
+                ]
+            ),
+            on_success="done",
+            on_failure="release_issue_failure",
+        ),
+        "check_ref_push_loop_a": RecipeStep(
+            tool="run_python",
+            with_args={
+                "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                "current_iteration": "${{ context.ref_push_count }}",
+                "max_iterations": "3",
+            },
+            on_success="ref_push_a",
+            on_failure="release_issue_failure",
+        ),
+        "ref_push_a": RecipeStep(
+            tool="push_to_remote",
+            with_args={
+                "clone_path": "${{ context.work_dir }}",
+                "remote_url": "${{ context.remote_url }}",
+                "branch": "main",
+            },
+            on_success="retry_a",
+            on_failure="release_issue_failure",
+        ),
+        "retry_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={
+                "worktree_path": "${{ context.implementation_ref }}",
+                "base_branch": "main",
+            },
+            on_success="done",
+            on_failure="release_issue_failure",
+        ),
+        # unclassified recovery — bare route step, no recovery signature
+        "merge_b_recovery": RecipeStep(
+            tool="run_python",
+            with_args={"callable": "autoskillit.recipe._cmd_rpc.compute_branch"},
+            on_success="done",
+            on_failure="release_issue_failure",
+        ),
+        "release_issue_failure": RecipeStep(action="stop", message="failed"),
+        "done": RecipeStep(action="stop", message="done"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
+    assert len(flagged) >= 1, (
+        f"Expected mismatch finding when classified vs unclassified arms diverge, got: {flagged}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 6: _classify_recovery_class integration check
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_ancestry_arm_classifies_as_push_recovery(
+    recipe_name: str,
+) -> None:
+    """The ancestry-aware ref_coherence arm must classify as 'push_recovery' for
+    every bundled merge_worktree step.
+
+    Supplements test_bundled_recipes_route_ref_coherence with a behavioral
+    classification assertion rather than only structural reachability.
+    """
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.rules import rules_merge
+
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    ctx = make_validation_context(recipe)
+
+    merge_steps = {
+        name: step
+        for name, step in recipe.steps.items()
+        if getattr(step, "tool", None) == "merge_worktree"
+    }
+    assert merge_steps, f"{recipe_name}: no merge_worktree step found"
+
+    for step_name, step in merge_steps.items():
+        assert step.on_result is not None
+        ancestry_condition = None
+        for condition in step.on_result.conditions:
+            if (
+                condition.when
+                and "ref_coherence" in condition.when.lower()
+                and "remote_is_ancestor" in condition.when.lower()
+            ):
+                ancestry_condition = condition
+                break
+        assert ancestry_condition is not None, (
+            f"{recipe_name}: merge_worktree '{step_name}' missing ancestry arm"
+        )
+        cls = rules_merge._classify_recovery_class(ancestry_condition.route, ctx)
+        assert cls == "push_recovery", (
+            f"{recipe_name}: merge '{step_name}' ancestry arm route "
+            f"'{ancestry_condition.route}' classified as {cls!r}, expected 'push_recovery'"
+        )

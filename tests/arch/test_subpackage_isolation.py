@@ -881,7 +881,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501
-        "server/tools": 29,  # +_preflight.py +_authority_feedback.py +_serve_helpers.py
+        "server/tools": 31,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
+        # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
         "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
     }
@@ -978,7 +979,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1418,
+        1471,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1003,10 +1004,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "docstring update for post_run_diagnostics demotion (+10 net lines)"
         "; get_recipe session_serve_overrides replay via serve_recipe; "
         "deferred-recall snapshot update guard (+3 net lines)"
-        "; per-step backend override config_backend kwarg threading (+5 net lines)",
+        "; per-step backend override config_backend kwarg threading (+5 net lines)"
+        "; _auto_init_pipeline_tracker helper + call sites on both deferred-recall and "
+        "normal open_kitchen paths for self-arming pipeline dependency tracker init "
+        "(+53 net lines)",
     ),
     "tools_execution.py": (
-        1430,
+        1560,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
@@ -1029,7 +1033,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; closure-mode MCP tool parameters: closure_authority_path/hash/plan_paths/"
         "base_sha/diff_sha/target_sha threaded through run_skill handler for "
         "execution-layer gate (+30 net lines)"
-        "; closure_report_root derivation after output_dir recipe auto-fill (+11 net lines)",
+        "; closure_report_root derivation after output_dir recipe auto-fill (+11 net lines)"
+        "; kitchen-scoped _check_pipeline_deps fallback, _active_order_ids_for_kitchen "
+        "multi-pipeline gating, _has_active_deps/_check_review_approach_plan_path gates, "
+        "and ambiguous/empty step_name dependency-deny branches (+126 net lines)",
     ),
     "execution/backends/codex.py": (
         1155,

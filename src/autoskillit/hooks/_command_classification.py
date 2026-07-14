@@ -7,6 +7,7 @@ _INTERPRETER_LINE_RE.
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import shlex
@@ -44,7 +45,25 @@ _WRITE_CALL_SITE_RE = re.compile(
     r"|shutil\.(?:copy|move|copyfile|copytree)\s*\("
 )
 
-_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
+# Operators that terminate a shell token (shlex punctuation_chars set).
+_SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
+
+# Operators that are emitted as standalone tokens. Parentheses are tracked by
+# the lexer as fused tokens (`(cmd` or `cmd)`) and handled separately in
+# extract_redirect_targets; we only need to split on these here.
+_SPLIT_TOKENS: frozenset[str] = _SHELL_OPERATORS
+
+# Command wrappers whose only effect is to invoke the next command with
+# adjusted environment/priority. The verb is the token after the wrapper.
+# 'xargs' is intentionally excluded: it dispatches a downstream reader and
+# adding it would let `xargs cat src/.../foo.yaml` reach the reader check,
+# weakening xargs-chain bypass detection (see D1 design decision).
+_COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo", "nohup"})
+# Wrappers that consume a mandatory DURATION as their first non-wrapper token.
+_WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
+# Wrappers that take a single short flag as their first non-wrapper token
+# (e.g. 'stdbuf -o0', 'stdbuf -i0', 'stdbuf -e0').
+_WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
 
 # Shell control words that mark the start of a new command in compound
 # shell constructs (loops, conditionals, case statements). When a `gh` token
@@ -64,6 +83,78 @@ _SHELL_CONTROL_WORDS: frozenset[str] = frozenset(
     }
 )
 
+# env option arity tables.
+_ENV_NO_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "-i",
+        "-0",
+        "-v",
+        "-V",
+        "--help",
+        "--version",
+        "--ignore-environment",
+        "--null",
+        "--debug",
+        "--split-string",
+    }
+)
+_ENV_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "-u",
+        "--unset",
+        "-C",
+        "--chdir",
+        "-S",
+        "--split-string",
+        "--default-signal",
+        "--ignore-signal",
+        "--block-signal",
+        "--argv0",
+    }
+)
+# Flags that take a value either as the next token or attached with '='.
+_ENV_VALUE_FLAGS_ATTACHED: frozenset[str] = frozenset(
+    {
+        "-u",
+        "--unset",
+        "-C",
+        "--chdir",
+        "--argv0",
+        "--default-signal",
+        "--ignore-signal",
+        "--block-signal",
+    }
+)
+# Wrappers taking a value optionally attached ('-u=root', '--user=root').
+_WRAPPER_VALUE_FLAGS_ATTACHED: frozenset[str] = frozenset(
+    {
+        "-u",
+        "--user",
+        "-n",
+        "--adjustment",
+        "-k",
+        "--kill-after",
+        "-s",
+        "--signal",
+    }
+)
+_WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
+    {
+        "-u",
+        "--user",
+        "-n",
+        "--adjustment",
+        "-k",
+        "--kill-after",
+        "-s",
+        "--signal",
+        "-g",
+        "--group",
+        "-p",
+        "--priority",
+    }
+)
+
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
@@ -76,17 +167,8 @@ _HEREDOC_BODY_RE = re.compile(
 )
 
 _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
-# Command wrappers whose only effect is to invoke the next command with
-# adjusted environment/priority. The verb is the token after the wrapper.
-# 'xargs' is intentionally excluded: it dispatches a downstream reader and
-# adding it would let `xargs cat src/.../foo.yaml` reach the reader check,
-# weakening xargs-chain bypass detection (see D1 design decision).
-_COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo", "nohup"})
-# Wrappers that consume a mandatory DURATION as their first non-wrapper token.
-_WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
-# Wrappers that take a single short flag as their first non-wrapper token
-# (e.g. 'stdbuf -o0', 'stdbuf -i0', 'stdbuf -e0').
-_WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
+_COMMAND_WRAPPERS_DICT: frozenset[str] = _COMMAND_WRAPPERS
+
 _GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
     {
         "-p",
@@ -166,6 +248,32 @@ def resolve_write_target(path: str, cwd: str = "") -> str | None:
     return None
 
 
+def _normalize_newlines_for_tokenize(command: str) -> str:
+    """Replace bare (unquoted) newlines with ' ; ' so shlex treats them as boundaries."""
+    result: list[str] = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if c == "\\" and not in_single and i + 1 < len(command):
+            result.append(c)
+            result.append(command[i + 1])
+            i += 2
+            continue
+        if c == "'" and not in_double:
+            in_single = not in_single
+        elif c == '"' and not in_single:
+            in_double = not in_double
+        elif c == "\n" and not in_single and not in_double:
+            result.append(" ; ")
+            i += 1
+            continue
+        result.append(c)
+        i += 1
+    return "".join(result)
+
+
 def tokenize_command_segments(command: str) -> list[list[str]]:
     """Split a shell command into segments of (verb, args...) token lists.
 
@@ -173,13 +281,20 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     Returns [] on shlex parse error (unclosed quotes).
     """
     try:
-        tokens = shlex.split(strip_heredoc_bodies(command))
+        lexer = shlex.shlex(
+            _normalize_newlines_for_tokenize(strip_heredoc_bodies(command)),
+            posix=True,
+            punctuation_chars=";&|",
+        )
+        lexer.whitespace_split = True
+        tokens = list(lexer)
     except (ValueError, TypeError):
         return []
+
     segments: list[list[str]] = []
     current: list[str] = []
     for token in tokens:
-        if token in _SHELL_OPS:
+        if token in _SPLIT_TOKENS:
             if current:
                 segments.append(current)
                 current = []
@@ -261,26 +376,116 @@ def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
     return targets
 
 
+def _is_posix_assignment(token: str) -> bool:
+    """Return True if *token* is a leading NAME=value assignment (POSIX env)."""
+    if "=" not in token:
+        return False
+    if token.startswith("="):
+        return False
+    name, _sep, _value = token.partition("=")
+    if not name:
+        return False
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False
+    return all(c.isalnum() or c == "_" for c in name)
+
+
+def _consume_env(start: int, segment: list[str]) -> int:
+    """Return the index of the first non-env token after the 'env' wrapper.
+
+    Handles --, no-value flags, value flags (detached and attached), and
+    NAME=value assignments.
+    """
+    i = start
+    # Allow leading whitespace-like wrapper-only segment with no command.
+    while i < len(segment):
+        token = segment[i]
+        if token == "--":
+            i += 1
+            break
+        if token in _ENV_NO_VALUE_FLAGS:
+            i += 1
+            continue
+        if token in _ENV_VALUE_FLAGS_ATTACHED and "=" in token:
+            i += 1
+            continue
+        if token in _ENV_VALUE_FLAGS and i + 1 < len(segment):
+            i += 2
+            continue
+        if token.startswith("-") or _is_posix_assignment(token):
+            if token in _ENV_VALUE_FLAGS and i + 1 < len(segment):
+                i += 2
+                continue
+            # Unknown long flag that may take a value (e.g. --foo=bar).
+            if "=" in token:
+                i += 1
+                continue
+            i += 1
+            continue
+        break
+    return i
+
+
+def _consume_wrapper_options(start: int, segment: list[str]) -> int:
+    """Skip past a wrapper's attached/detached value options.
+
+    Wrappers (sudo, nice, nohup, time, command) accept option flags before
+    the inner command. Many take values either attached (--user=root) or as
+    the next detached token (-u root). Returns the index of the first
+    non-option token.
+    """
+    i = start
+    while i < len(segment):
+        token = segment[i]
+        if token == "--":
+            return i + 1
+        if not token.startswith("-"):
+            return i
+        if "=" in token:
+            i += 1
+            continue
+        if token in _WRAPPER_VALUE_FLAGS_DETACHED and i + 1 < len(segment):
+            i += 2
+            continue
+        i += 1
+    return i
+
+
+def _consume_wrapper(token: str, start: int, segment: list[str]) -> int | None:
+    """Advance *start* past a single wrapper's required and optional args.
+
+    Returns None if a required argument is absent.
+    """
+    if token in _COMMAND_WRAPPERS_DICT:
+        return start
+    if token in _WRAPPERS_WITH_DURATION:
+        if start + 1 >= len(segment):
+            return None
+        return start + 2
+    if token in _WRAPPERS_WITH_SHORT_FLAG:
+        if start + 1 >= len(segment):
+            return None
+        if not segment[start + 1].startswith("-"):
+            return None
+        return start + 2
+    if token == "env":
+        return _consume_env(start + 1, segment)
+    return start
+
+
 def _command_start_index(segment: list[str]) -> int | None:
     if not segment:
         return None
     start = 0
-    # Iteratively strip 'env', command wrappers, and any wrapper-required
-    # argument. This handles nested forms like
-    # 'env FOO=BAR command git diff' and 'command env FOO=BAR git diff'
-    # consistently — the real command verb is the first token that is not a
-    # known env/wrapper prefix. 'xargs' is intentionally not a wrapper
-    # (see _COMMAND_WRAPPERS docstring).
     while start < len(segment):
         token = segment[start]
-        if token == "env" and start + 1 < len(segment):
+        if _is_posix_assignment(token):
             start += 1
-            while start < len(segment) and (
-                segment[start].startswith("-") or "=" in segment[start]
-            ):
-                start += 1
             continue
-        if token in _COMMAND_WRAPPERS:
+        if token == "env":
+            start = _consume_env(start + 1, segment)
+            continue
+        if token in _COMMAND_WRAPPERS_DICT:
             start += 1
             continue
         if token in _WRAPPERS_WITH_DURATION and start + 1 < len(segment):
@@ -297,10 +502,58 @@ def _command_start_index(segment: list[str]) -> int | None:
     return start if start < len(segment) else None
 
 
+def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
+    """Return (verb, args) for *segment*, skipping env/wrappers/assignments.
+
+    The verb is the raw executable token; args are the tokens after it. If
+    the segment ends inside a wrapper or a required wrapper value is
+    absent, returns ("", []).
+    """
+    if not segment:
+        return ("", [])
+    start = 0
+    while start < len(segment):
+        token = segment[start]
+        if _is_posix_assignment(token):
+            start += 1
+            continue
+        if token == "env":
+            new_start = _consume_env(start + 1, segment)
+            if new_start <= start:
+                return ("", [])
+            start = new_start
+            continue
+        if token in _COMMAND_WRAPPERS_DICT:
+            # Wrappers (sudo, nice, etc.) may consume attached/detached value options.
+            new_start = _consume_wrapper_options(start + 1, segment)
+            if new_start <= start + 1:
+                # No options consumed; check for missing required value.
+                start += 1
+                continue
+            start = new_start
+            continue
+        if token in _WRAPPERS_WITH_DURATION:
+            if start + 1 >= len(segment):
+                return ("", [])
+            start += 2
+            continue
+        if token in _WRAPPERS_WITH_SHORT_FLAG:
+            if start + 1 >= len(segment):
+                return ("", [])
+            if not segment[start + 1].startswith("-"):
+                return ("", [])
+            start += 2
+            continue
+        break
+    if start >= len(segment):
+        return ("", [])
+    return (segment[start], segment[start + 1 :])
+
+
 def command_verb(segment: list[str]) -> str:
     """Return the command verb from a segment, skipping 'env' prefix."""
-    start = _command_start_index(segment)
-    return segment[start] if start is not None else ""
+    verb, _args = command_verb_and_args(segment)
+    return verb
 
 
 def is_gh_command(segment: list[str]) -> bool:
@@ -413,7 +666,9 @@ def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
 
 def _tokenize_protected_read_segments(command: str) -> list[list[str]]:
     try:
-        lexer = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=";&|()")
+        lexer = shlex.shlex(
+            _normalize_newlines_for_tokenize(command), posix=True, punctuation_chars=";&|()"
+        )
         lexer.whitespace_split = True
         tokens = list(lexer)
     except (ValueError, TypeError):
@@ -503,3 +758,355 @@ def has_interpreter_wrapped_command(command: str, *, target_commands: Sequence[s
 
 def has_nested_shell(command: str) -> bool:
     return bool(_NESTED_SHELL_RE.search(command))
+
+
+# --- Phase 2/3 helpers for unsafe install detection ---
+
+
+_SHELL_INTERPRETERS: frozenset[str] = frozenset({"bash", "sh", "zsh", "dash"})
+_PYTHON_INTERPRETERS: frozenset[str] = frozenset({"python", "python3"})
+
+
+def _normalize_executable(token: str) -> str:
+    return os.path.basename(token).lower()
+
+
+def _is_shell_interpreter(token: str) -> bool:
+    base = _normalize_executable(token)
+    if base in _SHELL_INTERPRETERS:
+        return True
+    # Versioned forms: bash5, sh4, dash0.5, zsh5
+    for name in _SHELL_INTERPRETERS:
+        if base.startswith(name) and base[len(name) :].isdigit():
+            return True
+    return False
+
+
+def _is_python_interpreter(token: str) -> bool:
+    base = _normalize_executable(token)
+    if base in _PYTHON_INTERPRETERS:
+        return True
+    if base.startswith("python") and base[len("python") :].replace(".", "").isdigit():
+        return True
+    return False
+
+
+def _is_pip_executable(token: str) -> bool:
+    base = _normalize_executable(token)
+    if base == "pip":
+        return True
+    if base.startswith("pip") and base[3:].replace(".", "").isdigit():
+        return True
+    return False
+
+
+def _is_uv_executable(token: str) -> bool:
+    return _normalize_executable(token) == "uv"
+
+
+def _is_maturin_executable(token: str) -> bool:
+    return _normalize_executable(token) == "maturin"
+
+
+# Sentinel install subcommand tokens; ordered matchers consume these in sequence.
+_PIP_INSTALL_SUBCOMMAND = "install"
+_UV_PIP_SUBCOMMAND_CHAIN = ("pip", "install")
+_PYTHON_MODULE_PIP_SUBCOMMAND_CHAIN = ("-m", "pip", "install")
+_MATURIN_DEVELOP_SUBCOMMAND = "develop"
+
+
+# Sentinel install subcommand tokens; ordered matchers consume these in sequence.
+_PIP_INSTALL_SUBCOMMAND = "install"
+_UV_PIP_SUBCOMMAND_CHAIN = ("pip", "install")
+_PYTHON_MODULE_PIP_SUBCOMMAND_CHAIN = ("-m", "pip", "install")
+_MATURIN_DEVELOP_SUBCOMMAND = "develop"
+
+
+_PIP_DETACHED_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "-r",
+        "-c",
+        "-t",
+        "-b",
+        "--requirement",
+        "--constraint",
+        "--target",
+        "--prefix",
+        "--src",
+        "--build",
+        "--download",
+        "--index-url",
+        "--extra-index-url",
+        "--find-links",
+        "--editable",
+        "-e",
+    }
+)
+
+
+def _match_pip_install(args: list[str]) -> tuple[list[str], list[str]] | None:
+    """Return (install_args, post_install_args) for `pip install` if matched.
+
+    Consumes leading global pip options then verifies the next non-option
+    token is exactly 'install'. Returns None when the grammar does not match
+    (e.g. `pip help install` or `pip install --help`).
+    """
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if token == "--":
+            i += 1
+            break
+        if token.startswith("-"):
+            if "=" in token:
+                i += 1
+                continue
+            if token in _PIP_DETACHED_VALUE_FLAGS and i + 1 < len(args):
+                i += 2
+                continue
+            i += 1
+            continue
+        break
+    if i >= len(args) or args[i] != _PIP_INSTALL_SUBCOMMAND:
+        return None
+    install_args = args[: i + 1]
+    post_install_args = args[i + 1 :]
+    return (install_args, post_install_args)
+
+
+def _shlex_split_safe(payload: str) -> list[str]:
+    try:
+        return shlex.split(payload)
+    except (ValueError, TypeError):
+        return []
+
+
+def extract_shell_command_payloads(command: str) -> list[str]:
+    """Return shell text payloads that will actually be evaluated.
+
+    Includes the argument following `-c` for path-normalized bash/sh/zsh/dash
+    invocations, the joined argument payload for `eval`, balanced `$(...)`
+    payloads and backtick payloads occurring outside single quotes (including
+    those inside double quotes). Nested payloads are extracted recursively.
+    Single-quoted text, escaped substitutions, and heredoc bodies are inert.
+    """
+    payloads: list[str] = []
+    segments = tokenize_command_segments(command)
+    for segment in segments:
+        verb, args = command_verb_and_args(segment)
+        if not verb:
+            continue
+        if _is_shell_interpreter(verb) and args and args[0] == "-c" and len(args) >= 2:
+            payloads.append(args[1])
+            continue
+        if verb == "eval" and args:
+            payloads.append(" ".join(args))
+            continue
+    # Substitution scan
+    for sub in _extract_substitution_payloads(command):
+        payloads.append(sub)
+    return payloads
+
+
+def _extract_substitution_payloads(command: str) -> list[str]:
+    """Quote/escape-aware state machine that returns active substitution bodies."""
+    payloads: list[str] = []
+    i = 0
+    n = len(command)
+    while i < n:
+        c = command[i]
+        if c == "\\" and i + 1 < n:
+            i += 2
+            continue
+        if c == "'":
+            # Skip single-quoted span
+            j = i + 1
+            while j < n and command[j] != "'":
+                j += 1
+            i = j + 1
+            continue
+        if c == '"':
+            # Walk inside double quotes; substitutions are still active here.
+            j = i + 1
+            while j < n and command[j] != '"':
+                if command[j] == "\\" and j + 1 < n:
+                    j += 2
+                    continue
+                if command[j] == "`":
+                    inner_end = j + 1
+                    while inner_end < n and command[inner_end] != "`":
+                        inner_end += 1
+                    inner = command[j + 1 : inner_end]
+                    payloads.extend(_extract_substitution_payloads(inner))
+                    j = inner_end + 1
+                    continue
+                if command[j] == "$" and j + 1 < n and command[j + 1] == "(":
+                    paren_depth = 1
+                    k = j + 2
+                    while k < n and paren_depth > 0:
+                        if command[k] == "(":
+                            paren_depth += 1
+                        elif command[k] == ")":
+                            paren_depth -= 1
+                        if paren_depth == 0:
+                            break
+                        k += 1
+                    inner = command[j + 2 : k]
+                    payloads.append(inner)
+                    payloads.extend(_extract_substitution_payloads(inner))
+                    j = k + 1
+                    continue
+                j += 1
+            i = j + 1
+            continue
+        if c == "`":
+            j = i + 1
+            while j < n and command[j] != "`":
+                if command[j] == "\\" and j + 1 < n:
+                    j += 2
+                    continue
+                j += 1
+            inner = command[i + 1 : j]
+            payloads.append(inner)
+            payloads.extend(_extract_substitution_payloads(inner))
+            i = j + 1
+            continue
+        if c == "$" and i + 1 < n and command[i + 1] == "(":
+            paren_depth = 1
+            j = i + 2
+            while j < n and paren_depth > 0:
+                if command[j] == "(":
+                    paren_depth += 1
+                elif command[j] == ")":
+                    paren_depth -= 1
+                if paren_depth == 0:
+                    break
+                j += 1
+            inner = command[i + 2 : j]
+            payloads.append(inner)
+            payloads.extend(_extract_substitution_payloads(inner))
+            i = j + 1
+            continue
+        i += 1
+    return payloads
+
+
+_PYTHON_SUBPROCESS_FUNCS: frozenset[str] = frozenset(
+    {
+        "subprocess.run",
+        "subprocess.call",
+        "subprocess.Popen",
+        "subprocess.check_call",
+        "subprocess.check_output",
+    }
+)
+_PYTHON_OS_EXEC_FUNCS: frozenset[str] = frozenset(
+    {
+        "os.system",
+        "os.popen",
+        "os.execl",
+        "os.execle",
+        "os.execlp",
+        "os.execv",
+        "os.execvp",
+        "os.execvpe",
+        "os.execve",
+    }
+)
+
+
+def _parse_python_program_literals(program: str) -> list[ast.Call]:
+    """Return subprocess/os call AST nodes found in a Python -c program."""
+    try:
+        tree = ast.parse(program, mode="exec")
+    except SyntaxError:
+        return []
+    calls: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            dotted: str | None = None
+            if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                dotted = f"{func.value.id}.{func.attr}"
+            if dotted in _PYTHON_SUBPROCESS_FUNCS or dotted in _PYTHON_OS_EXEC_FUNCS:
+                calls.append(node)
+    return calls
+
+
+def _literal_to_argv(node: ast.AST) -> list[str] | None:
+    """Return a literal argv list from a list/tuple literal AST node, else None."""
+    if isinstance(node, ast.List):
+        elements = node.elts
+    elif isinstance(node, ast.Tuple):
+        elements = node.elts
+    else:
+        return None
+    out: list[str] = []
+    for elt in elements:
+        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+            out.append(elt.value)
+        else:
+            return None
+    return out
+
+
+def _literal_to_string(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def extract_interpreter_command_payloads(command: str) -> tuple[list, bool]:
+    """Return (literal command payloads, has_unresolved_subprocess).
+
+    Each payload is either a shell-command string (for `shell=True` calls or
+    `os.system`) or an argv token list (for list/tuple literal subprocess
+    calls). has_unresolved_subprocess is True when a matching process-launch
+    call was present but its arguments could not be statically resolved.
+    """
+    payloads: list = []
+    has_unresolved = False
+    if not _INTERPRETER_RE.search(command):
+        return (payloads, has_unresolved)
+    if not _SUBPROCESS_APIS_RE.search(command):
+        return (payloads, has_unresolved)
+
+    # Find each `python* -c "<payload>"` invocation.
+    py_re = re.compile(
+        r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?(?:\.\d+)?)\s+-c\s+(['\"])(.*?)\1",
+        re.DOTALL,
+    )
+    for match in py_re.finditer(command):
+        program = match.group(2)
+        for call in _parse_python_program_literals(program):
+            args = call.args
+            if not args:
+                continue
+            first = args[0]
+            # shell=True with a string first argument
+            shell_arg = next((kw.value for kw in call.keywords if kw.arg == "shell"), None)
+            is_shell_true = bool(
+                shell_arg is not None
+                and isinstance(shell_arg, ast.Constant)
+                and shell_arg.value is True
+            )
+            if is_shell_true:
+                cmd_str = _literal_to_string(first)
+                if cmd_str is not None:
+                    payloads.append(cmd_str)
+                    continue
+                has_unresolved = True
+                continue
+            # List/tuple argv literal
+            argv = _literal_to_argv(first)
+            if argv is not None:
+                payloads.append(argv)
+                continue
+            # String first argument interpreted as shell via shell=True not set;
+            # treat as shell-command string for os.system/Popen defaults too.
+            cmd_str = _literal_to_string(first)
+            if cmd_str is not None:
+                payloads.append(cmd_str)
+                continue
+            has_unresolved = True
+    return (payloads, has_unresolved)

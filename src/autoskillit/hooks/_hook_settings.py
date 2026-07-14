@@ -17,6 +17,7 @@ Claude Code hook subprocesses.
 import json
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -119,13 +120,146 @@ def read_merged_hook_config(root: Path | None = None) -> dict:
 
 
 def _read_hook_config() -> dict:
-    """Read the merged ``quota_guard`` section from base + overlay hook config.
+    """Read the ``quota_guard`` section from the base hook config only.
 
-    Returns ``{}`` if both files are absent or unreadable. The base file is
-    written by ``open_kitchen`` and the overlay by ``disable_quota_guard``.
-    Overlay values take precedence over base values.
+    Returns ``{}`` if the base file is absent or unreadable. The base file
+    is written by ``open_kitchen``. Overlay values are NOT consulted for
+    quota settings — quota disablement for a session is signaled by a
+    caller-session marker written by ``quota_guard_state_post_hook``, not
+    by an overlay file key.
     """
-    return read_merged_hook_config().get("quota_guard", {})
+    try:
+        base_path = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
+        if not base_path.exists():
+            return {}
+        base = json.loads(base_path.read_text())
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+        return {}
+    if not isinstance(base, dict):
+        return {}
+    section = base.get("quota_guard")
+    return section if isinstance(section, dict) else {}
+
+
+def _resolve_quota_disable_state_dir() -> Path:
+    """Resolve the per-session disable-marker state directory.
+
+    Honors ``AUTOSKILLIT_STATE_DIR`` (override), then ``AUTOSKILLIT_CAMPAIGN_ID``
+    (nested campaign subdir), and finally the default
+    ``<cwd>/.autoskillit/temp/kitchen_state[/<campaign_id>]`` location.
+    """
+    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
+    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+    if state_override:
+        base = Path(state_override) / "kitchen_state"
+    else:
+        base = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, "kitchen_state")
+    return base / campaign_id if campaign_id else base
+
+
+def _validate_session_id(session_id: str) -> str:
+    """Reject empty or path-traversal session IDs. Returns the validated ID."""
+    if not isinstance(session_id, str) or not session_id:
+        raise ValueError("session_id must be a non-empty string")
+    if os.sep in session_id or (os.altsep and os.altsep in session_id):
+        raise ValueError(f"session_id must not contain path separators: {session_id!r}")
+    if session_id in {".", ".."} or session_id.startswith("./") or session_id.startswith("../"):
+        raise ValueError(f"session_id must not be a path-relative segment: {session_id!r}")
+    return session_id
+
+
+def quota_disable_marker_path(session_id: str) -> Path:
+    """Resolve the per-session quota-disable marker path. Raises on invalid IDs."""
+    _validate_session_id(session_id)
+    return _resolve_quota_disable_state_dir() / f"{session_id}_quota_guard_disabled.json"
+
+
+def _atomic_write_marker(marker_path: Path, payload: str) -> None:
+    """Atomic write for a small JSON marker (mirrors recipe_confirmed_post_hook pattern)."""
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(marker_path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp, str(marker_path))
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+MARKER_TTL_SECONDS = 24 * 3600
+
+
+def write_quota_disable_marker(session_id: str) -> None:
+    """Atomically write a fresh quota-disable marker for the given session_id."""
+    marker_path = quota_disable_marker_path(session_id)
+    payload = json.dumps(
+        {
+            "session_id": session_id,
+            "disabled_at": datetime.now(UTC).isoformat(),
+            "marker_version": 1,
+        }
+    )
+    _atomic_write_marker(marker_path, payload)
+
+
+def read_quota_disable_marker(session_id: str) -> dict | None:
+    """Return the parsed marker payload for ``session_id`` if fresh and matching.
+
+    Returns ``None`` for missing, malformed, mismatched, traversal-shaped, or
+    expired markers. Never raises.
+    """
+    try:
+        _validate_session_id(session_id)
+    except ValueError:
+        return None
+    marker_path = quota_disable_marker_path(session_id)
+    try:
+        raw = marker_path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if data.get("session_id") != session_id:
+        return None
+    disabled_at_raw = data.get("disabled_at")
+    if not isinstance(disabled_at_raw, str):
+        return None
+    try:
+        disabled_at = datetime.fromisoformat(disabled_at_raw)
+    except (ValueError, TypeError):
+        return None
+    if disabled_at.tzinfo is None:
+        return None
+    age = (datetime.now(UTC) - disabled_at).total_seconds()
+    if age > MARKER_TTL_SECONDS or age < -MARKER_TTL_SECONDS:
+        return None
+    return data
+
+
+def clear_quota_disable_marker(session_id: str) -> None:
+    """Remove the quota-disable marker for ``session_id``. No-op if absent."""
+    try:
+        marker_path = quota_disable_marker_path(session_id)
+    except ValueError:
+        return
+    try:
+        marker_path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
+
+
+def is_quota_guard_disabled_for_session(session_id: str) -> bool:
+    """Return True iff a fresh, matching quota-disable marker exists for this session."""
+    if not session_id:
+        return False
+    return read_quota_disable_marker(session_id) is not None
 
 
 def _resolve_int(env_var: str, hook_value: object, default: int) -> int:

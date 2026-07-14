@@ -196,6 +196,7 @@ class TestGenerateHooksJsonFormat:
                         "lint_after_edit_hook",
                         "token_summary_hook",
                         "quota_post_hook",
+                        "quota_guard_state_post_hook",
                         "review_gate_post_hook",
                         "skill_load_post_hook",
                         "pipeline_step_post_hook",

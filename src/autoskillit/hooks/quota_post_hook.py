@@ -26,6 +26,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_settings import (  # noqa: E402
+    is_quota_guard_disabled_for_session,
     read_quota_cache,
     resolve_quota_log_dir,
     resolve_quota_settings,
@@ -48,9 +49,14 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)
 
     tool_name = event.get("tool_name", "")
+    event_session_id = ""
+    if isinstance(event.get("session_id"), str):
+        event_session_id = event["session_id"]
     settings = resolve_quota_settings(cache_path_override=cache_path_override)
     if settings.disabled:
         sys.exit(0)  # quota guard disabled for this session
+    if event_session_id and is_quota_guard_disabled_for_session(event_session_id):
+        sys.exit(0)  # session-scoped disable marker present
     cache_path_str = settings.cache_path
     cache_max_age = settings.cache_max_age
     log_dir = resolve_quota_log_dir(caller="quota_post_hook")

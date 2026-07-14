@@ -7,6 +7,7 @@ Hook script behavior, registration, and bridge tests.
 | File | Purpose |
 |------|---------|
 | `__init__.py` | empty |
+| `conftest.py` | Per-test project-root CWD isolation for every hook test (autouse `_isolate_hook_cwd`) |
 | `test_fmt_status.py` | Tests for autoskillit.hooks.formatters._fmt_status |
 | `test_hook_dispatch.py` | Tests for the stable hook dispatcher (_dispatch.py) — resolution, retired mapping, graceful degrade |
 | `test_hook_config_bridge.py` | Regression tests for the quota_guard.py → .hook_config.json bridge |
@@ -46,6 +47,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_resume_gate_post_hook.py` | Tests for resume_gate_post_hook.py PostToolUse hook — records resume attempts to state file under flock |
 | `test_reset_resume_gate.py` | Tests for reset_resume_gate.py PreToolUse guard — deny/allow, name→UUID resolution, REFUSED bypass, fail-open |
 | `test_recipe_confirmed_post_hook.py` | Tests for recipe_confirmed_post_hook.py PostToolUse hook — marker write, idempotency, fail-open |
+| `test_quota_guard_state_post_hook.py` | Tests for quota_guard_state_post_hook.py PostToolUse hook — per-session quota-disable marker write/clear, atomic-failure rewrite, session isolation |
 
 ## Architecture Notes
 

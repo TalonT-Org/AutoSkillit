@@ -613,3 +613,123 @@ def test_post_backend_bypass_with_empty_profile(tmp_path, monkeypatch):
     assert out.strip() == ""
     events = _read_quota_events(log_dir)
     assert events[0]["event"] == "post_backend_bypass"
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped quota-disable marker integration (PART B)
+# ---------------------------------------------------------------------------
+
+
+def _build_event_with_session(
+    session_id: str = "session-aaa",
+    tool_name: str = "mcp__plugin_autoskillit_autoskillit__run_skill",
+    success: bool = True,
+) -> dict:
+    inner = json.dumps({"success": success, "result": "plan written"})
+    outer = json.dumps({"result": inner})
+    return {
+        "session_id": session_id,
+        "tool_name": tool_name,
+        "tool_response": outer,
+    }
+
+
+def _write_disable_marker(state_dir: Path, session_id: str) -> None:
+    marker = state_dir / "kitchen_state" / f"{session_id}_quota_guard_disabled.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(
+        json.dumps(
+            {
+                "session_id": session_id,
+                "disabled_at": datetime.now(UTC).isoformat(),
+                "marker_version": 1,
+            }
+        )
+    )
+
+
+def test_fresh_marker_matching_session_suppresses_warning(tmp_path, monkeypatch):
+    """A fresh quota-disable marker matching the event session_id suppresses the warning."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    _write_disable_marker(tmp_path, "session-aaa")
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(event=_build_event_with_session("session-aaa"), cache_path=cache)
+    assert out.strip() == ""
+
+
+def test_marker_for_other_session_still_warns(tmp_path, monkeypatch):
+    """A quota-disable marker for a different session does NOT suppress the warning."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    _write_disable_marker(tmp_path, "session-bbb")
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(event=_build_event_with_session("session-aaa"), cache_path=cache)
+    data = json.loads(out)
+    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+
+def test_expired_marker_still_warns(tmp_path, monkeypatch):
+    """An expired quota-disable marker does NOT suppress the warning."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker = state_dir / "session-aaa_quota_guard_disabled.json"
+    old = datetime.fromtimestamp(datetime.now(UTC).timestamp() - 25 * 3600, tz=UTC).isoformat()
+    marker.write_text(
+        json.dumps({"session_id": "session-aaa", "disabled_at": old, "marker_version": 1})
+    )
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(event=_build_event_with_session("session-aaa"), cache_path=cache)
+    data = json.loads(out)
+    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+
+def test_malformed_marker_still_warns(tmp_path, monkeypatch):
+    """A malformed quota-disable marker does NOT suppress the warning."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    marker = state_dir / "session-aaa_quota_guard_disabled.json"
+    marker.write_text("not-json-{{{")
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(event=_build_event_with_session("session-aaa"), cache_path=cache)
+    data = json.loads(out)
+    assert "QUOTA WARNING" in data["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+
+def test_base_config_disabled_still_suppresses_post_warning(tmp_path, monkeypatch):
+    """Base-config ``disabled=true`` continues to suppress the post-hook warning."""
+    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", raising=False)
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(
+        json.dumps(
+            {
+                "quota_guard": {
+                    "cache_max_age": 300,
+                    "cache_path": str(cache),
+                    "disabled": True,
+                }
+            }
+        )
+    )
+    out, _ = _run_hook(event=_build_event_with_session(), cache_path=cache)
+    assert out.strip() == ""
+
+
+def test_explicit_env_override_still_suppresses_post_warning(tmp_path, monkeypatch):
+    """``AUTOSKILLIT_QUOTA_GUARD__DISABLED=1`` env override continues to suppress the warning."""
+    monkeypatch.setenv("AUTOSKILLIT_QUOTA_GUARD__DISABLED", "1")
+    cache = tmp_path / "quota_cache.json"
+    _write_cache(cache, utilization=99.0, should_block=True)
+    out, _ = _run_hook(event=_build_event_with_session(), cache_path=cache)
+    assert out.strip() == ""

@@ -545,12 +545,25 @@ class TestInterpreterSubprocessDeny:
             "python3 -c \"import subprocess; subprocess.run(['pip','install','-e','.'])\"",
             "python3 -c \"import subprocess; subprocess.run(('pip','install','--editable','.'))\"",
             "python3 -c \"import os; os.system('pip install -e .')\"",
+            "python3 -c \"import subprocess; subprocess.run(['uv','pip','install','-e','.'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['python3','-m','pip','install','-e','.'])\"",
+            "python3 -c \"import subprocess; subprocess.run(['maturin','develop'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['pip','install','--system','requests'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['uv','pip','install','foo','--system'])\"",
         ],
         ids=[
             "shell-string-pip",
             "argv-list-pip",
             "argv-tuple-pip",
             "os-system-pip",
+            "argv-list-uv-pip",
+            "argv-list-module-pip",
+            "argv-list-maturin",
+            "argv-list-pip-system",
+            "argv-list-uv-pip-system",
         ],
     )
     def test_run_guard_denies_interpreter_subprocess(self, cmd: str) -> None:
@@ -563,12 +576,25 @@ class TestInterpreterSubprocessDeny:
             "python3 -c \"import subprocess; subprocess.run(['pip','install','-e','.'])\"",
             "python3 -c \"import subprocess; subprocess.run(('pip','install','--editable','.'))\"",
             "python3 -c \"import os; os.system('pip install -e .')\"",
+            "python3 -c \"import subprocess; subprocess.run(['uv','pip','install','-e','.'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['python3','-m','pip','install','-e','.'])\"",
+            "python3 -c \"import subprocess; subprocess.run(['maturin','develop'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['pip','install','--system','requests'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['uv','pip','install','foo','--system'])\"",
         ],
         ids=[
             "shell-string-pip",
             "argv-list-pip",
             "argv-tuple-pip",
             "os-system-pip",
+            "argv-list-uv-pip",
+            "argv-list-module-pip",
+            "argv-list-maturin",
+            "argv-list-pip-system",
+            "argv-list-uv-pip-system",
         ],
     )
     def test_bash_guard_denies_interpreter_subprocess(self, cmd: str) -> None:
@@ -580,8 +606,10 @@ class TestInterpreterSubprocessAllow:
         "cmd",
         [
             "python3 -c \"import subprocess; subprocess.run(['rg', 'pip install -e', 'docs/'])\"",
+            'python3 -c "import subprocess; '
+            "subprocess.run(['pip','install','-e','.','--python','.venv/bin/python'])\"",
         ],
-        ids=["argv-reader-rg"],
+        ids=["argv-reader-rg", "argv-pip-venv-exempt"],
     )
     def test_run_guard_allows_interpreter_reader(self, cmd: str) -> None:
         assert not _is_denied(_run_guard(cmd))

@@ -197,7 +197,9 @@ def _iter_install_segments(command: str):
         argv_payloads, has_unresolved = extract_interpreter_command_payloads(current)
         for payload in argv_payloads:
             if isinstance(payload, list):
-                yield ("argv-payload", payload, [])
+                result = _classify_install_invocation(payload)
+                if result is not None:
+                    yield result
             elif isinstance(payload, str):
                 if payload not in seen:
                     queue.append(payload)
@@ -213,12 +215,6 @@ def _is_unsafe_editable_install(cmd: str) -> bool:
         if kind == "unresolved-subprocess":
             # A matching process-launch call could not be statically resolved.
             return True
-        if kind == "argv-payload":
-            argv = _install_args
-            if len(argv) >= 2 and _is_pip_executable(argv[0]) and argv[1] == "install":
-                if any(_is_editable_marker(t) for t in argv[2:]):
-                    return True
-            continue
         if any(_is_editable_marker(t) for t in post_install):
             python_target = _python_target_value(post_install)
             if python_target is not None and _is_venv_path(python_target):

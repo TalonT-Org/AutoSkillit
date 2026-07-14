@@ -499,6 +499,18 @@ class TestRunSkillConfigStreamIdleTimeout:
             RunSkillConfig(stream_idle_timeout_ms=-1)
 
 
+class TestRunSkillConfigCompletionChildDeferralCeiling:
+    def test_default_completion_child_deferral_ceiling_is_120(self):
+        cfg = AutomationConfig()
+        assert cfg.run_skill.completion_child_deferral_ceiling_seconds == 120.0
+
+    def test_negative_completion_child_deferral_ceiling_raises(self):
+        with pytest.raises(
+            ValueError, match=r"completion_child_deferral_ceiling_seconds=-1(\.0)? must be >= 0"
+        ):
+            RunSkillConfig(completion_child_deferral_ceiling_seconds=-1)
+
+
 class TestLoggingConfig:
     """LoggingConfig dataclass and YAML loading."""
 

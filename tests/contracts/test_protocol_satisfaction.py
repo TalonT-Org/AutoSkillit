@@ -411,6 +411,7 @@ class TestGroupDApiContractPreservation:
             "inspector_callback",
             "workload_basenames",
             "on_session_id_resolved",
+            "child_deferral_ceiling",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -483,6 +484,7 @@ class TestGroupDApiContractPreservation:
             "inspector_callback",
             "workload_basenames",
             "on_session_id_resolved",
+            "child_deferral_ceiling",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

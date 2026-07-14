@@ -197,3 +197,214 @@ class TestNoKillNeverTouchesKillHelper:
 
         assert kill_reason == KillReason.NATURAL_EXIT
         assert kill_calls == [], f"NO_KILL must not call async_kill_process_tree, got {kill_calls}"
+
+
+class TestChildLivenessDefersKill:
+    """DRAIN_THEN_KILL_IF_ALIVE + active children: kill is deferred beyond grace_seconds.
+
+    Child-process liveness is simulated via a mock on _has_active_child_processes
+    (the same usage-site patching style already used for async_kill_process_tree
+    in this file) rather than relying on real psutil CPU-percent sampling, which
+    requires a priming call before it reports non-zero usage and would make the
+    test's timing assertions racy under CI load.
+    """
+
+    @pytest.mark.anyio
+    async def test_active_children_defer_kill_past_grace_seconds(self, tmp_path) -> None:
+        """Active child processes defer the kill past grace_seconds, then kill fires."""
+        proc = await _spawn_script(_EXIT_AFTER_SLEEP, ["10.0"], tmp_path)
+        proc_exited_event = anyio.Event()
+
+        kill_calls: list[int] = []
+
+        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+            kill_calls.append(pid)
+            await proc.aclose()
+
+        import structlog
+
+        proc_log = structlog.get_logger().bind(pid=proc.pid)
+        start = time.monotonic()
+
+        with (
+            patch(
+                "autoskillit.execution.process.async_kill_process_tree",
+                side_effect=_mock_kill,
+            ),
+            patch(
+                "autoskillit.execution.process._has_active_child_processes",
+                return_value=True,
+            ),
+            patch(
+                "autoskillit.execution.process._has_active_api_connection",
+                return_value=False,
+            ),
+        ):
+            kill_reason = await execute_termination_action(
+                TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+                proc=proc,
+                process_exited_event=proc_exited_event,
+                grace_seconds=0.5,
+                proc_log=proc_log,
+                pid=proc.pid,
+                child_deferral_ceiling=1.5,
+            )
+
+        elapsed = time.monotonic() - start
+        assert kill_reason == KillReason.KILL_AFTER_COMPLETION
+        assert len(kill_calls) == 1
+        assert elapsed > 0.5, f"Expected deferral past grace_seconds=0.5, took only {elapsed:.3f}s"
+
+
+class TestChildLivenessFastKillUnchanged:
+    """DRAIN_THEN_KILL_IF_ALIVE + child_deferral_ceiling=0: fast kill unchanged (today)."""
+
+    @pytest.mark.anyio
+    async def test_zero_ceiling_disables_deferral(self, tmp_path) -> None:
+        """child_deferral_ceiling=0 must never consult child-liveness predicates."""
+        proc = await _spawn_script(_EXIT_AFTER_SLEEP, ["10.0"], tmp_path)
+        proc_exited_event = anyio.Event()
+
+        kill_calls: list[int] = []
+
+        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+            kill_calls.append(pid)
+            await proc.aclose()
+
+        import structlog
+
+        proc_log = structlog.get_logger().bind(pid=proc.pid)
+        start = time.monotonic()
+
+        with (
+            patch(
+                "autoskillit.execution.process.async_kill_process_tree",
+                side_effect=_mock_kill,
+            ),
+            patch(
+                "autoskillit.execution.process._has_active_child_processes",
+            ) as mock_has_active,
+        ):
+            kill_reason = await execute_termination_action(
+                TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+                proc=proc,
+                process_exited_event=proc_exited_event,
+                grace_seconds=0.3,
+                proc_log=proc_log,
+                pid=proc.pid,
+                child_deferral_ceiling=0.0,
+            )
+
+        elapsed = time.monotonic() - start
+        assert kill_reason == KillReason.KILL_AFTER_COMPLETION
+        assert len(kill_calls) == 1, f"Expected exactly one kill call, got {kill_calls}"
+        assert elapsed < 1.0, (
+            f"ceiling=0 should behave like today's fast kill, took {elapsed:.3f}s"
+        )
+        mock_has_active.assert_not_called()
+
+
+class TestChildLivenessCeilingExceeded:
+    """DRAIN_THEN_KILL_IF_ALIVE + active children past ceiling: kill proceeds despite activity."""
+
+    @pytest.mark.anyio
+    async def test_kill_proceeds_once_ceiling_exceeded(self, tmp_path) -> None:
+        """Kill fires shortly after child_deferral_ceiling expires even if child stays active."""
+        proc = await _spawn_script(_EXIT_AFTER_SLEEP, ["10.0"], tmp_path)
+        proc_exited_event = anyio.Event()
+
+        kill_calls: list[int] = []
+
+        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+            kill_calls.append(pid)
+            await proc.aclose()
+
+        import structlog
+
+        proc_log = structlog.get_logger().bind(pid=proc.pid)
+        start = time.monotonic()
+
+        with (
+            patch(
+                "autoskillit.execution.process.async_kill_process_tree",
+                side_effect=_mock_kill,
+            ),
+            patch(
+                "autoskillit.execution.process._has_active_child_processes",
+                return_value=True,
+            ),
+            patch(
+                "autoskillit.execution.process._has_active_api_connection",
+                return_value=False,
+            ),
+        ):
+            kill_reason = await execute_termination_action(
+                TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+                proc=proc,
+                process_exited_event=proc_exited_event,
+                grace_seconds=0.2,
+                proc_log=proc_log,
+                pid=proc.pid,
+                child_deferral_ceiling=1.0,
+            )
+
+        elapsed_after_grace = (time.monotonic() - start) - 0.2
+        assert kill_reason == KillReason.KILL_AFTER_COMPLETION
+        assert len(kill_calls) == 1
+        assert 1.0 <= elapsed_after_grace <= 3.0, (
+            f"Expected kill within ~1s of ceiling expiry (1.0s), "
+            f"deferral loop ran for {elapsed_after_grace:.3f}s"
+        )
+
+
+class TestChildLivenessChildExitsDuringDeferral:
+    """DRAIN_THEN_KILL_IF_ALIVE: child becomes inactive mid-deferral → kill proceeds."""
+
+    @pytest.mark.anyio
+    async def test_kill_proceeds_once_children_go_inactive(self, tmp_path) -> None:
+        """Once the liveness predicate reports inactive, the next poll proceeds to kill."""
+        proc = await _spawn_script(_EXIT_AFTER_SLEEP, ["10.0"], tmp_path)
+        proc_exited_event = anyio.Event()
+
+        kill_calls: list[int] = []
+
+        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+            kill_calls.append(pid)
+            await proc.aclose()
+
+        import structlog
+
+        proc_log = structlog.get_logger().bind(pid=proc.pid)
+        start = time.monotonic()
+
+        with (
+            patch(
+                "autoskillit.execution.process.async_kill_process_tree",
+                side_effect=_mock_kill,
+            ),
+            patch(
+                "autoskillit.execution.process._has_active_child_processes",
+                side_effect=[True, False],
+            ),
+            patch(
+                "autoskillit.execution.process._has_active_api_connection",
+                return_value=False,
+            ),
+        ):
+            kill_reason = await execute_termination_action(
+                TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+                proc=proc,
+                process_exited_event=proc_exited_event,
+                grace_seconds=0.2,
+                proc_log=proc_log,
+                pid=proc.pid,
+                child_deferral_ceiling=30.0,
+            )
+
+        elapsed_after_grace = (time.monotonic() - start) - 0.2
+        assert kill_reason == KillReason.KILL_AFTER_COMPLETION
+        assert len(kill_calls) == 1
+        assert elapsed_after_grace < 30.0, (
+            "Kill should proceed as soon as the second poll reports inactivity, "
+            "well before the 30s ceiling"
+        )

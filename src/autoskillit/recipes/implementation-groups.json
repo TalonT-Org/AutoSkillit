@@ -650,8 +650,12 @@
           "route": "check_dirty_main_retry"
         },
         {
-          "when": "result.failed_step == 'ref_coherence'",
+          "when": "result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true",
           "route": "check_ref_push_loop"
+        },
+        {
+          "when": "result.failed_step == 'ref_coherence'",
+          "route": "release_issue_failure"
         },
         {
           "when": "result.error",
@@ -662,7 +666,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "After merge, route to inter_part_push to sync the remote branch, then check_next_iteration to process remaining parts/groups before pushing. GROUPS MODE: When all plan_parts for the current group are merged, advance to the next group (back to plan step with the next group's description). When all groups are complete, go to audit_impl (via next_or_done). By default (open_pr=true), merge_target is the feature branch named from run_name. When open_pr=false, merge_target equals base_branch — merges go directly to base. test_gate failures route to fix (resolve-failures) for recovery; all other failures route to release_issue_failure.\n"
+      "note": "After merge, route to inter_part_push to sync the remote branch, then check_next_iteration to process remaining parts/groups before pushing. GROUPS MODE: When all plan_parts for the current group are merged, advance to the next group (back to plan step with the next group's description). When all groups are complete, go to audit_impl (via next_or_done). By default (open_pr=true), merge_target is the feature branch named from run_name. When open_pr=false, merge_target equals base_branch — merges go directly to base. test_gate failures route to fix (resolve-failures) for recovery. Local-ahead ref_coherence mismatches use bounded push recovery; genuine divergence or indeterminate ancestry routes to release_issue_failure. Other failures also route to release_issue_failure.\n"
     },
     "push": {
       "tool": "push_to_remote",

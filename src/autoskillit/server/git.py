@@ -112,6 +112,7 @@ async def _verify_merge_target(
         ["git", "rev-parse", expected_branch], main_repo, 10, runner
     )
     if sha_rc != 0:
+        # Local SHA resolution failed, so ancestry cannot be evaluated.
         return {
             "error": (f"Failed to resolve SHA of '{expected_branch}' in '{main_repo}'."),
             "failed_step": MergeFailedStep.REF_COHERENCE,
@@ -440,6 +441,7 @@ async def perform_merge(
         runner,
     )
     if remote_rc != 0:
+        # The remote SHA is unavailable, so the required ancestry pair is incomplete.
         return {
             "error": f"Could not resolve {remote}/{base_branch} after fetch: {remote_stderr}",
             "failed_step": MergeFailedStep.REF_COHERENCE,
@@ -449,17 +451,38 @@ async def perform_merge(
     local_sha = target.sha
     remote_sha = remote_sha_out.strip()
     if local_sha != remote_sha:
+        ancestry_rc, _, ancestry_stderr = await _run_git(
+            ["git", "merge-base", "--is-ancestor", remote_sha, local_sha],
+            worktree_path,
+            10,
+            runner,
+        )
+        if ancestry_rc not in (0, 1):
+            return {
+                "error": (
+                    f"Could not determine ancestry between local '{base_branch}' "
+                    f"({local_sha[:12]}) and '{remote}/{base_branch}' "
+                    f"({remote_sha[:12]}): {ancestry_stderr}"
+                ),
+                "failed_step": MergeFailedStep.REF_COHERENCE,
+                "state": MergeState.WORKTREE_INTACT_REF_DIVERGED,
+                "stderr": ancestry_stderr,
+                "worktree_path": worktree_path,
+                "local_sha": local_sha,
+                "remote_sha": remote_sha,
+            }
+        remote_is_ancestor = ancestry_rc == 0
         return {
             "error": (
-                f"Local '{base_branch}' ({local_sha[:12]}) has diverged from "
-                f"'{remote}/{base_branch}' ({remote_sha[:12]}). "
-                f"Push the local branch or pull the remote before merging."
+                f"Local '{base_branch}' ({local_sha[:12]}) does not match "
+                f"'{remote}/{base_branch}' ({remote_sha[:12]})."
             ),
             "failed_step": MergeFailedStep.REF_COHERENCE,
             "state": MergeState.WORKTREE_INTACT_REF_DIVERGED,
             "worktree_path": worktree_path,
             "local_sha": local_sha,
             "remote_sha": remote_sha,
+            "remote_is_ancestor": remote_is_ancestor,
         }
 
     # 7.6 Pre-merge dirty check — reject if main repo has uncommitted changes

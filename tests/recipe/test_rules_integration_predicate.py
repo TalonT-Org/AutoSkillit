@@ -36,7 +36,7 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in remediation.yaml has predicate on_result."""
         step = self.if_recipe.steps["merge"]
         assert step.on_result is not None
-        assert len(step.on_result.conditions) == 8
+        assert len(step.on_result.conditions) == 9
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'dirty_tree'"
@@ -44,31 +44,38 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond1 = step.on_result.conditions[1]
         assert cond1.when == "result.failed_step == 'test_gate'"
-        assert cond1.route == "check_merge_fix_loop"
+        assert cond1.route == "release_issue_failure"
 
         cond2 = step.on_result.conditions[2]
         assert cond2.when == "result.failed_step == 'post_rebase_test_gate'"
-        assert cond2.route == "check_merge_fix_loop"
+        assert cond2.route == "release_issue_failure"
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "check_merge_rebase_loop"
+        assert cond3.route == "release_issue_failure"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.failed_step == 'dirty_main_repo'"
         assert cond4.route == "check_dirty_main_retry"
 
         cond5 = step.on_result.conditions[5]
-        assert cond5.when == "result.failed_step == 'ref_coherence'"
+        assert (
+            cond5.when
+            == "result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true"
+        )
         assert cond5.route == "check_ref_push_loop"
 
         cond6 = step.on_result.conditions[6]
-        assert cond6.when == "result.error"
+        assert cond6.when == "result.failed_step == 'ref_coherence'"
         assert cond6.route == "release_issue_failure"
 
         cond7 = step.on_result.conditions[7]
-        assert cond7.when is None
-        assert cond7.route == "inter_part_push"
+        assert cond7.when == "result.error"
+        assert cond7.route == "release_issue_failure"
+
+        cond8 = step.on_result.conditions[8]
+        assert cond8.when is None
+        assert cond8.route == "inter_part_push"
 
     def test_investigate_first_merge_step_captures_worktree_path(self) -> None:
         """The merge step captures worktree_path from result.worktree_path."""
@@ -80,7 +87,7 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in implementation.yaml has predicate on_result."""
         step = self.ip_recipe.steps["merge"]
         assert step.on_result is not None
-        assert len(step.on_result.conditions) == 8
+        assert len(step.on_result.conditions) == 9
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'dirty_tree'"
@@ -103,16 +110,23 @@ class TestRecipeIntegrationPredicateRouting:
         assert cond4.route == "check_dirty_main_retry"
 
         cond5 = step.on_result.conditions[5]
-        assert cond5.when == "result.failed_step == 'ref_coherence'"
+        assert (
+            cond5.when
+            == "result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true"
+        )
         assert cond5.route == "check_ref_push_loop"
 
         cond6 = step.on_result.conditions[6]
-        assert cond6.when == "result.error"
+        assert cond6.when == "result.failed_step == 'ref_coherence'"
         assert cond6.route == "release_issue_failure"
 
         cond7 = step.on_result.conditions[7]
-        assert cond7.when is None
-        assert cond7.route == "inter_part_push"
+        assert cond7.when == "result.error"
+        assert cond7.route == "release_issue_failure"
+
+        cond8 = step.on_result.conditions[8]
+        assert cond8.when is None
+        assert cond8.route == "inter_part_push"
 
     def test_implementation_pipeline_merge_step_captures_worktree_path(self) -> None:
         """The merge step in implementation.yaml captures worktree_path."""
@@ -143,6 +157,48 @@ class TestRecipeIntegrationPredicateRouting:
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )
+
+
+class TestPreRemediationMergePredicateRouting:
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipe(self, request) -> None:
+        request.cls.recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    def test_ref_coherence_routes_by_ancestry_before_fallback(self) -> None:
+        step = self.recipe.steps["pre_remediation_merge"]
+        assert step.on_result is not None
+
+        ancestry_indexes = [
+            index
+            for index, condition in enumerate(step.on_result.conditions)
+            if condition.when
+            and "ref_coherence" in condition.when
+            and "remote_is_ancestor" in condition.when
+        ]
+        fallback_indexes = [
+            index
+            for index, condition in enumerate(step.on_result.conditions)
+            if condition.when
+            and "ref_coherence" in condition.when
+            and "remote_is_ancestor" not in condition.when
+        ]
+
+        assert len(ancestry_indexes) == 1
+        assert len(fallback_indexes) == 1
+        ancestry_index = ancestry_indexes[0]
+        fallback_index = fallback_indexes[0]
+        assert ancestry_index < fallback_index
+        assert (
+            step.on_result.conditions[ancestry_index].route
+            == "check_ref_push_loop_pre_remediation"
+        )
+        assert step.on_result.conditions[fallback_index].route == "release_issue_failure"
+
+    def test_ref_push_returns_to_pre_remediation_guard(self) -> None:
+        assert (
+            self.recipe.steps["ref_push_pre_remediation"].on_success
+            == "commit_guard_pre_remediation"
+        )
 
 
 class TestLoopBudgetSeparation:
@@ -193,14 +249,31 @@ class TestLoopBudgetSeparation:
             "check_dirty_main_retry",
         }
         guard_steps = merge_fix_guard_steps | {"check_ref_push_loop"}
+        terminal_steps = {"release_issue_failure"}
         for cond in merge_step.on_result.conditions:
-            if cond.when and "failed_step" in cond.when:
+            if not cond.when or "failed_step" not in cond.when:
+                continue
+            if "ref_coherence" in cond.when and "remote_is_ancestor" not in cond.when:
+                assert cond.route == "release_issue_failure"
+            elif recipe_name == "remediation" and cond.when in (
+                "result.failed_step == 'test_gate'",
+                "result.failed_step == 'post_rebase_test_gate'",
+                "result.failed_step == 'rebase'",
+            ):
+                # After PART B step 5, remediation.yaml's pre_remediation_merge
+                # routes these to terminal escalation so live-worktree merge
+                # failures no longer orphan the next worktree creator.
+                assert cond.route in terminal_steps, (
+                    f"{cond.when} routes to {cond.route}, expected a terminal escalation"
+                )
+            else:
                 assert cond.route in guard_steps, (
                     f"{cond.when} routes to {cond.route}, expected a guard step"
                 )
         for name in merge_fix_guard_steps:
-            step = recipe.steps[name]
-            assert step.with_args.get("current_iteration") == "${{ context.merge_fix_count }}"
+            if name in recipe.steps:
+                step = recipe.steps[name]
+                assert step.with_args.get("current_iteration") == "${{ context.merge_fix_count }}"
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
     def test_loop_budget_ingredients_exist(self, recipe_name: str) -> None:

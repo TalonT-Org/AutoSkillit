@@ -632,7 +632,40 @@ steps:
     on_failure: pre_remediation_merge
     note: >-
       Resets ref_push_count to 0 so each audit-remediation cycle gets a
-      fresh ref-push budget.
+      fresh ref-push budget shared by normal and pre-remediation recovery.
+
+  check_ref_push_loop_pre_remediation:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.ref_push_count }}
+      max_iterations: '2'
+    capture:
+      ref_push_count: ${{ result.next_iteration }}
+    on_result:
+    - when: ${{ result.max_exceeded }} == true
+      route: release_issue_failure
+    - route: ref_push_pre_remediation
+    on_failure: release_issue_failure
+    optional_context_refs:
+    - ref_push_count
+    note: >
+      Pre-remediation ref-coherence recovery guard. Shares ref_push_count
+      (max 2) with check_ref_push_loop. Routes to ref_push_pre_remediation,
+      then commit_guard_pre_remediation and pre_remediation_merge.
+
+  ref_push_pre_remediation:
+    tool: push_to_remote
+    with:
+      clone_path: ${{ context.work_dir }}
+      remote_url: ${{ context.remote_url }}
+      branch: ${{ context.merge_target }}
+      force: 'true'
+    on_success: commit_guard_pre_remediation
+    on_failure: release_issue_failure
+    note: >
+      Pushes the feature branch when the remote ref is an ancestor of the
+      local ref, then retries pre_remediation_merge through its commit guard.
 
   pre_remediation_merge:
     tool: merge_worktree
@@ -647,15 +680,17 @@ steps:
     - when: result.failed_step == 'dirty_tree'
       route: commit_guard_pre_remediation
     - when: result.failed_step == 'test_gate'
-      route: remediate
+      route: release_issue_failure
     - when: result.failed_step == 'post_rebase_test_gate'
-      route: remediate
+      route: release_issue_failure
     - when: result.failed_step == 'rebase'
-      route: remediate
+      route: release_issue_failure
     - when: result.failed_step == 'dirty_main_repo'
       route: main_repo_guard_pre_remediation
+    - when: result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true
+      route: check_ref_push_loop_pre_remediation
     - when: result.failed_step == 'ref_coherence'
-      route: remediate
+      route: release_issue_failure
     - when: result.failed_step == 'path_validation'
       route: remediate
     - when: result.error
@@ -666,13 +701,16 @@ steps:
       Merges the current worktree before the remediation cycle creates a new
       one. Audit NO GO means the implementation is incomplete, not wrong —
       merge it first, then remediate on top. This prevents orphaning the
-      original worktree when implement re-runs. dirty_tree routes to
-      commit_guard_pre_remediation to auto-commit before retrying merge.
-      dirty_main_repo routes to main_repo_guard_pre_remediation to stash.
-      test_gate, rebase, and path_validation route to remediate — the
-      remediation plan will address these. path_validation means the worktree
-      was already merged in a prior session. Only hard errors escalate to
-      release_issue_failure.
+      original worktree when implement re-runs. A local-ahead ref_coherence
+      mismatch uses the shared ref_push_count budget and pre-remediation push
+      recovery; genuine divergence or indeterminate ancestry escalates.
+      dirty_tree routes to commit_guard_pre_remediation to auto-commit before
+      retrying merge. dirty_main_repo routes to main_repo_guard_pre_remediation
+      to stash. test_gate, post_rebase_test_gate, and rebase escalate to
+      release_issue_failure — leaving the worktree live and retrying from a
+      remediation cycle would orphan the original worktree. path_validation
+      means the worktree was already merged in a prior session and routes to
+      remediate.
   commit_guard_pre_remediation:
     tool: run_python
     with:
@@ -961,21 +999,24 @@ steps:
     - when: result.failed_step == 'dirty_tree'
       route: check_merge_fix_loop
     - when: result.failed_step == 'test_gate'
-      route: check_merge_fix_loop
+      route: release_issue_failure
     - when: result.failed_step == 'post_rebase_test_gate'
-      route: check_merge_fix_loop
+      route: release_issue_failure
     - when: result.failed_step == 'rebase'
-      route: check_merge_rebase_loop
+      route: release_issue_failure
     - when: result.failed_step == 'dirty_main_repo'
       route: check_dirty_main_retry
-    - when: result.failed_step == 'ref_coherence'
+    - when: result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true
       route: check_ref_push_loop
+    - when: result.failed_step == 'ref_coherence'
+      route: release_issue_failure
     - when: result.error
       route: release_issue_failure
     - route: inter_part_push
     on_failure: release_issue_failure
     note: 'After merge, route to inter_part_push to sync the remote branch, then next_or_done
-      to process remaining parts before pushing.
+      to process remaining parts before pushing. Local-ahead ref_coherence mismatches
+      use bounded push recovery; genuine divergence or indeterminate ancestry escalates.
 
       '
   inter_part_push:

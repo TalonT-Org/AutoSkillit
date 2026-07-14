@@ -1,10 +1,4 @@
-"""Execution-tool formatters for the pretty_output split.
-
-Hosts ``run_skill``, ``run_cmd``, ``test_check``, ``merge_worktree``. Stdlib-only.
-
-The ``dispatch_food_truck`` formatter lives in ``_fmt_dispatch.py`` to keep
-this module under its file size budget (REQ-FILE-001).
-"""
+"""Execution-tool formatters for pretty_output."""
 
 from __future__ import annotations
 
@@ -327,6 +321,9 @@ _FMT_MERGE_WORKTREE_RENDERED: frozenset[str] = frozenset(
         "abort_failed",
         "abort_stderr",
         "poisoned_installs",
+        "local_sha",
+        "remote_sha",
+        "remote_is_ancestor",
     }
 )
 _FMT_MERGE_WORKTREE_SUPPRESSED: frozenset[str] = frozenset()

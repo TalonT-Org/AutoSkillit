@@ -524,3 +524,58 @@ def test_autoskillit_write_guard_tool_names_in_private_env_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 
     assert "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+# ---------------------------------------------------------------------------
+# ORDER_INTERACTIVE_REQUIRED_ENV constant (issue #4253 Part A)
+# ---------------------------------------------------------------------------
+
+
+def test_order_interactive_required_env_value() -> None:
+    from autoskillit.core.types._type_constants_env import ORDER_INTERACTIVE_REQUIRED_ENV
+
+    assert ORDER_INTERACTIVE_REQUIRED_ENV == frozenset(
+        {
+            "AUTOSKILLIT_SESSION_TYPE",
+            "MAX_MCP_OUTPUT_TOKENS",
+            "MCP_CONNECTION_NONBLOCKING",
+            "AUTOSKILLIT_AGENT_BACKEND",
+            "AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        }
+    )
+
+
+def test_order_interactive_required_env_excludes_headless() -> None:
+    """Interactive order sessions must not require AUTOSKILLIT_HEADLESS."""
+    from autoskillit.core.types._type_constants_env import ORDER_INTERACTIVE_REQUIRED_ENV
+
+    assert "AUTOSKILLIT_HEADLESS" not in ORDER_INTERACTIVE_REQUIRED_ENV
+
+
+def test_order_interactive_required_env_in_all() -> None:
+    from autoskillit.core.types._type_constants_env import __all__ as env_all
+
+    assert "ORDER_INTERACTIVE_REQUIRED_ENV" in env_all
+
+
+def test_order_interactive_required_env_importable_from_types() -> None:
+    from autoskillit.core.types import ORDER_INTERACTIVE_REQUIRED_ENV
+
+    assert "MAX_MCP_OUTPUT_TOKENS" in ORDER_INTERACTIVE_REQUIRED_ENV
+
+
+def test_order_interactive_required_env_importable_from_core() -> None:
+    from autoskillit.core import ORDER_INTERACTIVE_REQUIRED_ENV
+
+    assert "MAX_MCP_OUTPUT_TOKENS" in ORDER_INTERACTIVE_REQUIRED_ENV
+
+
+# ---------------------------------------------------------------------------
+# CODEX_INTERACTIVE_REQUIRED_ENV includes MAX_MCP_OUTPUT_TOKENS (issue #4253 Part A)
+# ---------------------------------------------------------------------------
+
+
+def test_codex_interactive_required_env_includes_max_mcp_output_tokens() -> None:
+    from autoskillit.core import CODEX_INTERACTIVE_REQUIRED_ENV
+
+    assert "MAX_MCP_OUTPUT_TOKENS" in CODEX_INTERACTIVE_REQUIRED_ENV

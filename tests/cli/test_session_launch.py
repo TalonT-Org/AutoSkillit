@@ -747,8 +747,41 @@ def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPat
         subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
     )
     _stub_plugin_installed(monkeypatch, installed=True)
-    _launch_cook_session(system_prompt="test", backend=_CapturingBackend())
+    _launch_cook_session(
+        system_prompt="test", backend=_CapturingBackend(), required_env=frozenset()
+    )
     assert build_calls, "backend.build_interactive_cmd must be called via _launch_cook_session"
+
+
+# ---------------------------------------------------------------------------
+# ORDER_INTERACTIVE_REQUIRED_ENV behavioral coverage (issue #4253 Part A)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+def test_interactive_builder_satisfies_order_required_env(backend_name: str) -> None:
+    """Both interactive builders must produce an env satisfying every key in
+    ORDER_INTERACTIVE_REQUIRED_ENV, including MAX_MCP_OUTPUT_TOKENS, when the order
+    call site's env_extras (mimicking _write_order_entry) is supplied."""
+    from autoskillit.core import ORDER_INTERACTIVE_REQUIRED_ENV, SESSION_TYPE_ENV_VAR
+    from autoskillit.execution.backends import get_backend
+
+    backend = get_backend(backend_name)
+    spec = backend.build_interactive_cmd(
+        env_extras={SESSION_TYPE_ENV_VAR: "orchestrator"},
+        required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+    )
+    for key in ORDER_INTERACTIVE_REQUIRED_ENV:
+        assert key in spec.env, f"{backend_name}: missing required key {key!r}"
+    assert spec.env["MAX_MCP_OUTPUT_TOKENS"]
+
+
+def test_order_interactive_required_env_excludes_headless() -> None:
+    """ORDER_INTERACTIVE_REQUIRED_ENV must not require AUTOSKILLIT_HEADLESS — interactive
+    order sessions are not headless, unlike the fleet/food-truck orchestrator contract."""
+    from autoskillit.core import ORDER_INTERACTIVE_REQUIRED_ENV
+
+    assert "AUTOSKILLIT_HEADLESS" not in ORDER_INTERACTIVE_REQUIRED_ENV
 
 
 # ---------------------------------------------------------------------------

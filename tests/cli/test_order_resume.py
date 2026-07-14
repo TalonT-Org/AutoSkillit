@@ -30,7 +30,7 @@ class TestLaunchCookSessionInfraResume:
             "autoskillit.cli.session._session_launch._run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt")
+            _launch_cook_session("prompt", required_env=frozenset())
 
         assert call_count == 2
 
@@ -47,7 +47,7 @@ class TestLaunchCookSessionInfraResume:
             "autoskillit.cli.session._session_launch._run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt")
+            _launch_cook_session("prompt", required_env=frozenset())
 
         assert isinstance(resume_specs[1], NamedResume)
         assert resume_specs[1].session_id == "sess-42"
@@ -63,7 +63,7 @@ class TestLaunchCookSessionInfraResume:
             ),
             pytest.raises(SystemExit, match="Too many infrastructure resumes"),
         ):
-            _launch_cook_session("prompt")
+            _launch_cook_session("prompt", required_env=frozenset())
 
     def test_no_resume_on_clean_exit(self) -> None:
         call_count = 0
@@ -77,6 +77,6 @@ class TestLaunchCookSessionInfraResume:
             "autoskillit.cli.session._session_launch._run_interactive_session",
             side_effect=mock_run_interactive,
         ):
-            _launch_cook_session("prompt")
+            _launch_cook_session("prompt", required_env=frozenset())
 
         assert call_count == 1

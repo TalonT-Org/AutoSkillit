@@ -163,7 +163,7 @@ def _launch_cook_session(
     extra_env: dict[str, str] | None = None,
     resume_spec: ResumeSpec = NoResume(),
     project_dir: Path | None = None,
-    required_env: frozenset[str] | None = None,
+    required_env: frozenset[str],
     backend: CodingAgentBackend | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""

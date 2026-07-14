@@ -36,7 +36,7 @@ def test_launch_cook_session_env_excludes_ide_vars(
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
-        _launch_cook_session("system prompt", initial_message="hello")
+        _launch_cook_session("system prompt", initial_message="hello", required_env=frozenset())
 
     mock_run.assert_called_once()
     env = mock_run.call_args.kwargs["env"]
@@ -65,6 +65,7 @@ def test_launch_cook_session_extra_env_still_applied(
         _launch_cook_session(
             "system prompt",
             extra_env={"AUTOSKILLIT_SUBSETS__DISABLED": "@json []"},
+            required_env=frozenset(),
         )
 
     env = mock_run.call_args.kwargs["env"]
@@ -86,7 +87,7 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
-        _launch_cook_session("system prompt", initial_message="hello")
+        _launch_cook_session("system prompt", initial_message="hello", required_env=frozenset())
 
     env = mock_run.call_args.kwargs["env"]
     assert env["MAX_MCP_OUTPUT_TOKENS"] == SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"]
@@ -106,7 +107,7 @@ def test_launch_cook_session_env_has_mcp_connection_nonblocking(
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
-        _launch_cook_session("system prompt", initial_message="hello")
+        _launch_cook_session("system prompt", initial_message="hello", required_env=frozenset())
 
     env = mock_run.call_args.kwargs["env"]
     assert env["MCP_CONNECTION_NONBLOCKING"] == "0"

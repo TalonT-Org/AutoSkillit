@@ -518,6 +518,7 @@ class TestOrderResumeParsing:
             extra_env=None,
             resume_spec=NoResume(),
             project_dir=None,
+            required_env=None,
         ):
             captured["resume_spec"] = resume_spec
 
@@ -554,7 +555,14 @@ class TestOrderResumeParsing:
 
         captured: dict = {}
 
-        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
+        def fake_launch(
+            prompt,
+            *,
+            initial_message=None,
+            extra_env=None,
+            resume_spec=NoResume(),
+            required_env=None,
+        ):
             captured["resume_spec"] = resume_spec
 
         with patch(
@@ -580,7 +588,14 @@ class TestOrderResumeParsing:
 
         captured: dict = {}
 
-        def fake_launch(prompt, *, initial_message=None, extra_env=None, resume_spec=NoResume()):
+        def fake_launch(
+            prompt,
+            *,
+            initial_message=None,
+            extra_env=None,
+            resume_spec=NoResume(),
+            required_env=None,
+        ):
             captured["resume_spec"] = resume_spec
 
         with (

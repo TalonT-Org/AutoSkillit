@@ -48,7 +48,7 @@ def test_cook_session_ignores_ide_lock_file(
             return_value=MagicMock(returncode=0),
         ) as mock_run,
     ):
-        _launch_cook_session("system prompt", initial_message="hello")
+        _launch_cook_session("system prompt", initial_message="hello", required_env=frozenset())
 
     # (1) Env scrub
     env = mock_run.call_args.kwargs["env"]

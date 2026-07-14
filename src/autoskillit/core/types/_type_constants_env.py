@@ -38,6 +38,7 @@ __all__ = [
     "FLEET_SESSION_REQUIRED_ENV",
     "SKILL_SESSION_REQUIRED_ENV",
     "ORCHESTRATOR_SESSION_REQUIRED_ENV",
+    "ORDER_INTERACTIVE_REQUIRED_ENV",
     "RESUME_SESSION_BASELINE_KEYS",
     "CODEX_INTERACTIVE_REQUIRED_ENV",
     "CODEX_MCP_ENV_FORWARD_VARS",
@@ -146,6 +147,21 @@ RESUME_SESSION_BASELINE_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# Interactive `autoskillit order` session contract. Deliberately omits
+# HEADLESS_ENV_VAR (AUTOSKILLIT_HEADLESS) — interactive order sessions are not
+# headless, unlike ORCHESTRATOR_SESSION_REQUIRED_ENV (the fleet/food-truck
+# contract), so injecting it here would make every interactive launch fail
+# required-key validation.
+ORDER_INTERACTIVE_REQUIRED_ENV: frozenset[str] = frozenset(
+    {
+        SESSION_TYPE_ENV_VAR,
+        "MAX_MCP_OUTPUT_TOKENS",
+        "MCP_CONNECTION_NONBLOCKING",
+        AGENT_BACKEND_ENV_VAR,
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
+    }
+)
+
 CODEX_MCP_ENV_FORWARD_VARS: frozenset[str] = frozenset(
     {
         HEADLESS_ENV_VAR,
@@ -161,6 +177,7 @@ CODEX_INTERACTIVE_REQUIRED_ENV: frozenset[str] = frozenset(
     {
         MCP_CLIENT_BACKEND_ENV_VAR,
         AGENT_BACKEND_ENV_VAR,
+        "MAX_MCP_OUTPUT_TOKENS",
     }
 )
 

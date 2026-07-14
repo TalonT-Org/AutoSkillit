@@ -497,6 +497,6 @@ class TestCookTerminalGuard:
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
 
         with pytest.raises(KeyboardInterrupt):
-            app_mod._launch_cook_session("system prompt")
+            app_mod._launch_cook_session("system prompt", required_env=frozenset())
 
         assert tcsetattr_calls, "terminal must be restored by _launch_cook_session on exception"

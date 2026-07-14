@@ -32,9 +32,10 @@ if TYPE_CHECKING:
 
 
 # Injected into every AutoSkillit-launched headless and cook session.
-# Raises the Claude Code client-side MCP tool result size gate from the
-# default 25,000 tokens to 50,000, preventing open_kitchen() responses
-# from being persisted to a file instead of returned inline.
+# Raises the Claude Code client-side MCP tool result inline token limit from
+# 25,000 to 50,000. NOTE: This does NOT control the ~100KB disk-persistence
+# gate — persistence is governed by a separate byte-size threshold in the
+# Claude Code harness (empirically ~100KB on CLI 2.1.197). See issue #4253.
 _MAX_MCP_OUTPUT_TOKENS_VALUE: str = "50000"
 
 

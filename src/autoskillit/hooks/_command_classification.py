@@ -826,6 +826,46 @@ def tokenize_shell_payload_segments(command: str) -> list[list[str]] | None:
     return result
 
 
+def _find_substitution_end(command: str, start: int) -> int:
+    """Return the index of the ``)`` closing a ``$(`` whose body starts at *start*.
+
+    Quotes open a fresh quoting context inside a substitution, so a literal
+    ``)`` within a quoted span must not terminate the scan. Returns
+    ``len(command)`` when the substitution is unclosed.
+    """
+    depth = 1
+    n = len(command)
+    k = start
+    while k < n:
+        ch = command[k]
+        if ch == "\\" and k + 1 < n:
+            k += 2
+            continue
+        if ch == "'":
+            k += 1
+            while k < n and command[k] != "'":
+                k += 1
+            k += 1
+            continue
+        if ch == '"':
+            k += 1
+            while k < n and command[k] != '"':
+                if command[k] == "\\" and k + 1 < n:
+                    k += 2
+                    continue
+                k += 1
+            k += 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return k
+        k += 1
+    return n
+
+
 def _extract_substitution_payloads(command: str) -> list[str]:
     """Quote/escape-aware state machine that returns active substitution bodies."""
     payloads: list[str] = []
@@ -860,16 +900,7 @@ def _extract_substitution_payloads(command: str) -> list[str]:
                     j = inner_end + 1
                     continue
                 if command[j] == "$" and j + 1 < n and command[j + 1] == "(":
-                    paren_depth = 1
-                    k = j + 2
-                    while k < n and paren_depth > 0:
-                        if command[k] == "(":
-                            paren_depth += 1
-                        elif command[k] == ")":
-                            paren_depth -= 1
-                        if paren_depth == 0:
-                            break
-                        k += 1
+                    k = _find_substitution_end(command, j + 2)
                     inner = command[j + 2 : k]
                     payloads.append(inner)
                     payloads.extend(_extract_substitution_payloads(inner))
@@ -891,16 +922,7 @@ def _extract_substitution_payloads(command: str) -> list[str]:
             i = j + 1
             continue
         if c == "$" and i + 1 < n and command[i + 1] == "(":
-            paren_depth = 1
-            j = i + 2
-            while j < n and paren_depth > 0:
-                if command[j] == "(":
-                    paren_depth += 1
-                elif command[j] == ")":
-                    paren_depth -= 1
-                if paren_depth == 0:
-                    break
-                j += 1
+            j = _find_substitution_end(command, i + 2)
             inner = command[i + 2 : j]
             payloads.append(inner)
             payloads.extend(_extract_substitution_payloads(inner))

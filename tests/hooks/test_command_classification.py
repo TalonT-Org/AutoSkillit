@@ -426,6 +426,13 @@ class TestTokenizeShellPayloadSegments:
         result = tokenize_shell_payload_segments("bash -c \"echo 'unclosed")
         assert result is None
 
+    def test_quoted_close_paren_does_not_truncate_substitution(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        result = tokenize_shell_payload_segments('echo $(echo "a) b" && gh pr create --fill)')
+        assert result is not None
+        assert ["gh", "pr", "create", "--fill"] in result
+
     def test_no_evaluated_shell_payload_returns_empty_list(self):
         from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
 

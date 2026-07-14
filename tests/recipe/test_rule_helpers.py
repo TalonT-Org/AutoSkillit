@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe._analysis import _build_step_graph
-from autoskillit.recipe._rule_helpers import is_success_stop, push_reachable
+from autoskillit.recipe._rule_helpers import (
+    is_success_stop,
+    parse_merge_failure_condition,
+    push_reachable,
+)
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -19,6 +23,35 @@ def _minimal_recipe(steps: dict[str, RecipeStep]) -> Recipe:
         kitchen_rules="none",
         steps=steps,
     )
+
+
+@pytest.mark.parametrize(
+    ("condition", "expected"),
+    [
+        (
+            "result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true",
+            ("ref_coherence", True),
+        ),
+        (
+            'result.failed_step == "ref_coherence" and result.remote_is_ancestor == "TRUE"',
+            ("ref_coherence", True),
+        ),
+        (
+            "result.failed_step == 'ref_coherence' and result.remote_is_ancestor == false",
+            ("ref_coherence", False),
+        ),
+        (
+            "result.failed_step == 'ref_coherence' and not result.remote_is_ancestor",
+            ("ref_coherence", False),
+        ),
+        ("failed_step == 'rebase'", (None, False)),
+        (None, (None, False)),
+    ],
+)
+def test_parse_merge_failure_condition(
+    condition: str | None, expected: tuple[str | None, bool]
+) -> None:
+    assert parse_merge_failure_condition(condition) == expected
 
 
 def test_push_reachable_finds_push_to_remote() -> None:

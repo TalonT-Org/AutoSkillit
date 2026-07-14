@@ -1435,6 +1435,76 @@ def test_barrier_transparency_safe_terminal_exit_is_clean() -> None:
     assert flagged == [], f"Terminal exit must not invalidate the barrier, got: {flagged}"
 
 
+def test_barrier_transparency_result_error_reentry_fires_error() -> None:
+    recipe = _make_worktree_creator_cycle(
+        fail_arm_route="implement",
+        fail_arm_when="result.error",
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "worktree-clobber-without-merge"]
+    assert len(flagged) == 1
+    assert flagged[0].step_name == "implement"
+
+
+def test_barrier_transparency_path_validation_reentry_is_excluded() -> None:
+    recipe = _make_worktree_creator_cycle(
+        fail_arm_route="implement",
+        fail_arm_when="result.failed_step == 'path_validation'",
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "worktree-clobber-without-merge"]
+    assert flagged == []
+
+
+def test_barrier_transparency_direct_merge_retry_is_clean() -> None:
+    recipe = _make_workflow(
+        {
+            "implement": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan"},
+                "capture": {
+                    "implementation_ref": "${{ result.worktree_path }}",
+                    "worktree_path": "${{ result.worktree_path }}",
+                },
+                "retries": 0,
+                "on_success": "merge",
+                "on_failure": "fail_stop",
+            },
+            "merge": {
+                "tool": "merge_worktree",
+                "with": {
+                    "worktree_path": "${{ context.implementation_ref }}",
+                    "base_branch": "main",
+                },
+                "on_result": [
+                    {
+                        "when": "result.failed_step == 'ref_coherence'",
+                        "route": "retry_merge",
+                    },
+                    {"when": "result.error", "route": "fail_stop"},
+                    {"route": "done"},
+                ],
+                "on_success": "done",
+                "on_failure": "fail_stop",
+            },
+            "retry_merge": {
+                "tool": "merge_worktree",
+                "with": {
+                    "worktree_path": "${{ context.implementation_ref }}",
+                    "base_branch": "main",
+                },
+                "on_success": "implement",
+                "on_failure": "fail_stop",
+            },
+            "done": {"action": "stop", "message": "Done."},
+            "fail_stop": {"action": "stop", "message": "Fail."},
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "worktree-clobber-without-merge"]
+    assert flagged == []
+
+
 def test_barrier_transparency_unrelated_creator_does_not_invalidate_barrier() -> None:
     """A failure arm reaching a different worktree creator does NOT invalidate
     the barrier for the current creator being analyzed."""

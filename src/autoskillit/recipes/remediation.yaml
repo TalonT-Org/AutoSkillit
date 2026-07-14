@@ -660,7 +660,6 @@ steps:
       clone_path: ${{ context.work_dir }}
       remote_url: ${{ context.remote_url }}
       branch: ${{ context.merge_target }}
-      force: 'true'
     on_success: commit_guard_pre_remediation
     on_failure: release_issue_failure
     note: >

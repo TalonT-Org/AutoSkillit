@@ -250,6 +250,7 @@ class TestLoopBudgetSeparation:
         }
         guard_steps = merge_fix_guard_steps | {"check_ref_push_loop"}
         terminal_steps = {"release_issue_failure"}
+        referenced_guard_steps: set[str] = set()
         for cond in merge_step.on_result.conditions:
             if not cond.when or "failed_step" not in cond.when:
                 continue
@@ -270,8 +271,10 @@ class TestLoopBudgetSeparation:
                 assert cond.route in guard_steps, (
                     f"{cond.when} routes to {cond.route}, expected a guard step"
                 )
-        for name in merge_fix_guard_steps:
-            if name in recipe.steps:
+                referenced_guard_steps.add(cond.route)
+        for name in referenced_guard_steps:
+            assert name in recipe.steps, f"merge condition routes to missing guard step {name}"
+            if name in merge_fix_guard_steps:
                 step = recipe.steps[name]
                 assert step.with_args.get("current_iteration") == "${{ context.merge_fix_count }}"
 

@@ -165,6 +165,7 @@ class TestBundledRecipesPassFailureDomainCheck:
         "recipe_name,merge_step_name",
         [
             ("implementation", "merge"),
+            ("remediation", "pre_remediation_merge"),
             ("remediation", "merge"),
             ("implementation-groups", "merge"),
         ],
@@ -181,11 +182,12 @@ class TestBundledRecipesPassFailureDomainCheck:
         for cond in merge_step.on_result.conditions:
             if cond.when and "rebase" in cond.when and "post_rebase" not in cond.when:
                 found_rebase = True
-                # After PART B step 5, the pre-remediation/merge rebase arm
-                # routes to terminal escalation (release_issue_failure) instead
-                # of the resolve-merge-conflicts skill, so live-worktree merge
-                # failures no longer orphan the next worktree creator.
-                if cond.route == "release_issue_failure":
+                remediation_escalation_sites = {
+                    ("remediation", "pre_remediation_merge"),
+                    ("remediation", "merge"),
+                }
+                if (recipe_name, merge_step_name) in remediation_escalation_sites:
+                    assert cond.route == "release_issue_failure"
                     continue
                 target_step = recipe.steps[cond.route]
                 skill_cmd = (target_step.with_args or {}).get("skill_command", "")

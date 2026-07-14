@@ -14,7 +14,7 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_success_step_graph
-from autoskillit.recipe._rule_helpers import _find_cycle_members
+from autoskillit.recipe._rule_helpers import _find_cycle_members, parse_merge_failure_condition
 from autoskillit.recipe.contracts import INPUT_REF_RE, load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
@@ -322,7 +322,6 @@ def _is_worktree_barrier(step_name: str, ctx_vars: frozenset[str], recipe: Recip
 
 # Conditions matched as explicit merge failure arms for barrier transparency.
 # path_validation is excluded: it occurs before any live worktree is acquired.
-_FAILED_STEP_CONDITION_RE = re.compile(r"\bfailed_step\b\s*==\s*['\"](\w+)['\"]")
 _RESULT_ERROR_CONDITION_RE = re.compile(r"\bresult\.error\b")
 
 
@@ -338,10 +337,10 @@ def _merge_failure_arms(barrier_step: RecipeStep) -> list[StepResultCondition]:
     for condition in barrier_step.on_result.conditions:
         if condition.when is None:
             continue
-        m = _FAILED_STEP_CONDITION_RE.search(condition.when)
-        if m and m.group(1) == MergeFailedStep.PATH_VALIDATION:
+        failed_step_value, _ = parse_merge_failure_condition(condition.when)
+        if failed_step_value == MergeFailedStep.PATH_VALIDATION:
             continue
-        if m or _RESULT_ERROR_CONDITION_RE.search(condition.when):
+        if failed_step_value is not None or _RESULT_ERROR_CONDITION_RE.search(condition.when):
             arms.append(condition)
     return arms
 
@@ -373,6 +372,8 @@ def _barrier_has_orphaning_arm(
     )
     for condition in _merge_failure_arms(barrier_step):
         route = condition.route
+        if route in merge_barriers:
+            continue
         if route not in success_graph:
             continue
         visited: set[str] = {route}

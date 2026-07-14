@@ -20,6 +20,28 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_MERGE_FAILED_STEP_RE = re.compile(r"\bresult\.failed_step\b\s*==\s*['\"](\w+)['\"]")
+_REMOTE_ANCESTOR_TRUE_RE = re.compile(
+    r"\bresult\.remote_is_ancestor\b\s*==\s*(?:true|['\"]true['\"])",
+    re.IGNORECASE,
+)
+
+
+def parse_merge_failure_condition(condition_when: str | None) -> tuple[str | None, bool]:
+    """Return the failed step and whether ancestry is explicitly positive.
+
+    Related merge semantic rules share this parser so they agree on the accepted
+    ``result.failed_step`` syntax. The ancestry flag is true only for an explicit
+    equality comparison with true; false and negated predicates are not safe
+    local-ahead recovery arms.
+    """
+    if condition_when is None:
+        return None, False
+    match = _MERGE_FAILED_STEP_RE.search(condition_when)
+    if match is None:
+        return None, False
+    return match.group(1), bool(_REMOTE_ANCESTOR_TRUE_RE.search(condition_when))
+
 
 def _find_cycle_members(
     graph: dict[str, set[str]], recipe_steps: Mapping[str, RecipeStep]

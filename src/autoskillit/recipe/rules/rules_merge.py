@@ -9,7 +9,7 @@ import regex as re
 from autoskillit.core import MergeFailedStep, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe._analysis_bfs import _build_success_step_graph
-from autoskillit.recipe._rule_helpers import _is_loop_guard_step
+from autoskillit.recipe._rule_helpers import _is_loop_guard_step, parse_merge_failure_condition
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
@@ -92,8 +92,6 @@ _RECOVERY_SIGNATURES_CALLABLE: dict[str, str] = {
     "autoskillit.recipe._cmd_rpc.main_repo_guard": "dirty_retry",
 }
 
-_FAILED_STEP_PATTERN = re.compile(r"result\.failed_step\s*==\s*['\"](\w+)['\"]")
-
 
 @semantic_rule(
     name="merge-routing-incomplete",
@@ -115,11 +113,9 @@ def _check_merge_routing_completeness(ctx: ValidationContext) -> list[RuleFindin
 
         matched: set[str] = set()
         for condition in step.on_result.conditions:
-            if condition.when is None:
-                continue
-            m = _FAILED_STEP_PATTERN.search(condition.when)
-            if m:
-                matched.add(m.group(1))
+            failed_step_value, _ = parse_merge_failure_condition(condition.when)
+            if failed_step_value is not None:
+                matched.add(failed_step_value)
 
         missing = _RECOVERABLE_FAILED_STEPS - matched
         if missing:
@@ -146,33 +142,25 @@ _CROSS_SITE_VARIANT_ANCESTRY = "ancestry-aware"
 _CROSS_SITE_VARIANT_FALLBACK = "fallback"
 
 
-def _predicate_variant(condition_when: str | None, failed_step_value: str) -> str:
+def _predicate_variant(failed_step_value: str, remote_is_ancestor: bool) -> str:
     """Return a predicate-qualified variant label for a failed_step arm.
 
-    For ref_coherence, distinguish at least ancestry-aware (contains both
-    ``ref_coherence`` and ``remote_is_ancestor``) and fallback (contains
-    ``ref_coherence`` but not ``remote_is_ancestor``). All other failed_steps
-    collapse to a single default variant.
+    For ref_coherence, distinguish explicit positive ancestry from every fallback
+    predicate. All other failed_steps collapse to a single default variant.
     """
-    if condition_when is None:
-        return _CROSS_SITE_VARIANT_DEFAULT
-    when_lower = condition_when.lower()
     if failed_step_value == MergeFailedStep.REF_COHERENCE:
-        has_ref = "ref_coherence" in when_lower
-        has_ancestor = "remote_is_ancestor" in when_lower
-        if has_ref and has_ancestor:
+        if remote_is_ancestor:
             return _CROSS_SITE_VARIANT_ANCESTRY
-        if has_ref:
-            return _CROSS_SITE_VARIANT_FALLBACK
+        return _CROSS_SITE_VARIANT_FALLBACK
     return _CROSS_SITE_VARIANT_DEFAULT
 
 
-# Exact site pair exemption for the bundled remediation recipe: the
+# Exact recipe and site-pair exemption for the bundled remediation recipe: the
 # pre_remediation_merge and merge steps intentionally diverge for these four
 # failed_step values because pre_remediation_merge runs before remediation
 # starts and merge runs after. ref_coherence must still match across sites.
-_CROSS_SITE_SITE_PAIR_EXEMPTIONS: dict[tuple[str, str], frozenset[str]] = {
-    ("pre_remediation_merge", "merge"): frozenset(
+_CROSS_SITE_RECIPE_EXEMPTIONS: dict[tuple[str, frozenset[str]], frozenset[str]] = {
+    ("remediation", frozenset({"pre_remediation_merge", "merge"})): frozenset(
         {
             MergeFailedStep.DIRTY_TREE,
             MergeFailedStep.TEST_GATE,
@@ -196,15 +184,12 @@ def _check_merge_routing_cross_site_consistency(
             continue
         per_variant: dict[str, list[tuple[str, str]]] = {}
         for condition in step.on_result.conditions:
-            if condition.when is None:
+            failed_step_value, remote_is_ancestor = parse_merge_failure_condition(condition.when)
+            if failed_step_value is None or condition.when is None:
                 continue
-            m = _FAILED_STEP_PATTERN.search(condition.when)
-            if not m:
-                continue
-            failed_step_value = m.group(1)
             if failed_step_value not in _RECOVERABLE_FAILED_STEPS:
                 continue
-            variant = _predicate_variant(condition.when, failed_step_value)
+            variant = _predicate_variant(failed_step_value, remote_is_ancestor)
             key = f"{failed_step_value}::{variant}"
             per_variant.setdefault(key, []).append((condition.route, condition.when))
         if per_variant:
@@ -220,17 +205,47 @@ def _check_merge_routing_cross_site_consistency(
 
     for key in sorted(all_keys):
         sites_with_key = [s for s in site_names if key in merge_sites[s]]
-        if len(sites_with_key) < 2:
+        failed_step_value = key.split("::", 1)[0]
+        variant = key.split("::", 1)[1]
+
+        duplicate_sites = [site for site in sites_with_key if len(merge_sites[site][key]) > 1]
+        if duplicate_sites:
+            duplicate_list = ", ".join(duplicate_sites)
+            findings.append(
+                make_finding(
+                    rule_name="merge-routing-cross-site-consistency",
+                    step_name=duplicate_sites[0],
+                    message=(
+                        f"merge_worktree sites [{duplicate_list}] define duplicate "
+                        f"predicate-qualified arms for failed_step "
+                        f"'{failed_step_value}' (variant '{variant}'). Each site "
+                        f"must define at most one arm for a predicate variant."
+                    ),
+                )
+            )
             continue
 
-        failed_step_value = key.split("::", 1)[0]
-        site_set = frozenset(sites_with_key)
-        exemption_match = False
-        for pair, exempt_steps in _CROSS_SITE_SITE_PAIR_EXEMPTIONS.items():
-            if frozenset(pair) == site_set and failed_step_value in exempt_steps:
-                exemption_match = True
-                break
-        if exemption_match:
+        exempt_steps = _CROSS_SITE_RECIPE_EXEMPTIONS.get(
+            (ctx.recipe.name, frozenset(site_names)), frozenset()
+        )
+        if failed_step_value in exempt_steps:
+            continue
+
+        missing_sites = [site for site in site_names if site not in sites_with_key]
+        if missing_sites:
+            missing_list = ", ".join(missing_sites)
+            findings.append(
+                make_finding(
+                    rule_name="merge-routing-cross-site-consistency",
+                    step_name=sites_with_key[0],
+                    message=(
+                        f"merge_worktree sites [{missing_list}] are missing the "
+                        f"predicate-qualified arm for failed_step "
+                        f"'{failed_step_value}' (variant '{variant}'). Every merge "
+                        f"site must define the same predicate variants."
+                    ),
+                )
+            )
             continue
 
         classifications: dict[str, str | None] = {}
@@ -266,7 +281,7 @@ def _check_merge_routing_cross_site_consistency(
                 message=(
                     f"merge_worktree sites [{site_list}] have inconsistent predicate-"
                     f"qualified routing for failed_step '{failed_step_value}' "
-                    f"(variant '{key.split('::', 1)[1]}'): {target_list}. The "
+                    f"(variant '{variant}'): {target_list}. The "
                     f"same failed_step at different merge sites must reach the "
                     f"same recovery class."
                 ),
@@ -375,12 +390,9 @@ def _check_merge_failure_skill_domain_mismatch(
             continue
 
         for condition in step.on_result.conditions:
-            if condition.when is None:
+            failed_step_value, remote_is_ancestor = parse_merge_failure_condition(condition.when)
+            if failed_step_value is None:
                 continue
-            m = _FAILED_STEP_PATTERN.search(condition.when)
-            if not m:
-                continue
-            failed_step_value = m.group(1)
             domain = _MERGE_FAILURE_DOMAINS.get(failed_step_value)
             if domain is None:
                 continue
@@ -389,8 +401,7 @@ def _check_merge_failure_skill_domain_mismatch(
             # fallback arm is an intentional escalation terminal whose target
             # differs from the ancestry arm by design.
             if failed_step_value == MergeFailedStep.REF_COHERENCE:
-                when_lower = condition.when.lower()
-                if "remote_is_ancestor" not in when_lower:
+                if not remote_is_ancestor:
                     continue
                 required_class = _REQUIRED_RECOVERY_CLASS.get(domain)
                 if required_class is None:

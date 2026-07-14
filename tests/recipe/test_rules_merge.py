@@ -1122,6 +1122,89 @@ def test_cross_site_consistency_matching_arms_is_clean() -> None:
     assert flagged == [], f"Expected no finding, got: {flagged}"
 
 
+def test_cross_site_consistency_flags_missing_predicate_variant() -> None:
+    recipe = _two_merge_recipe(site_a_class="push", site_b_class="push")
+    merge_b = recipe.steps["merge_b"]
+    assert merge_b.on_result is not None
+    merge_b.on_result.conditions = [
+        condition
+        for condition in merge_b.on_result.conditions
+        if not (
+            condition.when
+            and "ref_coherence" in condition.when
+            and "remote_is_ancestor" not in condition.when
+        )
+    ]
+
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
+    assert len(flagged) == 1
+    assert "merge_b" in flagged[0].message
+    assert "missing" in flagged[0].message
+    assert "fallback" in flagged[0].message
+
+
+def test_cross_site_consistency_rejects_duplicate_predicate_variant() -> None:
+    recipe = _two_merge_recipe(site_a_class="push", site_b_class="push")
+    merge_b = recipe.steps["merge_b"]
+    assert merge_b.on_result is not None
+    merge_b.on_result.conditions.append(
+        StepResultCondition(
+            route="done",
+            when=("result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true"),
+        )
+    )
+
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
+    assert len(flagged) == 1
+    assert "merge_b" in flagged[0].message
+    assert "duplicate" in flagged[0].message
+    assert "ancestry-aware" in flagged[0].message
+
+
+def test_cross_site_consistency_does_not_treat_false_ancestry_as_positive() -> None:
+    recipe = _two_merge_recipe(site_a_class="push", site_b_class="push")
+    merge_b = recipe.steps["merge_b"]
+    assert merge_b.on_result is not None
+    merge_b.on_result.conditions = [
+        condition
+        for condition in merge_b.on_result.conditions
+        if not (
+            condition.when
+            and "ref_coherence" in condition.when
+            and "remote_is_ancestor" not in condition.when
+        )
+    ]
+    ancestry_arm = merge_b.on_result.conditions[0]
+    ancestry_arm.when = (
+        "result.failed_step == 'ref_coherence' and result.remote_is_ancestor == false"
+    )
+
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
+    assert len(flagged) == 2
+    assert any(
+        "missing" in finding.message and "ancestry-aware" in finding.message for finding in flagged
+    )
+    assert any(
+        "inconsistent" in finding.message and "fallback" in finding.message for finding in flagged
+    )
+
+
+def test_cross_site_remediation_exemption_requires_recipe_identity() -> None:
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
+    assert flagged == []
+
+    recipe.name = "unrelated-recipe"
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
+    assert flagged
+    assert any("dirty_tree" in finding.message for finding in flagged)
+
+
 def test_cross_site_consistency_classified_vs_unclassified_is_mismatch() -> None:
     """A classified-vs-unclassified pair is a mismatch, not silently equivalent.
 
@@ -1263,7 +1346,7 @@ def test_cross_site_consistency_classified_vs_unclassified_is_mismatch() -> None
     recipe = _make_recipe(steps)
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-routing-cross-site-consistency"]
-    assert len(flagged) >= 1, (
+    assert len(flagged) == 1, (
         f"Expected mismatch finding when classified vs unclassified arms diverge, got: {flagged}"
     )
 
@@ -1271,6 +1354,68 @@ def test_cross_site_consistency_classified_vs_unclassified_is_mismatch() -> None
 # ---------------------------------------------------------------------------
 # Step 6: _classify_recovery_class integration check
 # ---------------------------------------------------------------------------
+
+
+def test_recovery_classifier_prefers_nearest_signature_depth() -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.rules.rules_merge import _classify_recovery_class
+
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(tool="run_cmd", with_args={"cmd": "true"}),
+            "near_push": RecipeStep(tool="push_to_remote"),
+            "bridge": RecipeStep(tool="run_cmd", with_args={"cmd": "true"}),
+            "deeper_plan": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:make-plan plan.md"},
+            ),
+        }
+    )
+    success_graph = {
+        "start": {"near_push", "bridge"},
+        "near_push": set(),
+        "bridge": {"deeper_plan"},
+        "deeper_plan": set(),
+    }
+
+    assert (
+        _classify_recovery_class(
+            "start",
+            make_validation_context(recipe),
+            success_graph=success_graph,
+        )
+        == "push_recovery"
+    )
+
+
+def test_recovery_classifier_rejects_same_depth_ambiguity() -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.rules.rules_merge import _classify_recovery_class
+
+    recipe = _make_recipe(
+        {
+            "start": RecipeStep(tool="run_cmd", with_args={"cmd": "true"}),
+            "push": RecipeStep(tool="push_to_remote"),
+            "plan": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:make-plan plan.md"},
+            ),
+        }
+    )
+    success_graph = {
+        "start": {"push", "plan"},
+        "push": set(),
+        "plan": set(),
+    }
+
+    assert (
+        _classify_recovery_class(
+            "start",
+            make_validation_context(recipe),
+            success_graph=success_graph,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])

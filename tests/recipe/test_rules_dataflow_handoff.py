@@ -119,10 +119,8 @@ class TestUncapturedHandoffConsumerRule:
                 },
             }
         }
+        monkeypatch.setattr("autoskillit.recipe.load_bundled_manifest", lambda: fake_manifest)
         monkeypatch.setattr(_contracts_manifest, "load_bundled_manifest", lambda: fake_manifest)
-        monkeypatch.setattr(
-            "autoskillit.recipe.contracts.load_bundled_manifest", lambda: fake_manifest
-        )
 
         steps = {
             "produce": {
@@ -159,10 +157,8 @@ class TestUncapturedHandoffConsumerRule:
                 },
             }
         }
+        monkeypatch.setattr("autoskillit.recipe.load_bundled_manifest", lambda: fake_manifest)
         monkeypatch.setattr(_contracts_manifest, "load_bundled_manifest", lambda: fake_manifest)
-        monkeypatch.setattr(
-            "autoskillit.recipe.contracts.load_bundled_manifest", lambda: fake_manifest
-        )
 
         steps = {
             "produce": {

@@ -301,19 +301,20 @@ class TestOpenKitchenAutoInitTracker:
 
         tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
         tracker_dir.mkdir(parents=True, exist_ok=True)
-        tracker_dir.joinpath("other-pipeline.json").write_text(
-            json.dumps(
-                {
-                    "pipeline_id": "other-pipeline",
-                    "kitchen_id": "kitchen-multi",
-                    "steps": {
-                        "rectify": {"status": "complete"},
-                        "review_approach": {"status": "pending"},
-                    },
-                    "dependencies": {"review_approach": ["rectify"]},
-                }
+        for oid in ("other-pipeline", "second-pipeline"):
+            tracker_dir.joinpath(f"{oid}.json").write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": oid,
+                        "kitchen_id": "kitchen-multi",
+                        "steps": {
+                            "rectify": {"status": "complete"},
+                            "review_approach": {"status": "pending"},
+                        },
+                        "dependencies": {"review_approach": ["rectify"]},
+                    }
+                )
             )
-        )
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
             result = json.loads(await open_kitchen(name="remediation", ctx=ctx))

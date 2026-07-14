@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 # Sibling-import bootstrap: hooks run as ``python3 /path/to/script.py`` subprocesses
@@ -25,9 +24,8 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_settings import (  # noqa: E402
-    _atomic_write_marker,
     clear_quota_disable_marker,
-    quota_disable_marker_path,
+    write_quota_disable_marker,
 )  # type: ignore[import-not-found]
 
 _HANDLED_TOOLS = frozenset({"disable_quota_guard", "close_kitchen"})
@@ -98,15 +96,7 @@ def main() -> None:
         if not _is_disable_success(tool_response):
             sys.exit(0)
         try:
-            marker_path = quota_disable_marker_path(session_id)
-            payload = json.dumps(
-                {
-                    "session_id": session_id,
-                    "disabled_at": datetime.now(UTC).isoformat(),
-                    "marker_version": 1,
-                }
-            )
-            _atomic_write_marker(marker_path, payload)
+            write_quota_disable_marker(session_id)
         except (OSError, ValueError) as exc:
             sys.stderr.write(
                 f"quota_guard_state_post_hook: marker write failed for {session_id}: {exc}\n"

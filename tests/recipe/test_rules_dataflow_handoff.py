@@ -107,6 +107,7 @@ class TestUncapturedHandoffConsumerRule:
         optional path input is file_path_list. The unwired case must fire.
         """
         from autoskillit.recipe import _contracts_manifest
+        from autoskillit.recipe.rules.dataflow import rules_dataflow_handoff
 
         fake_manifest = {
             "skills": {
@@ -121,6 +122,7 @@ class TestUncapturedHandoffConsumerRule:
         }
         monkeypatch.setattr("autoskillit.recipe.load_bundled_manifest", lambda: fake_manifest)
         monkeypatch.setattr(_contracts_manifest, "load_bundled_manifest", lambda: fake_manifest)
+        monkeypatch.setattr(rules_dataflow_handoff, "load_bundled_manifest", lambda: fake_manifest)
 
         steps = {
             "produce": {
@@ -145,6 +147,7 @@ class TestUncapturedHandoffConsumerRule:
     ) -> None:
         """file_path_list input wired via context ref must silence the handoff rule."""
         from autoskillit.recipe import _contracts_manifest
+        from autoskillit.recipe.rules.dataflow import rules_dataflow_handoff
 
         fake_manifest = {
             "skills": {
@@ -159,6 +162,7 @@ class TestUncapturedHandoffConsumerRule:
         }
         monkeypatch.setattr("autoskillit.recipe.load_bundled_manifest", lambda: fake_manifest)
         monkeypatch.setattr(_contracts_manifest, "load_bundled_manifest", lambda: fake_manifest)
+        monkeypatch.setattr(rules_dataflow_handoff, "load_bundled_manifest", lambda: fake_manifest)
 
         steps = {
             "produce": {

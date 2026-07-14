@@ -940,6 +940,7 @@ async def test_perform_merge_rejects_diverged_local_branch(tmp_path):
     runner.push(
         _make_result(0, "bbbbbbbbbbbb\n", "")
     )  # step 7.5b: rev-parse remote SHA (different!)
+    runner.push(_make_result(1, "", ""))  # merge-base: remote is not an ancestor
 
     with patch(
         "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
@@ -952,7 +953,99 @@ async def test_perform_merge_rejects_diverged_local_branch(tmp_path):
     assert "remote_sha" in result
     assert result["local_sha"] == "aaaaaaaaaaaa"
     assert result["remote_sha"] == "bbbbbbbbbbbb"
-    assert "diverged" in result["error"]
+    assert result["remote_is_ancestor"] is False
+    merge_base_call = next(
+        args
+        for args in runner.call_args_list
+        if args[0][:3] == ["git", "merge-base", "--is-ancestor"]
+    )
+    assert merge_base_call[0] == [
+        "git",
+        "merge-base",
+        "--is-ancestor",
+        "bbbbbbbbbbbb",
+        "aaaaaaaaaaaa",
+    ]
+    assert merge_base_call[1] == Path(fake_wt)
+
+
+@pytest.mark.anyio
+async def test_perform_merge_reports_local_ahead_ref_coherence(tmp_path):
+    from autoskillit.config import SafetyConfig
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
+    runner.push(_make_result(0, "feature-branch\n", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "abc123\n", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "dev\n", ""))
+    runner.push(_make_result(0, "bbbbbbbbbbbb\n", ""))
+    runner.push(_make_result(0, "aaaaaaaaaaaa\n", ""))
+    runner.push(_make_result(0, "", ""))
+
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
+        result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
+
+    assert result["failed_step"] == MergeFailedStep.REF_COHERENCE
+    assert result["local_sha"] == "bbbbbbbbbbbb"
+    assert result["remote_sha"] == "aaaaaaaaaaaa"
+    assert result["remote_is_ancestor"] is True
+    merge_base_call = next(
+        args
+        for args in runner.call_args_list
+        if args[0][:3] == ["git", "merge-base", "--is-ancestor"]
+    )
+    assert merge_base_call[0] == [
+        "git",
+        "merge-base",
+        "--is-ancestor",
+        "aaaaaaaaaaaa",
+        "bbbbbbbbbbbb",
+    ]
+    assert merge_base_call[1] == Path(fake_wt)
+
+
+@pytest.mark.anyio
+async def test_perform_merge_reports_ancestry_operational_error(tmp_path):
+    from autoskillit.config import SafetyConfig
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
+    runner.push(_make_result(0, "feature-branch\n", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "abc123\n", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "", ""))
+    runner.push(_make_result(0, "dev\n", ""))
+    runner.push(_make_result(0, "aaaaaaaaaaaa\n", ""))
+    runner.push(_make_result(0, "bbbbbbbbbbbb\n", ""))
+    runner.push(_make_result(128, "", "fatal: invalid object name"))
+
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
+        result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
+
+    assert result["failed_step"] == MergeFailedStep.REF_COHERENCE
+    assert result["local_sha"] == "aaaaaaaaaaaa"
+    assert result["remote_sha"] == "bbbbbbbbbbbb"
+    assert result["stderr"] == "fatal: invalid object name"
+    assert "invalid object name" in result["error"]
+    assert "remote_is_ancestor" not in result
 
 
 @pytest.mark.anyio

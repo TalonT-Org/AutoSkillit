@@ -130,6 +130,9 @@ class MergeWorktreeResult(TypedDict, total=False):
     abort_failed: bool
     abort_stderr: str
     poisoned_installs: list[str]
+    local_sha: str
+    remote_sha: str
+    remote_is_ancestor: bool
 
 
 class TokenSummaryResult(TypedDict, total=False):

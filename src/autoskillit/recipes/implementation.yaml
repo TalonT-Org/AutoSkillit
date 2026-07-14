@@ -648,8 +648,10 @@ steps:
       route: check_merge_rebase_loop
     - when: result.failed_step == 'dirty_main_repo'
       route: check_dirty_main_retry
-    - when: result.failed_step == 'ref_coherence'
+    - when: result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true
       route: check_ref_push_loop
+    - when: result.failed_step == 'ref_coherence'
+      route: release_issue_failure
     - when: result.error
       route: release_issue_failure
     - route: inter_part_push
@@ -659,7 +661,9 @@ steps:
       By default (open_pr=true), merge_target is the feature branch named from run_name.
       When open_pr=false, merge_target equals base_branch — merges go directly to
       base. dirty_tree and test_gate failures route to fix (resolve-failures) for
-      recovery; all other failures route to release_issue_failure.
+      recovery. Local-ahead ref_coherence mismatches use bounded push recovery;
+      genuine divergence or indeterminate ancestry routes to release_issue_failure.
+      Other failures also route to release_issue_failure.
 
       '
   check_has_commits:

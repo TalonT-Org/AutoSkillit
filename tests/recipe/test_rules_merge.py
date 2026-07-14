@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import Severity
+from autoskillit.recipe._analysis import _build_step_graph, bfs_reachable
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.rules.rules_merge import _RECOVERABLE_FAILED_STEPS, _TERMINAL_FAILED_STEPS
@@ -101,7 +102,6 @@ def test_bundled_recipes_pass_merge_routing_incomplete(recipe_name: str) -> None
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
 def test_bundled_recipes_route_ref_coherence(recipe_name: str) -> None:
     """All bundled recipes must route REF_COHERENCE in their merge_worktree on_result."""
-    from autoskillit.core.types import MergeFailedStep
 
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
 
@@ -113,18 +113,44 @@ def test_bundled_recipes_route_ref_coherence(recipe_name: str) -> None:
     assert merge_steps, f"{recipe_name}: no merge_worktree step found"
 
     for step_name, step in merge_steps.items():
-        if step.on_result is None:
-            continue
-        matched = set()
-        for cond in step.on_result.conditions:
-            if cond.when is None:
-                continue
-            if "ref_coherence" in cond.when.lower():
-                matched.add(MergeFailedStep.REF_COHERENCE)
-        assert MergeFailedStep.REF_COHERENCE in matched, (
-            f"{recipe_name}: merge_worktree step '{step_name}' does not route "
-            f"REF_COHERENCE in on_result."
+        assert step.on_result is not None
+        conditions = step.on_result.conditions
+        ancestry_matches = [
+            (index, condition)
+            for index, condition in enumerate(conditions)
+            if condition.when
+            and "ref_coherence" in condition.when.lower()
+            and "remote_is_ancestor" in condition.when.lower()
+        ]
+        fallback_matches = [
+            (index, condition)
+            for index, condition in enumerate(conditions)
+            if condition.when
+            and "ref_coherence" in condition.when.lower()
+            and "remote_is_ancestor" not in condition.when.lower()
+        ]
+
+        assert len(ancestry_matches) == 1, (
+            f"{recipe_name}: merge_worktree step '{step_name}' must have exactly one "
+            "ancestry-aware REF_COHERENCE arm"
         )
+        assert len(fallback_matches) == 1, (
+            f"{recipe_name}: merge_worktree step '{step_name}' must have exactly one "
+            "REF_COHERENCE fallback arm"
+        )
+
+        ancestry_index, ancestry_condition = ancestry_matches[0]
+        fallback_index, fallback_condition = fallback_matches[0]
+        assert ancestry_index < fallback_index
+        assert fallback_condition.route == "release_issue_failure"
+
+        graph = _build_step_graph(recipe)
+        reachable = bfs_reachable(graph, ancestry_condition.route) | {ancestry_condition.route}
+        assert any(
+            recipe.steps[step_name].tool == "push_to_remote"
+            for step_name in reachable
+            if step_name in recipe.steps
+        ), f"{recipe_name}: route {ancestry_condition.route} cannot reach push_to_remote"
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:

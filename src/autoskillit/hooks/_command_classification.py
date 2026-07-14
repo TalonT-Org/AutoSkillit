@@ -413,7 +413,7 @@ def _consume_env(start: int, segment: list[str]) -> int:
         if token in _ENV_NO_VALUE_FLAGS:
             i += 1
             continue
-        if token in _ENV_VALUE_FLAGS_ATTACHED and "=" in token:
+        if "=" in token and token.split("=", 1)[0] in _ENV_VALUE_FLAGS_ATTACHED:
             i += 1
             continue
         if token in _ENV_VALUE_FLAGS and i + 1 < len(segment):

@@ -23,8 +23,9 @@ if _HOOKS_DIR not in sys.path:
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     _SHELL_OPS,
+    command_verb_and_args,
     has_interpreter_wrapped_command,
-    has_nested_shell,
+    tokenize_shell_payload_segments,
 )
 
 DISCOVERY_DENY_TRIGGER: str = "Planner skills cannot discover GitHub issues"
@@ -53,6 +54,29 @@ _TARGETED_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
 _API_LISTING_RE = re.compile(r"/repos/[^/]+/[^/]+/(issues|pulls)(?:\?.*)?$")
 
 _API_SPECIFIC_RE = re.compile(r"/repos/[^/]+/[^/]+/(issues|pulls)/\d+")
+
+
+def _is_discovery_segment(segment: list[str]) -> bool:
+    """Return True when *segment* represents a GitHub discovery subcommand.
+
+    Targeted reads (``gh issue view <N>``, ``gh api .../issues/<N>``) return
+    False; ``api`` listings matching ``_API_LISTING_RE`` return True.
+    """
+    verb, args = command_verb_and_args(segment)
+    if verb != "gh" or len(args) < 2:
+        return False
+    pair = (args[0], args[1])
+    if pair in _DISCOVERY_SUBCOMMANDS:
+        return True
+    if pair in _TARGETED_SUBCOMMANDS:
+        return False
+    if args[0] == "api":
+        endpoint = args[1]
+        if _API_SPECIFIC_RE.search(endpoint):
+            return False
+        if _API_LISTING_RE.search(endpoint):
+            return True
+    return False
 
 
 def _is_gh_discovery(cmd: str) -> bool:
@@ -85,11 +109,10 @@ def _is_gh_discovery(cmd: str) -> bool:
     discovery_targets = [f"gh {sub} {cmd_}" for sub, cmd_ in _DISCOVERY_SUBCOMMANDS]
     if has_interpreter_wrapped_command(cmd, target_commands=discovery_targets):
         return True
-    if has_nested_shell(cmd):
-        cmd_lower = cmd.lower()
-        if any(sub in cmd_lower and c in cmd_lower for sub, c in _DISCOVERY_SUBCOMMANDS):
-            return True
-    return False
+    segments = tokenize_shell_payload_segments(cmd)
+    if segments is None:
+        return False
+    return any(_is_discovery_segment(segment) for segment in segments)
 
 
 def main() -> None:

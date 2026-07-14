@@ -388,11 +388,11 @@ skills:
     outputs: []
   audit-impl:
     inputs:
-    - name: plan_path
-      type: file_path
-      required: false
     - name: all_plan_paths
-      type: file_path
+      type: file_path_list
+      required: false
+    - name: all_conflict_report_paths
+      type: file_path_list
       required: false
     - name: branch_name
       type: string

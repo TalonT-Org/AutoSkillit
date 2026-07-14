@@ -26,12 +26,14 @@ __all__ = [
     "closure_authority_spec_from_args",
     "ContaminationOutcome",
     "InputSpec",
+    "InputSpecType",
     "LoadReport",
     "LoadResult",
     "ModelIdentity",
     "TestResult",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
+    "VALID_INPUT_SPEC_TYPES",
     "WriteBehaviorSpec",
     "WriteEvidence",
     "FailureRecord",
@@ -50,6 +52,10 @@ __all__ = [
     "SessionIndexEntry",
     "parse_plan_paths",
 ]
+
+VALID_INPUT_SPEC_TYPES = frozenset({"file_path", "directory_path", "file_path_list"})
+
+InputSpecType = Literal["file_path", "directory_path", "file_path_list"]
 
 
 @dataclass
@@ -242,16 +248,26 @@ def parse_plan_paths(raw: str) -> tuple[str, ...]:
 
 @dataclass(frozen=True, slots=True)
 class InputSpec:
-    """Input contract specification for a single file_path or directory_path argument."""
+    """Input contract specification for a scalar or list path argument.
+
+    Covers single-path types (``file_path``, ``directory_path``) and the
+    list variant (``file_path_list``) whose value is one positional token
+    carrying comma- or newline-separated member paths.
+    """
 
     name: str
-    type: Literal["file_path", "directory_path"]
+    type: InputSpecType
     required: bool
     position: int
 
     def __post_init__(self) -> None:
         if self.position < 0:
             raise ValueError(f"InputSpec.position must be >= 0, got {self.position}")
+        if self.type not in VALID_INPUT_SPEC_TYPES:
+            raise ValueError(
+                f"InputSpec.type must be one of {sorted(VALID_INPUT_SPEC_TYPES)}, "
+                f"got {self.type!r}"
+            )
 
 
 @dataclass

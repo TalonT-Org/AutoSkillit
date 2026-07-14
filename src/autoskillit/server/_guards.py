@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, assert_never
 
 import regex as re
 
@@ -17,6 +17,7 @@ from autoskillit.core import (
     extract_skill_name,
     get_logger,
     is_path_like_token,
+    parse_plan_paths,
     session_type,
 )
 from autoskillit.hooks import command_has_blocked_protected_path_read
@@ -277,7 +278,11 @@ def _check_input_contracts(
     if not specs:
         return None
 
-    args = extract_positional_args(skill_command)
+    try:
+        args = extract_positional_args(skill_command)
+    except ValueError as e:
+        skill_label = extract_skill_name(skill_command) or skill_command
+        return gate_error_result(f"Malformed quoting in skill_command for {skill_label}: {e}")
     path_args = [a for a in args if is_path_like_token(a)]
 
     for spec in specs:
@@ -290,20 +295,39 @@ def _check_input_contracts(
             continue
 
         value = path_args[spec.position]
-        resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
 
-        if spec.type == "file_path":
-            if not resolved.is_file():
-                return gate_error_result(
-                    f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
-                    f"expected a file, path does not exist or is a directory: {resolved}"
-                )
-        elif spec.type == "directory_path":
-            if not resolved.is_dir():
-                return gate_error_result(
-                    f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
-                    f"expected a directory, path does not exist or is a file: {resolved}"
-                )
+        match spec.type:
+            case "file_path":
+                resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
+                if not resolved.is_file():
+                    return gate_error_result(
+                        f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                        f"expected a file, path does not exist or is a directory: {resolved}"
+                    )
+            case "directory_path":
+                resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
+                if not resolved.is_dir():
+                    return gate_error_result(
+                        f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                        f"expected a directory, path does not exist or is a file: {resolved}"
+                    )
+            case "file_path_list":
+                members = parse_plan_paths(value)
+                missing: list[str] = []
+                for member in members:
+                    member_path = (
+                        Path(cwd) / member if not Path(member).is_absolute() else Path(member)
+                    )
+                    if not member_path.is_file():
+                        missing.append(str(member_path))
+                if missing:
+                    return gate_error_result(
+                        f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                        f"{len(missing)} of {len(members)} expected files do not exist "
+                        f"or are directories: {', '.join(missing)}"
+                    )
+            case _ as unreachable:
+                assert_never(unreachable)
 
     return None
 

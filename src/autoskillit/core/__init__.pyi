@@ -288,6 +288,8 @@ from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InputContractResolver as InputContractResolver
 from .types import InputSpec as InputSpec
+from .types import InputSpecType as InputSpecType
+from .types import VALID_INPUT_SPEC_TYPES as VALID_INPUT_SPEC_TYPES
 from .types import InspectorCallback as InspectorCallback
 from .types import InspectorEvidence as InspectorEvidence
 from .types import InspectorVerdict as InspectorVerdict

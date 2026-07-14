@@ -98,6 +98,92 @@ class TestUncapturedHandoffConsumerRule:
         handoff = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
         assert handoff == []
 
+    def test_uncaptured_handoff_consumer_fires_for_unwired_file_path_list(
+        self, monkeypatch
+    ) -> None:
+        """file_path_list inputs must be treated as path-typed by the handoff rule.
+
+        Uses an inline manifest with an outputless producer and a consumer whose sole
+        optional path input is file_path_list. The unwired case must fire.
+        """
+        from autoskillit.recipe import _contracts_manifest
+
+        fake_manifest = {
+            "skills": {
+                "fakelist-producer": {"inputs": [], "outputs": []},
+                "fakelist-consumer": {
+                    "inputs": [
+                        {"name": "plan_files", "type": "file_path_list", "required": False}
+                    ],
+                    "outputs": [],
+                },
+            }
+        }
+        monkeypatch.setattr(_contracts_manifest, "load_bundled_manifest", lambda: fake_manifest)
+        monkeypatch.setattr(
+            "autoskillit.recipe.contracts.load_bundled_manifest", lambda: fake_manifest
+        )
+
+        steps = {
+            "produce": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:fakelist-producer"},
+                "on_success": "consume",
+            },
+            "consume": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:fakelist-consumer"},
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        handoff = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
+        assert any("plan_files" in f.message for f in handoff)
+
+    def test_uncaptured_handoff_consumer_silent_when_file_path_list_wired(
+        self, monkeypatch
+    ) -> None:
+        """file_path_list input wired via context ref must silence the handoff rule."""
+        from autoskillit.recipe import _contracts_manifest
+
+        fake_manifest = {
+            "skills": {
+                "fakelist-producer": {"inputs": [], "outputs": []},
+                "fakelist-consumer": {
+                    "inputs": [
+                        {"name": "plan_files", "type": "file_path_list", "required": False}
+                    ],
+                    "outputs": [],
+                },
+            }
+        }
+        monkeypatch.setattr(_contracts_manifest, "load_bundled_manifest", lambda: fake_manifest)
+        monkeypatch.setattr(
+            "autoskillit.recipe.contracts.load_bundled_manifest", lambda: fake_manifest
+        )
+
+        steps = {
+            "produce": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:fakelist-producer"},
+                "on_success": "consume",
+            },
+            "consume": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": '/autoskillit:fakelist-consumer "${{ context.plan_files }}"'
+                },
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done."},
+        }
+        recipe = _make_workflow(steps)
+        findings = run_semantic_rules(recipe)
+        handoff = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
+        assert handoff == []
+
 
 # ---------------------------------------------------------------------------
 # TestCallableContracts

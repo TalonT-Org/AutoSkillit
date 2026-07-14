@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import SKILL_TOOLS, Severity, get_logger
+from autoskillit.core import SKILL_TOOLS, VALID_INPUT_SPEC_TYPES, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     get_skill_contract,
@@ -181,7 +181,7 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
             file_path_inputs = [
                 inp
                 for inp in consumer_contract.inputs
-                if inp.type in ("file_path", "directory_path") and not inp.required
+                if inp.type in VALID_INPUT_SPEC_TYPES and not inp.required
             ]
             if not file_path_inputs:
                 continue

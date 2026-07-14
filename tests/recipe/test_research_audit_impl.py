@@ -92,6 +92,15 @@ class TestResearchRecipesAuditImpl:
         skill_cmd = step.with_args.get("skill_command", "")
         assert "context.group_files" in skill_cmd
 
+    def test_audit_impl_group_files_is_quoted(self, recipe) -> None:
+        """context.group_files interpolation must be wrapped in double quotes.
+
+        Newline-separated values must remain one logical argument after shlex tokenization.
+        """
+        step = recipe.steps["audit_impl"]
+        skill_cmd = step.with_args.get("skill_command", "")
+        assert '"${{ context.group_files }}"' in skill_cmd
+
     def test_audit_impl_go_routes_to_run_experiment(self, recipe) -> None:
         """audit_impl on_result GO verdict must route to run_experiment."""
         step = recipe.steps["audit_impl"]

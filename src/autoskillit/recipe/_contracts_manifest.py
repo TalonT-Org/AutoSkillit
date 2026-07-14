@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, assert_never, cast
 
 from autoskillit.core import (
+    VALID_INPUT_SPEC_TYPES,
     InputSpec,
+    InputSpecType,
     get_logger,
     load_yaml,
     pkg_root,
@@ -94,7 +96,13 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
 
 
 def resolve_input_specs(skill_command: str) -> tuple[InputSpec, ...]:
-    """Resolve InputSpec entries for file_path/directory_path inputs from a skill's contract."""
+    """Resolve InputSpec entries for path-typed inputs from a skill's contract.
+
+    Recognized types are those in ``VALID_INPUT_SPEC_TYPES`` — scalar
+    ``file_path`` / ``directory_path`` and the ``file_path_list`` variant
+    whose value is one positional token carrying comma- or newline-separated
+    member paths. Non-path types (``string``, ``integer``, …) are skipped.
+    """
     name = resolve_skill_name(skill_command)
     if not name:
         return ()
@@ -104,17 +112,22 @@ def resolve_input_specs(skill_command: str) -> tuple[InputSpec, ...]:
     path_position = 0
     specs: list[InputSpec] = []
     for inp in contract.inputs:
-        if inp.type in ("file_path", "directory_path"):
-            narrowed_type = cast(Literal["file_path", "directory_path"], inp.type)
-            specs.append(
-                InputSpec(
-                    name=inp.name,
-                    type=narrowed_type,
-                    required=inp.required,
-                    position=path_position,
+        if inp.type not in VALID_INPUT_SPEC_TYPES:
+            continue
+        narrowed_type = cast(InputSpecType, inp.type)
+        match narrowed_type:
+            case "file_path" | "directory_path" | "file_path_list":
+                specs.append(
+                    InputSpec(
+                        name=inp.name,
+                        type=narrowed_type,
+                        required=inp.required,
+                        position=path_position,
+                    )
                 )
-            )
-            path_position += 1
+                path_position += 1
+            case _ as unreachable:
+                assert_never(unreachable)
     return tuple(specs)
 
 

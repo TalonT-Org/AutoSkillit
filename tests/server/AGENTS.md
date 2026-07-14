@@ -75,6 +75,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_dispatch_validation.py` | Tests for dispatch_food_truck validation: gates, input, and semantic validation |
 | `test_tools_execution_command.py` | Tests for run_skill command building, timeouts, env, model, and per-invocation markers |
 | `test_tools_execution_input_gates.py` | Tests for run_skill input validation gates and CWD checking |
+| `test_tools_execution_input_gates_file_path_list.py` | file_path_list gate behavioral tests — comma-separated and quoted newline-separated plan lists |
 | `test_tools_execution_provider.py` | Tests for provider_extras/profile_name forwarding through run_skill() |
 | `test_tools_execution_response.py` | Contract tests: MCP tool response fields use correct enum types |
 | `test_tools_execution_results.py` | Tests for run_skill result shapes, failure paths, timing, flush telemetry, and gate checks |

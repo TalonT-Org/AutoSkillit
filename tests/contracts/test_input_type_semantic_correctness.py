@@ -78,6 +78,9 @@ def _infer_path_kind_from_skillmd(
                 window = skillmd_text[max(0, pos - 200) : pos + 200]
                 if _LIST_COLLECTION_RE.search(window):
                     return "list"
+        else:
+            if _LIST_COLLECTION_RE.search(skillmd_text):
+                return "list"
 
     if input_name.endswith(("_dir", "_directory")) or input_name == "run_dir":
         return "directory"

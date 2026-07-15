@@ -21,7 +21,7 @@ import pytest
 
 from tests.fakes import InMemoryHeadlessExecutor
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 def _write_overlay(project_dir: Path, order_section: dict) -> Path:

@@ -869,9 +869,9 @@ def test_open_kitchen_output_includes_diagram():
 def _strip_presentation_fields(parsed: dict) -> dict:
     """Expected projection: original parsed YAML minus presentation-only fields
     compact_recipe_display() is allowed to drop (top-level description/summary/name/
-    recipe_version/requires_packs, direct step description)."""
+    recipe_version, direct step description)."""
     projected = dict(parsed)
-    for key in ("description", "summary", "name", "recipe_version", "requires_packs"):
+    for key in ("description", "summary", "name", "recipe_version"):
         projected.pop(key, None)
     steps = projected.get("steps")
     if isinstance(steps, dict):

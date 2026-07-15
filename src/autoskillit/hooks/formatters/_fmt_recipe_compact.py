@@ -290,7 +290,6 @@ _TOP_LEVEL_STRIP_FIELDS: frozenset[str] = frozenset(
         "summary",
         "name",
         "recipe_version",
-        "requires_packs",
     }
 )
 

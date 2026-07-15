@@ -698,6 +698,15 @@ async def run_skill(
     - "contract_recovery": model completed and wrote artifacts but structured output failed
       pattern validation and nudge could not recover — route to on_context_limit if
       has_progress_evidence, else on_failure.
+    - "rate_limited": transient HTTP 429 or rate-limit text signal — route to on_rate_limit
+      (falls back to on_context_limit if on_rate_limit is absent).
+    - "stale": session went stale (no output progress) — decrement retries counter and
+      re-execute the same step if retries remain, else on_failure.
+    - "idle_stall": stdout idle watchdog killed the session — route to on_context_limit if
+      lifespan_started, else on_failure.
+    - "clone_contamination": session wrote to a contaminated clone directory — route to
+      on_failure.
+    - "budget_exhausted": session exceeded its budget allocation — route to on_failure.
 
     This is the correct MCP tool to delegate work to a headless session during
     pipeline execution. NEVER use native tools (Read, Grep, Glob, Edit, Write,

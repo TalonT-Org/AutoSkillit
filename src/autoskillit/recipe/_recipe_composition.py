@@ -9,7 +9,7 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import CAPABILITY_INGREDIENT_TO_SKIP_GUARD, YAMLError, load_yaml
+from autoskillit.core import CAPABILITY_INGREDIENT_TO_SKIP_GUARD, SKILL_TOOLS, YAMLError, load_yaml
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
@@ -45,6 +45,28 @@ def _collect_all_route_targets(step: RecipeStep) -> set[str]:
         elif sr.routes:
             targets.update(sr.routes.values())
     return targets
+
+
+def _derive_rate_limit_routes(recipe: Any) -> None:
+    """Auto-populate on_rate_limit from on_context_limit for run_skill steps.
+
+    When a run_skill step declares on_context_limit but not on_rate_limit,
+    the sous-chef silently borrows on_context_limit for transient 429 failures.
+    This derivation makes that behavior explicit at the schema level, removing
+    the silent fallback and making the routing visible to semantic rules.
+
+    Mutates the recipe's steps in place. Steps with explicit on_rate_limit are
+    left untouched (explicit overrides win). Steps with neither field set are
+    also untouched (they remain flagged by the run-skill-missing-rate-limit
+    semantic rule).
+    """
+    for step in recipe.steps.values():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if step.on_rate_limit is not None:
+            continue
+        if step.on_context_limit is not None:
+            step.on_rate_limit = step.on_context_limit
 
 
 def _step_block_pattern(escaped_name: str) -> str:

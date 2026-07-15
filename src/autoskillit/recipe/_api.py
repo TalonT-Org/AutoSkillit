@@ -48,6 +48,7 @@ from autoskillit.recipe._recipe_composition import (
     _assert_content_integrity,
     _build_active_recipe,
     _compute_capability_feasibility,
+    _derive_rate_limit_routes,
     _prune_skipped_steps,
     _resolve_hidden_inputs_in_content,
     _resolve_skip_guards_in_content,
@@ -402,6 +403,12 @@ def load_and_validate(
             if _skip_resolutions:
                 raw = _resolve_skip_guards_in_content(raw, _skip_resolutions, _pre_prune_steps)
                 _assert_content_integrity(raw, _skip_resolutions, _pre_prune_steps)
+            # Auto-derive on_rate_limit from on_context_limit for run_skill steps.
+            # Runs after _prune_skipped_steps so live (non-pruned) steps get the
+            # derivation. This is production defense-in-depth — explicit YAML
+            # values remain the canonical declaration, but the silent fallback
+            # in the sous-chef cascade is removed at the data level.
+            _derive_rate_limit_routes(active_recipe)
             # Post-prune: validate that no surviving step routes to a removed step.
             # Must run inside try so active_recipe and errors are both in scope.
             _dangling_errors = _validate_no_dangling_routes(active_recipe)

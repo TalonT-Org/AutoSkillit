@@ -248,6 +248,7 @@ steps:
       queue_mode: ${{ result.queue_mode }}
     on_success: route_by_queue_mode
     on_failure: register_clone_failure
+    on_rate_limit: register_clone_failure
     note: 'Captures pr_order_file (path to JSON with ordered PRs + complexity tags),
       batch_branch (e.g. integration/pr-merge-20250228-143052), and queue_mode ("true"
       when a GitHub merge queue with MERGEABLE entries is active on base_branch; "false"
@@ -771,6 +772,7 @@ steps:
       diagnosis_path: ${{ result.diagnosis_path }}
     on_success: register_clone_failure
     on_failure: register_clone_failure
+    on_rate_limit: register_clone_failure
     note: 'Best-effort CI diagnosis for ejected_ci_failure state. The PR was ejected
       due to CI failure in the merge queue, not a conflict. After diagnosis, routes
       to register_clone_failure — CI failures in queue mode are not auto-recoverable
@@ -895,6 +897,7 @@ steps:
     - when: ${{ result.verdict }} == false_positive
       route: verify
     on_failure: register_clone_failure
+    on_rate_limit: register_clone_failure
     note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
       into plan_parts[]. For a single-part plan, plan_parts has one entry equal to
       plan_path. PRIMARY PATH: context.task = conflict_report_path from merge_pr.
@@ -1365,6 +1368,7 @@ steps:
       pr_url: ${{ result.pr_url }}
     on_success: wait_for_review_pr_mergeability
     on_failure: register_clone_failure
+    on_rate_limit: register_clone_failure
   wait_for_review_pr_mergeability:
     tool: run_python
     with:
@@ -1515,6 +1519,7 @@ steps:
     - when: 'true'
       route: check_review_posted
     on_failure: resolve_review_integration
+    on_rate_limit: resolve_review_integration
     note: 'Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr
       against context.batch_branch. All four verdicts have explicit routes: changes_requested
       → resolve_review_integration, approved_with_comments → resolve_review_integration,
@@ -1695,6 +1700,7 @@ steps:
       diagnosis_path: ${{ result.diagnosis_path }}
     on_success: register_clone_failure
     on_failure: register_clone_failure
+    on_rate_limit: register_clone_failure
     note: 'Runs when ci_watch_pr reports CI failure on the integration branch. Fetches
       logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/ for human inspection.
       diagnosis_path is captured for observability — no automated remediation for

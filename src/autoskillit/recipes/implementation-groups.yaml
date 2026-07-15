@@ -269,6 +269,7 @@ steps:
     on_success: verify
     on_failure: release_issue_failure
     on_context_limit: verify
+    on_rate_limit: verify
     skip_when_false: "inputs.review_approach"
     note: "Only execute this step if review_approach input is 'true'. Otherwise skip directly to verify."
 
@@ -314,6 +315,7 @@ steps:
       worktree_path: "${{ result.worktree_path }}"
     retries: 0
     on_context_limit: retry_worktree
+    on_rate_limit: retry_worktree
     on_success: gate_backend_write
     on_failure: release_issue_failure
     optional: true
@@ -337,6 +339,7 @@ steps:
       route: test
     - route: test
     on_context_limit: test
+    on_rate_limit: test
     on_exhausted: release_issue_failure
     on_failure: release_issue_failure
     optional: true
@@ -844,6 +847,7 @@ steps:
     - route: check_audit_remediation_loop
     on_failure: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     optional: true
     skip_when_false: "inputs.audit_impl"
     note: >
@@ -882,6 +886,7 @@ steps:
     - route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
+    on_rate_limit: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -904,6 +909,7 @@ steps:
     on_success: compose_pr
     on_failure: compose_pr
     on_context_limit: compose_pr
+    on_rate_limit: compose_pr
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -936,6 +942,7 @@ steps:
     - route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
+    on_rate_limit: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
@@ -1029,6 +1036,7 @@ steps:
     - route: check_review_posted
     on_failure: check_repo_ci_event
     on_context_limit: check_repo_ci_event
+    on_rate_limit: check_repo_ci_event
     optional: true
     skip_when_false: "inputs.open_pr"
     optional_context_refs:
@@ -1058,6 +1066,7 @@ steps:
     retries: 2
     on_exhausted: release_issue_failure
     on_context_limit: release_issue_failure
+    on_rate_limit: release_issue_failure
     on_result:
     - when: "${{ result.verdict }} == 'real_fix'"
       route: pre_review_rebase
@@ -1111,6 +1120,7 @@ steps:
     - route: re_push_review
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
+    on_rate_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
     optional: true
@@ -1432,6 +1442,7 @@ steps:
     on_success: escalate_stop_no_ci
     on_failure: escalate_stop_no_ci
     on_context_limit: escalate_stop_no_ci
+    on_rate_limit: escalate_stop_no_ci
     note: >
       Execute this diagnostic step. Failures are logged but do not alter pipeline routing.
 
@@ -1459,6 +1470,7 @@ steps:
     on_success: resolve_ci
     on_failure: resolve_ci
     on_context_limit: resolve_ci
+    on_rate_limit: resolve_ci
     optional: true
     optional_context_refs: [ci_event]
     skip_when_false: "inputs.open_pr"
@@ -1481,6 +1493,7 @@ steps:
     retries: 2
     on_exhausted: release_issue_failure
     on_context_limit: release_issue_failure
+    on_rate_limit: release_issue_failure
     optional: true
     skip_when_false: inputs.backend_supports_git_write
     on_result:
@@ -1544,6 +1557,7 @@ steps:
     - route: check_ci_rebase_loop
     on_failure: diagnose_ci
     on_context_limit: diagnose_ci
+    on_rate_limit: diagnose_ci
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: "inputs.backend_supports_git_write"
@@ -1864,6 +1878,7 @@ steps:
     - route: re_push_queue_fix
     on_failure: diagnose_ci
     on_context_limit: diagnose_ci
+    on_rate_limit: diagnose_ci
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: "inputs.open_pr"
@@ -2073,6 +2088,7 @@ steps:
     - route: re_push_direct_fix
     on_failure: diagnose_ci
     on_context_limit: diagnose_ci
+    on_rate_limit: diagnose_ci
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: "inputs.open_pr"
@@ -2179,6 +2195,7 @@ steps:
     - route: re_push_immediate_fix
     on_failure: diagnose_ci
     on_context_limit: diagnose_ci
+    on_rate_limit: diagnose_ci
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: "inputs.open_pr"
@@ -2242,6 +2259,7 @@ steps:
     on_success: done_unconfirmed
     on_failure: done_unconfirmed
     on_context_limit: done_unconfirmed
+    on_rate_limit: done_unconfirmed
     note: >
       Execute this diagnostic step. Failures are logged but do not alter pipeline routing.
 
@@ -2294,6 +2312,7 @@ steps:
     - route: re_push
     on_failure: diagnose_ci
     on_context_limit: diagnose_ci
+    on_rate_limit: diagnose_ci
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: "inputs.open_pr"
@@ -2373,6 +2392,7 @@ steps:
     on_success: done
     on_failure: done
     on_context_limit: done
+    on_rate_limit: done
     note: >
       Execute this diagnostic step. Failures are logged but do not alter pipeline
       routing. Both on_failure and on_context_limit route to the same terminal as on_success.
@@ -2402,6 +2422,7 @@ steps:
     on_success: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
+    on_rate_limit: escalate_stop
     note: >
       Execute this diagnostic step. Failures are logged but do not alter pipeline routing.
 

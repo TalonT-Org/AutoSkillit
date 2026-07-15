@@ -84,7 +84,14 @@ RATE_LIMIT_EXEMPT_STEPS: dict[str, set[str]] = {
 }
 
 
-_RATE_LIMIT_COMPLIANT_RECIPES: set[str] = set()
+_RATE_LIMIT_COMPLIANT_RECIPES: set[str] = {
+    "remediation",
+    "implementation",
+    "implementation-groups",
+    "merge-prs",
+    "promote-to-main-wrapper",
+    "planner",
+}
 
 
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)

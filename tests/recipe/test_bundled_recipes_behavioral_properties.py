@@ -69,6 +69,24 @@ _CONTEXT_LIMIT_COMPLIANT_RECIPES: set[str] = {
 }
 
 
+RATE_LIMIT_EXEMPT_STEPS: dict[str, set[str]] = {
+    "planner": set(),
+    "remediation": set(),
+    "research": set(),
+    "implementation": set(),
+    "implementation-groups": set(),
+    "merge-prs": set(),
+    "full-audit": set(),
+    "bem-wrapper": set(),
+    "research-design": set(),
+    "research-implement": set(),
+    "research-review": set(),
+}
+
+
+_RATE_LIMIT_COMPLIANT_RECIPES: set[str] = set()
+
+
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
 def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:
     """Every run_skill step must declare on_context_limit (or be exempt)."""
@@ -103,6 +121,43 @@ def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:
     assert not missing, (
         f"{recipe_name}: run_skill steps missing on_context_limit: {missing}. "
         f"Add on_context_limit: <recovery_step> to each, or add to CONTEXT_LIMIT_EXEMPT_STEPS."
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
+def test_run_skill_steps_declare_on_rate_limit(recipe_name: str) -> None:
+    """Every run_skill step must declare on_rate_limit (or be exempt)."""
+    if _recipe_base_name(recipe_name) not in _RATE_LIMIT_COMPLIANT_RECIPES:
+        pytest.xfail("on_rate_limit handlers not yet added to all bundled recipes")
+    recipe_path = next(p for p in _BUNDLED_ONLY if p.name == recipe_name)
+    recipe = load_recipe(recipe_path)
+    exempt = RATE_LIMIT_EXEMPT_STEPS.get(_recipe_base_name(recipe_name), set())
+
+    rate_limit_targets: set[str] = set()
+    for step in recipe.steps.values():
+        if step.on_rate_limit and step.on_rate_limit not in (
+            "escalate",
+            "release_issue_failure",
+        ):
+            rate_limit_targets.add(step.on_rate_limit)
+
+    missing: list[str] = []
+    for name, step in recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        if step.action == "stop":
+            continue
+        if step.on_rate_limit is not None:
+            continue
+        if name in rate_limit_targets:
+            continue
+        if name in exempt:
+            continue
+        missing.append(name)
+
+    assert not missing, (
+        f"{recipe_name}: run_skill steps missing on_rate_limit: {missing}. "
+        f"Add on_rate_limit: <recovery_step> to each, or add to RATE_LIMIT_EXEMPT_STEPS."
     )
 
 

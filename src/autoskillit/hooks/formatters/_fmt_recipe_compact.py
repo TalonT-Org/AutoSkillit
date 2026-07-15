@@ -295,36 +295,6 @@ _TOP_LEVEL_STRIP_FIELDS: frozenset[str] = frozenset(
 )
 
 
-def _strip_structural_blanks(text: str) -> str:
-    """Strip trailing whitespace and remove blank lines between step entries.
-
-    YAML trailing spaces are never semantically significant. Blank lines
-    between step mapping entries (where the next non-blank line is at indent
-    ≤ 1 after compaction, indicating a step name or top-level key) are
-    cosmetic separators; those inside literal/folded block scalars are NOT
-    removed because block-scalar content lines are deeper.
-    """
-    lines = text.split("\n")
-    n = len(lines)
-    out: list[str] = []
-    i = 0
-    while i < n:
-        line = lines[i]
-        if line.strip() == "":
-            j = i + 1
-            while j < n and lines[j].strip() == "":
-                j += 1
-            if j < n and _leading_spaces(lines[j]) <= 1:
-                i = j
-                continue
-            out.append(line)
-            i = i + 1
-        else:
-            out.append(line.rstrip())
-            i += 1
-    return "\n".join(out)
-
-
 def compact_recipe_display(yaml_text: str) -> str:
     """Apply the fixed, deterministic display-compaction projection.
 
@@ -333,15 +303,15 @@ def compact_recipe_display(yaml_text: str) -> str:
     response — ``name`` and ``recipe_version`` in the header, ``summary``
     via the STEP FLOW block, ``requires_packs`` as an internal gating
     field, descriptions nowhere — they are pure narration), then halves
-    structural YAML indentation and removes cosmetic blank lines between
-    step entries. All tools, actions, routes, commands, captures, messages,
-    notes, and guard fields are preserved as parsed values — see
+    structural YAML indentation. All tools, actions, routes, commands,
+    captures, messages, notes, and guard fields are preserved as parsed
+    values — see
     tests/infra/test_pretty_output_recipe.py::test_compact_recipe_display_preserves_execution_semantics.
     """
     text = _strip_top_level_fields(yaml_text, _TOP_LEVEL_STRIP_FIELDS)
     text = _strip_step_descriptions(text)
     text = _compact_indentation(text)
-    return _strip_structural_blanks(text)
+    return "\n".join(line.rstrip() for line in text.split("\n"))
 
 
 _STOP_STEP_MESSAGE_PREFIX = "  Stop step '"
@@ -377,6 +347,12 @@ def compact_orchestration_rules(text: str) -> str:
             continue
         kept.append(line)
     if success_true or success_false:
+        kept = [
+            line
+            for line in kept
+            if "emit the L3 sentinel block and TERMINATE" not in line
+            and "Do NOT attempt recovery, error reporting" not in line
+        ]
         if success_true:
             kept.append(f"  success=true: {', '.join(success_true)}")
         if success_false:

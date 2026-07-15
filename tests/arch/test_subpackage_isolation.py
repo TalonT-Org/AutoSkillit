@@ -979,7 +979,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1471,
+        1472,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1007,7 +1007,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; per-step backend override config_backend kwarg threading (+5 net lines)"
         "; _auto_init_pipeline_tracker helper + call sites on both deferred-recall and "
         "normal open_kitchen paths for self-arming pipeline dependency tracker init "
-        "(+53 net lines)",
+        "(+53 net lines)"
+        "; _auto_init_pipeline_tracker tool_ctx param typed as ToolContext under "
+        "TYPE_CHECKING instead of Any, matching _active_order_ids_for_kitchen's "
+        "established pattern (+1 net line)",
     ),
     "tools_execution.py": (
         1560,

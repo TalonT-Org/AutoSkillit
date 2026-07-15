@@ -2545,6 +2545,7 @@ steps:
     on_success: done_unconfirmed
     on_failure: done_unconfirmed
     on_context_limit: done_unconfirmed
+    on_rate_limit: done_unconfirmed
     note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
       routing.
 
@@ -2633,6 +2634,7 @@ steps:
     on_success: done
     on_failure: done
     on_context_limit: done
+    on_rate_limit: done
     note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
       routing. Both on_failure and on_context_limit route to the same terminal as on_success.
 
@@ -2653,6 +2655,7 @@ steps:
     on_success: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
+    on_rate_limit: escalate_stop
     note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
       routing.
 
@@ -2682,6 +2685,7 @@ steps:
     on_success: done_no_changes
     on_failure: done_no_changes
     on_context_limit: done_no_changes
+    on_rate_limit: done_no_changes
     note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
       routing.
 
@@ -2711,6 +2715,7 @@ steps:
     on_success: done_already_done
     on_failure: done_already_done
     on_context_limit: done_already_done
+    on_rate_limit: done_already_done
     note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
       routing.
 

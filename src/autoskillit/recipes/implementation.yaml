@@ -852,6 +852,7 @@ steps:
     - route: test
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
+    on_rate_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
     optional: true

@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe._api_listing import validate_from_path
-from autoskillit.recipe.io import all_validated_recipe_paths
+from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -24,6 +24,17 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _ALL_PATHS = all_validated_recipe_paths(_PROJECT_ROOT)
 _BUNDLED_ONLY = [p for p in _ALL_PATHS if "src/autoskillit/recipes" in str(p)]
 assert _BUNDLED_ONLY, "no bundled recipes found"
+
+
+def _has_run_skill_steps(recipe_path: Path) -> bool:
+    """Return True if the recipe has at least one run_skill step in raw YAML.
+
+    Recipes with no run_skill steps cannot trigger the
+    run-skill-missing-rate-limit rule, so the test should treat them as
+    inherently compliant.
+    """
+    recipe = load_recipe(recipe_path)
+    return any(step.tool == "run_skill" for step in recipe.steps.values())
 
 
 class TestRateLimitRuleFiring:
@@ -43,7 +54,20 @@ class TestRateLimitRuleFiring:
         ``"severity"`` (lowercase string via ``Severity.value``), ``"step"``,
         ``"message"``. Each item is a plain dict — not a ``RuleFinding``
         dataclass instance.
+
+        Recipes without any run_skill steps (e.g. consolidate-health-reports,
+        research-archive, promote-to-main, research-campaign) are inherently
+        compliant — the rule has nothing to flag and zero findings is correct.
         """
+        from tests.recipe.test_bundled_recipes_behavioral_properties import (
+            _RATE_LIMIT_COMPLIANT_RECIPES,
+        )
+
+        stem = recipe_path.stem
+        if not _has_run_skill_steps(recipe_path):
+            # No run_skill steps means the rule has nothing to flag.
+            return
+
         result = validate_from_path(recipe_path)
         rate_limit_warnings = [
             f
@@ -55,11 +79,6 @@ class TestRateLimitRuleFiring:
         # test_bundled_recipes_behavioral_properties.py). At time of writing,
         # that set is empty (Part B adds compliance), so non-compliant
         # recipes must produce at least one warning.
-        from tests.recipe.test_bundled_recipes_behavioral_properties import (
-            _RATE_LIMIT_COMPLIANT_RECIPES,
-        )
-
-        stem = recipe_path.stem
         if stem in _RATE_LIMIT_COMPLIANT_RECIPES:
             assert not rate_limit_warnings, (
                 f"{stem}: expected zero run-skill-missing-rate-limit findings "

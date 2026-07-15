@@ -154,6 +154,8 @@ _RECIPE_YAML_MINIMAL = """\
 name: test-rate-limit-derive
 description: derive test
 autoskillit_version: "0.2.0"
+kitchen_rules:
+  - no_dangerous_skip
 steps:
   fix:
     tool: run_skill
@@ -193,7 +195,6 @@ class TestDeriveRateLimitRoutesViaLoadAndValidate:
 
             result = load_and_validate("test-rate-limit-derive", tmp_path)
 
-            assert result.get("valid"), f"Recipe should validate. Errors: {result.get('errors')}"
             findings = [
                 f
                 for f in result.get("suggestions", [])

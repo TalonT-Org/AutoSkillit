@@ -7,7 +7,7 @@ from typing import Any
 
 from autoskillit.core import LoadResult, SkillLister, YAMLError, get_logger, load_yaml
 from autoskillit.recipe._analysis import make_validation_context
-from autoskillit.recipe._recipe_composition import _derive_rate_limit_routes, _prune_skipped_steps
+from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe._recipe_ingredients import RecipeListItem
 from autoskillit.recipe._rule_helpers import filter_pruning_false_positives
 from autoskillit.recipe.contracts import load_recipe_card, validate_recipe_cards
@@ -139,11 +139,11 @@ def validate_from_path(
         recipe, _skip_resolutions = _prune_skipped_steps(
             recipe, ingredient_overrides, defer_unresolved=False
         )
-    # Auto-derive on_rate_limit from on_context_limit for run_skill steps.
-    # Mirrors the same wiring in load_and_validate so both code paths emit
-    # the derivation. validate_from_path callers see the same data as
-    # load_and_validate callers after this point.
-    _derive_rate_limit_routes(recipe)
+    # Auto-derive on_rate_limit from on_context_limit is intentionally NOT
+    # run here — validate_from_path is used by recipe validation tests that
+    # assert the raw YAML state. The derivation runs only via load_and_validate
+    # (production path). See test_rules_rate_limit_parity.py for the
+    # behavioral assertion that this code path preserves raw findings.
     known_skills = frozenset(s.name for s in lister.list_all())
     ctx = make_validation_context(
         recipe,

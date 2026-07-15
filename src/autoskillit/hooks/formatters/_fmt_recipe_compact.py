@@ -295,19 +295,14 @@ _TOP_LEVEL_STRIP_FIELDS: frozenset[str] = frozenset(
 )
 
 
-def _collapse_blank_lines(text: str) -> str:
-    """Remove cosmetic blank lines and trailing whitespace.
+def _strip_structural_blanks(text: str) -> str:
+    """Strip trailing whitespace and remove blank lines between step entries.
 
-    Blank lines inside literal/folded block scalars are semantically
-    significant — they are preserved. Only blank lines that appear at a
-    nesting depth where the surrounding lines are structural (mapping keys
-    or list items) are removed.  As a safe approximation, remove any blank
-    line whose next non-blank line has indentation ≤ the previous non-blank
-    line's indentation (i.e., it separates sibling or parent entries, not
-    block-scalar content where the next line is deeper).
-
-    Also strips trailing whitespace from non-blank lines — YAML trailing
-    spaces are never semantically significant.
+    YAML trailing spaces are never semantically significant. Blank lines
+    between step mapping entries (where the next non-blank line is at indent
+    ≤ 1 after compaction, indicating a step name or top-level key) are
+    cosmetic separators; those inside literal/folded block scalars are NOT
+    removed because block-scalar content lines are deeper.
     """
     lines = text.split("\n")
     n = len(lines)
@@ -316,15 +311,14 @@ def _collapse_blank_lines(text: str) -> str:
     while i < n:
         line = lines[i]
         if line.strip() == "":
-            prev_indent = _leading_spaces(out[-1]) if out and out[-1].strip() else 0
             j = i + 1
             while j < n and lines[j].strip() == "":
                 j += 1
-            if j < n:
-                next_indent = _leading_spaces(lines[j])
-                if next_indent > prev_indent:
-                    out.append(line)
-            i = j if j > i + 1 else i + 1
+            if j < n and _leading_spaces(lines[j]) <= 1:
+                i = j
+                continue
+            out.append(line)
+            i = i + 1
         else:
             out.append(line.rstrip())
             i += 1
@@ -339,15 +333,15 @@ def compact_recipe_display(yaml_text: str) -> str:
     response — ``name`` and ``recipe_version`` in the header, ``summary``
     via the STEP FLOW block, ``requires_packs`` as an internal gating
     field, descriptions nowhere — they are pure narration), then halves
-    structural YAML indentation and collapses cosmetic blank lines. All
-    tools, actions, routes, commands, captures, messages, notes, and guard
-    fields are preserved as parsed values — see
+    structural YAML indentation and removes cosmetic blank lines between
+    step entries. All tools, actions, routes, commands, captures, messages,
+    notes, and guard fields are preserved as parsed values — see
     tests/infra/test_pretty_output_recipe.py::test_compact_recipe_display_preserves_execution_semantics.
     """
     text = _strip_top_level_fields(yaml_text, _TOP_LEVEL_STRIP_FIELDS)
     text = _strip_step_descriptions(text)
     text = _compact_indentation(text)
-    return _collapse_blank_lines(text)
+    return _strip_structural_blanks(text)
 
 
 _STOP_STEP_MESSAGE_PREFIX = "  Stop step '"

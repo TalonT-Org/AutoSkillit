@@ -16,7 +16,7 @@ from autoskillit.execution.backends._backend_cmd_builder_base import (
     FlagVocabulary,
 )
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 class _ConcreteBuilder(BackendCmdBuilderBase):
@@ -165,3 +165,49 @@ class TestSharedBaselineEnv:
             "MAX_MCP_OUTPUT_TOKENS",
             "MCP_CONNECTION_NONBLOCKING",
         }
+
+
+class TestMaxMcpOutputTokensCommentAccuracy:
+    """The comment above _MAX_MCP_OUTPUT_TOKENS_VALUE must not claim the token setting
+    prevents disk persistence — that's a separate, harness-controlled byte-size gate
+    (issue #4253)."""
+
+    def _preceding_comment(self) -> str:
+        import ast
+        from pathlib import Path
+
+        path = (
+            Path(__file__).resolve().parents[3]
+            / "src"
+            / "autoskillit"
+            / "execution"
+            / "backends"
+            / "_backend_cmd_builder_base.py"
+        )
+        source = path.read_text()
+        tree = ast.parse(source)
+        target_lineno = None
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == "_MAX_MCP_OUTPUT_TOKENS_VALUE"
+            ):
+                target_lineno = node.lineno
+                break
+        assert target_lineno is not None, "_MAX_MCP_OUTPUT_TOKENS_VALUE not found in source"
+        lines = source.splitlines()
+        comment_lines: list[str] = []
+        idx = target_lineno - 2  # 0-indexed line immediately above the assignment
+        while idx >= 0 and lines[idx].strip().startswith("#"):
+            comment_lines.insert(0, lines[idx].strip().lstrip("#").strip())
+            idx -= 1
+        return " ".join(comment_lines)
+
+    def test_max_mcp_output_tokens_comment_accuracy(self) -> None:
+        comment = self._preceding_comment()
+        assert "inline token limit" in comment
+        assert "does NOT control" in comment
+        assert "disk-persistence" in comment or "disk persistence" in comment
+        assert "preventing open_kitchen() responses" not in comment
+        assert "persisted to a file instead of returned inline" not in comment

@@ -180,3 +180,128 @@ class TestPipelineDepsScoping:
         )
         assert result["success"] is False
         assert "DEPENDENCY UNMET" in result["error"]
+
+
+class TestPipelineDepsKitchenScopedFallback:
+    @pytest.mark.anyio
+    async def test_run_skill_denies_out_of_order_step(self, tool_ctx_kitchen_open, tmp_path):
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-1"
+        _write_tracker(
+            tmp_path,
+            "kitchen-1",
+            {"rectify": {"status": "pending"}, "review_approach": {"status": "pending"}},
+            {"review_approach": ["rectify"]},
+        )
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:review-approach .autoskillit/temp/rectify/plan.md",
+                str(tmp_path),
+                step_name="review_approach",
+            )
+        )
+        assert result["success"] is False
+        assert "DEPENDENCY UNMET" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_run_skill_allows_in_order_step(self, tool_ctx_kitchen_open, tmp_path):
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-1"
+        _write_tracker(
+            tmp_path,
+            "kitchen-1",
+            {
+                "rectify": {"status": "complete", "completed_at": "2026-05-31T01:05:00Z"},
+                "review_approach": {"status": "pending"},
+            },
+            {"review_approach": ["rectify"]},
+        )
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:review-approach .autoskillit/temp/rectify/plan.md",
+                str(tmp_path),
+                step_name="review_approach",
+            )
+        )
+        assert "DEPENDENCY UNMET" not in result.get("error", "")
+
+    @pytest.mark.anyio
+    async def test_check_pipeline_deps_falls_back_to_kitchen_id(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-2"
+        _write_tracker(
+            tmp_path,
+            "kitchen-2",
+            {"rectify": {"status": "pending"}, "review_approach": {"status": "pending"}},
+            {"review_approach": ["rectify"]},
+        )
+        result = _check_pipeline_deps("review_approach", "")
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["success"] is False
+        assert "DEPENDENCY UNMET" in parsed["error"]
+
+
+class TestPipelineDepsEmptyStepNameBypass:
+    @pytest.mark.anyio
+    async def test_run_skill_denies_empty_step_name_with_active_deps(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-3"
+        tool_ctx_kitchen_open.active_recipe_steps = {
+            "some_other_step": SimpleNamespace(with_args={"skill_command": "/other-skill"}),
+        }
+        _write_tracker(
+            tmp_path,
+            "kitchen-3",
+            {"rectify": {"status": "pending"}, "review_approach": {"status": "pending"}},
+            {"review_approach": ["rectify"]},
+        )
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:review-approach .autoskillit/temp/rectify/plan.md",
+                str(tmp_path),
+                step_name="",
+            )
+        )
+        assert result["success"] is False
+        assert "DEPENDENCY UNMET" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_run_skill_denies_ambiguous_step_name_with_active_deps(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-4"
+        tool_ctx_kitchen_open.active_recipe_steps = {
+            "investigate_a": SimpleNamespace(
+                with_args={"skill_command": "/autoskillit:investigate a"}
+            ),
+            "investigate_b": SimpleNamespace(
+                with_args={"skill_command": "/autoskillit:investigate b"}
+            ),
+        }
+        _write_tracker(
+            tmp_path,
+            "kitchen-4",
+            {"rectify": {"status": "pending"}, "review_approach": {"status": "pending"}},
+            {"review_approach": ["rectify"]},
+        )
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:investigate c",
+                str(tmp_path),
+                step_name="",
+            )
+        )
+        assert result["success"] is False
+        assert "DEPENDENCY UNMET" in result["error"]

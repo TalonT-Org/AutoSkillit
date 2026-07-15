@@ -14,6 +14,7 @@ from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
 from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
 from autoskillit.cli.session._session_launch import _launch_cook_session, _write_order_entry
 from autoskillit.core import (
+    ORDER_INTERACTIVE_REQUIRED_ENV,
     RecipeSource,
     atomic_write,
     get_logger,
@@ -159,6 +160,7 @@ def order(
             initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
             resume_spec=resume_spec,
             extra_env=_write_order_entry(Path.cwd(), None),
+            required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
         )
         return
 
@@ -205,6 +207,7 @@ def order(
                 resume_spec=resume_spec,
                 project_dir=Path.cwd(),
                 extra_env=_write_order_entry(Path.cwd(), None),
+                required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
             )
             return
         elif resolved is None:
@@ -334,4 +337,5 @@ def order(
         extra_env=_extra_env,
         resume_spec=resume_spec,
         project_dir=Path.cwd(),
+        required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
     )

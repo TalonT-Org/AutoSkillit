@@ -1,37 +1,28 @@
-<!-- autoskillit-recipe-hash: sha256:f19a5fe94fc3fa762b26c94b022eb8dd8a84f8ff9314588a91da76a01193de25 -->
+<!-- autoskillit-recipe-hash: sha256:b59be3b8b980b97b4318c10867e0f09771ff4e7bfe2812fda09dbfb90faff931 -->
 <!-- autoskillit-diagram-format: v7 -->
 ## implementation-groups
-Group-based implementation with per-group plan/implement/test cycles and PR gates.
 
-### Graph
-clone → get_issue_title → claim_issue → compute_branch
+### Flow
+
+group
 |
-+-- create_branch → push_merge_target
-|
-group → plan → review_approach (optional)
-|
-┌────┤ FOR EACH PLAN PART:
-│    verify → implement ↔ [retry_worktree on context limit]
-│    |
-│    test → commit_guard → merge → push
-│    |
-│    fix (on failure) → next_or_done
-└────┘
-|
-+-- audit_impl → reset_test_fix_counter → reset_merge_test_fix_counter
-    → reset_ref_push_counter → remediate (optional)
-|
-+-- [open-pr] (optional):
-|     prepare_pr → compose_pr → review_pr → resolve_review
-|     ci_watch → check_repo_merge_state
-|     → [queue | direct | immediate] merge path
-|     → diagnose_ci → resolve_ci (on CI failure)
-|
-release_issue_success / release_issue_failure
-|
-+-- patch_token_summary (optional)
-|
-register_clone_success / register_clone_failure
-─────────────────────────────────────
-done  "Complete."
-escalate_stop  "Failed."
++----+ FOR EACH GROUP:
+|    |
+|    plan --- [review-approach] (optional)
+|    |
+|    +----+ FOR EACH PLAN PART:
+|    |    |
+|    |    verify --- implement --- test <-> [x fail -> fix]
+|    |    |
+|    |    merge
+|    |    |
+|    +----+
+|    |
++----+
+     |
+     +-- [audit] (optional)
+     |     x fail [-> plan]
+     |
+     +-- [prepare-pr] (optional)
+     |     +-- [arch-lens-{slug}] (optional, one per selected lens, parallel)
+     |     compose-pr

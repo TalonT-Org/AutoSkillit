@@ -1,39 +1,24 @@
-<!-- autoskillit-recipe-hash: sha256:077fad11823ad0404b999cb7bae62ae6b027b2a1f286a6e19b9a0e4da1418fd4 -->
+<!-- autoskillit-recipe-hash: sha256:a20fe102240e90ac72b1d9dde8a99d89c2ef10a30cbaccad278a2f048e652f4f -->
 <!-- autoskillit-diagram-format: v7 -->
 ## remediation
-Investigate, rectify, implement, and merge a bug fix with CI and PR gates.
 
-### Graph
-clone → get_issue_title → claim_issue → compute_branch
+### Flow
+
++-- [investigate] (optional)
 |
-+-- create_branch → push_merge_target
+rectify --- [review-approach] (optional)
 |
-investigate → rectify → review_approach (optional)
-|
-dry_walkthrough → implement ↔ [retry_worktree on context limit]
-|
-test ↔ assess
-     [assess context/rate limit → test]
-|
-+-- audit_impl → reset_test_fix_counter → reset_merge_test_fix_counter
-    → reset_ref_push_counter → pre_remediation_merge → remediate (optional)
-      [local ahead → ref push recovery → pre_remediation_merge]
-    → merge_gate_test ↔ merge_gate_assess
-       [merge_gate_assess context/rate limit → merge_gate_test]
-|
-make_plan → commit_guard → merge → push
-|
-+-- [open-pr] (optional):
-|     prepare_pr → compose_pr → review_pr → resolve_review
-|     ci_watch → check_repo_merge_state
-|     → [queue | direct | immediate] merge path
-|     → diagnose_ci → resolve_ci (on CI failure)
-|
-release_issue_success / release_issue_failure
-|
-+-- patch_token_summary (optional)
-|
-register_clone_success / register_clone_failure
-─────────────────────────────────────
-done  "Complete."
-escalate_stop  "Failed."
++----+ FOR EACH PLAN PART:
+|    |
+|    dry-walkthrough --- implement --- test <-> [x fail -> fix]
+|    |
+|    +-- [audit] (optional)
+|    |     x fail [-> make-plan]
+|    |
+|    merge
+|    |
++----+
+     |
+     +-- [prepare-pr] (optional)
+     |     +-- [arch-lens-{slug}] (optional, one per selected lens, parallel)
+     |     compose-pr

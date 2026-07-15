@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import QuotaGuardConfig
+    from autoskillit.pipeline import ToolContext
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -55,6 +56,7 @@ from autoskillit.server._misc import (
     _hook_config_overlay_path,
     _hook_config_path,
     _pipeline_tracker_dir,
+    _pipeline_tracker_path,
     _prime_quota_cache,
     _quota_refresh_loop,
     resolve_log_dir,
@@ -71,6 +73,7 @@ from autoskillit.server.tools._auto_overrides import (
     _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
     filter_steps_by_post_prune,
@@ -287,6 +290,60 @@ def _update_hook_config_with_git_ops_policy() -> None:
         atomic_write(hook_cfg_path, json.dumps(payload))
     except OSError:
         logger.warning("hook_config_git_ops_policy_update_write_failed", path=str(hook_cfg_path))
+
+
+def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> None:
+    """Auto-derive and initialize the kitchen-scoped pipeline dependency tracker.
+
+    Self-arming, server-internal counterpart to ``record_pipeline_step(op="init")``
+    — runs at ``open_kitchen`` time from ``ctx.active_recipe_steps``, requiring
+    no LLM action, mirroring how ingredient locks are primed. Writes directly
+    via ``atomic_write`` rather than calling the MCP tool: ``record_pipeline_step``
+    resolves its own pipeline_id from ``pipeline_id | AUTOSKILLIT_DISPATCH_ID``
+    with no kitchen_id tier, and this stays independent of that resolution so
+    fleet callers are unaffected.
+
+    Idempotent across the deferred-override re-call pattern: an existing
+    tracker's step statuses and previously-tracked dependency keys are
+    preserved rather than overwritten.
+    """
+    active_steps = tool_ctx.active_recipe_steps
+    if not active_steps:
+        return
+    try:
+        deps = _derive_phase_a_deps(active_steps)
+    except Exception:
+        logger.warning("pipeline_tracker_auto_init_deps_failed", exc_info=True)
+        return
+    if not deps:
+        return
+
+    tracker_path = _pipeline_tracker_path(tool_ctx.project_dir, tool_ctx.kitchen_id)
+    steps: dict[str, dict[str, str]] = {name: {"status": "pending"} for name in active_steps}
+    dependencies: dict[str, list[str]] = dict(deps)
+
+    if tracker_path.exists():
+        try:
+            existing = json.loads(tracker_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+        for name, state in existing.get("steps", {}).items():
+            if name in steps:
+                steps[name] = state
+        for key, value in existing.get("dependencies", {}).items():
+            dependencies.setdefault(key, value)
+
+    tracker_data = {
+        "kitchen_id": tool_ctx.kitchen_id,
+        "pipeline_id": tool_ctx.kitchen_id,
+        "steps": steps,
+        "dependencies": dependencies,
+        "initialized_at": datetime.now(UTC).isoformat(),
+    }
+    try:
+        atomic_write(tracker_path, fast_dumps(tracker_data))
+    except OSError:
+        logger.warning("pipeline_tracker_auto_init_write_failed", exc_info=True)
 
 
 async def _open_kitchen_handler() -> str | None:
@@ -830,6 +887,7 @@ async def open_kitchen(
                 # Dispatch-feasibility preflight: verify the backend can enforce
                 # all fix-required hooks for the recipe's run_skill steps.
                 if tool_ctx.active_recipe_steps is not None:
+                    _auto_init_pipeline_tracker(tool_ctx)
                     _preflight_err = _check_dispatch_feasibility(
                         post_prune_step_names=result.get("post_prune_step_names", []),
                         active_recipe_steps=tool_ctx.active_recipe_steps,
@@ -960,6 +1018,7 @@ async def open_kitchen(
             # Dispatch-feasibility preflight: verify the backend can enforce
             # all fix-required hooks for the recipe's run_skill steps.
             if tool_ctx.active_recipe_steps is not None:
+                _auto_init_pipeline_tracker(tool_ctx)
                 _preflight_err = _check_dispatch_feasibility(
                     post_prune_step_names=result.get("post_prune_step_names", []),
                     active_recipe_steps=tool_ctx.active_recipe_steps,

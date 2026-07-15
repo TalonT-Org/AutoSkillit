@@ -32,6 +32,10 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._ordering_telemetry import (
+    detect_ordering_violations,
+    read_session_index_records,
+)
 
 logger = get_logger(__name__)
 
@@ -362,6 +366,8 @@ async def analyze_tool_sequences(
             else:
                 rendering = render_adjacency_table(dfg, top_n=top_n)
 
+            ordering_violations = detect_ordering_violations(read_session_index_records(log_root))
+
             return json.dumps(
                 {
                     "success": True,
@@ -369,6 +375,7 @@ async def analyze_tool_sequences(
                     "recipe_count": len(result.by_recipe),
                     "top_bigrams": format_top_bigrams(dfg, top_n, min_count),
                     "rendering": rendering,
+                    "ordering_violations": ordering_violations,
                 }
             )
         except Exception as exc:

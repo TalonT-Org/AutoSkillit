@@ -516,3 +516,69 @@ def test_cook_mark_onboarded_not_called_on_failure(
     assert onboarded_calls == [], (
         "mark_onboarded() must not be called when the subprocess exits non-zero"
     )
+
+
+# ---------------------------------------------------------------------------
+# ORDER_INTERACTIVE_REQUIRED_ENV call-site contract (issue #4253 Part A)
+# ---------------------------------------------------------------------------
+
+_SESSION_ORDER_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "autoskillit"
+    / "cli"
+    / "session"
+    / "_session_order.py"
+)
+
+
+def _launch_cook_session_calls() -> list:
+    """AST Call nodes for every _launch_cook_session(...) invocation in _session_order.py."""
+    import ast
+
+    tree = ast.parse(_SESSION_ORDER_PATH.read_text())
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_launch_cook_session"
+    ]
+
+
+def test_session_order_has_exactly_three_launch_cook_session_call_sites() -> None:
+    calls = _launch_cook_session_calls()
+    assert len(calls) == 3, (
+        f"Expected exactly 3 _launch_cook_session() call sites in _session_order.py, "
+        f"found {len(calls)}"
+    )
+
+
+def test_session_order_launch_calls_pass_order_interactive_required_env() -> None:
+    """Every _launch_cook_session() call site must pass required_env=ORDER_INTERACTIVE_REQUIRED_ENV
+    exactly — accepting any keyword value would allow None and would not protect the contract."""
+    import ast
+
+    for call in _launch_cook_session_calls():
+        required_env_kwargs = [kw for kw in call.keywords if kw.arg == "required_env"]
+        assert len(required_env_kwargs) == 1, (
+            f"Call at line {call.lineno} must pass required_env= exactly once"
+        )
+        value = required_env_kwargs[0].value
+        assert isinstance(value, ast.Name) and value.id == "ORDER_INTERACTIVE_REQUIRED_ENV", (
+            f"Call at line {call.lineno} must pass required_env=ORDER_INTERACTIVE_REQUIRED_ENV, "
+            f"got {ast.dump(value)}"
+        )
+
+
+def test_launch_cook_session_required_env_is_required_keyword_only() -> None:
+    """required_env must be a keyword-only parameter with no default — omission must be
+    a language/type-checking error, not silently accepted as None."""
+    import inspect
+
+    from autoskillit.cli.session._session_launch import _launch_cook_session
+
+    sig = inspect.signature(_launch_cook_session)
+    param = sig.parameters["required_env"]
+    assert param.kind == inspect.Parameter.KEYWORD_ONLY
+    assert param.default is inspect.Parameter.empty

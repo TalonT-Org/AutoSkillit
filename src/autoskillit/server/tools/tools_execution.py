@@ -8,12 +8,16 @@ import os
 import shutil
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import anyio
 import regex as re
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
@@ -57,6 +61,7 @@ from autoskillit.server._guards import (
 from autoskillit.server._misc import (
     SCENARIO_STEP_NAME_ENV,
     _hook_config_overlay_path,
+    _pipeline_tracker_dir,
     _pipeline_tracker_path,
     resolve_closure_write_dirs,
 )
@@ -83,6 +88,7 @@ _PURE_SLEEP_RE = re.compile(
 )
 
 INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
+DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"
 
 
 def _is_absolute_path(path: str) -> bool:
@@ -207,15 +213,57 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     return None
 
 
+def _active_order_ids_for_kitchen(ctx: ToolContext) -> set[str]:
+    """Return distinct order_ids with an order-id-scoped tracker under this kitchen.
+
+    Used by the `_check_pipeline_deps` kitchen-scoped fallback to detect when
+    multiple pipelines are concurrently active under one kitchen (e.g.
+    fleet-style parallel dispatch). In that case the kitchen_id must not be
+    used as an aliasing key — one pipeline's completed step could otherwise
+    falsely satisfy an unrelated pipeline's dependency.
+    """
+    tracker_dir = _pipeline_tracker_dir(ctx.project_dir)
+    if not tracker_dir.is_dir():
+        return set()
+    active: set[str] = set()
+    for path in tracker_dir.glob("*.json"):
+        if path.stem == ctx.kitchen_id:
+            continue
+        try:
+            tracker = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if tracker.get("kitchen_id") == ctx.kitchen_id:
+            active.add(path.stem)
+    return active
+
+
 def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
-
     effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-    if not effective_oid:
-        return None
     from autoskillit.server import _get_ctx  # circular-break
 
     ctx = _get_ctx()
+    if not effective_oid:
+        # Kitchen-scoped fallback: interactive sessions have a kitchen_id but no
+        # order_id. Only resolve to the kitchen-scoped tracker when at most one
+        # pipeline is active under this kitchen.
+        if not ctx.kitchen_id:
+            return None
+        active_oids = _active_order_ids_for_kitchen(ctx)
+        if len(active_oids) > 1:
+            return json.dumps(
+                {
+                    "success": False,
+                    "is_error": True,
+                    "error": (
+                        f"{DEPENDENCY_DENY_PREFIX}: multiple pipelines are active "
+                        f"under this kitchen ({sorted(active_oids)}). Pass order_id "
+                        "explicitly to scope the dependency check."
+                    ),
+                }
+            )
+        effective_oid = ctx.kitchen_id
     tracker_path = _pipeline_tracker_path(ctx.project_dir, effective_oid)
     if not tracker_path.exists():
         return None
@@ -237,8 +285,8 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
             "success": False,
             "is_error": True,
             "error": (
-                f"DEPENDENCY UNMET: Step '{step_name}' requires {unmet} to complete first. "
-                f"Pipeline '{effective_oid}': {dep_status}."
+                f"{DEPENDENCY_DENY_PREFIX}: Step '{step_name}' requires {unmet} to complete "
+                f"first. Pipeline '{effective_oid}': {dep_status}."
             ),
         }
     )
@@ -290,6 +338,52 @@ def _has_active_locks(order_id: str) -> bool:
     if effective_oid:
         return any(v is False for v in locked_steps.get(effective_oid, {}).values())
     return any(v is False for steps in locked_steps.values() for v in steps.values())
+
+
+def _has_active_deps() -> bool:
+    """Return True if a kitchen-scoped tracker exists with any dependencies defined."""
+    from autoskillit.server import _get_ctx  # circular-break
+
+    ctx = _get_ctx()
+    if not ctx.kitchen_id:
+        return False
+    tracker_path = _pipeline_tracker_path(ctx.project_dir, ctx.kitchen_id)
+    if not tracker_path.exists():
+        return False
+    try:
+        tracker = json.loads(tracker_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return False
+    return bool(tracker.get("dependencies"))
+
+
+def _check_review_approach_plan_path(step_name: str, skill_command: str) -> str | None:
+    """Return a deny JSON if review_approach is invoked without a plan-path argument.
+
+    review_approach requires a plan file path produced by rectify/make_plan.
+    Heuristic: the first argument after the skill name must not be a bare
+    issue URL, which would otherwise fall back to ambiguous "conversation
+    context" inference instead of failing loudly.
+    """
+    if _canonical_step_name(step_name) != "review_approach":
+        return None
+    parts = skill_command.split()
+    if len(parts) < 2:
+        return None
+    first_arg = parts[1]
+    if first_arg.startswith("https://") or first_arg.startswith("http://"):
+        return json.dumps(
+            {
+                "success": False,
+                "is_error": True,
+                "error": (
+                    "review_approach requires a plan file path argument (a path "
+                    "under the project's temp directory produced by "
+                    "rectify/make_plan), not an issue URL."
+                ),
+            }
+        )
+    return None
 
 
 def _derive_run_cmd_write_prefixes() -> tuple[str, ...]:
@@ -674,6 +768,13 @@ async def run_skill(
         and (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None
     ):
         return _dep_denial
+    if (
+        step_name
+        and not resume_session_id
+        and (_plan_path_denial := _check_review_approach_plan_path(step_name, skill_command))
+        is not None
+    ):
+        return _plan_path_denial
     try:
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx  # circular-break
@@ -696,7 +797,24 @@ async def run_skill(
                     return _lock_denial
                 if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
                     return _dep_denial
-            elif not _ambiguous and _has_active_locks(order_id):
+                if (
+                    _plan_path_denial := _check_review_approach_plan_path(step_name, skill_command)
+                ) is not None:
+                    return _plan_path_denial
+            elif _ambiguous:
+                if _has_active_deps():
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "is_error": True,
+                            "error": (
+                                f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and matched "
+                                "multiple recipe steps by skill_command prefix (ambiguous). "
+                                "Cannot verify dependency status. Pass step_name explicitly."
+                            ),
+                        }
+                    )
+            elif _has_active_locks(order_id):
                 return json.dumps(
                     {
                         "success": False,
@@ -706,6 +824,18 @@ async def run_skill(
                             "not be resolved from the recipe. Cannot verify lock "
                             "status. Pass step_name explicitly or call "
                             "lock_ingredients(unlock=[...]) to release all locks."
+                        ),
+                    }
+                )
+            elif _has_active_deps():
+                return json.dumps(
+                    {
+                        "success": False,
+                        "is_error": True,
+                        "error": (
+                            f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
+                            "not be resolved from the recipe. Cannot verify dependency "
+                            "status. Pass step_name explicitly."
                         ),
                     }
                 )

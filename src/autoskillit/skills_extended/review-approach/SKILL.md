@@ -22,6 +22,16 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 - User has a plan or report and wants to explore what modern solutions exist
 - After an investigation or plan, before committing to an approach
 
+## Input Contract
+
+In pipeline context, the first argument after the skill name **must be a plan file
+path** (e.g. `{{AUTOSKILLIT_TEMP}}/rectify/plan.md`), not just an issue URL. The plan
+must already have been produced by a prior `rectify`/`make_plan` step. An issue URL
+alone is not a substitute — do not fall back to inferring the plan from "conversation
+context" in pipeline context. The pipeline fails with a `review_approach requires a
+plan file path argument` error if only an issue URL is provided; treat that as a hard
+failure, not something to work around.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -53,7 +63,7 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 
 ### Step 1: Extract Research Targets
 
-From the report, plan, or conversation context, identify the core problems and proposed features that need external research. Break them into distinct research topics.
+From the plan file path argument (or, outside pipeline context, the report/conversation context provided), identify the core problems and proposed features that need external research. Break them into distinct research topics.
 
 ### Step 2: Launch Parallel Web Search Subagents (SINGLE MESSAGE)
 

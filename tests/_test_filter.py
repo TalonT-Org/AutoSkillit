@@ -441,6 +441,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "rules_graph_output": frozenset({"recipe"}),
     "rules_graph_review": frozenset({"recipe"}),
     "rules_graph_routes": frozenset({"recipe"}),
+    "rules_graph_summary": frozenset({"recipe"}),
     "rules_inline_script": frozenset({"recipe"}),
     "rules_inputs": frozenset({"recipe"}),
     "rules_isolation": frozenset({"recipe"}),
@@ -779,6 +780,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_execution_input_gates_file_path_list.py",
             "server/test_capability_admission_e2e.py",
             "server/test_admission_dispatch_agreement.py",
+            "server/test_pipeline_deps_derivation.py",
+            "server/test_pipeline_tracker.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",

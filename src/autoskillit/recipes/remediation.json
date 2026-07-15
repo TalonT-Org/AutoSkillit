@@ -1,7 +1,7 @@
 {
   "name": "remediation",
   "description": "Investigate a bug, plan a fix, open a PR",
-  "summary": "bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > investigate > rectify > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup",
+  "summary": "bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > investigate > rectify > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?) > (open_pr?) > push > cleanup",
   "recipe_version": "1.0.0",
   "requires_packs": [
     "github",
@@ -50,7 +50,7 @@
       "default": ""
     },
     "review_approach": {
-      "description": "Research approaches first",
+      "description": "Review solution approaches against the plan (runs after rectify/make-plan)",
       "default": "false"
     },
     "investigate": {

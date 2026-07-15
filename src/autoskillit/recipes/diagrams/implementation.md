@@ -1,36 +1,22 @@
-<!-- autoskillit-recipe-hash: sha256:fffab1e7c9750b837d5b1091d090e5410152a93ba46d759ed800dfb9964a0cac -->
+<!-- autoskillit-recipe-hash: sha256:959a75a9a587a8f81d34a4807a0ca9ab7e6e44acc3ca6350371762230298a0e7 -->
 <!-- autoskillit-diagram-format: v7 -->
-# implementation
+## implementation
 
-```
-      clone → get_issue_title → claim_issue → compute_branch
-      |
-      +-- create_branch (optional)
-      |
-      plan
-      |
-      +-- review_approach (optional)
-      |
- +----+ FOR EACH PLAN PART:
- |    |
- |    verify → implement → test ↔ [fix on failure]
- |    |
- |    merge → push → next_or_done
- |
- +----+
-      |
-      +-- audit_impl → reset_test_fix_counter → reset_merge_test_fix_counter
-          → reset_ref_push_counter → remediate (optional)
-      |
-      +-- [open-pr] (optional):
-      |     prepare_pr → compose_pr → review_pr → resolve_review
-      |     ci_watch → check_repo_merge_state
-      |     → [queue | direct | immediate] merge path
-      |     → diagnose_ci → resolve_ci (on CI failure)
-      |
-      release_issue_success / release_issue_failure
-      |
-      +-- patch_token_summary (optional)
-      |
-      register_clone_success / register_clone_failure
-```
+### Flow
+
+plan --- [review-approach] (optional)
+|
++----+ FOR EACH PLAN PART:
+|    |
+|    verify --- implement --- test <-> [x fail -> fix]
+|    |
+|    merge
+|    |
++----+
+     |
+     +-- [audit] (optional)
+     |     x fail [-> plan]
+     |
+     +-- [prepare-pr] (optional)
+     |     +-- [arch-lens-{slug}] (optional, one per selected lens, parallel)
+     |     compose-pr

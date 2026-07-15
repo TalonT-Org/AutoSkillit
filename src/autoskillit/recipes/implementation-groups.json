@@ -30,7 +30,7 @@
       "authority": "config"
     },
     "review_approach": {
-      "description": "Research approaches first",
+      "description": "Review solution approaches against the plan (runs after rectify/make-plan)",
       "default": "false"
     },
     "audit_impl": {

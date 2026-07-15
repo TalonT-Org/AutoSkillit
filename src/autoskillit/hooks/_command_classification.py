@@ -173,7 +173,9 @@ _HEREDOC_BODY_RE = re.compile(
 # line (real redirects), so segments carry only executable tokens.
 _HEREDOC_MARKER_RE = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?([^\n]*)\n\t*\1(?=[ \t]*(?:\n|$))")
 
-_PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
+_PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
+    {"add", "diff", "status", "check-ignore"}
+)
 
 _GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
     {
@@ -219,6 +221,7 @@ _GIT_DIFF_METADATA_FLAGS: frozenset[str] = frozenset(
         "--summary",
     }
 )
+_GIT_CHECK_IGNORE_SAFE_FLAGS: frozenset[str] = frozenset({"-v", "--verbose", "--no-index"})
 _SHELL_SUBSTITUTION_RE = re.compile(r"\$\(|`|[<>]\(")
 _SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
 _PROTECTED_READ_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
@@ -602,6 +605,38 @@ def _is_allowed_wc_flag(token: str) -> bool:
     return bool(_WC_FLAG_RE.fullmatch(token))
 
 
+def _is_safe_check_ignore_segment(segment: list[str]) -> bool:
+    """Return True for `git check-ignore` restricted to the safe metadata grammar.
+
+    Required shape: ``git check-ignore (-v|--verbose) [--no-index] [--] LITERAL_PATH...``
+    No Git global options (``-c``, ``-C``, ``--git-dir``, ``--work-tree``, ``--bare``, ...)
+    may precede the subcommand — those can redirect repository/config context outside
+    what the submitted command text shows. ``--stdin`` and any other non-literal path
+    source are rejected because the classifier cannot see what they would resolve to.
+    Redirect metacharacters are rejected outright rather than treated as literal paths.
+    """
+    start = _command_start_index(segment)
+    if start is None or start + 1 >= len(segment) or segment[start + 1] != "check-ignore":
+        return False
+
+    paths: list[str] = []
+    seen_dash_dash = False
+    for token in segment[start + 2 :]:
+        if ">" in token or "<" in token:
+            return False
+        if not seen_dash_dash and token == "--":
+            seen_dash_dash = True
+            continue
+        if not seen_dash_dash and token.startswith("-"):
+            if token not in _GIT_CHECK_IGNORE_SAFE_FLAGS:
+                return False
+            continue
+        if not token or _SHELL_VAR_RE.search(token):
+            return False
+        paths.append(token)
+    return bool(paths)
+
+
 def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
     """Return True for protected-path commands that inspect metadata or VCS state.
 
@@ -617,6 +652,8 @@ def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
         subcommand, flags = git_parts
         if subcommand not in _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS:
             return False
+        if subcommand == "check-ignore":
+            return _is_safe_check_ignore_segment(segment)
         if subcommand == "add":
             return not any(
                 flag in _GIT_ADD_CONTENT_FLAGS or flag.startswith("--pathspec-from-file=")

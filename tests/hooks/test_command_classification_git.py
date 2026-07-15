@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.hooks._command_classification import (
     extract_git_subcommand_and_flags,
+    is_allowed_protected_path_metadata_command,
     is_git_command,
 )
 
@@ -81,3 +82,117 @@ class TestExtractGitSubcommandAndFlags:
     def test_git_bare_flag(self):
         result = extract_git_subcommand_and_flags(["git", "--bare", "log"])
         assert result == ("log", [])
+
+
+class TestCheckIgnoreMetadataClassification:
+    """Guard-compatibility fixture for the dry-walkthrough prescribed check-ignore form.
+
+    Binds `git check-ignore -v {path}` (SKILL.md:152) to
+    is_allowed_protected_path_metadata_command so the guard classifier and the
+    skill's committability contract cannot silently drift apart again.
+    """
+
+    def test_prescribed_dry_walkthrough_form(self):
+        segment = ["git", "check-ignore", "-v", "src/autoskillit/recipes/remediation.yaml"]
+        assert is_allowed_protected_path_metadata_command(segment) is True
+
+    def test_verbose_long_flag(self):
+        segment = ["git", "check-ignore", "--verbose", "src/autoskillit/recipes/remediation.yaml"]
+        assert is_allowed_protected_path_metadata_command(segment) is True
+
+    def test_no_index_flag(self):
+        segment = [
+            "git",
+            "check-ignore",
+            "-v",
+            "--no-index",
+            "src/autoskillit/recipes/remediation.yaml",
+        ]
+        assert is_allowed_protected_path_metadata_command(segment) is True
+
+    def test_double_dash_separator(self):
+        segment = ["git", "check-ignore", "-v", "--", "src/autoskillit/recipes/remediation.yaml"]
+        assert is_allowed_protected_path_metadata_command(segment) is True
+
+    def test_multiple_literal_paths(self):
+        segment = [
+            "git",
+            "check-ignore",
+            "-v",
+            "src/autoskillit/recipes/remediation.yaml",
+            "src/autoskillit/agents/explorer.md",
+        ]
+        assert is_allowed_protected_path_metadata_command(segment) is True
+
+    def test_no_paths_is_denied(self):
+        assert is_allowed_protected_path_metadata_command(["git", "check-ignore", "-v"]) is False
+
+    def test_stdin_flag_denied(self):
+        segment = ["git", "check-ignore", "-v", "--stdin"]
+        assert is_allowed_protected_path_metadata_command(segment) is False
+
+    def test_quiet_flag_denied(self):
+        segment = ["git", "check-ignore", "-q", "src/autoskillit/recipes/remediation.yaml"]
+        assert is_allowed_protected_path_metadata_command(segment) is False
+
+    def test_global_c_flag_before_subcommand_denied(self):
+        segment = [
+            "git",
+            "-c",
+            "core.excludesFile=src/autoskillit/recipes/remediation.yaml",
+            "check-ignore",
+            "-v",
+            "src/autoskillit/recipes/remediation.yaml",
+        ]
+        assert is_allowed_protected_path_metadata_command(segment) is False
+
+    def test_global_git_dir_flag_denied(self):
+        segment = [
+            "git",
+            "--git-dir",
+            "/tmp/.git",
+            "check-ignore",
+            "-v",
+            "src/autoskillit/recipes/remediation.yaml",
+        ]
+        assert is_allowed_protected_path_metadata_command(segment) is False
+
+    def test_global_work_tree_flag_denied(self):
+        segment = [
+            "git",
+            "--work-tree",
+            "/tmp",
+            "check-ignore",
+            "-v",
+            "src/autoskillit/recipes/remediation.yaml",
+        ]
+        assert is_allowed_protected_path_metadata_command(segment) is False
+
+    def test_bare_flag_denied(self):
+        segment = [
+            "git",
+            "--bare",
+            "check-ignore",
+            "-v",
+            "src/autoskillit/recipes/remediation.yaml",
+        ]
+        assert is_allowed_protected_path_metadata_command(segment) is False
+
+    def test_redirect_target_denied(self):
+        segment = [
+            "git",
+            "check-ignore",
+            "-v",
+            "src/autoskillit/recipes/remediation.yaml",
+            ">",
+            "/tmp/out",
+        ]
+        assert is_allowed_protected_path_metadata_command(segment) is False
+
+    def test_shell_variable_path_denied(self):
+        segment = ["git", "check-ignore", "-v", "$VAR"]
+        assert is_allowed_protected_path_metadata_command(segment) is False
+
+    def test_content_bearing_subcommand_still_denied(self):
+        segment = ["git", "show", "HEAD:src/autoskillit/recipes/remediation.yaml"]
+        assert is_allowed_protected_path_metadata_command(segment) is False

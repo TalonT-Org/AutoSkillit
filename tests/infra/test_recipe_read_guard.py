@@ -105,6 +105,15 @@ class TestRunCmdBlocking:
             "git diff --name-only -- src/autoskillit/recipes/remediation.yaml",
             "git status -- src/autoskillit/recipes/remediation.yaml",
             "wc -l src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore -v src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore --verbose src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore -v -- src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore -v --no-index src/autoskillit/recipes/remediation.yaml",
+            (
+                "git check-ignore -v src/autoskillit/recipes/remediation.yaml "
+                "src/autoskillit/recipes/other.yaml"
+            ),
+            "git check-ignore -v src/autoskillit/recipes/remediation.yaml || true",
         ],
     )
     def test_allows_recipe_path_vcs_and_metadata_commands(self, cmd):
@@ -182,6 +191,23 @@ class TestRunCmdBlocking:
             # -A/--all/--force stage content even when restricted to a path.
             "git add -A -- src/autoskillit/recipes/remediation.yaml",
             "git add --all -- src/autoskillit/recipes/remediation.yaml",
+            # git check-ignore bypass fixtures — required negative controls.
+            "git -c core.excludesFile=src/autoskillit/recipes/remediation.yaml "
+            "check-ignore -v src/autoskillit/recipes/remediation.yaml",
+            "git -C /tmp check-ignore -v src/autoskillit/recipes/remediation.yaml",
+            "git --git-dir=/tmp/.git check-ignore -v src/autoskillit/recipes/remediation.yaml",
+            "git --work-tree=/tmp check-ignore -v src/autoskillit/recipes/remediation.yaml",
+            "git --bare check-ignore -v src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore -v --stdin src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore -v src/autoskillit/recipes/remediation.yaml > /tmp/out",
+            "git check-ignore -v src/autoskillit/recipes/remediation.yaml && "
+            "cat src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore -v src/autoskillit/recipes/remediation.yaml && cat $_",
+            'git check-ignore -v "$(cat src/autoskillit/recipes/remediation.yaml)"',
+            "git check-ignore -v $VAR src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore -q src/autoskillit/recipes/remediation.yaml",
+            "git check-ignore -v src/autoskillit/recipes/remediation.yaml"
+            "&& cat src/autoskillit/recipes/remediation.yaml",
         ],
     )
     def test_denies_protected_path_content_bypasses(self, cmd):

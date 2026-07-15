@@ -128,6 +128,13 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
                 acc.error_message = str(error) if error else ""
             acc.saw_failure = True
             acc.success = False
+        elif event_type == CodexEventType.ERROR:
+            # Standalone ERROR events are FLAT: {"type": "error", "message": "..."}.
+            # There is no nested "error" object and no "code" field on this event shape.
+            # Extracted via obj.get("message", "") (NOT obj.get("error", {}).get("message")).
+            acc.error_message = obj.get("message", "")
+            acc.saw_failure = True
+            acc.success = False
     return acc
 
 
@@ -190,6 +197,7 @@ class CodexResultParser:
                 "mcp_tool_calls": acc.mcp_tool_calls,
                 "file_changes": acc.file_changes,
                 "error_code": acc.error_code,
+                "saw_failure": acc.saw_failure,
                 "ndjson_unknown_event_count": acc.ndjson_unknown_event_count,
                 "ndjson_unknown_item_count": acc.ndjson_unknown_item_count,
             },

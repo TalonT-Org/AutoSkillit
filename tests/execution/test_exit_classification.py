@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+import structlog
 
 from autoskillit.core.types import (
     CLAUDE_CODE_CAPABILITIES,
@@ -676,6 +677,46 @@ def test_is_signal_death_code_boundary_cases(returncode: int, expected: bool) ->
 def test_codex_api_error_patterns_count() -> None:
     """Structural test: _CODEX_API_ERROR_PATTERNS has exactly 5 entries."""
     assert len(_CODEX_API_ERROR_PATTERNS) == 5
+
+
+def test_unclassified_infra_error_warning_emitted() -> None:
+    """Unrecognized error-bearing session produces a structured warning log.
+
+    Observability layer: future pattern gaps become visible via the
+    unclassified_infra_error warning rather than silently falling through to
+    COMPLETED. The session still classifies as COMPLETED (behaviour unchanged).
+    """
+    session = ClaudeSessionResult(
+        subtype=CliSubtype.EMPTY_OUTPUT,
+        is_error=True,
+        result="",
+        session_id="s1",
+        errors=["Some unknown API failure"],
+    )
+    result = _sr(returncode=1, stderr="")
+    with structlog.testing.capture_logs() as captured:
+        category = classify_infra_exit(session, result, capabilities=_CAPS)
+    assert category == InfraExitCategory.COMPLETED
+    warning_events = [e for e in captured if e.get("event") == "unclassified_infra_error"]
+    assert warning_events, f"Expected unclassified_infra_error warning, got: {captured}"
+    assert warning_events[0]["is_error"] is True
+    assert warning_events[0]["error_count"] == 1
+    assert warning_events[0]["returncode"] == 1
+
+
+def test_unclassified_infra_error_warning_not_emitted_on_clean_completed() -> None:
+    """Clean success session produces NO unclassified_infra_error warning."""
+    session = ClaudeSessionResult(
+        subtype=CliSubtype.SUCCESS,
+        is_error=False,
+        result="Done.",
+        session_id="s1",
+    )
+    result = _sr(returncode=0, stderr="")
+    with structlog.testing.capture_logs() as captured:
+        classify_infra_exit(session, result, capabilities=_CAPS)
+    warning_events = [e for e in captured if e.get("event") == "unclassified_infra_error"]
+    assert warning_events == []
 
 
 class TestCodexApiErrorClassification:

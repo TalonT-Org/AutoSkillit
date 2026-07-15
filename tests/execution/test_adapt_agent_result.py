@@ -377,14 +377,86 @@ def test_api_error_status_from_rate_limit_code() -> None:
     assert result.api_error_status == 429
 
 
-def test_api_error_status_none_for_non_rate_limit_code() -> None:
+def test_api_error_status_none_for_unmapped_error_code() -> None:
     result = _adapt_agent_result(
         _make_agent_result(
-            raw={"subtype": "error_during_execution", "error_code": "server_error"},
-            error="Internal server error",
+            raw={"subtype": "error_during_execution", "error_code": "unknown_provider_code"},
+            error="Some unknown error",
         )
     )
     assert result.api_error_status is None
+
+
+@pytest.mark.parametrize(
+    ("error_code", "expected_status"),
+    [
+        ("server_error", 500),
+        ("insufficient_quota", 402),
+        ("model_not_found", 404),
+    ],
+)
+def test_api_error_status_expanded_codex_mapping(error_code: str, expected_status: int) -> None:
+    """Defence-in-depth: known Codex error codes map to HTTP status codes.
+
+    Enables classify_infra_exit's ``api_error_status >= 400`` guard to fire even
+    when text-pattern matching misses (independent detection channel from the
+    saw_failure/api_retry_exhausted structural guard).
+    """
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_during_execution", "error_code": error_code},
+            error=f"Codex error: {error_code}",
+        )
+    )
+    assert result.api_error_status == expected_status
+
+
+def test_saw_failure_with_error_code_populates_api_retry_exhausted() -> None:
+    """Architectural immunity: Codex turn.failed signal reaches api_retry_exhausted.
+
+    With raw={'saw_failure': True, 'error_code': <unknown code>} and no matching
+    pattern, _adapt_agent_result must still populate api_retry_exhausted=True so
+    classify_infra_exit's api_retry_exhausted guard (line 131-132) classifies the
+    session as API_ERROR rather than COMPLETED. This is the structural fallback
+    that makes future missing-pattern bugs retriable instead of silently permanent.
+    """
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={
+                "subtype": "error_during_execution",
+                "saw_failure": True,
+                "error_code": "unknown_provider_code",
+            },
+            error="Totally new unrecognized provider failure",
+        )
+    )
+    assert result.api_retry_exhausted is True
+
+
+def test_saw_failure_without_error_code_does_not_populate_api_retry_exhausted() -> None:
+    """Structural guard requires both signals: saw_failure AND a structured error_code.
+
+    saw_failure=True alone (no error_code) does NOT populate api_retry_exhausted,
+    because bare failure events without a structured error.code are weaker signal
+    (text-pattern matching is the right detection path for those).
+    """
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={
+                "subtype": "error_during_execution",
+                "saw_failure": True,
+                "error_code": "",
+            },
+            error="Some failure",
+        )
+    )
+    assert result.api_retry_exhausted is False
+
+
+def test_saw_failure_absent_does_not_populate_api_retry_exhausted() -> None:
+    """Default (no saw_failure in raw) leaves api_retry_exhausted=False."""
+    result = _adapt_agent_result(_make_agent_result())
+    assert result.api_retry_exhausted is False
 
 
 def test_classify_infra_exit_rate_limited_via_adapted_error_code() -> None:

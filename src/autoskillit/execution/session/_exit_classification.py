@@ -134,4 +134,17 @@ def classify_infra_exit(
         return InfraExitCategory.API_ERROR
     if result.returncode is not None and is_signal_death_code(result.returncode):
         return InfraExitCategory.PROCESS_KILLED
+    # Observability: surface unrecognized error-bearing sessions so future pattern
+    # gaps produce visible telemetry instead of silently falling through to COMPLETED.
+    # Behaviour is unchanged (COMPLETED is still returned) — this is logging only.
+    if session.is_error or session.errors:
+        text_sources = _all_text_sources(session, result)
+        error_preview = text_sources[0][:200] if text_sources else ""
+        logger.warning(
+            "unclassified_infra_error",
+            is_error=session.is_error,
+            error_count=len(session.errors),
+            returncode=result.returncode,
+            error_preview=error_preview,
+        )
     return InfraExitCategory.COMPLETED

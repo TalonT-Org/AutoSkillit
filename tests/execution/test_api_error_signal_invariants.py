@@ -23,7 +23,10 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless._headless_result import _build_skill_result
-from autoskillit.execution.session._exit_classification import classify_infra_exit
+from autoskillit.execution.session._exit_classification import (
+    _KNOWN_API_ERROR_PATTERNS,
+    classify_infra_exit,
+)
 from autoskillit.execution.session._session_model import ClaudeSessionResult, parse_session_result
 from tests.execution.conftest import (
     CODEX_API_ERROR_SIGNAL_STRINGS,
@@ -361,3 +364,56 @@ class TestApiErrorStatusChannelInvariance:
         assert sr.infra.exit_category == "rate_limited"
         assert sr.needs_retry is True
         assert sr.retry_reason == RetryReason.RATE_LIMITED
+
+
+# ---------------------------------------------------------------------------
+# Invariant 5: Independent curated error corpus — breaks circular derivation
+# ---------------------------------------------------------------------------
+#
+# Architectural immunity test. CODEX_API_ERROR_SIGNAL_STRINGS in tests/execution/
+# conftest.py is mechanically derived from _CODEX_API_ERROR_PATTERNS, so it can
+# only verify that existing patterns work — it can never detect that a pattern
+# is missing from the production list.
+#
+# KNOWN_PROVIDER_ERROR_STRINGS is independently maintained. Adding a real-world
+# error string here without adding a matching pattern in _KNOWN_API_ERROR_PATTERNS
+# will fail TestKnownProviderErrorsCovered, surfacing the gap before production
+# encounters it.
+#
+# Note on exact wording: patterns match snake_case error codes
+# (rate_limit_exceeded, \bserver_error\b, insufficient_quota) rather than
+# free-form prose. Use literal error.code values — which is also what Codex
+# surfaces via acc.error_code in production.
+
+KNOWN_PROVIDER_ERROR_STRINGS: list[str] = [
+    # OpenAI/Codex transient error codes (error.code values from the OpenAI API)
+    "Selected model is at capacity. Please try a different model.",
+    "rate_limit_exceeded",
+    "server_error",
+    "insufficient_quota",
+    # Network/connection errors
+    "overloaded",
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "socket hang up",
+    "network error",
+    "connection reset",
+    "socket connection was closed",
+]
+
+
+class TestKnownProviderErrorsCovered:
+    """Each real-world error string must match at least one pattern in _KNOWN_API_ERROR_PATTERNS.
+
+    Independent of the production pattern list: if a new error string is added
+    to KNOWN_PROVIDER_ERROR_STRINGS but no matching pattern exists, this test
+    fails — proving the corpus breaks the circular test derivation.
+    """
+
+    @pytest.mark.parametrize("error_string", KNOWN_PROVIDER_ERROR_STRINGS)
+    def test_error_string_matches_at_least_one_pattern(self, error_string: str) -> None:
+        assert any(p.search(error_string) for p in _KNOWN_API_ERROR_PATTERNS), (
+            f"Error string {error_string!r} is not covered by any pattern in "
+            f"_KNOWN_API_ERROR_PATTERNS. Add a matching pattern or remove the "
+            f"string from KNOWN_PROVIDER_ERROR_STRINGS."
+        )

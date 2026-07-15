@@ -194,6 +194,38 @@ class TestScanCodexNdjson:
         assert acc.ndjson_unknown_event_count == 1
         assert acc.ndjson_unknown_item_count == 1
 
+    def test_scan_standalone_error_event_populates_error_message(self) -> None:
+        """Standalone ERROR events (flat shape) populate error_message from obj['message'].
+
+        Shape is FLAT: {\"type\": \"error\", \"message\": \"...\"} with NO nested error
+        envelope and NO code field. Extraction must read obj['message'] directly,
+        NOT obj.get('error', {}).get('message') (which would silently produce '').
+        """
+        line = json.dumps({"type": "error", "message": "Connection failed"})
+        acc = _scan_codex_ndjson(line)
+        assert acc.error_message == "Connection failed"
+        assert acc.saw_failure is True
+        assert acc.success is False
+
+    def test_scan_standalone_error_event_empty_message(self) -> None:
+        """Standalone ERROR event with no message → empty error_message, still saw_failure."""
+        line = json.dumps({"type": "error"})
+        acc = _scan_codex_ndjson(line)
+        assert acc.error_message == ""
+        assert acc.saw_failure is True
+        assert acc.success is False
+
+    def test_scan_standalone_error_event_does_not_set_error_code(self) -> None:
+        """Standalone ERROR events have no 'code' field; error_code remains empty.
+
+        Confirms we do not invent an error_code from the FLAT shape — acc.error_code
+        stays as the default empty string. Only nested turn.failed events populate
+        error_code from obj['error']['code'].
+        """
+        line = json.dumps({"type": "error", "message": "Connection failed"})
+        acc = _scan_codex_ndjson(line)
+        assert acc.error_code == ""
+
 
 class TestCodexResultParserStdout:
     def test_parse_stdout_empty_returns_error(self) -> None:
@@ -724,6 +756,30 @@ def test_error_code_empty_when_no_failure() -> None:
     )
     result = CodexResultParser().parse_stdout(line)
     assert result.raw["error_code"] == ""
+
+
+def test_saw_failure_in_codex_raw_dict() -> None:
+    """Production wiring: parse_stdout copies acc.saw_failure into raw['saw_failure'].
+
+    Without this key, the structural api_retry_exhausted guard in
+    classify_infra_exit can never activate for real Codex sessions — Step 2A
+    threads the signal but only when it's actually present in the raw dict.
+    """
+    line = json.dumps(
+        {
+            "type": "turn.failed",
+            "error": {"message": "Token limit", "code": "context_length_exceeded"},
+        }
+    )
+    result = CodexResultParser().parse_stdout(line)
+    assert result.raw["saw_failure"] is True
+
+
+def test_saw_failure_false_when_no_failure() -> None:
+    """Production wiring: parse_stdout sets raw['saw_failure']=False on success path."""
+    line = json.dumps({"type": "turn.completed", "usage": {}})
+    result = CodexResultParser().parse_stdout(line)
+    assert result.raw["saw_failure"] is False
 
 
 # ---------------------------------------------------------------------------

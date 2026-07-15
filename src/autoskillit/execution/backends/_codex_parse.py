@@ -176,7 +176,7 @@ class CodexResultParser:
             subtype = CliSubtype.UNPARSEABLE.value
         is_error = subtype != CliSubtype.SUCCESS.value
         canonical_dict = None
-        if acc.last_usage is not None:
+        if acc.last_usage:
             canonical = CanonicalTokenUsage.from_codex_dict(acc.last_usage)
             canonical_dict = canonical.to_dict()
         return AgentSessionResult(

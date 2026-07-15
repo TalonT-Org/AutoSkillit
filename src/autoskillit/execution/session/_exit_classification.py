@@ -32,6 +32,7 @@ _CODEX_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bserver_error\b", re.IGNORECASE),
     re.compile(r"insufficient_quota", re.IGNORECASE),
     re.compile(r"model_not_found", re.IGNORECASE),
+    re.compile(r"at capacity", re.IGNORECASE),
 )
 
 _KNOWN_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (

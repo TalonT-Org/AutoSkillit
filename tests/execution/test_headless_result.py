@@ -40,6 +40,7 @@ from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_
 from tests.fixtures.codex import (
     HAPPY_PATH_SINGLE_TURN,
     HAPPY_PATH_V0136,
+    TURN_FAILED_CAPACITY_ERROR,
     TURN_FAILED_ERROR,
     fixture_path,
 )
@@ -1180,6 +1181,49 @@ class TestCodexPipelineTurnFailed:
     def test_failure_token_usage_none(self):
         sr = self._build()
         assert sr.token_usage is None
+
+
+class TestCodexCapacityErrorEndToEnd:
+    """Codex capacity error through full pipeline → needs_retry=True via API_ERROR override.
+
+    Regression guard for issue #4226: 'at capacity' messages were silently
+    falling through to COMPLETED. With exit_code_is_terminal=True (Codex),
+    this combination was a permanent failure with no retry path.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _patch_parse_stdout(self, monkeypatch):
+        from autoskillit.execution.headless import _headless_result
+
+        monkeypatch.setattr(_headless_result, "_parse_stdout", _make_codex_parse_stdout())
+        self._content = fixture_path(TURN_FAILED_CAPACITY_ERROR).read_text()
+        self._result = _codex_subprocess_result(
+            self._content,
+            returncode=1,
+            termination=TerminationReason.NATURAL_EXIT,
+            kill_reason=KillReason.NATURAL_EXIT,
+        )
+
+    def _build(self) -> SkillResult:
+        return _build_skill_result(
+            self._result, supports_claude_format_stdout=False, backend=CodexBackend()
+        )
+
+    def test_capacity_error_needs_retry(self):
+        sr = self._build()
+        assert sr.needs_retry is True
+
+    def test_capacity_error_retry_reason_is_resume(self):
+        sr = self._build()
+        assert sr.retry_reason == RetryReason.RESUME
+
+    def test_capacity_error_exit_category_is_api_error(self):
+        sr = self._build()
+        assert sr.infra.exit_category == "api_error"
+
+    def test_capacity_error_success_is_false(self):
+        sr = self._build()
+        assert sr.success is False
 
 
 class TestCodexPipelineTerminationBranches:

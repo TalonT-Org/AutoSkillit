@@ -674,5 +674,26 @@ def test_is_signal_death_code_boundary_cases(returncode: int, expected: bool) ->
 
 
 def test_codex_api_error_patterns_count() -> None:
-    """Structural test: _CODEX_API_ERROR_PATTERNS has exactly 4 entries."""
-    assert len(_CODEX_API_ERROR_PATTERNS) == 4
+    """Structural test: _CODEX_API_ERROR_PATTERNS has exactly 5 entries."""
+    assert len(_CODEX_API_ERROR_PATTERNS) == 5
+
+
+class TestCodexApiErrorClassification:
+    """Capacity error patterns must classify as API_ERROR, not COMPLETED.
+
+    Regression guard for Codex "at capacity" misclassification (issue #4226).
+    Without the 'at capacity' pattern in _CODEX_API_ERROR_PATTERNS, the
+    classify_infra_exit cascade silently falls through to COMPLETED, and
+    Codex's exit_code_is_terminal=True makes the session non-retriable.
+    """
+
+    def test_turn_failed_capacity_error_classified_as_api_error(self) -> None:
+        ndjson = _turn_failed_ndjson(
+            "Selected model is at capacity. Please try a different model."
+        )
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        result = _sr(returncode=1)
+        assert (
+            classify_infra_exit(adapted, result, capabilities=_CAPS) == InfraExitCategory.API_ERROR
+        )

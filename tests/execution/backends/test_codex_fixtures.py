@@ -19,6 +19,7 @@ from tests.fixtures.codex import (
     MULTI_TURN_WITH_COMPACTION,
     SESSION_WITH_MCP_TOOL_CALL,
     SESSION_WITH_REASONING,
+    TURN_FAILED_CAPACITY_ERROR,
     TURN_FAILED_ERROR,
     fixture_path,
 )
@@ -34,6 +35,7 @@ ALL_FIXTURE_NAMES = [
     MARKER_DETECTION_V0136,
     MULTI_TURN_WITH_COMPACTION,
     TURN_FAILED_ERROR,
+    TURN_FAILED_CAPACITY_ERROR,
     SESSION_WITH_REASONING,
     SESSION_WITH_MCP_TOOL_CALL,
 ]
@@ -58,7 +60,7 @@ class TestCodexFixturePackage:
             assert fixture_path(name).is_file()
 
     def test_all_exports_count(self) -> None:
-        assert len(CODEX_ALL) == 10
+        assert len(CODEX_ALL) == 11
 
 
 class TestCodexFixtureValidity:

@@ -197,6 +197,7 @@
       },
       "on_success": "route_by_queue_mode",
       "on_failure": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "note": "Captures pr_order_file (path to JSON with ordered PRs + complexity tags), batch_branch (e.g. integration/pr-merge-20250228-143052), and queue_mode (\"true\" when a GitHub merge queue with MERGEABLE entries is active on base_branch; \"false\" otherwise). If the skill reports pr_count=0 (no open PRs), skip directly to cleanup_success — no integration branch is needed. merge_queue_data_path is pre-computed by fetch_merge_queue_data step.\n"
     },
     "route_by_queue_mode": {
@@ -471,6 +472,7 @@
       "retries": 0,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Resolves git-level rebase conflicts between the ejected PR's branch and the current base_branch HEAD. Uses the same resolve-merge-conflicts skill as the classic path's integration conflict resolution.\n"
     },
@@ -776,6 +778,7 @@
       "retries": 0,
       "on_exhausted": "get_current_pr_branch",
       "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Resolves git-level rebase conflicts between the next PR's branch and the current base_branch HEAD. Similar to resolve_ejected_conflicts but operates proactively before queue submission. Unresolvable conflicts (escalation_required=true) hard-stop at register_clone_failure. Retry exhaustion falls through to get_current_pr_branch to enforce the CI gate before enqueue.\n"
     },
@@ -805,6 +808,7 @@
       },
       "on_success": "register_clone_failure",
       "on_failure": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "note": "Best-effort CI diagnosis for ejected_ci_failure state. The PR was ejected due to CI failure in the merge queue, not a conflict. After diagnosis, routes to register_clone_failure — CI failures in queue mode are not auto-recoverable without human intervention.\n"
     },
     "reenroll_stalled_queue_pr": {
@@ -905,6 +909,7 @@
       "retries": 5,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "note": "The agent reads context.pr_order_file at context.current_pr_number to get the current PR's complexity. Appends number and complexity to skill_command:\n  /autoskillit:merge-pr {pr_number} {complexity}\nescalation_required=true → ambiguous conflict, human intervention needed → escalate_stop. needs_plan=true → conflict_report_path set as context.task → plan. merged=false (timeout/conflict) → register_clone_failure. merged=true + fallthrough → PR merged directly → next_part_or_next_pr.\n"
     },
     "plan": {
@@ -936,6 +941,7 @@
         }
       ],
       "on_failure": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "note": "Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[]. For a single-part plan, plan_parts has one entry equal to plan_path. PRIMARY PATH: context.task = conflict_report_path from merge_pr. REMEDIATION MODE: context.remediation_path is set when re-entering from the remediate step; pass it inline in the skill_command instead of context.task.\n"
     },
     "verify": {
@@ -953,6 +959,7 @@
       "retries": 5,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "optional_context_refs": [
         "remediation_path"
       ],
@@ -977,6 +984,7 @@
       "retries": 0,
       "on_exhausted": "retry_worktree",
       "on_context_limit": "retry_worktree",
+      "on_rate_limit": "retry_worktree",
       "skip_when_false": "inputs.backend_supports_git_write"
     },
     "retry_worktree": {
@@ -998,7 +1006,8 @@
       "retries": 3,
       "skip_when_false": "inputs.backend_supports_git_write",
       "on_exhausted": "register_clone_failure",
-      "on_context_limit": "register_clone_failure"
+      "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure"
     },
     "test": {
       "tool": "test_check",
@@ -1217,6 +1226,7 @@
       "retries": 3,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "note": "Fixes test failures without merging. Routes to test for verification; test failure increments check_test_fix_loop before retrying. The base_branch with: key is present for contract compatibility only; the merge target is always the integration branch.\n"
     },
     "check_test_fix_loop": {
@@ -1345,6 +1355,7 @@
       ],
       "on_failure": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "optional": true,
       "skip_when_false": "inputs.audit_impl",
       "note": "DEPENDENCY: context.all_plan_paths is only populated if the plan step executed at least once. The check_impl_plans gate ensures this step is only reached when implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths is guaranteed to be set when audit_impl runs. Gated by check_impl_plans — only reached when implementation plan files exist in plans_dir. Only execute if inputs.audit_impl is 'true'; if false, skip directly to open_integration_pr. Passes context.all_plan_paths (comma-separated list of plan file paths accumulated across the PR loop) as plans_input. audit-impl splits on commas and audits each plan file. implementation_ref is context.batch_branch (no worktree remains). GO → open_integration_pr. NO GO → remediate (re-enters plan with remediation file).\n"
@@ -1386,7 +1397,8 @@
         "pr_url": "${{ result.pr_url }}"
       },
       "on_success": "wait_for_review_pr_mergeability",
-      "on_failure": "register_clone_failure"
+      "on_failure": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure"
     },
     "wait_for_review_pr_mergeability": {
       "tool": "run_python",
@@ -1453,6 +1465,7 @@
       "retries": 0,
       "on_failure": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003). Rebases context.batch_branch onto inputs.base_branch and resolves merge conflicts. Single attempt only — no retries — to prevent looping on unresolvable conflicts. On failure, escalates to register_clone_failure with diagnostics (REQ-MERGE-004).\n"
     },
@@ -1546,6 +1559,7 @@
         }
       ],
       "on_failure": "resolve_review_integration",
+      "on_rate_limit": "resolve_review_integration",
       "note": "Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr against context.batch_branch. All four verdicts have explicit routes: changes_requested → resolve_review_integration, approved_with_comments → resolve_review_integration, needs_human → check_review_posted (effect verification gate) → derive_batch_ci_event, approved → check_review_posted → derive_batch_ci_event. On tool-level failure, routes to resolve_review_integration. needs_human is explicitly routed to satisfy the unrouted-verdict-value semantic rule.\n"
     },
     "check_review_posted": {
@@ -1587,6 +1601,7 @@
       "retries": 2,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "pre_review_rebase_integration",
+      "on_rate_limit": "pre_review_rebase_integration",
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
@@ -1657,6 +1672,7 @@
       "retries": 0,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "skip_when_false": "inputs.backend_supports_git_write"
     },
     "re_push_review_integration": {
@@ -1752,6 +1768,7 @@
       },
       "on_success": "register_clone_failure",
       "on_failure": "register_clone_failure",
+      "on_rate_limit": "register_clone_failure",
       "note": "Runs when ci_watch_pr reports CI failure on the integration branch. Fetches logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/ for human inspection. diagnosis_path is captured for observability — no automated remediation for integration CI, so always routes to register_clone_failure.\n"
     },
     "patch_token_summary": {
@@ -1804,6 +1821,7 @@
       "on_success": "done",
       "on_failure": "done",
       "on_context_limit": "done",
+      "on_rate_limit": "done",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
     },
     "run_diagnostic_error": {
@@ -1821,6 +1839,7 @@
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
+      "on_rate_limit": "escalate_stop",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "done": {

@@ -244,6 +244,7 @@
       "on_success": "bridge_investigation",
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "note": "ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the skill_command so the investigate skill can detect and fetch the issue itself: \"/autoskillit:investigate {task}\\n\\nGitHub Issue: {inputs.issue_url}\" The skill detects the URL pattern and calls fetch_github_issue internally. DEPTH: When inputs.depth == 'deep', passes --depth deep flag and sets model to opus[1m] for the main skill session. Subagents within the skill always use model: sonnet regardless of depth setting.\n"
     },
     "bridge_investigation": {
@@ -282,6 +283,7 @@
       "retries": 0,
       "on_success": "review_approach",
       "on_failure": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "note": "Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[].\nACCUMULATION: all_plan_paths accumulates across any re-entries to the rectify step. On re-entry, the agent MUST append the captured plan_path to context.all_plan_paths using a comma separator instead of letting the capture block overwrite the accumulated value. When verdict=false_positive, do NOT overwrite all_plan_paths — preserve the existing accumulated value from prior plan executions.\n"
     },
     "review_approach": {
@@ -300,6 +302,7 @@
       "on_success": "dry_walkthrough",
       "on_failure": "release_issue_failure",
       "on_context_limit": "dry_walkthrough",
+      "on_rate_limit": "dry_walkthrough",
       "skip_when_false": "inputs.review_approach",
       "note": "Only execute this step if review_approach input is 'true'. Otherwise skip directly to dry_walkthrough."
     },
@@ -356,6 +359,7 @@
       },
       "retries": 0,
       "on_context_limit": "retry_worktree",
+      "on_rate_limit": "retry_worktree",
       "on_success": "gate_backend_write",
       "on_failure": "release_issue_failure",
       "optional": true,
@@ -392,6 +396,7 @@
         }
       ],
       "on_context_limit": "check_changes",
+      "on_rate_limit": "check_changes",
       "on_exhausted": "release_issue_failure",
       "on_failure": "release_issue_failure",
       "optional": true,
@@ -973,6 +978,7 @@
       ],
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "retries": 1,
       "on_exhausted": "release_issue_failure",
       "optional": true,
@@ -1057,6 +1063,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "note": "ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty string, append it to the skill_command: \"/autoskillit:make-plan {task}\\n\\nadversarial_review_level={inputs.adversarial_review_level}\" AUDIT REMEDIATION MODE: This step is always in remediation context (invoked from the remediate route step). Always append audit_remediation_mode=true to the skill_command at runtime: \"/autoskillit:make-plan {remediation_path}\\n\\naudit_remediation_mode=true\" VERDICT: The skill emits verdict=plan (produce implementation plan) or verdict=false_positive (audit finding is a false positive, skip implement). false_positive routes to check_has_commits. ACCUMULATION: all_plan_paths accumulates across any re-entries to the make_plan step. On re-entry, the agent MUST append the captured plan_path to context.all_plan_paths using a comma separator instead of letting the capture block overwrite the accumulated value. When verdict=false_positive, do NOT overwrite all_plan_paths — preserve the existing accumulated value from prior plan executions.\n"
     },
     "commit_guard": {
@@ -1247,6 +1254,7 @@
       ],
       "on_failure": "release_issue_failure",
       "on_context_limit": "prepare_pr",
+      "on_rate_limit": "prepare_pr",
       "on_exhausted": "release_issue_failure",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
@@ -1267,6 +1275,7 @@
       "on_success": "compose_pr",
       "on_failure": "compose_pr",
       "on_context_limit": "compose_pr",
+      "on_rate_limit": "compose_pr",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "note": "LENS ITERATION: context.selected_lenses contains comma-separated arch-lens slugs (e.g. \"module-dependency,process-flow\"). context.lens_context_paths contains the corresponding comma-separated context file paths (same order as slugs). For each lens slug, run:\n  /autoskillit:arch-lens-{slug} {matching_context_path}\nRun all selected lenses in parallel (all run_skill calls in a single message). Accumulate each diagram_path value into context.all_diagram_paths via capture_list. If a lens fails, continue with remaining lenses — compose_pr handles empty lists gracefully by omitting the Architecture Impact section.\n"
@@ -1297,6 +1306,7 @@
       ],
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "note": "Reads the PR prep file, validates arch-lens diagrams (must contain ★ or ●), composes the PR body, and runs gh pr create. Degrades gracefully if gh is unavailable (emits pr_url=).\n"
@@ -1409,6 +1419,7 @@
       ],
       "on_failure": "check_repo_ci_event",
       "on_context_limit": "check_repo_ci_event",
+      "on_rate_limit": "check_repo_ci_event",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "optional_context_refs": [
@@ -1432,6 +1443,7 @@
       "retries": 2,
       "on_exhausted": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
@@ -1504,6 +1516,7 @@
       ],
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "retries": 1,
       "on_exhausted": "release_issue_failure",
       "optional": true,
@@ -1853,6 +1866,7 @@
       "on_success": "escalate_stop_no_ci",
       "on_failure": "escalate_stop_no_ci",
       "on_context_limit": "escalate_stop_no_ci",
+      "on_rate_limit": "escalate_stop_no_ci",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "escalate_stop_no_ci": {
@@ -2163,6 +2177,7 @@
       ],
       "on_failure": "diagnose_ci",
       "on_context_limit": "diagnose_ci",
+      "on_rate_limit": "diagnose_ci",
       "retries": 1,
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
@@ -2414,6 +2429,7 @@
       ],
       "on_failure": "diagnose_ci",
       "on_context_limit": "diagnose_ci",
+      "on_rate_limit": "diagnose_ci",
       "retries": 1,
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
@@ -2525,6 +2541,7 @@
       ],
       "on_failure": "diagnose_ci",
       "on_context_limit": "diagnose_ci",
+      "on_rate_limit": "diagnose_ci",
       "retries": 1,
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
@@ -2570,6 +2587,7 @@
       "on_success": "resolve_ci",
       "on_failure": "resolve_ci",
       "on_context_limit": "resolve_ci",
+      "on_rate_limit": "resolve_ci",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "note": "Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to resolve_ci on success OR failure. If diagnosis fails, resolve_ci proceeds without diagnosis context. diagnosis_path is passed to resolve_ci for targeted remediation context.\n"
@@ -2591,6 +2609,7 @@
       "skip_when_false": "inputs.backend_supports_git_write",
       "on_exhausted": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
@@ -2665,6 +2684,7 @@
       ],
       "on_failure": "diagnose_ci",
       "on_context_limit": "diagnose_ci",
+      "on_rate_limit": "diagnose_ci",
       "retries": 1,
       "on_exhausted": "diagnose_ci"
     },
@@ -2766,6 +2786,7 @@
       ],
       "on_failure": "diagnose_ci",
       "on_context_limit": "diagnose_ci",
+      "on_rate_limit": "diagnose_ci",
       "retries": 1,
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
@@ -2798,6 +2819,7 @@
       "on_success": "done_unconfirmed",
       "on_failure": "done_unconfirmed",
       "on_context_limit": "done_unconfirmed",
+      "on_rate_limit": "done_unconfirmed",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "done_unconfirmed": {
@@ -2881,6 +2903,7 @@
       "on_success": "done",
       "on_failure": "done",
       "on_context_limit": "done",
+      "on_rate_limit": "done",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
     },
     "run_diagnostic_error": {
@@ -2898,6 +2921,7 @@
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
+      "on_rate_limit": "escalate_stop",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "register_clone_no_changes": {
@@ -2926,6 +2950,7 @@
       "on_success": "done_no_changes",
       "on_failure": "done_no_changes",
       "on_context_limit": "done_no_changes",
+      "on_rate_limit": "done_no_changes",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "register_clone_already_done": {
@@ -2954,6 +2979,7 @@
       "on_success": "done_already_done",
       "on_failure": "done_already_done",
       "on_context_limit": "done_already_done",
+      "on_rate_limit": "done_already_done",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "done": {

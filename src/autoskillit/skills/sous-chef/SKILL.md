@@ -98,9 +98,9 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   HTTP 429 or text-based rate-limit signal detected. Route to the designated recovery step
   (typically `test`) to continue after the rate limit window resets. Partial progress may
   exist on disk.
-- **If `retry_reason: rate_limited` AND the step has no `on_rate_limit`** → fall back to `on_context_limit`.
-  Backward compatible with recipes that do not yet declare `on_rate_limit`. If the step also
-  has no `on_context_limit`, fall through to `on_failure`.
+- **If `retry_reason: rate_limited` AND the step has no `on_rate_limit`** → fall through to `on_failure`.
+  All run_skill steps should declare on_rate_limit explicitly. If missing, treat as a
+  configuration error and fail safely via on_failure.
 - **If `retry_reason: early_stop` AND `has_progress_evidence` is true in the result AND the step
   defines `on_context_limit`** → follow `on_context_limit`. The model made progress (wrote files
   or created a worktree) but stopped before emitting the completion marker. Partial progress
@@ -152,7 +152,7 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=rate_limited` + step has `on_rate_limit` → follow `on_rate_limit`.
-         `needs_retry=true` + `retry_reason=rate_limited` + no `on_rate_limit` → follow `on_context_limit` (fallback) or `on_failure`.
+         `needs_retry=true` + `retry_reason=rate_limited` + no `on_rate_limit` → `on_failure`.
          `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=zero_writes` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
@@ -165,6 +165,27 @@ If the routing decision is to follow `on_failure` but the step has no `on_failur
 declared, this is a recipe authoring error. Emit the L3 result sentinel with
 `success=false` and `reason=missing_on_failure`, then halt. Do NOT improvise a
 routing target — the recipe is structurally incomplete.
+
+---
+
+## RATE LIMIT RETRY PROTOCOL
+
+When a `run_skill` call returns `retry_reason: rate_limited`:
+
+1. **Wait before routing.** Sleep 60 seconds before following the `on_rate_limit` route.
+   This gives the rate-limit window time to reset. Do NOT immediately re-dispatch.
+
+2. **Track rate-limit retry count.** Maintain a per-step counter of consecutive
+   rate-limit retries. If the same step returns `retry_reason: rate_limited` three
+   times consecutively, route to `on_failure` instead of `on_rate_limit` — the rate
+   limit is not transient and continued retrying wastes budget.
+
+3. **Check deadline budget.** If `AUTOSKILLIT_SESSION_DEADLINE` is set and fewer than
+   120 seconds remain before the deadline, route to `on_failure` instead of waiting.
+   Do not sleep past the session deadline.
+
+4. **Reset counter on success.** When a step completes successfully (or with a
+   non-rate-limit retry reason), reset its rate-limit retry counter to zero.
 
 ---
 

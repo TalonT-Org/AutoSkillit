@@ -139,6 +139,11 @@ def validate_from_path(
         recipe, _skip_resolutions = _prune_skipped_steps(
             recipe, ingredient_overrides, defer_unresolved=False
         )
+    # Auto-derive on_rate_limit from on_context_limit is intentionally NOT
+    # run here — validate_from_path is used by recipe validation tests that
+    # assert the raw YAML state. The derivation runs only via load_and_validate
+    # (production path). See test_rules_rate_limit_parity.py for the
+    # behavioral assertion that this code path preserves raw findings.
     known_skills = frozenset(s.name for s in lister.list_all())
     ctx = make_validation_context(
         recipe,

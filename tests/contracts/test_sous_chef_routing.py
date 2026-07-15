@@ -464,3 +464,178 @@ def test_sous_chef_passes_assess_review_approach_flag() -> None:
     """sous-chef must pass --assess-review-approach to build-execution-map."""
     text = _sous_chef_text()
     assert "--assess-review-approach" in text
+
+
+def _extract_rate_limit_retry_section(skill_md: str) -> str:
+    """Extract the RATE LIMIT RETRY PROTOCOL section."""
+    lines = skill_md.splitlines()
+    in_section = False
+    extracted: list[str] = []
+    for line in lines:
+        if "RATE LIMIT RETRY PROTOCOL" in line:
+            in_section = True
+            extracted.append(line)
+            continue
+        if in_section and (line.startswith("---") or line.startswith("## ")):
+            break
+        if in_section:
+            extracted.append(line)
+    return "\n".join(extracted)
+
+
+class TestSousChefRateLimitFallbackRemoval:
+    """SKILL.md must remove the fallback-to-on_context_limit shortcut for rate_limited.
+
+    Bounded retry protocol replaces the old "fall back to on_context_limit" behavior.
+    Recipes that did not yet declare on_rate_limit must fall through to on_failure,
+    not silently route to on_context_limit (which would mask missing configuration).
+    """
+
+    def test_rate_limited_routing_does_not_fall_back_to_on_context_limit(self) -> None:
+        """The rate_limited routing rule must NOT route to on_context_limit.
+
+        Fallback to on_context_limit would hide the missing-on_rate_limit configuration
+        error by silently absorbing rate-limit signals as context-limit signals.
+        """
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        # Find the rate_limited bullet(s) within the routing section.
+        rate_limited_lines: list[str] = []
+        in_rule = False
+        for line in routing_section.splitlines():
+            if "retry_reason: rate_limited" in line:
+                in_rule = True
+                rate_limited_lines.append(line)
+                continue
+            if in_rule:
+                if line.startswith("-") and "retry_reason" in line:
+                    # Next routing bullet — stop accumulating the rate_limited rule.
+                    break
+                if line.strip() and not line.startswith("-"):
+                    rate_limited_lines.append(line)
+        rate_limited_rule = "\n".join(rate_limited_lines)
+        assert rate_limited_rule, "Expected to find a rate_limited routing rule in SKILL.md"
+        assert "fall back to `on_context_limit`" not in rate_limited_rule, (
+            "The rate_limited routing rule must NOT contain the fallback phrase "
+            "'fall back to `on_context_limit`'. Bounded retry protocol is the new behavior."
+        )
+
+    def test_rate_limited_routing_does_not_mention_backward_compatibility(self) -> None:
+        """The rate_limited routing rule must NOT mention backward-compat with on_rate_limit."""
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        rate_limited_lines: list[str] = []
+        in_rule = False
+        for line in routing_section.splitlines():
+            if "retry_reason: rate_limited" in line:
+                in_rule = True
+                rate_limited_lines.append(line)
+                continue
+            if in_rule:
+                if line.startswith("-") and "retry_reason" in line:
+                    break
+                if line.strip() and not line.startswith("-"):
+                    rate_limited_lines.append(line)
+        rate_limited_rule = "\n".join(rate_limited_lines)
+        assert rate_limited_rule, "Expected to find a rate_limited routing rule in SKILL.md"
+        assert "Backward compatible with recipes that do not yet declare `on_rate_limit`" not in (
+            rate_limited_rule
+        ), (
+            "The rate_limited routing rule must NOT contain the backward-compatibility phrase. "
+            "Recipes missing on_rate_limit must fall through to on_failure, not silently "
+            "backward-compat to on_context_limit."
+        )
+
+    def test_rate_limited_routing_has_bounded_retry_instruction(self) -> None:
+        """The rate_limited routing rule must include a bounded retry instruction.
+
+        Either: wait/delay/backoff in the rate_limited routing rule, OR a dedicated
+        RATE LIMIT RETRY PROTOCOL section that provides the bounded retry contract.
+        """
+        skill_md = _sous_chef_text()
+        routing_section = _extract_routing_section(skill_md)
+        rate_limited_lines: list[str] = []
+        in_rule = False
+        for line in routing_section.splitlines():
+            if "retry_reason: rate_limited" in line:
+                in_rule = True
+                rate_limited_lines.append(line)
+                continue
+            if in_rule:
+                if line.startswith("-") and "retry_reason" in line:
+                    break
+                if line.strip() and not line.startswith("-"):
+                    rate_limited_lines.append(line)
+        rate_limited_rule = "\n".join(rate_limited_lines)
+        assert rate_limited_rule, "Expected to find a rate_limited routing rule in SKILL.md"
+
+        # Try first: a wait/delay/backoff instruction in the routing rule itself.
+        rule_lower = rate_limited_rule.lower()
+        has_wait_in_rule = any(keyword in rule_lower for keyword in ("wait", "delay", "backoff"))
+        # Fallback: a dedicated RATE LIMIT RETRY PROTOCOL section exists.
+        has_retry_protocol_section = "RATE LIMIT RETRY PROTOCOL" in skill_md
+
+        assert has_wait_in_rule or has_retry_protocol_section, (
+            "The rate_limited routing rule must either include a wait/delay/backoff "
+            "instruction, or reference a dedicated RATE LIMIT RETRY PROTOCOL section "
+            "providing the bounded retry contract."
+        )
+
+
+class TestSousChefRateLimitRetryProtocol:
+    """SKILL.md must include a RATE LIMIT RETRY PROTOCOL section with bounded retry contract."""
+
+    def test_rate_limit_retry_protocol_section_exists(self) -> None:
+        """SKILL.md must contain a RATE LIMIT RETRY PROTOCOL section."""
+        skill_md = _sous_chef_text()
+        section = _extract_rate_limit_retry_section(skill_md)
+        assert section, "RATE LIMIT RETRY PROTOCOL section not found in sous-chef SKILL.md"
+
+    def test_rate_limit_retry_protocol_has_wait_instruction(self) -> None:
+        """RATE LIMIT RETRY PROTOCOL must instruct waiting/delay before re-routing."""
+        skill_md = _sous_chef_text()
+        section = _extract_rate_limit_retry_section(skill_md)
+        assert section, "RATE LIMIT RETRY PROTOCOL section not found in sous-chef SKILL.md"
+        section_lower = section.lower()
+        assert any(keyword in section_lower for keyword in ("wait", "delay", "sleep")), (
+            "RATE LIMIT RETRY PROTOCOL section must instruct the orchestrator to "
+            "wait/delay/sleep before re-routing on rate-limit signals. "
+            f"Got section:\n{section}"
+        )
+
+    def test_rate_limit_retry_protocol_has_retry_count_bound(self) -> None:
+        """RATE LIMIT RETRY PROTOCOL must bound the number of consecutive rate-limit retries."""
+        skill_md = _sous_chef_text()
+        section = _extract_rate_limit_retry_section(skill_md)
+        assert section, "RATE LIMIT RETRY PROTOCOL section not found in sous-chef SKILL.md"
+        section_lower = section.lower()
+        # Look for a retry bound like "three times" / "max 3" / "3 retries" / "consecutive".
+        has_retry_bound = (
+            "three times" in section_lower
+            or "max 3" in section_lower
+            or "3 retries" in section_lower
+            or "3 rate-limit retries" in section_lower
+            or ("retries" in section_lower and "consecutive" in section_lower)
+            or "retry count" in section_lower
+        )
+        assert has_retry_bound, (
+            "RATE LIMIT RETRY PROTOCOL must bound the per-step rate-limit retry count "
+            "(e.g., 'three times', 'max 3', '3 retries', or per-step consecutive counter). "
+            f"Got section:\n{section}"
+        )
+
+    def test_rate_limit_retry_protocol_checks_deadline_budget(self) -> None:
+        """RATE LIMIT RETRY PROTOCOL must check the session deadline before sleeping."""
+        skill_md = _sous_chef_text()
+        section = _extract_rate_limit_retry_section(skill_md)
+        assert section, "RATE LIMIT RETRY PROTOCOL section not found in sous-chef SKILL.md"
+        assert "AUTOSKILLIT_SESSION_DEADLINE" in section, (
+            "RATE LIMIT RETRY PROTOCOL must reference AUTOSKILLIT_SESSION_DEADLINE and "
+            "check remaining budget before sleeping on rate-limit retries."
+        )
+        # Also assert a deadline-aware word like "budget", "deadline", or "remain" is present.
+        section_lower = section.lower()
+        assert any(keyword in section_lower for keyword in ("deadline", "budget", "remain")), (
+            "RATE LIMIT RETRY PROTOCOL must check the session deadline budget before waiting. "
+            f"Got section:\n{section}"
+        )

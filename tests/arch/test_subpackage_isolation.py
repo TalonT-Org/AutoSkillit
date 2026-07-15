@@ -1013,7 +1013,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "established pattern (+1 net line)",
     ),
     "tools_execution.py": (
-        1560,
+        1580,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "

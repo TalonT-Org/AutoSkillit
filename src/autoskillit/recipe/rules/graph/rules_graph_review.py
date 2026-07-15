@@ -163,6 +163,52 @@ def _check_run_skill_missing_context_limit(ctx: ValidationContext) -> list[RuleF
     return findings
 
 
+@semantic_rule(
+    name="run-skill-missing-rate-limit",
+    description=(
+        "All run_skill steps must declare on_rate_limit. "
+        "When a transient HTTP 429 rate limit occurs, the orchestrator needs a "
+        "deterministic recovery path. Without it, on_context_limit is borrowed — "
+        "conflating transient throttling with structural context exhaustion."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_run_skill_missing_rate_limit(ctx: ValidationContext) -> list[RuleFinding]:
+    recipe = ctx.recipe
+    findings: list[RuleFinding] = []
+
+    # Steps that are themselves on_rate_limit targets are exempt — they ARE
+    # the recovery path and do not need to declare a recovery of their own.
+    rate_limit_targets: set[str] = set()
+    for step in recipe.steps.values():
+        if step.on_rate_limit and step.on_rate_limit not in (
+            "escalate",
+            "release_issue_failure",
+        ):
+            rate_limit_targets.add(step.on_rate_limit)
+
+    for step_name, step in recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if step.action == "stop":
+            continue
+        if step.on_rate_limit is not None:
+            continue
+        if step_name in rate_limit_targets:
+            continue
+        findings.append(
+            make_finding(
+                rule_name="run-skill-missing-rate-limit",
+                step_name=step_name,
+                message=f"Step '{step_name}' ({step.tool}) has no on_rate_limit. "
+                f"Transient HTTP 429 rate limits will borrow on_context_limit routing — "
+                f"conflating transient throttling with structural context exhaustion. "
+                f"Add on_rate_limit: <recovery_step>.",
+            )
+        )
+    return findings
+
+
 _REVIEW_EFFECT_ADVANCE_GATES = frozenset({"check_review_loop", "derive_batch_ci_event"})
 
 

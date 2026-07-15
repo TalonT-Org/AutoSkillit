@@ -78,7 +78,8 @@
       },
       "on_success": "extract_domain",
       "on_failure": "escalate_stop",
-      "on_context_limit": "escalate_stop"
+      "on_context_limit": "escalate_stop",
+      "on_rate_limit": "escalate_stop"
     },
     "extract_domain": {
       "tool": "run_skill",
@@ -90,7 +91,8 @@
       },
       "on_success": "generate_phases",
       "on_failure": "generate_phases",
-      "on_context_limit": "escalate_stop"
+      "on_context_limit": "escalate_stop",
+      "on_rate_limit": "escalate_stop"
     },
     "generate_phases": {
       "tool": "run_skill",
@@ -105,7 +107,8 @@
       },
       "on_success": "build_plan_snapshot",
       "on_failure": "escalate_stop",
-      "on_context_limit": "escalate_stop"
+      "on_context_limit": "escalate_stop",
+      "on_rate_limit": "escalate_stop"
     },
     "build_plan_snapshot": {
       "tool": "run_python",
@@ -140,6 +143,7 @@
       "on_success": "merge_phases",
       "on_failure": "escalate_stop",
       "on_context_limit": "merge_phases",
+      "on_rate_limit": "merge_phases",
       "note": "PARALLEL DISPATCH: context.phase_ids contains comma-separated phase IDs (e.g. \"P1,P2,P3\"). For each phase_id, substitute it into the {phase_id} placeholder in skill_command and issue one run_skill call. Run ALL elaborations in parallel (all run_skill calls in a single message). Accumulate each elab_result_path value via capture_list.\n"
     },
     "merge_phases": {
@@ -171,7 +175,8 @@
       },
       "on_success": "expand_assignments",
       "on_failure": "escalate_stop",
-      "on_context_limit": "expand_assignments"
+      "on_context_limit": "expand_assignments",
+      "on_rate_limit": "expand_assignments"
     },
     "expand_assignments": {
       "tool": "run_python",
@@ -203,6 +208,7 @@
       "on_success": "merge_assignments",
       "on_failure": "escalate_stop",
       "on_context_limit": "merge_assignments",
+      "on_rate_limit": "merge_assignments",
       "note": "PARALLEL DISPATCH: context.assignment_context_paths contains comma-separated paths to per-phase context files. For each context_path, substitute it into the {context_path} placeholder in skill_command and issue one run_skill call. Run ALL elaborations in parallel. Accumulate results via capture_list.\n"
     },
     "merge_assignments": {
@@ -237,6 +243,7 @@
       "on_success": "merge_refined_assignments",
       "on_failure": "escalate_stop",
       "on_context_limit": "expand_wps",
+      "on_rate_limit": "expand_wps",
       "note": "PARALLEL DISPATCH: context.refine_context_paths contains comma-separated paths to per-phase context files produced by merge_tier_results. For each context_path, substitute it into the {context_path} placeholder and issue one run_skill call. Run ALL refinements in parallel. Accumulate results via capture_list.\n"
     },
     "merge_refined_assignments": {
@@ -281,6 +288,7 @@
       "on_success": "finalize_wp_manifest",
       "on_failure": "escalate_stop",
       "on_context_limit": "finalize_wp_manifest",
+      "on_rate_limit": "finalize_wp_manifest",
       "note": "PARALLEL DISPATCH: context.wp_context_paths contains comma-separated paths to per-phase WP context files. For each context_path, substitute it into the {context_path} placeholder in skill_command and issue one run_skill call. Run ALL elaborations in parallel. Accumulate results via capture_list.\n"
     },
     "finalize_wp_manifest": {
@@ -325,6 +333,7 @@
       "on_success": "merge_refined_wps",
       "on_failure": "escalate_stop",
       "on_context_limit": "reconcile_wp_files",
+      "on_rate_limit": "reconcile_wp_files",
       "note": "PARALLEL DISPATCH: context.wp_refine_context_paths contains comma-separated paths to per-phase WP context files. For each context_path, substitute it into the {context_path} placeholder in skill_command and issue one run_skill call in parallel. Accumulate results via capture_list.\n"
     },
     "merge_refined_wps": {
@@ -350,6 +359,7 @@
       "on_success": "consolidate_wps_merge",
       "on_failure": "consolidate_wps_merge",
       "on_context_limit": "consolidate_wps_merge",
+      "on_rate_limit": "consolidate_wps_merge",
       "note": "Analysis-only step: always routes to consolidate_wps_merge regardless of success or failure. If the skill fails, the merge callable falls back to passing all WPs through unchanged (no consolidation manifests = no-op merge).\n"
     },
     "consolidate_wps_merge": {
@@ -387,7 +397,8 @@
       },
       "on_success": "reconcile_deps",
       "on_failure": "reconcile_deps",
-      "on_context_limit": "reconcile_deps"
+      "on_context_limit": "reconcile_deps",
+      "on_rate_limit": "reconcile_deps"
     },
     "reconcile_deps": {
       "tool": "run_skill",
@@ -400,7 +411,8 @@
       },
       "on_success": "planner_assess_review_approach",
       "on_failure": "escalate_stop",
-      "on_context_limit": "planner_assess_review_approach"
+      "on_context_limit": "planner_assess_review_approach",
+      "on_rate_limit": "planner_assess_review_approach"
     },
     "planner_assess_review_approach": {
       "tool": "run_skill",
@@ -418,6 +430,7 @@
       "on_success": "validate",
       "on_failure": "validate",
       "on_context_limit": "validate",
+      "on_rate_limit": "validate",
       "note": "Optional review-approach benefit assessment pass. Non-fatal: routes to validate on both success and failure. Skipped when planner_assess_review_approach ingredient is false (default).\n"
     },
     "validate": {
@@ -461,7 +474,8 @@
       "on_success": "check_refine_loop",
       "on_exhausted": "escalate_stop",
       "on_failure": "escalate_stop",
-      "on_context_limit": "check_refine_loop"
+      "on_context_limit": "check_refine_loop",
+      "on_rate_limit": "check_refine_loop"
     },
     "check_refine_loop": {
       "tool": "run_python",

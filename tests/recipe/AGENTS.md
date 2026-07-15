@@ -90,6 +90,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_pseudocode_sync_rule.py` | Tests for the pseudocode-callable-divergence semantic rule |
 | `test_recipe_backend_composition_matrix.py` | Recipe x backend composition matrix: parametrized CI gate validating every (recipe, backend) combination with declared-unsupported and known-broken governance |
 | `test_recipe_composition_vacuous_gate.py` | Tests for reachability-aware `_is_vacuous_gate`: gate reachable post-prune is NOT vacuous, unreachable gate IS vacuous, all bundled gate-equipped recipes must report dispatch_feasible=False under codex |
+| `test_recipe_composition_rate_limit.py` | Tests for `_derive_rate_limit_routes` auto-derivation during recipe composition (on_rate_limit ← on_context_limit) |
 | `test_recipe_ci_applicable_routing.py` | Structural tests for ci_applicable routing guards across all wait_for_ci chains |
 | `test_recipe_ci_contracts.py` | Cross-recipe ci_event/branch coherence and remote_url structural tests |
 | `test_recipe_ci_watch_event.py` | Tests for CI watch event in recipe steps |
@@ -175,6 +176,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_merge_context_forward.py` | Tests for merge-test-gate-context-not-forwarded semantic validation rule |
 | `test_rules_multipart_iteration.py` | Tests for multipart_iteration semantic validation rule |
 | `test_rules_on_context_limit.py` | Tests for on_context_limit semantic validation rule |
+| `test_rules_on_rate_limit.py` | Tests for `run-skill-missing-rate-limit` semantic validation rule (transient HTTP 429 enforcement) |
 | `test_rules_on_result_failure_route.py` | Tests for on_result_failure_route semantic validation rule |
 | `test_rules_outdated_script_version.py` | Tests for outdated_script_version semantic validation rule |
 | `test_rules_packs.py` | Tests for packs semantic validation rule |

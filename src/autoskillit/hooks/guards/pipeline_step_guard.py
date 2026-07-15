@@ -15,6 +15,14 @@ import re
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_utils import (  # type: ignore[import-not-found]  # noqa: E402
+    discover_single_tracker_order_id,
+)
+
 _SUFFIX_RE = re.compile(r"-\d+$")
 
 
@@ -32,14 +40,7 @@ def main() -> None:
     order_id = tool_input.get("order_id", "") or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
     if not order_id:
         tracker_dir = Path.cwd() / ".autoskillit" / "temp" / "pipeline_tracker"
-        if tracker_dir.is_dir():
-            trackers = [
-                f
-                for f in tracker_dir.iterdir()
-                if f.suffix == ".json" and not f.name.startswith(".")
-            ]
-            if len(trackers) == 1:
-                order_id = trackers[0].stem
+        order_id = discover_single_tracker_order_id(tracker_dir)
         if not order_id:
             sys.exit(0)
 

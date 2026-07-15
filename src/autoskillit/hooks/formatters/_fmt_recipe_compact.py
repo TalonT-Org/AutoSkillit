@@ -284,38 +284,107 @@ def _compact_indentation(yaml_text: str) -> str:
     return "".join(out)
 
 
+_TOP_LEVEL_STRIP_FIELDS: frozenset[str] = frozenset(
+    {
+        "description",
+        "summary",
+        "name",
+        "recipe_version",
+        "requires_packs",
+    }
+)
+
+
+def _collapse_blank_lines(text: str) -> str:
+    """Remove cosmetic blank lines and trailing whitespace.
+
+    Blank lines inside literal/folded block scalars are semantically
+    significant — they are preserved. Only blank lines that appear at a
+    nesting depth where the surrounding lines are structural (mapping keys
+    or list items) are removed.  As a safe approximation, remove any blank
+    line whose next non-blank line has indentation ≤ the previous non-blank
+    line's indentation (i.e., it separates sibling or parent entries, not
+    block-scalar content where the next line is deeper).
+
+    Also strips trailing whitespace from non-blank lines — YAML trailing
+    spaces are never semantically significant.
+    """
+    lines = text.split("\n")
+    n = len(lines)
+    out: list[str] = []
+    i = 0
+    while i < n:
+        line = lines[i]
+        if line.strip() == "":
+            prev_indent = _leading_spaces(out[-1]) if out and out[-1].strip() else 0
+            j = i + 1
+            while j < n and lines[j].strip() == "":
+                j += 1
+            if j < n:
+                next_indent = _leading_spaces(lines[j])
+                if next_indent > prev_indent:
+                    out.append(line)
+            i = j if j > i + 1 else i + 1
+        else:
+            out.append(line.rstrip())
+            i += 1
+    return "\n".join(out)
+
+
 def compact_recipe_display(yaml_text: str) -> str:
     """Apply the fixed, deterministic display-compaction projection.
 
-    Removes presentation-only top-level `description`/`summary` and direct
-    step `description` fields (already rendered elsewhere in the formatted
-    response — summary via the STEP FLOW block, descriptions nowhere, they
-    are pure narration), then halves structural YAML indentation. All tools,
-    actions, routes, commands, captures, messages, notes, and guard fields
-    are preserved as parsed values — see
+    Removes presentation-only top-level metadata and direct step
+    ``description`` fields (already rendered elsewhere in the formatted
+    response — ``name`` and ``recipe_version`` in the header, ``summary``
+    via the STEP FLOW block, ``requires_packs`` as an internal gating
+    field, descriptions nowhere — they are pure narration), then halves
+    structural YAML indentation and collapses cosmetic blank lines. All
+    tools, actions, routes, commands, captures, messages, notes, and guard
+    fields are preserved as parsed values — see
     tests/infra/test_pretty_output_recipe.py::test_compact_recipe_display_preserves_execution_semantics.
     """
-    text = _strip_top_level_fields(yaml_text, frozenset({"description", "summary"}))
+    text = _strip_top_level_fields(yaml_text, _TOP_LEVEL_STRIP_FIELDS)
     text = _strip_step_descriptions(text)
-    return _compact_indentation(text)
+    text = _compact_indentation(text)
+    return _collapse_blank_lines(text)
 
 
 _STOP_STEP_MESSAGE_PREFIX = "  Stop step '"
+_PER_STOP_PREFIX = "- For stop step '"
 
 
 def compact_orchestration_rules(text: str) -> str:
-    """Drop repeated per-stop-step `message:` payload lines from displayed rules.
+    """Drop repeated per-stop-step `message:` payload lines and consolidate
+    per-stop L3 sentinel directives into a compact table.
 
-    The exact message text remains in each stop step's own YAML `message`
+    The exact message text remains in each stop step's own YAML ``message``
     field (rendered in the RECIPE section). Only the duplicated copy emitted
-    by `_build_stop_step_semantics()` is dropped here — that function and its
-    dedicated `stop_step_semantics` Channel B field are untouched; this only
-    affects the human/agent-visible `orchestration_rules` rendering.
+    by ``_build_stop_step_semantics()`` is dropped here — that function and
+    its dedicated ``stop_step_semantics`` Channel B field are untouched.
+
+    Per-stop L3 sentinel directives (``- For stop step 'X': emit ...``) are
+    consolidated into ``success=true: A, B`` / ``success=false: C, D`` lines.
     """
     lines = text.split("\n")
-    kept = [
-        line
-        for line in lines
-        if not (line.startswith(_STOP_STEP_MESSAGE_PREFIX) and "' message: " in line)
-    ]
+    kept: list[str] = []
+    success_true: list[str] = []
+    success_false: list[str] = []
+    for line in lines:
+        if line.startswith(_STOP_STEP_MESSAGE_PREFIX) and "' message: " in line:
+            continue
+        if line.startswith(_PER_STOP_PREFIX):
+            name_end = line.index("'", len(_PER_STOP_PREFIX))
+            name = line[len(_PER_STOP_PREFIX) : name_end]
+            if "success=true" in line:
+                success_true.append(name)
+            else:
+                success_false.append(name)
+            continue
+        kept.append(line)
+    if success_true or success_false:
+        if success_true:
+            kept.append(f"  success=true: {', '.join(success_true)}")
+        if success_false:
+            kept.append(f"  success=false: {', '.join(success_false)}")
     return "\n".join(kept)

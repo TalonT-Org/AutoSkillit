@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import QuotaGuardConfig
+    from autoskillit.pipeline import ToolContext
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -291,7 +292,7 @@ def _update_hook_config_with_git_ops_policy() -> None:
         logger.warning("hook_config_git_ops_policy_update_write_failed", path=str(hook_cfg_path))
 
 
-def _auto_init_pipeline_tracker(tool_ctx: Any) -> None:
+def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> None:
     """Auto-derive and initialize the kitchen-scoped pipeline dependency tracker.
 
     Self-arming, server-internal counterpart to ``record_pipeline_step(op="init")``

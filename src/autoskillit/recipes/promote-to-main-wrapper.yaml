@@ -54,6 +54,7 @@ steps:
       route: emit_result
     - route: emit_result
     on_context_limit: escalate_stop
+    on_rate_limit: escalate_stop
     on_failure: escalate_stop
 
   emit_result:

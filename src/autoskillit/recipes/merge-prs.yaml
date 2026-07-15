@@ -486,6 +486,7 @@ steps:
     retries: 0
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
     note: 'Resolves git-level rebase conflicts between the ejected PR''s branch and
       the current base_branch HEAD. Uses the same resolve-merge-conflicts skill as
@@ -734,6 +735,7 @@ steps:
     retries: 0
     on_exhausted: get_current_pr_branch
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
     note: 'Resolves git-level rebase conflicts between the next PR''s branch and the
       current base_branch HEAD. Similar to resolve_ejected_conflicts but operates
@@ -864,6 +866,7 @@ steps:
     retries: 5
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     note: "The agent reads context.pr_order_file at context.current_pr_number to get\
       \ the current PR's complexity. Appends number and complexity to skill_command:\n\
       \  /autoskillit:merge-pr {pr_number} {complexity}\nescalation_required=true\
@@ -913,6 +916,7 @@ steps:
     retries: 5
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     optional_context_refs:
     - remediation_path
     note: 'SEQUENTIAL: For each plan_part, run the full cycle (verify → implement
@@ -938,6 +942,7 @@ steps:
     retries: 0
     on_exhausted: retry_worktree
     on_context_limit: retry_worktree
+    on_rate_limit: retry_worktree
     skip_when_false: inputs.backend_supports_git_write
   retry_worktree:
     tool: run_skill
@@ -958,6 +963,7 @@ steps:
     skip_when_false: inputs.backend_supports_git_write
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
   test:
     tool: test_check
     with:
@@ -1176,6 +1182,7 @@ steps:
     retries: 3
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     note: 'Fixes test failures without merging. Routes to test for verification;
       test failure increments check_test_fix_loop before retrying.
       The base_branch with: key is present for contract compatibility only; the merge
@@ -1304,6 +1311,7 @@ steps:
     - route: compute_domain_partitions
     on_failure: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     optional: true
     skip_when_false: inputs.audit_impl
     note: 'DEPENDENCY: context.all_plan_paths is only populated if the plan step executed
@@ -1413,6 +1421,7 @@ steps:
     retries: 0
     on_failure: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
     note: 'Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003).
       Rebases context.batch_branch onto inputs.base_branch and resolves merge conflicts.
@@ -1544,6 +1553,7 @@ steps:
     retries: 2
     on_exhausted: register_clone_failure
     on_context_limit: pre_review_rebase_integration
+    on_rate_limit: pre_review_rebase_integration
     on_result:
     - when: ${{ result.verdict }} == 'real_fix'
       route: pre_review_rebase_integration
@@ -1595,6 +1605,7 @@ steps:
     retries: 0
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
   re_push_review_integration:
     tool: push_to_remote
@@ -1739,6 +1750,7 @@ steps:
     on_success: done
     on_failure: done
     on_context_limit: done
+    on_rate_limit: done
     note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
       routing. Both on_failure and on_context_limit route to the same terminal as on_success.
 
@@ -1759,6 +1771,7 @@ steps:
     on_success: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
+    on_rate_limit: escalate_stop
     note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
       routing.
 

@@ -371,7 +371,7 @@ def test_fmt_open_kitchen_combined_response():
     assert "open_kitchen" in formatted
     assert "v1.2.3" in formatted
     assert "--- RECIPE ---" in formatted
-    assert "my-recipe" in formatted
+    assert "run_cmd" in formatted
 
 
 def test_fmt_open_kitchen_combined_includes_ingredients_table():
@@ -868,11 +868,11 @@ def test_open_kitchen_output_includes_diagram():
 
 def _strip_presentation_fields(parsed: dict) -> dict:
     """Expected projection: original parsed YAML minus presentation-only fields
-    compact_recipe_display() is allowed to drop (top-level description/summary,
-    direct step description)."""
+    compact_recipe_display() is allowed to drop (top-level description/summary/name/
+    recipe_version/requires_packs, direct step description)."""
     projected = dict(parsed)
-    projected.pop("description", None)
-    projected.pop("summary", None)
+    for key in ("description", "summary", "name", "recipe_version", "requires_packs"):
+        projected.pop(key, None)
     steps = projected.get("steps")
     if isinstance(steps, dict):
         new_steps = {}

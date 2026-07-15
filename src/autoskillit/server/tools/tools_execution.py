@@ -74,6 +74,7 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
     maybe_promote_work_dir,
+    propagate_session_deadline,
     resolve_relative_path_args,
     validate_path_arg_anchoring,
 )
@@ -1385,31 +1386,7 @@ async def run_skill(
             _orchestrator_sid = find_caller_session_id(project_dir=tool_ctx.project_dir)
 
             # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
-            # Fleet/food-truck sessions inherit the deadline via env_extras from
-            # fleet/_api.py; interactive "order" sessions must compute it here.
-            # Read overlay directly (mirrors _check_ingredient_locks) — do NOT use
-            # _build_config_snapshot, which collapses explicit timeouts to the
-            # RunSkillConfig default of 7200.
-            try:
-                _overlay_path = _hook_config_overlay_path(tool_ctx.project_dir)
-                if _overlay_path.exists():
-                    _overlay = json.loads(_overlay_path.read_text())
-                    _order_section = _overlay.get("order", {})
-                    if "timeout" in _order_section:
-                        _existing_deadline = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
-                        if _existing_deadline:
-                            # Fleet session: preserve inherited deadline unchanged.
-                            _deadline_str = _existing_deadline
-                        else:
-                            # Order session: compute and cache deadline in process env.
-                            _deadline = time.time() + int(_order_section["timeout"])
-                            _deadline_str = str(int(_deadline))
-                            os.environ["AUTOSKILLIT_SESSION_DEADLINE"] = _deadline_str
-                        if provider_extras is None:
-                            provider_extras = {}
-                        provider_extras["AUTOSKILLIT_SESSION_DEADLINE"] = _deadline_str
-            except (json.JSONDecodeError, OSError, ValueError, TypeError):
-                pass  # malformed overlay — skip silently
+            provider_extras = propagate_session_deadline(tool_ctx.project_dir, provider_extras)
 
             _start = time.monotonic()
             try:

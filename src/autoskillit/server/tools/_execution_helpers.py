@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import time
 import types
 import typing
 from pathlib import Path
 
 from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, get_logger
+from autoskillit.server._misc import _hook_config_overlay_path
 
 logger = get_logger(__name__)
 
@@ -235,3 +238,41 @@ async def _import_and_call(
         return {"success": True, "result": result}
     except (TypeError, ValueError):
         return {"success": True, "result": str(result)}
+
+
+def propagate_session_deadline(
+    project_dir: Path, provider_extras: dict[str, str] | None
+) -> dict[str, str] | None:
+    """Propagate AUTOSKILLIT_SESSION_DEADLINE from the order overlay to L1 sessions.
+
+    Fleet/food-truck sessions inherit the deadline via env_extras from fleet/_api.py;
+    interactive "order" sessions must compute it here. The overlay is read directly
+    (mirrors `_check_ingredient_locks`) — do NOT use `_build_config_snapshot`, which
+    collapses explicit timeouts to the RunSkillConfig default of 7200.
+
+    Mutates `provider_extras` in place (creating it if None) and returns it.
+    Failures are swallowed silently (malformed overlay -> skip).
+    """
+    try:
+        overlay_path = _hook_config_overlay_path(project_dir)
+        if not overlay_path.exists():
+            return provider_extras
+        overlay = json.loads(overlay_path.read_text())
+        order_section = overlay.get("order", {})
+        if "timeout" not in order_section:
+            return provider_extras
+        existing_deadline = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
+        if existing_deadline:
+            # Fleet session: preserve inherited deadline unchanged.
+            deadline_str = existing_deadline
+        else:
+            # Order session: compute and cache deadline in process env.
+            deadline = time.time() + int(order_section["timeout"])
+            deadline_str = str(int(deadline))
+            os.environ["AUTOSKILLIT_SESSION_DEADLINE"] = deadline_str
+        if provider_extras is None:
+            provider_extras = {}
+        provider_extras["AUTOSKILLIT_SESSION_DEADLINE"] = deadline_str
+    except (json.JSONDecodeError, OSError, ValueError, TypeError):
+        pass  # malformed overlay — skip silently
+    return provider_extras

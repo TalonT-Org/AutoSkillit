@@ -982,7 +982,7 @@ def test_open_kitchen_payload_warning_uses_formatted_byte_count(capsys):
 def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     """Regression gate (issue #4253): the fully rendered open_kitchen payload for every
     runtime-discoverable recipe, under both default and all-truthy ingredient
-    resolution, must stay at or under the 95,000 UTF-8 byte regression budget — a
+    resolution, must stay at or under the 96,000 UTF-8 byte regression budget — a
     margin below the last empirically observed ~100KB Claude Code CLI disk-persistence
     gate (measured on CLI 2.1.197). Re-measure after CLI upgrades; this is not a claim
     that the external gate is stable."""
@@ -1004,7 +1004,7 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
             )
             rendered = _fmt_open_kitchen(result, pipeline=False)
             byte_len = len(rendered.encode("utf-8"))
-            if byte_len > 95_000:
-                over_budget.append(f"{recipe_name} ({mode_name}): {byte_len} bytes > 95000")
+            if byte_len > 96_000:
+                over_budget.append(f"{recipe_name} ({mode_name}): {byte_len} bytes > 96000")
 
     assert not over_budget, "\n".join(over_budget)

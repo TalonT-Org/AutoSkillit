@@ -37,7 +37,7 @@ _DEFAULT_SMALL_FILE_MAX_BYTES = 5_000
 _DEFAULT_SHELL_MAX_INLINE_BYTES = 12_000
 _JSONL_PRODUCERS: frozenset[str] = frozenset({"cat", "rg", "grep", "sed", "awk", "jq"})
 _GLOB_CHARS = frozenset("*?[]{}")
-_RISKY_SURFACE_RE = re.compile(r"\b(?:rg|grep|cat|sed|awk|jq|find)\b")
+_RISKY_SURFACE_RE = re.compile(r"\b(?:rg|grep|cat|sed|awk|jq|find|wc)\b")
 
 _RG_FLAGS_WITH_VALUE: frozenset[str] = frozenset(
     {
@@ -196,8 +196,30 @@ def _is_plain_cat(args: list[str], targets: list[str]) -> bool:
     return bool(targets) and remaining == targets
 
 
-def _is_wc_lines(args: list[str], targets: list[str]) -> bool:
-    return bool(targets) and all(arg in {"-l", "--lines"} or arg in targets for arg in args)
+def _wc_line_operands(args: list[str]) -> tuple[bool, bool, list[str]]:
+    """Return line-mode, option validity, and every operand after wc parsing."""
+    line_mode = False
+    valid_options = True
+    operands: list[str] = []
+    options_ended = False
+    for arg in args:
+        if not options_ended and arg == "--":
+            options_ended = True
+        elif not options_ended and arg in {"-l", "--lines"}:
+            line_mode = True
+        elif not options_ended and arg.startswith("-") and arg != "-":
+            valid_options = False
+        else:
+            operands.append(arg)
+    return line_mode, valid_options, operands
+
+
+def _is_jsonl_operand(raw: str) -> bool:
+    return Path(raw).suffix.lower() == ".jsonl"
+
+
+def _is_dynamic_operand(raw: str) -> bool:
+    return raw == "-" or "$" in raw or any(char in raw for char in _GLOB_CHARS)
 
 
 def _producer_classifier(
@@ -230,8 +252,21 @@ def _producer_classifier(
         else:
             profiles.append((False, False))
 
-    if verb == "wc" and targets and _is_wc_lines(args, targets):
-        profiles.append((True, True))
+    if verb == "wc":
+        line_mode, valid_options, operands = _wc_line_operands(args)
+        jsonl_derived = any(_is_jsonl_operand(arg) for arg in operands)
+        ambiguous = not operands or any(_is_dynamic_operand(arg) for arg in operands)
+        if line_mode and jsonl_derived:
+            intrinsically_bounded = (
+                valid_options
+                and all(_is_jsonl_operand(arg) for arg in operands)
+                and _literal_small_jsonl_files(operands, cwd, small_file_max_bytes)
+            )
+            profiles.append((intrinsically_bounded, intrinsically_bounded))
+        elif line_mode and ambiguous:
+            profiles.append((False, False))
+        elif jsonl_derived:
+            profiles.append((False, False))
 
     if verb == "find" and args and _looks_like_directory(args[0], cwd):
         profiles.append(("-quit" in args, False))

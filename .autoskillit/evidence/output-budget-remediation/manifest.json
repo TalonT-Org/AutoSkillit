@@ -43,7 +43,31 @@
     "gate_log_path": "temp/test-2026-07-15_224649.txt",
     "gate_log_sha256": "110cc8fc22aa832efcc461166f3c95052ec39fabc33ac95410fe8ac2697c0a16"
   },
-  "phases": [],
+  "phases": [
+    {
+      "phase": 1,
+      "phase_commit_sha": "016f88931997347705586c00834d9ef8b6e4003c",
+      "gate_tested_sha": "016f88931997347705586c00834d9ef8b6e4003c",
+      "gates": [
+        {
+          "command": "task test-all",
+          "status": "pass",
+          "summary": "30912 passed, 611 skipped, 55 xfailed",
+          "gate_tested_sha": "016f88931997347705586c00834d9ef8b6e4003c",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase1-task-test-all-016f88931.log",
+          "gate_log_sha256": "ab8f5a0c0958e78d23c9075eaabd773ba76f3eff93ff8d8f97e3b5aa27501c34"
+        },
+        {
+          "command": "pre-commit run --all-files",
+          "status": "pass",
+          "summary": "all configured hooks passed",
+          "gate_tested_sha": "016f88931997347705586c00834d9ef8b6e4003c",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase1-pre-commit-016f88931.log",
+          "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
+        }
+      ]
+    }
+  ],
   "closure": {
     "historical_mutation_transcript": "non-reconstructible",
     "historical_artifacts": [

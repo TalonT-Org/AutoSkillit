@@ -991,6 +991,7 @@ async def test_all_infeasibility_paths_have_escape_hatch(build_ctx_open: Any) ->
             preflight_backend,
             MagicMock(),
             recipe_name="implementation",
+            skill_resolver=MagicMock(),
         )
     assert preflight_result is not None
     parsed = json.loads(preflight_result)

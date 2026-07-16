@@ -52,8 +52,8 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         )
         if step_backend is None:
             continue
+        uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
         if skill_info.backend_requirements and step_backend not in skill_info.backend_requirements:
-            uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
             cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
             _required = CLAUDE_CODE_CAPABILITIES.git_metadata_writable
             git_detail = (
@@ -72,4 +72,28 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                     ),
                 )
             )
+        # Independent hard-capability property check (sibling if, not elif) —
+        # catches worker_routable skills whose backend_requirements are empty
+        # but require a backend property (e.g. git_metadata_write → requires
+        # git_metadata_writable=True on the pinned backend). Different actionable
+        # diagnostic from backend_requirements — both findings surface together.
+        step_backend_caps = (ctx.backend_capabilities_map or {}).get(step_backend)
+        if step_backend_caps and uses_caps:
+            for _hc_cap in uses_caps:
+                _hc_cap_def = SKILL_CAPABILITY_REGISTRY.get(_hc_cap)
+                if _hc_cap_def and _hc_cap_def.required_backend_property:
+                    _hc_prop = _hc_cap_def.required_backend_property
+                    _hc_val = getattr(step_backend_caps, _hc_prop, None)
+                    if not _hc_val:
+                        findings.append(
+                            make_finding(
+                                rule_name="backend-incompatible-skill",
+                                step_name=step_name,
+                                message=(
+                                    f"step '{step_name}': skill '{skill_name}' requires "
+                                    f"{_hc_prop}=True (via capability '{_hc_cap}') but "
+                                    f"backend '{step_backend}' has {_hc_prop}={_hc_val!r}."
+                                ),
+                            )
+                        )
     return findings

@@ -19,6 +19,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 def _make_skill_info(
     name: str = "investigate",
     backend_requirements: frozenset[str] = frozenset({"claude-code"}),
+    uses_capabilities: frozenset[str] = frozenset(),
 ) -> SimpleNamespace:
     return SimpleNamespace(
         name=name,
@@ -26,6 +27,7 @@ def _make_skill_info(
         path=Path("/nonexistent/SKILL.md"),
         categories=frozenset(),
         backend_requirements=backend_requirements,
+        uses_capabilities=uses_capabilities,
     )
 
 
@@ -117,6 +119,52 @@ class TestBackendIncompatibleSkillRule:
         findings = run_semantic_rules(ctx)
         compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
         assert len(compat_findings) == 0
+
+    def test_rules_backend_compat_fires_for_worker_routable_pinned_to_codex(self):
+        """A worker_routable skill (empty backend_requirements, only
+        uses_capabilities=frozenset({'git_metadata_write'})) explicitly pinned
+        via effective_backend_map to a codex backend that lacks the required
+        BackendCapabilities.git_metadata_writable property must fire the
+        backend-incompatible-skill rule."""
+        from autoskillit.core.types._type_backend import BackendCapabilities
+
+        # resolve-review declares uses_capabilities=[..., git_metadata_write, ...]
+        # but the /investigate fixture resolver returns a worker_routable
+        # skill with empty backend_requirements and only git_metadata_write
+        # capability — matches the architecturally interesting case.
+        skill_info = _make_skill_info(
+            name="resolve-review",
+            backend_requirements=frozenset(),
+            uses_capabilities=frozenset({"git_metadata_write"}),
+        )
+        steps = {
+            "run-skill-step": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/resolve-review", "cwd": "/tmp"},
+            )
+        }
+        recipe = Recipe(name="test-recipe", description="test", steps=steps)
+        resolver = _mock_resolver(skill_info)
+        codex_caps = BackendCapabilities(git_metadata_writable=False)
+        ctx = make_validation_context(
+            recipe,
+            backend_name="claude-code",
+            skill_resolver=resolver,
+            effective_backend_map={"run-skill-step": "codex"},
+            backend_capabilities_map={"codex": codex_caps},
+            available_skills=frozenset({"resolve-review"}),
+        )
+        findings = run_semantic_rules(ctx)
+        compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert len(compat_findings) == 1, (
+            f"Expected one backend-incompatible-skill finding for worker_routable "
+            f"skill pinned to codex, got {compat_findings}"
+        )
+        msg = compat_findings[0].message
+        assert "git_metadata_writable" in msg, (
+            f"Finding must mention git_metadata_writable capability mismatch, got: {msg!r}"
+        )
+        assert "codex" in msg, f"Finding must reference the pinned codex backend, got: {msg!r}"
 
 
 _RECIPE_WITH_SKILL_STEP_YAML = """\

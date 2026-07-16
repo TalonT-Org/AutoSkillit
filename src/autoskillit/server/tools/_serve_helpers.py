@@ -13,7 +13,39 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from autoskillit.core import BackendCapabilities, CodingAgentBackend
     from autoskillit.pipeline.context import ToolContext
+
+
+def build_backend_capabilities_map(
+    effective_backend_map: dict[str, str] | None,
+    orchestrator_backend: CodingAgentBackend | None,
+) -> dict[str, BackendCapabilities]:
+    """Build a backend-name → BackendCapabilities map for the static recipe rule.
+
+    Collects distinct backend names from the per-step effective backend map plus
+    the orchestrator's own backend, then resolves each via get_backend(). Names
+    that fail to resolve (e.g. test MagicMocks) are silently dropped — get_recipe,
+    load_recipe, and dispatch_food_truck must continue producing useful output
+    even when the test fixture substitutes non-real backend objects.
+    """
+    from autoskillit.server._misc import get_backend  # circular-break
+
+    distinct: set[str] = set()
+    for _v in (effective_backend_map or {}).values():
+        if isinstance(_v, str):
+            distinct.add(_v)
+    if orchestrator_backend is not None and isinstance(orchestrator_backend.name, str):
+        distinct.add(orchestrator_backend.name)
+    out: dict[str, BackendCapabilities] = {}
+    for _name in distinct:
+        if not _name:
+            continue
+        try:
+            out[_name] = get_backend(_name).capabilities
+        except (KeyError, ValueError):
+            continue
+    return out
 
 
 def _build_serve_override_stack(
@@ -80,6 +112,7 @@ def serve_recipe(
     backend_name: str | None = None,
     temp_dir: Path | str | None = None,
     temp_dir_relpath: str | None = None,
+    backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
 ) -> dict[str, Any]:
     """Unified recipe serve path. Only legal caller of load_and_validate in server/tools/."""
     ingredient_overrides = _build_serve_override_stack(
@@ -99,6 +132,8 @@ def serve_recipe(
         kwargs["resolved_defaults"] = resolved_defaults
     if effective_backend_map is not None:
         kwargs["effective_backend_map"] = effective_backend_map
+    if backend_capabilities_map is not None:
+        kwargs["backend_capabilities_map"] = backend_capabilities_map
     if suppressed is not None:
         kwargs["suppressed"] = suppressed
     if backend_name is not None:

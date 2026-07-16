@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from autoskillit.core import LoadResult
+    from autoskillit.core import BackendCapabilities, LoadResult
     from autoskillit.recipe.schema import Recipe, RecipeInfo
 
 import autoskillit.recipe._api as _api
@@ -97,6 +97,7 @@ class DefaultRecipeRepository:
         defer_unresolved: bool = False,
         backend_name: str | None = None,
         effective_backend_map: dict[str, str] | None = None,
+        backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     ) -> dict[str, Any]:
         project_dir = Path(project_dir)
         result = self._get_list(project_dir)
@@ -116,6 +117,7 @@ class DefaultRecipeRepository:
                 defer_unresolved=defer_unresolved,
                 backend_name=backend_name,
                 effective_backend_map=effective_backend_map,
+                backend_capabilities_map=backend_capabilities_map,
             ),
         )
 
@@ -127,6 +129,7 @@ class DefaultRecipeRepository:
         backend_name: str | None = None,
         ingredient_overrides: dict[str, str] | None = None,
         effective_backend_map: dict[str, str] | None = None,
+        backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     ) -> dict[str, Any]:
         return _api.validate_from_path(
             script_path,
@@ -134,6 +137,7 @@ class DefaultRecipeRepository:
             backend_name=backend_name,
             ingredient_overrides=ingredient_overrides,
             effective_backend_map=effective_backend_map,
+            backend_capabilities_map=backend_capabilities_map,
         )
 
     def list_all(

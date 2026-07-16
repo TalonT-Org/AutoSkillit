@@ -15,6 +15,7 @@ from typing import Any, cast
 from autoskillit.core import (
     BACKEND_CAPABILITY_INGREDIENTS,
     CAPABILITY_GATE_CALLABLES,
+    BackendCapabilities,
     ProcessStaleError,
     RecipeNotFoundError,
     RecipeSource,
@@ -199,6 +200,7 @@ def load_and_validate(
     defer_unresolved: bool = False,
     backend_name: str | None = None,
     effective_backend_map: dict[str, str] | None = None,
+    backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -266,6 +268,7 @@ def load_and_validate(
         _user_method_traditions_hash,
         backend_name,
         tuple(sorted(effective_backend_map.items())) if effective_backend_map else (),
+        tuple(sorted(backend_capabilities_map.keys()) if backend_capabilities_map else ()),
         _manifest_mtime,
         _manifest_size,
         _budgets_mtime,
@@ -394,6 +397,7 @@ def load_and_validate(
                 backend_name=backend_name,
                 skill_resolver=_skill_resolver,
                 effective_backend_map=effective_backend_map,
+                backend_capabilities_map=backend_capabilities_map,
             )
             _pre_prune_findings = run_semantic_rules(_pre_prune_val_ctx)
             _pre_prune_steps = dict(active_recipe.steps)
@@ -463,6 +467,7 @@ def load_and_validate(
                 skill_resolver=_skill_resolver,
                 backend_name=backend_name,
                 effective_backend_map=effective_backend_map,
+                backend_capabilities_map=backend_capabilities_map,
             )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)

@@ -9,7 +9,13 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe, RecipeInfo
 
+    from ._type_backend import BackendCapabilities
     from ._type_protocols_logging import SupportsDebug
+else:
+    # Re-exported at runtime so typing.get_type_hints() can resolve the string
+    # annotations in the RecipeRepository protocol below (from __future__ import
+    # annotations defers everything to strings).
+    from ._type_backend import BackendCapabilities  # noqa: F401
 
 from ._type_results import LoadResult
 
@@ -60,6 +66,7 @@ class RecipeRepository(Protocol):
         defer_unresolved: bool = False,
         backend_name: str | None = None,
         effective_backend_map: dict[str, str] | None = None,
+        backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     ) -> dict[str, Any]:
         """Load and validate a recipe.
 
@@ -75,6 +82,7 @@ class RecipeRepository(Protocol):
         backend_name: str | None = None,
         ingredient_overrides: dict[str, str] | None = None,
         effective_backend_map: dict[str, str] | None = None,
+        backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     ) -> dict[str, Any]: ...
 
     def list_all(

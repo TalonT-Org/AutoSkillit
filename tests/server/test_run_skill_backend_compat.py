@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
 from autoskillit.core import SkillSource
+from autoskillit.server.tools._preflight import check_hard_capability_feasibility
 from autoskillit.server.tools.tools_execution import _is_backend_incompatible
 from autoskillit.workspace.skills import SkillInfo
 
@@ -154,6 +157,103 @@ class TestBackendCompatGateFailClosed:
         )
         error_text = (parsed.get("error") or parsed.get("result") or "").lower()
         assert "backend" in error_text, f"Expected error mentioning missing backend, got: {parsed}"
+
+
+class TestHardCapabilityFeasibilityPredicate:
+    """Direct tests of `check_hard_capability_feasibility` (Step 2.2 / Tests 1a-1b).
+
+    Validates that the shared predicate correctly rejects backends whose
+    `BackendCapabilities` field is falsy for the capability's
+    `required_backend_property`, and passes when the field is True.
+    """
+
+    @staticmethod
+    def _make_backend(name: str, *, git_metadata_writable: bool) -> MagicMock:
+        """Build a mock backend with the given capability property values."""
+        from autoskillit.core import BackendCapabilities
+
+        caps = BackendCapabilities(git_metadata_writable=git_metadata_writable)
+        backend = MagicMock()
+        backend.name = name
+        backend.capabilities = caps
+        return backend
+
+    def test_rejects_incapable_backend_for_git_metadata_write(self):
+        """A backend with git_metadata_writable=False must be rejected for git_metadata_write."""
+        backend = self._make_backend("codex", git_metadata_writable=False)
+        result = check_hard_capability_feasibility(frozenset({"git_metadata_write"}), backend)
+        assert result is not None, "Expected rejection diagnostic"
+        assert "git_metadata_writable" in result
+        assert "codex" in result
+        assert "git_metadata_write" in result
+
+    def test_passes_capable_backend_for_git_metadata_write(self):
+        """A backend with git_metadata_writable=True must pass for git_metadata_write."""
+        backend = self._make_backend("claude-code", git_metadata_writable=True)
+        result = check_hard_capability_feasibility(frozenset({"git_metadata_write"}), backend)
+        assert result is None, f"Expected None for capable backend, got: {result}"
+
+    def test_unknown_capability_is_ignored(self):
+        """Capabilities not in SKILL_CAPABILITY_REGISTRY are silently skipped."""
+        backend = self._make_backend("claude-code", git_metadata_writable=True)
+        result = check_hard_capability_feasibility(frozenset({"unknown_capability"}), backend)
+        assert result is None
+
+    def test_capability_without_required_property_is_ignored(self):
+        """A capability without `required_backend_property` is silently passed."""
+        backend = self._make_backend("claude-code", git_metadata_writable=True)
+        # `open_kitchen` has required_backend_property=None.
+        result = check_hard_capability_feasibility(frozenset({"open_kitchen"}), backend)
+        assert result is None
+
+    def test_check_backend_compat_rejects_explicit_pin_to_incapable_backend(self):
+        """Test 1c: _check_backend_compat must reject when uses_capabilities requires
+        a BackendCapabilities property the backend lacks (the explicit-pin bypass)."""
+        import json
+
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        skill_info = SimpleNamespace(
+            backend_requirements=frozenset(),
+            uses_capabilities=frozenset({"git_metadata_write"}),
+        )
+        backend = self._make_backend("codex", git_metadata_writable=False)
+        result = _check_backend_compat(
+            skill_command="/autoskillit:resolve-review ...",
+            resolved_command="resolve-review",
+            effective_order_id="test-order",
+            target_name="resolve-review",
+            skill_info=skill_info,
+            effective_backend_obj=backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is not None, "Expected crash JSON for incapable backend"
+        parsed = json.loads(result)
+        assert parsed["subtype"] == "crashed"
+        assert "git_metadata_writable" in parsed.get(
+            "result", ""
+        ) or "git_metadata_writable" in parsed.get("error", "")
+
+    def test_check_backend_compat_passes_pinned_claude_code_for_git_write(self):
+        """Sanity: _check_backend_compat must PASS when the chosen backend has the
+        capability property true (claude-code's `git_metadata_writable=True`)."""
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        skill_info = SimpleNamespace(
+            backend_requirements=frozenset(),
+            uses_capabilities=frozenset({"git_metadata_write"}),
+        )
+        backend = self._make_backend("claude-code", git_metadata_writable=True)
+        result = _check_backend_compat(
+            skill_command="/autoskillit:resolve-review",
+            resolved_command="resolve-review",
+            effective_order_id="test-order",
+            target_name="resolve-review",
+            skill_info=skill_info,
+            effective_backend_obj=backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is None, f"Capable backend must pass — expected None, got: {result}"
 
     @pytest.mark.anyio
     async def test_provider_override_allows_skill_requiring_claude_code(

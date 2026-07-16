@@ -78,7 +78,10 @@ from autoskillit.server.tools._execution_helpers import (
     resolve_relative_path_args,
     validate_path_arg_anchoring,
 )
-from autoskillit.server.tools._preflight import _get_fix_required_hook_matchers
+from autoskillit.server.tools._preflight import (
+    _get_fix_required_hook_matchers,
+    check_hard_capability_feasibility,
+)
 from autoskillit.server.tools._types import ToolFailureEnvelope
 
 logger = get_logger(__name__)
@@ -150,6 +153,23 @@ def _check_backend_compat(
             skill_command=resolved_command,
             order_id=effective_order_id,
         ).to_json()
+    # Hard-capability property check — runs AFTER override resolution so an
+    # explicit backend pin that targets an incapable backend is rejected.
+    # Catches the architectural gap where `worker_routable=True` capabilities
+    # (e.g. `git_metadata_write`) have empty `backend_requirements` and would
+    # otherwise bypass validation against the pinned backend.
+    _skill_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
+    if _skill_caps:
+        hard_cap_err = check_hard_capability_feasibility(_skill_caps, effective_backend_obj)
+        if hard_cap_err:
+            return SkillResult.crashed(
+                exception=RuntimeError(
+                    f"Skill {target_name!r} is not feasible on backend "
+                    f"{effective_backend!r}: {hard_cap_err}"
+                ),
+                skill_command=resolved_command,
+                order_id=effective_order_id,
+            ).to_json()
     fix_required_matchers = _get_fix_required_hook_matchers(
         effective_backend_obj.capabilities.applicable_guards,
     )

@@ -151,6 +151,35 @@ def test_required_backends_is_derived_property():
     assert "required_backends" not in SkillCapabilityDef.__dataclass_fields__
 
 
+def test_required_backend_property_on_git_metadata_write():
+    """git_metadata_write must declare required_backend_property=git_metadata_writable,
+    and that property must exist as a field on BackendCapabilities (boot-time check).
+    """
+    from autoskillit.core.types._type_backend import BackendCapabilities
+
+    cap = SKILL_CAPABILITY_REGISTRY["git_metadata_write"]
+    assert cap.required_backend_property == "git_metadata_writable", (
+        f"git_metadata_write.required_backend_property must be 'git_metadata_writable', "
+        f"got {cap.required_backend_property!r}"
+    )
+    # Boot-time validation: the property name must match a real BackendCapabilities field.
+    fields_set = {f.name for f in __import__("dataclasses").fields(BackendCapabilities)}
+    assert "git_metadata_writable" in fields_set, (
+        "BackendCapabilities must have a 'git_metadata_writable' field for "
+        "git_metadata_write.required_backend_property to be enforceable"
+    )
+
+
+def test_required_backend_property_is_optional_on_unrouted_capabilities():
+    """Caps without a hard property requirement must keep required_backend_property=None."""
+    for name in ("open_kitchen", "run_skill", "test_check", "claude_dir"):
+        cap = SKILL_CAPABILITY_REGISTRY[name]
+        assert cap.required_backend_property is None, (
+            f"{name}.required_backend_property must remain None (no hard property "
+            f"requirement), got {cap.required_backend_property!r}"
+        )
+
+
 def test_headless_tools_not_marked_not_applicable():
     from autoskillit.core.types._type_constants_registries import HEADLESS_TOOLS
 

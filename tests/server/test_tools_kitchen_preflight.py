@@ -111,6 +111,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None, f"Expected None, got: {result}"
 
@@ -129,6 +130,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None, f"Expected None for compatible backend, got: {result}"
 
@@ -147,6 +149,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is not None
         parsed = json.loads(result)
@@ -165,6 +168,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps={},
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None
 
@@ -182,6 +186,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None
 
@@ -200,6 +205,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is not None
         parsed = json.loads(result)
@@ -230,6 +236,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=providers_config,
+                skill_resolver=None,
             )
         assert result is None, f"Provider override should exclude step from check, got: {result}"
 
@@ -248,6 +255,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None
 
@@ -266,6 +274,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is not None
         parsed = json.loads(result)
@@ -288,6 +297,7 @@ class TestCheckDispatchFeasibilityUnit:
             active_recipe_steps=active_steps,
             backend=backend,
             config_providers=_DEFAULT_PROVIDERS,
+            skill_resolver=None,
         )
 
         has_unenforced = bool(

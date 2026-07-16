@@ -1,13 +1,16 @@
 """Tool registries, pack registries, tool-to-tag mappings, visibility tags.
 
-Zero autoskillit imports — except sibling _type_constants_env for backend name constants.
+Zero autoskillit imports — except sibling `_type_constants_env` for backend name constants,
+sibling `_type_enums` for `FleetErrorCode`, and sibling `_type_backend` for the
+`BackendCapabilities` boot-time field check.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Literal, NamedTuple
 
+from ._type_backend import BackendCapabilities
 from ._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
 from ._type_enums import FleetErrorCode
 
@@ -314,6 +317,18 @@ class SkillCapabilityDef:
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"]
     required_sandbox_overrides: frozenset[str] = frozenset()
     worker_routable: bool = False
+    # Name of a Boolean field on `BackendCapabilities` that must be True
+    # on the dispatch-target backend for this capability to be feasible.
+    # When set, `check_hard_capability_feasibility()` rejects the dispatch
+    # at both admission (`_check_dispatch_feasibility`) and dispatch-time
+    # (`_check_backend_compat`) gates if the backend's value is falsy —
+    # independent of explicit backend pinning (REQ-RES-001).
+    #
+    # The parallel `CAPABILITY_INGREDIENT_MAP` (in `_type_constants.py`)
+    # drives soft, recipe-level ingredient gating; this field drives hard,
+    # dispatch-level backend-property gating. Both registries must be kept
+    # in sync when adding a new hard capability.
+    required_backend_property: str | None = None
 
     @property
     def required_backends(self) -> frozenset[str]:
@@ -372,6 +387,7 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
         ),
         codex_status="not-applicable",
         worker_routable=True,
+        required_backend_property="git_metadata_writable",
     ),
     "github_api_write": SkillCapabilityDef(
         description=(
@@ -391,4 +407,18 @@ for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
             f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}].codex_status="
             f"{_cap_def.codex_status!r} is not valid. "
             f"Must be one of {sorted(_VALID_CODEX_STATUSES)}."
+        )
+
+# Boot-time validation: every `required_backend_property` must name a real
+# field on `BackendCapabilities`. Catches typos in the registry at import
+# time rather than at first dispatch.
+_BACKEND_CAPABILITIES_FIELDS = {f.name for f in fields(BackendCapabilities)}
+for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
+    if (
+        _cap_def.required_backend_property is not None
+        and _cap_def.required_backend_property not in _BACKEND_CAPABILITIES_FIELDS
+    ):
+        raise RuntimeError(
+            f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}].required_backend_property="
+            f"{_cap_def.required_backend_property!r} is not a field on BackendCapabilities."
         )

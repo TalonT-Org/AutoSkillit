@@ -309,6 +309,84 @@ def test_backend_compat_precedes_dispatch() -> None:
     )
 
 
+def test_direct_executor_callers_check_backend_compat() -> None:
+    """Every .executor.run() call outside run_skill must be preceded by a
+    _check_backend_compat call in the same enclosing function.
+
+    Mirrors the proven pattern from test_backend_compat_precedes_dispatch.
+    Scans tools_github.py (report_bug) and tools_issue_headless.py
+    (prepare_issue, enrich_issues) for direct executor.run() invocations
+    and verifies each is preceded by a _check_backend_compat call within
+    the same enclosing function. This is the structural guard for Defect 4
+    in the propagation-defect hardening plan.
+    """
+    target_files = [
+        SRC_ROOT / "server" / "tools" / "tools_github.py",
+        SRC_ROOT / "server" / "tools" / "tools_issue_headless.py",
+    ]
+
+    violations: list[str] = []
+
+    for py_file in target_files:
+        src = py_file.read_text()
+        tree = ast.parse(src)
+
+        # Walk top-level functions, then nested defs inside them, to get all
+        # enclosing functions (this matches the production scope at which
+        # tool_ctx.skill_resolver / tool_ctx.backend are in scope).
+        enclosing_funcs: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                enclosing_funcs.append(node)
+
+        # Only consider functions that call .executor.run() directly
+        for func_node in enclosing_funcs:
+            executor_run_linenos: list[int] = []
+            compat_lineno: int | None = None
+            for child in ast.walk(func_node):
+                if not isinstance(child, ast.Call):
+                    continue
+                call_func = child.func
+                is_executor_run = (
+                    isinstance(call_func, ast.Attribute)
+                    and call_func.attr == "run"
+                    and isinstance(call_func.value, ast.Attribute)
+                    and call_func.value.attr == "executor"
+                )
+                is_compat = (
+                    isinstance(call_func, ast.Name) and call_func.id == "_check_backend_compat"
+                )
+                if is_executor_run:
+                    executor_run_linenos.append(child.lineno)
+                if is_compat and compat_lineno is None:
+                    compat_lineno = child.lineno
+
+            if not executor_run_linenos:
+                continue
+            if compat_lineno is None:
+                rel = _rel(py_file)
+                for run_line in executor_run_linenos:
+                    violations.append(
+                        f"{rel}:{run_line} — function "
+                        f"{func_node.name!r} calls .executor.run() but has no "
+                        f"_check_backend_compat call"
+                    )
+                continue
+            for run_line in executor_run_linenos:
+                if run_line < compat_lineno:
+                    rel = _rel(py_file)
+                    violations.append(
+                        f"{rel}:{run_line} — .executor.run() in "
+                        f"{func_node.name!r} precedes _check_backend_compat "
+                        f"(line {compat_lineno})"
+                    )
+
+    assert not violations, (
+        "Direct executor callers must run _check_backend_compat before "
+        "executor.run():\n" + "\n".join(f"  {v}" for v in violations)
+    )
+
+
 def test_fleet_tools_call_require_fleet() -> None:
     """Every tool in FLEET_TOOLS (except batch_cleanup_clones) must call
     _require_fleet() before any non-guard await/return in its function body."""

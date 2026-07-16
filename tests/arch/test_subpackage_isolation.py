@@ -859,6 +859,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             (interpreter/wrapper detection) for all command-classifying guards.
             quota_guard_state_post_hook.py is a stdlib-only PostToolUse script that
             maintains the per-session quota-disable marker. Exempt at 15 files.
+            output_budget_guard.py is a standalone stdlib-only PreToolUse script that
+            enforces the output-budget protocol without importing package runtime code.
+            Exempt at 33 files.
           pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
             GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
             Exempt at 12 files.
@@ -885,7 +888,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
-        "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
+        "hooks/guards": 33,  # +output_budget_guard (REQ-CNST-003-E6)
         "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
     }
     violations: list[str] = []
@@ -951,13 +954,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
-    "_command_classification.py": (
-        1100,
+    "hooks/_command_classification.py": (
+        1500,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
-        "interpreter-write detection, protected-path reads, and recursive "
-        "payload segmentation for nested-shell verb-position enforcement; "
-        "stdlib-only stdlib boundary prevents splitting across modules.",
+        "interpreter-write detection, protected-path reads, recursive payload "
+        "segmentation, and descriptor-flow output-budget analysis; the stdlib-only "
+        "hook boundary and shared parser prevent policy drift across guard processes.",
     ),
     "session.py": (
         1060,
@@ -981,7 +984,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1540,
+        1560,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1013,9 +1016,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; _auto_init_pipeline_tracker tool_ctx param typed as ToolContext under "
         "TYPE_CHECKING instead of Any, matching _active_order_ids_for_kitchen's "
         "established pattern (+1 net line)"
+<<<<<<< HEAD
         "; serve_recipe backend_capabilities_map threading at get_recipe + deferred-recall + "
         "normal open_kitchen paths with safe _distinct_backends extraction from "
-        "_effective_backend_map and tool_ctx.backend.name (+28 net lines)",
+        "_effective_backend_map and tool_ctx.backend.name (+28 net lines)"
+        "; output-budget hook payload type, serializer, and hook-config bridge "
+        "(+21 net lines)",
     ),
     "tools_execution.py": (
         1600,

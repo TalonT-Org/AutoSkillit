@@ -1,8 +1,8 @@
-"""Regression tests for the quota_guard.py → .hook_config.json bridge.
+"""Regression tests for hook policy snapshots in ``.hook_config.json``.
 
-Tests the end-to-end path from _quota_guard_hook_payload serialization through
-.hook_config.json to resolve_quota_settings() consumption by quota_guard.py.
-No pytestmark — hooks/ is out of scope for layer markers.
+Tests quota and output-budget serialization across the server-to-stdlib hook
+boundary, including layered overlay behavior. No pytestmark — hooks/ is out of
+scope for layer markers.
 """
 
 from __future__ import annotations
@@ -205,6 +205,65 @@ def test_hook_config_quota_guard_keys_match_payload_keys(tmp_path):
 
     data = json.loads(hook_cfg.read_text())
     assert set(data["quota_guard"].keys()) == QUOTA_GUARD_HOOK_PAYLOAD_KEYS
+
+
+def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
+    """The server snapshot and stdlib consumer declare the same exact keys."""
+    from autoskillit.config import OutputBudgetConfig
+    from autoskillit.hooks._hook_settings import OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS
+    from autoskillit.server.tools.tools_kitchen import _output_budget_policy_hook_payload
+
+    payload = _output_budget_policy_hook_payload(
+        OutputBudgetConfig(
+            guard_enabled=False,
+            small_file_max_bytes=321,
+            shell_max_inline_bytes=654,
+        )
+    )
+
+    assert set(payload) == OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS
+    assert payload == {
+        "disabled": True,
+        "small_file_max_bytes": 321,
+        "shell_max_inline_bytes": 654,
+    }
+
+
+def test_output_budget_policy_overlay_overrides_snapshot(tmp_path):
+    """The project overlay is the highest-priority output-budget policy layer."""
+    from autoskillit.hooks._hook_settings import read_merged_hook_config
+
+    config_dir = tmp_path / ".autoskillit" / "temp"
+    config_dir.mkdir(parents=True)
+    (config_dir / ".hook_config.json").write_text(
+        json.dumps(
+            {
+                "output_budget_policy": {
+                    "disabled": False,
+                    "small_file_max_bytes": 5000,
+                    "shell_max_inline_bytes": 12000,
+                }
+            }
+        )
+    )
+    (config_dir / ".hook_config_overlay.json").write_text(
+        json.dumps(
+            {
+                "output_budget_policy": {
+                    "disabled": True,
+                    "small_file_max_bytes": 17,
+                }
+            }
+        )
+    )
+
+    policy = read_merged_hook_config(tmp_path)["output_budget_policy"]
+
+    assert policy == {
+        "disabled": True,
+        "small_file_max_bytes": 17,
+        "shell_max_inline_bytes": 12000,
+    }
 
 
 # T-BRIDGE-7

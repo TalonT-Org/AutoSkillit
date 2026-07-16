@@ -1,10 +1,9 @@
-"""Live Codex CLI conformance probes — CODEX_SMOKE_TEST-gated.
+"""Live backend CLI conformance probes — backend smoke-test gated.
 
-Wires real ``codex exec --json`` output through the shared
-``_conformance_assertions.py`` assertion helpers. Each probe checks
-``ProbeCache`` before invoking the CLI, delegates to assertion functions,
-discriminates OSError/TimeoutExpired (network) from AssertionError (schema),
-and records results via ``CanaryState`` + ``CanaryIssueUpdater``.
+Wires real CLI output through shared assertion helpers. Each probe checks
+``ProbeCache`` before invoking the CLI, delegates to assertion functions, and
+discriminates OSError/TimeoutExpired (network) from AssertionError (schema).
+The original Codex schema probes also record ``CanaryState`` issue updates.
 """
 
 from __future__ import annotations
@@ -13,9 +12,10 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Protocol, TypeVar
 
 import pytest
 
@@ -24,11 +24,13 @@ from autoskillit._probe_canary import (
     CanaryState,
     ErrorKind,
 )
+from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._probe_cache import (
     ProbeResult,
     read_probe_cache,
     write_probe_cache,
 )
+from autoskillit.hook_registry import generate_hooks_json
 from tests.execution.backends._conformance_assertions import (
     assert_config_schema,
     assert_hook_event_format,
@@ -72,6 +74,37 @@ class _CodexProbeOutput(NamedTuple):
     events: list[dict]
     config_dict: dict
     cli_version: str
+
+
+class _VersionedProbeOutput(Protocol):
+    cli_version: str
+
+
+_ProbeOutputT = TypeVar("_ProbeOutputT", bound=_VersionedProbeOutput)
+
+
+def _run_probe_with_discrimination(
+    probe_name: str,
+    cli_version: str,
+    probe_fn: Callable[[], _ProbeOutputT],
+    assertion_fn: Callable[[_ProbeOutputT], None],
+    *,
+    record_success: Callable[[str], None],
+    record_failure: Callable[[ErrorKind, str, str, str], None],
+) -> None:
+    """Run one live probe and distinguish transport failures from contract drift."""
+    try:
+        probe_output = probe_fn()
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        record_failure(ErrorKind.NETWORK, probe_name, cli_version, str(exc))
+        raise
+
+    try:
+        assertion_fn(probe_output)
+    except AssertionError as exc:
+        record_failure(ErrorKind.SCHEMA, probe_name, probe_output.cli_version, str(exc))
+        raise
+    record_success(probe_output.cli_version)
 
 
 def _get_codex_version() -> str:
@@ -200,16 +233,6 @@ class TestCodexLiveProbes:
             ),
         )
 
-    def _run_probe_with_discrimination(
-        self, probe_name: str, probe_output: _CodexProbeOutput, assertion_fn
-    ) -> None:
-        try:
-            assertion_fn(probe_output)
-            self._record_success(probe_output.cli_version)
-        except AssertionError as exc:
-            self._record_failure(ErrorKind.SCHEMA, probe_name, probe_output.cli_version, str(exc))
-            raise
-
     _cls_probe_output: _CodexProbeOutput | None = None
     _cls_probe_exc: BaseException | None = None
 
@@ -227,13 +250,6 @@ class TestCodexLiveProbes:
 
     def test_ndjson_event_vocabulary_conforms(self) -> None:
         self._check_cache()
-        try:
-            probe_output = self._get_probe_output()
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            self._record_failure(
-                ErrorKind.NETWORK, "ndjson_event_vocabulary", _get_codex_version(), str(exc)
-            )
-            raise
 
         def _assert(output: _CodexProbeOutput) -> None:
             assert_no_unknown_event_types(output.events)
@@ -241,41 +257,245 @@ class TestCodexLiveProbes:
             assert_turn_completed_usage_nonzero(output.events)
             assert_vocabulary_coverage(output.events, {"thread.started", "turn.completed"})
 
-        self._run_probe_with_discrimination("ndjson_event_vocabulary", probe_output, _assert)
+        _run_probe_with_discrimination(
+            "ndjson_event_vocabulary",
+            _get_codex_version(),
+            self._get_probe_output,
+            _assert,
+            record_success=self._record_success,
+            record_failure=self._record_failure,
+        )
 
     def test_hook_firing_codex_status(self) -> None:
         self._check_cache()
-        try:
-            probe_output = self._get_probe_output()
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            self._record_failure(
-                ErrorKind.NETWORK, "hook_firing_codex_status", _get_codex_version(), str(exc)
-            )
-            raise
 
         def _assert(output: _CodexProbeOutput) -> None:
             if not output.config_dict:
                 pytest.skip("No session_configuration event in NDJSON output")
             assert_hook_event_format(output.config_dict)
 
-        self._run_probe_with_discrimination("hook_firing_codex_status", probe_output, _assert)
+        _run_probe_with_discrimination(
+            "hook_firing_codex_status",
+            _get_codex_version(),
+            self._get_probe_output,
+            _assert,
+            record_success=self._record_success,
+            record_failure=self._record_failure,
+        )
 
     def test_config_acceptance(self) -> None:
         self._check_cache()
-        try:
-            probe_output = self._get_probe_output()
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            self._record_failure(
-                ErrorKind.NETWORK, "config_acceptance", _get_codex_version(), str(exc)
-            )
-            raise
 
         def _assert(output: _CodexProbeOutput) -> None:
             if not output.config_dict:
                 pytest.skip("No session_configuration event in NDJSON output")
             assert_config_schema(output.config_dict, output.cli_version)
 
-        self._run_probe_with_discrimination("config_acceptance", probe_output, _assert)
+        _run_probe_with_discrimination(
+            "config_acceptance",
+            _get_codex_version(),
+            self._get_probe_output,
+            _assert,
+            record_success=self._record_success,
+            record_failure=self._record_failure,
+        )
+
+
+_OUTPUT_BUDGET_CANARY_COMMAND = "rg -n output_budget_probe ."
+_OUTPUT_BUDGET_CANARY_PROMPT = (
+    "This is a hook conformance probe. Use the shell tool exactly once to run "
+    f"`{_OUTPUT_BUDGET_CANARY_COMMAND}` without changing or bounding it. "
+    "After the tool is denied, repeat the complete denial reason verbatim and stop. "
+    "Do not run any other tool."
+)
+
+_skip_unless_codex_output_budget_smoke = pytest.mark.skipif(
+    not os.environ.get("CODEX_SMOKE_TEST")
+    or not shutil.which("codex")
+    or (not os.environ.get("CODEX_API_KEY") and not os.environ.get("OPENAI_API_KEY")),
+    reason=(
+        "Set CODEX_SMOKE_TEST=1 and CODEX_API_KEY or OPENAI_API_KEY to run the "
+        "isolated Codex output-budget hook probe"
+    ),
+)
+
+_skip_unless_claude_output_budget_smoke = pytest.mark.skipif(
+    not os.environ.get("CLAUDE_CODE_SMOKE_TEST")
+    or not shutil.which("claude")
+    or (not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")),
+    reason=(
+        "Set CLAUDE_CODE_SMOKE_TEST=1 and an environment-provided Claude credential "
+        "to run the isolated Claude Code output-budget hook probe"
+    ),
+)
+
+
+class _DenyRoundTripOutput(NamedTuple):
+    transcript: str
+    cli_version: str
+
+
+def _isolated_cli_env(tmp_path: Path, workspace: Path) -> tuple[dict[str, str], Path, Path]:
+    home = tmp_path / "home"
+    codex_home = tmp_path / "codex-home"
+    claude_config = tmp_path / "claude-config"
+    for directory in (home, codex_home, claude_config):
+        directory.mkdir(parents=True)
+
+    env = dict(os.environ)
+    env.update(
+        {
+            "HOME": str(home),
+            "CODEX_HOME": str(codex_home),
+            "CLAUDE_CONFIG_DIR": str(claude_config),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "XDG_DATA_HOME": str(home / ".local" / "share"),
+            "AUTOSKILLIT_CWD": str(workspace),
+            "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES": str(workspace),
+        }
+    )
+    return env, codex_home, claude_config
+
+
+def _cli_version(binary: str, env: dict[str, str]) -> str:
+    try:
+        result = subprocess.run(  # noqa: S603
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+        return result.stdout.strip() or result.stderr.strip() or "unknown"
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+
+
+def _run_output_budget_deny_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutput:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    env, codex_home, claude_config = _isolated_cli_env(tmp_path, workspace)
+
+    if backend == "codex":
+        config_path = codex_home / "config.toml"
+        sync_hooks_to_codex_config(config_path=config_path)
+        init_result = subprocess.run(  # noqa: S603
+            ["git", "init", "-q"],
+            cwd=workspace,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if init_result.returncode != 0:
+            raise OSError(f"isolated git init failed: {init_result.stderr}")
+        command = [
+            "codex",
+            "exec",
+            "--json",
+            "--sandbox",
+            "workspace-write",
+            _OUTPUT_BUDGET_CANARY_PROMPT,
+        ]
+    elif backend == "claude-code":
+        settings_path = claude_config / "settings.json"
+        settings_path.write_text(
+            json.dumps(generate_hooks_json(), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        command = [
+            "claude",
+            "-p",
+            _OUTPUT_BUDGET_CANARY_PROMPT,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--dangerously-skip-permissions",
+            "--tools",
+            "Bash",
+        ]
+    else:  # pragma: no cover - callers pass a sealed backend literal
+        raise ValueError(f"unsupported probe backend: {backend}")
+
+    timeout = int(os.environ.get("OUTPUT_BUDGET_HOOK_SMOKE_TIMEOUT", "120"))
+    result = subprocess.run(  # noqa: S603
+        command,
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    transcript = result.stdout + "\n" + result.stderr
+    if result.returncode != 0:
+        raise OSError(f"{backend} deny probe failed with rc={result.returncode}: {transcript}")
+    return _DenyRoundTripOutput(
+        transcript=transcript,
+        cli_version=_cli_version(command[0], env),
+    )
+
+
+def _assert_output_budget_deny_round_trip(output: _DenyRoundTripOutput) -> None:
+    assert _OUTPUT_BUDGET_CANARY_COMMAND in output.transcript
+    assert "rg -l" in output.transcript
+    assert "head -c 4000" in output.transcript
+    assert ".autoskillit/temp/" in output.transcript
+
+
+def _exercise_output_budget_deny_probe(backend: str, tmp_path: Path) -> None:
+    workspace = tmp_path / "version-workspace"
+    workspace.mkdir()
+    version_env, _, _ = _isolated_cli_env(tmp_path / "version-env", workspace)
+    binary = "codex" if backend == "codex" else "claude"
+    cli_version = _cli_version(binary, version_env)
+    cache_path = tmp_path / f"{backend}-output-budget-probe-cache.json"
+    cached = read_probe_cache(cache_path, cli_version)
+    if cached is not None and cached.passed:
+        pytest.skip(f"Output-budget deny probe cached as passed for {cli_version}")
+
+    def _record(passed: bool, version: str, detail: str | None) -> None:
+        write_probe_cache(
+            cache_path,
+            ProbeResult(
+                cli_version=version,
+                passed=passed,
+                failure_detail=detail,
+                probe_timestamp=datetime.now(UTC).isoformat(),
+            ),
+        )
+
+    def _record_success(version: str) -> None:
+        _record(True, version, None)
+
+    def _record_failure(
+        kind: ErrorKind,
+        probe_name: str,
+        version: str,
+        detail: str,
+    ) -> None:
+        _record(False, version, f"{kind.value}:{probe_name}:{detail}")
+
+    _run_probe_with_discrimination(
+        f"output_budget_deny_round_trip_{backend}",
+        cli_version,
+        lambda: _run_output_budget_deny_probe(backend, tmp_path / "round-trip"),
+        _assert_output_budget_deny_round_trip,
+        record_success=_record_success,
+        record_failure=_record_failure,
+    )
+
+
+@_skip_unless_codex_output_budget_smoke
+class TestCodexOutputBudgetDenyRoundTrip:
+    def test_hook_fires_and_reason_reaches_model(self, tmp_path: Path) -> None:
+        _exercise_output_budget_deny_probe("codex", tmp_path)
+
+
+@_skip_unless_claude_output_budget_smoke
+class TestClaudeCodeOutputBudgetDenyRoundTrip:
+    def test_hook_fires_and_reason_reaches_model(self, tmp_path: Path) -> None:
+        _exercise_output_budget_deny_probe("claude-code", tmp_path)
 
 
 @_skip_unless_claude_code_smoke

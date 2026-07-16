@@ -60,32 +60,35 @@ Friction is any pattern where repeated effort yields no progress:
 
 ## Friction Signal Patterns
 
-Logs are too large to read in full. All analysis uses targeted grep commands to surface signal lines, then reads only the surrounding context (a few lines via `-A`/`-B`) to confirm the event. Use this keyword battery against each file:
+Logs are too large to read in full. All analysis uses targeted search commands to surface signal lines, then reads only the surrounding context (a few lines via `-A`/`-B`) to confirm the event. Use this keyword battery against each file:
 
 ```bash
 # Tool errors — direct flag
-grep -n '"is_error".*true' FILE | head -100
+rg -n -M 500 '"is_error".*true' FILE 2>&1 | head -c 12000
 
 # Error keywords in content
-rg -i '"not found|permission denied|no such file|command not found|ENOENT|"failed|"cannot|"error"|exit code [1-9]|Traceback|AssertionError' FILE | head -200
+rg -i -M 500 '"not found|permission denied|no such file|command not found|ENOENT|"failed|"cannot|"error"|exit code [1-9]|Traceback|AssertionError' FILE 2>&1 | head -c 12000
 
 # Human correction language (look inside "type":"human" lines)
-rg -n '"type":"human"' FILE | rg -i 'wrong|"no,|try again|you already|that.s not|incorrect|revert|undo|stop' | head -50
+rg -n -M 500 '"type":"human"' FILE 2>&1 | rg -i 'wrong|"no,|try again|you already|that.s not|incorrect|revert|undo|stop' 2>&1 | head -c 12000
 
 # Test / build failures
-rg -i 'FAILED|test.*failed|build.*failed|compile.*error|syntax error' FILE | head -100
+rg -i -M 500 'FAILED|test.*failed|build.*failed|compile.*error|syntax error' FILE 2>&1 | head -c 12000
 
 # Consecutive tool call loops — extract tool names in document order, show runs of 2+ back-to-back
-grep -o '"name":"[^"]*"' FILE | awk -F'"' '{print $4}' | uniq -c | awk '$1>=2' | head -30
+rg -o -M 500 '"name":"[^"]*"' FILE 2>&1 | awk -F'"' '{print $4}' 2>&1 | uniq -c 2>&1 | awk '$1>=2' 2>&1 | head -c 12000
 
 # Once you know which tool is looping, get its line numbers to find the range:
-grep -n '"name":"TOOL_NAME"' FILE | head -30
+rg -n -M 500 '"name":"TOOL_NAME"' FILE 2>&1 | head -c 12000
 
 # Permission / access blockers
-rg -i 'permission denied|access denied|not allowed|forbidden' FILE | head -50
+rg -i -M 500 'permission denied|access denied|not allowed|forbidden' FILE 2>&1 | head -c 12000
+
+# Confirm a match with bounded surrounding context
+rg -n -M 500 -A 10 -B 10 'CONFIRMING_PATTERN' FILE 2>&1 | head -c 12000
 ```
 
-For each match batch, pull context (`-A 10 -B 10`) to confirm it is a real friction event rather than incidental text, then record the line range and category.
+For each match batch, use the bounded `-A 10 -B 10` command above to confirm it is a real friction event rather than incidental text, then record the line range and category.
 
 ## Workflow
 
@@ -163,7 +166,7 @@ After all Haiku agents return, group all indicators by category. Dispatch **Sonn
 Each Sonnet subagent should:
 
 - Receive the list of `(file, line_start, line_end)` pointers for its assigned category
-- Read those specific line ranges to confirm or reclassify each indicator (Haiku may misfire on edge cases)
+- Read those specific line ranges with the bounded `rg -n -M 500 -A 10 -B 10 ... 2>&1 | head -c 12000` form to confirm or reclassify each indicator (Haiku may misfire on edge cases)
 - Expand the line range further if context is insufficient to understand the event
 - For confirmed instances: extract session date, the specific sequence of events, and what was blocking progress
 - Count confirmed occurrences and distinct sessions affected

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
-    from autoskillit.config.settings import QuotaGuardConfig
+    from autoskillit.config.settings import OutputBudgetConfig, QuotaGuardConfig
     from autoskillit.pipeline import ToolContext
 
 from fastmcp import Context
@@ -202,6 +202,12 @@ class QuotaGuardHookPayload(TypedDict):
     disabled: bool
 
 
+class OutputBudgetPolicyHookPayload(TypedDict):
+    disabled: bool
+    small_file_max_bytes: int
+    shell_max_inline_bytes: int
+
+
 def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     """Return the quota_guard section of .hook_config.json for a given config.
 
@@ -219,18 +225,33 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     }
 
 
-def _write_hook_config() -> None:
-    """Write user-configured quota values to .autoskillit/temp/.hook_config.json.
+def _output_budget_policy_hook_payload(
+    cfg: OutputBudgetConfig,
+) -> OutputBudgetPolicyHookPayload:
+    """Return the output-budget guard section of ``.hook_config.json``.
 
-    The hook subprocess (quota_guard.py) reads this file to apply user settings
-    without importing the autoskillit package.
+    Keep these keys in sync with ``OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS``
+    in the stdlib-only hook settings bridge.
+    """
+    return {
+        "disabled": not cfg.guard_enabled,
+        "small_file_max_bytes": cfg.small_file_max_bytes,
+        "shell_max_inline_bytes": cfg.shell_max_inline_bytes,
+    }
+
+
+def _write_hook_config() -> None:
+    """Write hook policy snapshots to .autoskillit/temp/.hook_config.json.
+
+    Hook subprocesses read this file to apply user settings without importing
+    the autoskillit package.
     """
     from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
-    cfg = ctx.config.quota_guard
     payload = {
-        "quota_guard": _quota_guard_hook_payload(cfg),
+        "quota_guard": _quota_guard_hook_payload(ctx.config.quota_guard),
+        "output_budget_policy": _output_budget_policy_hook_payload(ctx.config.output_budget),
         "kitchen_id": ctx.kitchen_id,
         "git_ops_policy": {},
     }

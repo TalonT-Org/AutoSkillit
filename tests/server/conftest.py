@@ -115,11 +115,14 @@ def assert_no_timing(timing_log: DefaultTimingLog) -> None:
 
 def _make_mock_ctx() -> MagicMock:
     """Return a minimal mock ToolContext with a gate."""
+    from autoskillit.config import OutputBudgetConfig
+
     gate = MagicMock()
     gate.enabled = False
     ctx = MagicMock()
     ctx.gate = gate
     ctx.project_dir = Path("/fake/project")
+    ctx.config.output_budget = OutputBudgetConfig()
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
     ctx.active_recipe_ingredients = None
     ctx.gate_infrastructure_ready = False

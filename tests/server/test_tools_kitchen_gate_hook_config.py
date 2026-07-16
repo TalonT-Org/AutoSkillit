@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.config.settings import QuotaGuardConfig
+from autoskillit.config.settings import OutputBudgetConfig, QuotaGuardConfig
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
 from tests.server.conftest import _make_mock_ctx
@@ -135,6 +135,39 @@ async def test_open_kitchen_bridges_enabled_flag_as_disabled(
     assert data["quota_guard"]["disabled"] is expected_disabled, (
         f"enabled={enabled} must produce disabled={expected_disabled} in hook config"
     )
+
+
+@pytest.mark.parametrize("guard_enabled,expected_disabled", [(True, False), (False, True)])
+@pytest.mark.anyio
+async def test_open_kitchen_bridges_output_budget_policy(
+    tmp_path, monkeypatch, guard_enabled, expected_disabled
+):
+    """The stdlib guard receives the configured disable flag and numeric bounds."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.config.quota_guard = QuotaGuardConfig()
+    mock_ctx.config.output_budget = OutputBudgetConfig(
+        guard_enabled=guard_enabled,
+        small_file_max_bytes=4321,
+        shell_max_inline_bytes=8765,
+    )
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
+
+                await _open_kitchen_handler()
+
+    data = json.loads(tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS).read_text())
+    assert data["output_budget_policy"] == {
+        "disabled": expected_disabled,
+        "small_file_max_bytes": 4321,
+        "shell_max_inline_bytes": 8765,
+    }
 
 
 # T-CACHE-3

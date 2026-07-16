@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "098b3c2938aefd3ed36b0a204b698a10b7ca75ac8ae45d05a5b0053a963969b4",
+  "_registry_hash": "8d81e614712cca43c4ceb2ed0635ace210a5055687a19437806504115b93d46c",
   "hooks": {
     "PostToolUse": [
       {
@@ -184,6 +184,11 @@
           },
           {
             "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/test_runner_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/output_budget_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }

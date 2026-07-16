@@ -162,7 +162,7 @@ def _coerce_scalar(val: object, annotation: object) -> object:
             actual = non_none[0]
     # Unwrap Optional[X] / Union[X, None] (typing.Union with __origin__)
     elif hasattr(annotation, "__origin__") and hasattr(annotation, "__args__"):
-        ann: typing.Any = annotation  # type: ignore[name-defined]
+        ann: typing.Any = annotation
         origin = ann.__origin__
         args = ann.__args__
         if origin is typing.Union:

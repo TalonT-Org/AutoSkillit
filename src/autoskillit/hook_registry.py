@@ -64,6 +64,7 @@ class HookDef:
 # artifact_download_guard                | works-as-is
 # git_ops_guard                          | works-as-is
 # test_runner_guard                      | works-as-is
+# output_budget_guard                    | works-as-is
 # generated_file_write_guard             | works-as-is
 # write_guard                            | works-as-is
 # planner_result_naming_guard            | works-as-is
@@ -197,6 +198,15 @@ HOOK_REGISTRY: list[HookDef] = [
         # Must stay in sync with _EXEMPT_SKILLS in guards/test_runner_guard.py —
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_skills=frozenset({"implement-experiment"}),
+        mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+    ),
+    HookDef(
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
+        scripts=["guards/output_budget_guard.py"],
+        session_scope="any",
+        exempt_skills=frozenset(),
+        codex_status="works-as-is",
         mechanism="deny",
         enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
@@ -413,6 +423,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "git_ops_guard.py",
         "compose_pr_body_guard.py",
         "test_runner_guard.py",
+        "output_budget_guard.py",
         "fleet_claim_guard.py",
         "reset_resume_gate.py",
         "recipe_read_guard.py",

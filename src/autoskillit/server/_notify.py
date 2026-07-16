@@ -18,10 +18,12 @@ from autoskillit.server._response_budget import enforce_response_budget
 if TYPE_CHECKING:
     from fastmcp import Context
 
+    from autoskillit.pipeline import ToolContext
+
 logger = get_logger(__name__)
 
 
-def _get_ctx_or_none():  # type: ignore[return]
+def _get_ctx_or_none() -> ToolContext | None:
     from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn  # circular-break
 
     return _ctx_none_fn()

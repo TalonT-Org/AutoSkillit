@@ -15,6 +15,7 @@ from tests.fixtures.codex import (
     CODEX_SCHEMA_VERSION,
     HAPPY_PATH_SINGLE_TURN,
     HAPPY_PATH_V0136,
+    LARGE_EMBEDDED_PAYLOAD_V1,
     MARKER_DETECTION_V0136,
     MULTI_TURN_WITH_COMPACTION,
     SESSION_WITH_MCP_TOOL_CALL,
@@ -58,7 +59,17 @@ class TestCodexFixturePackage:
             assert fixture_path(name).is_file()
 
     def test_all_exports_count(self) -> None:
-        assert len(CODEX_ALL) == 10
+        assert len(CODEX_ALL) == 11
+
+    def test_large_embedded_payload_is_realistic_jsonl_data(self) -> None:
+        path = fixture_path(LARGE_EMBEDDED_PAYLOAD_V1)
+        assert path.stat().st_size >= 120_000
+        lines = path.read_text().splitlines()
+        assert len(lines) == 1
+        record = json.loads(lines[0])
+        assert record["kind"] == "large_embedded_payload"
+        assert isinstance(record["payload"], str)
+        assert len(record["payload"]) >= 120_000
 
 
 class TestCodexFixtureValidity:

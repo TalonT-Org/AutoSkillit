@@ -41,7 +41,6 @@ from autoskillit.core import (
     is_git_worktree,
     parse_plan_paths,
     resolve_target_skill,
-    truncate_text,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
@@ -77,9 +76,13 @@ from autoskillit.server.tools._backend_compat import (
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
+    clear_run_skill_state,
     maybe_promote_work_dir,
+    persist_run_skill_state,
     propagate_session_deadline,
     resolve_relative_path_args,
+    shape_execution_response,
+    spill_run_cmd_result,
     validate_path_arg_anchoring,
 )
 from autoskillit.server.tools._preflight import (
@@ -401,12 +404,13 @@ async def run_cmd(
                     timeout=float(timeout),
                     env=_env,
                 )
-                result = {
-                    "success": returncode == 0,
-                    "exit_code": returncode,
-                    "stdout": truncate_text(stdout),
-                    "stderr": truncate_text(stderr),
-                }
+                result = spill_run_cmd_result(
+                    tool_ctx,
+                    cwd=cwd,
+                    returncode=returncode,
+                    stdout=stdout,
+                    stderr=stderr,
+                )
                 if not result["success"]:
                     await _notify(
                         ctx,
@@ -467,6 +471,9 @@ async def run_python(
     if (gate := _check_recipe_read_prohibition(callable_name=callable)) is not None:
         return gate
     try:
+        from autoskillit.server import _get_ctx  # circular-break
+
+        tool_ctx = _get_ctx()
         with structlog.contextvars.bound_contextvars(tool="run_python"):
             logger.info("run_python", callable=callable, timeout=timeout)
             await _notify(
@@ -506,22 +513,15 @@ async def run_python(
                     "autoskillit.run_python",
                     extra={"callable": callable},
                 )
-            return json.dumps(result)
+            return shape_execution_response(
+                tool_ctx,
+                result,
+                tool_name="run_python",
+                work_dir=work_dir,
+            )
     except Exception as exc:
         logger.error("run_python unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
-
-
-def _persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
-    from autoskillit.server._misc import persist_run_skill_state  # circular-break
-
-    persist_run_skill_state(skill_result, project_dir)
-
-
-def _clear_run_skill_state(project_dir: Path) -> None:
-    from autoskillit.server._misc import clear_run_skill_state  # circular-break
-
-    clear_run_skill_state(project_dir)
 
 
 def _compute_write_prefixes(
@@ -1389,7 +1389,7 @@ async def run_skill(
                     ).to_json()
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)
-                    _clear_run_skill_state(tool_ctx.project_dir)
+                    clear_run_skill_state(tool_ctx.project_dir)
                 else:
                     await _notify(
                         ctx,
@@ -1401,7 +1401,7 @@ async def run_skill(
                             "subtype": skill_result.subtype,
                         },
                     )
-                    _persist_run_skill_state(skill_result, tool_ctx.project_dir)
+                    persist_run_skill_state(skill_result, tool_ctx.project_dir)
                 if effective_order_id:
                     skill_result.order_id = effective_order_id
                 from autoskillit.server._misc import (  # circular-break
@@ -1440,7 +1440,12 @@ async def run_skill(
                             retriable=True,
                         )
                     )
-                return _json_str
+                return shape_execution_response(
+                    tool_ctx,
+                    _parsed,
+                    tool_name="run_skill",
+                    work_dir=cwd,
+                )
             except Exception as exc:
                 logger.error("run_skill executor raised unexpectedly", exc_info=True)
                 return SkillResult.crashed(

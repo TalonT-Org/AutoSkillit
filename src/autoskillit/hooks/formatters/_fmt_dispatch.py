@@ -3,9 +3,8 @@
 Hosts the per-tool formatter for ``dispatch_food_truck``. Stdlib-only at runtime.
 
 This module is split from ``_fmt_execution.py`` to keep the file size budget
-(REQ-FILE-001) below the 329-line ceiling. The dispatch envelope contains
-nested structured data (l3_payload with dispatch_plan, health_report,
-resume_checkpoint) that must NOT be size-truncated.
+(REQ-FILE-001) below the 329-line ceiling. Artifact-backed response projections
+retain a bounded nested view while the central formatter exposes the full path.
 """
 
 from __future__ import annotations
@@ -24,9 +23,8 @@ def _fmt_dispatch_food_truck(data: dict, _pipeline: bool) -> str:
 
     Renders both success (DispatchCompleted) and error (DispatchRejected /
     fleet_error) response shapes — discriminates on ``data.get("kind")``.
-    Nested structured fields (l3_payload, health_report, token_usage,
-    resume_checkpoint) are rendered in full without size-based truncation
-    to preserve dispatch_plan visibility for downstream orchestrators.
+    Nested structured fields are rendered from the inline projection. The
+    central spill notice exposes the full response artifact when present.
     """
     success = data.get("success", False)
     mark = _CHECK_MARK if success else _CROSS_MARK

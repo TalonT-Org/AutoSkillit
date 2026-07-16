@@ -26,7 +26,6 @@ from autoskillit.core import (
     WriteEvidence,
     extract_skill_name,
     get_logger,
-    truncate_text,
     validate_worktree_path,
 )
 from autoskillit.execution.headless._headless_evidence import (
@@ -71,7 +70,6 @@ if TYPE_CHECKING:
     from autoskillit.core import AuditLog, CodingAgentBackend, SubprocessResult
 
 logger = get_logger(__name__)
-_truncate = truncate_text
 
 __all__ = [
     "_build_skill_result",
@@ -243,7 +241,7 @@ def _build_skill_result(
                     result=result,
                     session=stale_session,
                     success=True,
-                    result_text=_truncate(stale_session.agent_result),
+                    result_text=stale_session.agent_result,
                     subtype="recovered_from_stale",
                     needs_retry=False,
                     retry_reason=RetryReason.NONE,
@@ -350,7 +348,7 @@ def _build_skill_result(
                     result=result,
                     session=idle_session,
                     success=True,
-                    result_text=_truncate(idle_session.agent_result),
+                    result_text=idle_session.agent_result,
                     subtype="recovered_from_idle_stall",
                     needs_retry=False,
                     retry_reason=RetryReason.NONE,
@@ -698,7 +696,7 @@ def _build_skill_result(
             audit=audit,
         )
 
-    result_text = _truncate(session.agent_result)
+    result_text = session.agent_result
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
@@ -790,7 +788,7 @@ def _build_skill_result(
         exit_code=returncode,
         needs_retry=needs_retry,
         retry_reason=retry_reason,
-        stderr=_truncate(result.stderr),
+        stderr=result.stderr,
         token_usage=session.token_usage,
         worktree_path=effective_worktree_path,
         branch_name=extracted_branch_name,

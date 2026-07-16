@@ -342,6 +342,24 @@ class McpResponseConfig:
 
 
 @dataclass
+class OutputBudgetConfig:
+    """Model-context output limits.
+
+    ``*_chars`` values bound human-readable previews. ``response_max_bytes``
+    bounds the compact serialized handler payload; it is neither a tokenizer
+    estimate nor a JSON-RPC envelope limit.
+    """
+
+    inline_max_chars: int = 5000
+    head_chars: int = 2500
+    tail_chars: int = 2500
+    response_max_bytes: int = 90_000
+    guard_enabled: bool = True
+    small_file_max_bytes: int = 5000
+    shell_max_inline_bytes: int = 12_000
+
+
+@dataclass
 class BranchingConfig:
     default_base_branch: str = "main"
     promotion_target: str = "main"  # Canonical upstream default for staged-label comparison.

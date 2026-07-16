@@ -60,6 +60,7 @@ from .io import read_versioned_json as read_versioned_json
 from .io import resolve_skill_temp_dir as resolve_skill_temp_dir
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import safe_upsert_section as safe_upsert_section
+from .io import spill_output as spill_output
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_versioned_json as write_versioned_json
 from .logging import configure_logging as configure_logging
@@ -354,6 +355,8 @@ from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSource as SkillSource
+from .types import SpilledOutput as SpilledOutput
+from .types import SpillSpec as SpillSpec
 from .types import StreamParser as StreamParser
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner

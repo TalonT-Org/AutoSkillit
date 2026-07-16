@@ -9,13 +9,95 @@ import time
 import types
 import typing
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, get_logger
+from autoskillit.core import (
+    RUN_PYTHON_SENTINEL_KEYS,
+    SpillSpec,
+    get_logger,
+    resolve_temp_dir,
+    spill_output,
+)
 from autoskillit.server._misc import _hook_config_overlay_path
+from autoskillit.server._response_budget import shape_json_response
 
 logger = get_logger(__name__)
 
+if TYPE_CHECKING:
+    from autoskillit.core import SkillResult
+    from autoskillit.pipeline import ToolContext
+
 _PATH_LIKE_ARGS: frozenset[str] = frozenset({"output_dir", "workspace", "diagnostics_log_dir"})
+
+
+def persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
+    from autoskillit.server._misc import persist_run_skill_state as persist  # circular-break
+
+    persist(skill_result, project_dir)
+
+
+def clear_run_skill_state(project_dir: Path) -> None:
+    from autoskillit.server._misc import clear_run_skill_state as clear  # circular-break
+
+    clear(project_dir)
+
+
+def _spill_spec(tool_ctx: ToolContext) -> SpillSpec:
+    budget = tool_ctx.config.output_budget
+    return SpillSpec(
+        inline_max_chars=budget.inline_max_chars,
+        head_chars=budget.head_chars,
+        tail_chars=budget.tail_chars,
+    )
+
+
+def spill_run_cmd_result(
+    tool_ctx: ToolContext,
+    *,
+    cwd: str,
+    returncode: int,
+    stdout: str,
+    stderr: str,
+) -> dict[str, object]:
+    artifact_root = (
+        resolve_temp_dir(Path(cwd), tool_ctx.config.workspace.temp_dir) / "run_cmd"
+        if cwd and Path(cwd).is_absolute()
+        else tool_ctx.temp_dir / "run_cmd"
+    )
+    spec = _spill_spec(tool_ctx)
+    shaped_stdout = spill_output(stdout, artifact_root, "stdout", spec)
+    shaped_stderr = spill_output(stderr, artifact_root, "stderr", spec)
+    result: dict[str, object] = {
+        "success": returncode == 0,
+        "exit_code": returncode,
+        "stdout": shaped_stdout.text,
+        "stderr": shaped_stderr.text,
+    }
+    if shaped_stdout.artifact_path is not None:
+        result["stdout_artifact_path"] = shaped_stdout.artifact_path
+    if shaped_stderr.artifact_path is not None:
+        result["stderr_artifact_path"] = shaped_stderr.artifact_path
+    return result
+
+
+def shape_execution_response(
+    tool_ctx: ToolContext,
+    payload: dict[str, typing.Any],
+    *,
+    tool_name: str,
+    work_dir: str,
+) -> str:
+    artifact_root = (
+        resolve_temp_dir(Path(work_dir), tool_ctx.config.workspace.temp_dir) / tool_name
+        if work_dir and Path(work_dir).is_absolute()
+        else tool_ctx.temp_dir / tool_name
+    )
+    return shape_json_response(
+        payload,
+        tool_name=tool_name,
+        artifact_dir=artifact_root,
+        config=tool_ctx.config.output_budget,
+    )
 
 
 def validate_path_arg_anchoring(args: dict[str, object] | None, work_dir: str) -> str | None:

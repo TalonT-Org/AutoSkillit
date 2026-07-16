@@ -5,6 +5,7 @@ from __future__ import annotations
 from _fmt_primitives import (  # type: ignore[import-not-found]
     _CHECK_MARK,
     _CROSS_MARK,
+    _filter_pytest_output,
     _fmt_tokens,
 )
 
@@ -122,9 +123,13 @@ def _fmt_run_cmd(data: dict, pipeline: bool) -> str:
         stdout = (data.get("stdout") or "").strip()
         if stdout:
             lines.extend(["", "### stdout", stdout])
+        if data.get("stdout_artifact_path"):
+            lines.append(f"stdout_artifact_path: {data['stdout_artifact_path']}")
         stderr = (data.get("stderr") or "").strip()
         if stderr:
             lines.extend(["", "### stderr", stderr])
+        if data.get("stderr_artifact_path"):
+            lines.append(f"stderr_artifact_path: {data['stderr_artifact_path']}")
         return "\n".join(lines)
 
     lines = [
@@ -136,34 +141,14 @@ def _fmt_run_cmd(data: dict, pipeline: bool) -> str:
     stdout = (data.get("stdout") or "").strip()
     if stdout:
         lines.extend(["", "### stdout", stdout])
+    if data.get("stdout_artifact_path"):
+        lines.append(f"stdout_artifact_path: {data['stdout_artifact_path']}")
     stderr = (data.get("stderr") or "").strip()
     if stderr:
         lines.extend(["", "### stderr", stderr])
+    if data.get("stderr_artifact_path"):
+        lines.append(f"stderr_artifact_path: {data['stderr_artifact_path']}")
     return "\n".join(lines)
-
-
-def _filter_pytest_output(raw: str) -> str:
-    """Filter pytest boilerplate, keeping only failure-relevant lines."""
-    boilerplate_prefixes = (
-        "platform ",
-        "rootdir:",
-        "configfile:",
-        "plugins:",
-        "collecting ",
-        "collected ",
-        "cacheprovider",
-    )
-    boilerplate_exact = {"", " "}
-    lines = raw.splitlines()
-    filtered = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped in boilerplate_exact:
-            continue
-        if any(stripped.startswith(p) for p in boilerplate_prefixes):
-            continue
-        filtered.append(line)
-    return "\n".join(filtered)
 
 
 def _fmt_test_check(data: dict, _pipeline: bool) -> str:
@@ -200,6 +185,8 @@ def _fmt_test_check(data: dict, _pipeline: bool) -> str:
     error = data.get("error", "")
     if error:
         lines.extend(["", f"error: {error}"])
+    if data.get("raw_output_artifact_path"):
+        lines.append(f"raw_output_artifact_path: {data['raw_output_artifact_path']}")
     return "\n".join(lines)
 
 
@@ -247,7 +234,16 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
     }
 )
 
-_FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset({"success", "exit_code", "stdout", "stderr"})
+_FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset(
+    {
+        "success",
+        "exit_code",
+        "stdout",
+        "stderr",
+        "stdout_artifact_path",
+        "stderr_artifact_path",
+    }
+)
 _FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset({"error"})
 
 _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
@@ -262,6 +258,7 @@ _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
         "stderr",
         "error",
         "infrastructure_missing",
+        "raw_output_artifact_path",
     }
 )
 _FMT_TEST_CHECK_SUPPRESSED: frozenset[str] = frozenset()
@@ -324,6 +321,7 @@ _FMT_MERGE_WORKTREE_RENDERED: frozenset[str] = frozenset(
         "local_sha",
         "remote_sha",
         "remote_is_ancestor",
+        "raw_output_artifact_path",
     }
 )
 _FMT_MERGE_WORKTREE_SUPPRESSED: frozenset[str] = frozenset()

@@ -215,8 +215,10 @@ class TestMergeWorktreeNoBypass:
         assert "test_summary" not in result
 
     @pytest.mark.anyio
-    async def test_gate_failure_truncates_large_output(self, tool_ctx_kitchen_open, tmp_path):
-        """merge_worktree truncates test_stdout and test_stderr in failure response."""
+    async def test_gate_failure_spills_large_output_losslessly(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        """merge_worktree bounds previews and preserves exact raw output in an artifact."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
@@ -234,5 +236,8 @@ class TestMergeWorktreeNoBypass:
         )  # test-check
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
-        assert len(result["test_stdout"]) <= 5100
-        assert len(result["test_stderr"]) <= 5100
+        artifact = Path(result["raw_output_artifact_path"])
+        raw = json.loads(artifact.read_text())
+        assert raw == {"stdout": large_stdout, "stderr": large_stderr}
+        assert "raw test output spilled" in result["test_stdout"]
+        assert "raw test output spilled" in result["test_stderr"]

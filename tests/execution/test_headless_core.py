@@ -1250,8 +1250,8 @@ class TestBuildSkillResultStderr:
         )
         assert response["stderr"] == "queue contention"
 
-    def test_stderr_truncated(self):
-        """Stderr exceeding 5000 chars is truncated."""
+    def test_stderr_reaches_tool_boundary_losslessly(self):
+        """Headless results retain stderr until the MCP response boundary."""
         valid_json = json.dumps(
             {
                 "type": "result",
@@ -1272,8 +1272,7 @@ class TestBuildSkillResultStderr:
         response = json.loads(
             _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
         )
-        assert len(response["stderr"]) < len(long_stderr)
-        assert "truncated" in response["stderr"]
+        assert response["stderr"] == long_stderr
 
     def test_empty_stderr_is_empty_string(self):
         """Empty stderr produces empty string, not omitted."""

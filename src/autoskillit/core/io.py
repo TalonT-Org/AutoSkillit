@@ -10,9 +10,12 @@ is detectable. Existing artifacts are tracked in
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 import tempfile
 import threading
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -22,6 +25,7 @@ from yaml import YAMLError as YAMLError  # explicit re-export for callers and ty
 
 from ._json import fast_dumps as _fast_dumps
 from .types._type_helpers import extract_skill_name
+from .types._type_results import SpilledOutput, SpillSpec
 
 try:
     from yaml import CSafeLoader as _Loader
@@ -44,6 +48,7 @@ __all__ = [
     "resolve_skill_temp_dir",
     "resolve_temp_dir",
     "safe_upsert_section",
+    "spill_output",
     "temp_dir_display_str",
     "write_versioned_json",
 ]
@@ -168,6 +173,52 @@ def atomic_write(path: Path, content: str) -> None:
                 os.close(dir_fd)
         except OSError:
             pass  # Non-fatal — data is durable at path after os.replace()
+
+
+def spill_output(
+    text: str,
+    artifact_dir: Path,
+    name_hint: str,
+    spec: SpillSpec,
+) -> SpilledOutput:
+    """Persist oversized text losslessly and return a bounded inline preview.
+
+    The final artifact path is exposed only after ``atomic_write`` has published
+    the complete UTF-8 payload. Small values remain byte-for-byte inline and do
+    not create an artifact.
+    """
+    encoded = text.encode("utf-8")
+    total_lines = len(text.splitlines())
+    if len(text) <= spec.inline_max_chars:
+        return SpilledOutput(
+            spilled=False,
+            text=text,
+            artifact_path=None,
+            total_chars=len(text),
+            total_utf8_bytes=len(encoded),
+            total_lines=total_lines,
+        )
+
+    safe_hint = re.sub(r"[^A-Za-z0-9._-]+", "_", name_hint).strip("._-") or "output"
+    final_path = artifact_dir / f"{safe_hint}_{uuid.uuid4().hex[:8]}.log"
+    atomic_write(final_path, text)
+    published_path = str(final_path.resolve())
+    head = text[: spec.head_chars]
+    tail = text[-spec.tail_chars :] if spec.tail_chars else ""
+    marker = f"[spilled {len(text)} chars -> {published_path}]"
+    preview_parts = [head, marker, tail]
+    preview = "\n".join(part for part in preview_parts if part)
+    return SpilledOutput(
+        spilled=True,
+        text=preview,
+        artifact_path=published_path,
+        head=head,
+        tail=tail,
+        sha256=hashlib.sha256(encoded).hexdigest(),
+        total_chars=len(text),
+        total_utf8_bytes=len(encoded),
+        total_lines=total_lines,
+    )
 
 
 def safe_upsert_section(

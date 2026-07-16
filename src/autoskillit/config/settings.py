@@ -44,6 +44,7 @@ from autoskillit.config._config_dataclasses import (
     LoggingConfig,
     McpResponseConfig,
     MigrationConfig,
+    OutputBudgetConfig,
     PacksConfig,
     PlanConfig,
     ProviderProfileDef,
@@ -178,6 +179,7 @@ __all__ = [
     "LoggingConfig",
     "McpResponseConfig",
     "MigrationConfig",
+    "OutputBudgetConfig",
     "PacksConfig",
     "ProviderProfileDef",
     "ProvidersConfig",
@@ -373,6 +375,7 @@ class AutomationConfig:
     diagnostics: DiagnosticsConfig = field(default_factory=DiagnosticsConfig)
     linux_tracing: LinuxTracingConfig = field(default_factory=LinuxTracingConfig)
     mcp_response: McpResponseConfig = field(default_factory=McpResponseConfig)
+    output_budget: OutputBudgetConfig = field(default_factory=OutputBudgetConfig)
     branching: BranchingConfig = field(default_factory=BranchingConfig)
     ci: CIConfig = field(default_factory=CIConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)

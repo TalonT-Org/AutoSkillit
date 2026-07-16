@@ -215,7 +215,6 @@ from .types import SESSION_TYPE_ORCHESTRATOR as SESSION_TYPE_ORCHESTRATOR
 from .types import SESSION_TYPE_SKILL as SESSION_TYPE_SKILL
 from .types import SKILL_ACTIVATE_DEPS_REQUIRED as SKILL_ACTIVATE_DEPS_REQUIRED
 from .types import SKILL_CAPABILITY_REGISTRY as SKILL_CAPABILITY_REGISTRY
-from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import SKILL_COMMAND_DISPLAY_MAX as SKILL_COMMAND_DISPLAY_MAX
 from .types import SKILL_COMMAND_PREFIX as SKILL_COMMAND_PREFIX
 from .types import SKILL_FILE_ADVISORY_MAP as SKILL_FILE_ADVISORY_MAP
@@ -286,6 +285,7 @@ from .types import FleetSessionEnv as FleetSessionEnv
 from .types import GateState as GateState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
+from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
@@ -348,7 +348,6 @@ from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
 from .types import SkillCapabilityDef as SkillCapabilityDef
-from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver
@@ -393,4 +392,5 @@ from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
+from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import validate_label_transition as validate_label_transition

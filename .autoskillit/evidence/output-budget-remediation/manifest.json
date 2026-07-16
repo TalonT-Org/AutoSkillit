@@ -89,6 +89,37 @@
           "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
         }
       ]
+    },
+    {
+      "phase": 3,
+      "phase_commit_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+      "gate_tested_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+      "gates": [
+        {
+          "command": "task test-codex-config-parse",
+          "status": "pass",
+          "summary": "23 passed with installed Codex CLI",
+          "gate_tested_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase3-codex-config-parse-a261f23fb.log",
+          "gate_log_sha256": "dc842555a8bc071f11cd589d796c4f2406dd704c0fcb20659b74ca6ec12dd62b"
+        },
+        {
+          "command": "task test-all",
+          "status": "pass",
+          "summary": "30929 passed, 611 skipped, 55 xfailed",
+          "gate_tested_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase3-task-test-all-a261f23fb.log",
+          "gate_log_sha256": "9ea5c4e6f2ac4b2b0c591b1f4e15d1bde51c84a28da2592482b43fbb125b73bb"
+        },
+        {
+          "command": "pre-commit run --all-files",
+          "status": "pass",
+          "summary": "all configured hooks passed",
+          "gate_tested_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase3-pre-commit-a261f23fb.log",
+          "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
+        }
+      ]
     }
   ],
   "closure": {

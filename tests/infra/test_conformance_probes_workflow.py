@@ -130,6 +130,29 @@ class TestVersionResolution:
 
 
 class TestCacheGate:
+    def test_codex_config_parse_gate_precedes_cache_and_live_probe(self, workflow: dict) -> None:
+        steps = workflow["jobs"]["codex-probe"]["steps"]
+        parse_index, parse_step = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Validate installed Codex config parsing"
+        )
+        restore_index = next(
+            index
+            for index, step in enumerate(steps)
+            if "cache/restore" in (step.get("uses") or "")
+        )
+        live_index = next(
+            index
+            for index, step in enumerate(steps)
+            if step.get("name") == "Run Codex conformance probes"
+        )
+
+        assert parse_step.get("run") == "task test-codex-config-parse"
+        assert "if" not in parse_step
+        assert parse_step.get("continue-on-error") is not True
+        assert parse_index < restore_index < live_index
+
     @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
     def test_exports_output_discipline_policy_identity(
         self, workflow: dict, job_name: str

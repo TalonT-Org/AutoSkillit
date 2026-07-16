@@ -100,6 +100,12 @@ tasks:
         export AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-aggressive}"
         task test-check
 
+  test-codex-config-parse:
+    desc: Validate generated interactive config overrides with the installed Codex CLI
+    cmds:
+      - |
+        PYTEST_TEST_PATHS="tests/execution/backends/test_codex_interactive.py" task test-all
+
   coverage-audit:
     desc: "Run pytest with coverage collection and compare against AST-derived function map"
     deps: [install-worktree, _tmpdir-setup]

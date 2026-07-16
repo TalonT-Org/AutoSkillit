@@ -66,6 +66,29 @@
           "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
         }
       ]
+    },
+    {
+      "phase": 2,
+      "phase_commit_sha": "a1a129d3719087a828d3a2352ff66477ee0aef48",
+      "gate_tested_sha": "a1a129d3719087a828d3a2352ff66477ee0aef48",
+      "gates": [
+        {
+          "command": "task test-all",
+          "status": "pass",
+          "summary": "30924 passed, 611 skipped, 55 xfailed",
+          "gate_tested_sha": "a1a129d3719087a828d3a2352ff66477ee0aef48",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase2-task-test-all-a1a129d37.log",
+          "gate_log_sha256": "c5492d564a04f212a8910b3978219ff6fef3d1ad428264610541674d7a9cba6f"
+        },
+        {
+          "command": "pre-commit run --all-files",
+          "status": "pass",
+          "summary": "all configured hooks passed",
+          "gate_tested_sha": "a1a129d3719087a828d3a2352ff66477ee0aef48",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase2-pre-commit-a1a129d37.log",
+          "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
+        }
+      ]
     }
   ],
   "closure": {

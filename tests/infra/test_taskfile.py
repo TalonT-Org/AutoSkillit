@@ -152,6 +152,15 @@ class TestTaskfile:
         assert "status" in task, "compile-recipes must have a status: block"
         assert task["status"], "compile-recipes status: block must not be empty"
 
+    def test_codex_config_parse_target_uses_supported_test_gate(self) -> None:
+        data = self._load()
+        task = data["tasks"]["test-codex-config-parse"]
+        commands = "\n".join(str(command) for command in task.get("cmds", []))
+        assert 'PYTEST_TEST_PATHS="tests/execution/backends/test_codex_interactive.py"' in commands
+        assert "task test-all" in commands
+        assert "python -m pytest" not in commands
+        assert re.search(r"(^|\s)pytest(?:\s|$)", commands) is None
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

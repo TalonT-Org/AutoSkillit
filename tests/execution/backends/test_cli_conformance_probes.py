@@ -78,39 +78,8 @@ _skip_unless_claude_code_smoke = pytest.mark.skipif(
     reason=_CLAUDE_CODE_SKIP_REASON,
 )
 
-_skip_unless_codex_config_parse_probe = pytest.mark.skipif(
-    not os.environ.get("CODEX_CONFIG_PARSE_PROBE") or not shutil.which("codex"),
-    reason="Set CODEX_CONFIG_PARSE_PROBE=1 and have 'codex' on PATH to run the config probe",
-)
-
 _PROBE_BACKEND = "codex"
 _CANARY_TITLE_PREFIX = "[Canary] codex conformance probe"
-
-
-@_skip_unless_codex_config_parse_probe
-def test_installed_codex_parses_multiline_developer_instructions(tmp_path: Path) -> None:
-    """Guard the exact interactive ``-c`` TOML value accepted by installed Codex."""
-    from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
-    from autoskillit.execution.backends._codex_config import _format_toml_value
-
-    caller_prompt = 'caller "prompt"\nwith a second line and \\ path'
-    combined = f"{caller_prompt}\n\n{OUTPUT_DISCIPLINE_DIGEST}"
-    override = f"developer_instructions={_format_toml_value(combined)}"
-    env = dict(os.environ)
-    env["CODEX_HOME"] = str(tmp_path / "codex-home")
-    Path(env["CODEX_HOME"]).mkdir()
-
-    result = subprocess.run(  # noqa: S603
-        ["codex", "-c", override, "doctor", "--json"],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        env=env,
-    )
-
-    assert result.stdout, result.stderr
-    config_check = json.loads(result.stdout)["checks"]["config.load"]
-    assert config_check["status"] == "ok", config_check
 
 
 class _CodexProbeOutput(NamedTuple):

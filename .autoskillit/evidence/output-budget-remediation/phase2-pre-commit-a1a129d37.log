@@ -1,0 +1,14 @@
+ruff format..............................................................Passed
+ruff.....................................................................Passed
+mypy.....................................................................Passed
+uv lock --check..........................................................Passed
+Block generated config files from being committed....(no files to check)Skipped
+doc count accuracy.......................................................Passed
+Check version consistency across artifacts...............................Passed
+Check MCP tool readOnlyHint annotations..............(no files to check)Skipped
+Check sub-AGENTS.md file table completeness..............................Passed
+Check contract card freshness............................................Passed
+Check __init__.pyi stub format...........................................Passed
+Check __init__.pyi stub symbol completeness..............................Passed
+check for merge conflicts................................................Passed
+Detect hardcoded secrets.................................................Passed

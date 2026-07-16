@@ -25,7 +25,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_docs_critical_rules.py` | Tests that `AGENTS.md` (and a few physical-`CLAUDE.md` integrity checks) contain required critical rules (FRICT-1B-3, FRICT-3A-1, FRICT-5-2, FRICT-7-1) |
 | `test_command_guard_completeness.py` | Structural meta-test: command-inspecting guards must cover all command-executing tools |
 | `test_command_guard_verb_position.py` | Structural ratchet: command-inspecting guards must not perform raw substring membership against shell command text — guards must tokenize evaluated payloads and compare verb/argument positions |
-| `test_conformance_probes_workflow.py` | Structural tests for conformance-probes.yml workflow — triggers, permissions, SHA pinning, cache gate, post-failure wiring |
+| `test_conformance_probes_workflow.py` | Structural tests for conformance-probes.yml workflow — triggers, permissions, SHA pinning, installed Codex parse gate, cache gate, post-failure wiring |
 | `test_coverage_audit.py` | Tests for scripts/compare-coverage-ast.py — AST extraction and coverage comparison |
 | `test_dependency_pins.py` | Dependency pin guards (REQ-DEP-001, REQ-DEP-002) — pytest 9.x, networkx bounds |
 | `test_docstring_labels.py` | Tests for correct docstring layer labels across the codebase |
@@ -70,7 +70,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_skill_cmd_check.py` | Unit tests for the skill_cmd_check PreToolUse hook |
 | `test_skill_load_guard.py` | Tests for guards/skill_load_guard.py PreToolUse hook — denies native tools until Skill called |
 | `test_skill_command_guard.py` | Tests for the skill_command_guard PreToolUse hook |
-| `test_taskfile.py` | Taskfile structural tests |
+| `test_taskfile.py` | Taskfile structural tests, including supported delegation for the installed Codex config-parse gate |
 | `test_testmon_eval.py` | Testmon eval tests |
 | `test_token_summary_core.py` | Tests: token_summary_appender core — early-exit, happy path, session filtering, efficiency table |
 | `test_token_summary_filters.py` | Tests: token_summary_appender unit helpers (_canonical, _humanize, _format_table, _unwrap_mcp_response), order_id isolation, and config key migration |

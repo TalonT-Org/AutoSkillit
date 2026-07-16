@@ -329,11 +329,11 @@ class SkillCapabilityDef:
     # (`_check_backend_compat`) gates if the backend's value is falsy —
     # independent of explicit backend pinning (REQ-RES-001).
     #
-    # The parallel `CAPABILITY_INGREDIENT_MAP` (in `_type_constants.py`)
-    # drives soft, recipe-level ingredient gating; this field drives hard,
-    # dispatch-level backend-property gating. Both registries must be kept
-    # in sync when adding a new hard capability.
+    # `required_recipe_ingredient` drives the corresponding soft,
+    # recipe-level gate. `CAPABILITY_INGREDIENT_MAP` is derived from this
+    # definition so admission and dispatch cannot drift apart.
     required_backend_property: str | None = None
+    required_recipe_ingredient: str | None = None
 
     @property
     def required_backends(self) -> frozenset[str]:
@@ -401,6 +401,7 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
         codex_status="not-applicable",
         worker_routable=True,
         required_backend_property="git_metadata_writable",
+        required_recipe_ingredient="backend_supports_git_write",
     ),
     "github_api_write": SkillCapabilityDef(
         description=(
@@ -424,13 +425,17 @@ for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
 
 # Boot-time validation: every `required_backend_property` must name a real
 # field on `BackendCapabilities`. Catches typos in the registry at import
-# time rather than at first dispatch. This is the hard, dispatch-level
-# gating mechanism; the parallel `CAPABILITY_INGREDIENT_MAP` (in
-# `_type_constants.py`) drives soft, recipe-level ingredient gating — both
-# registries must be kept in sync when adding a new hard capability (see
-# the `required_backend_property` field docstring above for the full split).
+# time rather than at first dispatch. The recipe-level ingredient map is
+# derived from the same capability definitions in `_type_constants.py`.
 _BACKEND_CAPABILITIES_FIELDS = {f.name for f in fields(BackendCapabilities)}
 for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
+    if (_cap_def.required_backend_property is None) != (
+        _cap_def.required_recipe_ingredient is None
+    ):
+        raise RuntimeError(
+            f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}] must define both "
+            "required_backend_property and required_recipe_ingredient, or neither."
+        )
     if (
         _cap_def.required_backend_property is not None
         and _cap_def.required_backend_property not in _BACKEND_CAPABILITIES_FIELDS

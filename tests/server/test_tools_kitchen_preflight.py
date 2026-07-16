@@ -214,6 +214,42 @@ class TestCheckDispatchFeasibilityUnit:
         assert parsed.get("stage") == "dispatch_feasibility_preflight"
         assert parsed.get("step") == "resolve_review"
 
+    def test_dispatch_feasibility_fails_closed_when_pinned_skill_is_unresolved(self) -> None:
+        """A valid explicit backend pin cannot turn an unknown skill into an
+        empty capability set.
+        """
+        from autoskillit.config._config_dataclasses import AgentBackendConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        backend = _make_codex_backend()
+        active_steps: dict[str, Any] = {
+            "unknown_step": _make_recipe_step(
+                "unknown_step", tool="run_skill", skill_name="missing-skill"
+            ),
+        }
+        config_backend = AgentBackendConfig(
+            recipe_overrides={"test-recipe": {"unknown_step": "codex"}},
+        )
+        resolver = MagicMock()
+        resolver.resolve.return_value = None
+
+        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+            result = _check_dispatch_feasibility(
+                post_prune_step_names=["unknown_step"],
+                active_recipe_steps=active_steps,
+                backend=backend,
+                config_providers=_DEFAULT_PROVIDERS,
+                recipe_name="test-recipe",
+                config_backend=config_backend,
+                skill_resolver=resolver,
+            )
+
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed.get("error") == "skill_not_found_for_pinned_step"
+        assert parsed.get("skill") == "missing-skill"
+        assert parsed.get("step") == "unknown_step"
+
     def test_incompatible_backend_fails(self) -> None:
         """Backend with empty applicable_guards returns error (1b)."""
         from autoskillit.server.tools._preflight import _check_dispatch_feasibility

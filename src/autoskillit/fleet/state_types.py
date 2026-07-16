@@ -176,13 +176,18 @@ class DispatchRecord:
     def from_dict(cls, d: dict[str, Any]) -> DispatchRecord:
         pid_raw = d.get("dispatched_pid")
         ticks_raw = d.get("dispatched_starttime_ticks")
+        caller_backend_name = d.get("caller_backend_name", "")
+        if not isinstance(caller_backend_name, str):
+            raise TypeError(
+                f"caller_backend_name must be str, got {type(caller_backend_name).__name__!r}"
+            )
         return cls(
             name=d["name"],
             status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
             dispatch_id=d.get("dispatch_id", ""),
             campaign_id=d.get("campaign_id", ""),
             caller_session_id=d.get("caller_session_id", ""),
-            caller_backend_name=d.get("caller_backend_name", ""),
+            caller_backend_name=caller_backend_name,
             dispatched_session_id=(
                 d.get("dispatched_session_id")
                 or d.get("l3_session_id")

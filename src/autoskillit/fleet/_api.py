@@ -953,7 +953,11 @@ async def _run_dispatch(
 
         sidecar_entries = read_sidecar_from_path(sidecar_file).entries
         if sidecar_entries:
-            dispatch_checkpoint = checkpoint_from_sidecar(sidecar_entries)
+            dispatch_checkpoint = checkpoint_from_sidecar(
+                sidecar_entries,
+                backend_name=_effective_backend.name if _effective_backend else "",
+                skill_name=recipe,
+            )
 
     tracker_checkpoint: SessionCheckpoint | None = None
     _tracker_path = (
@@ -968,7 +972,11 @@ async def _run_dispatch(
                 checkpoint_from_tracker,  # noqa: PLC0415
             )
 
-            tracker_checkpoint = checkpoint_from_tracker(_tracker_data)
+            tracker_checkpoint = checkpoint_from_tracker(
+                _tracker_data,
+                backend_name=_effective_backend.name if _effective_backend else "",
+                skill_name=recipe,
+            )
         except (OSError, ValueError, TypeError, AttributeError):
             logger.debug("tracker read failed for %s", dispatch_id, exc_info=True)
 

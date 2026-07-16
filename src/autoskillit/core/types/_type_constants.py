@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+from ._type_constants_registries import SKILL_CAPABILITY_REGISTRY
+
 __all__ = [
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
@@ -107,12 +109,22 @@ CAPABILITY_INGREDIENT_TO_SKIP_GUARD: dict[str, str] = {
 }
 
 # Maps worker_routable capabilities to the specific recipe ingredients they
-# authorize. Capabilities not in this map (e.g. agent_subagent, agent_model,
-# cross_skill_ref) trigger backend rerouting but do not flip any ingredient
-# — they are routed but not git-write-gated.
+# authorize. Derived from the authoritative capability definitions so recipe
+# admission cannot drift from dispatch-time hard-capability enforcement.
 CAPABILITY_INGREDIENT_MAP: dict[str, str] = {
-    "git_metadata_write": "backend_supports_git_write",
+    name: capability.required_recipe_ingredient
+    for name, capability in SKILL_CAPABILITY_REGISTRY.items()
+    if capability.required_recipe_ingredient is not None
 }
+
+_UNKNOWN_CAPABILITY_INGREDIENTS = (
+    frozenset(CAPABILITY_INGREDIENT_MAP.values()) - BACKEND_CAPABILITY_INGREDIENTS
+)
+if _UNKNOWN_CAPABILITY_INGREDIENTS:
+    raise RuntimeError(
+        "SKILL_CAPABILITY_REGISTRY references unknown backend capability ingredients: "
+        f"{sorted(_UNKNOWN_CAPABILITY_INGREDIENTS)}"
+    )
 
 # Bare (un-dotted) callable names whose run_python steps are capability gates.
 # Each entry corresponds to a callable in smoke_utils that reads a

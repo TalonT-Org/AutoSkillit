@@ -141,10 +141,24 @@ def _check_dispatch_feasibility(
                 )
                 if _skill_name:
                     _skill_info = skill_resolver.resolve(_skill_name)
-                    _skill_caps: frozenset[str] = (
-                        getattr(_skill_info, "uses_capabilities", frozenset())
-                        if _skill_info
-                        else frozenset()
+                    if _skill_info is None:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "kitchen": "preflight_failed",
+                                "user_visible_message": (
+                                    f"Cannot verify capability feasibility for explicitly-pinned "
+                                    f"step '{step_name}': skill '{_skill_name}' could not be "
+                                    "resolved."
+                                ),
+                                "error": "skill_not_found_for_pinned_step",
+                                "stage": "dispatch_feasibility_preflight",
+                                "step": step_name,
+                                "skill": _skill_name,
+                            }
+                        )
+                    _skill_caps: frozenset[str] = getattr(
+                        _skill_info, "uses_capabilities", frozenset()
                     )
                     if _skill_caps:
                         hard_cap_err = check_hard_capability_feasibility(

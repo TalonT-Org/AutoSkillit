@@ -191,6 +191,13 @@ class TestDispatchRecordFromDict:
         assert rec.token_usage == {}
         assert rec.sidecar_path is None
 
+    @pytest.mark.parametrize("invalid_backend", [None, 7, ["codex"]])
+    def test_from_dict_rejects_non_string_caller_backend(self, invalid_backend: object) -> None:
+        with pytest.raises(TypeError, match="caller_backend_name must be str"):
+            DispatchRecord.from_dict(
+                {"name": "invalid-provenance", "caller_backend_name": invalid_backend}
+            )
+
     def test_from_dict_pid_zero_not_falsy(self) -> None:
         d = {"name": "t", "dispatched_pid": 0, "l3_pid": 999}
         rec = DispatchRecord.from_dict(d)

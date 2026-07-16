@@ -23,28 +23,26 @@ def build_backend_capabilities_map(
 ) -> dict[str, BackendCapabilities]:
     """Build a backend-name → BackendCapabilities map for the static recipe rule.
 
-    Collects distinct backend names from the per-step effective backend map plus
-    the orchestrator's own backend, then resolves each via get_backend(). Names
-    that fail to resolve (e.g. test MagicMocks) are silently dropped — get_recipe,
-    load_recipe, and dispatch_food_truck must continue producing useful output
-    even when the test fixture substitutes non-real backend objects.
+    Uses the supplied orchestrator backend as the authority for its own name and
+    resolves every distinct per-step backend via get_backend(). Invalid names are
+    surfaced so admission cannot silently skip hard-capability diagnostics.
     """
     from autoskillit.server._misc import get_backend  # circular-break
 
-    distinct: set[str] = set()
-    for _v in (effective_backend_map or {}).values():
-        if isinstance(_v, str):
-            distinct.add(_v)
-    if orchestrator_backend is not None and isinstance(orchestrator_backend.name, str):
-        distinct.add(orchestrator_backend.name)
     out: dict[str, BackendCapabilities] = {}
-    for _name in distinct:
-        if not _name:
-            continue
-        try:
-            out[_name] = get_backend(_name).capabilities
-        except (KeyError, ValueError):
-            continue
+    if orchestrator_backend is not None:
+        orchestrator_name = orchestrator_backend.name
+        if not isinstance(orchestrator_name, str) or not orchestrator_name:
+            raise ValueError("orchestrator backend must have a non-empty string name")
+        out[orchestrator_name] = orchestrator_backend.capabilities
+
+    for step_name, backend_name in (effective_backend_map or {}).items():
+        if not isinstance(backend_name, str) or not backend_name:
+            raise ValueError(
+                f"effective backend for step {step_name!r} must be a non-empty string"
+            )
+        if backend_name not in out:
+            out[backend_name] = get_backend(backend_name).capabilities
     return out
 
 

@@ -9,6 +9,8 @@ from autoskillit.fleet.sidecar import IssueSidecarEntry
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
+_PROVENANCE = {"backend_name": "codex", "skill_name": "implementation"}
+
 
 class TestCheckpointFromSidecar:
     def test_extracts_completed_urls(self) -> None:
@@ -23,15 +25,17 @@ class TestCheckpointFromSidecar:
                 issue_url="https://github.com/o/r/issues/3", status="completed", ts="t3"
             ),
         ]
-        cp = checkpoint_from_sidecar(entries)
+        cp = checkpoint_from_sidecar(entries, **_PROVENANCE)
         assert cp.completed_items == [
             "https://github.com/o/r/issues/1",
             "https://github.com/o/r/issues/3",
         ]
         assert cp.step_name == "fleet_dispatch"
+        assert cp.backend_name == "codex"
+        assert cp.skill_name == "implementation"
 
     def test_empty_entries(self) -> None:
-        cp = checkpoint_from_sidecar([])
+        cp = checkpoint_from_sidecar([], **_PROVENANCE)
         assert cp.completed_items == []
         assert cp.ts == ""
 
@@ -40,14 +44,14 @@ class TestCheckpointFromSidecar:
             IssueSidecarEntry(issue_url="u1", status="completed", ts="2026-01-01"),
             IssueSidecarEntry(issue_url="u2", status="completed", ts="2026-05-04"),
         ]
-        cp = checkpoint_from_sidecar(entries)
+        cp = checkpoint_from_sidecar(entries, **_PROVENANCE)
         assert cp.ts == "2026-05-04"
 
     def test_produces_valid_checkpoint(self) -> None:
         entries = [
             IssueSidecarEntry(issue_url="u1", status="completed", ts="t"),
         ]
-        cp = checkpoint_from_sidecar(entries)
+        cp = checkpoint_from_sidecar(entries, **_PROVENANCE)
         d = cp.to_dict()
         from autoskillit.core.types._type_checkpoint import SessionCheckpoint
 
@@ -66,7 +70,7 @@ class TestCheckpointFromTracker:
                 "review-pr": {"status": "pending"},
             },
         }
-        checkpoint = checkpoint_from_tracker(tracker_data)
+        checkpoint = checkpoint_from_tracker(tracker_data, **_PROVENANCE)
         assert checkpoint is not None
         assert checkpoint.completed_items == [
             "plan",
@@ -75,6 +79,8 @@ class TestCheckpointFromTracker:
         ]  # sorted by completed_at
         assert checkpoint.step_name == "implement"
         assert checkpoint.progress_pct == pytest.approx(0.75)
+        assert checkpoint.backend_name == "codex"
+        assert checkpoint.skill_name == "implementation"
 
     def test_tracker_with_no_completed_steps_returns_none(self) -> None:
         tracker_data = {
@@ -84,7 +90,7 @@ class TestCheckpointFromTracker:
                 "verify": {"status": "pending"},
             },
         }
-        checkpoint = checkpoint_from_tracker(tracker_data)
+        checkpoint = checkpoint_from_tracker(tracker_data, **_PROVENANCE)
         assert checkpoint is None
 
     def test_tracker_empty_steps_returns_none(self) -> None:
@@ -92,11 +98,11 @@ class TestCheckpointFromTracker:
             "pipeline_id": "dispatch-123",
             "steps": {},
         }
-        checkpoint = checkpoint_from_tracker(tracker_data)
+        checkpoint = checkpoint_from_tracker(tracker_data, **_PROVENANCE)
         assert checkpoint is None
 
     def test_tracker_missing_file_returns_none(self) -> None:
-        checkpoint = checkpoint_from_tracker(None)
+        checkpoint = checkpoint_from_tracker(None, **_PROVENANCE)
         assert checkpoint is None
 
     def test_tracker_sorts_by_completed_at(self) -> None:
@@ -107,7 +113,7 @@ class TestCheckpointFromTracker:
                 "plan": {"status": "complete", "completed_at": "2026-06-01T00:00:00Z"},
             },
         }
-        checkpoint = checkpoint_from_tracker(tracker_data)
+        checkpoint = checkpoint_from_tracker(tracker_data, **_PROVENANCE)
         assert checkpoint is not None
         assert checkpoint.step_name == "implement"
         assert checkpoint.ts == "2026-06-01T00:02:00Z"
@@ -121,7 +127,7 @@ class TestCheckpointFromTracker:
                 "plan": {"status": "complete", "completed_at": "2026-06-01T00:00:00Z"},
             },
         }
-        checkpoint = checkpoint_from_tracker(tracker_data)
+        checkpoint = checkpoint_from_tracker(tracker_data, **_PROVENANCE)
         assert checkpoint is not None
         d = checkpoint.to_dict()
         restored = SessionCheckpoint.from_dict(d)
@@ -135,7 +141,7 @@ class TestCheckpointFromTracker:
                 "verify": "bad_data",
             },
         }
-        checkpoint = checkpoint_from_tracker(tracker_data)
+        checkpoint = checkpoint_from_tracker(tracker_data, **_PROVENANCE)
         assert checkpoint is not None
         assert checkpoint.completed_items == ["plan"]
         assert checkpoint.progress_pct == pytest.approx(0.5)

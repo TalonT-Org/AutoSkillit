@@ -152,6 +152,14 @@ class TestDeriveOrchestratorResumeSpec:
         mismatch_spec = derive_orchestrator_resume_spec(state, current_backend="codex")
         assert isinstance(mismatch_spec, NoResume)
 
+    def test_derive_rejects_orchestrator_session_without_backend_provenance(self) -> None:
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        state = _make_state(orchestrator_session_id="legacy-session", dispatches=[])
+
+        spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
+        assert isinstance(spec, NoResume)
+
     def test_derive_validates_backend_match_for_caller_session_id_fallback(self) -> None:
         """Fallback caller_session_id path must also reject mismatched backends."""
         from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
@@ -189,8 +197,8 @@ class TestDeriveOrchestratorResumeSpec:
         assert isinstance(spec, NamedResume)
         assert spec.session_id == "claude-orchestrator-session"
 
-    def test_derive_passes_when_legacy_record_has_no_caller_backend_name(self) -> None:
-        """Legacy records cannot safely infer caller provenance from the worker backend."""
+    def test_derive_rejects_legacy_record_without_caller_backend_name(self) -> None:
+        """Legacy records without caller provenance must fail closed."""
         from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
@@ -204,8 +212,7 @@ class TestDeriveOrchestratorResumeSpec:
         state = _make_state(orchestrator_session_id="", dispatches=dispatches)
 
         spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
-        assert isinstance(spec, NamedResume)
-        assert spec.session_id == "legacy-session"
+        assert isinstance(spec, NoResume)
 
 
 class TestResumeDecisionDispatchId:

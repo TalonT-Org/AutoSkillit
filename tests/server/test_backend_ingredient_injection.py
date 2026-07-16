@@ -54,6 +54,31 @@ class TestBackendCapabilityOverrides:
         assert _backend_capability_overrides(backend) == {"backend_supports_git_write": "false"}
 
 
+class TestBackendCapabilitiesMap:
+    def test_uses_supplied_orchestrator_backend_capabilities(self) -> None:
+        from autoskillit.server.tools._serve_helpers import build_backend_capabilities_map
+
+        backend = _make_backend_with_capability(False)
+        with patch("autoskillit.server._misc.get_backend") as resolve_backend:
+            result = build_backend_capabilities_map({"step": "codex"}, backend)
+
+        assert result == {"codex": backend.capabilities}
+        resolve_backend.assert_not_called()
+
+    def test_unknown_effective_backend_is_not_silently_dropped(self) -> None:
+        from autoskillit.server.tools._serve_helpers import build_backend_capabilities_map
+
+        backend = _make_backend_with_capability(True)
+        with (
+            patch(
+                "autoskillit.server._misc.get_backend",
+                side_effect=ValueError("unknown backend"),
+            ),
+            pytest.raises(ValueError, match="unknown backend"),
+        ):
+            build_backend_capabilities_map({"step": "codexx_typo"}, backend)
+
+
 # ---------------------------------------------------------------------------
 # open_kitchen injection
 # ---------------------------------------------------------------------------

@@ -32,12 +32,7 @@ def _checkpoint_to_dict(cp: SessionCheckpoint | None) -> dict[str, Any]:
     """Convert SessionCheckpoint to a plain dict for DispatchRecord storage."""
     if cp is None:
         return {}
-    return {
-        "completed_items": list(cp.completed_items),
-        "step_name": cp.step_name,
-        "progress_pct": cp.progress_pct,
-        "ts": cp.ts,
-    }
+    return cp.to_dict()
 
 
 def classify_dispatch_outcome(

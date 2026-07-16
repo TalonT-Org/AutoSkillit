@@ -169,6 +169,9 @@ tests/execution/backends/fixtures/codex_ndjson/*.json:
 .autoskillit/config.yaml:
   - infra/
 
+.autoskillit/evidence/output-budget-remediation/**/*:
+  - infra/
+
 .autoskillit/recipes/*.yaml:
   - recipe/
 

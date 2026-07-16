@@ -357,3 +357,84 @@ def test_non_dominating_producer_does_not_exonerate_reader():
         "Non-dominating producer should flag reader with capture-inversion, "
         "but no findings were produced."
     )
+
+
+# ---------------------------------------------------------------------------
+# Fork-join fixture for event-scope-requires-upstream-capture
+# ---------------------------------------------------------------------------
+
+
+def _make_fork_event_scope_recipe() -> Recipe:
+    """Fork-join where only one branch upstream of wait_for_ci captures merge_group_trigger.
+
+    Layout:
+      entry → fork (branch_producer + branch_other) → joiner → ci_watch(event='push')
+      branch_producer → captures merge_group_trigger → joiner
+      branch_other    → no capture → joiner
+
+    The producer exists on ONE branch only. Under the existential
+    ``any(p in ancestor_set for p in mg_producers)`` check, the producer is an
+    ancestor via the branch_producer path — but it is NOT a dominator: the
+    branch_other path reaches ci_watch without crossing the producer.
+
+    Under the dominator fix, ``all_paths_cross(graph, entry, producer,
+    ci_watch)`` must return False (a path skips the producer), so the rule
+    must fire.
+    """
+    entry = RecipeStep(
+        name="entry",
+        action="route",
+        on_result=StepResultRoute(
+            conditions=[
+                StepResultCondition(route="branch_producer", when="context.flag == 'yes'"),
+                StepResultCondition(route="branch_other"),
+            ]
+        ),
+    )
+    branch_producer = RecipeStep(
+        name="branch_producer",
+        tool="check_repo_merge_state",
+        capture={"merge_group_trigger": "${{ result.merge_group_trigger }}"},
+        on_success="joiner",
+    )
+    branch_other = RecipeStep(
+        name="branch_other",
+        tool="run_cmd",
+        with_args={"cmd": "echo nothing"},
+        on_success="joiner",
+    )
+    joiner = RecipeStep(name="joiner", action="route", on_success="ci_watch")
+    ci_watch = RecipeStep(
+        name="ci_watch",
+        tool="wait_for_ci",
+        with_args={"branch": "main", "event": "push"},
+    )
+    return Recipe(
+        name="synthetic-fork-event-scope",
+        description="fork where only one branch captures merge_group_trigger",
+        steps={
+            "entry": entry,
+            "branch_producer": branch_producer,
+            "branch_other": branch_other,
+            "joiner": joiner,
+            "ci_watch": ci_watch,
+        },
+    )
+
+
+def test_event_scope_fork_only_one_branch_has_producer_fires():
+    """The fork-join shape: producer on one branch only.
+
+    Under the existential ancestor check this passes (the producer is an
+    ancestor via one branch). Under the dominator fix this must fire because
+    ``all_paths_cross(graph, entry, producer, ci_watch)`` is False — the
+    branch_other path skips the producer.
+    """
+    recipe = _make_fork_event_scope_recipe()
+    findings = run_semantic_rules(recipe)
+    matching = [f for f in findings if f.rule == "event-scope-requires-upstream-capture"]
+    assert len(matching) == 1, (
+        f"Fork with producer on one branch only must produce 1 finding, "
+        f"got {len(matching)}: {[f.message for f in matching]}"
+    )
+    assert matching[0].step_name == "ci_watch"

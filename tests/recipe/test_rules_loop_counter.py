@@ -292,9 +292,255 @@ class TestLoopCounterNotResetOnOuterCycle:
         ("remediation", "implementation", "implementation-groups"),
     )
     def test_bundled_recipes_no_missing_reset(self, recipe_name: str) -> None:
+        """After the dominator fix to ``loop-counter-not-reset-on-outer-cycle``,
+        this test asserts the rule fires on the bundled recipes for the
+        counters that lack a reset step on the audit-remediation NO-GO path.
+
+        Before the fix this test asserted zero findings (the original
+        existential-path BFS mistakenly accepted parallel guards' ``capture``
+        as resets). The fix correctly excludes ``check_loop_iteration`` guards
+        from the reset candidate list because their capture is an INCREMENT,
+        not a reset — so parallel guards sharing a counter no longer
+        masquerade as resets.
+
+        The merged findings here represent latent defects in the bundled
+        recipes (``merge_fix_count`` is shared by ``check_merge_fix_loop``,
+        ``check_merge_rebase_loop``, ``check_dirty_main_retry`` with no
+        ``init_counter`` reset on the audit-remediation NO-GO path). Part B
+        will add the missing reset steps; once it lands this test will need
+        updating to assert zero findings again.
+        """
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
         findings = run_semantic_rules(recipe)
         rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
-        assert rule_findings == [], (
-            f"{recipe_name}: {[(f.step_name, f.message) for f in rule_findings]}"
+
+        # Expected findings per recipe: counters shared by parallel guards with
+        # no reset step on the audit-remediation NO-GO path.
+        expected_inner_steps = {
+            "remediation": {"check_merge_fix_loop", "check_dirty_main_retry"},
+            "implementation": {
+                "check_merge_fix_loop",
+                "check_merge_rebase_loop",
+                "check_dirty_main_retry",
+            },
+            "implementation-groups": {
+                "check_merge_fix_loop",
+                "check_merge_rebase_loop",
+                "check_dirty_main_retry",
+            },
+        }
+        expected = expected_inner_steps.get(recipe_name, set())
+
+        actual = {f.step_name for f in rule_findings}
+        assert expected <= actual, (
+            f"{recipe_name}: expected at least {sorted(expected)}, "
+            f"got {sorted(actual)}. Findings: "
+            f"{[(f.step_name, f.message) for f in rule_findings]}"
+        )
+
+    def test_branching_reentry_reset_on_only_one_branch_fires(self) -> None:
+        """Outer guard forks; only one branch crosses a reset — the other reaches
+        inner_guard without a reset. The original existential-path BFS misses
+        this because it accepts any reset reachable in the bilateral region.
+
+        With the dominator fix, no single reset step dominates every path from
+        non_exit_target (work) to inner_guard (branch_a skips the reset), so
+        the rule must fire.
+        """
+        steps = {
+            "outer_guard": _audit_outer_guard(
+                "audit_remediation_count", non_exit="work", exit_route="done"
+            ),
+            "work": RecipeStep(
+                tool="run_skill",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="branch_a", when="context.flag == 'a'"),
+                        StepResultCondition(route="branch_b"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "branch_a": RecipeStep(tool="run_skill", on_success="inner_guard", on_failure="done"),
+            "branch_b": RecipeStep(tool="run_skill", on_success="reset_fix", on_failure="done"),
+            "reset_fix": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.init_counter",
+                    "counter_value": "",
+                },
+                capture={"fix_count": "${{ result.value }}"},
+                on_success="inner_guard",
+                on_failure="inner_guard",
+            ),
+            "inner_guard": _guard_step("fix_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="test", on_failure="done"),
+            "test": RecipeStep(tool="test_check", on_success="outer_guard", on_failure="fix"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
+        assert len(rule_findings) == 1
+        assert rule_findings[0].severity == Severity.ERROR
+        assert rule_findings[0].step_name == "inner_guard"
+
+    def test_branching_reentry_reset_on_all_branches_does_not_fire(self) -> None:
+        """Outer guard forks; both branches reconverge at a SHARED reset before
+        reaching inner_guard. The shared reset dominates inner_guard from the
+        outer guard's non-exit target, so the rule must NOT fire.
+
+        Mirrors the linear test_reset_present_does_not_fire topology but
+        exercises the fork-join structure explicitly.
+        """
+        steps = {
+            "outer_guard": _audit_outer_guard(
+                "audit_remediation_count", non_exit="work", exit_route="done"
+            ),
+            "work": RecipeStep(
+                tool="run_skill",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(route="branch_a", when="context.flag == 'a'"),
+                        StepResultCondition(route="branch_b"),
+                    ]
+                ),
+                on_failure="done",
+            ),
+            "branch_a": RecipeStep(tool="run_skill", on_success="reset_fix", on_failure="done"),
+            "branch_b": RecipeStep(tool="run_skill", on_success="reset_fix", on_failure="done"),
+            "reset_fix": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.init_counter",
+                    "counter_value": "",
+                },
+                capture={"fix_count": "${{ result.value }}"},
+                on_success="inner_guard",
+                on_failure="inner_guard",
+            ),
+            "inner_guard": _guard_step("fix_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="test", on_failure="done"),
+            "test": RecipeStep(tool="test_check", on_success="outer_guard", on_failure="fix"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
+        assert rule_findings == []
+
+
+# ---------------------------------------------------------------------------
+# shared-counter-cross-site-without-push-symmetry
+#
+# These fixtures exercise the rule that catches the #4274 defect shape:
+# two check_loop_iteration guards share a counter, each is preceded by a
+# merge_worktree step, and those merge steps disagree on whether their
+# unconditional success route reaches a push_to_remote step.
+# ---------------------------------------------------------------------------
+
+
+def _merge_worktree_step(*, push_route: str | None, guard_route: str) -> RecipeStep:
+    """A merge_worktree step with two on_result conditions: one to a guard,
+    one (default) to either a push_to_remote step (push_route) or a
+    non-push work step (push_route=None → routes to 'remediate')."""
+    conditions = [
+        StepResultCondition(when="result.failed_step == 'ref_coherence'", route=guard_route),
+    ]
+    if push_route is not None:
+        conditions.append(StepResultCondition(route=push_route))
+    else:
+        conditions.append(StepResultCondition(route="remediate"))
+    return RecipeStep(
+        tool="merge_worktree",
+        on_result=StepResultRoute(conditions=conditions),
+        on_success="done",
+    )
+
+
+def _push_to_remote_step(next_step: str) -> RecipeStep:
+    return RecipeStep(tool="push_to_remote", on_success=next_step, on_failure="done")
+
+
+class TestSharedCounterCrossSiteWithoutPushSymmetry:
+    def test_asymmetric_push_protection_fires(self) -> None:
+        """merge_a's success routes to push_to_remote; merge_b's success routes
+        to remediate (no push). Both guards share ``shared_count``. Rule must fire.
+        """
+        steps = {
+            "merge_a": _merge_worktree_step(push_route="push_a", guard_route="guard_a"),
+            "push_a": _push_to_remote_step("done"),
+            "merge_b": _merge_worktree_step(push_route=None, guard_route="guard_b"),
+            "guard_a": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "guard_b": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="done", on_failure="done"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [
+            f for f in findings if f.rule == "shared-counter-cross-site-without-push-symmetry"
+        ]
+        assert len(rule_findings) == 1
+        assert rule_findings[0].severity == Severity.ERROR
+        # Finding must name both guard sites
+        assert "guard_a" in rule_findings[0].message
+        assert "guard_b" in rule_findings[0].message
+
+    def test_symmetric_push_protection_does_not_fire(self) -> None:
+        """Both merge sites' success routes reach a push_to_remote step. Rule
+        must NOT fire — push symmetry is preserved across both guards.
+        """
+        steps = {
+            "merge_a": _merge_worktree_step(push_route="push_a", guard_route="guard_a"),
+            "push_a": _push_to_remote_step("done"),
+            "merge_b": _merge_worktree_step(push_route="push_b", guard_route="guard_b"),
+            "push_b": _push_to_remote_step("done"),
+            "guard_a": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "guard_b": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="done", on_failure="done"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [
+            f for f in findings if f.rule == "shared-counter-cross-site-without-push-symmetry"
+        ]
+        assert rule_findings == []
+
+    def test_single_guard_site_does_not_fire(self) -> None:
+        """Only one check_loop_iteration guard uses the counter — nothing to
+        compare. Rule must NOT fire.
+        """
+        steps = {
+            "merge_a": _merge_worktree_step(push_route="push_a", guard_route="guard_a"),
+            "push_a": _push_to_remote_step("done"),
+            "guard_a": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="done", on_failure="done"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [
+            f for f in findings if f.rule == "shared-counter-cross-site-without-push-symmetry"
+        ]
+        assert rule_findings == []
+
+    def test_bundled_remediation_yaml_fires(self) -> None:
+        """Issue #4274 regression: bundled ``remediation.yaml`` has two guards
+        sharing ``ref_push_count`` with asymmetric push protection across
+        their merge_worktree predecessors (``merge`` has immediate push,
+        ``pre_remediation_merge`` does not). Rule must fire on the unfixed
+        current recipe. After Part B separates counters and adds the missing
+        push, this test should stop firing.
+        """
+        recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+        findings = run_semantic_rules(recipe)
+        rule_findings = [
+            f for f in findings if f.rule == "shared-counter-cross-site-without-push-symmetry"
+        ]
+        assert len(rule_findings) >= 1, (
+            f"remediation.yaml must fire shared-counter-cross-site-without-push-symmetry "
+            f"on the current unfixed topology; got findings: "
+            f"{[(f.rule, f.message) for f in findings]}"
         )

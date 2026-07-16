@@ -415,6 +415,42 @@ def test_check_loop_iteration_cross_cycle_budget_starvation() -> None:
     assert r4["next_iteration"] == "1"
 
 
+def test_check_loop_iteration_max_iterations_two_single_push_boundary() -> None:
+    """max_iterations="2" allows exactly ONE push attempt (issue #4274 boundary).
+
+    With max_iterations="2" (the production value for ``ref_push_count``), the
+    counter permits exactly one increment before exhausting the budget:
+
+    - Round 1: 0→1 (allowed), the single permitted push attempt.
+    - Reset: counter back to "" via ``init_counter``.
+    - Round 2: 0→1 (allowed), the second push attempt.
+    - Final increment 1→2: blocked — ``max_exceeded == "true"``.
+
+    Any cycle that needs ≥2 pushes between resets therefore exhausts the
+    budget at the second push, regardless of how many audit-rem cycles
+    wrap around it. The existing ``max_iterations="3"`` test has comfortable
+    margin; this ``max=2`` variant exposes the tight single-push boundary
+    that the ref-push retry chain actually operates under.
+    """
+    # First push attempt
+    r1 = check_loop_iteration(current_iteration="", max_iterations="2")
+    assert r1["max_exceeded"] == "false"
+    assert r1["next_iteration"] == "1"
+
+    # Reset between cycles — init_counter returns "0" for blank input
+    reset = init_counter(counter_value="")
+    assert reset["value"] == "0"
+
+    # Second push attempt — counter fresh, allowed
+    r2 = check_loop_iteration(current_iteration=reset["value"], max_iterations="2")
+    assert r2["max_exceeded"] == "false"
+    assert r2["next_iteration"] == "1"
+
+    # The next increment 1→2 exhausts the budget
+    r3 = check_loop_iteration(current_iteration=r2["next_iteration"], max_iterations="2")
+    assert r3["max_exceeded"] == "true"
+
+
 # ---------------------------------------------------------------------------
 # T_SU_CL1–T_SU_CL4: check_loop_with_progress tests (progress-aware loop guard)
 # ---------------------------------------------------------------------------

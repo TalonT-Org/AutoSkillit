@@ -6,11 +6,26 @@ import regex as _re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
+from autoskillit.recipe._analysis_bfs import all_paths_cross
 from autoskillit.recipe._analysis_graph import _extract_routing_edges
 from autoskillit.recipe._rule_helpers import _build_graph_without_nodes
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import Recipe, RecipeStep
 
 _CTX_VAR_RE = _re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
+
+
+def _is_check_loop_iteration_guard(step: RecipeStep) -> bool:
+    """Return True if ``step`` is a ``check_loop_iteration`` smoke_utils guard.
+
+    These steps increment their counter via ``capture`` rather than resetting
+    it; the rule's dominator candidate filter must exclude them so parallel
+    guards sharing a counter don't masquerade as resets.
+    """
+    return (
+        step.tool == "run_python"
+        and step.with_args.get("callable") == "autoskillit.smoke_utils.check_loop_iteration"
+    )
 
 
 def _build_yaml_predecessor_map(ctx: ValidationContext) -> dict[str, set[str]]:
@@ -297,17 +312,40 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
             if inner_name not in cycle_candidates:
                 continue
 
-            backward_reachable = bfs_reachable(ctx.predecessors, inner_name)
-            on_path = forward_reachable & backward_reachable
-            on_path.add(non_exit_target)
-            on_path.discard(inner_name)
+            # Dominator check: at least one reset step must dominate
+            # ``inner_name`` on every path from ``non_exit_target``. The prior
+            # existential-path intersection (``forward & backward``) accepted
+            # any reset reachable in the bilateral region — false-negative for
+            # branching re-entry where the reset sits on only one branch.
+            #
+            # Candidate filter:
+            # - ``inner_name`` is excluded because every ``check_loop_iteration``
+            #   captures its own counter (self-loop), and ``all_paths_cross``
+            #   returns True whenever ``candidate == target``. Without this
+            #   filter, every cyclic guard would trivially "dominate itself"
+            #   and the rule would silently never fire.
+            # - Other ``check_loop_iteration`` guards sharing the counter are
+            #   excluded because their ``capture`` is an INCREMENT (the guard
+            #   runs to consume one iteration), not a reset. Including them
+            #   would treat every parallel guard as a "reset" and produce
+            #   false-positive findings on bundled recipes that have multiple
+            #   guards sharing a counter across parallel branches.
+            # - The actual reset is a step using
+            #   ``autoskillit.smoke_utils.init_counter`` whose ``capture``
+            #   publishes the new value. We identify it by callable.
+            reset_steps = [
+                sn
+                for sn in forward_reachable
+                if sn != inner_name
+                and sn in recipe.steps
+                and inner_counter in recipe.steps[sn].capture
+                and not _is_check_loop_iteration_guard(recipe.steps[sn])
+            ]
 
-            has_reset = False
-            for sn in on_path:
-                candidate = recipe.steps.get(sn)
-                if candidate is not None and inner_counter in candidate.capture:
-                    has_reset = True
-                    break
+            has_reset = any(
+                all_paths_cross(graph, non_exit_target, reset_sn, inner_name)
+                for reset_sn in reset_steps
+            )
 
             if not has_reset:
                 findings.append(
@@ -326,5 +364,187 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
                         ),
                     )
                 )
+
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# shared-counter-cross-site-without-push-symmetry
+#
+# Catches the structural shape of issue #4274: two ``check_loop_iteration``
+# guards sharing a counter variable, each preceded by a ``merge_worktree``-
+# tool step, where the two merge sites disagree on whether their success path
+# reaches a ``push_to_remote``-tool step. The asymmetry means one merge site
+# consumes push retries with a "fresh push" reset while the other does not,
+# exhausting the shared counter on whichever site lacks push protection.
+# ---------------------------------------------------------------------------
+
+
+def _find_nearest_merge_worktree_ancestor(
+    recipe: Recipe,
+    guard_step: str,
+    yaml_preds: dict[str, set[str]],
+) -> str | None:
+    """Walk ``yaml_preds`` backward from ``guard_step`` to the nearest ``merge_worktree`` step.
+
+    Returns the merge_worktree step name, or ``None`` if no such step is
+    reachable upstream. Skips guard steps themselves (they are not merge sites).
+    """
+    visited: set[str] = set()
+    queue = list(yaml_preds.get(guard_step, set()))
+    while queue:
+        node = queue.pop()
+        if node in visited:
+            continue
+        visited.add(node)
+        step = recipe.steps.get(node)
+        if step is not None and step.tool == "merge_worktree":
+            return node
+        queue.extend(yaml_preds.get(node, set()))
+    return None
+
+
+def _unconditional_success_route(step: RecipeStep) -> str | None:
+    """Return the unconditional success route of a merge_worktree step.
+
+    The unconditional route is the ``on_result`` condition with no ``when``
+    clause (the "default" route), falling back to ``on_success`` if there is
+    no ``on_result``. Returns ``None`` if neither is declared.
+    """
+    if step.on_result and step.on_result.conditions:
+        for cond in step.on_result.conditions:
+            if cond.when is None:
+                return cond.route
+    return step.on_success
+
+
+def _merge_push_symmetric_to_guard(recipe: Recipe, merge_step_name: str) -> bool:
+    """Return True iff merge's unconditional success route is a push_to_remote step.
+
+    Checks the immediate next step in the success path. A push_to_remote step
+    that is reachable only after traversing sub-recipe composition or the
+    full pipeline loop is not credited — such "coincidental" pushes do not
+    represent intentional push-after-merge protection at the merge site being
+    audited.
+
+    Matches the bundled recipe topology:
+    - ``merge`` (the main merge_worktree) routes unconditionally to
+      ``inter_part_push`` (a ``push_to_remote`` step) → True.
+    - ``pre_remediation_merge`` routes unconditionally to ``remediate`` (a
+      ``run_skill`` step) → False — the pipeline eventually pushes via
+      ``ref_push_pre_remediation`` but only after looping back through the
+      audit cycle, which does not constitute push symmetry at this merge site.
+    """
+    merge_step = recipe.steps.get(merge_step_name)
+    if merge_step is None or merge_step.tool != "merge_worktree":
+        return False
+    route = _unconditional_success_route(merge_step)
+    if route is None:
+        return False
+    target = recipe.steps.get(route)
+    return target is not None and target.tool == "push_to_remote"
+
+
+@semantic_rule(
+    name="shared-counter-cross-site-without-push-symmetry",
+    description=(
+        "Two check_loop_iteration guards share a counter variable across "
+        "structurally distinct merge_worktree sites that disagree on whether "
+        "their success path reaches a push_to_remote step before the next "
+        "merge site"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_shared_counter_cross_site_without_push_symmetry(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    """Flag two guards sharing a counter whose merge ancestors disagree on push.
+
+    This is the rule that catches issue #4274 — the ``ref_push_count`` shared
+    between ``check_ref_push_loop`` (preceded by ``merge``, whose success
+    route is the ``push_to_remote`` step ``inter_part_push``) and
+    ``check_ref_push_loop_pre_remediation`` (preceded by ``pre_remediation_merge``,
+    whose success route is the ``run_skill`` step ``remediate``, no immediate
+    push). The asymmetry means one merge site pushes fresh retries while the
+    other accumulates, exhausting the shared counter.
+
+    The per-guard dominator fix to ``loop-counter-not-reset-on-outer-cycle``
+    does NOT reach this defect because the two guard sites are entered from
+    unrelated points in the graph (the GO-path bypass in ``remediation.yaml``
+    forks at ``audit_impl``'s ``on_result``, not at any step downstream of
+    either guard's bilateral cycle). Catching the #4274 shape requires
+    reasoning about push symmetry across structurally distinct merge sites
+    sharing one counter — exactly what this rule does.
+    """
+    findings: list[RuleFinding] = []
+    recipe = ctx.recipe
+    yaml_preds = _build_yaml_predecessor_map(ctx)
+
+    # Collect guard steps and their counter variables
+    guard_steps: dict[str, str] = {}
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        if step.with_args.get("callable") != "autoskillit.smoke_utils.check_loop_iteration":
+            continue
+        current_iter_expr = step.with_args.get("current_iteration", "")
+        m = _CTX_VAR_RE.search(current_iter_expr)
+        if not m:
+            continue
+        guard_steps[step_name] = m.group(1)
+
+    if len(guard_steps) < 2:
+        return findings
+
+    # Group guards by counter variable
+    guards_by_counter: dict[str, list[str]] = {}
+    for guard_name, counter_var in guard_steps.items():
+        guards_by_counter.setdefault(counter_var, []).append(guard_name)
+
+    # For each shared-counter group with >=2 guards, find nearest merge_worktree
+    # ancestor of each and check push symmetry.
+    for counter_var, group_guards in guards_by_counter.items():
+        if len(group_guards) < 2:
+            continue
+
+        guard_sites: list[
+            tuple[str, str | None, bool]
+        ] = []  # (guard_name, merge_ancestor, push_symmetric)
+        for guard_name in group_guards:
+            merge_ancestor = _find_nearest_merge_worktree_ancestor(recipe, guard_name, yaml_preds)
+            if merge_ancestor is None:
+                continue  # not a merge-site guard
+            push_symmetric = _merge_push_symmetric_to_guard(recipe, merge_ancestor)
+            guard_sites.append((guard_name, merge_ancestor, push_symmetric))
+
+        if len(guard_sites) < 2:
+            continue  # nothing to compare
+
+        push_values = {push_sym for _, _, push_sym in guard_sites}
+        if len(push_values) < 2:
+            continue  # all guards agree on push symmetry
+
+        # Disagreement: fire one finding naming all guard sites
+        site_descriptions = [
+            f"'{guard_name}' (merge predecessor '{merge_ancestor}', "
+            f"{'pushes' if push_sym else 'no immediate push'})"
+            for guard_name, merge_ancestor, push_sym in guard_sites
+        ]
+        findings.append(
+            make_finding(
+                rule_name="shared-counter-cross-site-without-push-symmetry",
+                step_name=guard_sites[0][0],
+                message=(
+                    f"Counter '{counter_var}' is shared across guards "
+                    f"{', '.join(site_descriptions)} whose merge_worktree "
+                    f"predecessors disagree on push symmetry. One merge site "
+                    f"pushes fresh retries after consuming the counter while "
+                    f"the other does not, deterministically exhausting the "
+                    f"shared counter. Use a separate counter per merge site "
+                    f"or ensure every merge_worktree's success route is a "
+                    f"push_to_remote step."
+                ),
+            )
+        )
 
     return findings

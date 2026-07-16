@@ -42,7 +42,32 @@ def _make_params() -> list[tuple[str, str, list[str]]]:
     return params
 
 
-@pytest.mark.parametrize("recipe_name,ing_name,guarded_steps", _make_params())
+_PART_A_AFFECTED_RECIPES = frozenset({"remediation", "implementation", "implementation-groups"})
+
+
+def _content_integrity_param(recipe_name: str, ing_name: str, guarded_steps: list[str]):
+    if recipe_name in _PART_A_AFFECTED_RECIPES:
+        return pytest.param(
+            recipe_name,
+            ing_name,
+            guarded_steps,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    "Part A exposes latent defects (merge_fix_count without "
+                    "reset, shared-counter-cross-site-without-push-symmetry). "
+                    "Part B resolves them; remove xfail when Part B lands."
+                ),
+            ),
+        )
+    return pytest.param(recipe_name, ing_name, guarded_steps)
+
+
+def _xfail_params() -> list:
+    return [_content_integrity_param(*p) for p in _make_params()]
+
+
+@pytest.mark.parametrize("recipe_name,ing_name,guarded_steps", _xfail_params())
 def test_truthy_resolved_step_has_no_optional_signal_in_content(
     recipe_name: str, ing_name: str, guarded_steps: list[str]
 ) -> None:

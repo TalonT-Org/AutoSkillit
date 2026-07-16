@@ -93,17 +93,30 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
     yaml_files = list(wf_dir.glob("*.yaml"))
     assert yaml_files
 
-    _KNOWN_NON_CONFORMING: dict[str, set[str]] = {}
+    _PART_A_NON_CONFORMING: dict[str, set[str]] = {
+        "remediation.yaml": {
+            "loop-counter-not-reset-on-outer-cycle",
+            "shared-counter-cross-site-without-push-symmetry",
+        },
+        "implementation.yaml": {"loop-counter-not-reset-on-outer-cycle"},
+        "implementation-groups.yaml": {"loop-counter-not-reset-on-outer-cycle"},
+    }
+    """Part A exposes latent defects in these recipes.
+
+    Excluded from the strict no-error-findings assertion. Part B resolves the
+    recipe-level defects (adds reset steps and a push step); once Part B lands
+    remove the entries to enforce the strict invariant again.
+    """
     for path in yaml_files:
         wf = load_recipe(path)
         findings = run_semantic_rules(wf)
-        excluded = _KNOWN_NON_CONFORMING.get(path.name, set())
+        excluded = _PART_A_NON_CONFORMING.get(path.name, set())
         if excluded:
             fired_rules = {f.rule for f in findings if f.severity == Severity.ERROR}
             for rule_name in excluded:
                 assert rule_name in fired_rules, (
                     f"Recipe '{path.name}': exclusion for '{rule_name}' is stale — "
-                    f"rule no longer fires. Remove from _KNOWN_NON_CONFORMING."
+                    f"rule no longer fires. Remove from _PART_A_NON_CONFORMING."
                 )
         errors = [f for f in findings if f.severity == Severity.ERROR and f.rule not in excluded]
         assert not errors, (

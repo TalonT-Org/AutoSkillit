@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import Severity
-from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_success_step_graph
+from autoskillit.recipe._analysis_bfs import (
+    _bfs_capped,
+    _build_success_step_graph,
+    all_paths_cross,
+)
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
 
@@ -145,6 +149,15 @@ class TestRecipeIntegrationPredicateRouting:
         ip_errors = validate_recipe_structure(self.ip_recipe)
         assert ip_errors == [], f"implementation.yaml has validation errors: {ip_errors}"
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "Part A exposes latent defects in bundled recipes: "
+            "merge_fix_count without reset, and shared-counter-cross-site-"
+            "without-push-symmetry on remediation.yaml. Part B resolves "
+            "these defects; remove xfail when Part B lands."
+        ),
+    )
     def test_all_recipes_no_error_semantic_findings(self) -> None:
         """All bundled implementation-family recipes have no ERROR-severity findings."""
         for recipe, name in [
@@ -395,3 +408,87 @@ def test_test_fix_loop_count_resets_in_implementation_groups_recipe() -> None:
     assert _has_counter_reset_on_path(
         recipe, "check_audit_remediation_loop", "remediate", "test_fix_loop_count"
     ), "implementation-groups.yaml must reset test_fix_loop_count between audit-remediation cycles"
+
+
+# ---------------------------------------------------------------------------
+# Ref-push counter reset coverage — issue #4274 regression guards.
+#
+# The pre-remediation ref-push guard (``check_ref_push_loop_pre_remediation``)
+# must have its counter reset on the NO-GO re-entry path. Cross-part
+# coordination: this test reads the counter variable directly from the loaded
+# recipe so it survives Part B's counter separation (the counter name may
+# change from ``ref_push_count`` to ``pre_remediation_ref_push_count``).
+# ---------------------------------------------------------------------------
+
+
+def _extract_check_loop_iteration_counter(step) -> str | None:
+    """Return the counter variable name from a check_loop_iteration step, or None."""
+    if step.tool != "run_python":
+        return None
+    if step.with_args.get("callable") != "autoskillit.smoke_utils.check_loop_iteration":
+        return None
+    current_iter_expr = step.with_args.get("current_iteration", "")
+    import regex as re
+
+    m = re.search(r"\$\{\{\s*context\.(\w+)\s*\}\}", current_iter_expr)
+    return m.group(1) if m else None
+
+
+@pytest.mark.parametrize("recipe_name", ["remediation", "implementation", "implementation-groups"])
+def test_ref_push_counter_reset_on_no_go_path(recipe_name: str) -> None:
+    """The ref-push pre-remediation guard's counter is reset on the NO-GO path.
+
+    For ``remediation.yaml``: the pre-remediation guard
+    (``check_ref_push_loop_pre_remediation``) sits downstream of the audit-
+    remediation cycle's NO-GO route, so its counter MUST be reset by
+    ``reset_ref_push_counter`` on every path from the audit loop's non-exit
+    target to the guard. ``all_paths_cross`` enforces this universal-path
+    contract (Part B may split the counter variable; the test reads the name
+    dynamically so it survives that change).
+
+    For ``implementation.yaml`` and ``implementation-groups.yaml``: the pre-
+    remediation guard step is NOT in those recipes, so the test only asserts
+    the structural reset invariant for remediation.yaml.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+
+    pre_remediation_guard = "check_ref_push_loop_pre_remediation"
+    if pre_remediation_guard not in recipe.steps:
+        pytest.skip(f"{recipe_name} has no {pre_remediation_guard} step")
+
+    guard_step = recipe.steps[pre_remediation_guard]
+    counter_var = _extract_check_loop_iteration_counter(guard_step)
+    assert counter_var is not None, (
+        f"{pre_remediation_guard} does not parse as a check_loop_iteration guard"
+    )
+
+    # reset_ref_push_counter must capture the same counter variable
+    reset_step = recipe.steps.get("reset_ref_push_counter")
+    assert reset_step is not None, f"{recipe_name} must have a reset_ref_push_counter step"
+    assert counter_var in reset_step.capture, (
+        f"reset_ref_push_counter must capture {counter_var!r}, got {list(reset_step.capture)}"
+    )
+
+    # The audit-remediation loop's non-max_exceeded route feeds the pre-
+    # remediation cycle. reset_ref_push_counter must dominate the pre-
+    # remediation guard from that starting point.
+    audit_loop = recipe.steps["check_audit_remediation_loop"]
+    non_exit_target: str | None = None
+    if audit_loop.on_result:
+        for cond in audit_loop.on_result.conditions:
+            if cond.when and "max_exceeded" in cond.when:
+                continue
+            non_exit_target = cond.route
+            break
+    assert non_exit_target is not None, (
+        "check_audit_remediation_loop must declare a non-max_exceeded route"
+    )
+
+    graph = recipe.steps and _build_success_step_graph(recipe)
+    dominated = all_paths_cross(
+        graph, non_exit_target, "reset_ref_push_counter", pre_remediation_guard
+    )
+    assert dominated, (
+        f"{recipe_name}: reset_ref_push_counter must dominate "
+        f"{pre_remediation_guard} from {non_exit_target}"
+    )

@@ -48,11 +48,43 @@ def _default_overrides() -> dict[str, Any]:
     }
 
 
+_PART_A_AFFECTED_RECIPES = frozenset({"remediation", "implementation", "implementation-groups"})
+"""Recipes whose semantic findings change as a result of Part A's rule corrections.
+
+Part A exposes latent defects (missing merge_fix_count reset and shared-counter-
+cross-site-without-push-symmetry on remediation.yaml) which previously escaped
+the old existential BFS. The xfail bridges on these tests survive until Part B
+resolves the defects in the bundled recipes themselves.
+"""
+
+
 def _recipe_names() -> list[str]:
     return sorted(all_validated_recipe_names(_PROJECT_ROOT))
 
 
-@pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
+def _recipe_name_param(name: str):
+    """Return a pytest.param for ``name``, with strict xfail only on Part A affected recipes."""
+    if name in _PART_A_AFFECTED_RECIPES:
+        return pytest.param(
+            name,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    "Part A exposes latent defects in bundled recipes: "
+                    "merge_fix_count without reset, and shared-counter-cross-site-"
+                    "without-push-symmetry on remediation.yaml. Part B resolves "
+                    "these defects; remove xfail when Part B lands."
+                ),
+            ),
+        )
+    return pytest.param(name)
+
+
+def _parametrize_recipes() -> list:
+    return [_recipe_name_param(n) for n in _recipe_names()]
+
+
+@pytest.mark.parametrize("recipe_name", _parametrize_recipes(), ids=lambda n: n)
 def test_bundled_recipe_validates_with_all_truthy_ingredients(
     recipe_name: str, tmp_path: Path
 ) -> None:
@@ -78,7 +110,7 @@ def test_bundled_recipe_validates_with_all_truthy_ingredients(
         os.chdir(cwd_before)
 
 
-@pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
+@pytest.mark.parametrize("recipe_name", _parametrize_recipes(), ids=lambda n: n)
 def test_bundled_recipe_validates_with_default_ingredients(
     recipe_name: str, tmp_path: Path
 ) -> None:

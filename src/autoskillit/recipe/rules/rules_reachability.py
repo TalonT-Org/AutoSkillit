@@ -25,9 +25,8 @@ from autoskillit.core import Severity
 from autoskillit.recipe._analysis import (
     ValidationContext,
     _bfs_with_facts,
-    bfs_reachable,
 )
-from autoskillit.recipe._analysis_bfs import bfs_reachable_without_barrier
+from autoskillit.recipe._analysis_bfs import all_paths_cross, bfs_reachable_without_barrier
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # Regex to find ${{ context.X }} references anywhere in a string value.
@@ -60,9 +59,20 @@ def _find_capture_producers(ctx: ValidationContext, var: str) -> list[str]:
     return [step.name for step in ctx.recipe.steps.values() if var in (step.capture or {})]
 
 
-def _ancestors(ctx: ValidationContext, step_name: str) -> set[str]:
-    """Return all steps reachable via backward BFS from step_name (i.e. ancestors)."""
-    return bfs_reachable(ctx.predecessors, step_name)
+def _find_recipe_entry(ctx: ValidationContext) -> str | None:
+    """Return the recipe entry step name: the first step with no in-edges in ``ctx.step_graph``.
+
+    Falls back to the first step in ``ctx.recipe.steps`` iteration order when
+    every step has an incoming edge (e.g. recipes that compose via
+    ``sub_recipe`` and have no top-level entry). Returns ``None`` if the recipe
+    has no steps at all.
+    """
+    all_targets = {t for targets in ctx.step_graph.values() for t in targets}
+    entry = next(
+        (name for name in ctx.recipe.steps if name not in all_targets),
+        next(iter(ctx.recipe.steps), None),
+    )
+    return entry
 
 
 @semantic_rule(
@@ -87,12 +97,7 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
     Note: variables captured unconditionally by tool steps are NOT flagged here
     because they do not appear in the ``_bfs_with_facts`` conditional fact domain.
     """
-    # Find the recipe entry: the step with no in-edges in the step graph.
-    all_targets = {t for targets in ctx.step_graph.values() for t in targets}
-    entry = next(
-        (name for name in ctx.recipe.steps if name not in all_targets),
-        next(iter(ctx.recipe.steps), None),
-    )
+    entry = _find_recipe_entry(ctx)
     if entry is None:
         return []
 
@@ -194,13 +199,19 @@ def _check_event_scope_requires_upstream_capture(ctx: ValidationContext) -> list
         if isinstance(event, str) and event.startswith("${{"):
             continue  # dynamic reference — correct pattern
 
-        # Literal event value: check whether at least one merge_group_trigger
-        # producer is upstream of this step (i.e. it's an ancestor in the graph).
+        # Literal event value: dominator check — every path from the recipe
+        # entry to this step must cross at least one merge_group_trigger
+        # producer. The prior existential ``any(p in ancestor_set)`` check
+        # accepted producers reachable via a single branch of a fork, producing
+        # false negatives for fork-join topologies where the other branch
+        # bypasses the producer.
         mg_producers = _find_capture_producers(ctx, "merge_group_trigger")
-        ancestor_set = _ancestors(ctx, step_name)
+        entry = _find_recipe_entry(ctx)
+        if entry is None:
+            entry = step_name  # no recipe entry — fall back to step-local view
 
-        if any(p in ancestor_set for p in mg_producers):
-            continue  # at least one producer is upstream — context is known
+        if any(all_paths_cross(ctx.step_graph, entry, p, step_name) for p in mg_producers):
+            continue  # at least one producer dominates — context is known
 
         producer_desc = (
             f"producer steps {mg_producers!r}"

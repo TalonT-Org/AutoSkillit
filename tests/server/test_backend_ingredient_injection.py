@@ -495,6 +495,14 @@ class TestRealCompositionPruning:
             and step.tool == "run_skill"
         )
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "Part A exposes latent defects in bundled implementation.yaml "
+            "(merge_fix_count without reset). Part B resolves the recipe defect; "
+            "remove xfail when Part B lands."
+        ),
+    )
     def test_codex_overrides_remove_guarded_steps_from_content(self, tmp_path: Path) -> None:
         from autoskillit.recipe._api import load_and_validate
 

@@ -184,7 +184,6 @@ from .types import LABEL_TRANSITIONS as LABEL_TRANSITIONS
 from .types import LAUNCH_ID_ENV_VAR as LAUNCH_ID_ENV_VAR
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
-from .types import OPEN_KITCHEN_OUTPUT_BUDGET_BYTES as OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
 from .types import ORCHESTRATOR_SESSION_REQUIRED_ENV as ORCHESTRATOR_SESSION_REQUIRED_ENV
 from .types import ORDER_INTERACTIVE_REQUIRED_ENV as ORDER_INTERACTIVE_REQUIRED_ENV
 from .types import OUTPUT_DISCIPLINE_BLOCK as OUTPUT_DISCIPLINE_BLOCK
@@ -206,6 +205,10 @@ from .types import RECIPE_PACK_REGISTRY as RECIPE_PACK_REGISTRY
 from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS
 from .types import REQUIRED_CONSUMER_FIELDS as REQUIRED_CONSUMER_FIELDS
 from .types import RESERVED_LOG_RECORD_KEYS as RESERVED_LOG_RECORD_KEYS
+from .types import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY as RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+from .types import (
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST as RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+)
 from .types import RESUME_SESSION_BASELINE_KEYS as RESUME_SESSION_BASELINE_KEYS
 from .types import RETIRED_AGENT_NAMES as RETIRED_AGENT_NAMES
 from .types import RETIRED_FEATURES as RETIRED_FEATURES
@@ -341,6 +344,7 @@ from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
 from .types import RecipeSource as RecipeSource
+from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec

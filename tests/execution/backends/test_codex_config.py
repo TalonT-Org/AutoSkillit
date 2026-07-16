@@ -9,7 +9,7 @@ from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     HEADLESS_AUTO_GATE_ENV_VAR,
-    OPEN_KITCHEN_OUTPUT_BUDGET_BYTES,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
 )
 from autoskillit.execution.backends import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_config import (
@@ -27,15 +27,18 @@ from autoskillit.execution.backends._codex_config import (
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
-def test_codex_tool_output_limit_is_derived_from_open_kitchen_budget() -> None:
+def test_codex_tool_output_limit_is_derived_from_largest_measured_exemption() -> None:
     """The four-byte relation is Codex's coarse truncation heuristic, not tokenization.
 
     This ceiling is a blast-radius damage bound; producer guards and output
     spilling remain the load-bearing protections.
     """
-    assert OPEN_KITCHEN_OUTPUT_BUDGET_BYTES == 96_000
-    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == ((OPEN_KITCHEN_OUTPUT_BUDGET_BYTES + 3) // 4) + 8_000
-    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == 32_000
+    max_bytes = max(
+        definition.max_utf8_bytes for definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.values()
+    )
+    assert max_bytes == 180_000
+    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == ((max_bytes + 3) // 4) + 8_000
+    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == 53_000
 
 
 def test_response_backstop_fires_below_codex_transport_ceiling() -> None:

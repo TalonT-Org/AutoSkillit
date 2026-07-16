@@ -44,14 +44,18 @@ containment; downstream layers are independent backstops rather than substitutes
    the ceiling is downstream containment. Neither is cumulative-context accounting.
 
 The raw-text `open_kitchen` and `load_recipe` responses are measured exemptions from the
-universal backstop. Adding an exemption requires its own measured-budget test.
+universal backstop. `RESPONSE_BACKSTOP_EXEMPTION_REGISTRY` is the closed authority for
+their independent character ceiling, UTF-8 byte ceiling, and measurement identity. Its
+canonical digest is carried in tool metadata and probe-cache identity. Adding or relaxing
+an exemption requires re-measurement and a deliberate registry-digest change.
 
 ## Numeric Limits and Rationale
 
 | Limit | Decision and rationale |
 |---|---|
-| `OPEN_KITCHEN_OUTPUT_BUDGET_BYTES = 96_000` | This is a stable regression ceiling, not an estimate of the external gate. The 2026-07-15 maximum canonical rendering was 95,771 UTF-8 bytes for `remediation` with all truthy ingredients. The 229-byte project margin keeps growth explicit, while the payload remains roughly 4 KB below the last observed external persistence gate near 100 KB. Re-measure after CLI upgrades instead of silently raising the constant. |
-| `CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 32_000` | Derive it as `((96_000 + 3) // 4) + 8_000`: 24,000 tokens under the current client's four-byte heuristic, plus 8,000 tokens (32 KB under that heuristic) for serialized-payload headroom. It is a blast-radius damage bound, not the mechanism that makes evidence lossless. |
+| `load_recipe`: `max_chars = 179_000`, `max_utf8_bytes = 179_000` | The 2026-07-15 independent all-recipe/all-mode pre-backstop measurement reached 178,601 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 399-unit margin makes serving growth explicit. Measurement identity: `bundled-recipes-all-modes-2026-07-15/load-recipe`. |
+| `open_kitchen`: `max_chars = 180_000`, `max_utf8_bytes = 180_000` | The matching current-version pre-backstop measurement reached 178,660 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,340-unit margin covers the open-kitchen routing fields without conflating this handler ceiling with the smaller formatted presentation. Measurement identity: `bundled-recipes-all-modes-2026-07-15/open-kitchen`. |
+| `CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 53_000` | Derive it from the largest registered exemption as `((180_000 + 3) // 4) + 8_000`: 45,000 tokens under the current client's four-byte heuristic, plus 8,000 tokens for serialized-payload headroom. It is a blast-radius damage bound, not the mechanism that makes evidence lossless. |
 | `CODEX_AUTO_COMPACT_LIMIT = 999_999_999` | Retain the unreachable sentinel and the recovery obligation accepted in [ADR-0004](0004-recipe-redelivery.md). This protocol does not relax recipe-preservation policy. |
 | `inline_max_chars = 5_000` | Preserve the previous truncation threshold while changing the representation from destructive clipping to an artifact-backed preview. The configured 2,500-character head and 2,500-character tail retain both diagnostic setup and terminal status; a spill marker is added outside those source slices. |
 | `response_max_bytes = 90_000` | Bound the exact compact serialized handler payload before a coarser transport can clip it. Bytes are authoritative here; this is not a token or full JSON-RPC-envelope estimate. |
@@ -74,14 +78,15 @@ estimate.
 
 The project therefore requires the stricter relationship
 `response_max_bytes // 3 < CODEX_TOOL_OUTPUT_TOKEN_LIMIT`. The three-byte divisor is
-deliberate margin: the 90,000-byte response backstop must fire before Codex's 32,000-token
+deliberate margin: the 90,000-byte response backstop must fire before Codex's 53,000-token
 transport ceiling can clip a producer-blind response. A static test pins the relationship,
 and the live large-output probe must pass before either side is retuned.
 
 The measured raw-text exemptions, `open_kitchen` and `load_recipe`, must each remain below
-the 128,000-byte budget implied by the current 32,000-token, four-byte heuristic. Their
-measurements are independent release gates; the heuristic is not permission to omit
-those tests.
+their own registered character and UTF-8 byte ceilings, which in turn remain below the
+212,000-byte budget implied by the current 53,000-token, four-byte heuristic. Their
+measurements are independent release gates; the heuristic is not permission to omit those
+tests or reuse one surface's observed maximum as the other's authority.
 
 ## Corrections of Record
 
@@ -133,7 +138,7 @@ reserve-trigger metrics, so instrumentation must not claim those mechanisms exis
 
 ## Forward Obligations
 
-- Re-measure the 96,000-byte empirical `open_kitchen` bound after CLI upgrades.
+- Re-measure both registered raw-response ceilings after CLI upgrades.
 - Any ceiling relaxation, command-guard rule removal, response-backstop exemption
   addition, or output-discipline policy-version change invalidates the applicable cached
   capability probe.

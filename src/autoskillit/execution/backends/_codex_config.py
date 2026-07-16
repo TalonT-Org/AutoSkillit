@@ -10,7 +10,7 @@ import regex as _re
 from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     HEADLESS_AUTO_GATE_ENV_VAR,
-    OPEN_KITCHEN_OUTPUT_BUDGET_BYTES,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     ReadResult,
     atomic_write,
     get_logger,
@@ -28,7 +28,10 @@ CODEX_MCP_STARTUP_TIMEOUT_SEC: float = 30.0
 # native shell and MCP output. Codex currently applies a coarse four-UTF-8-byte
 # truncation heuristic; the extra 8,000 tokens provide serialized-payload
 # headroom. Guard and spill layers remain the load-bearing mechanisms.
-CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = ((OPEN_KITCHEN_OUTPUT_BUDGET_BYTES + 3) // 4) + 8_000
+_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES: int = max(
+    definition.max_utf8_bytes for definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.values()
+)
+CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = ((_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES + 3) // 4) + 8_000
 
 # Disable Codex auto-compaction by setting the limit to an unreachable value.
 # Auto-compaction at 90% of 258K context window can destroy recipe content

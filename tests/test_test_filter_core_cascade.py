@@ -217,6 +217,7 @@ class TestModuleCascadeCore:
                 "cli",
                 "config",
                 "core",
+                "execution",
                 "pipeline",
                 "recipe",
                 "server",
@@ -671,7 +672,7 @@ class TestBuildTestScopeCoreCascade:
             )
 
     def test_type_constants_registries_narrow_cascade(self, tmp_path: Path) -> None:
-        """_type_constants_registries → narrow cascade of 7 dirs."""
+        """_type_constants_registries → narrow cascade of 8 dirs."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_constants_registries.py"},
@@ -680,9 +681,18 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "cli", "config", "pipeline", "recipe", "server", "workspace"]:
+        for pkg in [
+            "core",
+            "cli",
+            "config",
+            "execution",
+            "pipeline",
+            "recipe",
+            "server",
+            "workspace",
+        ]:
             assert pkg in dir_names, f"_type_constants_registries cascade should include {pkg}"
-        for excluded in ["execution", "fleet", "migration", "planner", "hooks"]:
+        for excluded in ["fleet", "migration", "planner", "hooks"]:
             assert excluded not in dir_names, (
                 f"_type_constants_registries cascade should not include {excluded}"
             )

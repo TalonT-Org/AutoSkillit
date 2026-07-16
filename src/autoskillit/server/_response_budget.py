@@ -5,10 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import (
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    atomic_write,
+    get_logger,
+)
 
 if TYPE_CHECKING:
     from autoskillit.config import OutputBudgetConfig
@@ -16,13 +21,78 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 RESPONSE_SPILL_METADATA_KEY = "_autoskillit_response_spill"
-RESPONSE_BACKSTOP_EXEMPT_TOOLS = frozenset({"open_kitchen", "load_recipe"})
+RESPONSE_SPILL_SCHEMA_VERSION = 1
+RESPONSE_SPILL_METADATA_KEYS = frozenset(
+    {
+        "schema_version",
+        "artifact_path",
+        "sha256",
+        "original_utf8_bytes",
+        "projected_utf8_bytes",
+        "omitted_chars",
+        "omitted_items",
+        "reason",
+    }
+)
+RESPONSE_SPILL_REASONS = frozenset({"oversized_values", "minimal_projection", "plain_text"})
+RESPONSE_SPILL_SCHEMA_DIGEST = hashlib.sha256(
+    json.dumps(
+        {
+            "metadata_key": RESPONSE_SPILL_METADATA_KEY,
+            "metadata_keys": sorted(RESPONSE_SPILL_METADATA_KEYS),
+            "reasons": sorted(RESPONSE_SPILL_REASONS),
+            "schema_version": RESPONSE_SPILL_SCHEMA_VERSION,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+).hexdigest()
+
+RESPONSE_BUDGET_FAILURE_CAUSES = frozenset(
+    {
+        "context_unavailable",
+        "artifact_publication_failed",
+        "serialization_failed",
+        "projection_nonconvergent",
+        "irreducible_shape",
+        "schema_nonconforming",
+        "internal_invariant_failed",
+    }
+)
+
+
+class _ProjectionNonconvergentError(RuntimeError):
+    pass
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
 def _serialized(value: Any) -> str:
     if isinstance(value, str):
         return value
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+    return _canonical_json(value)
+
+
+def _bounded_tool_name(tool_name: str) -> str:
+    return tool_name.encode("ascii", "replace").decode("ascii")[:64]
+
+
+def _emit_response_budget_event(event: str, **payload: Any) -> None:
+    with suppress(Exception):
+        logger.info(event, **payload)
+
+
+def emit_response_budget_failure(tool_name: str, cause: str, original_utf8_bytes: int) -> None:
+    if cause not in RESPONSE_BUDGET_FAILURE_CAUSES:
+        cause = "internal_invariant_failed"
+    _emit_response_budget_event(
+        "response_budget_failure",
+        tool_name=_bounded_tool_name(tool_name),
+        cause=cause,
+        original_utf8_bytes=original_utf8_bytes,
+    )
 
 
 def _preview_string(value: str, limit: int) -> tuple[str, int]:
@@ -101,15 +171,94 @@ def _bounded_failure(
     }
     if artifact_path is not None:
         payload["artifact_path"] = artifact_path
-    rendered = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    if len(rendered.encode("utf-8")) <= max_bytes:
+    candidates = (
+        _canonical_json(payload),
+        '{"success":false,"error":"response_budget_failure"}',
+        '{"success":false}',
+        "{}",
+        "",
+    )
+    return next(
+        candidate for candidate in candidates if len(candidate.encode("utf-8")) <= max_bytes
+    )
+
+
+def bounded_response_budget_failure(
+    result: Any,
+    *,
+    cause: str,
+    tool_name: str,
+    max_bytes: int,
+    original_utf8_bytes: int,
+    artifact_path: str | None = None,
+) -> Any:
+    emit_response_budget_failure(tool_name, cause, original_utf8_bytes)
+    rendered = _bounded_failure(
+        reason=f"response_budget_{cause}",
+        tool_name=_bounded_tool_name(tool_name),
+        max_bytes=max_bytes,
+        artifact_path=artifact_path,
+    )
+    if isinstance(result, str):
         return rendered
-    return '{"success":false,"error":"response_budget_failure"}'
+    try:
+        return json.loads(rendered)
+    except ValueError:
+        return {"success": False, "error": "response_budget_failure"}
 
 
 def _artifact_path(artifact_dir: Path, tool_name: str) -> Path:
     safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in tool_name)
     return artifact_dir / f"{safe_name or 'response'}_{uuid.uuid4().hex[:8]}.log"
+
+
+def _finalize_envelope(envelope: dict[str, Any], *, max_bytes: int) -> str:
+    metadata = envelope.get(RESPONSE_SPILL_METADATA_KEY)
+    if not isinstance(metadata, dict) or "projected_utf8_bytes" not in metadata:
+        raise _ProjectionNonconvergentError("spill metadata missing projected byte field")
+    max_decimal_width = len(str(max(0, max_bytes)))
+    seen: set[tuple[int, int]] = set()
+    for _ in range(max_decimal_width + 2):
+        rendered = _canonical_json(envelope)
+        measured = len(rendered.encode("utf-8"))
+        current = metadata.get("projected_utf8_bytes")
+        if current == measured:
+            return rendered
+        state = (current if isinstance(current, int) else -1, measured)
+        if state in seen:
+            break
+        seen.add(state)
+        metadata["projected_utf8_bytes"] = measured
+    raise _ProjectionNonconvergentError("projected byte fixed point did not converge")
+
+
+def _spill_metadata(
+    metadata: dict[str, Any],
+    *,
+    reason: str,
+    omitted_chars: int,
+    omitted_items: int,
+) -> dict[str, Any]:
+    return {
+        "schema_version": RESPONSE_SPILL_SCHEMA_VERSION,
+        **metadata,
+        "projected_utf8_bytes": 0,
+        "omitted_chars": omitted_chars,
+        "omitted_items": omitted_items,
+        "reason": reason,
+    }
+
+
+def _total_omissions(value: Any) -> tuple[int, int]:
+    if isinstance(value, str):
+        return len(value), 0
+    if isinstance(value, list):
+        nested = [_total_omissions(item) for item in value]
+        return sum(chars for chars, _ in nested), len(value) + sum(items for _, items in nested)
+    if isinstance(value, dict):
+        nested = [_total_omissions(item) for item in value.values()]
+        return sum(chars for chars, _ in nested), len(value) + sum(items for _, items in nested)
+    return 0, 0
 
 
 def _project_json_object(
@@ -134,30 +283,32 @@ def _project_json_object(
             omitted_chars += chars
             omitted_items += items
         projected[RESPONSE_SPILL_METADATA_KEY] = {
-            **metadata,
-            "omitted_chars": omitted_chars,
-            "omitted_items": omitted_items,
-            "reason": "oversized_values",
+            **_spill_metadata(
+                metadata,
+                reason="oversized_values",
+                omitted_chars=omitted_chars,
+                omitted_items=omitted_items,
+            )
         }
-        rendered = json.dumps(projected, ensure_ascii=False, separators=(",", ":"))
-        projected[RESPONSE_SPILL_METADATA_KEY]["projected_utf8_bytes"] = len(
-            rendered.encode("utf-8")
-        )
-        rendered = json.dumps(projected, ensure_ascii=False, separators=(",", ":"))
+        rendered = _finalize_envelope(projected, max_bytes=max_bytes)
         if len(rendered.encode("utf-8")) <= max_bytes:
             return rendered
         value_limit //= 2
 
     minimal = {key: _minimal_same_type(value) for key, value in parsed.items()}
-    minimal[RESPONSE_SPILL_METADATA_KEY] = {
-        **metadata,
-        "omitted_chars": 0,
-        "omitted_items": 0,
-        "reason": "minimal_projection",
-    }
-    rendered = json.dumps(minimal, ensure_ascii=False, separators=(",", ":"))
-    minimal[RESPONSE_SPILL_METADATA_KEY]["projected_utf8_bytes"] = len(rendered.encode("utf-8"))
-    rendered = json.dumps(minimal, ensure_ascii=False, separators=(",", ":"))
+    omitted_chars = 0
+    omitted_items = 0
+    for value in parsed.values():
+        chars, items = _total_omissions(value)
+        omitted_chars += chars
+        omitted_items += items
+    minimal[RESPONSE_SPILL_METADATA_KEY] = _spill_metadata(
+        metadata,
+        reason="minimal_projection",
+        omitted_chars=omitted_chars,
+        omitted_items=omitted_items,
+    )
+    rendered = _finalize_envelope(minimal, max_bytes=max_bytes)
     return rendered if len(rendered.encode("utf-8")) <= max_bytes else None
 
 
@@ -167,24 +318,25 @@ def _plain_spill_envelope(
     metadata: dict[str, Any],
     max_bytes: int,
     inline_chars: int,
-) -> str:
-    preview, _ = _preview_string(original, min(inline_chars, max_bytes // 3))
-    envelope: dict[str, Any] = {
-        RESPONSE_SPILL_METADATA_KEY: {
-            **metadata,
-            "projected_utf8_bytes": 0,
-            "reason": "plain_text",
-        },
-        "preview": preview,
-    }
-    rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
-    envelope[RESPONSE_SPILL_METADATA_KEY]["projected_utf8_bytes"] = len(rendered.encode("utf-8"))
-    rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
-    while len(rendered.encode("utf-8")) > max_bytes and preview:
-        preview = preview[: len(preview) // 2]
-        envelope["preview"] = preview
-        rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
-    return rendered
+) -> str | None:
+    preview_limit = min(inline_chars, max_bytes // 3)
+    while True:
+        preview, omitted_chars = _preview_string(original, preview_limit)
+        envelope: dict[str, Any] = {
+            RESPONSE_SPILL_METADATA_KEY: _spill_metadata(
+                metadata,
+                reason="plain_text",
+                omitted_chars=omitted_chars,
+                omitted_items=0,
+            ),
+            "preview": preview,
+        }
+        rendered = _finalize_envelope(envelope, max_bytes=max_bytes)
+        if len(rendered.encode("utf-8")) <= max_bytes:
+            return rendered
+        if preview_limit == 0:
+            return None
+        preview_limit //= 2
 
 
 def enforce_response_budget(
@@ -201,32 +353,60 @@ def enforce_response_budget(
     Artifact failure and missing-context cases fail closed without echoing the
     original payload.
     """
-    if tool_name in RESPONSE_BACKSTOP_EXEMPT_TOOLS:
-        return result
-
-    original = _serialized(result)
+    try:
+        original = _serialized(result)
+    except (TypeError, ValueError, OverflowError):
+        return bounded_response_budget_failure(
+            result,
+            cause="serialization_failed",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=0,
+        )
     original_bytes = original.encode("utf-8")
+    original_size = len(original_bytes)
+    exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(tool_name)
+    if exemption is not None:
+        if len(original) <= exemption.max_chars and original_size <= exemption.max_utf8_bytes:
+            _emit_response_budget_event(
+                "response_budget_exemption",
+                tool_name=_bounded_tool_name(tool_name),
+                measurement_id=exemption.measurement_id,
+                original_chars=len(original),
+                original_utf8_bytes=original_size,
+                max_chars=exemption.max_chars,
+                max_utf8_bytes=exemption.max_utf8_bytes,
+            )
+            return result
+        return bounded_response_budget_failure(
+            result,
+            cause="internal_invariant_failed",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
+        )
     if not force_spill and len(original_bytes) <= config.response_max_bytes:
         return result
     if artifact_dir is None:
-        failure = _bounded_failure(
-            reason="response_budget_context_unavailable",
+        return bounded_response_budget_failure(
+            result,
+            cause="context_unavailable",
             tool_name=tool_name,
             max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
         )
-        return failure if isinstance(result, str) else {"success": False, "error": failure}
 
     path = _artifact_path(artifact_dir, tool_name)
     try:
         atomic_write(path, original)
-    except Exception:
-        logger.error("response_budget_artifact_write_failed", tool_name=tool_name, exc_info=True)
-        failure = _bounded_failure(
-            reason="response_budget_artifact_write_failed",
+    except OSError:
+        return bounded_response_budget_failure(
+            result,
+            cause="artifact_publication_failed",
             tool_name=tool_name,
             max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
         )
-        return failure if isinstance(result, str) else {"success": False, "error": failure}
 
     published = str(path.resolve())
     metadata = {
@@ -245,33 +425,45 @@ def enforce_response_budget(
         parsed = result
 
     rendered: str | None = None
-    if isinstance(parsed, dict):
-        rendered = _project_json_object(
-            parsed,
-            metadata=metadata,
-            max_bytes=config.response_max_bytes,
-            inline_chars=config.inline_max_chars,
-        )
-    if rendered is None and not isinstance(parsed, dict):
-        rendered = _plain_spill_envelope(
-            original,
-            metadata=metadata,
-            max_bytes=config.response_max_bytes,
-            inline_chars=config.inline_max_chars,
-        )
-    if rendered is None:
-        rendered = _bounded_failure(
-            reason="response_budget_irreducible_shape",
+    try:
+        if isinstance(parsed, dict):
+            rendered = _project_json_object(
+                parsed,
+                metadata=metadata,
+                max_bytes=config.response_max_bytes,
+                inline_chars=config.inline_max_chars,
+            )
+        if rendered is None and not isinstance(parsed, dict):
+            rendered = _plain_spill_envelope(
+                original,
+                metadata=metadata,
+                max_bytes=config.response_max_bytes,
+                inline_chars=config.inline_max_chars,
+            )
+    except _ProjectionNonconvergentError:
+        rendered = bounded_response_budget_failure(
+            "",
+            cause="projection_nonconvergent",
             tool_name=tool_name,
             max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
+            artifact_path=published,
+        )
+    if rendered is None:
+        rendered = bounded_response_budget_failure(
+            "",
+            cause="irreducible_shape",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
             artifact_path=published,
         )
 
-    logger.info(
+    _emit_response_budget_event(
         "response_budget_spill",
-        tool_name=tool_name,
-        original_utf8_bytes=len(original_bytes),
-        artifact_utf8_bytes=len(original_bytes),
+        tool_name=_bounded_tool_name(tool_name),
+        original_utf8_bytes=original_size,
+        projected_utf8_bytes=len(rendered.encode("utf-8")),
     )
     if isinstance(result, str):
         return rendered
@@ -303,8 +495,14 @@ def shape_json_response(
 
 
 __all__ = [
-    "RESPONSE_BACKSTOP_EXEMPT_TOOLS",
+    "RESPONSE_BUDGET_FAILURE_CAUSES",
     "RESPONSE_SPILL_METADATA_KEY",
+    "RESPONSE_SPILL_METADATA_KEYS",
+    "RESPONSE_SPILL_REASONS",
+    "RESPONSE_SPILL_SCHEMA_DIGEST",
+    "RESPONSE_SPILL_SCHEMA_VERSION",
+    "bounded_response_budget_failure",
+    "emit_response_budget_failure",
     "enforce_response_budget",
     "shape_json_response",
 ]

@@ -14,6 +14,7 @@ from pathlib import Path
 from autoskillit.core import (
     OUTPUT_DISCIPLINE_BLOCK_SHA256,
     OUTPUT_DISCIPLINE_POLICY_VERSION,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     get_logger,
     read_versioned_json,
     write_versioned_json,
@@ -23,7 +24,8 @@ logger = get_logger(__name__)
 
 PROBE_CACHE_TTL: timedelta = timedelta(hours=24)
 PROBE_POLICY_IDENTITY: str = (
-    f"v{OUTPUT_DISCIPLINE_POLICY_VERSION}-{OUTPUT_DISCIPLINE_BLOCK_SHA256}"
+    f"v{OUTPUT_DISCIPLINE_POLICY_VERSION}-{OUTPUT_DISCIPLINE_BLOCK_SHA256}-"
+    f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}"
 )
 _SCHEMA_VERSION: int = 2
 

@@ -9,8 +9,14 @@ enforced by tests/arch/test_serve_surface_registry.py.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from autoskillit.core import (
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, CodingAgentBackend
@@ -43,6 +49,38 @@ def build_backend_capabilities_map(
         if backend_name not in out:
             out[backend_name] = get_backend(backend_name).capabilities
     return out
+
+
+def response_backstop_tool_meta(
+    tool_name: str, *, always_load: bool = False
+) -> dict[str, bool | int | str]:
+    """Build transport metadata from the measured exemption authority."""
+    definition = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[tool_name]
+    metadata: dict[str, bool | int | str] = {
+        "anthropic/maxResultSizeChars": definition.max_chars,
+        "autoskillit/responseBackstopMeasurement": definition.measurement_id,
+        "autoskillit/responseBackstopMaxUtf8Bytes": definition.max_utf8_bytes,
+        "autoskillit/responseBackstopRegistryDigest": (
+            RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST
+        ),
+    }
+    if always_load:
+        metadata["anthropic/alwaysLoad"] = True
+    return metadata
+
+
+def render_served_response(payload: dict[str, Any]) -> str:
+    """Render the authoritative pre-backstop response used by recipe serve tools."""
+    return json.dumps(payload)
+
+
+def build_open_kitchen_recipe_payload(result: dict[str, Any], *, version: str) -> dict[str, Any]:
+    """Add the routing fields shared by every recipe-bearing open-kitchen response."""
+    payload = dict(result)
+    payload.update(success=True, kitchen="open", version=version)
+    if not payload.get("ingredients_table"):
+        payload["ingredients_table"] = None
+    return payload
 
 
 def _build_serve_override_stack(

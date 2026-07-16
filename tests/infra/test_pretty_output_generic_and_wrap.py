@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +14,23 @@ from tests.infra._pretty_output_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
+
+def _valid_spill_metadata(project_root: Path, artifact_text: str) -> dict[str, object]:
+    artifact = project_root / ".autoskillit" / "temp" / "responses" / "full.log"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(artifact_text, encoding="utf-8")
+    encoded = artifact_text.encode("utf-8")
+    return {
+        "schema_version": 1,
+        "artifact_path": str(artifact.resolve()),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "original_utf8_bytes": len(encoded),
+        "projected_utf8_bytes": 4096,
+        "omitted_chars": 5000,
+        "omitted_items": 5,
+        "reason": "oversized_values",
+    }
 
 
 # PHK-29
@@ -92,8 +111,8 @@ def test_fmt_generic_pipeline_report_failures_visible():
 
 
 # PHK-33
-def test_fmt_generic_deeply_nested_truncated():
-    """Deeply nested structures must be rendered as truncated compact JSON."""
+def test_fmt_generic_deeply_nested_lossless():
+    """Deeply nested structures must be rendered as complete compact JSON."""
     deep = {"a": {"b": {"c": {"d": {"e": "deep"}}}}}
     event = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__some_tool",
@@ -261,8 +280,8 @@ def test_fmt_generic_list_of_dicts_renders_per_item_not_blob():
     assert "... and" not in text, "Output was truncated"
 
 
-def test_fmt_generic_list_of_dicts_caps_at_20_items():
-    """PHK-48: Generic formatter caps list-of-dicts at 20 items with overflow note."""
+def test_fmt_generic_list_of_dicts_renders_all_items_without_artifact():
+    """Generic rendering cannot omit list items without a recovery artifact."""
     from tests.infra._pretty_output_helpers import _make_event
 
     items = [{"key": f"item-{i}", "val": f"value-{i}"} for i in range(25)]
@@ -271,8 +290,9 @@ def test_fmt_generic_list_of_dicts_caps_at_20_items():
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     assert "item-0" in text
     assert "item-19" in text
-    assert "item-20" not in text
-    assert "and 5 more" in text
+    assert "item-20" in text
+    assert "item-24" in text
+    assert "and 5 more" not in text
 
 
 # PHK-49: list-of-dicts must render all fields, not just first 2
@@ -304,15 +324,16 @@ def test_fmt_generic_list_of_dicts_renders_all_fields():
 
 
 # PHK-50: non-string list items must include ellipsis when truncated
-def test_fmt_generic_non_string_list_items_have_ellipsis_when_truncated():
-    """_fmt_generic must append '...' when truncating non-string list items."""
+def test_fmt_generic_non_string_list_items_are_lossless_without_artifact():
+    """Nested JSON cannot be clipped unless a complete artifact is available."""
     from tests.infra._pretty_output_helpers import _make_event
 
     big_nested = list(range(2000))
     event = _make_event("some_tool", {"items": [big_nested]})
     out, _ = _run_hook(event)
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "..." in text
+    assert "1999" in text
+    assert "..." not in text
 
 
 # PHK-51: nested dict/list values render in full when under the raised limit
@@ -326,3 +347,43 @@ def test_fmt_generic_nested_dict_value_renders_in_full():
     text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
     for i in range(20):
         assert f"key_{i}" in text, f"key_{i} missing from nested dict output"
+
+
+def test_fmt_generic_unspilled_path_crosses_all_former_clip_boundaries():
+    """Unspilled generic output retains long strings, all items, and nested JSON."""
+    from tests.infra._pretty_output_helpers import _make_event
+
+    long_value = "LONG-HEAD::" + ("x" * 2500) + "::LONG-TAIL"
+    payload = {
+        "strings": [f"string-item-{i}" for i in range(25)],
+        "dict_items": [{"key": f"dict-item-{i}", "value": long_value} for i in range(25)],
+        "nested": {"long": long_value, "numbers": list(range(600))},
+    }
+    out, _ = _run_hook(_make_event("some_tool", payload))
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+    assert "string-item-24" in text
+    assert "dict-item-24" in text
+    assert "::LONG-TAIL" in text
+    assert "599" in text
+    assert "... and" not in text
+    assert "..." not in text
+
+
+def test_fmt_generic_valid_artifact_allows_bounded_projection(tmp_path: Path):
+    """Trusted spill metadata permits reduction because the notice routes to full data."""
+    from tests.infra._pretty_output_helpers import _make_event
+
+    metadata = _valid_spill_metadata(tmp_path, "complete authoritative response")
+    payload = {
+        "items": [f"artifact-item-{i}" for i in range(25)],
+        "_autoskillit_response_spill": metadata,
+    }
+    out, _ = _run_hook(_make_event("some_tool", payload), cwd=tmp_path)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+    assert "artifact-item-19" in text
+    assert "artifact-item-20" not in text
+    assert "... and 5 more" in text
+    assert text.count("response_spilled:") == 1
+    assert text.count(f"artifact_path: {metadata['artifact_path']}") == 1

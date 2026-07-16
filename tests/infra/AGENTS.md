@@ -43,13 +43,14 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_manifest_directory_completeness.py` | Manifest directory completeness: validates each manifest pattern's test directory list includes all dependent test directories |
 | `test_mcp_health_advisor.py` | Tests for mcp_health_advisor PreToolUse hook |
 | `test_open_kitchen_guard.py` | Phase 2 tests: open_kitchen_guard PreToolUse hook |
+| `test_output_budget_evidence.py` | Fixture-isolated validation of incremental and complete Output Budget Protocol remediation evidence manifests |
 | `test_planner_gh_discovery_guard.py` | Tests for the planner_gh_discovery_guard PreToolUse hook |
 | `test_pr_create_guard.py` | Tests for the pr_create_guard PreToolUse hook |
 | `test_pretty_output_formatters.py` | Tests: pretty_output per-tool named formatters |
-| `test_pretty_output_generic_and_wrap.py` | Tests: pretty_output generic formatter and Claude Code double-wrap |
-| `test_pretty_output_hook_infra.py` | Tests: pretty_output hook infrastructure, fail-open, and coverage contracts |
+| `test_pretty_output_generic_and_wrap.py` | Generic formatter losslessness, artifact-backed reduction, and Claude Code double-wrap tests |
+| `test_pretty_output_hook_infra.py` | Formatter infrastructure, spill-metadata trust, recovery-notice, fail-open, and coverage contracts |
 | `test_pretty_output_integration.py` | End-to-end schema consistency tests for the pretty_output hook |
-| `test_pretty_output_recipe.py` | Tests: pretty_output token/timing, load_recipe, list_recipes, open_kitchen, deduplication |
+| `test_pretty_output_recipe.py` | Recipe formatter, exemption measurement/metadata parity, and deduplication contracts |
 | `test_probe_scripts.py` | Tests for CI-facing probe canary shell scripts (post-probe-failure.sh, create-probe-canary-issue.sh) — syntax, executable bit, and env-var validation |
 | `test_pyproject_bounds.py` | Tests for pyproject.toml version lower bounds |
 | `test_recipe_read_guard.py` | Tests for the recipe_read_guard PreToolUse hook — blocks recipe/skill/agent file reads |

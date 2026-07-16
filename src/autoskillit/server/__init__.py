@@ -62,6 +62,7 @@ __all__ = [
     "_compute_effective_backend_map",
     # Wire-format compatibility middleware
     "ClaudeCodeCompatMiddleware",
+    "ResponseConformanceMiddleware",
     # Session-type visibility dispatcher (callable by tests)
     "_apply_session_type_visibility",
 ]
@@ -157,5 +158,11 @@ for tag in sorted(ALL_VISIBILITY_TAGS):
 from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: E402
 
 mcp.add_middleware(ClaudeCodeCompatMiddleware())
+
+from autoskillit.server._response_conformance import (  # noqa: E402
+    ResponseConformanceMiddleware,
+)
+
+mcp.add_middleware(ResponseConformanceMiddleware(mcp))
 
 _apply_session_type_visibility()

@@ -25,7 +25,7 @@ from autoskillit._probe_canary import (
     ErrorKind,
 )
 from autoskillit.config import OutputBudgetConfig
-from autoskillit.core import OPEN_KITCHEN_OUTPUT_BUDGET_BYTES, pkg_root
+from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY, pkg_root
 from autoskillit.execution.backends._codex_config import (
     CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
     ensure_codex_mcp_registered,
@@ -764,7 +764,7 @@ def _assert_large_output_probe(output: _LargeOutputProbe) -> None:
         _TRANSPORT_TRUNCATION_MARKERS,
     )
     assert len(_OPEN_KITCHEN_TERMINAL_SENTINEL.encode("utf-8")) < (
-        OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
     )
 
 

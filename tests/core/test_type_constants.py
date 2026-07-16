@@ -2,9 +2,77 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 import pytest
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
+
+def test_response_backstop_exemption_def_namedtuple_fields() -> None:
+    from autoskillit.core import ResponseBackstopExemptionDef
+
+    definition = ResponseBackstopExemptionDef(
+        max_chars=1,
+        max_utf8_bytes=2,
+        measurement_id="measurement-v1",
+    )
+    assert definition._fields == ("max_chars", "max_utf8_bytes", "measurement_id")
+    assert definition.max_chars == 1
+    assert definition.max_utf8_bytes == 2
+    assert definition.measurement_id == "measurement-v1"
+
+
+def test_response_backstop_exemption_registry_is_closed_and_pinned() -> None:
+    from autoskillit.core import (
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+        ResponseBackstopExemptionDef,
+    )
+
+    assert RESPONSE_BACKSTOP_EXEMPTION_REGISTRY == {
+        "load_recipe": ResponseBackstopExemptionDef(
+            max_chars=179_000,
+            max_utf8_bytes=179_000,
+            measurement_id="bundled-recipes-all-modes-2026-07-15/load-recipe",
+        ),
+        "open_kitchen": ResponseBackstopExemptionDef(
+            max_chars=180_000,
+            max_utf8_bytes=180_000,
+            measurement_id="bundled-recipes-all-modes-2026-07-15/open-kitchen",
+        ),
+    }
+
+
+def test_response_backstop_exemption_registry_digest_is_canonical() -> None:
+    from autoskillit.core import (
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    )
+
+    canonical = {
+        tool_name: definition._asdict()
+        for tool_name, definition in sorted(RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.items())
+    }
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    assert hashlib.sha256(payload.encode("ascii")).hexdigest() == (
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST
+    )
+    assert (
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST
+        == "2e44a2d65867ccac075ff1978f207bac5b25487e0c037254a62059a363bd8d60"
+    )
+
+
+def test_response_backstop_exemption_registry_public_gateways() -> None:
+    import autoskillit.core as core
+    import autoskillit.core.types as core_types
+
+    for module in (core, core_types):
+        assert module.RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+        assert module.RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST
+        assert module.ResponseBackstopExemptionDef
+        assert not hasattr(module, "OPEN_KITCHEN_OUTPUT_BUDGET_BYTES")
 
 
 # REQ-PACK-001: PACK_REGISTRY defines all packs with default_enabled

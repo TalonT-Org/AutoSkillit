@@ -223,6 +223,8 @@ scripts/check_tool_annotations.py:
   - arch/
 scripts/compare-coverage-ast.py:
   - infra/
+scripts/validate_output_budget_evidence.py:
+  - infra/
 scripts/compile_recipes.py:
   - recipe/
   - infra/

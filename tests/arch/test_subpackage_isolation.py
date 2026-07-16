@@ -94,6 +94,10 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # Canonical output-discipline block/digest and their SHA-256 cache identity are
         # deliberately derived once at import time from the single source of truth.
         "_type_constants",
+        "_type_constants_registries",  # measured response-exemption registry digest
+        "_codex_config",  # Codex output ceiling derived from measured exemptions
+        "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
+        "_response_budget",  # canonical spill schema digest
         # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
         "_label_cleanup",  # fleet/_label_cleanup.py: _REMOVE_LABELS constant (see comment above)
         "_step_context",  # core/_step_context.py: current_step_name, current_order_id ContextVars
@@ -1019,12 +1023,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; _auto_init_pipeline_tracker tool_ctx param typed as ToolContext under "
         "TYPE_CHECKING instead of Any, matching _active_order_ids_for_kitchen's "
         "established pattern (+1 net line)"
-<<<<<<< HEAD
         "; serve_recipe backend_capabilities_map threading at get_recipe + deferred-recall + "
         "normal open_kitchen paths with safe _distinct_backends extraction from "
         "_effective_backend_map and tool_ctx.backend.name (+28 net lines)"
         "; output-budget hook payload type, serializer, and hook-config bridge "
-        "(+21 net lines)",
+        "(+21 net lines); response artifact temp-root bridge (+2 net lines)",
     ),
     "tools_execution.py": (
         1600,

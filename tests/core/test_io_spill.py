@@ -47,13 +47,25 @@ def test_large_output_is_published_losslessly_with_metadata(tmp_path):
         assert artifact.stat().st_mode & 0o777 == 0o600
 
 
-def test_publication_failure_returns_no_path_or_partial_file(tmp_path, monkeypatch):
+def test_write_permission_failure_returns_no_path_or_partial_file(tmp_path, monkeypatch):
     from autoskillit.core import io
 
-    def fail_write(*_args, **_kwargs):
-        raise OSError("ENOSPC")
+    def fail_create(*_args, **_kwargs):
+        raise PermissionError("permission denied")
 
-    monkeypatch.setattr(io, "atomic_write", fail_write)
-    with pytest.raises(OSError, match="ENOSPC"):
+    monkeypatch.setattr(io.tempfile, "mkstemp", fail_create)
+    with pytest.raises(PermissionError, match="permission denied"):
+        spill_output("x" * 100, tmp_path, "stdout", SpillSpec(inline_max_chars=10))
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_replace_failure_removes_temporary_and_final_files(tmp_path, monkeypatch):
+    from autoskillit.core import io
+
+    def fail_replace(*_args, **_kwargs):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(io.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
         spill_output("x" * 100, tmp_path, "stdout", SpillSpec(inline_max_chars=10))
     assert list(tmp_path.iterdir()) == []

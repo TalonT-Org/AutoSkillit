@@ -13,7 +13,10 @@ from anyio import ClosedResourceError as _ClosedResource
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, get_logger
-from autoskillit.server._response_budget import enforce_response_budget
+from autoskillit.server._response_budget import (
+    bounded_response_budget_failure,
+    enforce_response_budget,
+)
 
 if TYPE_CHECKING:
     from fastmcp import Context
@@ -99,7 +102,7 @@ def track_response_size(
                         ),
                     }
                 )
-                logger.exception("Unhandled exception in tool %s", tool_name)
+                logger.error("track_response_size_handler_failed", tool_name=tool_name)
             ctx = _get_ctx_or_none()
             try:
                 response_str = result if isinstance(result, str) else json.dumps(result)
@@ -107,12 +110,11 @@ def track_response_size(
                 logger.warning(
                     "track_response_size_nonserializable_result",
                     tool_name=tool_name,
-                    result_type=type(result).__name__,
                 )
-                return result
+                response_str = None
             exceeded = False
             try:
-                if ctx is not None:
+                if ctx is not None and response_str is not None:
                     threshold = ctx.config.mcp_response.alert_threshold_tokens
                     exceeded = ctx.response_log.record(
                         tool_name, response_str, alert_threshold_tokens=threshold
@@ -121,7 +123,6 @@ def track_response_size(
                 logger.warning(
                     "track_response_size_telemetry_failed",
                     tool_name=tool_name,
-                    exc_info=True,
                 )
 
             configured_budget = (
@@ -144,14 +145,15 @@ def track_response_size(
                     config=budget,
                 )
             except Exception:
-                logger.exception("track_response_size_enforcement_failed", tool_name=tool_name)
-                result = json.dumps(
-                    {
-                        "success": False,
-                        "error": "response_budget_enforcement_failed",
-                        "tool_name": tool_name,
-                    },
-                    separators=(",", ":"),
+                logger.error("track_response_size_enforcement_failed", tool_name=tool_name)
+                result = bounded_response_budget_failure(
+                    result,
+                    cause="internal_invariant_failed",
+                    tool_name=tool_name,
+                    max_bytes=budget.response_max_bytes,
+                    original_utf8_bytes=(
+                        len(response_str.encode("utf-8")) if response_str is not None else 0
+                    ),
                 )
 
             if exceeded:
@@ -177,7 +179,6 @@ def track_response_size(
                     logger.warning(
                         "track_response_size_notification_failed",
                         tool_name=tool_name,
-                        exc_info=True,
                     )
             return result
 

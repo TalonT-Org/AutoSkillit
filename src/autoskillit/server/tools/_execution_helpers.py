@@ -60,7 +60,7 @@ def spill_run_cmd_result(
     stderr: str,
 ) -> dict[str, object]:
     artifact_root = (
-        resolve_temp_dir(Path(cwd), tool_ctx.config.workspace.temp_dir) / "run_cmd"
+        resolve_temp_dir(Path(cwd).resolve(), tool_ctx.config.workspace.temp_dir) / "run_cmd"
         if cwd and Path(cwd).is_absolute()
         else tool_ctx.temp_dir / "run_cmd"
     )
@@ -88,7 +88,7 @@ def shape_execution_response(
     work_dir: str,
 ) -> str:
     artifact_root = (
-        resolve_temp_dir(Path(work_dir), tool_ctx.config.workspace.temp_dir) / tool_name
+        resolve_temp_dir(Path(work_dir).resolve(), tool_ctx.config.workspace.temp_dir) / tool_name
         if work_dir and Path(work_dir).is_absolute()
         else tool_ctx.temp_dir / tool_name
     )

@@ -251,6 +251,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "cli",
             "config",
             "core",
+            "execution",
             "pipeline",
             "recipe",
             "server",

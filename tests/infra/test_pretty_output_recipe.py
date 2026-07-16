@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
-from autoskillit.hooks.formatters.pretty_output_hook import (
-    _OPEN_KITCHEN_OUTPUT_BUDGET_BYTES,
-    _format_response,
+from autoskillit.core import (
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
 )
+from autoskillit.hooks.formatters.pretty_output_hook import _format_response
 from tests.infra._pretty_output_helpers import (
     REALISTIC_RECIPE_YAML,
     _make_event,
@@ -21,10 +21,20 @@ from tests.infra._pretty_output_helpers import (
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 
-def test_open_kitchen_budget_dual_copy_matches_core_authority() -> None:
-    """The stdlib-only formatter copy must stay equal to the public authority."""
-    assert OPEN_KITCHEN_OUTPUT_BUDGET_BYTES == 96_000
-    assert _OPEN_KITCHEN_OUTPUT_BUDGET_BYTES == OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
+def test_response_backstop_tool_metadata_comes_from_registry() -> None:
+    from autoskillit.server.tools._serve_helpers import response_backstop_tool_meta
+
+    for tool_name in ("load_recipe", "open_kitchen"):
+        definition = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[tool_name]
+        metadata = response_backstop_tool_meta(tool_name, always_load=tool_name == "open_kitchen")
+        assert metadata["anthropic/maxResultSizeChars"] == definition.max_chars
+        assert metadata["autoskillit/responseBackstopMeasurement"] == definition.measurement_id
+        assert metadata["autoskillit/responseBackstopMaxUtf8Bytes"] == definition.max_utf8_bytes
+        assert (
+            metadata["autoskillit/responseBackstopRegistryDigest"]
+            == RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST
+        )
+        assert metadata.get("anthropic/alwaysLoad", False) is (tool_name == "open_kitchen")
 
 
 # PHK-15
@@ -963,47 +973,102 @@ def test_compact_recipe_display_preserves_execution_semantics(tmp_path, monkeypa
     assert remediation_note_checked, "remediation recipe was not exercised by this test"
 
 
-def test_open_kitchen_payload_warning_uses_formatted_byte_count(capsys):
-    """When the rendered payload exceeds budget, the stdlib-only warning must report
-    the tool name, content_hash, actual formatted byte count, and the budget."""
-    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
+def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, monkeypatch):
+    """Measure the same pre-backstop string in characters and UTF-8 bytes."""
+    from types import SimpleNamespace
 
-    huge_note_body = "x" * 100_000
-    content = (
-        f"name: huge\nsteps:\n  only:\n    tool: run_cmd\n    note: |\n      {huge_note_body}\n"
+    from autoskillit import __version__
+    from autoskillit.recipe import _api_cache, all_validated_recipe_names
+    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+    from autoskillit.server._misc import strip_ingredients_only_keys
+    from autoskillit.server.tools._serve_helpers import (
+        build_open_kitchen_recipe_payload,
+        render_served_response,
+        serve_recipe,
     )
-    data = {
-        "content": content,
-        "valid": True,
-        "suggestions": [],
-        "version": "0.1.0",
-        "content_hash": "deadbeef",
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    measured_modes: set[tuple[str, str, bool]] = set()
+    maxima = {"load_recipe": (0, "", ""), "open_kitchen": (0, "", "")}
+
+    for recipe_name in all_validated_recipe_names(project_root):
+        for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
+            for ingredients_only in (False, True):
+                monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+                tool_ctx = SimpleNamespace(
+                    recipes=DefaultRecipeRepository(),
+                    project_dir=project_root,
+                    session_serve_overrides=None,
+                    session_serve_defer_unresolved=False,
+                )
+                result = serve_recipe(
+                    tool_ctx,
+                    recipe_name,
+                    caller_overrides=dict(overrides, source_dir=str(project_root)),
+                    config_default={},
+                    session_overrides={},
+                    config_layer={},
+                    temp_dir=tmp_path,
+                )
+
+                for tool_name in ("load_recipe", "open_kitchen"):
+                    payload = dict(result)
+                    if tool_name == "open_kitchen":
+                        payload = build_open_kitchen_recipe_payload(payload, version=__version__)
+                    if ingredients_only:
+                        payload = strip_ingredients_only_keys(payload)
+                    raw = render_served_response(payload)
+                    definition = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[tool_name]
+                    assert len(raw) <= definition.max_chars, (
+                        tool_name,
+                        recipe_name,
+                        mode_name,
+                        ingredients_only,
+                        len(raw),
+                    )
+                    assert len(raw.encode("utf-8")) <= definition.max_utf8_bytes, (
+                        tool_name,
+                        recipe_name,
+                        mode_name,
+                        ingredients_only,
+                        len(raw.encode("utf-8")),
+                    )
+                    maxima[tool_name] = max(
+                        maxima[tool_name],
+                        (len(raw.encode("utf-8")), recipe_name, mode_name),
+                    )
+                    measured_modes.add((tool_name, mode_name, ingredients_only))
+
+    assert measured_modes == {
+        (tool_name, mode_name, ingredients_only)
+        for tool_name in ("load_recipe", "open_kitchen")
+        for mode_name in _COMPACT_TEST_OVERRIDES
+        for ingredients_only in (False, True)
     }
-    formatted = _fmt_open_kitchen(data, pipeline=False)
-    captured = capsys.readouterr()
-    byte_len = len(formatted.encode("utf-8"))
-    assert byte_len > OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
-    assert "open_kitchen" in captured.err
-    assert "content_hash=deadbeef" in captured.err
-    assert str(byte_len) in captured.err
-    assert str(OPEN_KITCHEN_OUTPUT_BUDGET_BYTES) in captured.err
+    assert maxima == {
+        "load_recipe": (178_601, "remediation", "all_truthy"),
+        "open_kitchen": (178_660, "remediation", "all_truthy"),
+    }
 
 
 def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     """Regression gate (issue #4253): the fully rendered open_kitchen payload for every
     runtime-discoverable recipe, under both default and all-truthy ingredient
-    resolution, must stay at or under the 100,000 UTF-8 byte regression budget — a
-    margin below the last empirically observed ~100KB Claude Code CLI disk-persistence
-    gate (measured on CLI 2.1.197). Re-measure after CLI upgrades; this is not a claim
-    that the external gate is stable. Budget bumped from 96,000 to 100,000 for Part B
-    of issue #4274: the new ``inter_part_push_pre_remediation`` and
-    ``verify_ref_push_exhaustion`` steps in ``remediation.yaml`` legitimately grew
-    the rendered payload (issue #4274 root cause fix)."""
+    resolution, must stay at or under the measured exemption ceiling from
+    ``RESPONSE_BACKSTOP_EXEMPTION_REGISTRY`` — a margin below the last empirically
+    observed ~100KB Claude Code CLI disk-persistence gate (measured on CLI 2.1.197).
+    Re-measure after CLI upgrades; this is not a claim that the external gate is
+    stable. Ceiling accommodates growth from issue #4274 Part B: the new
+    ``inter_part_push_pre_remediation`` and ``verify_ref_push_exhaustion`` steps in
+    ``remediation.yaml`` legitimately grew the rendered payload (issue #4274 root
+    cause fix)."""
     from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
     from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
 
     project_root = Path(__file__).resolve().parent.parent.parent
+    ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
     over_budget: list[str] = []
     maximum: tuple[int, str, str] = (0, "", "")
 
@@ -1019,11 +1084,8 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
             rendered = _fmt_open_kitchen(result, pipeline=False)
             byte_len = len(rendered.encode("utf-8"))
             maximum = max(maximum, (byte_len, recipe_name, mode_name))
-            if byte_len > OPEN_KITCHEN_OUTPUT_BUDGET_BYTES:
-                over_budget.append(
-                    f"{recipe_name} ({mode_name}): {byte_len} bytes > "
-                    f"{OPEN_KITCHEN_OUTPUT_BUDGET_BYTES}"
-                )
+            if byte_len > ceiling:
+                over_budget.append(f"{recipe_name} ({mode_name}): {byte_len} bytes > {ceiling}")
 
     max_bytes, max_recipe, max_mode = maximum
     assert not over_budget, (

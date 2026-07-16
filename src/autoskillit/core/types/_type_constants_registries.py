@@ -7,6 +7,8 @@ sibling `_type_enums` for `FleetErrorCode`, and sibling `_type_backend` for the
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, fields
 from typing import Literal, NamedTuple
 
@@ -34,6 +36,9 @@ __all__ = [
     "RecipePackDef",
     "RECIPE_PACK_REGISTRY",
     "RECIPE_PACK_TAGS",
+    "ResponseBackstopExemptionDef",
+    "RESPONSE_BACKSTOP_EXEMPTION_REGISTRY",
+    "RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST",
     "AgentPackDef",
     "AGENT_PACK_REGISTRY",
     "CORE_PACKS",
@@ -172,6 +177,40 @@ SERVE_SURFACES: frozenset[str] = frozenset(
         "get_recipe",  # S4 — MCP resource handler
     }
 )
+
+
+class ResponseBackstopExemptionDef(NamedTuple):
+    """Measured ceiling for a tool that bypasses universal response shaping."""
+
+    max_chars: int
+    max_utf8_bytes: int
+    measurement_id: str
+
+
+RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: dict[str, ResponseBackstopExemptionDef] = {
+    "load_recipe": ResponseBackstopExemptionDef(
+        max_chars=179_000,
+        max_utf8_bytes=179_000,
+        measurement_id="bundled-recipes-all-modes-2026-07-15/load-recipe",
+    ),
+    "open_kitchen": ResponseBackstopExemptionDef(
+        max_chars=180_000,
+        max_utf8_bytes=180_000,
+        measurement_id="bundled-recipes-all-modes-2026-07-15/open-kitchen",
+    ),
+}
+
+
+def _response_backstop_exemption_registry_digest() -> str:
+    canonical = {
+        tool_name: definition._asdict()
+        for tool_name, definition in sorted(RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.items())
+    }
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("ascii")).hexdigest()
+
+
+RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST: str = _response_backstop_exemption_registry_digest()
 
 
 class PackDef(NamedTuple):

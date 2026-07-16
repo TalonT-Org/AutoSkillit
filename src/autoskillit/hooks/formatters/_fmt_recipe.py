@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from _fmt_primitives import (  # type: ignore[import-not-found]
     _CHECK_MARK,
     _CROSS_MARK,
+    _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     _WARN_MARK,
 )
 from _fmt_recipe_compact import (  # type: ignore[import-not-found]
@@ -24,12 +25,6 @@ from _fmt_recipe_compact import (  # type: ignore[import-not-found]
 if TYPE_CHECKING:
     from autoskillit.recipe import ListRecipesResult, LoadRecipeResult, OpenKitchenResult
 
-
-# Regression budget for the rendered open_kitchen payload — see _fmt_open_kitchen.
-# Empirically below the ~100KB Claude Code CLI disk-persistence gate (measured on
-# CLI 2.1.197); re-measure after CLI upgrades rather than treating this as a
-# protocol constant. See issue #4253.
-_OPEN_KITCHEN_OUTPUT_BUDGET_BYTES = 96_000
 
 # Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
 _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
@@ -243,11 +238,12 @@ def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
     formatted = "\n".join(lines)
 
     byte_len = len(formatted.encode("utf-8"))
-    if byte_len > _OPEN_KITCHEN_OUTPUT_BUDGET_BYTES:
+    budget = _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]["max_utf8_bytes"]
+    if byte_len > budget:
         content_hash = data.get("content_hash", "")
         print(
             f"open_kitchen payload over budget: content_hash={content_hash} "
-            f"bytes={byte_len} budget={_OPEN_KITCHEN_OUTPUT_BUDGET_BYTES}",
+            f"bytes={byte_len} budget={budget}",
             file=sys.stderr,
         )
     return formatted

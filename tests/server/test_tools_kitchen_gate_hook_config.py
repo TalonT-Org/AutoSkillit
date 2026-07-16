@@ -61,6 +61,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
+    mock_ctx.temp_dir = tmp_path / "configured-response-temp"
     mock_ctx.config.quota_guard.short_window_threshold = 85.0
     mock_ctx.config.quota_guard.long_window_threshold = 98.0
     mock_ctx.config.quota_guard.long_window_patterns = ["weekly", "sonnet", "opus"]
@@ -95,6 +96,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
     # disabled is always written by _quota_guard_hook_payload
     # MagicMock.enabled is truthy by default, so disabled must be False
     assert data["quota_guard"]["disabled"] is False
+    assert data["response_temp_root"] == str(mock_ctx.temp_dir.resolve())
     # Confirm kitchen_id rename: hook config must contain 'kitchen_id' (not 'pipeline_id')
     assert "kitchen_id" in data, (
         "hook config must contain 'kitchen_id' after rename from 'pipeline_id'"

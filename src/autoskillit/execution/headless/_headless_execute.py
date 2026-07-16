@@ -212,12 +212,18 @@ async def _execute_claude_headless(
     if not skip_clone_guard and is_git_main_checkout(Path(cwd)):
         _pre_sha = _clone_snapshot.head_sha if _clone_snapshot else ""
         try:
-            await validate_pre_session_index(
+            _was_dirty = await validate_pre_session_index(
                 cwd,
                 runner,
                 pre_session_sha=_pre_sha,
                 exclude_prefix=_derived_prefix or GUARD_EXCLUDE_PREFIX,
             )
+            if _was_dirty:
+                logger.warning(
+                    "pre_session_index_reset",
+                    dirty=True,
+                    pre_sha=_pre_sha,
+                )
         except Exception:
             logger.warning("validate_pre_session_index_failed", exc_info=True)
 

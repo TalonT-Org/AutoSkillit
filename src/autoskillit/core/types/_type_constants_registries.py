@@ -10,6 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from typing import Literal, NamedTuple
 
+# _type_backend.py itself imports several other core/types siblings, but all
+# of them stay within core/ (IL-0) — importing BackendCapabilities here does
+# not introduce a circular or cross-layer dependency.
 from ._type_backend import BackendCapabilities
 from ._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
 from ._type_enums import FleetErrorCode
@@ -411,7 +414,11 @@ for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
 
 # Boot-time validation: every `required_backend_property` must name a real
 # field on `BackendCapabilities`. Catches typos in the registry at import
-# time rather than at first dispatch.
+# time rather than at first dispatch. This is the hard, dispatch-level
+# gating mechanism; the parallel `CAPABILITY_INGREDIENT_MAP` (in
+# `_type_constants.py`) drives soft, recipe-level ingredient gating — both
+# registries must be kept in sync when adding a new hard capability (see
+# the `required_backend_property` field docstring above for the full split).
 _BACKEND_CAPABILITIES_FIELDS = {f.name for f in fields(BackendCapabilities)}
 for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
     if (

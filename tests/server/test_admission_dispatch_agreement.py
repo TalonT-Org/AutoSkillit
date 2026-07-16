@@ -17,6 +17,7 @@ installed package. Filesystem access is required (no network).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -611,59 +612,87 @@ def test_auto_overrides_git_ingredient_set_by_git_capability(
 # ---------------------------------------------------------------------------
 
 
-def test_admission_dispatch_agreement_with_explicit_pin(tmp_path: Path) -> None:
-    """Admission ↔ dispatch agreement when a single step is explicitly pinned
-    to a backend that cannot satisfy the step's hard capability.
+@pytest.mark.parametrize(
+    "config_backend_kwargs",
+    [
+        pytest.param(
+            {"recipe_overrides": {"test-explicit-pin": {"run-skill-step": "codex"}}},
+            id="recipe_overrides",
+        ),
+        pytest.param(
+            {"step_overrides": {"run-skill-step": "codex"}},
+            id="step_overrides",
+        ),
+    ],
+)
+def test_admission_dispatch_agreement_with_explicit_pin(
+    tmp_path: Path,
+    config_backend_kwargs: dict[str, Any],
+) -> None:
+    """Admission <-> dispatch agreement when a step is explicitly pinned via
+    config_backend (recipe_overrides or step_overrides) to a backend that
+    cannot satisfy the step's hard capability.
 
-    Construct a minimal recipe with one ``run_skill`` step whose skill
-    declares ``uses_capabilities={'git_metadata_write'}`` and
-    ``backend_requirements=frozenset()`` (the worker_routable shape). Pin
-    that step to codex via the ``effective_backend_map``, and supply codex
-    backend capabilities with ``git_metadata_writable=False``. Both
-    admission (``load_and_validate``) and dispatch
-    (``check_hard_capability_feasibility`` against the explicit-pin
-    effective backend) must agree: this step is infeasible on the pinned
-    backend due to the capability mismatch.
-
-    The agreement contract: if admission deems the recipe infeasible /
-    surfaces the capability mismatch, dispatch must produce the same
-    capability mismatch when called against the same effective pinned
-    backend.
+    Exercises three independent production code paths against the identical
+    pinned scenario and proves they all agree the step is infeasible:
+      * recipe-load-time semantic rule (rules_backend_compat.py, via
+        load_and_validate) — advisory finding at first validation.
+      * open_kitchen-time preflight gate (_check_dispatch_feasibility) — the
+        blocking admission gate this PART A fix added.
+      * run_skill-time dispatch gate (_check_backend_compat) — the final
+        enforcement point before a skill actually executes.
     """
     import json as _json
-    from unittest.mock import MagicMock
+    from unittest.mock import MagicMock, patch
 
+    from autoskillit.config._config_dataclasses import AgentBackendConfig, ProvidersConfig
     from autoskillit.core import BackendCapabilities
-    from autoskillit.server.tools._preflight import check_hard_capability_feasibility
+    from autoskillit.recipe.schema import RecipeStep
+    from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
+    from autoskillit.server.tools._preflight import _check_dispatch_feasibility
     from autoskillit.server.tools.tools_execution import _check_backend_compat
 
+    recipe_name = "test-explicit-pin"
     step_name = "run-skill-step"
     skill_command = "/autoskillit:resolve-review feature main"
     target_skill_name = "resolve-review"
 
-    # Skill resolver whose skill has empty backend_requirements and only the
-    # git_metadata_write capability — the worker_routable shape that bypasses
-    # the legacy backend_requirements mismatch gate.
     skill_info = MagicMock()
     skill_info.name = target_skill_name
     skill_info.backend_requirements = frozenset()
     skill_info.uses_capabilities = frozenset({"git_metadata_write"})
-    skill_info.path = Path(__file__).resolve()
     resolver = MagicMock()
     resolver.resolve.return_value = skill_info
-    resolver.list_all.return_value = [skill_info]
 
-    # Codex backend lacking git_metadata_writable — capability mismatch target.
     codex_caps = BackendCapabilities(git_metadata_writable=False)
     codex_backend = MagicMock()
     codex_backend.name = "codex"
     codex_backend.capabilities = codex_caps
 
-    # Persist the recipe to a temp location so load_and_validate can read it.
-    _recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    _recipes_dir.mkdir(parents=True)
-    (_recipes_dir / "test-explicit-pin.yaml").write_text(
-        "name: test-explicit-pin\n"
+    orchestrator_backend = MagicMock()
+    orchestrator_backend.name = "claude-code"
+
+    step = RecipeStep(name=step_name, tool="run_skill", with_args={"skill_command": skill_command})
+    config_backend = AgentBackendConfig(backend="claude-code", **config_backend_kwargs)
+
+    # Derive effective_backend_map from the SAME config_backend production IL-3
+    # call sites use (_compute_effective_backend_map), instead of hand-
+    # constructing the map, so this test proves the whole resolution chain —
+    # not just the two downstream gates — agrees on the pinned backend.
+    effective_map = _compute_effective_backend_map(
+        {step_name: step},
+        "claude-code",
+        None,
+        recipe_name,
+        skill_resolver=resolver,
+        config_backend=config_backend,
+    )
+    assert effective_map == {step_name: "codex"}
+
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / f"{recipe_name}.yaml").write_text(
+        f"name: {recipe_name}\n"
         "description: explicit-pin agreement test\n"
         'autoskillit_version: "0.2.0"\n'
         "steps:\n"
@@ -675,33 +704,46 @@ def test_admission_dispatch_agreement_with_explicit_pin(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    # Call admission with effective_backend_map pinning the step to codex.
+    # --- Leg 1: recipe-load-time semantic rule (rules_backend_compat.py) ---
     admission_result = load_and_validate(
-        "test-explicit-pin",
+        recipe_name,
         project_dir=tmp_path,
         backend_name="claude-code",
-        effective_backend_map={step_name: "codex"},
+        effective_backend_map=effective_map,
         backend_capabilities_map={"codex": codex_caps},
         lister=resolver,
     )
-
-    # --- ADMISSION side of the agreement ---
-    # Admission must surface the capability mismatch via one of:
-    #   * dispatch_feasible=False (refused outright)
-    #   * A suggestion/finding mentioning the git_metadata_writable mismatch
-    _admission_feasible = admission_result.get("dispatch_feasible", True)
-    _admission_findings = admission_result.get("suggestions", []) + admission_result.get(
+    admission_findings = admission_result.get("suggestions", []) + admission_result.get(
         "findings", []
     )
-    _admission_mentions_cap = any(
-        "git_metadata_writable" in str(f) or "git_metadata_write" in str(f)
-        for f in _admission_findings
+    assert any("git_metadata_writable" in str(f) for f in admission_findings), (
+        f"rules_backend_compat.py must surface the capability mismatch, got: {admission_findings}"
     )
 
-    # --- DISPATCH side of the agreement ---
-    # Dispatch is exercised by _check_backend_compat with the same
-    # effective pinned backend (codex, lacking the capability property).
-    _dispatch_err = _check_backend_compat(
+    # --- Leg 2: open_kitchen-time preflight gate (_check_dispatch_feasibility) ---
+    # get_backend("codex") is patched so the pinned-backend lookup resolves to
+    # the same codex_backend double used for the dispatch-side call below —
+    # keeps all three legs checking the identical capability state.
+    with patch("autoskillit.server.tools._preflight.get_backend", return_value=codex_backend):
+        preflight_err = _check_dispatch_feasibility(
+            post_prune_step_names=[step_name],
+            active_recipe_steps={step_name: step},
+            backend=orchestrator_backend,
+            config_providers=ProvidersConfig(),
+            recipe_name=recipe_name,
+            config_backend=config_backend,
+            skill_resolver=resolver,
+        )
+    assert preflight_err is not None, (
+        "_check_dispatch_feasibility must reject an explicit pin to a backend "
+        "lacking the required capability property"
+    )
+    preflight_parsed = _json.loads(preflight_err)
+    assert "git_metadata_writable" in preflight_parsed.get("error", "")
+    assert preflight_parsed.get("override_source") == "explicit_config"
+
+    # --- Leg 3: run_skill-time dispatch gate (_check_backend_compat) ---
+    dispatch_err = _check_backend_compat(
         skill_command=skill_command,
         resolved_command=target_skill_name,
         effective_order_id="test-order",
@@ -710,39 +752,9 @@ def test_admission_dispatch_agreement_with_explicit_pin(tmp_path: Path) -> None:
         effective_backend_obj=codex_backend,
         skill_resolver=resolver,
     )
-    # Direct hard-capability check on the same backend — the canonical
-    # capability-feasibility gate for worker_routable pinned steps.
-    _hard_cap_err = check_hard_capability_feasibility(
-        frozenset({"git_metadata_write"}),
-        codex_backend,
+    assert dispatch_err is not None, (
+        "_check_backend_compat must reject the same explicit pin at dispatch time"
     )
-
-    # Dispatch definitively rejects (returns diagnostic) — that's the
-    # canonical capability-feasibility gate.
-    assert _hard_cap_err is not None, (
-        "check_hard_capability_feasibility must report the capability "
-        "mismatch on a codex backend with git_metadata_writable=False"
-    )
-    assert "git_metadata_writable" in _hard_cap_err
-    assert _dispatch_err is not None, (
-        "_check_backend_compat must reject the explicit-pin to a backend "
-        "that lacks the required capability property"
-    )
-    _dispatch_parsed = _json.loads(_dispatch_err)
-    assert _dispatch_parsed.get("subtype") == "crashed", (
-        f"dispatch crash envelope subtype must be 'crashed', got {_dispatch_parsed}"
-    )
-
-    # The agreement: admission must NOT silently disagree with dispatch.
-    # If admission says feasible=True AND no capability finding exists,
-    # that is a structural disagreement — dispatch will fail at run_skill
-    # time even though admission admitted the pipeline.
-    admission_says_infeasible = _admission_feasible is False
-    admission_says_finding = _admission_mentions_cap
-    assert admission_says_infeasible or admission_says_finding, (
-        "Admission ↔ dispatch agreement violated: dispatch rejects "
-        f"({_hard_cap_err!r}) but admission reported dispatch_feasible="
-        f"{_admission_feasible!r} with no finding mentioning "
-        "git_metadata_writable/git_metadata_write. "
-        f"Admission findings: {_admission_findings!r}"
-    )
+    dispatch_parsed = _json.loads(dispatch_err)
+    assert dispatch_parsed.get("subtype") == "crashed"
+    assert "git_metadata_writable" in str(dispatch_parsed)

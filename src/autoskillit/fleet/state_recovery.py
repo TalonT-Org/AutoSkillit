@@ -619,17 +619,49 @@ def find_dispatch_for_issue(
     return None
 
 
-def derive_orchestrator_resume_spec(state: CampaignState) -> NamedResume | NoResume:
+def derive_orchestrator_resume_spec(
+    state: CampaignState, *, current_backend: str = ""
+) -> NamedResume | NoResume:
     """Derive the correct ResumeSpec for the L3 orchestrator from campaign state.
 
     Priority:
     1. state.orchestrator_session_id (if non-empty) → NamedResume
     2. Latest dispatch's caller_session_id (fallback) → NamedResume
     3. No session ID available → NoResume
+
+    Backend-mismatch guard:
+        When ``current_backend`` is provided AND the source DispatchRecord's
+        ``backend_name`` is also set, the resume is rejected (returns
+        NoResume) if the two backends differ. This prevents a Codex
+        session_id from being passed to Claude's --resume flag (or vice versa),
+        which produces either an opaque CLI error or a silent fresh session
+        with stale resume context.
     """
     if state.orchestrator_session_id:
+        if current_backend:
+            for d in state.dispatches:
+                if (
+                    d.caller_session_id == state.orchestrator_session_id
+                    and d.backend_name
+                    and d.backend_name != current_backend
+                ):
+                    logger.warning(
+                        "resume_backend_mismatch",
+                        session_id=state.orchestrator_session_id,
+                        source_backend=d.backend_name,
+                        current_backend=current_backend,
+                    )
+                    return NoResume()
         return NamedResume(session_id=state.orchestrator_session_id)
     for d in reversed(state.dispatches):
         if d.caller_session_id:
+            if current_backend and d.backend_name and d.backend_name != current_backend:
+                logger.warning(
+                    "resume_backend_mismatch",
+                    session_id=d.caller_session_id,
+                    source_backend=d.backend_name,
+                    current_backend=current_backend,
+                )
+                return NoResume()
             return NamedResume(session_id=d.caller_session_id)
     return NoResume()

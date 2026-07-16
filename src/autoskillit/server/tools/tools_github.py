@@ -13,8 +13,13 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, atomic_write, get_logger, is_feature_enabled
-from autoskillit.core.types._type_helpers import resolve_target_skill
+from autoskillit.core import (
+    DISPATCH_ID_ENV_VAR,
+    atomic_write,
+    get_logger,
+    is_feature_enabled,
+    resolve_target_skill,
+)
 from autoskillit.pipeline import write_status
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled

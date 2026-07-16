@@ -669,6 +669,11 @@ def _make_mock_tool_ctx_for_project_dir(project_dir):
     mock_ctx.config.github.check_labels_allowed = MagicMock(return_value=None)
     mock_ctx.output_pattern_resolver = MagicMock(return_value=[])
     mock_ctx.write_expected_resolver = MagicMock(return_value=None)
+    # Disable the backend-compat gate by leaving resolver/backend unset; the
+    # production gate fail-closes when these are missing, so set them to None
+    # so the gate short-circuits at `if target_name is None: return None`.
+    mock_ctx.skill_resolver = None
+    mock_ctx.backend = None
     return mock_ctx
 
 

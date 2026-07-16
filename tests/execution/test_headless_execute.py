@@ -167,6 +167,10 @@ class TestPreSessionIndexSignaling:
 
         with (
             patch(
+                "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+                return_value=True,
+            ),
+            patch(
                 "autoskillit.execution.headless._headless_execute.validate_pre_session_index",
                 return_value=True,
             ),

@@ -11,8 +11,12 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, RetryReason, get_logger
-from autoskillit.core.types._type_helpers import resolve_target_skill
+from autoskillit.core import (
+    DISPATCH_ID_ENV_VAR,
+    RetryReason,
+    get_logger,
+    resolve_target_skill,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block

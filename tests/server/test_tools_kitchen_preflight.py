@@ -180,6 +180,40 @@ class TestCheckDispatchFeasibilityUnit:
         assert "git_metadata_writable" in parsed.get("error", "")
         assert parsed.get("override_source") == "explicit_config"
 
+    def test_dispatch_feasibility_fails_closed_when_skill_resolver_missing_for_pinned_step(
+        self,
+    ) -> None:
+        """An explicit pin that resolves to a valid backend, but with no
+        skill_resolver available, fails closed (REQ-018)."""
+        from autoskillit.config._config_dataclasses import AgentBackendConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        backend = _make_codex_backend()
+        active_steps: dict[str, Any] = {
+            "resolve_review": _make_recipe_step(
+                "resolve_review", tool="run_skill", skill_name="resolve-review"
+            ),
+        }
+        config_backend = AgentBackendConfig(
+            recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
+        )
+        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+            result = _check_dispatch_feasibility(
+                post_prune_step_names=["resolve_review"],
+                active_recipe_steps=active_steps,
+                backend=backend,
+                config_providers=_DEFAULT_PROVIDERS,
+                recipe_name="test-recipe",
+                config_backend=config_backend,
+                skill_resolver=None,
+            )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed.get("error") == "skill_resolver_unavailable_for_pinned_step"
+        assert parsed.get("success") is False
+        assert parsed.get("stage") == "dispatch_feasibility_preflight"
+        assert parsed.get("step") == "resolve_review"
+
     def test_incompatible_backend_fails(self) -> None:
         """Backend with empty applicable_guards returns error (1b)."""
         from autoskillit.server.tools._preflight import _check_dispatch_feasibility

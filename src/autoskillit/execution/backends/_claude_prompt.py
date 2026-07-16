@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 from autoskillit.core import (
+    OUTPUT_DISCIPLINE_DIGEST,
     PROVIDER_PROFILE_ENV_VAR,
     ClaudeFlags,
     OutputFormat,
@@ -182,6 +183,13 @@ def _inject_narration_suppression(skill_command: str, *, has_skill_prefix: bool 
     return skill_command + directive
 
 
+def _inject_output_discipline(prompt: str, *, include: bool = False) -> str:
+    """Append the shared output-discipline digest on supported delivery surfaces."""
+    if not include:
+        return prompt
+    return f"{prompt}\n\n{OUTPUT_DISCIPLINE_DIGEST}"
+
+
 def _inject_completion_reminder(prompt: str, marker: str) -> str:
     """Append a short completion marker reminder as the final prompt line.
 
@@ -217,6 +225,7 @@ class PromptBuildContext:
     temp_dir_relpath: str | None = None
     has_skill_prefix: bool = False
     profile_name: str = ""
+    include_output_discipline: bool = False
 
 
 class InjectorDef(NamedTuple):
@@ -229,6 +238,7 @@ PROMPT_INJECTOR_CHAIN: tuple[InjectorDef, ...] = (
     InjectorDef("completion-directive"),
     InjectorDef("cwd-anchor"),
     InjectorDef("narration-suppression"),
+    InjectorDef("output-discipline"),
     InjectorDef("output-format-reinforcement"),
     InjectorDef("completion-reminder"),
 )
@@ -243,6 +253,7 @@ def apply_prompt_injector_chain(prompt: str, ctx: PromptBuildContext) -> str:
     prompt = _inject_completion_directive(prompt, ctx.completion_marker)
     prompt = _inject_cwd_anchor(prompt, ctx.cwd, temp_dir_relpath=ctx.temp_dir_relpath)
     prompt = _inject_narration_suppression(prompt, has_skill_prefix=ctx.has_skill_prefix)
+    prompt = _inject_output_discipline(prompt, include=ctx.include_output_discipline)
     prompt = _inject_output_format_reinforcement(prompt, profile_name=ctx.profile_name)
     prompt = _inject_completion_reminder(prompt, ctx.completion_marker)
     return prompt

@@ -145,6 +145,21 @@ def test_d1_headless_auto_approve(deep_workflow_section: str) -> None:
     )
 
 
+def test_d1_reserves_completion_budget_before_each_batch(
+    deep_workflow_section: str,
+) -> None:
+    """Deep mode must stop gathering before it consumes the completion reserve."""
+    d1 = extract_step_section(deep_workflow_section, "Step D1")
+    normalized = d1.lower()
+    assert "before authorizing each batch" in normalized
+    assert "reserve" in normalized
+    assert "synthesis" in normalized
+    assert "report writing" in normalized
+    assert "post-report validation" in normalized
+    assert "stop gathering" in normalized
+    assert "would cross that reserve" in normalized
+
+
 def test_d2_broad_exploration_minimum_subagents(deep_workflow_section: str) -> None:
     """Step D2 must specify a minimum of 5 parallel subagents."""
     d2 = extract_step_section(deep_workflow_section, "Step D2")

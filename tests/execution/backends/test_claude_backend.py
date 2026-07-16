@@ -181,6 +181,25 @@ class TestResumePromptPreservation:
         assert marker_text in prompt
 
 
+class TestOutputDisciplineDelivery:
+    @staticmethod
+    def _extract_prompt(spec: CmdSpec) -> str:
+        cmd = list(spec.cmd)
+        return cmd[cmd.index(ClaudeFlags.PRINT) + 1]
+
+    def test_fresh_skill_session_does_not_include_codex_digest(self) -> None:
+        from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+
+        spec = ClaudeCodeBackend().build_skill_session_cmd("/plan", **SKILL_BASE)
+        assert OUTPUT_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
+
+    def test_fresh_orchestrator_does_not_include_codex_digest(self) -> None:
+        from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+
+        spec = ClaudeCodeBackend().build_food_truck_cmd(**FOOD_TRUCK_BASE)
+        assert OUTPUT_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
+
+
 class TestBuildSkillSessionCmdConfigAdapter:
     def test_config_adapter_matches_impl(self) -> None:
         backend = ClaudeCodeBackend()

@@ -32,6 +32,21 @@ Do not change any code.
 - User says "rectify", "rectify this", or "address root cause"
 - User wants to understand why tests missed something and how to prevent it architecturally
 
+<!-- output-discipline:begin -->
+### Output Discipline Policy v1
+
+- Treat shell and tool output as a bounded resource. Choose the smallest useful producer and set a byte limit before running it.
+- Bound discovery itself: use forms such as `rg -l PATTERN PATH 2>&1 | head -c N`, where `N` is within the configured inline-output ceiling, or redirect both descriptors to a project-temp artifact.
+- For JSONL, use record-aware search with a per-record limit such as `rg -M 500`; never rely on a bare line cap because one record may contain an arbitrarily large payload.
+- Route stdout and stderr from every stage of an output-producing pipeline into the terminal byte cap. Intermediate stderr must not bypass the cap.
+- Follow `jq` field extraction with a byte cap. Selecting one field does not make its contents small.
+- Redirect potentially unbounded output to `{{AUTOSKILLIT_TEMP}}/<skill>/out.txt` with both descriptors captured, then inspect only bounded searches or byte slices from that artifact.
+- Read complete files only when their size is known to be small. Otherwise locate matches first and read only the bounded relevant region.
+- Give every subagent an explicit maximum size for its final report and request only evidence needed by the parent synthesis.
+- Before authorizing each deep-mode batch, reserve enough context for synthesis, report writing, and validation. Stop gathering and begin synthesis when another batch would cross that reserve.
+- A command's success does not make oversized inline output safe. Preserve full evidence in project temp and return a bounded summary plus the artifact path.
+<!-- output-discipline:end -->
+
 ## Critical Constraints
 
 **NEVER:**

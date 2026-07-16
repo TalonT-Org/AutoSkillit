@@ -1,13 +1,39 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BareResume, CmdSpec, NamedResume, NoResume
+from autoskillit.core import (
+    OUTPUT_DISCIPLINE_DIGEST,
+    BareResume,
+    CmdSpec,
+    NamedResume,
+    NoResume,
+)
 from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _developer_instructions(spec: CmdSpec) -> str | None:
+    overrides = [
+        spec.cmd[i + 1]
+        for i, value in enumerate(spec.cmd[:-1])
+        if value == CodexFlags.CONFIG_OVERRIDE
+    ]
+    rendered = next(
+        (
+            value.partition("=")[2]
+            for value in overrides
+            if value.startswith("developer_instructions=")
+        ),
+        None,
+    )
+    if rendered is None:
+        return None
+    return tomllib.loads(f"developer_instructions = {rendered}")["developer_instructions"]
 
 
 class TestCodexInteractiveCmdBaseStructure:
@@ -66,10 +92,10 @@ class TestCodexInteractiveCmdSystemPrompt:
             system_prompt="do stuff",
             resume_spec=NoResume(),
         )
+        assert _developer_instructions(spec) == f"do stuff\n\n{OUTPUT_DISCIPLINE_DIGEST}"
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
-        assert "developer_instructions=do stuff" in overrides
         assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_named_resume_suppressed(self) -> None:
@@ -99,7 +125,16 @@ class TestCodexInteractiveCmdSystemPrompt:
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
-        assert overrides == ["features.image_generation=false"]
+        assert _developer_instructions(spec) == OUTPUT_DISCIPLINE_DIGEST
+        assert "features.image_generation=false" in overrides
+
+    def test_system_prompt_override_is_valid_toml_with_quotes_and_newlines(self) -> None:
+        caller_prompt = 'line one "quoted"\nline two \\ path'
+        spec = CodexBackend().build_interactive_cmd(
+            system_prompt=caller_prompt,
+            resume_spec=NoResume(),
+        )
+        assert _developer_instructions(spec) == (f"{caller_prompt}\n\n{OUTPUT_DISCIPLINE_DIGEST}")
 
 
 class TestCodexInteractiveCmdAddDirs:

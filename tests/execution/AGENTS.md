@@ -159,3 +159,4 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |
 | `test_coding_agent_backend_conformance.py` | Parametrized conformance tests for all CodingAgentBackend implementations via BackendContractBase |
 | `test_cli_conformance_probes.py` | Live backend CLI conformance probes: schema checks plus isolated output-budget deny round trips with ProbeCache and shared error discrimination |
+| `test_probe_cache.py` | Versioned probe-cache tests: CLI/policy identity invalidation, TTL, schema, and write preservation |

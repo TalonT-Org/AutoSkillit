@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
@@ -28,6 +29,7 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
+    OUTPUT_DISCIPLINE_DIGEST,
     PROVIDER_PROFILE_ENV_VAR,
     RESUME_SESSION_BASELINE_KEYS,
     SESSION_TYPE_ORCHESTRATOR,
@@ -466,8 +468,11 @@ def _generate_agent_tomls(session_dir: Path) -> int:
             effort = CODEX_EFFORT_MAPPING.get(model_key)
             if effort:
                 lines.append(f"model_reasoning_effort = {_format_toml_value(effort)}")
+        body = f"{body}\n\n{OUTPUT_DISCIPLINE_DIGEST}"
         lines.append(f"developer_instructions = '''\n{body}\n'''")
-        atomic_write(out_dir / f"{name}.toml", "\n".join(lines) + "\n")
+        toml_path = out_dir / f"{name}.toml"
+        atomic_write(toml_path, "\n".join(lines) + "\n")
+        tomllib.loads(toml_path.read_text(encoding="utf-8"))
         count += 1
     logger.debug("codex_agents_generated", count=count, dest=str(out_dir))
     return count
@@ -751,6 +756,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 temp_dir_relpath=temp_dir_relpath,
                 has_skill_prefix=_has_prefix,
                 profile_name=profile_name,
+                include_output_discipline=True,
             ),
         )
 
@@ -863,6 +869,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 temp_dir_relpath=temp_dir_relpath,
                 has_skill_prefix=False,
                 profile_name="",
+                include_output_discipline=True,
             ),
         )
 
@@ -958,8 +965,16 @@ class CodexBackend(BackendCmdBuilderBase):
             for override in self.model_config_overrides(model):
                 builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, override)
         builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
-        if system_prompt is not None and isinstance(resume_spec, NoResume):
-            builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, f"developer_instructions={system_prompt}")
+        if isinstance(resume_spec, NoResume):
+            developer_instructions = (
+                f"{system_prompt}\n\n{OUTPUT_DISCIPLINE_DIGEST}"
+                if system_prompt is not None
+                else OUTPUT_DISCIPLINE_DIGEST
+            )
+            builder.kv_flag(
+                CodexFlags.CONFIG_OVERRIDE,
+                f"developer_instructions={_format_toml_value(developer_instructions)}",
+            )
         if initial_prompt is not None:
             builder.positional(initial_prompt)
         for d in add_dirs:

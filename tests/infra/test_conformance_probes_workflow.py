@@ -125,6 +125,18 @@ class TestVersionResolution:
 
 class TestCacheGate:
     @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_exports_output_discipline_policy_identity(
+        self, workflow: dict, job_name: str
+    ) -> None:
+        steps = workflow["jobs"][job_name]["steps"]
+        policy_steps = [s for s in steps if s.get("id") == "resolve-policy"]
+        assert len(policy_steps) == 1
+        run = policy_steps[0].get("run", "")
+        assert "PROBE_POLICY_IDENTITY" in run
+        assert "policy_identity=${POLICY_IDENTITY}" in run
+        assert "GITHUB_OUTPUT" in run
+
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
     def test_cache_restore_step(self, workflow: dict, job_name: str) -> None:
         steps = workflow["jobs"][job_name]["steps"]
         restore_steps = [s for s in steps if "cache/restore" in (s.get("uses") or "")]
@@ -155,6 +167,21 @@ class TestCacheGate:
         for step in restore_steps:
             key = step.get("with", {}).get("key", "")
             assert f"probe-{expected_backend}" in key
+
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_restore_and_save_keys_include_policy_identity(
+        self, workflow: dict, job_name: str
+    ) -> None:
+        steps = workflow["jobs"][job_name]["steps"]
+        cache_steps = [
+            s
+            for s in steps
+            if "cache/restore" in (s.get("uses") or "") or "cache/save" in (s.get("uses") or "")
+        ]
+        assert len(cache_steps) == 2
+        for step in cache_steps:
+            key = step.get("with", {}).get("key", "")
+            assert "steps.resolve-policy.outputs.policy_identity" in key
 
 
 class TestPostFailure:

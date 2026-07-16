@@ -91,6 +91,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
+        # Canonical output-discipline block/digest and their SHA-256 cache identity are
+        # deliberately derived once at import time from the single source of truth.
+        "_type_constants",
         # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
         "_label_cleanup",  # fleet/_label_cleanup.py: _REMOVE_LABELS constant (see comment above)
         "_step_context",  # core/_step_context.py: current_step_name, current_order_id ContextVars
@@ -1053,7 +1056,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and ambiguous/empty step_name dependency-deny branches (+126 net lines)",
     ),
     "execution/backends/codex.py": (
-        1155,
+        1167,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1079,7 +1082,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; explicit parameter dispositions for "
         "plugin_source/output_format/exit_after_stop_delay_ms "
         "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1"
-        "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)",
+        "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)"
+        "; output-discipline delivery for fresh interactive sessions and generated agent "
+        "TOMLs (+12 net lines)",
     ),
 }
 

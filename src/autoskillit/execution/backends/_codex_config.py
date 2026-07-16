@@ -10,6 +10,7 @@ import regex as _re
 from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     HEADLESS_AUTO_GATE_ENV_VAR,
+    OPEN_KITCHEN_OUTPUT_BUDGET_BYTES,
     ReadResult,
     atomic_write,
     get_logger,
@@ -23,9 +24,11 @@ CODEX_MCP_TOOL_TIMEOUT_FLOOR: float = 14364.0
 
 CODEX_MCP_STARTUP_TIMEOUT_SEC: float = 30.0
 
-# Per-tool response size budget for Codex MCP tools. Sufficient for current
-# `open_kitchen` response sizes with 2x headroom.
-CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = 50_000
+# Damage bound for all tool/function output stored in Codex context, including
+# native shell and MCP output. Codex currently applies a coarse four-UTF-8-byte
+# truncation heuristic; the extra 8,000 tokens provide serialized-payload
+# headroom. Guard and spill layers remain the load-bearing mechanisms.
+CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = ((OPEN_KITCHEN_OUTPUT_BUDGET_BYTES + 3) // 4) + 8_000
 
 # Disable Codex auto-compaction by setting the limit to an unreachable value.
 # Auto-compaction at 90% of 258K context window can destroy recipe content
@@ -239,7 +242,7 @@ def _is_autoskillit_registered(
         return False
     if entry.get("startup_timeout_sec") != CODEX_MCP_STARTUP_TIMEOUT_SEC:
         return False
-    if config.get("tool_output_token_limit", 0) < CODEX_TOOL_OUTPUT_TOKEN_LIMIT:
+    if config.get("tool_output_token_limit") != CODEX_TOOL_OUTPUT_TOKEN_LIMIT:
         return False
     if config.get("model_auto_compact_token_limit", 0) < CODEX_AUTO_COMPACT_LIMIT:
         return False
@@ -247,26 +250,55 @@ def _is_autoskillit_registered(
 
 
 def _ensure_top_level_key(path: Path, *, key: str, value: int) -> None:
-    """Insert `key = value` at the top of a TOML file if not already present.
+    """Ensure a bare top-level integer scalar is at least ``value``.
 
     `safe_upsert_section` only writes `[section]` blocks; it cannot write bare
     top-level scalars. This helper handles the bare-scalar case for the
-    corrupt-file path where the entire config needs text-level edits.
+    corrupt-file path while preserving higher values.
     """
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    pattern = _re.compile(rf"^\s*{_re.escape(key)}\s*=", _re.MULTILINE)
-    if pattern.search(existing):
-        return
-    line = f"{key} = {value}\n"
     lines = existing.splitlines(keepends=True)
-    insert_at = 0
-    for i, ln in enumerate(lines):
-        if ln.lstrip().startswith("["):
+    assignment = _re.compile(rf"^\s*{_re.escape(key)}\s*=\s*(?P<value>[+-]?[0-9][0-9_]*)")
+    insert_at = len(lines)
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("["):
             insert_at = i
             break
-        insert_at = i + 1
-    new_lines = lines[:insert_at] + [line] + lines[insert_at:]
-    atomic_write(path, "".join(new_lines))
+        match = assignment.match(line)
+        if match:
+            current = int(match.group("value").replace("_", ""))
+            if current >= value:
+                return
+            newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+            lines[i] = f"{key} = {value}{newline}"
+            atomic_write(path, "".join(lines))
+            return
+    lines.insert(insert_at, f"{key} = {value}\n")
+    atomic_write(path, "".join(lines))
+
+
+def _upsert_top_level_key_exact(path: Path, *, key: str, value: int) -> None:
+    """Set a bare top-level scalar to exactly ``value`` using text-level edits.
+
+    This is deliberately separate from ``_ensure_top_level_key``: the Codex
+    tool-output setting is exact, while the auto-compact setting retains its
+    independent minimum semantics.
+    """
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = existing.splitlines(keepends=True)
+    assignment = _re.compile(rf"^\s*{_re.escape(key)}\s*=")
+    insert_at = len(lines)
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("["):
+            insert_at = i
+            break
+        if assignment.match(line):
+            newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+            lines[i] = f"{key} = {value}{newline}"
+            atomic_write(path, "".join(lines))
+            return
+    lines.insert(insert_at, f"{key} = {value}\n")
+    atomic_write(path, "".join(lines))
 
 
 def ensure_codex_mcp_registered(
@@ -299,7 +331,7 @@ def ensure_codex_mcp_registered(
     if result.is_corrupt:
         section_text = _serialize_mcp_autoskillit_section(entry)
         safe_upsert_section(config_path, "[mcp_servers.autoskillit]", section_text)
-        _ensure_top_level_key(
+        _upsert_top_level_key_exact(
             config_path,
             key="tool_output_token_limit",
             value=CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
@@ -319,7 +351,12 @@ def ensure_codex_mcp_registered(
         ):
             return False
         config.setdefault("mcp_servers", {})["autoskillit"] = entry
-        config.setdefault("tool_output_token_limit", CODEX_TOOL_OUTPUT_TOKEN_LIMIT)
-        config["model_auto_compact_token_limit"] = CODEX_AUTO_COMPACT_LIMIT
+        config["tool_output_token_limit"] = CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+        existing_compact_limit = config.get("model_auto_compact_token_limit", 0)
+        if not isinstance(existing_compact_limit, int):
+            existing_compact_limit = 0
+        config["model_auto_compact_token_limit"] = max(
+            existing_compact_limit, CODEX_AUTO_COMPACT_LIMIT
+        )
         _write_codex_config(config_path, config, source=result)
         return True

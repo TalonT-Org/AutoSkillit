@@ -123,6 +123,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_no_path_cwd_in_tools.py` | Regression guard: Path.cwd() must not appear in server tool handlers |
 | `test_open_kitchen_staleness.py` | Tests for ProcessStaleError propagation through open_kitchen — failure envelope with staleness context |
 | `test_open_kitchen_deferred_recall.py` | Tests for the _is_deferred_recall=True path: active_recipe_steps and fail-closed guard |
+| `test_output_budget_e2e.py` | Env-gated real kitchen/run_skill deep-investigate probes against controlled large-output fixtures for Codex and Claude Code |
 | `test_tools_label_validation.py` | Tests for label whitelist validation in server tool handlers |
 | `test_tools_list_recipes.py` | Tests for autoskillit server list_recipes tool |
 | `test_tools_load_recipe.py` | Tests for autoskillit server load_recipe tool |

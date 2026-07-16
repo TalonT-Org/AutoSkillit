@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 # Empirically below the ~100KB Claude Code CLI disk-persistence gate (measured on
 # CLI 2.1.197); re-measure after CLI upgrades rather than treating this as a
 # protocol constant. See issue #4253.
-_OPEN_KITCHEN_OUTPUT_BUDGET_BYTES = 95_000
+_OPEN_KITCHEN_OUTPUT_BUDGET_BYTES = 96_000
 
 # Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
 _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(

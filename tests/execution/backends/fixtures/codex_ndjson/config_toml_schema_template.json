@@ -26,9 +26,9 @@
       "floor_value": 999999999
     },
     "tool_output_token_limit": {
-      "constraint": "minimum",
+      "constraint": "exact",
       "expected_type": "int",
-      "floor_value": 50000
+      "expected_value": 32000
     }
   }
 }

@@ -24,6 +24,12 @@ from autoskillit._probe_canary import (
     CanaryState,
     ErrorKind,
 )
+from autoskillit.config import OutputBudgetConfig
+from autoskillit.core import OPEN_KITCHEN_OUTPUT_BUDGET_BYTES, pkg_root
+from autoskillit.execution.backends._codex_config import (
+    CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+    ensure_codex_mcp_registered,
+)
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._probe_cache import (
     PROBE_POLICY_IDENTITY,
@@ -33,10 +39,15 @@ from autoskillit.execution.backends._probe_cache import (
 )
 from autoskillit.hook_registry import generate_hooks_json
 from tests.execution.backends._conformance_assertions import (
+    assert_boundary_spill_behavior,
     assert_config_schema,
     assert_hook_event_format,
+    assert_inline_within_byte_budget,
     assert_no_unknown_event_types,
+    assert_sentinels_present,
     assert_session_start_present,
+    assert_spill_artifact_integrity,
+    assert_terminal_sentinel_preserved,
     assert_turn_completed_usage_nonzero,
     assert_vocabulary_coverage,
 )
@@ -531,6 +542,277 @@ class TestCodexOutputBudgetDenyRoundTrip:
 class TestClaudeCodeOutputBudgetDenyRoundTrip:
     def test_hook_fires_and_reason_reaches_model(self, tmp_path: Path) -> None:
         _exercise_output_budget_deny_probe("claude-code", tmp_path)
+
+
+_SOURCE_SPILL_THRESHOLD = OutputBudgetConfig().inline_max_chars
+_CODEX_HEURISTIC_BYTES = CODEX_TOOL_OUTPUT_TOKEN_LIMIT * 4
+_SERIALIZED_ENVELOPE_SLACK_BYTES = 4096
+_LARGE_OUTPUT_CASE_BYTES = tuple(
+    sorted(
+        {
+            _SOURCE_SPILL_THRESHOLD - 1,
+            _SOURCE_SPILL_THRESHOLD,
+            _SOURCE_SPILL_THRESHOLD + 1,
+            _CODEX_HEURISTIC_BYTES - 1,
+            _CODEX_HEURISTIC_BYTES,
+            _CODEX_HEURISTIC_BYTES + 1,
+            500_000,
+        }
+    )
+)
+_OPEN_KITCHEN_TERMINAL_SENTINEL = "success=false: escalate_stop_no_ci, escalate_stop"
+_TRANSPORT_TRUNCATION_MARKERS = (
+    "[tool output truncated]",
+    "[output truncated by transport]",
+)
+
+
+class _LargeOutputProbe(NamedTuple):
+    transcript: str
+    cli_version: str
+    expected_payloads: dict[int, str]
+
+
+def _large_payload(size: int) -> tuple[str, tuple[str, str, str]]:
+    sentinels = (
+        f"HEAD-SENTINEL::{size}",
+        f"MIDDLE-SENTINEL::{size}",
+        f"TAIL-SENTINEL::{size}",
+    )
+    fixed = sum(len(value) for value in sentinels) + 2
+    assert fixed <= size
+    filler = size - fixed
+    before_middle = filler // 2
+    after_middle = filler - before_middle
+    payload = (
+        sentinels[0]
+        + "\n"
+        + ("a" * before_middle)
+        + sentinels[1]
+        + ("z" * after_middle)
+        + "\n"
+        + sentinels[2]
+    )
+    assert len(payload.encode("utf-8")) == size
+    return payload, sentinels
+
+
+def _walk_json_values(value: object):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _walk_json_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_json_values(child)
+    elif isinstance(value, str):
+        try:
+            nested = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return
+        yield from _walk_json_values(nested)
+
+
+def _run_cmd_payloads(transcript: str) -> list[dict]:
+    payloads: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for line in transcript.splitlines():
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for candidate in _walk_json_values(event):
+            if not {"success", "exit_code", "stdout", "stderr"}.issubset(candidate):
+                continue
+            key = (
+                str(candidate.get("stdout", "")),
+                str(candidate.get("stdout_artifact_path", "")),
+            )
+            if key not in seen:
+                seen.add(key)
+                payloads.append(candidate)
+    return payloads
+
+
+def _large_output_prompt(workspace: Path) -> str:
+    calls = "\n".join(
+        f'- run_cmd cmd="LC_ALL=C head -c {size} '
+        f'.autoskillit/temp/probe-fixtures/case-{size}.txt" cwd="{workspace}"'
+        for size in _LARGE_OUTPUT_CASE_BYTES
+    )
+    return (
+        "This is an output-budget conformance probe. First call the autoskillit "
+        "open_kitchen tool with name=remediation and overrides "
+        '{"task":"test task","issue_url":"https://github.com/test/test/issues/1",'
+        '"is_fleet_dispatch":"true","adversarial_review_level":"true",'
+        '"local_review_rounds":"true","base_branch":"true",'
+        '"post_run_diagnostics":"true"}. Then make every autoskillit run_cmd call below, '
+        "in order. Do not substitute native shell tools and do not omit a call.\n"
+        f"{calls}\nAfter all calls, respond with exactly: probe-complete"
+    )
+
+
+def _run_large_output_probe(backend: str, tmp_path: Path) -> _LargeOutputProbe:
+    workspace = tmp_path / "workspace"
+    fixture_dir = workspace / ".autoskillit" / "temp" / "probe-fixtures"
+    fixture_dir.mkdir(parents=True)
+    expected_payloads: dict[int, str] = {}
+    for size in _LARGE_OUTPUT_CASE_BYTES:
+        payload, _ = _large_payload(size)
+        expected_payloads[size] = payload
+        (fixture_dir / f"case-{size}.txt").write_text(payload, encoding="utf-8")
+
+    env, codex_home, claude_config = _isolated_cli_env(tmp_path / "isolated", workspace)
+    venv_bin = Path(__file__).resolve().parents[3] / ".venv" / "bin"
+    env["PATH"] = f"{venv_bin}{os.pathsep}{env.get('PATH', '')}"
+    env["AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED"] = "true"
+    prompt = _large_output_prompt(workspace)
+
+    if backend == "codex":
+        config_path = codex_home / "config.toml"
+        ensure_codex_mcp_registered(config_path=config_path, headless_auto_gate=False)
+        sync_hooks_to_codex_config(config_path=config_path)
+        subprocess.run(
+            ["git", "init", "-q"],
+            cwd=workspace,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        command = [
+            "codex",
+            "exec",
+            "--json",
+            "--sandbox",
+            "workspace-write",
+            prompt,
+        ]
+    elif backend == "claude-code":
+        (claude_config / "settings.json").write_text(
+            json.dumps(generate_hooks_json(), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        command = [
+            "claude",
+            "-p",
+            prompt,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--dangerously-skip-permissions",
+            "--plugin-dir",
+            str(pkg_root()),
+        ]
+    else:  # pragma: no cover - parametrization is sealed below
+        raise ValueError(f"unsupported probe backend: {backend}")
+
+    timeout = int(os.environ.get("OUTPUT_BUDGET_LARGE_SMOKE_TIMEOUT", "900"))
+    result = subprocess.run(  # noqa: S603
+        command,
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    transcript = result.stdout + "\n" + result.stderr
+    if result.returncode != 0:
+        raise OSError(f"{backend} large-output probe rc={result.returncode}: {transcript}")
+    return _LargeOutputProbe(
+        transcript=transcript,
+        cli_version=_cli_version(command[0], env),
+        expected_payloads=expected_payloads,
+    )
+
+
+def _assert_large_output_probe(output: _LargeOutputProbe) -> None:
+    payloads = _run_cmd_payloads(output.transcript)
+    observed_by_size: dict[int, dict] = {}
+    for size, expected in output.expected_payloads.items():
+        head = f"HEAD-SENTINEL::{size}"
+        matches = [entry for entry in payloads if head in str(entry.get("stdout", ""))]
+        assert len(matches) == 1, f"expected one run_cmd result for {size}, got {len(matches)}"
+        observed_by_size[size] = matches[0]
+
+    spill_by_size: dict[int, bool] = {}
+    for size, entry in observed_by_size.items():
+        expected = output.expected_payloads[size]
+        _, sentinels = _large_payload(size)
+        inline = str(entry["stdout"])
+        artifact_path = str(entry.get("stdout_artifact_path", ""))
+        spilled = bool(artifact_path)
+        spill_by_size[size] = spilled
+        assert_inline_within_byte_budget(
+            json.dumps(entry),
+            CODEX_TOOL_OUTPUT_TOKEN_LIMIT * 4,
+            envelope_slack_bytes=_SERIALIZED_ENVELOPE_SLACK_BYTES,
+        )
+        if spilled:
+            assert "[spilled " in inline
+            assert_sentinels_present(inline, (sentinels[0], sentinels[2]))
+            assert_spill_artifact_integrity(artifact_path, expected, sentinels)
+        else:
+            assert inline == expected
+            assert_sentinels_present(inline, sentinels)
+
+    assert_boundary_spill_behavior(spill_by_size, _SOURCE_SPILL_THRESHOLD)
+    assert_terminal_sentinel_preserved(
+        output.transcript,
+        _OPEN_KITCHEN_TERMINAL_SENTINEL,
+        _TRANSPORT_TRUNCATION_MARKERS,
+    )
+    assert len(_OPEN_KITCHEN_TERMINAL_SENTINEL.encode("utf-8")) < (
+        OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
+    )
+
+
+def _exercise_large_output_probe(backend: str, tmp_path: Path) -> None:
+    version_workspace = tmp_path / "version-workspace"
+    version_workspace.mkdir()
+    version_env, _, _ = _isolated_cli_env(tmp_path / "version-env", version_workspace)
+    binary = "codex" if backend == "codex" else "claude"
+    cli_version = _cli_version(binary, version_env)
+    cache_path = tmp_path / f"{backend}-large-output-probe-cache.json"
+    cached = read_probe_cache(cache_path, cli_version, PROBE_POLICY_IDENTITY)
+    if cached is not None and cached.passed:
+        pytest.skip(f"Large-output probe cached as passed for {cli_version}")
+
+    def _record(passed: bool, version: str, detail: str | None) -> None:
+        write_probe_cache(
+            cache_path,
+            ProbeResult(
+                cli_version=version,
+                policy_identity=PROBE_POLICY_IDENTITY,
+                passed=passed,
+                failure_detail=detail,
+                probe_timestamp=datetime.now(UTC).isoformat(),
+            ),
+        )
+
+    _run_probe_with_discrimination(
+        f"large_output_boundaries_{backend}",
+        cli_version,
+        lambda: _run_large_output_probe(backend, tmp_path / "round-trip"),
+        _assert_large_output_probe,
+        record_success=lambda version: _record(True, version, None),
+        record_failure=lambda kind, name, version, detail: _record(
+            False, version, f"{kind.value}:{name}:{detail}"
+        ),
+    )
+
+
+@_skip_unless_codex_output_budget_smoke
+class TestCodexLargeOutputAndOpenKitchenRoundTrip:
+    def test_boundaries_spill_integrity_and_terminal_sentinel(self, tmp_path: Path) -> None:
+        _exercise_large_output_probe("codex", tmp_path)
+
+
+@_skip_unless_claude_output_budget_smoke
+class TestClaudeCodeLargeOutputAndOpenKitchenRoundTrip:
+    def test_boundaries_spill_integrity_and_terminal_sentinel(self, tmp_path: Path) -> None:
+        _exercise_large_output_probe("claude-code", tmp_path)
 
 
 @_skip_unless_claude_code_smoke

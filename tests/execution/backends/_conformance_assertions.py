@@ -6,6 +6,9 @@ AssertionError with a descriptive message on failure.
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 from autoskillit.core.types._type_enums import CodexEventType
 from autoskillit.execution.process._process_jsonl import _marker_is_standalone
 
@@ -96,3 +99,67 @@ def assert_config_schema(config_dict: dict, version_str: str) -> None:
     assert not missing, (
         f"Config (version {version_str}) missing expected top-level keys: {sorted(missing)}"
     )
+
+
+def assert_boundary_spill_behavior(spilled_by_size: dict[int, bool], threshold: int) -> None:
+    """Assert the lossless-spill contract immediately around a source threshold."""
+    expected = {threshold - 1: False, threshold: False, threshold + 1: True}
+    observed = {size: spilled_by_size.get(size) for size in expected}
+    assert observed == expected, (
+        f"spill boundary mismatch at {threshold}: expected {expected}, observed {observed}"
+    )
+
+
+def assert_sentinels_present(text: str, sentinels: tuple[str, ...]) -> None:
+    """Assert distinct workload sentinels survived a delivery or artifact path."""
+    missing = [sentinel for sentinel in sentinels if sentinel not in text]
+    assert not missing, f"missing sentinels: {missing}"
+
+
+def assert_spill_artifact_integrity(
+    artifact_path: str,
+    expected_text: str,
+    sentinels: tuple[str, ...],
+) -> None:
+    """Assert an atomically published spill is byte-complete and content-addressable."""
+    path = Path(artifact_path)
+    assert path.is_file(), f"spill artifact does not exist: {path}"
+    artifact_bytes = path.read_bytes()
+    expected_bytes = expected_text.encode("utf-8")
+    assert artifact_bytes == expected_bytes, (
+        f"spill artifact differs from source: {len(artifact_bytes)} != {len(expected_bytes)} bytes"
+    )
+    expected_sha256 = hashlib.sha256(expected_bytes).hexdigest()
+    actual_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+    assert actual_sha256 == expected_sha256, (
+        f"spill sha256 mismatch: {actual_sha256} != {expected_sha256}"
+    )
+    assert_sentinels_present(artifact_bytes.decode("utf-8"), sentinels)
+
+
+def assert_inline_within_byte_budget(
+    inline_text: str,
+    byte_budget: int,
+    *,
+    envelope_slack_bytes: int = 0,
+) -> None:
+    """Assert inline output stays within a transport ceiling plus explicit envelope slack."""
+    inline_bytes = len(inline_text.encode("utf-8"))
+    effective_budget = byte_budget + envelope_slack_bytes
+    assert inline_bytes <= effective_budget, (
+        f"inline output is {inline_bytes} bytes, over {byte_budget} + "
+        f"{envelope_slack_bytes} envelope bytes"
+    )
+
+
+def assert_terminal_sentinel_preserved(
+    delivered_text: str,
+    terminal_sentinel: str,
+    truncation_markers: tuple[str, ...],
+) -> None:
+    """Assert a terminal sentinel arrived and no known transport truncation marker did."""
+    assert terminal_sentinel in delivered_text, (
+        f"terminal sentinel missing from delivered text: {terminal_sentinel!r}"
+    )
+    observed_markers = [marker for marker in truncation_markers if marker in delivered_text]
+    assert not observed_markers, f"transport truncation markers present: {observed_markers}"

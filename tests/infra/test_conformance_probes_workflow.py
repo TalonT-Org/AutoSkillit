@@ -75,6 +75,12 @@ class TestJobEnvironment:
     def test_claude_probe_smoke_env(self, workflow: dict) -> None:
         assert workflow["jobs"]["claude-probe"]["env"]["CLAUDE_CODE_SMOKE_TEST"] == "1"
 
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_live_probe_timeout_covers_default_dispatch(
+        self, workflow: dict, job_name: str
+    ) -> None:
+        assert workflow["jobs"][job_name]["timeout-minutes"] == 75
+
 
 class TestActionPinning:
     _SHA_RE = re.compile(r"@[0-9a-f]{40}\b")
@@ -182,6 +188,23 @@ class TestCacheGate:
         for step in cache_steps:
             key = step.get("with", {}).get("key", "")
             assert "steps.resolve-policy.outputs.policy_identity" in key
+
+
+class TestOutputBudgetE2E:
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_job_runs_real_server_harness(self, workflow: dict, job_name: str) -> None:
+        run_steps = [step.get("run", "") for step in workflow["jobs"][job_name]["steps"]]
+        assert any("tests/server/test_output_budget_e2e.py" in run for run in run_steps)
+
+    def test_claude_job_exports_isolated_credential(self, workflow: dict) -> None:
+        steps = workflow["jobs"]["claude-probe"]["steps"]
+        probe_step = next(
+            step for step in steps if step.get("name") == "Run Claude Code conformance probes"
+        )
+        env = probe_step["env"]
+        assert "ANTHROPIC_API_KEY" in env
+        assert "CLAUDE_CODE_OAUTH_TOKEN" in env
+        assert "No isolated Claude credential" in probe_step["run"]
 
 
 class TestPostFailure:

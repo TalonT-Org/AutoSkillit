@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks.formatters.pretty_output_hook import _format_response
+from autoskillit.core import OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
+from autoskillit.hooks.formatters.pretty_output_hook import (
+    _OPEN_KITCHEN_OUTPUT_BUDGET_BYTES,
+    _format_response,
+)
 from tests.infra._pretty_output_helpers import (
     REALISTIC_RECIPE_YAML,
     _make_event,
@@ -15,6 +19,12 @@ from tests.infra._pretty_output_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
+
+def test_open_kitchen_budget_dual_copy_matches_core_authority() -> None:
+    """The stdlib-only formatter copy must stay equal to the public authority."""
+    assert OPEN_KITCHEN_OUTPUT_BUDGET_BYTES == 96_000
+    assert _OPEN_KITCHEN_OUTPUT_BUDGET_BYTES == OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
 
 
 # PHK-15
@@ -972,11 +982,11 @@ def test_open_kitchen_payload_warning_uses_formatted_byte_count(capsys):
     formatted = _fmt_open_kitchen(data, pipeline=False)
     captured = capsys.readouterr()
     byte_len = len(formatted.encode("utf-8"))
-    assert byte_len > 95_000
+    assert byte_len > OPEN_KITCHEN_OUTPUT_BUDGET_BYTES
     assert "open_kitchen" in captured.err
     assert "content_hash=deadbeef" in captured.err
     assert str(byte_len) in captured.err
-    assert "95000" in captured.err
+    assert str(OPEN_KITCHEN_OUTPUT_BUDGET_BYTES) in captured.err
 
 
 def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
@@ -995,6 +1005,7 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
 
     project_root = Path(__file__).resolve().parent.parent.parent
     over_budget: list[str] = []
+    maximum: tuple[int, str, str] = (0, "", "")
 
     for recipe_name in all_validated_recipe_names(project_root):
         for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
@@ -1007,7 +1018,15 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
             )
             rendered = _fmt_open_kitchen(result, pipeline=False)
             byte_len = len(rendered.encode("utf-8"))
-            if byte_len > 100_000:
-                over_budget.append(f"{recipe_name} ({mode_name}): {byte_len} bytes > 100000")
+            maximum = max(maximum, (byte_len, recipe_name, mode_name))
+            if byte_len > OPEN_KITCHEN_OUTPUT_BUDGET_BYTES:
+                over_budget.append(
+                    f"{recipe_name} ({mode_name}): {byte_len} bytes > "
+                    f"{OPEN_KITCHEN_OUTPUT_BUDGET_BYTES}"
+                )
 
-    assert not over_budget, "\n".join(over_budget)
+    max_bytes, max_recipe, max_mode = maximum
+    assert not over_budget, (
+        f"maximum rendered payload: {max_recipe} ({max_mode}) = {max_bytes} bytes\n"
+        + "\n".join(over_budget)
+    )

@@ -405,6 +405,7 @@ async def _run_dispatch(
         )
 
     _effective_backend = dispatch_backend if dispatch_backend is not None else tool_ctx.backend
+    _caller_backend_name = tool_ctx.backend.name if tool_ctx.backend is not None else ""
 
     try:
         _capability_overrides = provider_capability_overrides or _build_capability_overrides(
@@ -542,7 +543,13 @@ async def _run_dispatch(
                     campaign_id,
                     effective_name,
                     "",
-                    [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+                    [
+                        DispatchRecord(
+                            name=effective_name,
+                            caller_session_id=caller_session_id,
+                            caller_backend_name=_caller_backend_name,
+                        ),
+                    ],
                     recipe_snapshot,
                 )
             else:
@@ -587,7 +594,13 @@ async def _run_dispatch(
                 campaign_id,
                 effective_name,
                 "",
-                [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+                [
+                    DispatchRecord(
+                        name=effective_name,
+                        caller_session_id=caller_session_id,
+                        caller_backend_name=_caller_backend_name,
+                    ),
+                ],
                 recipe_snapshot,
             )
     else:
@@ -596,7 +609,13 @@ async def _run_dispatch(
             campaign_id,
             effective_name,
             "",
-            [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+            [
+                DispatchRecord(
+                    name=effective_name,
+                    caller_session_id=caller_session_id,
+                    caller_backend_name=_caller_backend_name,
+                ),
+            ],
             recipe_snapshot,
         )
 
@@ -1064,6 +1083,7 @@ async def _run_dispatch(
         dispatch_id=dispatch_id,
         campaign_id=campaign_id,
         caller_session_id=caller_session_id,
+        caller_backend_name=_caller_backend_name,
         dispatched_session_id=_dispatched_session_id[0]
         if _dispatched_session_id
         else skill_result.session_id,

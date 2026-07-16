@@ -631,7 +631,7 @@ def derive_orchestrator_resume_spec(
 
     Backend-mismatch guard:
         When ``current_backend`` is provided AND the source DispatchRecord's
-        ``backend_name`` is also set, the resume is rejected (returns
+        ``caller_backend_name`` is also set, the resume is rejected (returns
         NoResume) if the two backends differ. This prevents a Codex
         session_id from being passed to Claude's --resume flag (or vice versa),
         which produces either an opaque CLI error or a silent fresh session
@@ -642,24 +642,28 @@ def derive_orchestrator_resume_spec(
             for d in state.dispatches:
                 if (
                     d.caller_session_id == state.orchestrator_session_id
-                    and d.backend_name
-                    and d.backend_name != current_backend
+                    and d.caller_backend_name
+                    and d.caller_backend_name != current_backend
                 ):
                     logger.warning(
                         "resume_backend_mismatch",
                         session_id=state.orchestrator_session_id,
-                        source_backend=d.backend_name,
+                        source_backend=d.caller_backend_name,
                         current_backend=current_backend,
                     )
                     return NoResume()
         return NamedResume(session_id=state.orchestrator_session_id)
     for d in reversed(state.dispatches):
         if d.caller_session_id:
-            if current_backend and d.backend_name and d.backend_name != current_backend:
+            if (
+                current_backend
+                and d.caller_backend_name
+                and d.caller_backend_name != current_backend
+            ):
                 logger.warning(
                     "resume_backend_mismatch",
                     session_id=d.caller_session_id,
-                    source_backend=d.backend_name,
+                    source_backend=d.caller_backend_name,
                     current_backend=current_backend,
                 )
                 return NoResume()

@@ -311,19 +311,14 @@ def test_backend_compat_precedes_dispatch() -> None:
 
 def test_direct_executor_callers_check_backend_compat() -> None:
     """Every .executor.run() call outside run_skill must be preceded by a
-    _check_backend_compat call in the same enclosing function.
+    fail-closed backend compatibility call in the same enclosing function.
 
     Mirrors the proven pattern from test_backend_compat_precedes_dispatch.
-    Scans tools_github.py (report_bug) and tools_issue_headless.py
-    (prepare_issue, enrich_issues) for direct executor.run() invocations
-    and verifies each is preceded by a _check_backend_compat call within
-    the same enclosing function. This is the structural guard for Defect 4
-    in the propagation-defect hardening plan.
+    Discovers every server tool module so new direct executor callers cannot
+    silently escape the invariant.
     """
-    target_files = [
-        SRC_ROOT / "server" / "tools" / "tools_github.py",
-        SRC_ROOT / "server" / "tools" / "tools_issue_headless.py",
-    ]
+    target_files = sorted((SRC_ROOT / "server" / "tools").glob("*.py"))
+    compat_calls = {"_check_backend_compat", "_resolve_and_check_backend_compat"}
 
     violations: list[str] = []
 
@@ -341,6 +336,8 @@ def test_direct_executor_callers_check_backend_compat() -> None:
 
         # Only consider functions that call .executor.run() directly
         for func_node in enclosing_funcs:
+            if py_file.name == "tools_execution.py" and func_node.name == "run_skill":
+                continue
             executor_run_linenos: list[int] = []
             compat_lineno: int | None = None
             for child in ast.walk(func_node):
@@ -353,9 +350,7 @@ def test_direct_executor_callers_check_backend_compat() -> None:
                     and isinstance(call_func.value, ast.Attribute)
                     and call_func.value.attr == "executor"
                 )
-                is_compat = (
-                    isinstance(call_func, ast.Name) and call_func.id == "_check_backend_compat"
-                )
+                is_compat = isinstance(call_func, ast.Name) and call_func.id in compat_calls
                 if is_executor_run:
                     executor_run_linenos.append(child.lineno)
                 if is_compat and compat_lineno is None:
@@ -369,7 +364,7 @@ def test_direct_executor_callers_check_backend_compat() -> None:
                     violations.append(
                         f"{rel}:{run_line} — function "
                         f"{func_node.name!r} calls .executor.run() but has no "
-                        f"_check_backend_compat call"
+                        f"fail-closed backend compatibility call"
                     )
                 continue
             for run_line in executor_run_linenos:
@@ -377,12 +372,12 @@ def test_direct_executor_callers_check_backend_compat() -> None:
                     rel = _rel(py_file)
                     violations.append(
                         f"{rel}:{run_line} — .executor.run() in "
-                        f"{func_node.name!r} precedes _check_backend_compat "
+                        f"{func_node.name!r} precedes backend compatibility check "
                         f"(line {compat_lineno})"
                     )
 
     assert not violations, (
-        "Direct executor callers must run _check_backend_compat before "
+        "Direct executor callers must run a fail-closed backend compatibility check before "
         "executor.run():\n" + "\n".join(f"  {v}" for v in violations)
     )
 

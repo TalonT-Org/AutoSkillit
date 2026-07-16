@@ -138,7 +138,7 @@ class TestDeriveOrchestratorResumeSpec:
         dispatches = [
             DispatchRecord(
                 name="dispatch-1",
-                backend_name="claude-code",
+                caller_backend_name="claude-code",
                 caller_session_id="claude-session-abc",
             ),
         ]
@@ -160,7 +160,7 @@ class TestDeriveOrchestratorResumeSpec:
             DispatchRecord(
                 name="dispatch-1",
                 status=DispatchStatus.SUCCESS,
-                backend_name="codex",
+                caller_backend_name="codex",
                 caller_session_id="codex-session-xyz",
             ),
         ]
@@ -170,8 +170,27 @@ class TestDeriveOrchestratorResumeSpec:
         mismatch_spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
         assert isinstance(mismatch_spec, NoResume)
 
-    def test_derive_passes_when_backend_name_missing(self) -> None:
-        """When dispatch record has no backend_name, fall through to NamedResume."""
+    def test_derive_uses_caller_backend_instead_of_dispatched_worker_backend(self) -> None:
+        """A heterogeneous worker backend must not invalidate the caller session."""
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        dispatches = [
+            DispatchRecord(
+                name="dispatch-1",
+                status=DispatchStatus.SUCCESS,
+                caller_session_id="claude-orchestrator-session",
+                caller_backend_name="claude-code",
+                backend_name="codex",
+            ),
+        ]
+        state = _make_state(orchestrator_session_id="", dispatches=dispatches)
+
+        spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
+        assert isinstance(spec, NamedResume)
+        assert spec.session_id == "claude-orchestrator-session"
+
+    def test_derive_passes_when_legacy_record_has_no_caller_backend_name(self) -> None:
+        """Legacy records cannot safely infer caller provenance from the worker backend."""
         from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
@@ -179,11 +198,12 @@ class TestDeriveOrchestratorResumeSpec:
                 name="dispatch-1",
                 status=DispatchStatus.SUCCESS,
                 caller_session_id="legacy-session",
+                backend_name="codex",
             ),
         ]
         state = _make_state(orchestrator_session_id="", dispatches=dispatches)
 
-        spec = derive_orchestrator_resume_spec(state, current_backend="codex")
+        spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
         assert isinstance(spec, NamedResume)
         assert spec.session_id == "legacy-session"
 

@@ -268,7 +268,7 @@ def load_and_validate(
         _user_method_traditions_hash,
         backend_name,
         tuple(sorted(effective_backend_map.items())) if effective_backend_map else (),
-        tuple(sorted(backend_capabilities_map.keys()) if backend_capabilities_map else ()),
+        tuple(sorted(backend_capabilities_map.items())) if backend_capabilities_map else (),
         _manifest_mtime,
         _manifest_size,
         _budgets_mtime,

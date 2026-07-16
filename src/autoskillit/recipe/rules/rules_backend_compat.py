@@ -7,6 +7,7 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
     Severity,
+    unsatisfied_backend_capabilities,
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _has_dynamic_skill_name
@@ -79,21 +80,17 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         # diagnostic from backend_requirements — both findings surface together.
         step_backend_caps = (ctx.backend_capabilities_map or {}).get(step_backend)
         if step_backend_caps and uses_caps:
-            for _hc_cap in uses_caps:
-                _hc_cap_def = SKILL_CAPABILITY_REGISTRY.get(_hc_cap)
-                if _hc_cap_def and _hc_cap_def.required_backend_property:
-                    _hc_prop = _hc_cap_def.required_backend_property
-                    _hc_val = getattr(step_backend_caps, _hc_prop, None)
-                    if not _hc_val:
-                        findings.append(
-                            make_finding(
-                                rule_name="backend-incompatible-skill",
-                                step_name=step_name,
-                                message=(
-                                    f"step '{step_name}': skill '{skill_name}' requires "
-                                    f"{_hc_prop}=True (via capability '{_hc_cap}') but "
-                                    f"backend '{step_backend}' has {_hc_prop}={_hc_val!r}."
-                                ),
-                            )
-                        )
+            for mismatch in unsatisfied_backend_capabilities(uses_caps, step_backend_caps):
+                findings.append(
+                    make_finding(
+                        rule_name="backend-incompatible-skill",
+                        step_name=step_name,
+                        message=(
+                            f"step '{step_name}': skill '{skill_name}' requires "
+                            f"{mismatch.property_name}=True (via capability "
+                            f"'{mismatch.capability}') but backend '{step_backend}' has "
+                            f"{mismatch.property_name}={mismatch.actual_value!r}."
+                        ),
+                    )
+                )
     return findings

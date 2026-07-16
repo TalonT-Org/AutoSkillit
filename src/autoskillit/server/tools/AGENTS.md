@@ -10,6 +10,7 @@ MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 | `_auto_overrides.py` | Shared `_build_auto_overrides()` factory for server-authoritative ingredient injection |
 | `_authority_feedback.py` | Authority-clobber warning builder and structured rejection envelope constructor for server-authoritative ingredient violations (single source of truth shared by open_kitchen, load_recipe, lock_ingredients) |
 | `_cancellation_shield.py` | `_cancellation_shield` decorator — catches `asyncio.CancelledError` at MCP tool boundary, returns structured JSON |
+| `_backend_compat.py` | Shared target resolution and fail-closed backend compatibility gate for direct headless executor callers |
 | `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, ToolFailureEnvelope, etc.) and failure envelope factory helpers |
 | `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource |
 | `tools_config.py` | `configure_fleet`, `configure_order` (session config overlay) |

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -13,20 +12,14 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import (
-    DISPATCH_ID_ENV_VAR,
-    atomic_write,
-    get_logger,
-    is_feature_enabled,
-    resolve_target_skill,
-)
+from autoskillit.core import atomic_write, get_logger, is_feature_enabled
 from autoskillit.pipeline import write_status
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.tools._backend_compat import _resolve_and_check_backend_compat
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools.tools_execution import _check_backend_compat
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, HeadlessExecutor, WriteBehaviorSpec
@@ -277,27 +270,8 @@ async def report_bug(
                 f"Report output path: {report_path}"
             )
 
-            # Backend compatibility gate — must precede executor.run().
-            _resolved_command = skill_command
-            _target_name: str | None = None
-            if tool_ctx.skill_resolver is not None:
-                _resolved_command, _target_name = resolve_target_skill(
-                    skill_command, tool_ctx.skill_resolver
-                )
-            _skill_info = (
-                tool_ctx.skill_resolver.resolve(_target_name)
-                if tool_ctx.skill_resolver and _target_name
-                else None
-            )
-            if _compat_err := _check_backend_compat(
-                skill_command=skill_command,
-                resolved_command=_resolved_command,
-                effective_order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
-                target_name=_target_name,
-                skill_info=_skill_info,
-                effective_backend_obj=tool_ctx.backend,
-                skill_resolver=tool_ctx.skill_resolver,
-            ):
+            # Backend compatibility gate — must precede executor dispatch.
+            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
                 return _compat_err
 
             log_dir = config.linux_tracing.log_dir if config.linux_tracing is not None else ""

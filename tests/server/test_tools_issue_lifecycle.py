@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from autoskillit.core import RetryReason, SkillResult
+from autoskillit.core import (
+    CLAUDE_CODE_CAPABILITIES,
+    BackendCapabilities,
+    RetryReason,
+    SkillResult,
+    SkillSource,
+)
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
 from autoskillit.server.tools.tools_issue_headless import (
@@ -28,6 +35,13 @@ from autoskillit.server.tools.tools_issue_labels import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+@pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx):
+    """Open the gate while retaining production backend compatibility metadata."""
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    return tool_ctx
 
 
 def _make_skill_result(
@@ -363,6 +377,71 @@ async def test_enrich_issues_success(tool_ctx_kitchen_open) -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("handler", "args"),
+    [
+        (prepare_issue, ("Title", "Body")),
+        (enrich_issues, ()),
+    ],
+    ids=("prepare-issue", "enrich-issues"),
+)
+async def test_issue_headless_handlers_reject_incompatible_backend_before_executor(
+    tool_ctx_kitchen_open,
+    handler,
+    args,
+) -> None:
+    """Direct lifecycle handlers must fail closed before executor dispatch."""
+    skill_info = SimpleNamespace(
+        source=SkillSource.BUNDLED_EXTENDED,
+        backend_requirements=frozenset({"required-backend"}),
+        uses_capabilities=frozenset(),
+    )
+    resolver = MagicMock()
+    resolver.resolve.return_value = skill_info
+    backend = MagicMock()
+    backend.name = "incompatible-backend"
+    backend.capabilities = BackendCapabilities(
+        applicable_guards=CLAUDE_CODE_CAPABILITIES.applicable_guards
+    )
+    tool_ctx_kitchen_open.skill_resolver = resolver
+    tool_ctx_kitchen_open.backend = backend
+    tool_ctx_kitchen_open.executor = AsyncMock()
+
+    result = json.loads(await handler(*args))
+
+    assert result["success"] is False
+    assert result["subtype"] == "crashed"
+    assert "required-backend" in result["result"]
+    tool_ctx_kitchen_open.executor.run.assert_not_awaited()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("handler", "args"),
+    [
+        (prepare_issue, ("Title", "Body")),
+        (enrich_issues, ()),
+    ],
+    ids=("prepare-issue", "enrich-issues"),
+)
+async def test_issue_headless_handlers_fail_closed_without_skill_resolver(
+    tool_ctx_kitchen_open,
+    handler,
+    args,
+) -> None:
+    """Missing resolution metadata must stop lifecycle dispatch before executor.run."""
+    tool_ctx_kitchen_open.skill_resolver = None
+    tool_ctx_kitchen_open.executor = AsyncMock()
+
+    result = json.loads(await handler(*args))
+
+    assert result["success"] is False
+    assert result["subtype"] == "crashed"
+    assert "resolver" in result["result"].lower()
+    tool_ctx_kitchen_open.executor.run.assert_not_awaited()
+
+
+@pytest.mark.anyio
 async def test_claim_issue_gate_closed(tool_ctx) -> None:
     """Gate disabled → gate error JSON."""
     tool_ctx.gate = DefaultGateState(enabled=False)
@@ -669,11 +748,14 @@ def _make_mock_tool_ctx_for_project_dir(project_dir):
     mock_ctx.config.github.check_labels_allowed = MagicMock(return_value=None)
     mock_ctx.output_pattern_resolver = MagicMock(return_value=[])
     mock_ctx.write_expected_resolver = MagicMock(return_value=None)
-    # Disable the backend-compat gate by leaving resolver/backend unset; the
-    # production gate fail-closes when these are missing, so set them to None
-    # so the gate short-circuits at `if target_name is None: return None`.
-    mock_ctx.skill_resolver = None
-    mock_ctx.backend = None
+    skill_info = SimpleNamespace(
+        source=SkillSource.BUNDLED_EXTENDED,
+        backend_requirements=frozenset(),
+        uses_capabilities=frozenset(),
+    )
+    mock_ctx.skill_resolver.resolve.return_value = skill_info
+    mock_ctx.backend.name = "claude-code"
+    mock_ctx.backend.capabilities = CLAUDE_CODE_CAPABILITIES
     return mock_ctx
 
 

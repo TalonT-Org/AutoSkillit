@@ -41,7 +41,9 @@ __all__ = [
     "ALL_VISIBILITY_TAGS",
     "SERVE_SURFACES",
     "SkillCapabilityDef",
+    "HardCapabilityMismatch",
     "SKILL_CAPABILITY_REGISTRY",
+    "unsatisfied_backend_capabilities",
 ]
 
 # Native Claude Code tools that pipeline orchestrators must NEVER use directly.
@@ -342,6 +344,14 @@ class SkillCapabilityDef:
         return frozenset()
 
 
+class HardCapabilityMismatch(NamedTuple):
+    """A required backend capability property whose value is unsatisfied."""
+
+    capability: str
+    property_name: str
+    actual_value: object
+
+
 # Semantics divergence: fix-required has different enforcement in HOOK_REGISTRY vs
 # SKILL_CAPABILITY_REGISTRY. In HOOK_REGISTRY, fix-required triggers _check_backend_compat
 # to block dispatch on backends whose applicable_guards don't cover the hook's scripts.
@@ -429,3 +439,20 @@ for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
             f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}].required_backend_property="
             f"{_cap_def.required_backend_property!r} is not a field on BackendCapabilities."
         )
+
+
+def unsatisfied_backend_capabilities(
+    uses_capabilities: frozenset[str],
+    backend_capabilities: BackendCapabilities,
+) -> tuple[HardCapabilityMismatch, ...]:
+    """Return hard capability requirements not satisfied by a backend."""
+    mismatches: list[HardCapabilityMismatch] = []
+    for capability in sorted(uses_capabilities):
+        capability_def = SKILL_CAPABILITY_REGISTRY.get(capability)
+        if capability_def is None or capability_def.required_backend_property is None:
+            continue
+        property_name = capability_def.required_backend_property
+        actual_value = getattr(backend_capabilities, property_name, None)
+        if not actual_value:
+            mismatches.append(HardCapabilityMismatch(capability, property_name, actual_value))
+    return tuple(mismatches)

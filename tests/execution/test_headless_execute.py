@@ -207,13 +207,18 @@ class TestPreSessionIndexSignaling:
 
         with (
             patch(
+                "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+                return_value=True,
+            ),
+            patch(
                 "autoskillit.execution.headless._headless_execute.validate_pre_session_index",
                 return_value=False,
-            ),
+            ) as validate_index,
             structlog.testing.capture_logs() as caplog,
         ):
             await run_headless_core("/test foo", str(tmp_path), minimal_ctx)
 
+        validate_index.assert_awaited_once()
         dirty_events = [e for e in caplog if e.get("event") == "pre_session_index_reset"]
         assert not dirty_events, (
             f"pre_session_index_reset must NOT be logged when clean; caplog={caplog}"

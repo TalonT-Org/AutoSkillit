@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import TYPE_CHECKING, Any
 
 import regex as re
@@ -11,18 +10,13 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import (
-    DISPATCH_ID_ENV_VAR,
-    RetryReason,
-    get_logger,
-    resolve_target_skill,
-)
+from autoskillit.core import RetryReason, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.tools._backend_compat import _resolve_and_check_backend_compat
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools.tools_execution import _check_backend_compat
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult, WriteBehaviorSpec
@@ -322,26 +316,7 @@ async def prepare_issue(
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
             # Backend compatibility gate — must precede executor.run().
-            _resolved_command = skill_command
-            _target_name: str | None = None
-            if tool_ctx.skill_resolver is not None:
-                _resolved_command, _target_name = resolve_target_skill(
-                    skill_command, tool_ctx.skill_resolver
-                )
-            _skill_info = (
-                tool_ctx.skill_resolver.resolve(_target_name)
-                if tool_ctx.skill_resolver and _target_name
-                else None
-            )
-            if _compat_err := _check_backend_compat(
-                skill_command=skill_command,
-                resolved_command=_resolved_command,
-                effective_order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
-                target_name=_target_name,
-                skill_info=_skill_info,
-                effective_backend_obj=tool_ctx.backend,
-                skill_resolver=tool_ctx.skill_resolver,
-            ):
+            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
                 return _compat_err
 
             result = await tool_ctx.executor.run(
@@ -463,26 +438,7 @@ async def enrich_issues(
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
             # Backend compatibility gate — must precede executor.run().
-            _resolved_command = skill_command
-            _target_name: str | None = None
-            if tool_ctx.skill_resolver is not None:
-                _resolved_command, _target_name = resolve_target_skill(
-                    skill_command, tool_ctx.skill_resolver
-                )
-            _skill_info = (
-                tool_ctx.skill_resolver.resolve(_target_name)
-                if tool_ctx.skill_resolver and _target_name
-                else None
-            )
-            if _compat_err := _check_backend_compat(
-                skill_command=skill_command,
-                resolved_command=_resolved_command,
-                effective_order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
-                target_name=_target_name,
-                skill_info=_skill_info,
-                effective_backend_obj=tool_ctx.backend,
-                skill_resolver=tool_ctx.skill_resolver,
-            ):
+            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
                 return _compat_err
 
             result = await tool_ctx.executor.run(

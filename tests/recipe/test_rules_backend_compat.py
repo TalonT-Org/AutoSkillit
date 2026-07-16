@@ -256,6 +256,48 @@ class TestBackendNameThreadingAPI:
         cache = cache_mod._LOAD_CACHE
         assert len(cache._store) == 2
 
+    def test_cache_key_varies_by_backend_capability_values(self, tmp_path, monkeypatch):
+        import autoskillit.recipe._api as api_mod
+        import autoskillit.recipe._api_cache as cache_mod
+        from autoskillit.core import BackendCapabilities
+
+        monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
+
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test-compat.yaml").write_text(_RECIPE_WITH_SKILL_STEP_YAML)
+
+        skill_info = _make_skill_info(
+            backend_requirements=frozenset(),
+            uses_capabilities=frozenset({"git_metadata_write"}),
+        )
+        resolver = _FakeSkillResolver(skill_info)
+
+        incapable = api_mod.load_and_validate(
+            "test-compat",
+            tmp_path,
+            backend_name="codex",
+            backend_capabilities_map={"codex": BackendCapabilities(git_metadata_writable=False)},
+            lister=resolver,
+        )
+        capable = api_mod.load_and_validate(
+            "test-compat",
+            tmp_path,
+            backend_name="codex",
+            backend_capabilities_map={"codex": BackendCapabilities(git_metadata_writable=True)},
+            lister=resolver,
+        )
+
+        assert any(
+            finding.get("rule") == "backend-incompatible-skill"
+            for finding in incapable["suggestions"]
+        )
+        assert not any(
+            finding.get("rule") == "backend-incompatible-skill"
+            for finding in capable["suggestions"]
+        )
+        assert len(cache_mod._LOAD_CACHE._store) == 2
+
 
 # ---------------------------------------------------------------------------
 # Backend-parameterized bundled recipe validation tests

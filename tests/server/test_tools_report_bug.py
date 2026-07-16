@@ -12,6 +12,7 @@ import pytest
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
+from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server._misc import _extract_block
 from autoskillit.server.tools.tools_github import (
     _FINGERPRINT_END,
@@ -30,6 +31,14 @@ from autoskillit.server.tools.tools_issue_headless import (
 from tests.server._helpers import _skill_fail, _skill_ok
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+@pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx):
+    """Open the gate while retaining production backend compatibility metadata."""
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    return tool_ctx
+
 
 # ---------------------------------------------------------------------------
 # _parse_fingerprint unit tests
@@ -269,6 +278,21 @@ async def test_report_bug_no_executor(tool_ctx_kitchen_open, tmp_path):
     result = json.loads(await report_bug("error ctx", str(tmp_path)))
     assert result["success"] is False
     assert "executor" in result["error"].lower()
+
+
+@pytest.mark.anyio
+async def test_report_bug_fails_closed_without_skill_resolver(tool_ctx_kitchen_open, tmp_path):
+    """Missing resolution metadata must stop report dispatch before executor.run."""
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.skill_resolver = None
+    tool_ctx_kitchen_open.executor = AsyncMock()
+
+    result = json.loads(await report_bug("error ctx", str(tmp_path), severity="blocking"))
+
+    assert result["success"] is False
+    assert result["subtype"] == "crashed"
+    assert "resolver" in result["result"].lower()
+    tool_ctx_kitchen_open.executor.run.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import SKILL_CAPABILITY_REGISTRY, CodingAgentBackend
+from autoskillit.core import CodingAgentBackend, unsatisfied_backend_capabilities
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
 
@@ -34,23 +34,18 @@ def check_hard_capability_feasibility(
 ) -> str | None:
     """Return diagnostic string if any capability's required_backend_property is unsatisfied.
 
-    For each declared capability, looks up `SKILL_CAPABILITY_REGISTRY[cap]` and
-    checks the named `BackendCapabilities` field against the supplied backend.
-    Returns None when every capability is satisfied (or no capability declares
-    a `required_backend_property`).
+    Delegates registry lookup and BackendCapabilities evaluation to the shared
+    core predicate, then formats the first mismatch for server callers. Returns
+    None when every capability is satisfied.
     """
-    for cap_name in uses_capabilities:
-        cap_def = SKILL_CAPABILITY_REGISTRY.get(cap_name)
-        if cap_def is None or cap_def.required_backend_property is None:
-            continue
-        prop_name = cap_def.required_backend_property
-        prop_value = getattr(backend.capabilities, prop_name, None)
-        if not prop_value:
-            return (
-                f"Capability '{cap_name}' requires backend property "
-                f"'{prop_name}' to be True, but backend '{backend.name}' has "
-                f"{prop_name}={prop_value!r}."
-            )
+    mismatches = unsatisfied_backend_capabilities(uses_capabilities, backend.capabilities)
+    if mismatches:
+        mismatch = mismatches[0]
+        return (
+            f"Capability '{mismatch.capability}' requires backend property "
+            f"'{mismatch.property_name}' to be True, but backend '{backend.name}' has "
+            f"{mismatch.property_name}={mismatch.actual_value!r}."
+        )
     return None
 
 

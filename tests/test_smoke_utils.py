@@ -3472,8 +3472,8 @@ def test_gate_backend_write_empty() -> None:
 def test_check_ref_state_local_ahead_returns_true(tmp_path: Path) -> None:
     """Local branch ahead of remote tracking ref returns remote_is_ancestor=true.
 
-    Constructs a repo with one initial commit on ``main`` (simulating remote),
-    then advances a local ``feature`` branch by one commit (local ahead).
+    Constructs a repo with one initial commit (simulating remote), then
+    advances a local ``feature`` branch by one commit (local ahead).
     ``check_ref_state`` must detect that origin/feature is an ancestor of
     feature and return ``{"remote_is_ancestor": "true"}``.
 
@@ -3491,6 +3491,16 @@ def test_check_ref_state_local_ahead_returns_true(tmp_path: Path) -> None:
         check=True,
         env=_DZC_GIT_ENV,
     )
+    # Capture the base tip via HEAD (not by name) — the initial branch name
+    # created by ``git init`` depends on ``init.defaultBranch``, which is not
+    # guaranteed to be ``main`` in every environment (e.g. CI runners).
+    base_tip = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
     subprocess.run(
         ["git", "checkout", "-b", "feature"],
         cwd=tmp_path,
@@ -3506,13 +3516,6 @@ def test_check_ref_state_local_ahead_returns_true(tmp_path: Path) -> None:
         env=_DZC_GIT_ENV,
     )
     # Simulate a remote tracking ref pointing at the original commit.
-    base_tip = subprocess.run(
-        ["git", "rev-parse", "main"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout.strip()
     subprocess.run(
         ["git", "update-ref", "refs/remotes/origin/feature", base_tip],
         cwd=tmp_path,

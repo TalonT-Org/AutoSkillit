@@ -567,7 +567,7 @@
       "with": {
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.ref_push_count }}",
-        "max_iterations": "2"
+        "max_iterations": "3"
       },
       "capture": {
         "ref_push_count": "${{ result.next_iteration }}"
@@ -585,7 +585,7 @@
       "optional_context_refs": [
         "ref_push_count"
       ],
-      "note": "Ref-coherence recovery guard. Uses a SEPARATE counter (ref_push_count, max 2) from merge_fix_count. Push-and-retry is cheap and near-deterministic (no LLM invocation), so it does not share the merge_fix_count budget. If max exceeded, the divergence is not fixable by pushing — escalate.\n"
+      "note": "Ref-coherence recovery guard. Uses a SEPARATE counter (ref_push_count, max 3 under >= semantics = 2 usable push attempts) from merge_fix_count. Push-and-retry is cheap and near-deterministic (no LLM invocation), so it does not share the merge_fix_count budget. If max exceeded, the divergence is not fixable by pushing — escalate.\n"
     },
     "ref_push": {
       "tool": "push_to_remote",
@@ -668,7 +668,7 @@
       "with": {
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.ref_push_count }}",
-        "max_iterations": "2"
+        "max_iterations": "3"
       },
       "capture": {
         "ref_push_count": "${{ result.next_iteration }}"
@@ -686,7 +686,7 @@
       "optional_context_refs": [
         "ref_push_count"
       ],
-      "note": "Pre-remediation ref-coherence recovery guard. Shares ref_push_count (max 2) with check_ref_push_loop. Routes to ref_push_pre_remediation, then commit_guard_pre_remediation and pre_remediation_merge.\n"
+      "note": "Pre-remediation ref-coherence recovery guard. Shares ref_push_count (max 3 under >= semantics = 2 usable push attempts) with check_ref_push_loop. Routes to ref_push_pre_remediation, then commit_guard_pre_remediation and pre_remediation_merge.\n"
     },
     "ref_push_pre_remediation": {
       "tool": "push_to_remote",

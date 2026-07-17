@@ -393,6 +393,37 @@ def test_check_loop_iteration_budget_semantics_documented() -> None:
     assert r3["max_exceeded"] == "true"
 
 
+def test_check_loop_iteration_ref_push_budget_two_attempts() -> None:
+    """Ref-push budget: max_iterations='3' yields exactly 2 usable push attempts.
+
+    Locks the ref-push recovery budget under the existing ``>=`` semantics:
+    with ``max_iterations='3'`` (the production value for ``check_ref_push_loop``
+    and ``check_ref_push_loop_pre_remediation`` in ``remediation.yaml``),
+    the counter permits two push attempts before exhausting:
+
+    - Round 0→1: allowed (first push attempt)
+    - Round 1→2: allowed (second push attempt)
+    - Round 2→3: blocked (budget exhausted)
+
+    This matches the intent of the ref-push recovery chain — two retries are
+    enough to absorb a transient ref-coherence divergence without false
+    positives. Do NOT change ``check_loop_iteration``'s ``>=`` operator — the
+    ``max_iterations='3'`` value is the canonical budget adjustment for
+    ref-push sites (issue #4274, Part B Step 1).
+    """
+    r1 = check_loop_iteration(current_iteration="", max_iterations="3")
+    assert r1["next_iteration"] == "1"
+    assert r1["max_exceeded"] == "false"
+
+    r2 = check_loop_iteration(current_iteration="1", max_iterations="3")
+    assert r2["next_iteration"] == "2"
+    assert r2["max_exceeded"] == "false"
+
+    r3 = check_loop_iteration(current_iteration="2", max_iterations="3")
+    assert r3["next_iteration"] == "3"
+    assert r3["max_exceeded"] == "true"
+
+
 def test_check_loop_iteration_cross_cycle_budget_starvation() -> None:
     """Cross-cycle budget starvation: counter persists → new cycle has zero budget.
 

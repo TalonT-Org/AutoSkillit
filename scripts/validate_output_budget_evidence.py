@@ -134,7 +134,7 @@ def _validate_gate(
     return gate
 
 
-def _validate_historical_context(manifest: dict[str, Any], repo_root: Path) -> None:
+def _validate_historical_context(manifest: dict[str, Any]) -> None:
     entries = _require_list(manifest.get("historical_context"), "historical_context")
     if [entry.get("phase") for entry in entries if isinstance(entry, dict)] != list(PHASES):
         raise EvidenceValidationError("historical_context must contain phases 1 through 4")
@@ -150,13 +150,8 @@ def _validate_historical_context(manifest: dict[str, Any], repo_root: Path) -> N
         if entry.get("bound_to_commit") is not False:
             raise EvidenceValidationError(f"{location}.bound_to_commit must be false")
         _require_string(entry.get("summary"), f"{location}.summary")
-        _validate_file_reference(
-            entry,
-            repo_root,
-            location=location,
-            path_key="gate_log_path",
-            digest_key="gate_log_sha256",
-        )
+        _require_string(entry.get("gate_log_path"), f"{location}.gate_log_path")
+        _require_digest(entry.get("gate_log_sha256"), f"{location}.gate_log_sha256")
 
     actual_shas = tuple(entry["phase_commit_sha"] for entry in entries)
     if actual_shas != HISTORICAL_PHASE_SHAS:
@@ -220,7 +215,7 @@ def _validate_phases(manifest: dict[str, Any], repo_root: Path) -> list[dict[str
 
 
 def _validate_indexed_closure_artifacts(
-    manifest: dict[str, Any], repo_root: Path
+    manifest: dict[str, Any],
 ) -> dict[str, Any] | None:
     value = manifest.get("closure")
     if value is None:
@@ -231,12 +226,10 @@ def _validate_indexed_closure_artifacts(
     )
     for index, artifact in enumerate(artifacts):
         record = _require_dict(artifact, f"closure.historical_artifacts[{index}]")
-        _validate_file_reference(
-            record,
-            repo_root,
-            location=f"closure.historical_artifacts[{index}]",
-            path_key="path",
-            digest_key="response_content_sha256",
+        _require_string(record.get("path"), f"closure.historical_artifacts[{index}].path")
+        _require_digest(
+            record.get("response_content_sha256"),
+            f"closure.historical_artifacts[{index}].response_content_sha256",
         )
     return closure
 
@@ -309,18 +302,26 @@ def validate_manifest(manifest: dict[str, Any], repo_root: Path, *, mode: str) -
     if mode not in {"incremental", "complete"}:
         raise EvidenceValidationError("mode must be incremental or complete")
 
-    _validate_historical_context(manifest, repo_root)
+    _validate_historical_context(manifest)
     baseline_sha = _require_sha(
         manifest.get("implementation_baseline_sha"), "implementation_baseline_sha"
     )
-    _validate_gate(
-        manifest.get("baseline_regression"),
-        repo_root,
-        location="baseline_regression",
-        expected_sha=baseline_sha,
+    baseline = _require_dict(manifest.get("baseline_regression"), "baseline_regression")
+    _require_string(baseline.get("command"), "baseline_regression.command")
+    if baseline.get("status") != "pass":
+        raise EvidenceValidationError("baseline_regression.status must be 'pass'")
+    _require_string(baseline.get("summary"), "baseline_regression.summary")
+    tested_sha = _require_sha(
+        baseline.get("gate_tested_sha"), "baseline_regression.gate_tested_sha"
     )
+    if tested_sha != baseline_sha:
+        raise EvidenceValidationError(
+            "baseline_regression.gate_tested_sha must equal implementation_baseline_sha"
+        )
+    _require_string(baseline.get("gate_log_path"), "baseline_regression.gate_log_path")
+    _require_digest(baseline.get("gate_log_sha256"), "baseline_regression.gate_log_sha256")
     phases = _validate_phases(manifest, repo_root)
-    closure = _validate_indexed_closure_artifacts(manifest, repo_root)
+    closure = _validate_indexed_closure_artifacts(manifest)
     if mode == "incremental":
         return
 

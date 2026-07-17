@@ -980,6 +980,7 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
     from autoskillit import __version__
     from autoskillit.recipe import _api_cache, all_validated_recipe_names
     from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.io import _SCRIPTS_PLACEHOLDER, builtin_scripts_dir
     from autoskillit.recipe.repository import DefaultRecipeRepository
     from autoskillit.server._misc import strip_ingredients_only_keys
     from autoskillit.server.tools._serve_helpers import (
@@ -991,6 +992,9 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
     project_root = Path(__file__).resolve().parent.parent.parent
     measured_modes: set[tuple[str, str, bool]] = set()
     maxima = {"load_recipe": (0, "", ""), "open_kitchen": (0, "", "")}
+    # Normalize away the environment-dependent scripts path so the pinned
+    # maxima are identical regardless of checkout location.
+    _scripts_dir = str(builtin_scripts_dir())
 
     for recipe_name in all_validated_recipe_names(project_root):
         for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
@@ -1034,9 +1038,10 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
                         ingredients_only,
                         len(raw.encode("utf-8")),
                     )
+                    normalized = raw.replace(_scripts_dir, _SCRIPTS_PLACEHOLDER)
                     maxima[tool_name] = max(
                         maxima[tool_name],
-                        (len(raw.encode("utf-8")), recipe_name, mode_name),
+                        (len(normalized.encode("utf-8")), recipe_name, mode_name),
                     )
                     measured_modes.add((tool_name, mode_name, ingredients_only))
 
@@ -1047,8 +1052,8 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
         for ingredients_only in (False, True)
     }
     assert maxima == {
-        "load_recipe": (183_103, "remediation", "all_truthy"),
-        "open_kitchen": (183_162, "remediation", "all_truthy"),
+        "load_recipe": (182_994, "remediation", "all_truthy"),
+        "open_kitchen": (183_053, "remediation", "all_truthy"),
     }
 
 

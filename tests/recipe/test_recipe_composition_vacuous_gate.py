@@ -219,7 +219,7 @@ def test_compute_capability_feasibility_feasible_when_capability_route_active(
     _info = find_recipe_by_name(recipe_name, _PROJECT_ROOT)
     assert _info is not None, f"Recipe {recipe_name!r} not found"
     raw = load_recipe(_info.path)
-    eff_map = _compute_effective_backend_map(
+    eff_map, _ = _compute_effective_backend_map(
         raw.steps,
         "codex",
         None,
@@ -293,7 +293,7 @@ def test_capability_route_binary_absent_fails_closed(
     assert overrides["backend_supports_git_write"] == "false"
     assert detail.resolution_path == "capability_route_no_binary"
 
-    eff_map = _compute_effective_backend_map(
+    eff_map, _ = _compute_effective_backend_map(
         raw.steps,
         "codex",
         None,

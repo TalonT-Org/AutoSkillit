@@ -321,6 +321,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
             "resolved_defaults",
             "lister",
             "temp_dir",
+            "backend_origin_map",
         }
     )
 

@@ -57,7 +57,7 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeyp
     )
     backend = get_backend(backend_name)
     _raw = load_recipe(_RECIPE_PATHS[recipe_name])
-    _eff_map = _compute_effective_backend_map(
+    _eff_map, _ = _compute_effective_backend_map(
         _raw.steps,
         backend_name,
         None,
@@ -124,7 +124,7 @@ def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str, monk
     )
     backend = get_backend(backend_name)
     _raw = load_recipe(_RECIPE_PATHS[recipe_name])
-    _eff_map = _compute_effective_backend_map(
+    _eff_map, _ = _compute_effective_backend_map(
         _raw.steps,
         backend_name,
         None,

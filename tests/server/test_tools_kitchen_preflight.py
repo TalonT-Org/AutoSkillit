@@ -178,7 +178,7 @@ class TestCheckDispatchFeasibilityUnit:
         assert result is not None
         parsed = json.loads(result)
         assert "git_metadata_writable" in parsed.get("error", "")
-        assert parsed.get("override_source") == "explicit_config"
+        assert parsed.get("origin") == "agent_backend.recipe_overrides.test-recipe.resolve_review"
 
     def test_dispatch_feasibility_fails_closed_when_skill_resolver_missing_for_pinned_step(
         self,

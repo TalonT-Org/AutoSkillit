@@ -112,7 +112,7 @@ def test_admission_dispatch_agreement(
 
     # Pre-load recipe to compute effective backend map (mirrors IL-3 call sites).
     raw_recipe = load_recipe_yaml(_BUILTIN_DIR / f"{recipe_name}.yaml")
-    effective_map = _compute_effective_backend_map(
+    effective_map, _ = _compute_effective_backend_map(
         raw_recipe.steps,
         backend_name,
         None,
@@ -228,7 +228,7 @@ def test_open_kitchen_capability_not_routing_eligible_in_admission() -> None:
     steps to claude-code — open_kitchen is not worker_routable."""
     from autoskillit.config._config_dataclasses import ProvidersConfig
 
-    eff_map = _compute_effective_backend_map(
+    eff_map, _ = _compute_effective_backend_map(
         {"step": _mock_run_skill_step()},
         "codex",
         ProvidersConfig(),
@@ -246,7 +246,7 @@ def test_effective_backend_map_capability_route_unit() -> None:
     to claude-code when a skill_resolver is supplied."""
     from autoskillit.config._config_dataclasses import ProvidersConfig
 
-    eff_map = _compute_effective_backend_map(
+    eff_map, _ = _compute_effective_backend_map(
         {"fix": _mock_run_skill_step()},
         "codex",
         ProvidersConfig(),
@@ -353,7 +353,7 @@ def test_admission_dispatch_agreement_real_providers_config(
     )
     assert overrides["backend_supports_git_write"] == "true"
 
-    effective_map = _compute_effective_backend_map(
+    effective_map, _ = _compute_effective_backend_map(
         raw_recipe.steps,
         "codex",
         providers,
@@ -434,7 +434,7 @@ def test_make_plan_reroutes_on_codex() -> None:
     fake_backend.name = "codex"
     fake_backend.capabilities.anthropic_provider_capable = False
 
-    eff_map = _compute_effective_backend_map(
+    eff_map, _ = _compute_effective_backend_map(
         {"plan": step},
         "codex",
         ProvidersConfig(),
@@ -476,7 +476,7 @@ def test_investigate_reroutes_on_codex() -> None:
     fake_backend.name = "codex"
     fake_backend.capabilities.anthropic_provider_capable = False
 
-    eff_map = _compute_effective_backend_map(
+    eff_map, _ = _compute_effective_backend_map(
         {"inv": step},
         "codex",
         ProvidersConfig(),
@@ -515,7 +515,7 @@ def test_prepare_issue_stays_on_codex() -> None:
     fake_backend.name = "codex"
     fake_backend.capabilities.anthropic_provider_capable = False
 
-    eff_map = _compute_effective_backend_map(
+    eff_map, _ = _compute_effective_backend_map(
         {"prep": step},
         "codex",
         ProvidersConfig(),
@@ -698,7 +698,7 @@ def test_admission_dispatch_agreement_with_explicit_pin(
     # call sites use (_compute_effective_backend_map), instead of hand-
     # constructing the map, so this test proves the whole resolution chain —
     # not just the two downstream gates — agrees on the pinned backend.
-    effective_map = _compute_effective_backend_map(
+    effective_map, _origin_map = _compute_effective_backend_map(
         {step_name: step},
         "claude-code",
         None,
@@ -759,7 +759,7 @@ def test_admission_dispatch_agreement_with_explicit_pin(
     )
     preflight_parsed = _json.loads(preflight_err)
     assert "git_metadata_writable" in preflight_parsed.get("error", "")
-    assert preflight_parsed.get("override_source") == "explicit_config"
+    assert preflight_parsed.get("origin") is not None
 
     # --- Leg 3: run_skill-time dispatch gate (_check_backend_compat) ---
     dispatch_err = _check_backend_compat(

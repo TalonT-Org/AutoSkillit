@@ -383,7 +383,7 @@ class TestFleetRunCliAdmission:
         # config_providers, recipe_name, skill_resolver=skill_resolver) with the same recipe
         # steps that _make_mock_ctx returns (empty dict).
         recipe_steps: dict[str, Any] = {}
-        kitchen_map = _compute_effective_backend_map(
+        kitchen_map, _ = _compute_effective_backend_map(
             recipe_steps,
             backend_name,
             None,  # config_providers

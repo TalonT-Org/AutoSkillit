@@ -6,7 +6,7 @@ import regex as _re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
-from autoskillit.recipe._analysis_bfs import all_paths_cross
+from autoskillit.recipe._analysis_bfs import _bfs_capped, all_paths_cross
 from autoskillit.recipe._analysis_graph import _extract_routing_edges
 from autoskillit.recipe._rule_helpers import _build_graph_without_nodes
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
@@ -418,22 +418,50 @@ def _unconditional_success_route(step: RecipeStep) -> str | None:
     return step.on_success
 
 
-def _merge_push_symmetric_to_guard(recipe: Recipe, merge_step_name: str) -> bool:
-    """Return True iff merge's unconditional success route is a push_to_remote step.
+def _build_unconditional_route_graph(recipe: Recipe) -> dict[str, set[str]]:
+    """Build an adjacency dict containing only each step's unconditional successor.
 
-    Checks the immediate next step in the success path. A push_to_remote step
-    that is reachable only after traversing sub-recipe composition or the
-    full pipeline loop is not credited — such "coincidental" pushes do not
-    represent intentional push-after-merge protection at the merge site being
-    audited.
+    A step's single outgoing edge here is exactly what
+    ``_unconditional_success_route`` resolves for it: the no-``when``
+    ``on_result`` condition, or ``on_success`` if there is no ``on_result``.
+    A ``when``-gated branch (e.g. a verdict fork) is a conditional detour,
+    not part of "the" deterministic success path, and is deliberately
+    excluded — crediting it would let a rare escape-hatch route (such as a
+    false_positive verdict skipping straight to the final publish push)
+    masquerade as a merge site's own push protection.
+    """
+    graph: dict[str, set[str]] = {name: set() for name in recipe.steps}
+    for name, step in recipe.steps.items():
+        route = _unconditional_success_route(step)
+        if route is not None and route in recipe.steps:
+            graph[name].add(route)
+    return graph
+
+
+def _merge_push_symmetric_to_guard(recipe: Recipe, merge_step_name: str) -> bool:
+    """Return True iff a push_to_remote step is reachable from merge's unconditional
+    success route by following only unconditional (no-``when``) routing edges,
+    without crossing another merge_worktree-tool step.
+
+    Walks the chain of unconditional successors so a push_to_remote step
+    reached two or more hops downstream through an intermediate
+    non-branching step is still credited (fixing the prior single-hop-only
+    check). Only unconditional edges are followed at every hop — a
+    conditional (``when``-gated) branch on a downstream step is never part
+    of "the" deterministic success path.
+
+    The barrier is every merge_worktree-tool step in the recipe: a push
+    reachable only by first crossing a *different* merge site belongs to
+    that site's own symmetry, not this one's.
 
     Matches the bundled recipe topology:
     - ``merge`` (the main merge_worktree) routes unconditionally to
-      ``inter_part_push`` (a ``push_to_remote`` step) → True.
-    - ``pre_remediation_merge`` routes unconditionally to ``remediate`` (a
-      ``run_skill`` step) → False — the pipeline eventually pushes via
-      ``ref_push_pre_remediation`` but only after looping back through the
-      audit cycle, which does not constitute push symmetry at this merge site.
+      ``inter_part_push`` (a ``push_to_remote`` step, 1 hop) -> True.
+    - ``pre_remediation_merge`` routes unconditionally to ``remediate``,
+      whose own on_success chain (``make_plan``) has no unconditional
+      route of its own (both of make_plan's on_result conditions are
+      when-gated on verdict) -> the chain dead-ends without reaching a
+      push -> False.
     """
     merge_step = recipe.steps.get(merge_step_name)
     if merge_step is None or merge_step.tool != "merge_worktree":
@@ -441,8 +469,15 @@ def _merge_push_symmetric_to_guard(recipe: Recipe, merge_step_name: str) -> bool
     route = _unconditional_success_route(merge_step)
     if route is None:
         return False
-    target = recipe.steps.get(route)
-    return target is not None and target.tool == "push_to_remote"
+    merge_worktree_steps = {
+        name for name, step in recipe.steps.items() if step.tool == "merge_worktree"
+    }
+    graph = _build_unconditional_route_graph(recipe)
+    reachable = _bfs_capped(graph, {route}, merge_worktree_steps)
+    return any(
+        (step := recipe.steps.get(name)) is not None and step.tool == "push_to_remote"
+        for name in reachable
+    )
 
 
 @semantic_rule(

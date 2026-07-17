@@ -1059,7 +1059,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and ambiguous/empty step_name dependency-deny branches (+126 net lines)",
     ),
     "execution/backends/codex.py": (
-        1167,
+        1210,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1087,7 +1087,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1"
         "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)"
         "; output-discipline delivery for fresh interactive sessions and generated agent "
-        "TOMLs (+12 net lines)",
+        "TOMLs (+12 net lines)"
+        "; _register_agent_tomls session-config registration for generated roles "
+        "(+39 net lines)",
     ),
 }
 

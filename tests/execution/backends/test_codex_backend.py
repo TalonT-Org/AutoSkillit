@@ -1824,6 +1824,33 @@ class TestCodexBackendSetupSessionDir:
                 f"{toml_path.name}: wrong sandbox_mode"
             )
 
+    def test_generated_agents_are_registered_in_session_config(self) -> None:
+        import tomllib
+
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        generated_names = {path.stem for path in (self.session_dir / "agents").glob("*.toml")}
+        assert generated_names <= config["agents"].keys()
+        wp_role = config["agents"]["wp-elaborator"]
+        assert wp_role["config_file"] == "agents/wp-elaborator.toml"
+        assert wp_role["description"]
+
+    def test_profile_agent_registration_takes_precedence(self) -> None:
+        import tomllib
+
+        (self.codex_home / "config.toml").write_text(
+            '[agents."wp-elaborator"]\n'
+            'description = "profile role"\n'
+            'config_file = "/profile/wp-elaborator.toml"\n'
+        )
+        CodexBackend().setup_session_dir(self.session_dir)
+        config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        assert config["agents"]["wp-elaborator"] == {
+            "description": "profile role",
+            "config_file": "/profile/wp-elaborator.toml",
+        }
+
     def test_agent_toml_model_alias_mapped(self) -> None:
         import tomllib
 

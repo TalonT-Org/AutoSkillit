@@ -478,6 +478,43 @@ def _generate_agent_tomls(session_dir: Path) -> int:
     return count
 
 
+def _register_agent_tomls(session_dir: Path) -> int:
+    """Register generated agent config layers in the session config."""
+    config_path = session_dir / "config.toml"
+    config_text = config_path.read_text(encoding="utf-8")
+    config = tomllib.loads(config_text)
+    configured_agents = config.get("agents", {})
+    if not isinstance(configured_agents, dict):
+        configured_agents = {}
+
+    registrations: list[str] = []
+    for agent_path in sorted((session_dir / "agents").glob("*.toml")):
+        agent = tomllib.loads(agent_path.read_text(encoding="utf-8"))
+        name = agent.get("name")
+        description = agent.get("description")
+        if not isinstance(name, str) or not name or name in configured_agents:
+            continue
+        if not isinstance(description, str) or not description:
+            continue
+        registrations.extend(
+            [
+                f"[agents.{_format_toml_value(name)}]",
+                f"description = {_format_toml_value(description)}",
+                f"config_file = {_format_toml_value(f'agents/{agent_path.name}')}",
+                "",
+            ]
+        )
+
+    if not registrations:
+        return 0
+    separator = "\n" if config_text.endswith("\n") else "\n\n"
+    registration_text = "\n".join(registrations)
+    updated = f"{config_text}{separator}{registration_text}"
+    tomllib.loads(updated)
+    atomic_write(config_path, updated)
+    return len(registrations) // 4
+
+
 def _materialize_profile_skills(session_dir: Path) -> int:
     """Symlink ~/.codex/skills/<name> dirs into session_dir/skills/<name>.
 
@@ -1109,6 +1146,8 @@ class CodexBackend(BackendCmdBuilderBase):
 
         try:
             _generate_agent_tomls(session_dir)
+            registered = _register_agent_tomls(session_dir)
+            logger.debug("codex_agents_registered", count=registered)
         except Exception:
             logger.warning("codex_agent_toml_generation_failed", exc_info=True)
 

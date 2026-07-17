@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import tomllib
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,7 +26,11 @@ from autoskillit._probe_canary import (
     ErrorKind,
 )
 from autoskillit.config import OutputBudgetConfig
-from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY, pkg_root
+from autoskillit.core import (
+    OUTPUT_DISCIPLINE_DIGEST,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    pkg_root,
+)
 from autoskillit.execution.backends._codex_config import (
     CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
     ensure_codex_mcp_registered,
@@ -37,10 +42,12 @@ from autoskillit.execution.backends._probe_cache import (
     read_probe_cache,
     write_probe_cache,
 )
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.hook_registry import generate_hooks_json
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
+    assert_generated_child_delivery,
     assert_hook_event_format,
     assert_inline_within_byte_budget,
     assert_no_unknown_event_types,
@@ -58,13 +65,14 @@ _SKIP_REASON = (
     "Set CODEX_SMOKE_TEST=1 and one of: CODEX_API_KEY, OPENAI_API_KEY,"
     " or ~/.codex/auth.json to run Codex smoke tests"
 )
+_CODEX_AUTH_PATH = Path("~/.codex/auth.json").expanduser()
 
 _skip_unless_codex_smoke = pytest.mark.skipif(
     not os.environ.get("CODEX_SMOKE_TEST")
     or (
         not os.environ.get("CODEX_API_KEY")
         and not os.environ.get("OPENAI_API_KEY")
-        and not Path("~/.codex/auth.json").expanduser().exists()
+        and not _CODEX_AUTH_PATH.exists()
     ),
     reason=_SKIP_REASON,
 )
@@ -333,6 +341,20 @@ _skip_unless_codex_output_budget_smoke = pytest.mark.skipif(
     ),
 )
 
+_skip_unless_codex_generated_child_smoke = pytest.mark.skipif(
+    not os.environ.get("CODEX_SMOKE_TEST")
+    or not shutil.which("codex")
+    or (
+        not os.environ.get("CODEX_API_KEY")
+        and not os.environ.get("OPENAI_API_KEY")
+        and not _CODEX_AUTH_PATH.is_file()
+    ),
+    reason=(
+        "Set CODEX_SMOKE_TEST=1 and provide an environment API key or authenticated "
+        "~/.codex/auth.json to run the generated Codex child probe"
+    ),
+)
+
 _skip_unless_claude_output_budget_smoke = pytest.mark.skipif(
     not os.environ.get("CLAUDE_CODE_SMOKE_TEST")
     or not shutil.which("claude")
@@ -346,6 +368,14 @@ _skip_unless_claude_output_budget_smoke = pytest.mark.skipif(
 
 class _DenyRoundTripOutput(NamedTuple):
     transcript: str
+    cli_version: str
+
+
+class _GeneratedChildProbeOutput(NamedTuple):
+    parent_events: list[dict]
+    child_events: list[dict]
+    parent_id: str
+    agent_role: str
     cli_version: str
 
 
@@ -383,6 +413,168 @@ def _cli_version(binary: str, env: dict[str, str]) -> str:
         return result.stdout.strip() or result.stderr.strip() or "unknown"
     except (OSError, subprocess.TimeoutExpired):
         return "unknown"
+
+
+def _read_ndjson(path: Path) -> list[dict]:
+    events: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events
+
+
+def _run_generated_child_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> _GeneratedChildProbeOutput:
+    source_auth = _CODEX_AUTH_PATH
+    profile_home = tmp_path / "profile-home"
+    profile_codex_home = profile_home / ".codex"
+    session_home = tmp_path / "session-home"
+    workspace = tmp_path / "workspace"
+    for directory in (profile_codex_home, session_home, workspace):
+        directory.mkdir(parents=True)
+    if source_auth.is_file():
+        (profile_codex_home / "auth.json").symlink_to(source_auth.resolve())
+
+    monkeypatch.setenv("HOME", str(profile_home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: profile_home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(profile_home / ".config"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(profile_home / ".local" / "share"))
+    profile_config = profile_codex_home / "config.toml"
+    ensure_codex_mcp_registered(config_path=profile_config, headless_auto_gate=False)
+    sync_hooks_to_codex_config(config_path=profile_config)
+    CodexBackend().setup_session_dir(session_home)
+
+    agent_role = "wp-elaborator"
+    agent_toml = session_home / "agents" / f"{agent_role}.toml"
+    assert agent_toml.is_file(), f"generated role missing: {agent_toml}"
+    agent_definition = tomllib.loads(agent_toml.read_text(encoding="utf-8"))
+    assert OUTPUT_DISCIPLINE_DIGEST in agent_definition["developer_instructions"]
+    session_config = tomllib.loads((session_home / "config.toml").read_text(encoding="utf-8"))
+    assert session_config["agents"][agent_role]["config_file"] == (f"agents/{agent_role}.toml")
+
+    env = dict(os.environ)
+    env.update(
+        {
+            "HOME": str(profile_home),
+            "CODEX_HOME": str(session_home),
+            "XDG_CONFIG_HOME": str(profile_home / ".config"),
+            "XDG_DATA_HOME": str(profile_home / ".local" / "share"),
+        }
+    )
+    subprocess.run(
+        ["git", "init", "-q"],
+        cwd=workspace,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    prompt = (
+        "This is a generated-subagent delivery probe. Call spawn_agent exactly once with "
+        f'agent_type="{agent_role}", fork_context=false, and a message asking the child '
+        "to reply exactly child-delivery-complete without using tools. Then call wait_agent "
+        "with only the returned agent id until it reports completed. Finally respond exactly "
+        "parent-delivery-complete. You may call tool_search only to discover spawn_agent and "
+        "wait_agent; do not call other tool types."
+    )
+    timeout = int(os.environ.get("GENERATED_CHILD_SMOKE_TIMEOUT", "900"))
+    result = subprocess.run(  # noqa: S603
+        [
+            "codex",
+            "exec",
+            "--json",
+            "--sandbox",
+            "workspace-write",
+            "--model",
+            os.environ.get("GENERATED_CHILD_SMOKE_MODEL", "gpt-5.4"),
+            prompt,
+        ],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if result.returncode != 0:
+        raise OSError(
+            f"generated child probe failed with rc={result.returncode}: "
+            f"{result.stdout}\n{result.stderr}"
+        )
+    stdout_events = []
+    for line in result.stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(event, dict):
+            stdout_events.append(event)
+    parent_ids = [
+        str(event.get("thread_id", ""))
+        for event in stdout_events
+        if event.get("type") == "thread.started" and event.get("thread_id")
+    ]
+    assert len(parent_ids) == 1, f"expected one parent thread, got {parent_ids}"
+    parent_id = parent_ids[0]
+
+    rollout_root = (session_home / "sessions").resolve()
+    rollout_events = [_read_ndjson(path) for path in rollout_root.rglob("rollout-*.jsonl")]
+    parent_events: list[dict] = []
+    child_events: list[dict] = []
+    for events in rollout_events:
+        session_metas = [
+            event.get("payload", {}) for event in events if event.get("type") == "session_meta"
+        ]
+        if any(meta.get("id") == parent_id for meta in session_metas):
+            parent_events = events
+        if any(
+            (meta.get("forked_from_id") or meta.get("parent_thread_id")) == parent_id
+            for meta in session_metas
+        ):
+            child_events.extend(events)
+    assert parent_events, f"parent rollout not found for {parent_id} under {rollout_root}"
+    return _GeneratedChildProbeOutput(
+        parent_events=parent_events,
+        child_events=child_events,
+        parent_id=parent_id,
+        agent_role=agent_role,
+        cli_version=_cli_version("codex", env),
+    )
+
+
+def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
+    assert_generated_child_delivery(
+        output.parent_events,
+        output.child_events,
+        parent_id=output.parent_id,
+        agent_role=output.agent_role,
+        output_discipline_digest=OUTPUT_DISCIPLINE_DIGEST,
+    )
+
+
+@_skip_unless_codex_generated_child_smoke
+def test_generated_codex_child_receives_output_discipline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "version-workspace"
+    workspace.mkdir()
+    version_env, _, _ = _isolated_cli_env(tmp_path / "version-env", workspace)
+    cli_version = _cli_version("codex", version_env)
+    _run_probe_with_discrimination(
+        "generated_codex_child",
+        cli_version,
+        lambda: _run_generated_child_probe(tmp_path / "generated-child", monkeypatch),
+        _assert_generated_child_probe,
+        record_success=lambda _version: None,
+        record_failure=lambda _kind, _name, _version, _detail: None,
+    )
 
 
 def _run_output_budget_deny_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutput:

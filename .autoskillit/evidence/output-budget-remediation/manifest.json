@@ -177,6 +177,16 @@
         "path": ".autoskillit/temp/apply_phase4_issue_closures.sh",
         "response_content_sha256": "56f8b56c6bc48a4f1dc9af8b98c5e1efedaeeae836beae5d6e2b44765e3fe25e"
       }
-    ]
+    ],
+    "postcondition": {
+      "path": ".autoskillit/evidence/output-budget-remediation/phase4-closure-postcondition.json",
+      "response_content_sha256": "991db41b843f32c540d4827c6dcd1a026a293ab1e1a4e802a347e5ae140ab096",
+      "query": "aliased GraphQL read for issues #4253/#3938 and PR #4259",
+      "assertions": {
+        "issue_4253": "CLOSED with Closure section",
+        "issue_3938": "CLOSED with Closure section",
+        "pr_4259": "MERGED at 1e2670ec7"
+      }
+    }
   }
 }

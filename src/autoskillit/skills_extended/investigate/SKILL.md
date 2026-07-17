@@ -97,7 +97,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 **ALWAYS:**
 - Use subagents for parallel exploration
 - Issue all Task calls in a single message to maximize parallelism
-- Limit total subagent spawns to 9 across all batches (standard and deep mode). If the investigation requires more exploration vectors, consolidate related questions into fewer, broader subagent prompts rather than spawning additional agents.
+- Limit total subagent spawns to 16 across all batches (standard and deep mode). If the investigation requires more exploration vectors, consolidate related questions into fewer, broader subagent prompts rather than spawning additional agents.
 - Spawn all subagents via `Agent(model="sonnet")`
 - Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
 - After writing the investigation report, emit the **absolute path** as a structured output
@@ -370,7 +370,7 @@ Launch a minimum of 5 parallel subagents via `Agent(model="sonnet")` covering:
 - **External research**: Web search for known issues, library bugs, documentation
 - **Design Intent**: Run `git log --follow`, caller tracing, and architecture doc checks on the mechanisms under investigation — identical to the Standard Mode Design Intent vector but with deep mode evidence standards
 
-Simultaneously with Batch 1 subagents, run historical recurrence check (Step 3.5 Parts A+B) in parallel. After Batch 1 completes, produce inter-batch synthesis: summarize confirmed findings, open questions, and new investigative leads.
+Simultaneously with Batch 1 subagents, run historical recurrence check (Step 3.5 Parts A+B) in parallel. Batch 1 is a completed agent wave only after every launch has a terminal result. Before launching Batch 2, emit an assistant progress message beginning `Inter-batch synthesis:` that summarizes confirmed findings, open questions, and new investigative leads.
 
 After inter-batch synthesis, run Part C of Step 3.5 conditionally: if Parts A+B found prior history, spawn the conditional analysis subagent. Otherwise skip and proceed to D3.
 
@@ -386,6 +386,8 @@ For each subsequent batch (Batch 2, Batch 3, ...):
 **Early termination:** When all findings across all open questions are SUPPORTED (backed by direct code evidence) and no new investigative leads have emerged in the last batch, stop iterating and proceed to D4.
 
 **Empty batch handling:** If a batch produces no new findings (all subagents report the same conclusions as prior batches), treat it as an early termination signal and proceed to D4.
+
+Deep mode must execute at least two completed agent waves. Do not begin a later wave until every launch in the preceding wave has a terminal result and its `Inter-batch synthesis:` progress message has been emitted.
 
 ### Step D4: Challenge Round
 
@@ -432,7 +434,9 @@ After writing the report (Step 4), spawn 2–3 independent validator subagents v
 - **Validator 2 — Recommendation soundness**: Assess whether the single recommendation is implementable, safe, and correctly scoped.
 - **Validator 3 — Gap analysis** (optional, spawn if investigation was complex): Identify what the report does not cover that could be relevant.
 
-If any validator identifies errors or gaps, apply in-place corrections to the report before emitting `investigation_path`. The structured output token is emitted **after** all validation and correction is complete.
+Every validator launch must reach a terminal result before emitting `investigation_path`. If any validator identifies errors or gaps, apply in-place corrections to the report before finalizing validation. The structured output token is emitted **after** all validation and correction is complete, as the final line of the final assistant message with no later assistant text.
+
+Before finalizing validation, check the report's structure directly. It must retain the exact Step 4 headings, including the literal plural heading `## Recommendations`; correct singular or renamed headings in place. Confirm the final assistant message contains the exact report path token only after this structural check and every validator terminal result.
 
 ## Subagent Prompt Template
 
@@ -473,7 +477,7 @@ Evidence standards:
 - Mark finding as SUPPORTED (direct evidence) or NEEDS-EVIDENCE (inferred)
 
 This is a research task - DO NOT modify any code.
-Report your findings in a structured format with explicit evidence citations.
+Report your findings in a structured format with explicit evidence citations, using at most 800 words.
 ```
 
 ### Deep Analysis Mode Template
@@ -497,7 +501,7 @@ Evidence standards:
 - Mark each finding as SUPPORTED (direct evidence), UNSUPPORTED (contradicted), or NEEDS-EVIDENCE (not yet confirmed)
 
 This is a research task - DO NOT modify any code.
-Report your findings in a structured format with explicit evidence citations.
+Report your findings in a structured format with explicit evidence citations, using at most 800 words.
 ```
 
 ### Adversarial Subagent Template (Challenge Round)
@@ -554,7 +558,7 @@ Gap Analysis Validator tasks:
 - Identify any areas NOT listed that should have been explored
 - Report whether the investigation coverage is sufficient for the stated findings
 
-Report your findings in a structured format. If corrections are needed, state them explicitly.
+Report your findings in a structured format using at most 600 words. If corrections are needed, state them explicitly.
 This is a research task - DO NOT modify any code.
 ```
 

@@ -337,21 +337,21 @@ class TestConformanceAssertionsFullCoverage:
             if name.startswith("assert_") and callable(getattr(ca_mod, name))
         }
 
-        source = inspect.getsource(
-            importlib.import_module(
-                "tests.execution.backends.test_codex_deterministic_conformance"
-            )
-        )
-        tree = ast.parse(source)
-
+        test_modules = [
+            "tests.execution.backends.test_codex_deterministic_conformance",
+            "tests.execution.backends.test_cli_conformance_probes",
+        ]
         called_names: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                func = node.func
-                if isinstance(func, ast.Name) and func.id in exported_names:
-                    called_names.add(func.id)
-                elif isinstance(func, ast.Attribute) and func.attr in exported_names:
-                    called_names.add(func.attr)
+        for mod_name in test_modules:
+            source = inspect.getsource(importlib.import_module(mod_name))
+            tree = ast.parse(source)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    if isinstance(func, ast.Name) and func.id in exported_names:
+                        called_names.add(func.id)
+                    elif isinstance(func, ast.Attribute) and func.attr in exported_names:
+                        called_names.add(func.attr)
 
         missing = exported_names - called_names
-        assert not missing, f"Conformance assertions not called in test file: {sorted(missing)}"
+        assert not missing, f"Conformance assertions not called in test files: {sorted(missing)}"

@@ -161,6 +161,19 @@ class TestTaskfile:
         assert "python -m pytest" not in commands
         assert re.search(r"(^|\s)pytest(?:\s|$)", commands) is None
 
+    def test_output_budget_e2e_target_selects_credentialed_smoke_test(self) -> None:
+        data = self._load()
+        task = data["tasks"]["test-smoke-output-budget-e2e"]
+        commands = "\n".join(str(command) for command in task.get("cmds", []))
+        preconditions = "\n".join(
+            str(precondition) for precondition in task.get("preconditions", [])
+        )
+        assert "tests/server/test_output_budget_e2e.py" in commands
+        assert "-m smoke" in commands
+        assert ".autoskillit/temp/smoke-output-budget-e2e-" in commands
+        assert "CODEX_SMOKE_TEST" in preconditions
+        assert "CLAUDE_CODE_SMOKE_TEST" in preconditions
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

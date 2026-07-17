@@ -70,7 +70,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_skill_cmd_check.py` | Unit tests for the skill_cmd_check PreToolUse hook |
 | `test_skill_load_guard.py` | Tests for guards/skill_load_guard.py PreToolUse hook — denies native tools until Skill called |
 | `test_skill_command_guard.py` | Tests for the skill_command_guard PreToolUse hook |
-| `test_taskfile.py` | Taskfile structural tests, including supported delegation for the installed Codex config-parse gate |
+| `test_taskfile.py` | Taskfile structural tests, including installed Codex config-parse and credentialed output-budget smoke gates |
 | `test_testmon_eval.py` | Testmon eval tests |
 | `test_token_summary_core.py` | Tests: token_summary_appender core — early-exit, happy path, session filtering, efficiency table |
 | `test_token_summary_filters.py` | Tests: token_summary_appender unit helpers (_canonical, _humanize, _format_table, _unwrap_mcp_response), order_id isolation, and config key migration |

@@ -7,6 +7,7 @@ discipline policy, surviving across runs while staying under `PROBE_CACHE_TTL`.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,9 +24,17 @@ from autoskillit.core import (
 logger = get_logger(__name__)
 
 PROBE_CACHE_TTL: timedelta = timedelta(hours=24)
+PROBE_SUITE_CONTRACT: tuple[str, ...] = (
+    "generated-codex-child-v1",
+    "deep-investigate-codex-v2",
+    "deep-investigate-claude-200k-v2",
+)
+PROBE_SUITE_CONTRACT_DIGEST: str = hashlib.sha256(
+    "\n".join(PROBE_SUITE_CONTRACT).encode("utf-8")
+).hexdigest()
 PROBE_POLICY_IDENTITY: str = (
     f"v{OUTPUT_DISCIPLINE_POLICY_VERSION}-{OUTPUT_DISCIPLINE_BLOCK_SHA256}-"
-    f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}"
+    f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}-{PROBE_SUITE_CONTRACT_DIGEST}"
 )
 _SCHEMA_VERSION: int = 2
 

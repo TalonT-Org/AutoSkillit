@@ -15,6 +15,8 @@ from autoskillit.execution.backends._probe_cache import (
     _SCHEMA_VERSION,
     PROBE_CACHE_TTL,
     PROBE_POLICY_IDENTITY,
+    PROBE_SUITE_CONTRACT,
+    PROBE_SUITE_CONTRACT_DIGEST,
     ProbeResult,
     read_probe_cache,
     write_probe_cache,
@@ -171,7 +173,12 @@ class TestReadProbeCache:
 def test_probe_policy_identity_uses_output_discipline_authorities() -> None:
     assert PROBE_POLICY_IDENTITY == (
         f"v{OUTPUT_DISCIPLINE_POLICY_VERSION}-{OUTPUT_DISCIPLINE_BLOCK_SHA256}-"
-        f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}"
+        f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}-{PROBE_SUITE_CONTRACT_DIGEST}"
+    )
+    assert PROBE_SUITE_CONTRACT == (
+        "generated-codex-child-v1",
+        "deep-investigate-codex-v2",
+        "deep-investigate-claude-200k-v2",
     )
 
 

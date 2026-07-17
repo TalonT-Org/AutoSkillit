@@ -76,6 +76,11 @@ def test_deep_mode_subagents_use_sonnet(deep_mode_section: str) -> None:
     )
 
 
+def test_investigation_spawn_ceiling_is_sixteen(skill_text: str) -> None:
+    assert "Limit total subagent spawns to 16" in skill_text
+    assert "Limit total subagent spawns to 9" not in skill_text
+
+
 # ── Standard Mode Preserved ───────────────────────────────────────────────────
 
 
@@ -176,6 +181,16 @@ def test_d2_inter_batch_synthesis(deep_workflow_section: str) -> None:
     assert "inter-batch synthesis" in d2.lower(), (
         "Step D2 must describe 'inter-batch synthesis' after Batch 1 completes"
     )
+
+
+def test_deep_waves_complete_before_inter_batch_progress(
+    deep_workflow_section: str,
+) -> None:
+    normalized = deep_workflow_section.lower()
+    assert "at least two completed agent waves" in normalized
+    assert "every launch has a terminal result" in normalized
+    assert "before launching batch 2" in normalized
+    assert "inter-batch synthesis:" in normalized
 
 
 def test_d2_historical_recurrence_parallel(deep_workflow_section: str) -> None:
@@ -282,6 +297,22 @@ def test_d6_factual_accuracy_check(deep_workflow_section: str) -> None:
     )
 
 
+def test_d6_finishes_before_final_path_token(deep_workflow_section: str) -> None:
+    d6 = extract_step_section(deep_workflow_section, "Step D6")
+    normalized = d6.lower()
+    assert "every validator launch" in normalized
+    assert "terminal result" in normalized
+    assert "final line of the final assistant message" in normalized
+    assert d6.find("terminal result") < d6.find("investigation_path")
+
+
+def test_d6_preserves_exact_recommendations_heading(deep_workflow_section: str) -> None:
+    d6 = extract_step_section(deep_workflow_section, "Step D6")
+    assert "exact Step 4 headings" in d6
+    assert "`## Recommendations`" in d6
+    assert "correct singular or renamed headings" in d6
+
+
 # ── Enhanced Report Template ───────────────────────────────────────────────────
 
 
@@ -384,3 +415,14 @@ def test_deep_template_has_inter_batch_context(skill_text: str) -> None:
         "Deep Analysis Mode Template must include a placeholder for context from "
         "'prior batches' or 'previous batch' inter-batch synthesis"
     )
+
+
+def test_deep_and_validator_templates_bound_final_reports(skill_text: str) -> None:
+    deep_start = skill_text.index("### Deep Analysis Mode Template")
+    adversarial_start = skill_text.index("### Adversarial Subagent Template", deep_start)
+    validator_start = skill_text.index("### Validation Subagent Template")
+    breakage_start = skill_text.index("### Adversarial Breakage Subagent Template")
+    deep_template = skill_text[deep_start:adversarial_start]
+    validator_template = skill_text[validator_start:breakage_start]
+    assert "at most 800 words" in deep_template
+    assert "at most 600 words" in validator_template

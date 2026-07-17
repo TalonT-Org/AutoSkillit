@@ -169,6 +169,15 @@ def all_paths_cross(
     graphs is unsupported: dominance claims are only valid on the graph that
     was searched.
 
+    ``ctx.step_graph`` specifically (built by ``_build_step_graph``) includes
+    bypass edges injected for ``skip_when_false`` steps and ``sub_recipe``
+    placeholder steps, in addition to the six routing-field edge types
+    (``on_result``, ``on_success``, ``on_failure``, ``on_context_limit``,
+    ``on_rate_limit``, ``on_exhausted``). These bypass edges can create
+    shortcuts around a candidate dominator node — callers should be aware
+    of this when interpreting a ``True``/``False`` result against
+    ``ctx.step_graph``.
+
     Returns False if ``target`` is not reachable from ``start`` in the
     unmodified graph. This guards against vacuous-true dominance results from
     unreachable targets — the standard "not-in-reachable-set implies dominates"

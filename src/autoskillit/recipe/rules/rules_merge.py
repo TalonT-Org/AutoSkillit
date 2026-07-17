@@ -804,7 +804,7 @@ def _check_merge_site_push_symmetry(ctx: ValidationContext) -> list[RuleFinding]
                     ),
                 )
             )
-        elif not push_found and target not in visited:
+        elif not push_found:
             findings.append(
                 make_finding(
                     rule_name="merge-site-push-symmetry",

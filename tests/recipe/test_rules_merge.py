@@ -1459,7 +1459,7 @@ def test_merge_site_push_symmetry_merge_with_push_does_not_fire() -> None:
         "merge_b": RecipeStep(
             tool="merge_worktree",
             with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
-            on_result=StepResultRoute(conditions=[StepResultCondition(route="done")]),
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="push_a")]),
         ),
         "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
     }
@@ -1483,7 +1483,12 @@ def test_merge_site_push_symmetry_merge_without_push_fires() -> None:
         "merge_b": RecipeStep(
             tool="merge_worktree",
             with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
-            on_result=StepResultRoute(conditions=[StepResultCondition(route="done")]),
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="push_b")]),
+        ),
+        "push_b": RecipeStep(
+            tool="push_to_remote",
+            on_success="done",
+            on_failure="done",
         ),
         "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
     }
@@ -1513,7 +1518,7 @@ def test_merge_site_push_symmetry_push_on_failure_only_fires() -> None:
         "merge_b": RecipeStep(
             tool="merge_worktree",
             with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
-            on_result=StepResultRoute(conditions=[StepResultCondition(route="done")]),
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="push_a")]),
         ),
         "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
     }
@@ -1523,3 +1528,22 @@ def test_merge_site_push_symmetry_push_on_failure_only_fires() -> None:
     assert len(rule_findings) == 1
     assert rule_findings[0].step_name == "merge_a"
     assert "merge_b" in rule_findings[0].message
+
+
+def test_merge_site_push_symmetry_bare_terminal_fires() -> None:
+    """Merge whose success fallthrough dead-ends at a bare recipe terminal
+    (no push_to_remote, no other merge_worktree anywhere) — rule fires."""
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/a", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="done")]),
+        ),
+        "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "merge-site-push-symmetry"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].severity == Severity.WARNING
+    assert rule_findings[0].step_name == "merge_a"

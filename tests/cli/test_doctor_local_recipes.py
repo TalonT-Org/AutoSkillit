@@ -10,7 +10,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 class TestLocalRecipeValidity:
-    def test_broken_local_recipe_reports_error(self, tmp_path: Path) -> None:
+    def test_structurally_invalid_recipe_reports_error(self, tmp_path: Path) -> None:
         from autoskillit.cli.doctor._doctor_config import _check_local_recipe_validity
         from autoskillit.core import Severity
 
@@ -22,8 +22,7 @@ class TestLocalRecipeValidity:
             'autoskillit_version: "0.2.0"\n'
             "steps:\n"
             "  step_a:\n"
-            "    tool: run_skill\n"
-            "    on_success: nonexistent_step\n",
+            "    tool: run_skill\n",
             encoding="utf-8",
         )
         results = _check_local_recipe_validity(project_dir=tmp_path)

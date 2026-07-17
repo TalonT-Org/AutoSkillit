@@ -62,6 +62,17 @@ def _shape_failed_test_output(
     )
     condensed_stdout, condensed_stderr = condense_test_output(test_result)
 
+    if spilled.artifact_path is None and (
+        len(condensed_stdout) > spec.inline_max_chars
+        or len(condensed_stderr) > spec.inline_max_chars
+    ):
+        spilled = spill_output(
+            raw,
+            resolve_temp_dir(Path(worktree_path), config.workspace.temp_dir) / "merge_worktree",
+            "raw_test_output",
+            SpillSpec(inline_max_chars=0, head_chars=spec.head_chars, tail_chars=spec.tail_chars),
+        )
+
     def preview(text: str) -> str:
         if len(text) <= spec.inline_max_chars:
             return text

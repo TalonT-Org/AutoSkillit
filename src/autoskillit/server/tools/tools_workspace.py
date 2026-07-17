@@ -118,20 +118,32 @@ async def test_check(
                     head_chars=tool_ctx.config.output_budget.head_chars,
                     tail_chars=tool_ctx.config.output_budget.tail_chars,
                 )
+                condensed_stdout, condensed_stderr = condense_test_output(test_result)
                 if not test_result.passed:
                     raw_output = json.dumps(
                         {"stdout": test_result.stdout, "stderr": test_result.stderr}
                     )
-                    raw_spill = spill_output(
-                        raw_output,
+                    spill_dir = (
                         resolve_temp_dir(Path(resolved), tool_ctx.config.workspace.temp_dir)
-                        / "test_check",
-                        "raw_output",
-                        spec,
+                        / "test_check"
                     )
+                    raw_spill = spill_output(raw_output, spill_dir, "raw_output", spec)
                     raw_artifact_path = raw_spill.artifact_path
-
-                condensed_stdout, condensed_stderr = condense_test_output(test_result)
+                    if raw_artifact_path is None and (
+                        len(condensed_stdout) > spec.inline_max_chars
+                        or len(condensed_stderr) > spec.inline_max_chars
+                    ):
+                        raw_spill = spill_output(
+                            raw_output,
+                            spill_dir,
+                            "raw_output",
+                            SpillSpec(
+                                inline_max_chars=0,
+                                head_chars=spec.head_chars,
+                                tail_chars=spec.tail_chars,
+                            ),
+                        )
+                        raw_artifact_path = raw_spill.artifact_path
                 response = {
                     "passed": test_result.passed,
                     "stdout": _bounded_test_stream(condensed_stdout, spec, raw_artifact_path),

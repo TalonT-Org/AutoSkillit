@@ -650,6 +650,15 @@ def derive_orchestrator_resume_spec(
     """
     if state.orchestrator_session_id:
         if current_backend:
+            if not state.dispatches:
+                # Truly legacy state with no dispatches — fail closed when backend
+                # provenance cannot be verified.
+                logger.warning(
+                    "resume_backend_provenance_missing",
+                    session_id=state.orchestrator_session_id,
+                    current_backend=current_backend,
+                )
+                return NoResume()
             source_record = next(
                 (
                     dispatch
@@ -658,13 +667,18 @@ def derive_orchestrator_resume_spec(
                 ),
                 None,
             )
-            source_backend = source_record.caller_backend_name if source_record else ""
-            if not _resume_backend_is_safe(
-                session_id=state.orchestrator_session_id,
-                source_backend=source_backend,
-                current_backend=current_backend,
-            ):
-                return NoResume()
+            if source_record is not None:
+                source_backend = source_record.caller_backend_name
+                if not _resume_backend_is_safe(
+                    session_id=state.orchestrator_session_id,
+                    source_backend=source_backend,
+                    current_backend=current_backend,
+                ):
+                    return NoResume()
+            # source_record is None: campaign has dispatches but none match the
+            # orchestrator session id — accept the orchestrator session id as
+            # authoritative since it was set via update_orchestrator_session_id
+            # (not derived from a dispatch).
         return NamedResume(session_id=state.orchestrator_session_id)
     for d in reversed(state.dispatches):
         if d.caller_session_id:

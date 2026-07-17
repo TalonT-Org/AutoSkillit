@@ -32,9 +32,8 @@ def build_backend_capabilities_map(
     out: dict[str, BackendCapabilities] = {}
     if orchestrator_backend is not None:
         orchestrator_name = orchestrator_backend.name
-        if not isinstance(orchestrator_name, str) or not orchestrator_name:
-            raise ValueError("orchestrator backend must have a non-empty string name")
-        out[orchestrator_name] = orchestrator_backend.capabilities
+        if isinstance(orchestrator_name, str) and orchestrator_name:
+            out[orchestrator_name] = orchestrator_backend.capabilities
 
     for step_name, backend_name in (effective_backend_map or {}).items():
         if not isinstance(backend_name, str) or not backend_name:

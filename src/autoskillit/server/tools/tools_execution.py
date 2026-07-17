@@ -72,6 +72,7 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._backend_compat import (
     _check_backend_compat,
+    _is_backend_incompatible,  # noqa: F401  (re-exported for tests/arch/test_cross_registry_dispatch_sufficiency.py and tests/server/test_run_skill_backend_compat.py)
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
@@ -80,6 +81,9 @@ from autoskillit.server.tools._execution_helpers import (
     propagate_session_deadline,
     resolve_relative_path_args,
     validate_path_arg_anchoring,
+)
+from autoskillit.server.tools._preflight import (
+    _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
 )
 from autoskillit.server.tools._types import ToolFailureEnvelope
 

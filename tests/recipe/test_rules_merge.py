@@ -1436,3 +1436,90 @@ def test_bundled_recipes_ancestry_arm_classifies_as_push_recovery(
             f"{recipe_name}: merge '{step_name}' ancestry arm route "
             f"'{ancestry_condition.route}' classified as {cls!r}, expected 'push_recovery'"
         )
+
+
+# ---------------------------------------------------------------------------
+# merge-site-push-symmetry rule tests (issue #4274, Part B Step 9)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_site_push_symmetry_merge_with_push_does_not_fire() -> None:
+    """Merge whose success fallthrough reaches push_to_remote — rule must NOT fire."""
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/a", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="push_a")]),
+        ),
+        "push_a": RecipeStep(
+            tool="push_to_remote",
+            on_success="done",
+            on_failure="done",
+        ),
+        "merge_b": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="done")]),
+        ),
+        "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "merge-site-push-symmetry"]
+    assert rule_findings == [], (
+        f"merge with push in success path must NOT fire merge-site-push-symmetry; "
+        f"got findings: {[(f.rule, f.message) for f in rule_findings]}"
+    )
+
+
+def test_merge_site_push_symmetry_merge_without_push_fires() -> None:
+    """Merge without a push on the success fallthrough — rule fires."""
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/a", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="merge_b")]),
+        ),
+        "merge_b": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="done")]),
+        ),
+        "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "merge-site-push-symmetry"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].severity == Severity.WARNING
+    assert rule_findings[0].step_name == "merge_a"
+    assert "merge_b" in rule_findings[0].message
+
+
+def test_merge_site_push_symmetry_push_on_failure_only_fires() -> None:
+    """Push reachable only from failure route, NOT success fallthrough — rule fires."""
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/a", "base_branch": "main"},
+            on_success="merge_b",
+            on_failure="push_a",
+        ),
+        "push_a": RecipeStep(
+            tool="push_to_remote",
+            on_success="merge_b",
+            on_failure="done",
+        ),
+        "merge_b": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="done")]),
+        ),
+        "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "merge-site-push-symmetry"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].step_name == "merge_a"
+    assert "merge_b" in rule_findings[0].message

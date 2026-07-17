@@ -102,7 +102,7 @@ def track_response_size(
                         ),
                     }
                 )
-                logger.error("track_response_size_handler_failed", tool_name=tool_name)
+                logger.exception("track_response_size_handler_failed", tool_name=tool_name)
             ctx = _get_ctx_or_none()
             try:
                 response_str = result if isinstance(result, str) else json.dumps(result)

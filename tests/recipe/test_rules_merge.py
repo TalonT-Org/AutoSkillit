@@ -847,6 +847,62 @@ def test_bundled_recipes_push_between_parts(recipe_name: str) -> None:
         )
 
 
+def test_pre_remediation_merge_success_pushes_before_next_merge() -> None:
+    """pre_remediation_merge's success fallthrough must reach push_to_remote.
+
+    Without an inter_part_push-pre_remediation step, a successful pre_remediation_merge
+    routes to ``remediate`` directly, advancing the local branch without publishing it
+    to the remote. This guarantees ref_coherence divergence at the next merge site
+    (issue #4274). The fix inserts a push step between pre_remediation_merge's success
+    fallthrough and ``remediate``, mirroring the ``merge → inter_part_push`` pattern.
+    """
+    from autoskillit.recipe._analysis_bfs import _build_success_step_graph
+
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    step = recipe.steps["pre_remediation_merge"]
+    success_route = None
+    if step.on_result and step.on_result.conditions:
+        for cond in step.on_result.conditions:
+            if cond.when is None:
+                success_route = cond.route
+                break
+    if success_route is None:
+        success_route = step.on_success
+
+    assert success_route is not None, "pre_remediation_merge must have a success route"
+    assert success_route != "remediate", (
+        "pre_remediation_merge success fallthrough routes directly to remediate "
+        "without a push — this is the missing-push root cause of issue #4274"
+    )
+
+    graph = _build_success_step_graph(recipe)
+    visited = set()
+    queue = [success_route]
+    while queue:
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        if current not in recipe.steps:
+            continue
+        current_step = recipe.steps[current]
+        if getattr(current_step, "tool", None) == "push_to_remote":
+            return  # Found a push_to_remote step on the success fallthrough
+        if getattr(current_step, "tool", None) == "merge_worktree":
+            pytest.fail(
+                f"pre_remediation_merge success fallthrough reaches merge_worktree "
+                f"step '{current}' before any push_to_remote — "
+                f"the visited path was: {visited}"
+            )
+        queue.extend(graph.get(current, set()))
+
+    pytest.fail(
+        f"pre_remediation_merge success fallthrough never reaches push_to_remote; "
+        f"visited: {visited}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Step 1a: merge-routing-cross-site-consistency rule tests
 # ---------------------------------------------------------------------------

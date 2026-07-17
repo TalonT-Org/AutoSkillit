@@ -6,7 +6,11 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import CodingAgentBackend, unsatisfied_backend_capabilities
+from autoskillit.core import (
+    CodingAgentBackend,
+    describe_capability_mismatches,
+    unsatisfied_backend_capabilities,
+)
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
 
@@ -40,12 +44,7 @@ def check_hard_capability_feasibility(
     """
     mismatches = unsatisfied_backend_capabilities(uses_capabilities, backend.capabilities)
     if mismatches:
-        mismatch = mismatches[0]
-        return (
-            f"Capability '{mismatch.capability}' requires backend property "
-            f"'{mismatch.property_name}' to be True, but backend '{backend.name}' has "
-            f"{mismatch.property_name}={mismatch.actual_value!r}."
-        )
+        return f"Backend '{backend.name}': {describe_capability_mismatches(mismatches)}."
     return None
 
 

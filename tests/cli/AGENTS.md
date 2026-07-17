@@ -37,6 +37,8 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_doctor_script.py` | Tests for the _check_script_binary doctor check — script(1) PTY binary availability |
 | `test_doctor_claude_binary.py` | Tests for the _check_claude_binary doctor check — claude CLI availability for capability-driven rerouting |
 | `test_doctor_runtime.py` | Tests for the _check_codex_model_alias_staleness doctor check — codex model alias staleness auditing (Check 36) |
+| `test_doctor_standing_pins.py` | Tests for _check_standing_backend_pins_feasibility doctor check — standing backend pin capability feasibility (Check 37) |
+| `test_doctor_local_recipes.py` | Tests for _check_local_recipe_validity doctor check — local recipe semantic validation (Check 38) |
 | `test_doctor_split.py` | Structural guards: test_doctor.py split into three files (P1-F02) |
 | `test_hook_drift_plugin_guard.py` | Tests for hook drift false-positive fix when plugin is marketplace-installed |
 | `test_features_cli.py` | Tests for the features CLI subcommand |

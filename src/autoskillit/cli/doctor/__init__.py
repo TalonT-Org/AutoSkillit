@@ -13,8 +13,10 @@ from autoskillit.execution import get_backend
 from ._doctor_config import (
     _check_config_layers_for_secrets,
     _check_gitignore_completeness,
+    _check_local_recipe_validity,
     _check_project_config,
     _check_secret_scanning_hook,
+    _check_standing_backend_pins_feasibility,
 )
 from ._doctor_env import (
     _check_ambient_campaign_id,
@@ -143,22 +145,16 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 11: Editable install source directory still exists
     results.append(_check_editable_install_source_exists())
-
     # Check 12: No stale autoskillit entry points outside ~/.local/bin
     results.append(_check_stale_entry_points())
-
     # Check 13: Source version drift (network, with disk-cache TTL fallback)
     results.append(_check_source_version_drift())
-
     # Check 14: Quota cache schema version
     results.append(_check_quota_cache_schema())
-
     # Check 15: claude process state breakdown
     results.append(_check_claude_process_state_breakdown(backend=_backend))
-
     # Check 16: Install classification from direct_url.json
     results.append(_check_install_classification())
-
     # Check 17: Update-prompt dismissal state
     results.append(_check_update_dismissal_state())
 
@@ -227,6 +223,11 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 36: Codex model-alias staleness
     results.append(_check_codex_model_alias_staleness())
+
+    # Check 37: Standing backend pin feasibility
+    results.extend(_check_standing_backend_pins_feasibility())
+    # Check 38: Local recipe validity
+    results.extend(_check_local_recipe_validity())
 
     # Output
     if output_json:

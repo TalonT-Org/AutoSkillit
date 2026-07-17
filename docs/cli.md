@@ -82,14 +82,17 @@ Run health checks on your setup.
 **Flags:**
 - `--output-json` — Output results as JSON
 
-Runs 28 checks (up to 33 with fleet enabled) enumerated by `run_doctor` in
-`cli/_doctor.py` — 23 numbered plus lettered sub-checks `2b`, `2c`, `2d`,
-`4b`, and `7b`. The checks cover stale MCP servers, plugin registration, PATH,
+Runs 38 checks (up to 44 with fleet enabled) enumerated by `run_doctor` in
+`cli/doctor/__init__.py` — numbered plus lettered sub-checks `2b`, `2c`, `2d`,
+`2e`, `4b`, `7b`, `7c`, and `31b`. The checks cover stale MCP servers, plugin registration, PATH,
 project config, secrets placement, version consistency, hook health, hook
 registration, hook registry drift, recipe version health, gitignore
 completeness, secret-scanning hook, editable install source, stale entry
 points, source drift, quota cache schema, process state, install classification,
-update dismissal state, ambient env leaks, and feature gate consistency. See
+update dismissal state, ambient env leaks, feature gate consistency, codex version,
+script binary, claude binary, codex MCP timeouts, codex graduation, CLI conformance,
+codex NDJSON drift, codex model-alias staleness, standing backend pin feasibility,
+and local recipe validity (including the 6 fleet checks 24-29). See
 [installation.md](installation.md#post-install-verification) for the full table.
 
 ---

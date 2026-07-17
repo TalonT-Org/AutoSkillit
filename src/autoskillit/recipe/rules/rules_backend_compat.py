@@ -7,6 +7,7 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
     Severity,
+    describe_capability_mismatches,
     unsatisfied_backend_capabilities,
 )
 from autoskillit.recipe._analysis import ValidationContext
@@ -92,16 +93,16 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         # diagnostic from backend_requirements — both findings surface together.
         step_backend_caps = (ctx.backend_capabilities_map or {}).get(step_backend)
         if step_backend_caps and uses_caps:
-            for mismatch in unsatisfied_backend_capabilities(uses_caps, step_backend_caps):
+            mismatches = unsatisfied_backend_capabilities(uses_caps, step_backend_caps)
+            if mismatches:
                 findings.append(
                     make_finding(
                         rule_name="backend-incompatible-skill",
                         step_name=step_name,
                         message=(
-                            f"step '{step_name}': skill '{skill_name}' requires "
-                            f"{mismatch.property_name}=True (via capability "
-                            f"'{mismatch.capability}') but backend '{step_backend}' has "
-                            f"{mismatch.property_name}={mismatch.actual_value!r}."
+                            f"step '{step_name}': skill '{skill_name}' requires backend "
+                            f"'{step_backend}' to satisfy: "
+                            f"{describe_capability_mismatches(mismatches)}."
                         ),
                         origin=_step_origin,
                         remedy=_step_remedy,

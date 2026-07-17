@@ -1494,6 +1494,9 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
             "DefaultWorkspaceManager",  # signal guard cleanup
         },
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
+        Path("cli/doctor/_doctor_config.py"): {
+            "DefaultSkillResolver"
+        },  # standing backend pin feasibility check
         Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
         Path("pipeline/context.py"): {  # __post_init__ +
             "DefaultBackgroundSupervisor",  # field default_factory

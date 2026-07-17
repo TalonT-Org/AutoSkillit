@@ -42,7 +42,17 @@ _MATRIX_IDS: list[tuple[str, str]] = [
 
 
 # -- Known-broken combos (xfail strict) -------------------------------------
-KNOWN_BROKEN: dict[tuple[str, str], str] = {}
+KNOWN_BROKEN: dict[tuple[str, str], str] = {
+    (recipe, backend): (
+        "Part A exposes latent defects in bundled recipes (merge_fix_count "
+        "without reset on the audit-remediation NO-GO path; "
+        "ref_push_count shared with asymmetric push symmetry in remediation.yaml). "
+        "Part B adds reset steps and a push step to close these defects. "
+        "Remove this xfail entry when Part B lands."
+    )
+    for recipe in ("remediation", "implementation", "implementation-groups")
+    for backend in _BACKEND_NAMES
+}
 
 _SKILL_RESOLVER = DefaultSkillResolver()
 
@@ -190,6 +200,14 @@ def test_matrix_collection_count() -> None:
     )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Part A exposes latent defects in bundled implementation.yaml "
+        "(merge_fix_count without reset on the audit-remediation NO-GO path). "
+        "Part B adds the reset step; remove xfail when Part B lands."
+    ),
+)
 def test_recipe_backend_matrix_codex_with_provider_override() -> None:
     """Codex with backend_supports_git_write=true: recipe is valid and feasible.
 

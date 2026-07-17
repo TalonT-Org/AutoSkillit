@@ -15,6 +15,7 @@ from autoskillit.smoke_utils._eval import (
 from autoskillit.smoke_utils._git import (
     check_bug_report_non_empty,
     check_commits_ahead,
+    check_ref_state,
     close_issue_already_done,
     compute_domain_partitions,
     detect_zero_changes,
@@ -49,6 +50,7 @@ __all__ = [
     "check_bug_report_non_empty",
     "check_commits_ahead",
     "check_loop_iteration",
+    "check_ref_state",
     "check_loop_with_progress",
     "check_review_loop",
     "check_review_posted",

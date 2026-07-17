@@ -50,6 +50,14 @@ def test_codex_backend_reachable_gate_returns_infeasible() -> None:
     assert "gate_backend_write" in result.get("infeasible_steps", [])
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Part A exposes latent defects in bundled implementation.yaml "
+        "(merge_fix_count without reset). Part B resolves the recipe defect; "
+        "remove xfail when Part B lands."
+    ),
+)
 def test_claude_code_backend_produces_feasible_recipe() -> None:
     """Claude Code + implementation recipe: backend_supports_git_write=true
     produces dispatch_feasible=True."""

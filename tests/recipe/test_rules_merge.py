@@ -847,6 +847,127 @@ def test_bundled_recipes_push_between_parts(recipe_name: str) -> None:
         )
 
 
+def test_pre_remediation_merge_success_pushes_before_next_merge() -> None:
+    """pre_remediation_merge's success fallthrough must reach push_to_remote.
+
+    Without an inter_part_push-pre_remediation step, a successful pre_remediation_merge
+    routes to ``remediate`` directly, advancing the local branch without publishing it
+    to the remote. This guarantees ref_coherence divergence at the next merge site
+    (issue #4274). The fix inserts a push step between pre_remediation_merge's success
+    fallthrough and ``remediate``, mirroring the ``merge → inter_part_push`` pattern.
+    """
+    from autoskillit.recipe._analysis_bfs import _build_success_step_graph
+
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    step = recipe.steps["pre_remediation_merge"]
+    success_route = None
+    if step.on_result and step.on_result.conditions:
+        for cond in step.on_result.conditions:
+            if cond.when is None:
+                success_route = cond.route
+                break
+    if success_route is None:
+        success_route = step.on_success
+
+    assert success_route is not None, "pre_remediation_merge must have a success route"
+    assert success_route != "remediate", (
+        "pre_remediation_merge success fallthrough routes directly to remediate "
+        "without a push — this is the missing-push root cause of issue #4274"
+    )
+
+    graph = _build_success_step_graph(recipe)
+    visited = set()
+    queue = [success_route]
+    while queue:
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        if current not in recipe.steps:
+            continue
+        current_step = recipe.steps[current]
+        if getattr(current_step, "tool", None) == "push_to_remote":
+            return  # Found a push_to_remote step on the success fallthrough
+        if getattr(current_step, "tool", None) == "merge_worktree":
+            pytest.fail(
+                f"pre_remediation_merge success fallthrough reaches merge_worktree "
+                f"step '{current}' before any push_to_remote — "
+                f"the visited path was: {visited}"
+            )
+        queue.extend(graph.get(current, set()))
+
+    pytest.fail(
+        f"pre_remediation_merge success fallthrough never reaches push_to_remote; "
+        f"visited: {visited}"
+    )
+
+
+def test_check_ref_push_loop_max_exceeded_routes_through_verify() -> None:
+    """Both ref-push guards route max_exceeded to verify_ref_push_exhaustion.
+
+    Issue #4274 compounding factor #4: when max_exceeded fires, the recipe
+    routes directly to release_issue_failure, applying a fail label even when
+    the local branch is still a clean fast-forward of remote (the benign
+    push-recoverable state). The fix inserts ``verify_ref_push_exhaustion``
+    as an authoritative re-check that routes the benign case to
+    ``register_clone_unconfirmed`` (preserving the in-progress label).
+    """
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    verify_step = recipe.steps.get("verify_ref_push_exhaustion")
+    assert verify_step is not None, (
+        "remediation.yaml must define verify_ref_push_exhaustion; "
+        "the graceful re-check terminal is missing"
+    )
+    assert getattr(verify_step, "tool", None) == "run_python", (
+        f"verify_ref_push_exhaustion must use run_python to call check_ref_state; "
+        f"got tool={getattr(verify_step, 'tool', None)!r}"
+    )
+
+    for guard_name in ("check_ref_push_loop", "check_ref_push_loop_pre_remediation"):
+        guard = recipe.steps[guard_name]
+        max_exceeded_routes = [
+            c.route
+            for c in (guard.on_result.conditions if guard.on_result else [])
+            if c.when and "max_exceeded" in c.when
+        ]
+        assert len(max_exceeded_routes) == 1, (
+            f"{guard_name} must have exactly one max_exceeded route; got {max_exceeded_routes}"
+        )
+        assert max_exceeded_routes[0] == "verify_ref_push_exhaustion", (
+            f"{guard_name} max_exceeded arm must route to "
+            f"verify_ref_push_exhaustion for the authoritative re-check; "
+            f"got {max_exceeded_routes[0]!r}"
+        )
+
+
+def test_verify_ref_push_exhaustion_routes_benign_state_to_register_clone() -> None:
+    """verify_ref_push_exhaustion routes remote_is_ancestor=true to register_clone_unconfirmed.
+
+    When the local branch is a clean fast-forward of remote, the work is
+    audit-approved and push-recoverable. The recipe must preserve the
+    in-progress label (route to register_clone_unconfirmed), not apply the
+    fail label.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    verify_step = recipe.steps["verify_ref_push_exhaustion"]
+    assert verify_step.on_result is not None, (
+        "verify_ref_push_exhaustion must declare on_result conditions"
+    )
+    ancestry_route = None
+    for cond in verify_step.on_result.conditions:
+        if cond.when and "remote_is_ancestor" in cond.when:
+            ancestry_route = cond.route
+            break
+    assert ancestry_route == "register_clone_unconfirmed", (
+        f"verify_ref_push_exhaustion must route remote_is_ancestor=true to "
+        f"register_clone_unconfirmed (preserves in-progress label); "
+        f"got {ancestry_route!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Step 1a: merge-routing-cross-site-consistency rule tests
 # ---------------------------------------------------------------------------
@@ -1315,3 +1436,114 @@ def test_bundled_recipes_ancestry_arm_classifies_as_push_recovery(
             f"{recipe_name}: merge '{step_name}' ancestry arm route "
             f"'{ancestry_condition.route}' classified as {cls!r}, expected 'push_recovery'"
         )
+
+
+# ---------------------------------------------------------------------------
+# merge-site-push-symmetry rule tests (issue #4274, Part B Step 9)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_site_push_symmetry_merge_with_push_does_not_fire() -> None:
+    """Merge whose success fallthrough reaches push_to_remote — rule must NOT fire."""
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/a", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="push_a")]),
+        ),
+        "push_a": RecipeStep(
+            tool="push_to_remote",
+            on_success="done",
+            on_failure="done",
+        ),
+        "merge_b": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="push_a")]),
+        ),
+        "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "merge-site-push-symmetry"]
+    assert rule_findings == [], (
+        f"merge with push in success path must NOT fire merge-site-push-symmetry; "
+        f"got findings: {[(f.rule, f.message) for f in rule_findings]}"
+    )
+
+
+def test_merge_site_push_symmetry_merge_without_push_fires() -> None:
+    """Merge without a push on the success fallthrough — rule fires."""
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/a", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="merge_b")]),
+        ),
+        "merge_b": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="push_b")]),
+        ),
+        "push_b": RecipeStep(
+            tool="push_to_remote",
+            on_success="done",
+            on_failure="done",
+        ),
+        "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "merge-site-push-symmetry"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].severity == Severity.WARNING
+    assert rule_findings[0].step_name == "merge_a"
+    assert "merge_b" in rule_findings[0].message
+
+
+def test_merge_site_push_symmetry_push_on_failure_only_fires() -> None:
+    """Push reachable only from failure route, NOT success fallthrough — rule fires."""
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/a", "base_branch": "main"},
+            on_success="merge_b",
+            on_failure="push_a",
+        ),
+        "push_a": RecipeStep(
+            tool="push_to_remote",
+            on_success="merge_b",
+            on_failure="done",
+        ),
+        "merge_b": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/b", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="push_a")]),
+        ),
+        "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "merge-site-push-symmetry"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].step_name == "merge_a"
+    assert "merge_b" in rule_findings[0].message
+
+
+def test_merge_site_push_symmetry_bare_terminal_fires() -> None:
+    """Merge whose success fallthrough dead-ends at a bare recipe terminal
+    (no push_to_remote, no other merge_worktree anywhere) — rule fires."""
+    steps = {
+        "merge_a": RecipeStep(
+            tool="merge_worktree",
+            with_args={"worktree_path": "/tmp/a", "base_branch": "main"},
+            on_result=StepResultRoute(conditions=[StepResultCondition(route="done")]),
+        ),
+        "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+    }
+    recipe = _make_recipe(steps)
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "merge-site-push-symmetry"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].severity == Severity.WARNING
+    assert rule_findings[0].step_name == "merge_a"

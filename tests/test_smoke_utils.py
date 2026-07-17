@@ -393,6 +393,37 @@ def test_check_loop_iteration_budget_semantics_documented() -> None:
     assert r3["max_exceeded"] == "true"
 
 
+def test_check_loop_iteration_ref_push_budget_two_attempts() -> None:
+    """Ref-push budget: max_iterations='3' yields exactly 2 usable push attempts.
+
+    Locks the ref-push recovery budget under the existing ``>=`` semantics:
+    with ``max_iterations='3'`` (the production value for ``check_ref_push_loop``
+    and ``check_ref_push_loop_pre_remediation`` in ``remediation.yaml``),
+    the counter permits two push attempts before exhausting:
+
+    - Round 0→1: allowed (first push attempt)
+    - Round 1→2: allowed (second push attempt)
+    - Round 2→3: blocked (budget exhausted)
+
+    This matches the intent of the ref-push recovery chain — two retries are
+    enough to absorb a transient ref-coherence divergence without false
+    positives. Do NOT change ``check_loop_iteration``'s ``>=`` operator — the
+    ``max_iterations='3'`` value is the canonical budget adjustment for
+    ref-push sites (issue #4274, Part B Step 1).
+    """
+    r1 = check_loop_iteration(current_iteration="", max_iterations="3")
+    assert r1["next_iteration"] == "1"
+    assert r1["max_exceeded"] == "false"
+
+    r2 = check_loop_iteration(current_iteration="1", max_iterations="3")
+    assert r2["next_iteration"] == "2"
+    assert r2["max_exceeded"] == "false"
+
+    r3 = check_loop_iteration(current_iteration="2", max_iterations="3")
+    assert r3["next_iteration"] == "3"
+    assert r3["max_exceeded"] == "true"
+
+
 def test_check_loop_iteration_cross_cycle_budget_starvation() -> None:
     """Cross-cycle budget starvation: counter persists → new cycle has zero budget.
 
@@ -413,6 +444,42 @@ def test_check_loop_iteration_cross_cycle_budget_starvation() -> None:
     r4 = check_loop_iteration(current_iteration=reset["value"], max_iterations="3")
     assert r4["max_exceeded"] == "false"
     assert r4["next_iteration"] == "1"
+
+
+def test_check_loop_iteration_max_iterations_two_single_push_boundary() -> None:
+    """max_iterations="2" allows exactly ONE push attempt (issue #4274 boundary).
+
+    With max_iterations="2" (the production value for ``ref_push_count``), the
+    counter permits exactly one increment before exhausting the budget:
+
+    - Round 1: 0→1 (allowed), the single permitted push attempt.
+    - Reset: counter back to "" via ``init_counter``.
+    - Round 2: 0→1 (allowed), the second push attempt.
+    - Final increment 1→2: blocked — ``max_exceeded == "true"``.
+
+    Any cycle that needs ≥2 pushes between resets therefore exhausts the
+    budget at the second push, regardless of how many audit-rem cycles
+    wrap around it. The existing ``max_iterations="3"`` test has comfortable
+    margin; this ``max=2`` variant exposes the tight single-push boundary
+    that the ref-push retry chain actually operates under.
+    """
+    # First push attempt
+    r1 = check_loop_iteration(current_iteration="", max_iterations="2")
+    assert r1["max_exceeded"] == "false"
+    assert r1["next_iteration"] == "1"
+
+    # Reset between cycles — init_counter returns "0" for blank input
+    reset = init_counter(counter_value="")
+    assert reset["value"] == "0"
+
+    # Second push attempt — counter fresh, allowed
+    r2 = check_loop_iteration(current_iteration=reset["value"], max_iterations="2")
+    assert r2["max_exceeded"] == "false"
+    assert r2["next_iteration"] == "1"
+
+    # The next increment 1→2 exhausts the budget
+    r3 = check_loop_iteration(current_iteration=r2["next_iteration"], max_iterations="2")
+    assert r3["max_exceeded"] == "true"
 
 
 # ---------------------------------------------------------------------------
@@ -2656,7 +2723,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 29 public names."""
+    """smoke_utils.__all__ must list all 30 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2668,6 +2735,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "check_commits_ahead",
         "check_loop_iteration",
         "check_loop_with_progress",
+        "check_ref_state",
         "check_review_loop",
         "check_review_posted",
         "close_issue_already_done",
@@ -3394,6 +3462,158 @@ def test_gate_backend_write_zero() -> None:
 def test_gate_backend_write_empty() -> None:
     """Returns {"backend_capable": "false"} for empty string."""
     assert gate_backend_write("") == {"backend_capable": "false"}
+
+
+# ---------------------------------------------------------------------------
+# T_SU_CRS1–T_SU_CRS3: check_ref_state tests (issue #4274, Part B Step 7)
+# ---------------------------------------------------------------------------
+
+
+def test_check_ref_state_local_ahead_returns_true(tmp_path: Path) -> None:
+    """Local branch ahead of remote tracking ref returns remote_is_ancestor=true.
+
+    Constructs a repo with one initial commit (simulating remote), then
+    advances a local ``feature`` branch by one commit (local ahead).
+    ``check_ref_state`` must detect that origin/feature is an ancestor of
+    feature and return ``{"remote_is_ancestor": "true"}``.
+
+    Issue #4274 Part B: this is the benign-exhaustion case — local work is
+    audit-approved and trivially push-recoverable; the recipe must route to
+    ``register_clone_unconfirmed`` instead of escalating to ``fail``.
+    """
+    from autoskillit.smoke_utils import check_ref_state
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    # Capture the base tip via HEAD (not by name) — the initial branch name
+    # created by ``git init`` depends on ``init.defaultBranch``, which is not
+    # guaranteed to be ``main`` in every environment (e.g. CI runners).
+    base_tip = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "feature work"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    # Simulate a remote tracking ref pointing at the original commit.
+    subprocess.run(
+        ["git", "update-ref", "refs/remotes/origin/feature", base_tip],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    result = check_ref_state(str(tmp_path), "feature")
+    assert result == {"remote_is_ancestor": "true"}
+
+
+def test_check_ref_state_genuine_divergence_returns_false(tmp_path: Path) -> None:
+    """Genuine local/remote divergence returns remote_is_ancestor=false.
+
+    Constructs a repo where ``feature`` and the simulated remote tracking
+    ref have both advanced independently from the same base — true
+    divergence. ``check_ref_state`` must NOT report ancestor relationship.
+    """
+    from autoskillit.smoke_utils import check_ref_state
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    base_tip = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "local advance"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+
+    # Simulate remote having advanced from the same base as a different branch.
+    subprocess.run(
+        ["git", "checkout", base_tip],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "remote_tip"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "remote advance"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    divergent_remote = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "update-ref", "refs/remotes/origin/feature", divergent_remote],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    result = check_ref_state(str(tmp_path), "feature")
+    assert result == {"remote_is_ancestor": "false"}
+
+
+def test_check_ref_state_missing_branch_returns_false(tmp_path: Path) -> None:
+    """Missing local branch returns remote_is_ancestor=false (no ancestry to test)."""
+    from autoskillit.smoke_utils import check_ref_state
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    result = check_ref_state(str(tmp_path), "nonexistent")
+    assert result == {"remote_is_ancestor": "false"}
 
 
 # ---------------------------------------------------------------------------

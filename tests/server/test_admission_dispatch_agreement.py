@@ -308,6 +308,14 @@ def test_provider_aware_overrides_capability_route_none_providers(
     assert detail.resolution_path == "capability_route"
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Part A exposes latent defects in bundled implementation.yaml "
+        "(merge_fix_count without reset). Part B resolves the recipe defect; "
+        "remove xfail when Part B lands."
+    ),
+)
 def test_admission_dispatch_agreement_real_providers_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

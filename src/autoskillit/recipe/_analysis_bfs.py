@@ -148,6 +148,58 @@ def _bfs_capped(
     return visited
 
 
+def all_paths_cross(
+    graph: dict[str, set[str]],
+    start: str,
+    candidate: str,
+    target: str,
+) -> bool:
+    """Return True iff every path from ``start`` to ``target`` in ``graph`` crosses ``candidate``.
+
+    Implements the contradiction pattern: if ``target`` is unreachable from
+    ``start`` when ``candidate`` is treated as a barrier (visited but not
+    expanded), then every path from ``start`` to ``target`` must cross
+    ``candidate``. This promotes the inline pattern previously duplicated in
+    ``capture-inversion-detection`` and ``clone-terminal-requires-registration``
+    into a named, tested, reusable helper.
+
+    The caller controls which edge types are included in ``graph`` — typically
+    the same adjacency used for candidate selection (e.g. ``ctx.step_graph``
+    for all-edges reachability, or a narrower success-only graph). Mixing the
+    graphs is unsupported: dominance claims are only valid on the graph that
+    was searched.
+
+    ``ctx.step_graph`` specifically (built by ``_build_step_graph``) includes
+    bypass edges injected for ``skip_when_false`` steps and ``sub_recipe``
+    placeholder steps, in addition to the six routing-field edge types
+    (``on_result``, ``on_success``, ``on_failure``, ``on_context_limit``,
+    ``on_rate_limit``, ``on_exhausted``). These bypass edges can create
+    shortcuts around a candidate dominator node — callers should be aware
+    of this when interpreting a ``True``/``False`` result against
+    ``ctx.step_graph``.
+
+    Returns False if ``target`` is not reachable from ``start`` in the
+    unmodified graph. This guards against vacuous-true dominance results from
+    unreachable targets — the standard "not-in-reachable-set implies dominates"
+    idiom is unsound without this precondition.
+
+    Trivially returns True when ``candidate == target`` (a node dominates
+    itself). Callers that derive candidate lists from a predecessor set that
+    includes the target itself must filter the target out before invoking,
+    or accept the vacuous True.
+    """
+    if start not in graph and start not in (candidate, target):
+        # start is not a node in the graph — unreachable trivially
+        return False
+    full_reachable = bfs_reachable(graph, start)
+    if target not in full_reachable and target != start:
+        return False
+    if candidate == target:
+        return True
+    reachable_without = _bfs_capped(graph, {start}, {candidate})
+    return target not in reachable_without
+
+
 # ---------------------------------------------------------------------------
 # Symbolic reachability: BFS with fact propagation
 # ---------------------------------------------------------------------------

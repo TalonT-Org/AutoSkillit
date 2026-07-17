@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
-    OUTPUT_DISCIPLINE_BLOCK_SHA256,
+    OUTPUT_DISCIPLINE_COMBINED_SHA256,
     OUTPUT_DISCIPLINE_POLICY_VERSION,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
 )
@@ -172,7 +172,7 @@ class TestReadProbeCache:
 
 def test_probe_policy_identity_uses_output_discipline_authorities() -> None:
     assert PROBE_POLICY_IDENTITY == (
-        f"v{OUTPUT_DISCIPLINE_POLICY_VERSION}-{OUTPUT_DISCIPLINE_BLOCK_SHA256}-"
+        f"v{OUTPUT_DISCIPLINE_POLICY_VERSION}-{OUTPUT_DISCIPLINE_COMBINED_SHA256}-"
         f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}-{PROBE_SUITE_CONTRACT_DIGEST}"
     )
     assert PROBE_SUITE_CONTRACT == (

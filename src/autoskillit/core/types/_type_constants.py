@@ -14,6 +14,7 @@ __all__ = [
     "OUTPUT_DISCIPLINE_POLICY_VERSION",
     "OUTPUT_DISCIPLINE_BLOCK",
     "OUTPUT_DISCIPLINE_BLOCK_SHA256",
+    "OUTPUT_DISCIPLINE_COMBINED_SHA256",
     "OUTPUT_DISCIPLINE_DIGEST",
     "OUTPUT_DISCIPLINE_REQUIRED_SKILLS",
     "RETIRED_SKILL_NAMES",
@@ -144,6 +145,12 @@ OUTPUT_DISCIPLINE_DIGEST = "\n".join(
         ),
     )
 )
+
+# Covers both policy texts (SKILL.md block and runtime-injected digest) so
+# editing either one invalidates cache keys derived from the policy content.
+OUTPUT_DISCIPLINE_COMBINED_SHA256 = sha256(
+    (OUTPUT_DISCIPLINE_BLOCK + "\x00" + OUTPUT_DISCIPLINE_DIGEST).encode("utf-8")
+).hexdigest()
 
 OUTPUT_DISCIPLINE_REQUIRED_SKILLS: frozenset[str] = frozenset(
     {"investigate", "rectify", "audit-bugs", "audit-friction"}

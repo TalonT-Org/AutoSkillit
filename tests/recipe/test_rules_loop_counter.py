@@ -526,6 +526,58 @@ class TestSharedCounterCrossSiteWithoutPushSymmetry:
         ]
         assert rule_findings == []
 
+    def test_multi_hop_push_reachable_does_not_fire(self) -> None:
+        """merge_a's push is reachable two hops downstream (through an
+        intermediate non-branching step); merge_b's push is immediate. Both
+        are genuinely push-protected — the rule must not fire on hop-distance
+        alone.
+        """
+        steps = {
+            "merge_a": _merge_worktree_step(push_route="hop1", guard_route="guard_a"),
+            "hop1": RecipeStep(tool="run_skill", on_success="push_a", on_failure="done"),
+            "push_a": _push_to_remote_step("done"),
+            "merge_b": _merge_worktree_step(push_route="push_b", guard_route="guard_b"),
+            "push_b": _push_to_remote_step("done"),
+            "guard_a": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "guard_b": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="done", on_failure="done"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [
+            f for f in findings if f.rule == "shared-counter-cross-site-without-push-symmetry"
+        ]
+        assert rule_findings == []
+
+    def test_push_beyond_another_merge_worktree_not_credited(self) -> None:
+        """merge_a's unconditional route reaches another merge_worktree step
+        (merge_c) before any push_to_remote step; merge_c's own downstream
+        push must not be credited to merge_a. merge_b pushes immediately.
+        Rule must fire (asymmetric — merge_a has no push of its own before
+        crossing merge_c).
+        """
+        steps = {
+            "merge_a": _merge_worktree_step(push_route="merge_c", guard_route="guard_a"),
+            "merge_c": _merge_worktree_step(push_route="push_c", guard_route="guard_c"),
+            "push_c": _push_to_remote_step("done"),
+            "guard_c": _guard_step("other_count", non_exit="fix", exit_route="done"),
+            "merge_b": _merge_worktree_step(push_route="push_b", guard_route="guard_b"),
+            "push_b": _push_to_remote_step("done"),
+            "guard_a": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "guard_b": _guard_step("shared_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="done", on_failure="done"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [
+            f for f in findings if f.rule == "shared-counter-cross-site-without-push-symmetry"
+        ]
+        assert len(rule_findings) == 1
+        assert "guard_a" in rule_findings[0].message
+        assert "guard_b" in rule_findings[0].message
+
     def test_bundled_remediation_yaml_fires(self) -> None:
         """Issue #4274 regression: bundled ``remediation.yaml`` has two guards
         sharing ``ref_push_count`` with asymmetric push protection across

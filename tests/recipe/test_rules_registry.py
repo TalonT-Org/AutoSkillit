@@ -96,7 +96,6 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
     _PART_A_NON_CONFORMING: dict[str, set[str]] = {
         "remediation.yaml": {
             "loop-counter-not-reset-on-outer-cycle",
-            "shared-counter-cross-site-without-push-symmetry",
         },
         "implementation.yaml": {"loop-counter-not-reset-on-outer-cycle"},
         "implementation-groups.yaml": {"loop-counter-not-reset-on-outer-cycle"},

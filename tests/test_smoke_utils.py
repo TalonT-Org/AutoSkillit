@@ -2723,7 +2723,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 29 public names."""
+    """smoke_utils.__all__ must list all 30 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2735,6 +2735,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "check_commits_ahead",
         "check_loop_iteration",
         "check_loop_with_progress",
+        "check_ref_state",
         "check_review_loop",
         "check_review_posted",
         "close_issue_already_done",

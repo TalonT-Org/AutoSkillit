@@ -578,23 +578,26 @@ class TestSharedCounterCrossSiteWithoutPushSymmetry:
         assert "guard_a" in rule_findings[0].message
         assert "guard_b" in rule_findings[0].message
 
-    def test_bundled_remediation_yaml_fires(self) -> None:
-        """Issue #4274 regression: bundled ``remediation.yaml`` has two guards
-        sharing ``ref_push_count`` with asymmetric push protection across
-        their merge_worktree predecessors (``merge`` has immediate push,
-        ``pre_remediation_merge`` does not). Rule must fire on the unfixed
-        current recipe. After Part B separates counters and adds the missing
-        push, this test should stop firing.
+    def test_bundled_remediation_yaml_does_not_fire(self) -> None:
+        """Issue #4274 regression: after Part B, ``remediation.yaml`` must NOT
+        fire ``shared-counter-cross-site-without-push-symmetry``.
+
+        The original failure had two guards sharing ``ref_push_count`` with
+        asymmetric push protection across their merge_worktree predecessors
+        (``merge`` had immediate push, ``pre_remediation_merge`` did not). Part B
+        separates the counters and adds the missing push step, so the rule must
+        no longer fire on the bundled recipe. This is the green-gate invariant
+        for the Part B fix.
         """
         recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
         findings = run_semantic_rules(recipe)
         rule_findings = [
             f for f in findings if f.rule == "shared-counter-cross-site-without-push-symmetry"
         ]
-        assert len(rule_findings) >= 1, (
-            f"remediation.yaml must fire shared-counter-cross-site-without-push-symmetry "
-            f"on the current unfixed topology; got findings: "
-            f"{[(f.rule, f.message) for f in findings]}"
+        assert rule_findings == [], (
+            f"remediation.yaml must NOT fire shared-counter-cross-site-without-push-symmetry "
+            f"after Part B's counter split and missing-push fix; got findings: "
+            f"{[(f.rule, f.message) for f in rule_findings]}"
         )
 
     def test_ref_push_loop_sites_use_independent_counters(self) -> None:

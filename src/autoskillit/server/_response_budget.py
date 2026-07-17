@@ -229,7 +229,12 @@ def _finalize_envelope(envelope: dict[str, Any], *, max_bytes: int) -> str:
             break
         seen.add(state)
         metadata["projected_utf8_bytes"] = measured
-    raise _ProjectionNonconvergentError("projected byte fixed point did not converge")
+    raise _ProjectionNonconvergentError(
+        "projected byte fixed point did not converge: "
+        f"measured={len(_canonical_json(envelope).encode('utf-8'))} "
+        f"projected={metadata.get('projected_utf8_bytes')!r} "
+        f"max_bytes={max_bytes} attempted_states={len(seen)}"
+    )
 
 
 def _spill_metadata(
@@ -440,7 +445,12 @@ def enforce_response_budget(
                 max_bytes=config.response_max_bytes,
                 inline_chars=config.inline_max_chars,
             )
-    except _ProjectionNonconvergentError:
+    except _ProjectionNonconvergentError as exc:
+        _emit_response_budget_event(
+            "response_budget_projection_nonconvergent",
+            tool_name=_bounded_tool_name(tool_name),
+            detail=str(exc),
+        )
         rendered = bounded_response_budget_failure(
             "",
             cause="projection_nonconvergent",

@@ -8,7 +8,9 @@ import pytest
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
-_PERSONAL_HOME_PATH_FIXTURES = frozenset({Path("tests/hooks/test_output_budget_guard.py")})
+_PERSONAL_HOME_PATH_FIXTURES: dict[Path, frozenset[int]] = {
+    Path("tests/hooks/test_output_budget_guard.py"): frozenset({17, 18}),
+}
 
 
 def test_no_personal_home_paths_in_test_files():
@@ -23,7 +25,7 @@ def test_no_personal_home_paths_in_test_files():
             if (
                 personal_prefix in line
                 and not line.strip().startswith("#")
-                and relative_path not in _PERSONAL_HOME_PATH_FIXTURES
+                and lineno not in _PERSONAL_HOME_PATH_FIXTURES.get(relative_path, frozenset())
             ):
                 hits.append(f"{relative_path}:{lineno}: {line.rstrip()}")
     assert hits == [], "Personal home paths found in tests:\n" + "\n".join(hits)

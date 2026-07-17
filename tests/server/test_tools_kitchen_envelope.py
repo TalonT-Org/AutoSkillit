@@ -380,6 +380,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     mock_ctx.project_dir = project_dir
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.quota_refresh_task = None
+    mock_ctx.backend = None
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
 
@@ -547,6 +548,7 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
     mock_ctx.project_dir = project_dir
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.quota_refresh_task = None
+    mock_ctx.backend = None
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
 

@@ -83,6 +83,7 @@ class RecipeRepository(Protocol):
         ingredient_overrides: dict[str, str] | None = None,
         effective_backend_map: dict[str, str] | None = None,
         backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
+        backend_origin_map: dict[str, str] | None = None,
     ) -> dict[str, Any]: ...
 
     def list_all(

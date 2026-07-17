@@ -400,6 +400,7 @@ async def validate_recipe(script_path: str) -> str:
                 ingredient_overrides=_cap_overrides,
                 effective_backend_map=_validate_effective_backend_map,
                 backend_capabilities_map=_validate_backend_capabilities_map,
+                backend_origin_map=_validate_backend_origin_map,
             )
             return json.dumps(result)
     except Exception as exc:

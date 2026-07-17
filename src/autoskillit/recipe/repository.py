@@ -130,6 +130,7 @@ class DefaultRecipeRepository:
         ingredient_overrides: dict[str, str] | None = None,
         effective_backend_map: dict[str, str] | None = None,
         backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
+        backend_origin_map: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return _api.validate_from_path(
             script_path,
@@ -138,6 +139,7 @@ class DefaultRecipeRepository:
             ingredient_overrides=ingredient_overrides,
             effective_backend_map=effective_backend_map,
             backend_capabilities_map=backend_capabilities_map,
+            backend_origin_map=backend_origin_map,
         )
 
     def list_all(

@@ -170,7 +170,7 @@ def serve_recipe(
         kwargs["effective_backend_map"] = effective_backend_map
     if backend_capabilities_map is not None:
         kwargs["backend_capabilities_map"] = backend_capabilities_map
-    if backend_origin_map:
+    if backend_origin_map is not None:
         kwargs["backend_origin_map"] = backend_origin_map
     if suppressed is not None:
         kwargs["suppressed"] = suppressed

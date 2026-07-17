@@ -97,12 +97,18 @@ def _read_policy() -> tuple[bool, int, int]:
 
 
 def _has_flag(args: list[str], *names: str) -> bool:
+    short_chars = frozenset(name[1] for name in names if len(name) == 2 and name.startswith("-"))
     for arg in args:
         if arg in names:
             return True
         if any(arg.startswith(f"{name}=") for name in names if name.startswith("--")):
             return True
-        if "-q" in names and arg.startswith("-") and not arg.startswith("--") and "q" in arg[1:]:
+        if (
+            short_chars
+            and arg.startswith("-")
+            and not arg.startswith("--")
+            and any(c in arg[1:] for c in short_chars)
+        ):
             return True
     return False
 

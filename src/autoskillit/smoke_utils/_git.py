@@ -187,6 +187,61 @@ def check_commits_ahead(cwd: str, base_branch: str) -> dict[str, str]:
     return {"has_commits": "true" if count > 0 else "false"}
 
 
+def check_ref_state(worktree_path: str, branch: str) -> dict[str, str]:
+    """Report whether ``branch`` is a clean fast-forward of the remote tracking ref.
+
+    Authoritative re-check used by ``verify_ref_push_exhaustion`` after the
+    ref-push budget is exhausted. Runs ``git merge-base --is-ancestor`` to test
+    whether the local ``branch``'s tip has the remote tracking ref as a
+    strict ancestor (i.e. local is ahead of or equal to remote — push is a
+    no-op or trivially recoverable). Returns ``{"remote_is_ancestor": "true"|"false"}``.
+
+    Used by the recipe to distinguish a benign ref-push exhaustion (local
+    clean ahead of remote — push failure is recoverable) from a genuine
+    divergence (local and remote have diverged — escalation required).
+    Issue #4274, Part B Step 8.
+    """
+    import subprocess  # noqa: PLC0415
+
+    # Resolve the local branch tip and its remote tracking ref.
+    local_tip = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", branch],
+        cwd=worktree_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    if local_tip.returncode != 0:
+        return {"remote_is_ancestor": "false"}
+    remote_ref = f"origin/{branch}"
+    remote_tip = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", remote_ref],
+        cwd=worktree_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    if remote_tip.returncode != 0:
+        return {"remote_is_ancestor": "false"}
+    ancestor = subprocess.run(
+        [
+            "git",
+            "merge-base",
+            "--is-ancestor",
+            remote_tip.stdout.strip(),
+            local_tip.stdout.strip(),
+        ],
+        cwd=worktree_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    return {"remote_is_ancestor": "true" if ancestor.returncode == 0 else "false"}
+
+
 def close_issue_already_done(issue_url: str) -> dict[str, str]:
     """Remove in-progress label and close issue as already-implemented.
 

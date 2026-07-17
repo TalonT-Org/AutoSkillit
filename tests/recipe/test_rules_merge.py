@@ -903,6 +903,71 @@ def test_pre_remediation_merge_success_pushes_before_next_merge() -> None:
     )
 
 
+def test_check_ref_push_loop_max_exceeded_routes_through_verify() -> None:
+    """Both ref-push guards route max_exceeded to verify_ref_push_exhaustion.
+
+    Issue #4274 compounding factor #4: when max_exceeded fires, the recipe
+    routes directly to release_issue_failure, applying a fail label even when
+    the local branch is still a clean fast-forward of remote (the benign
+    push-recoverable state). The fix inserts ``verify_ref_push_exhaustion``
+    as an authoritative re-check that routes the benign case to
+    ``register_clone_unconfirmed`` (preserving the in-progress label).
+    """
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    verify_step = recipe.steps.get("verify_ref_push_exhaustion")
+    assert verify_step is not None, (
+        "remediation.yaml must define verify_ref_push_exhaustion; "
+        "the graceful re-check terminal is missing"
+    )
+    assert getattr(verify_step, "tool", None) == "run_python", (
+        f"verify_ref_push_exhaustion must use run_python to call check_ref_state; "
+        f"got tool={getattr(verify_step, 'tool', None)!r}"
+    )
+
+    for guard_name in ("check_ref_push_loop", "check_ref_push_loop_pre_remediation"):
+        guard = recipe.steps[guard_name]
+        max_exceeded_routes = [
+            c.route
+            for c in (guard.on_result.conditions if guard.on_result else [])
+            if c.when and "max_exceeded" in c.when
+        ]
+        assert len(max_exceeded_routes) == 1, (
+            f"{guard_name} must have exactly one max_exceeded route; got {max_exceeded_routes}"
+        )
+        assert max_exceeded_routes[0] == "verify_ref_push_exhaustion", (
+            f"{guard_name} max_exceeded arm must route to "
+            f"verify_ref_push_exhaustion for the authoritative re-check; "
+            f"got {max_exceeded_routes[0]!r}"
+        )
+
+
+def test_verify_ref_push_exhaustion_routes_benign_state_to_register_clone() -> None:
+    """verify_ref_push_exhaustion routes remote_is_ancestor=true to register_clone_unconfirmed.
+
+    When the local branch is a clean fast-forward of remote, the work is
+    audit-approved and push-recoverable. The recipe must preserve the
+    in-progress label (route to register_clone_unconfirmed), not apply the
+    fail label.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    verify_step = recipe.steps["verify_ref_push_exhaustion"]
+    assert verify_step.on_result is not None, (
+        "verify_ref_push_exhaustion must declare on_result conditions"
+    )
+    ancestry_route = None
+    for cond in verify_step.on_result.conditions:
+        if cond.when and "remote_is_ancestor" in cond.when:
+            ancestry_route = cond.route
+            break
+    assert ancestry_route == "register_clone_unconfirmed", (
+        f"verify_ref_push_exhaustion must route remote_is_ancestor=true to "
+        f"register_clone_unconfirmed (preserves in-progress label); "
+        f"got {ancestry_route!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Step 1a: merge-routing-cross-site-consistency rule tests
 # ---------------------------------------------------------------------------

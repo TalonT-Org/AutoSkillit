@@ -555,7 +555,7 @@ steps:
       ref_push_count: ${{ result.next_iteration }}
     on_result:
     - when: ${{ result.max_exceeded }} == true
-      route: release_issue_failure
+      route: verify_ref_push_exhaustion
     - route: ref_push
     on_failure: release_issue_failure
     optional_context_refs:
@@ -565,7 +565,8 @@ steps:
       max 3 under >= semantics = 2 usable push attempts) from merge_fix_count.
       Push-and-retry is cheap and near-deterministic
       (no LLM invocation), so it does not share the merge_fix_count budget.
-      If max exceeded, the divergence is not fixable by pushing — escalate.
+      On max exceeded, route to verify_ref_push_exhaustion for an authoritative
+      remote_is_ancestor re-check before escalating.
 
   ref_push:
     tool: push_to_remote
@@ -653,7 +654,7 @@ steps:
       pre_remediation_ref_push_count: ${{ result.next_iteration }}
     on_result:
     - when: ${{ result.max_exceeded }} == true
-      route: release_issue_failure
+      route: verify_ref_push_exhaustion
     - route: ref_push_pre_remediation
     on_failure: release_issue_failure
     optional_context_refs:
@@ -663,8 +664,11 @@ steps:
       counter pre_remediation_ref_push_count (max 3 under >= semantics =
       2 usable push attempts), independent from the final-merge
       ref_push_count so the two sites cannot drain each other's budget.
-      Routes to ref_push_pre_remediation, then commit_guard_pre_remediation
-      and pre_remediation_merge.
+      On max exceeded, routes to verify_ref_push_exhaustion (same terminal
+      as check_ref_push_loop — both guards guard the same failure condition
+      and must share the graceful re-check route). Routes non-max_exceeded
+      to ref_push_pre_remediation, then commit_guard_pre_remediation and
+      pre_remediation_merge.
 
   ref_push_pre_remediation:
     tool: push_to_remote
@@ -678,6 +682,28 @@ steps:
     note: >
       Pushes the feature branch when the remote ref is an ancestor of the
       local ref, then retries pre_remediation_merge through its commit guard.
+
+  verify_ref_push_exhaustion:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_ref_state
+      worktree_path: ${{ context.work_dir }}
+      branch: ${{ context.merge_target }}
+    on_result:
+    - when: ${{ result.remote_is_ancestor }} == true
+      route: register_clone_unconfirmed
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+    note: >-
+      Authoritative re-check before escalating ref-push budget exhaustion.
+      If the local branch is still a clean fast-forward of remote
+      (remote_is_ancestor=true), the work is audit-approved and
+      push-recoverable — route to register_clone_unconfirmed (preserves
+      the in-progress label for operator recovery) instead of applying
+      the fail label. Follows the check_ci_already_passed precedent
+      (implementation.yaml:1472) — the pattern of an authoritative
+      re-check before escalating is what's being followed; that
+      precedent step uses the wait_for_ci tool, this one uses run_python.
 
   pre_remediation_merge:
     tool: merge_worktree

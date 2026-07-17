@@ -3464,6 +3464,155 @@ def test_gate_backend_write_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
+# T_SU_CRS1–T_SU_CRS3: check_ref_state tests (issue #4274, Part B Step 7)
+# ---------------------------------------------------------------------------
+
+
+def test_check_ref_state_local_ahead_returns_true(tmp_path: Path) -> None:
+    """Local branch ahead of remote tracking ref returns remote_is_ancestor=true.
+
+    Constructs a repo with one initial commit on ``main`` (simulating remote),
+    then advances a local ``feature`` branch by one commit (local ahead).
+    ``check_ref_state`` must detect that origin/feature is an ancestor of
+    feature and return ``{"remote_is_ancestor": "true"}``.
+
+    Issue #4274 Part B: this is the benign-exhaustion case — local work is
+    audit-approved and trivially push-recoverable; the recipe must route to
+    ``register_clone_unconfirmed`` instead of escalating to ``fail``.
+    """
+    from autoskillit.smoke_utils import check_ref_state
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "feature work"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    # Simulate a remote tracking ref pointing at the original commit.
+    base_tip = subprocess.run(
+        ["git", "rev-parse", "main"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "update-ref", "refs/remotes/origin/feature", base_tip],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    result = check_ref_state(str(tmp_path), "feature")
+    assert result == {"remote_is_ancestor": "true"}
+
+
+def test_check_ref_state_genuine_divergence_returns_false(tmp_path: Path) -> None:
+    """Genuine local/remote divergence returns remote_is_ancestor=false.
+
+    Constructs a repo where ``feature`` and the simulated remote tracking
+    ref have both advanced independently from the same base — true
+    divergence. ``check_ref_state`` must NOT report ancestor relationship.
+    """
+    from autoskillit.smoke_utils import check_ref_state
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    base_tip = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "local advance"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+
+    # Simulate remote having advanced from the same base as a different branch.
+    subprocess.run(
+        ["git", "checkout", base_tip],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "remote_tip"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "remote advance"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    divergent_remote = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "update-ref", "refs/remotes/origin/feature", divergent_remote],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    result = check_ref_state(str(tmp_path), "feature")
+    assert result == {"remote_is_ancestor": "false"}
+
+
+def test_check_ref_state_missing_branch_returns_false(tmp_path: Path) -> None:
+    """Missing local branch returns remote_is_ancestor=false (no ancestry to test)."""
+    from autoskillit.smoke_utils import check_ref_state
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    result = check_ref_state(str(tmp_path), "nonexistent")
+    assert result == {"remote_is_ancestor": "false"}
+
+
+# ---------------------------------------------------------------------------
 # T_CRP1–T_CRP5: check_review_posted
 # ---------------------------------------------------------------------------
 

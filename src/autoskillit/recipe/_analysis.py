@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.core import SkillResolver
+    from autoskillit.core import BackendCapabilities, SkillResolver
 
 from autoskillit.recipe._analysis_bfs import _bfs_with_facts, bfs_reachable
 from autoskillit.recipe._analysis_blocks import extract_blocks
@@ -82,6 +82,7 @@ class ValidationContext:
     backend_name: str | None = None
     skill_resolver: SkillResolver | None = None
     effective_backend_map: dict[str, str] | None = None
+    backend_capabilities_map: dict[str, BackendCapabilities] | None = None
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
     predecessors: dict[str, set[str]] = field(default_factory=dict)
 
@@ -135,6 +136,7 @@ def make_validation_context(
     backend_name: str | None = None,
     skill_resolver: SkillResolver | None = None,
     effective_backend_map: dict[str, str] | None = None,
+    backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
@@ -163,6 +165,7 @@ def make_validation_context(
         backend_name=backend_name,
         skill_resolver=skill_resolver,
         effective_backend_map=effective_backend_map,
+        backend_capabilities_map=backend_capabilities_map,
         blocks=extract_blocks(recipe, step_graph, predecessors=predecessors),
         predecessors=predecessors,
     )

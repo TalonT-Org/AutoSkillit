@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_issue_headless import prepare_issue
 from autoskillit.server.tools.tools_issue_labels import (
     claim_issue,
@@ -14,6 +15,13 @@ from autoskillit.server.tools.tools_issue_labels import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+@pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx):
+    """Open the gate while retaining production backend compatibility metadata."""
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    return tool_ctx
 
 
 class TestClaimIssueWhitelist:

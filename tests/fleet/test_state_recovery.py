@@ -131,6 +131,89 @@ class TestDeriveOrchestratorResumeSpec:
         result = derive_orchestrator_resume_spec(state)
         assert result == NoResume()
 
+    def test_derive_validates_backend_match_for_orchestrator_session(self) -> None:
+        """Resume spec must reject session_id from a different backend."""
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        dispatches = [
+            DispatchRecord(
+                name="dispatch-1",
+                caller_backend_name="claude-code",
+                caller_session_id="claude-session-abc",
+            ),
+        ]
+        state = _make_state(orchestrator_session_id="claude-session-abc", dispatches=dispatches)
+
+        # Same backend → NamedResume
+        same_spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
+        assert isinstance(same_spec, NamedResume)
+
+        # Different backend → NoResume
+        mismatch_spec = derive_orchestrator_resume_spec(state, current_backend="codex")
+        assert isinstance(mismatch_spec, NoResume)
+
+    def test_derive_rejects_orchestrator_session_without_backend_provenance(self) -> None:
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        state = _make_state(orchestrator_session_id="legacy-session", dispatches=[])
+
+        spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
+        assert isinstance(spec, NoResume)
+
+    def test_derive_validates_backend_match_for_caller_session_id_fallback(self) -> None:
+        """Fallback caller_session_id path must also reject mismatched backends."""
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        dispatches = [
+            DispatchRecord(
+                name="dispatch-1",
+                status=DispatchStatus.SUCCESS,
+                caller_backend_name="codex",
+                caller_session_id="codex-session-xyz",
+            ),
+        ]
+        state = _make_state(orchestrator_session_id="", dispatches=dispatches)
+
+        # Mismatched backend → NoResume
+        mismatch_spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
+        assert isinstance(mismatch_spec, NoResume)
+
+    def test_derive_uses_caller_backend_instead_of_dispatched_worker_backend(self) -> None:
+        """A heterogeneous worker backend must not invalidate the caller session."""
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        dispatches = [
+            DispatchRecord(
+                name="dispatch-1",
+                status=DispatchStatus.SUCCESS,
+                caller_session_id="claude-orchestrator-session",
+                caller_backend_name="claude-code",
+                backend_name="codex",
+            ),
+        ]
+        state = _make_state(orchestrator_session_id="", dispatches=dispatches)
+
+        spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
+        assert isinstance(spec, NamedResume)
+        assert spec.session_id == "claude-orchestrator-session"
+
+    def test_derive_rejects_legacy_record_without_caller_backend_name(self) -> None:
+        """Legacy records without caller provenance must fail closed."""
+        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+
+        dispatches = [
+            DispatchRecord(
+                name="dispatch-1",
+                status=DispatchStatus.SUCCESS,
+                caller_session_id="legacy-session",
+                backend_name="codex",
+            ),
+        ]
+        state = _make_state(orchestrator_session_id="", dispatches=dispatches)
+
+        spec = derive_orchestrator_resume_spec(state, current_backend="claude-code")
+        assert isinstance(spec, NoResume)
+
 
 class TestResumeDecisionDispatchId:
     def test_resume_decision_carries_dispatch_id(self) -> None:

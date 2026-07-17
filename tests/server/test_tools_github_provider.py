@@ -6,9 +6,17 @@ import json
 
 import pytest
 
+from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_github import report_bug
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+@pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx):
+    """Open the gate while retaining production backend compatibility metadata."""
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    return tool_ctx
 
 
 @pytest.mark.anyio

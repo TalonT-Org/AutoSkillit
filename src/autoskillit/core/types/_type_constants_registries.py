@@ -1,13 +1,19 @@
 """Tool registries, pack registries, tool-to-tag mappings, visibility tags.
 
-Zero autoskillit imports — except sibling _type_constants_env for backend name constants.
+Zero autoskillit imports — except sibling `_type_constants_env` for backend name constants,
+sibling `_type_enums` for `FleetErrorCode`, and sibling `_type_backend` for the
+`BackendCapabilities` boot-time field check.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Literal, NamedTuple
 
+# _type_backend.py itself imports several other core/types siblings, but all
+# of them stay within core/ (IL-0) — importing BackendCapabilities here does
+# not introduce a circular or cross-layer dependency.
+from ._type_backend import BackendCapabilities
 from ._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
 from ._type_enums import FleetErrorCode
 
@@ -35,7 +41,9 @@ __all__ = [
     "ALL_VISIBILITY_TAGS",
     "SERVE_SURFACES",
     "SkillCapabilityDef",
+    "HardCapabilityMismatch",
     "SKILL_CAPABILITY_REGISTRY",
+    "unsatisfied_backend_capabilities",
 ]
 
 # Native Claude Code tools that pipeline orchestrators must NEVER use directly.
@@ -314,6 +322,18 @@ class SkillCapabilityDef:
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"]
     required_sandbox_overrides: frozenset[str] = frozenset()
     worker_routable: bool = False
+    # Name of a Boolean field on `BackendCapabilities` that must be True
+    # on the dispatch-target backend for this capability to be feasible.
+    # When set, `check_hard_capability_feasibility()` rejects the dispatch
+    # at both admission (`_check_dispatch_feasibility`) and dispatch-time
+    # (`_check_backend_compat`) gates if the backend's value is falsy —
+    # independent of explicit backend pinning (REQ-RES-001).
+    #
+    # `required_recipe_ingredient` drives the corresponding soft,
+    # recipe-level gate. `CAPABILITY_INGREDIENT_MAP` is derived from this
+    # definition so admission and dispatch cannot drift apart.
+    required_backend_property: str | None = None
+    required_recipe_ingredient: str | None = None
 
     @property
     def required_backends(self) -> frozenset[str]:
@@ -322,6 +342,14 @@ class SkillCapabilityDef:
         if self.codex_status == "not-applicable" and not self.worker_routable:
             return frozenset({AGENT_BACKEND_CLAUDE_CODE})
         return frozenset()
+
+
+class HardCapabilityMismatch(NamedTuple):
+    """A required backend capability property whose value is unsatisfied."""
+
+    capability: str
+    property_name: str
+    actual_value: object
 
 
 # Semantics divergence: fix-required has different enforcement in HOOK_REGISTRY vs
@@ -372,6 +400,8 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
         ),
         codex_status="not-applicable",
         worker_routable=True,
+        required_backend_property="git_metadata_writable",
+        required_recipe_ingredient="backend_supports_git_write",
     ),
     "github_api_write": SkillCapabilityDef(
         description=(
@@ -392,3 +422,42 @@ for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
             f"{_cap_def.codex_status!r} is not valid. "
             f"Must be one of {sorted(_VALID_CODEX_STATUSES)}."
         )
+
+# Boot-time validation: every `required_backend_property` must name a real
+# field on `BackendCapabilities`. Catches typos in the registry at import
+# time rather than at first dispatch. The recipe-level ingredient map is
+# derived from the same capability definitions in `_type_constants.py`.
+_BACKEND_CAPABILITIES_FIELDS = {f.name for f in fields(BackendCapabilities)}
+for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
+    if (_cap_def.required_backend_property is None) != (
+        _cap_def.required_recipe_ingredient is None
+    ):
+        raise RuntimeError(
+            f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}] must define both "
+            "required_backend_property and required_recipe_ingredient, or neither."
+        )
+    if (
+        _cap_def.required_backend_property is not None
+        and _cap_def.required_backend_property not in _BACKEND_CAPABILITIES_FIELDS
+    ):
+        raise RuntimeError(
+            f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}].required_backend_property="
+            f"{_cap_def.required_backend_property!r} is not a field on BackendCapabilities."
+        )
+
+
+def unsatisfied_backend_capabilities(
+    uses_capabilities: frozenset[str],
+    backend_capabilities: BackendCapabilities,
+) -> tuple[HardCapabilityMismatch, ...]:
+    """Return hard capability requirements not satisfied by a backend."""
+    mismatches: list[HardCapabilityMismatch] = []
+    for capability in sorted(uses_capabilities):
+        capability_def = SKILL_CAPABILITY_REGISTRY.get(capability)
+        if capability_def is None or capability_def.required_backend_property is None:
+            continue
+        property_name = capability_def.required_backend_property
+        actual_value = getattr(backend_capabilities, property_name, None)
+        if not actual_value:
+            mismatches.append(HardCapabilityMismatch(capability, property_name, actual_value))
+    return tuple(mismatches)

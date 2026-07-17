@@ -147,6 +147,7 @@ class TestDispatchRecordPersistsBackendName:
 
         record = _read_dispatch_record(tool_ctx)
         assert record["backend_name"] == "codex"
+        assert record["caller_backend_name"] == "claude-code"
 
 
 class TestDispatchRecordBackendNameDefaultsEmptyWhenOmitted:
@@ -207,10 +208,17 @@ class TestDispatchBackendOverrideInvalidNameRaises:
 class TestDispatchBackendOverridePreservedAcrossRetry:
     def test_dispatch_backend_override_preserved_across_retry(self):
         assert "backend_name" in _RETRY_IDENTITY_FIELDS
+        assert "caller_backend_name" in _RETRY_IDENTITY_FIELDS
 
-        record = DispatchRecord(name="test", backend_name="codex")
+        record = DispatchRecord(
+            name="test",
+            backend_name="codex",
+            caller_backend_name="claude-code",
+        )
         d = record.to_dict()
         assert d["backend_name"] == "codex"
+        assert d["caller_backend_name"] == "claude-code"
 
         restored = DispatchRecord.from_dict(d)
         assert restored.backend_name == "codex"
+        assert restored.caller_backend_name == "claude-code"

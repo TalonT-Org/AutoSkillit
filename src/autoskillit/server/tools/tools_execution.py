@@ -70,6 +70,10 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.tools._backend_compat import (
+    _check_backend_compat,
+    _is_backend_incompatible,  # noqa: F401  (re-exported for tests/arch/test_cross_registry_dispatch_sufficiency.py and tests/server/test_run_skill_backend_compat.py)
+)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
@@ -78,7 +82,9 @@ from autoskillit.server.tools._execution_helpers import (
     resolve_relative_path_args,
     validate_path_arg_anchoring,
 )
-from autoskillit.server.tools._preflight import _get_fix_required_hook_matchers
+from autoskillit.server.tools._preflight import (
+    _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
+)
 from autoskillit.server.tools._types import ToolFailureEnvelope
 
 logger = get_logger(__name__)
@@ -95,76 +101,6 @@ DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"
 def _is_absolute_path(path: str) -> bool:
     """Return True if path is an absolute filesystem path."""
     return Path(path).is_absolute()
-
-
-def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool:
-    """Return True if skill's backend_requirements exclude effective_backend."""
-    reqs = getattr(skill_info, "backend_requirements", None)
-    return bool(reqs and effective_backend not in reqs)
-
-
-def _check_backend_compat(
-    skill_command: str,
-    resolved_command: str,
-    effective_order_id: str,
-    target_name: str | None,
-    skill_info: object | None,
-    effective_backend_obj: CodingAgentBackend | None,
-    skill_resolver: object | None,
-) -> str | None:
-    """Fail-closed backend compatibility gate.
-
-    Returns crash JSON if the skill's backend_requirements exclude the effective
-    backend, or if the check cannot be conclusively performed (missing resolver
-    or backend). Returns None on pass.
-    """
-    if target_name is None:
-        return None
-    if skill_resolver is None:
-        return SkillResult.crashed(
-            exception=RuntimeError(
-                f"Cannot verify backend compatibility for skill {target_name!r}: "
-                "skill resolver is not available."
-            ),
-            skill_command=resolved_command,
-            order_id=effective_order_id,
-        ).to_json()
-    if effective_backend_obj is None:
-        return SkillResult.crashed(
-            exception=RuntimeError(
-                f"Cannot dispatch skill {target_name!r}: session backend is not configured."
-            ),
-            skill_command=resolved_command,
-            order_id=effective_order_id,
-        ).to_json()
-    if skill_info is None:
-        return None
-    effective_backend = effective_backend_obj.name
-    if _is_backend_incompatible(skill_info, effective_backend):
-        return SkillResult.crashed(
-            exception=RuntimeError(
-                f"Skill {target_name!r} requires backend "
-                f"{sorted(getattr(skill_info, 'backend_requirements', []))} but session "
-                f"backend is {effective_backend!r}."
-            ),
-            skill_command=resolved_command,
-            order_id=effective_order_id,
-        ).to_json()
-    fix_required_matchers = _get_fix_required_hook_matchers(
-        effective_backend_obj.capabilities.applicable_guards,
-    )
-    if fix_required_matchers:
-        return SkillResult.crashed(
-            exception=RuntimeError(
-                f"Cannot dispatch skill {target_name!r} on backend "
-                f"{effective_backend!r}: HOOK_REGISTRY contains fix-required "
-                f"entries [{', '.join(fix_required_matchers)}] that cannot be "
-                f"enforced by this backend."
-            ),
-            skill_command=resolved_command,
-            order_id=effective_order_id,
-        ).to_json()
-    return None
 
 
 def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:

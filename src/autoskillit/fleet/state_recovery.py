@@ -619,17 +619,74 @@ def find_dispatch_for_issue(
     return None
 
 
-def derive_orchestrator_resume_spec(state: CampaignState) -> NamedResume | NoResume:
+def _resume_backend_is_safe(*, session_id: str, source_backend: str, current_backend: str) -> bool:
+    if not current_backend or source_backend == current_backend:
+        return True
+    event = "resume_backend_mismatch" if source_backend else "resume_backend_provenance_missing"
+    logger.warning(
+        event,
+        session_id=session_id,
+        source_backend=source_backend,
+        current_backend=current_backend,
+    )
+    return False
+
+
+def derive_orchestrator_resume_spec(
+    state: CampaignState, *, current_backend: str = ""
+) -> NamedResume | NoResume:
     """Derive the correct ResumeSpec for the L3 orchestrator from campaign state.
 
     Priority:
     1. state.orchestrator_session_id (if non-empty) → NamedResume
     2. Latest dispatch's caller_session_id (fallback) → NamedResume
     3. No session ID available → NoResume
+
+    Backend-provenance guard:
+        When ``current_backend`` is provided, resume is allowed only when the
+        source DispatchRecord has the same ``caller_backend_name``. Missing or
+        mismatched provenance returns NoResume. This prevents a backend-specific
+        session ID from being passed to another backend's resume interface.
     """
     if state.orchestrator_session_id:
+        if current_backend:
+            if not state.dispatches:
+                # Truly legacy state with no dispatches — fail closed when backend
+                # provenance cannot be verified.
+                logger.warning(
+                    "resume_backend_provenance_missing",
+                    session_id=state.orchestrator_session_id,
+                    current_backend=current_backend,
+                )
+                return NoResume()
+            source_record = next(
+                (
+                    dispatch
+                    for dispatch in reversed(state.dispatches)
+                    if dispatch.caller_session_id == state.orchestrator_session_id
+                ),
+                None,
+            )
+            if source_record is not None:
+                source_backend = source_record.caller_backend_name
+                if not _resume_backend_is_safe(
+                    session_id=state.orchestrator_session_id,
+                    source_backend=source_backend,
+                    current_backend=current_backend,
+                ):
+                    return NoResume()
+            # source_record is None: campaign has dispatches but none match the
+            # orchestrator session id — accept the orchestrator session id as
+            # authoritative since it was set via update_orchestrator_session_id
+            # (not derived from a dispatch).
         return NamedResume(session_id=state.orchestrator_session_id)
     for d in reversed(state.dispatches):
         if d.caller_session_id:
+            if not _resume_backend_is_safe(
+                session_id=d.caller_session_id,
+                source_backend=d.caller_backend_name,
+                current_backend=current_backend,
+            ):
+                return NoResume()
             return NamedResume(session_id=d.caller_session_id)
     return NoResume()

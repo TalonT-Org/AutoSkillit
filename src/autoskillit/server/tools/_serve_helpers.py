@@ -13,7 +13,36 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from autoskillit.core import BackendCapabilities, CodingAgentBackend
     from autoskillit.pipeline.context import ToolContext
+
+
+def build_backend_capabilities_map(
+    effective_backend_map: dict[str, str] | None,
+    orchestrator_backend: CodingAgentBackend | None,
+) -> dict[str, BackendCapabilities]:
+    """Build a backend-name → BackendCapabilities map for the static recipe rule.
+
+    Uses the supplied orchestrator backend as the authority for its own name and
+    resolves every distinct per-step backend via get_backend(). Invalid names are
+    surfaced so admission cannot silently skip hard-capability diagnostics.
+    """
+    from autoskillit.server._misc import get_backend  # circular-break
+
+    out: dict[str, BackendCapabilities] = {}
+    if orchestrator_backend is not None:
+        orchestrator_name = orchestrator_backend.name
+        if isinstance(orchestrator_name, str) and orchestrator_name:
+            out[orchestrator_name] = orchestrator_backend.capabilities
+
+    for step_name, backend_name in (effective_backend_map or {}).items():
+        if not isinstance(backend_name, str) or not backend_name:
+            raise ValueError(
+                f"effective backend for step {step_name!r} must be a non-empty string"
+            )
+        if backend_name not in out:
+            out[backend_name] = get_backend(backend_name).capabilities
+    return out
 
 
 def _build_serve_override_stack(
@@ -80,6 +109,7 @@ def serve_recipe(
     backend_name: str | None = None,
     temp_dir: Path | str | None = None,
     temp_dir_relpath: str | None = None,
+    backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
 ) -> dict[str, Any]:
     """Unified recipe serve path. Only legal caller of load_and_validate in server/tools/."""
     ingredient_overrides = _build_serve_override_stack(
@@ -99,6 +129,8 @@ def serve_recipe(
         kwargs["resolved_defaults"] = resolved_defaults
     if effective_backend_map is not None:
         kwargs["effective_backend_map"] = effective_backend_map
+    if backend_capabilities_map is not None:
+        kwargs["backend_capabilities_map"] = backend_capabilities_map
     if suppressed is not None:
         kwargs["suppressed"] = suppressed
     if backend_name is not None:

@@ -19,6 +19,8 @@ class SessionCheckpoint:
     step_name: str = ""
     progress_pct: float = 0.0
     ts: str = ""
+    backend_name: str = ""
+    skill_name: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -26,6 +28,8 @@ class SessionCheckpoint:
             "step_name": self.step_name,
             "progress_pct": self.progress_pct,
             "ts": self.ts,
+            "backend_name": self.backend_name,
+            "skill_name": self.skill_name,
         }
 
     @classmethod
@@ -35,17 +39,26 @@ class SessionCheckpoint:
             step_name=str(data.get("step_name", "")),
             progress_pct=float(data.get("progress_pct", 0.0)),
             ts=str(data.get("ts", "")),
+            backend_name=str(data.get("backend_name", "")),
+            skill_name=str(data.get("skill_name", "")),
         )
 
     @classmethod
     def now(
-        cls, completed_items: list[str], step_name: str = "", progress_pct: float = 0.0
+        cls,
+        completed_items: list[str],
+        step_name: str = "",
+        progress_pct: float = 0.0,
+        backend_name: str = "",
+        skill_name: str = "",
     ) -> SessionCheckpoint:
         return cls(
             completed_items=completed_items,
             step_name=step_name,
             progress_pct=progress_pct,
             ts=datetime.now(tz=UTC).isoformat(),
+            backend_name=backend_name,
+            skill_name=skill_name,
         )
 
 

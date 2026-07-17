@@ -22,6 +22,7 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "name",
         "campaign_id",
         "caller_session_id",
+        "caller_backend_name",
         "attempt_history",
         "session_chain",
         "resume_count",
@@ -105,6 +106,7 @@ class DispatchRecord:
     dispatch_id: str = ""
     campaign_id: str = ""
     caller_session_id: str = ""
+    caller_backend_name: str = ""
     dispatched_session_id: str = ""
     session_chain: list[str] = field(default_factory=list)
     dispatched_session_log_dir: str = ""
@@ -140,6 +142,7 @@ class DispatchRecord:
             "dispatch_id": self.dispatch_id,
             "campaign_id": self.campaign_id,
             "caller_session_id": self.caller_session_id,
+            "caller_backend_name": self.caller_backend_name,
             "dispatched_session_id": self.dispatched_session_id,
             "session_chain": list(self.session_chain),
             "dispatched_session_log_dir": self.dispatched_session_log_dir,
@@ -173,12 +176,18 @@ class DispatchRecord:
     def from_dict(cls, d: dict[str, Any]) -> DispatchRecord:
         pid_raw = d.get("dispatched_pid")
         ticks_raw = d.get("dispatched_starttime_ticks")
+        caller_backend_name = d.get("caller_backend_name", "")
+        if not isinstance(caller_backend_name, str):
+            raise TypeError(
+                f"caller_backend_name must be str, got {type(caller_backend_name).__name__!r}"
+            )
         return cls(
             name=d["name"],
             status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
             dispatch_id=d.get("dispatch_id", ""),
             campaign_id=d.get("campaign_id", ""),
             caller_session_id=d.get("caller_session_id", ""),
+            caller_backend_name=caller_backend_name,
             dispatched_session_id=(
                 d.get("dispatched_session_id")
                 or d.get("l3_session_id")

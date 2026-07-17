@@ -185,7 +185,9 @@ def _launch_fleet_session(
         if resume_metadata is not None:
             state = read_state(state_path)
             current_resume_spec = (
-                derive_orchestrator_resume_spec(state) if state is not None else NoResume()
+                derive_orchestrator_resume_spec(state, current_backend=cfg.agent_backend.backend)
+                if state is not None
+                else NoResume()
             )
         else:
             current_resume_spec = NoResume()

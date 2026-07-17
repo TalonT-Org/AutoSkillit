@@ -538,3 +538,5 @@ class TestTrackerBridgeIntegration:
         assert record["reason"] == "fleet_l3_no_result_block"
         assert record.get("resume_checkpoint") is not None
         assert "plan" in record["resume_checkpoint"]["completed_items"]
+        assert record["resume_checkpoint"]["backend_name"] == tool_ctx.backend.name
+        assert record["resume_checkpoint"]["skill_name"] == "test-recipe"

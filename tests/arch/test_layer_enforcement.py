@@ -309,6 +309,159 @@ def test_backend_compat_precedes_dispatch() -> None:
     )
 
 
+def _backend_compat_dominance_violations(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    compat_calls: set[str],
+) -> list[int]:
+    """Return executor.run lines not dominated by a compat call in this scope."""
+    violations: list[int] = []
+
+    class _CurrentScopeCalls(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.calls: list[ast.Call] = []
+
+        def visit_Call(self, node: ast.Call) -> None:
+            self.calls.append(node)
+            self.generic_visit(node)
+
+        def visit_Lambda(self, node: ast.Lambda) -> None:
+            return
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            return
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            return
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            return
+
+    def scan_expression(node: ast.AST | None, compat_seen: bool) -> bool:
+        if node is None:
+            return compat_seen
+        visitor = _CurrentScopeCalls()
+        visitor.visit(node)
+        for call in visitor.calls:
+            call_func = call.func
+            is_executor_run = (
+                isinstance(call_func, ast.Attribute)
+                and call_func.attr == "run"
+                and isinstance(call_func.value, ast.Attribute)
+                and call_func.value.attr == "executor"
+            )
+            is_compat = isinstance(call_func, ast.Name) and call_func.id in compat_calls
+            if is_executor_run and not compat_seen:
+                violations.append(call.lineno)
+            if is_compat:
+                compat_seen = True
+        return compat_seen
+
+    def merge_paths(*states: bool | None) -> bool | None:
+        reachable = [state for state in states if state is not None]
+        return all(reachable) if reachable else None
+
+    def scan_block(statements: list[ast.stmt], compat_seen: bool) -> bool | None:
+        state: bool | None = compat_seen
+        for statement in statements:
+            if state is None:
+                break
+            state = scan_statement(statement, state)
+        return state
+
+    def scan_statement(statement: ast.stmt, compat_seen: bool) -> bool | None:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return compat_seen
+        if isinstance(statement, ast.If):
+            branch_state = scan_expression(statement.test, compat_seen)
+            body_state = scan_block(statement.body, branch_state)
+            else_state = (
+                scan_block(statement.orelse, branch_state) if statement.orelse else branch_state
+            )
+            return merge_paths(body_state, else_state)
+        if isinstance(statement, (ast.For, ast.AsyncFor)):
+            loop_state = scan_expression(statement.iter, compat_seen)
+            body_state = scan_block(statement.body, loop_state)
+            after_loop = merge_paths(loop_state, body_state)
+            if statement.orelse and after_loop is not None:
+                return scan_block(statement.orelse, after_loop)
+            return after_loop
+        if isinstance(statement, ast.While):
+            loop_state = scan_expression(statement.test, compat_seen)
+            body_state = scan_block(statement.body, loop_state)
+            after_loop = merge_paths(loop_state, body_state)
+            if statement.orelse and after_loop is not None:
+                return scan_block(statement.orelse, after_loop)
+            return after_loop
+        if isinstance(statement, (ast.With, ast.AsyncWith)):
+            body_state = compat_seen
+            for item in statement.items:
+                body_state = scan_expression(item.context_expr, body_state)
+                body_state = scan_expression(item.optional_vars, body_state)
+            return scan_block(statement.body, body_state)
+        if isinstance(statement, (ast.Try, ast.TryStar)):
+            body_state = scan_block(statement.body, compat_seen)
+            if statement.orelse and body_state is not None:
+                body_state = scan_block(statement.orelse, body_state)
+            handler_states = [
+                scan_block(handler.body, compat_seen) for handler in statement.handlers
+            ]
+            merged = merge_paths(body_state, *handler_states)
+            if statement.finalbody:
+                final_entry = merged if merged is not None else compat_seen
+                final_state = scan_block(statement.finalbody, final_entry)
+                return final_state if merged is not None else None
+            return merged
+        if isinstance(statement, ast.Match):
+            match_state = scan_expression(statement.subject, compat_seen)
+            case_states = [scan_block(case.body, match_state) for case in statement.cases]
+            return merge_paths(match_state, *case_states)
+        if isinstance(statement, (ast.Return, ast.Raise)):
+            value = statement.value if isinstance(statement, ast.Return) else statement.exc
+            scan_expression(value, compat_seen)
+            return None
+        if isinstance(statement, (ast.Break, ast.Continue)):
+            return None
+        return scan_expression(statement, compat_seen)
+
+    scan_block(func_node.body, False)
+    return violations
+
+
+def test_direct_executor_callers_check_backend_compat() -> None:
+    """Every .executor.run() call outside run_skill must be preceded by a
+    fail-closed backend compatibility call in the same enclosing function.
+
+    Mirrors the proven pattern from test_backend_compat_precedes_dispatch.
+    Discovers every server tool module so new direct executor callers cannot
+    silently escape the invariant.
+    """
+    target_files = sorted((SRC_ROOT / "server" / "tools").glob("*.py"))
+    compat_calls = {"_check_backend_compat", "_resolve_and_check_backend_compat"}
+
+    violations: list[str] = []
+
+    for py_file in target_files:
+        src = py_file.read_text()
+        tree = ast.parse(src)
+
+        for func_node in ast.walk(tree):
+            if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if py_file.name == "tools_execution.py" and func_node.name == "run_skill":
+                continue
+            for run_line in _backend_compat_dominance_violations(func_node, compat_calls):
+                violations.append(
+                    f"{_rel(py_file)}:{run_line} — .executor.run() in "
+                    f"{func_node.name!r} is not control-flow dominated by a "
+                    "fail-closed backend compatibility call in the same lexical scope"
+                )
+
+    assert not violations, (
+        "Direct executor callers must run a fail-closed backend compatibility check before "
+        "executor.run():\n" + "\n".join(f"  {v}" for v in violations)
+    )
+
+
 def test_fleet_tools_call_require_fleet() -> None:
     """Every tool in FLEET_TOOLS (except batch_cleanup_clones) must call
     _require_fleet() before any non-guard await/return in its function body."""

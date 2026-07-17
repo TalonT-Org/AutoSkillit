@@ -18,6 +18,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.tools._backend_compat import _resolve_and_check_backend_compat
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 if TYPE_CHECKING:
@@ -268,6 +269,10 @@ async def report_bug(
                 f"Error context:\n{error_context}\n\n"
                 f"Report output path: {report_path}"
             )
+
+            # Backend compatibility gate — must precede executor dispatch.
+            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
+                return _compat_err
 
             log_dir = config.linux_tracing.log_dir if config.linux_tracing is not None else ""
 

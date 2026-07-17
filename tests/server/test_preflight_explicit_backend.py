@@ -37,6 +37,20 @@ def _make_backend(**kwargs):
     return AgentBackendConfig(**kwargs)
 
 
+def _make_skill_resolver_with_no_caps() -> MagicMock:
+    """Return a MagicMock skill_resolver whose .resolve() returns a stub
+    with empty uses_capabilities — preserves existing tests' err is None behavior
+    because check_hard_capability_feasibility returns None for caps with no
+    required_backend_property.
+    """
+    resolver = MagicMock()
+    resolver.resolve.return_value = SimpleNamespace(
+        backend_requirements=frozenset(),
+        uses_capabilities=frozenset(),
+    )
+    return resolver
+
+
 class TestPreflightExplicitBackend:
     def test_explicit_override_to_missing_binary_excluded(self) -> None:
         """An explicit override pointing to a backend excludes that step from
@@ -64,6 +78,7 @@ class TestPreflightExplicitBackend:
                 config_providers=providers,
                 recipe_name="remediation",
                 config_backend=cfg,
+                skill_resolver=_make_skill_resolver_with_no_caps(),
             )
         assert err is None
 
@@ -93,6 +108,7 @@ class TestPreflightExplicitBackend:
                 config_providers=providers,
                 recipe_name="remediation",
                 config_backend=cfg,
+                skill_resolver=_make_skill_resolver_with_no_caps(),
             )
         assert err is None
 
@@ -121,5 +137,6 @@ class TestPreflightExplicitBackend:
                 config_providers=providers,
                 recipe_name="remediation",
                 config_backend=cfg,
+                skill_resolver=_make_skill_resolver_with_no_caps(),
             )
         assert err is None

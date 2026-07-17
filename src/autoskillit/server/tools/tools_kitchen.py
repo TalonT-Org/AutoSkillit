@@ -78,7 +78,10 @@ from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
     filter_steps_by_post_prune,
 )
-from autoskillit.server.tools._serve_helpers import serve_recipe
+from autoskillit.server.tools._serve_helpers import (
+    build_backend_capabilities_map,
+    serve_recipe,
+)
 from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
@@ -565,6 +568,9 @@ def get_recipe(name: str) -> str:
             skill_resolver=ctx.skill_resolver,
             config_backend=ctx.config.agent_backend,
         )
+        _backend_capabilities_map = build_backend_capabilities_map(
+            _effective_backend_map, ctx.backend
+        )
         _config_default = build_config_default_layer(_defaults)
         result = serve_recipe(
             ctx,
@@ -577,6 +583,7 @@ def get_recipe(name: str) -> str:
             resolved_defaults=_defaults,
             effective_backend_map=_effective_backend_map,
             backend_name=ctx.backend.name if ctx.backend else None,
+            backend_capabilities_map=_backend_capabilities_map,
         )
     except ProcessStaleError:
         logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
@@ -806,6 +813,9 @@ async def open_kitchen(
                 skill_resolver=tool_ctx.skill_resolver,
                 config_backend=tool_ctx.config.agent_backend,
             )
+            _backend_capabilities_map = build_backend_capabilities_map(
+                _effective_backend_map, tool_ctx.backend
+            )
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":
                 _om_value = (overrides or {}).get("output_mode")
@@ -831,6 +841,7 @@ async def open_kitchen(
                         suppressed=suppressed,
                         backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                         effective_backend_map=_effective_backend_map,
+                        backend_capabilities_map=_backend_capabilities_map,
                     )
                 except ProcessStaleError as exc:
                     logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
@@ -895,6 +906,7 @@ async def open_kitchen(
                         config_providers=tool_ctx.config.providers,
                         recipe_name=name,
                         config_backend=tool_ctx.config.agent_backend,
+                        skill_resolver=tool_ctx.skill_resolver,
                     )
                     if _preflight_err is not None:
                         tool_ctx.gate.disable()
@@ -944,6 +956,7 @@ async def open_kitchen(
                     suppressed=suppressed,
                     backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                     effective_backend_map=_effective_backend_map,
+                    backend_capabilities_map=_backend_capabilities_map,
                 )
             except ProcessStaleError as exc:
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
@@ -1026,6 +1039,7 @@ async def open_kitchen(
                     config_providers=tool_ctx.config.providers,
                     recipe_name=name,
                     config_backend=tool_ctx.config.agent_backend,
+                    skill_resolver=tool_ctx.skill_resolver,
                 )
                 if _preflight_err is not None:
                     tool_ctx.gate.disable()

@@ -881,8 +881,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501
-        "server/tools": 31,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
+        "server/tools": 32,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
+        # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
+        # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
         "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
     }
@@ -979,7 +981,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1472,
+        1540,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1010,10 +1012,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(+53 net lines)"
         "; _auto_init_pipeline_tracker tool_ctx param typed as ToolContext under "
         "TYPE_CHECKING instead of Any, matching _active_order_ids_for_kitchen's "
-        "established pattern (+1 net line)",
+        "established pattern (+1 net line)"
+        "; serve_recipe backend_capabilities_map threading at get_recipe + deferred-recall + "
+        "normal open_kitchen paths with safe _distinct_backends extraction from "
+        "_effective_backend_map and tool_ctx.backend.name (+28 net lines)",
     ),
     "tools_execution.py": (
-        1580,
+        1600,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "

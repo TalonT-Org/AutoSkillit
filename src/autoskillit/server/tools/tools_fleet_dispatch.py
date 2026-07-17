@@ -60,6 +60,7 @@ from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
     filter_steps_by_post_prune,
 )
+from autoskillit.server.tools._serve_helpers import build_backend_capabilities_map
 
 logger = get_logger(__name__)
 
@@ -373,6 +374,9 @@ async def dispatch_food_truck(
                     skill_resolver=tool_ctx.skill_resolver,
                     config_backend=tool_ctx.config.agent_backend,
                 )
+                _preflight_backend_capabilities_map = build_backend_capabilities_map(
+                    _effective_backend_map, _override_backend
+                )
                 _fleet_load_result = tool_ctx.recipes.load_and_validate(
                     recipe,
                     tool_ctx.project_dir,
@@ -381,6 +385,7 @@ async def dispatch_food_truck(
                     temp_dir=tool_ctx.temp_dir,
                     backend_name=_override_backend.name if _override_backend else None,
                     effective_backend_map=_effective_backend_map,
+                    backend_capabilities_map=_preflight_backend_capabilities_map,
                 )
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
@@ -441,6 +446,7 @@ async def dispatch_food_truck(
                 config_providers=tool_ctx.config.providers,
                 recipe_name=recipe,
                 config_backend=tool_ctx.config.agent_backend,
+                skill_resolver=tool_ctx.skill_resolver,
             )
             if _preflight_err is not None:
                 return _preflight_err

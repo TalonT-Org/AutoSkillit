@@ -13,7 +13,9 @@ from autoskillit.core import SessionCheckpoint
 from autoskillit.fleet.sidecar import IssueSidecarEntry
 
 
-def checkpoint_from_sidecar(entries: list[IssueSidecarEntry]) -> SessionCheckpoint:
+def checkpoint_from_sidecar(
+    entries: list[IssueSidecarEntry], *, backend_name: str, skill_name: str
+) -> SessionCheckpoint:
     completed = [e.issue_url for e in entries if e.status == "completed"]
     ts = entries[-1].ts if entries else ""
     return SessionCheckpoint(
@@ -21,10 +23,14 @@ def checkpoint_from_sidecar(entries: list[IssueSidecarEntry]) -> SessionCheckpoi
         step_name="fleet_dispatch",
         progress_pct=0.0,
         ts=ts,
+        backend_name=backend_name,
+        skill_name=skill_name,
     )
 
 
-def checkpoint_from_tracker(tracker_data: dict[str, Any] | None) -> SessionCheckpoint | None:
+def checkpoint_from_tracker(
+    tracker_data: dict[str, Any] | None, *, backend_name: str, skill_name: str
+) -> SessionCheckpoint | None:
     if tracker_data is None:
         return None
     steps = tracker_data.get("steps", {})
@@ -46,4 +52,6 @@ def checkpoint_from_tracker(tracker_data: dict[str, Any] | None) -> SessionCheck
         step_name=last_step_name,
         progress_pct=len(completed) / len(steps),
         ts=last_ts,
+        backend_name=backend_name,
+        skill_name=skill_name,
     )

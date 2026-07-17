@@ -5,7 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import LoadResult, SkillLister, YAMLError, get_logger, load_yaml
+from autoskillit.core import (
+    BackendCapabilities,
+    LoadResult,
+    SkillLister,
+    YAMLError,
+    get_logger,
+    load_yaml,
+)
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe._recipe_ingredients import RecipeListItem
@@ -79,6 +86,7 @@ def validate_from_path(
     backend_name: str | None = None,
     ingredient_overrides: dict[str, str] | None = None,
     effective_backend_map: dict[str, str] | None = None,
+    backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
 ) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
 
@@ -134,6 +142,7 @@ def validate_from_path(
             skill_resolver=_skill_resolver,
             backend_name=backend_name,
             effective_backend_map=effective_backend_map,
+            backend_capabilities_map=backend_capabilities_map,
         )
         _pre_prune_findings = run_semantic_rules(pre_prune_ctx)
         recipe, _skip_resolutions = _prune_skipped_steps(
@@ -151,6 +160,7 @@ def validate_from_path(
         skill_resolver=_skill_resolver,
         backend_name=backend_name,
         effective_backend_map=effective_backend_map,
+        backend_capabilities_map=backend_capabilities_map,
     )
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)

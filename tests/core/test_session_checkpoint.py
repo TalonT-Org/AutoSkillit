@@ -27,6 +27,8 @@ class TestSessionCheckpoint:
         assert cp.step_name == ""
         assert cp.progress_pct == 0.0
         assert cp.ts == ""
+        assert cp.backend_name == ""
+        assert cp.skill_name == ""
 
     def test_from_dict_missing_fields_uses_defaults(self) -> None:
         cp = SessionCheckpoint.from_dict({})
@@ -44,6 +46,23 @@ class TestSessionCheckpoint:
         cp = SessionCheckpoint(completed_items=["x"])
         with pytest.raises(AttributeError):
             cp.step_name = "mutated"  # type: ignore[misc]
+
+    def test_session_checkpoint_round_trips_backend_name(self) -> None:
+        """SessionCheckpoint must preserve backend_name through serialization."""
+        cp = SessionCheckpoint.now(
+            completed_items=["step_a"],
+            step_name="step_b",
+            backend_name="codex",
+            skill_name="report-bug",
+        )
+        assert cp.backend_name == "codex"
+        assert cp.skill_name == "report-bug"
+        d = cp.to_dict()
+        assert d["backend_name"] == "codex"
+        assert d["skill_name"] == "report-bug"
+        cp2 = SessionCheckpoint.from_dict(d)
+        assert cp2.backend_name == "codex"
+        assert cp2.skill_name == "report-bug"
 
 
 class TestComputeRemaining:

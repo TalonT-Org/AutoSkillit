@@ -33,7 +33,10 @@ from autoskillit.server.tools._auto_overrides import (
     _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._serve_helpers import serve_recipe
+from autoskillit.server.tools._serve_helpers import (
+    build_backend_capabilities_map,
+    serve_recipe,
+)
 from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
@@ -250,6 +253,9 @@ async def load_recipe(
                 skill_resolver=tool_ctx.skill_resolver,
                 config_backend=tool_ctx.config.agent_backend,
             )
+            _backend_capabilities_map = build_backend_capabilities_map(
+                _effective_backend_map, tool_ctx.backend
+            )
             result = serve_recipe(
                 tool_ctx,
                 name,
@@ -263,6 +269,7 @@ async def load_recipe(
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                 effective_backend_map=_effective_backend_map,
+                backend_capabilities_map=_backend_capabilities_map,
             )
             recipe_info = _recipe_info_pre
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
@@ -378,12 +385,16 @@ async def validate_recipe(script_path: str) -> str:
                 skill_resolver=tool_ctx.skill_resolver,
                 config_backend=tool_ctx.config.agent_backend,
             )
+            _validate_backend_capabilities_map = build_backend_capabilities_map(
+                _validate_effective_backend_map, tool_ctx.backend
+            )
             result = tool_ctx.recipes.validate_from_path(
                 Path(script_path),
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                 ingredient_overrides=_cap_overrides,
                 effective_backend_map=_validate_effective_backend_map,
+                backend_capabilities_map=_validate_backend_capabilities_map,
             )
             return json.dumps(result)
     except Exception as exc:

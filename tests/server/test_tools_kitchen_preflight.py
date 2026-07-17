@@ -13,6 +13,7 @@ itself and its integration into open_kitchen and dispatch_food_truck.
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -59,13 +60,14 @@ def _make_dormancy_hook() -> Any:
     )
 
 
-def _make_codex_backend() -> MagicMock:
+def _make_codex_backend(git_metadata_writable: bool = True) -> MagicMock:
     """Create a mock codex backend with empty applicable_guards."""
     from autoskillit.core import BackendCapabilities
 
     caps = BackendCapabilities(
         applicable_guards=frozenset(),
         anthropic_provider_capable=False,
+        git_metadata_writable=git_metadata_writable,
     )
     backend = MagicMock()
     backend.name = "codex"
@@ -85,6 +87,16 @@ def _make_claude_backend() -> MagicMock:
     backend.name = AGENT_BACKEND_CLAUDE_CODE
     backend.capabilities = caps
     return backend
+
+
+def _make_skill_resolver_with_git_write() -> MagicMock:
+    """Resolver whose .resolve() returns a stub declaring git_metadata_write."""
+    resolver = MagicMock()
+    resolver.resolve.return_value = SimpleNamespace(
+        uses_capabilities=frozenset({"git_metadata_write"}),
+        backend_requirements=frozenset(),
+    )
+    return resolver
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +123,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None, f"Expected None, got: {result}"
 
@@ -129,8 +142,113 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None, f"Expected None for compatible backend, got: {result}"
+
+    def test_dispatch_feasibility_rejects_pinned_step_to_incapable_backend(self) -> None:
+        """An explicit pin to a backend lacking a required BackendCapabilities
+        property is rejected at admission time (REQ-013/014/017/018/019)."""
+        from autoskillit.config._config_dataclasses import AgentBackendConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        backend = _make_codex_backend(git_metadata_writable=False)
+        active_steps: dict[str, Any] = {
+            "resolve_review": _make_recipe_step(
+                "resolve_review", tool="run_skill", skill_name="resolve-review"
+            ),
+        }
+        config_backend = AgentBackendConfig(
+            recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
+        )
+        # get_backend("codex") is patched to the same instance so the pinned-
+        # backend lookup inside _check_dispatch_feasibility deterministically
+        # observes git_metadata_writable=False, independent of whatever the
+        # real production Codex backend's default happens to be.
+        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+            result = _check_dispatch_feasibility(
+                post_prune_step_names=["resolve_review"],
+                active_recipe_steps=active_steps,
+                backend=backend,
+                config_providers=_DEFAULT_PROVIDERS,
+                recipe_name="test-recipe",
+                config_backend=config_backend,
+                skill_resolver=_make_skill_resolver_with_git_write(),
+            )
+        assert result is not None
+        parsed = json.loads(result)
+        assert "git_metadata_writable" in parsed.get("error", "")
+        assert parsed.get("override_source") == "explicit_config"
+
+    def test_dispatch_feasibility_fails_closed_when_skill_resolver_missing_for_pinned_step(
+        self,
+    ) -> None:
+        """An explicit pin that resolves to a valid backend, but with no
+        skill_resolver available, fails closed (REQ-018)."""
+        from autoskillit.config._config_dataclasses import AgentBackendConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        backend = _make_codex_backend()
+        active_steps: dict[str, Any] = {
+            "resolve_review": _make_recipe_step(
+                "resolve_review", tool="run_skill", skill_name="resolve-review"
+            ),
+        }
+        config_backend = AgentBackendConfig(
+            recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
+        )
+        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+            result = _check_dispatch_feasibility(
+                post_prune_step_names=["resolve_review"],
+                active_recipe_steps=active_steps,
+                backend=backend,
+                config_providers=_DEFAULT_PROVIDERS,
+                recipe_name="test-recipe",
+                config_backend=config_backend,
+                skill_resolver=None,
+            )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed.get("error") == "skill_resolver_unavailable_for_pinned_step"
+        assert parsed.get("success") is False
+        assert parsed.get("stage") == "dispatch_feasibility_preflight"
+        assert parsed.get("step") == "resolve_review"
+
+    def test_dispatch_feasibility_fails_closed_when_pinned_skill_is_unresolved(self) -> None:
+        """A valid explicit backend pin cannot turn an unknown skill into an
+        empty capability set.
+        """
+        from autoskillit.config._config_dataclasses import AgentBackendConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        backend = _make_codex_backend()
+        active_steps: dict[str, Any] = {
+            "unknown_step": _make_recipe_step(
+                "unknown_step", tool="run_skill", skill_name="missing-skill"
+            ),
+        }
+        config_backend = AgentBackendConfig(
+            recipe_overrides={"test-recipe": {"unknown_step": "codex"}},
+        )
+        resolver = MagicMock()
+        resolver.resolve.return_value = None
+
+        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+            result = _check_dispatch_feasibility(
+                post_prune_step_names=["unknown_step"],
+                active_recipe_steps=active_steps,
+                backend=backend,
+                config_providers=_DEFAULT_PROVIDERS,
+                recipe_name="test-recipe",
+                config_backend=config_backend,
+                skill_resolver=resolver,
+            )
+
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed.get("error") == "skill_not_found_for_pinned_step"
+        assert parsed.get("skill") == "missing-skill"
+        assert parsed.get("step") == "unknown_step"
 
     def test_incompatible_backend_fails(self) -> None:
         """Backend with empty applicable_guards returns error (1b)."""
@@ -147,6 +265,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is not None
         parsed = json.loads(result)
@@ -165,6 +284,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps={},
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None
 
@@ -182,6 +302,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None
 
@@ -200,6 +321,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is not None
         parsed = json.loads(result)
@@ -230,6 +352,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=providers_config,
+                skill_resolver=None,
             )
         assert result is None, f"Provider override should exclude step from check, got: {result}"
 
@@ -248,6 +371,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is None
 
@@ -266,6 +390,7 @@ class TestCheckDispatchFeasibilityUnit:
                 active_recipe_steps=active_steps,
                 backend=backend,
                 config_providers=_DEFAULT_PROVIDERS,
+                skill_resolver=None,
             )
         assert result is not None
         parsed = json.loads(result)
@@ -288,6 +413,7 @@ class TestCheckDispatchFeasibilityUnit:
             active_recipe_steps=active_steps,
             backend=backend,
             config_providers=_DEFAULT_PROVIDERS,
+            skill_resolver=None,
         )
 
         has_unenforced = bool(

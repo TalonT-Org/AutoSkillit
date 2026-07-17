@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
+from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_github import (
     _format_diagnostics_section,
     _read_session_diagnostics,
@@ -17,6 +18,14 @@ from autoskillit.server.tools.tools_github import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+@pytest.fixture
+def tool_ctx_kitchen_open(tool_ctx):
+    """Open the gate while retaining production backend compatibility metadata."""
+    tool_ctx.gate = DefaultGateState(enabled=True)
+    return tool_ctx
+
 
 # ---------------------------------------------------------------------------
 # _read_session_diagnostics unit tests

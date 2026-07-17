@@ -363,6 +363,7 @@ async def test_config_layer_keys_match_server_authoritative_ingredients(tmp_path
 @pytest.mark.anyio
 async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch):
     """T7: open_kitchen smoke-test renders the config-resolved base_branch value."""
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import pkg_root
     from autoskillit.recipe.repository import DefaultRecipeRepository
@@ -379,6 +380,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     mock_ctx.project_dir = project_dir
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.quota_refresh_task = None
+    mock_ctx.backend = None
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
 
@@ -524,6 +526,7 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
 @pytest.mark.anyio
 async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
     """Full open_kitchen path: config value wins over caller override in rendered output."""
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import pkg_root
     from autoskillit.recipe.repository import DefaultRecipeRepository
@@ -545,6 +548,7 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
     mock_ctx.project_dir = project_dir
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.quota_refresh_task = None
+    mock_ctx.backend = None
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
 

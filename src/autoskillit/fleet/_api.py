@@ -405,6 +405,7 @@ async def _run_dispatch(
         )
 
     _effective_backend = dispatch_backend if dispatch_backend is not None else tool_ctx.backend
+    _caller_backend_name = tool_ctx.backend.name if tool_ctx.backend is not None else ""
 
     try:
         _capability_overrides = provider_capability_overrides or _build_capability_overrides(
@@ -542,7 +543,13 @@ async def _run_dispatch(
                     campaign_id,
                     effective_name,
                     "",
-                    [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+                    [
+                        DispatchRecord(
+                            name=effective_name,
+                            caller_session_id=caller_session_id,
+                            caller_backend_name=_caller_backend_name,
+                        ),
+                    ],
                     recipe_snapshot,
                 )
             else:
@@ -587,7 +594,13 @@ async def _run_dispatch(
                 campaign_id,
                 effective_name,
                 "",
-                [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+                [
+                    DispatchRecord(
+                        name=effective_name,
+                        caller_session_id=caller_session_id,
+                        caller_backend_name=_caller_backend_name,
+                    ),
+                ],
                 recipe_snapshot,
             )
     else:
@@ -596,7 +609,13 @@ async def _run_dispatch(
             campaign_id,
             effective_name,
             "",
-            [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+            [
+                DispatchRecord(
+                    name=effective_name,
+                    caller_session_id=caller_session_id,
+                    caller_backend_name=_caller_backend_name,
+                ),
+            ],
             recipe_snapshot,
         )
 
@@ -934,7 +953,11 @@ async def _run_dispatch(
 
         sidecar_entries = read_sidecar_from_path(sidecar_file).entries
         if sidecar_entries:
-            dispatch_checkpoint = checkpoint_from_sidecar(sidecar_entries)
+            dispatch_checkpoint = checkpoint_from_sidecar(
+                sidecar_entries,
+                backend_name=_effective_backend.name if _effective_backend else "",
+                skill_name=recipe,
+            )
 
     tracker_checkpoint: SessionCheckpoint | None = None
     _tracker_path = (
@@ -949,7 +972,11 @@ async def _run_dispatch(
                 checkpoint_from_tracker,  # noqa: PLC0415
             )
 
-            tracker_checkpoint = checkpoint_from_tracker(_tracker_data)
+            tracker_checkpoint = checkpoint_from_tracker(
+                _tracker_data,
+                backend_name=_effective_backend.name if _effective_backend else "",
+                skill_name=recipe,
+            )
         except (OSError, ValueError, TypeError, AttributeError):
             logger.debug("tracker read failed for %s", dispatch_id, exc_info=True)
 
@@ -1064,6 +1091,7 @@ async def _run_dispatch(
         dispatch_id=dispatch_id,
         campaign_id=campaign_id,
         caller_session_id=caller_session_id,
+        caller_backend_name=_caller_backend_name,
         dispatched_session_id=_dispatched_session_id[0]
         if _dispatched_session_id
         else skill_result.session_id,

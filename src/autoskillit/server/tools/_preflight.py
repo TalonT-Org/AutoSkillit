@@ -6,11 +6,13 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from autoskillit.core import CodingAgentBackend, unsatisfied_backend_capabilities
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
 
 if TYPE_CHECKING:
     from autoskillit.config._config_dataclasses import AgentBackendConfig
+    from autoskillit.core import SkillResolver
 
 
 def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[str]:
@@ -24,6 +26,27 @@ def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[s
             or not frozenset(Path(s).stem for s in h.scripts).issubset(applicable_guards)
         )
     ]
+
+
+def check_hard_capability_feasibility(
+    uses_capabilities: frozenset[str],
+    backend: CodingAgentBackend,
+) -> str | None:
+    """Return diagnostic string if any capability's required_backend_property is unsatisfied.
+
+    Delegates registry lookup and BackendCapabilities evaluation to the shared
+    core predicate, then formats the first mismatch for server callers. Returns
+    None when every capability is satisfied.
+    """
+    mismatches = unsatisfied_backend_capabilities(uses_capabilities, backend.capabilities)
+    if mismatches:
+        mismatch = mismatches[0]
+        return (
+            f"Capability '{mismatch.capability}' requires backend property "
+            f"'{mismatch.property_name}' to be True, but backend '{backend.name}' has "
+            f"{mismatch.property_name}={mismatch.actual_value!r}."
+        )
+    return None
 
 
 def filter_steps_by_post_prune(
@@ -43,6 +66,7 @@ def _check_dispatch_feasibility(
     recipe_name: str = "",
     *,
     config_backend: AgentBackendConfig | None = None,
+    skill_resolver: SkillResolver | None,
 ) -> str | None:
     """Fail-closed dispatch-feasibility preflight.
 
@@ -50,6 +74,10 @@ def _check_dispatch_feasibility(
     recipe/backend combinations where HOOK_REGISTRY has fix-required entries
     that the current backend cannot enforce. Returns a JSON error envelope
     string on failure, None on pass.
+
+    `skill_resolver` is REQUIRED for explicit-pin hard-capability feasibility
+    checks. When omitted, the function fails closed for any pinned step: the
+    dispatch is refused as infeasible rather than silently bypassing the gate.
     """
     if backend is None:
         return None
@@ -76,19 +104,83 @@ def _check_dispatch_feasibility(
         # routing for preflight too (mirrors the dispatch path):
         # - pinned to claude-code: feasible regardless of orchestrator backend
         #   (effective backend enforces all fix-required hooks).
-        # - pinned to a non-claude backend: only feasible if its required
-        #   binary is on PATH; otherwise the step cannot run, so exclude it
-        #   from the feasibility check (preflight won't fire on its account).
+        # - pinned to a non-claude backend: subject to hard-capability
+        #   feasibility check — if the pinned backend lacks a required
+        #   BackendCapabilities property (e.g. git_metadata_writable=False
+        #   for git_metadata_write skills), dispatch is infeasible and the
+        #   gate refuses the recipe.
         if config_backend is not None:
             _explicit = _resolve_backend_override(step_name, recipe_name, config_backend)
             if _explicit is not None:
                 try:
-                    get_backend(_explicit)
+                    _pinned_backend = get_backend(_explicit)
                 except (ValueError, KeyError):
                     continue
-                # Any explicitly-overridden step is excluded from
-                # orchestrator-level feasibility — the step runs on the
-                # pinned backend, not the orchestrator's.
+                # Hard-capability feasibility: when an explicit pin targets a
+                # backend that lacks a BackendCapabilities property required
+                # by the step's skill (REQ-RES-001 suppression is structural,
+                # not opaque — capability feasibility still applies), refuse
+                # dispatch.
+                if skill_resolver is None:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "kitchen": "preflight_failed",
+                            "user_visible_message": (
+                                f"Cannot verify capability feasibility for explicitly-pinned "
+                                f"step '{step_name}': skill resolver is not available."
+                            ),
+                            "error": "skill_resolver_unavailable_for_pinned_step",
+                            "stage": "dispatch_feasibility_preflight",
+                            "step": step_name,
+                        }
+                    )
+                _step_obj = active_recipe_steps.get(step_name)
+                _skill_name = (
+                    getattr(_step_obj, "skill_name", None) if _step_obj is not None else None
+                )
+                if _skill_name:
+                    _skill_info = skill_resolver.resolve(_skill_name)
+                    if _skill_info is None:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "kitchen": "preflight_failed",
+                                "user_visible_message": (
+                                    f"Cannot verify capability feasibility for explicitly-pinned "
+                                    f"step '{step_name}': skill '{_skill_name}' could not be "
+                                    "resolved."
+                                ),
+                                "error": "skill_not_found_for_pinned_step",
+                                "stage": "dispatch_feasibility_preflight",
+                                "step": step_name,
+                                "skill": _skill_name,
+                            }
+                        )
+                    _skill_caps: frozenset[str] = getattr(
+                        _skill_info, "uses_capabilities", frozenset()
+                    )
+                    if _skill_caps:
+                        hard_cap_err = check_hard_capability_feasibility(
+                            _skill_caps, _pinned_backend
+                        )
+                        if hard_cap_err:
+                            return json.dumps(
+                                {
+                                    "success": False,
+                                    "kitchen": "preflight_failed",
+                                    "user_visible_message": (
+                                        f"Cannot dispatch step '{step_name}': explicitly "
+                                        f"pinned to backend '{_explicit}' which lacks required "
+                                        f"capability. {hard_cap_err}"
+                                    ),
+                                    "error": hard_cap_err,
+                                    "stage": "dispatch_feasibility_preflight",
+                                    "backend": _explicit,
+                                    "step": step_name,
+                                    "override_source": "explicit_config",
+                                }
+                            )
                 continue
 
         step = active_recipe_steps.get(step_name)

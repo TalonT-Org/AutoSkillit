@@ -111,3 +111,91 @@ def test_queue_ejected_fix_returns_fetch_error_on_network_failure():
 
     assert result["status"] == "fetch_error", f"Expected fetch_error, got: {result}"
     assert "Could not resolve host" in result.get("stderr", "")
+
+
+def test_queue_ejected_fix_returns_conflicts_with_stderr():
+    """Rebase failure must preserve stderr for downstream diagnostics."""
+    from autoskillit.recipe._cmd_rpc_merge import queue_ejected_fix
+
+    responses = [
+        _mock_result(0, "origin\n", ""),  # _detect_remote
+        _mock_result(0, "", ""),  # fetch
+        _mock_result(1, "", "CONFLICT (content): ..."),  # rebase (fails)
+        _mock_result(0, "", ""),  # rebase --abort
+    ]
+    fake = _fake_run_git_factory(responses=responses, call_log=[])
+
+    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+        result = queue_ejected_fix(work_dir="/tmp/test", base_branch="main")
+
+    assert result["status"] == "conflicts"
+    assert "stderr" in result
+    assert "CONFLICT" in result["stderr"]
+
+
+def test_queue_ejected_fix_distinguishes_dirty_tree():
+    """Dirty-tree rebase rejection must still surface stderr for diagnostics."""
+    from autoskillit.recipe._cmd_rpc_merge import queue_ejected_fix
+
+    responses = [
+        _mock_result(0, "origin\n", ""),
+        _mock_result(0, "", ""),
+        _mock_result(1, "", "cannot rebase: you have unstaged changes"),
+        _mock_result(0, "", ""),
+    ]
+    fake = _fake_run_git_factory(responses=responses, call_log=[])
+
+    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+        result = queue_ejected_fix(work_dir="/tmp/test", base_branch="main")
+
+    assert result["status"] == "conflicts"
+    assert "stderr" in result
+    assert "unstaged changes" in result["stderr"]
+
+
+def test_attempt_cheap_rebase_returns_conflicts_with_stderr():
+    """attempt_cheap_rebase must preserve stderr on rebase failure path."""
+    from autoskillit.recipe._cmd_rpc_merge import attempt_cheap_rebase
+
+    responses = [
+        _mock_result(0, "origin\n", ""),  # _detect_remote
+        _mock_result(0, "", ""),  # fetch ejected_pr_branch (check=True)
+        _mock_result(0, "", ""),  # fetch base_branch
+        _mock_result(0, "", ""),  # checkout ejected_pr_branch (check=True)
+        _mock_result(1, "", "CONFLICT (content): Merge conflict in x.py"),  # rebase fails
+        _mock_result(0, "", ""),  # rebase --abort
+    ]
+    fake = _fake_run_git_factory(responses=responses, call_log=[])
+
+    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+        result = attempt_cheap_rebase(
+            work_dir="/tmp/test", ejected_pr_branch="pr-branch", base_branch="main"
+        )
+
+    assert result["status"] == "conflicts"
+    assert "stderr" in result
+    assert "CONFLICT" in result["stderr"]
+
+
+def test_proactive_rebase_next_pr_returns_conflicts_with_stderr():
+    """proactive_rebase_next_pr must preserve stderr on rebase failure path."""
+    from autoskillit.recipe._cmd_rpc_merge import proactive_rebase_next_pr
+
+    responses = [
+        _mock_result(0, "origin\n", ""),  # _detect_remote
+        _mock_result(0, "", ""),  # fetch next_pr_branch (check=True)
+        _mock_result(0, "", ""),  # fetch base_branch
+        _mock_result(0, "", ""),  # checkout -B (check=True)
+        _mock_result(1, "", "CONFLICT (content): Merge conflict in y.py"),  # rebase fails
+        _mock_result(0, "", ""),  # rebase --abort
+    ]
+    fake = _fake_run_git_factory(responses=responses, call_log=[])
+
+    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+        result = proactive_rebase_next_pr(
+            work_dir="/tmp/test", next_pr_branch="next-pr", base_branch="main"
+        )
+
+    assert result["status"] == "conflicts"
+    assert "stderr" in result
+    assert "CONFLICT" in result["stderr"]

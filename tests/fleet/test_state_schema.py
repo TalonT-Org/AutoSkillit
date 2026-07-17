@@ -369,6 +369,7 @@ class TestDispatchRecordToDict:
             "dispatch_id",
             "campaign_id",
             "caller_session_id",
+            "caller_backend_name",
             "dispatched_session_id",
             "session_chain",
             "dispatched_session_log_dir",

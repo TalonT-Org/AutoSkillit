@@ -285,6 +285,7 @@ from .types import FleetSessionEnv as FleetSessionEnv
 from .types import GateState as GateState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
+from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
@@ -391,4 +392,5 @@ from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
+from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import validate_label_transition as validate_label_transition

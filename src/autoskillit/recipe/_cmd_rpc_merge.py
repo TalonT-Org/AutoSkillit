@@ -31,7 +31,7 @@ def queue_ejected_fix(
     if rebase.returncode == 0:
         return {"status": "clean"}
     run_git(["rebase", "--abort"], cwd=work_dir)
-    return {"status": "conflicts"}
+    return {"status": "conflicts", "stderr": rebase.stderr}
 
 
 def direct_merge_conflict_fix(
@@ -100,7 +100,7 @@ def attempt_cheap_rebase(
     if rebase.returncode == 0:
         return {"status": "clean"}
     run_git(["rebase", "--abort"], cwd=work_dir)
-    return {"status": "conflicts"}
+    return {"status": "conflicts", "stderr": rebase.stderr}
 
 
 def wait_for_review_pr_mergeability(
@@ -234,4 +234,4 @@ def proactive_rebase_next_pr(
     if rebase.returncode == 0:
         return {"status": "clean"}
     run_git(["rebase", "--abort"], cwd=work_dir)
-    return {"status": "conflicts"}
+    return {"status": "conflicts", "stderr": rebase.stderr}

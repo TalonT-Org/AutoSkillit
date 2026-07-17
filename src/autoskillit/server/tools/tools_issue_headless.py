@@ -15,6 +15,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.tools._backend_compat import _resolve_and_check_backend_compat
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 if TYPE_CHECKING:
@@ -314,6 +315,10 @@ async def prepare_issue(
             if tool_ctx.write_expected_resolver:
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
+            # Backend compatibility gate — must precede executor.run().
+            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
+                return _compat_err
+
             result = await tool_ctx.executor.run(
                 skill_command,
                 str(tool_ctx.project_dir),
@@ -431,6 +436,10 @@ async def enrich_issues(
             write_spec: WriteBehaviorSpec | None = None
             if tool_ctx.write_expected_resolver:
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
+
+            # Backend compatibility gate — must precede executor.run().
+            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
+                return _compat_err
 
             result = await tool_ctx.executor.run(
                 skill_command,

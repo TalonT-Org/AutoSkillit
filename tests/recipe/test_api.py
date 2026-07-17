@@ -477,6 +477,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         defer_unresolved=False,
         backend_name=None,
         effective_backend_map=None,
+        backend_origin_map=None,
     ):
         captured["recipe_info"] = recipe_info
         captured["backend_capabilities_map"] = locals().get("backend_capabilities_map")
@@ -495,6 +496,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             backend_name=backend_name,
             effective_backend_map=effective_backend_map,
             backend_capabilities_map=backend_capabilities_map,
+            backend_origin_map=backend_origin_map,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)

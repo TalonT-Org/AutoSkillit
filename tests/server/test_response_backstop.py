@@ -311,7 +311,7 @@ def test_exemption_overage_fails_closed_and_does_not_spill(tmp_path):
     )
 
     assert original not in shaped
-    assert "internal_invariant_failed" in shaped
+    assert "exemption_ceiling_exceeded" in shaped
     assert list(tmp_path.iterdir()) == []
 
 

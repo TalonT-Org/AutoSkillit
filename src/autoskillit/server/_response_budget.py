@@ -56,6 +56,7 @@ RESPONSE_BUDGET_FAILURE_CAUSES = frozenset(
         "projection_nonconvergent",
         "irreducible_shape",
         "schema_nonconforming",
+        "exemption_ceiling_exceeded",
         "internal_invariant_failed",
     }
 )
@@ -385,7 +386,7 @@ def enforce_response_budget(
             return result
         return bounded_response_budget_failure(
             result,
-            cause="internal_invariant_failed",
+            cause="exemption_ceiling_exceeded",
             tool_name=tool_name,
             max_bytes=config.response_max_bytes,
             original_utf8_bytes=original_size,

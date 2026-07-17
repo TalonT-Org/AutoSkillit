@@ -251,6 +251,70 @@ def test_nonserializable_result_fails_closed_and_emits_exact_failure(tmp_path):
     assert event["cause"] == "serialization_failed"
 
 
+def test_deeply_nested_object_serialization_fails_closed(tmp_path):
+    payload = {"leaf": True}
+    for _ in range(4000):
+        payload = {"nested": payload}
+
+    shaped = enforce_response_budget(
+        payload,
+        tool_name="deep_tool",
+        artifact_dir=tmp_path,
+        config=_config(),
+    )
+
+    assert shaped["success"] is False
+    assert "serialization_failed" in shaped["error"]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_deeply_nested_json_string_degrades_to_plain_spill_with_artifact(tmp_path):
+    depth = 4000
+    original = "[" * depth + '"x"' + "]" * depth
+
+    shaped = enforce_response_budget(
+        original,
+        tool_name="run_skill",
+        artifact_dir=tmp_path,
+        config=_config(),
+    )
+
+    assert isinstance(shaped, str)
+    assert len(shaped.encode()) <= _config().response_max_bytes
+    metadata = json.loads(shaped)[RESPONSE_SPILL_METADATA_KEY]
+    assert metadata["reason"] == "plain_text"
+    assert open(metadata["artifact_path"], encoding="utf-8").read() == original
+
+
+def test_projection_recursion_failure_fails_closed_with_artifact_path(tmp_path, monkeypatch):
+    from autoskillit.server import _response_budget
+
+    def _stack_exhausted(*_args, **_kwargs):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(_response_budget, "_project_json_object", _stack_exhausted)
+    original = json.dumps({"success": True, "result": "x" * 10_000})
+
+    shaped = enforce_response_budget(
+        original,
+        tool_name="run_skill",
+        artifact_dir=tmp_path,
+        config=_config(),
+    )
+
+    data = json.loads(shaped)
+    assert data["success"] is False
+    assert data["error"] == "response_budget_irreducible_shape"
+    assert open(data["artifact_path"], encoding="utf-8").read() == original
+
+
+def test_nonpositive_response_max_bytes_is_rejected():
+    with pytest.raises(ValueError, match="response_max_bytes"):
+        OutputBudgetConfig(response_max_bytes=0)
+    with pytest.raises(ValueError, match="response_max_bytes"):
+        OutputBudgetConfig(response_max_bytes=-10)
+
+
 def test_spill_and_failure_telemetry_is_exact_and_path_free(tmp_path, monkeypatch):
     from autoskillit.server import _response_budget
 

@@ -325,7 +325,7 @@ def _plain_spill_envelope(
     max_bytes: int,
     inline_chars: int,
 ) -> str | None:
-    preview_limit = min(inline_chars, max_bytes // 3)
+    preview_limit = max(0, min(inline_chars, max_bytes // 3))
     while True:
         preview, omitted_chars = _preview_string(original, preview_limit)
         envelope: dict[str, Any] = {
@@ -361,7 +361,7 @@ def enforce_response_budget(
     """
     try:
         original = _serialized(result)
-    except (TypeError, ValueError, OverflowError):
+    except (TypeError, ValueError, OverflowError, RecursionError):
         return bounded_response_budget_failure(
             result,
             cause="serialization_failed",
@@ -425,7 +425,7 @@ def enforce_response_budget(
     if isinstance(result, str):
         try:
             parsed = json.loads(result)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, RecursionError):
             parsed = None
     else:
         parsed = result
@@ -460,6 +460,17 @@ def enforce_response_budget(
             original_utf8_bytes=original_size,
             artifact_path=published,
         )
+    except RecursionError:
+        # Projection recurses per nesting level; the artifact is already
+        # persisted, so the recovery pointer must survive the stack failure.
+        rendered = bounded_response_budget_failure(
+            "",
+            cause="irreducible_shape",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
+            artifact_path=published,
+        )
     if rendered is None:
         rendered = bounded_response_budget_failure(
             "",
@@ -480,7 +491,7 @@ def enforce_response_budget(
         return rendered
     try:
         return json.loads(rendered)
-    except ValueError:
+    except (ValueError, RecursionError):
         return {"success": False, "error": "response_budget_projection_invalid"}
 
 

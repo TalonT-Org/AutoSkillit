@@ -358,6 +358,10 @@ class OutputBudgetConfig:
     small_file_max_bytes: int = 5000
     shell_max_inline_bytes: int = 12_000
 
+    def __post_init__(self) -> None:
+        if self.response_max_bytes <= 0:
+            raise ValueError("response_max_bytes must be positive")
+
 
 @dataclass
 class BranchingConfig:

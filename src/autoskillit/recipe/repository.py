@@ -98,6 +98,7 @@ class DefaultRecipeRepository:
         backend_name: str | None = None,
         effective_backend_map: dict[str, str] | None = None,
         backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
+        backend_origin_map: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         project_dir = Path(project_dir)
         result = self._get_list(project_dir)
@@ -118,6 +119,7 @@ class DefaultRecipeRepository:
                 backend_name=backend_name,
                 effective_backend_map=effective_backend_map,
                 backend_capabilities_map=backend_capabilities_map,
+                backend_origin_map=backend_origin_map,
             ),
         )
 

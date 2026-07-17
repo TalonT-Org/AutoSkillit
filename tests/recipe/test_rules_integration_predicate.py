@@ -492,3 +492,17 @@ def test_ref_push_counter_reset_on_no_go_path(recipe_name: str) -> None:
         f"{recipe_name}: reset_ref_push_counter must dominate "
         f"{pre_remediation_guard} from {non_exit_target}"
     )
+
+    # Structural immunity confirmation: the GO-path entry to check_ref_push_loop
+    # (audit_impl's GO branch -> commit_guard -> main_repo_guard -> merge) must
+    # not re-enter the pre-remediation cycle. Barrier at audit_impl so the
+    # check stays scoped to this audit decision's own GO/NO-GO branches rather
+    # than a subsequent plan part's independent audit cycle (confirmed the
+    # only fork point on every path into check_audit_remediation_loop).
+    go_path_entry = "commit_guard"
+    reachable_without_new_audit = _bfs_capped(graph, {go_path_entry}, {"audit_impl"})
+    assert pre_remediation_guard not in reachable_without_new_audit, (
+        f"{recipe_name}: GO-path entry '{go_path_entry}' must not re-enter the "
+        f"pre-remediation cycle ({pre_remediation_guard} reachable via "
+        f"{reachable_without_new_audit})"
+    )

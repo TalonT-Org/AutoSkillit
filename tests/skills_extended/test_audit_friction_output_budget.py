@@ -88,8 +88,10 @@ def test_real_command_battery_passes_output_budget_guard(
     )
 
     assert result.returncode == 0, result.stderr
-    if result.stdout.strip():
-        hook_output = json.loads(result.stdout)["hookSpecificOutput"]
-        assert hook_output.get("permissionDecision") != "deny", (
-            f"real audit-friction command was denied: {rendered}\n{result.stdout}"
-        )
+    assert result.stdout.strip(), (
+        f"guard produced no classification output for: {rendered}\nstderr: {result.stderr}"
+    )
+    hook_output = json.loads(result.stdout)["hookSpecificOutput"]
+    assert hook_output.get("permissionDecision") != "deny", (
+        f"real audit-friction command was denied: {rendered}\n{result.stdout}"
+    )

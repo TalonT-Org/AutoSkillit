@@ -14,6 +14,7 @@ from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     RESPONSE_SPILL_METADATA_KEYS,
     enforce_response_budget,
+    shape_json_response,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -364,3 +365,46 @@ def test_successful_spill_and_exemption_events_have_exact_path_free_payloads(
     assert spill_event["projected_utf8_bytes"] == len(shaped.encode("utf-8"))
     assert "artifact" not in repr(exemption_event)
     assert str(tmp_path) not in repr(spill_event)
+
+
+def test_shape_json_response_under_threshold_is_passthrough(tmp_path):
+    payload = {"key": "value"}
+    result = shape_json_response(
+        payload, tool_name="small_tool", artifact_dir=tmp_path, config=_config()
+    )
+    assert result == json.dumps(payload)
+    assert not list(tmp_path.iterdir())
+
+
+def test_shape_json_response_over_threshold_spills_with_metadata(tmp_path):
+    payload = {"data": "x" * 10_000}
+    result = shape_json_response(
+        payload, tool_name="big_tool", artifact_dir=tmp_path, config=_config()
+    )
+    data = json.loads(result)
+    assert RESPONSE_SPILL_METADATA_KEY in data
+    artifact_path = data[RESPONSE_SPILL_METADATA_KEY]["artifact_path"]
+    assert Path(artifact_path).exists()
+    assert json.loads(Path(artifact_path).read_text()) == payload
+    assert len(result.encode("utf-8")) <= _config().response_max_bytes
+
+
+def test_plain_text_irreducible_shape_returns_failure(tmp_path):
+    from autoskillit.server._response_budget import RESPONSE_BUDGET_FAILURE_CAUSES
+
+    tiny_config = OutputBudgetConfig(
+        inline_max_chars=10,
+        head_chars=5,
+        tail_chars=5,
+        response_max_bytes=10,
+    )
+    result = enforce_response_budget(
+        "x" * 1000,
+        tool_name="tiny_tool",
+        artifact_dir=tmp_path,
+        config=tiny_config,
+    )
+    assert isinstance(result, str)
+    data = json.loads(result)
+    assert data.get("success") is False
+    assert data.get("cause") in RESPONSE_BUDGET_FAILURE_CAUSES

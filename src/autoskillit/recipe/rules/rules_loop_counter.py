@@ -215,6 +215,7 @@ def _check_loop_guard_before_verify(ctx: ValidationContext) -> list[RuleFinding]
 _WRAPPER_LOOP_EXEMPT_COUNTERS: frozenset[str] = frozenset(
     {
         "group_iteration_count",
+        "ref_push_count",
     }
 )
 """Counters exempt from the cross-cycle reset requirement.
@@ -224,7 +225,13 @@ total number of recipe-group iterations across the entire pipeline run) and must
 NOT be reset per audit-remediation cycle — doing so would defeat the safety
 ceiling and allow indefinite repetition. Counter names are stable across
 recipes; step names vary, so we key the exemption on counter variable rather
-than step name."""
+than step name.
+
+``ref_push_count`` guards the final-merge site's ref-push recovery loop, which
+is reached only via the GO path (pipeline-terminating). No audit-remediation
+cycle re-enters it, so a per-cycle reset is unnecessary — its sibling
+``pre_remediation_ref_push_count`` is what gets reset on the NO-GO path
+(see ``reset_ref_push_counter`` in remediation.yaml)."""
 
 
 @semantic_rule(

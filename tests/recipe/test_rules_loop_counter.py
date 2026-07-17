@@ -596,3 +596,47 @@ class TestSharedCounterCrossSiteWithoutPushSymmetry:
             f"on the current unfixed topology; got findings: "
             f"{[(f.rule, f.message) for f in findings]}"
         )
+
+    def test_ref_push_loop_sites_use_independent_counters(self) -> None:
+        """The two ref-push guard sites must use distinct counter variables.
+
+        Issue #4274 root cause #2: ``check_ref_push_loop`` and
+        ``check_ref_push_loop_pre_remediation`` both read from
+        ``context.ref_push_count``, so a recovery at one site silently
+        drains the other's budget. The fix separates the pre-remediation
+        site to ``context.pre_remediation_ref_push_count`` — a distinct
+        counter — restoring the codebase convention of one counter per
+        guard site.
+        """
+        import re
+
+        recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+        ctx_var_re = re.compile(r"\$\{\{\s*context\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+
+        def _counter_var(step_name: str) -> str:
+            step = recipe.steps[step_name]
+            current_iteration = (
+                step.with_args.get("current_iteration", "") if step.with_args else ""
+            )
+            match = ctx_var_re.search(current_iteration)
+            assert match is not None, (
+                f"{step_name} must declare current_iteration referencing a context counter; "
+                f"got: {current_iteration!r}"
+            )
+            return match.group(1)
+
+        final_counter = _counter_var("check_ref_push_loop")
+        pre_remediation_counter = _counter_var("check_ref_push_loop_pre_remediation")
+
+        assert final_counter == "ref_push_count", (
+            f"check_ref_push_loop must continue to use ref_push_count; got {final_counter!r}"
+        )
+        assert pre_remediation_counter == "pre_remediation_ref_push_count", (
+            f"check_ref_push_loop_pre_remediation must use the dedicated "
+            f"pre_remediation_ref_push_count; got {pre_remediation_counter!r}"
+        )
+        assert final_counter != pre_remediation_counter, (
+            f"the two ref-push guard sites must use independent counters; "
+            f"both share {final_counter!r} — this is the shared-counter bug"
+        )

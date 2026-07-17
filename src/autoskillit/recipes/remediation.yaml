@@ -633,33 +633,38 @@ steps:
       callable: autoskillit.smoke_utils.init_counter
       counter_value: ''
     capture:
-      ref_push_count: ${{ result.value }}
+      pre_remediation_ref_push_count: ${{ result.value }}
     on_success: pre_remediation_merge
     on_failure: pre_remediation_merge
     note: >-
-      Resets ref_push_count to 0 so each audit-remediation cycle gets a
-      fresh ref-push budget shared by normal and pre-remediation recovery.
+      Resets pre_remediation_ref_push_count to 0 so each audit-remediation
+      cycle gets a fresh pre-remediation ref-push budget. The final-merge
+      ref_push_count is exempt from cross-cycle resets (it guards the GO
+      path, which terminates the pipeline and never re-enters; see
+      _WRAPPER_LOOP_EXEMPT_COUNTERS in rules_loop_counter.py).
 
   check_ref_push_loop_pre_remediation:
     tool: run_python
     with:
       callable: autoskillit.smoke_utils.check_loop_iteration
-      current_iteration: ${{ context.ref_push_count }}
+      current_iteration: ${{ context.pre_remediation_ref_push_count }}
       max_iterations: '3'
     capture:
-      ref_push_count: ${{ result.next_iteration }}
+      pre_remediation_ref_push_count: ${{ result.next_iteration }}
     on_result:
     - when: ${{ result.max_exceeded }} == true
       route: release_issue_failure
     - route: ref_push_pre_remediation
     on_failure: release_issue_failure
     optional_context_refs:
-    - ref_push_count
+    - pre_remediation_ref_push_count
     note: >
-      Pre-remediation ref-coherence recovery guard. Shares ref_push_count
-      (max 3 under >= semantics = 2 usable push attempts) with
-      check_ref_push_loop. Routes to ref_push_pre_remediation,
-      then commit_guard_pre_remediation and pre_remediation_merge.
+      Pre-remediation ref-coherence recovery guard. Uses its OWN dedicated
+      counter pre_remediation_ref_push_count (max 3 under >= semantics =
+      2 usable push attempts), independent from the final-merge
+      ref_push_count so the two sites cannot drain each other's budget.
+      Routes to ref_push_pre_remediation, then commit_guard_pre_remediation
+      and pre_remediation_merge.
 
   ref_push_pre_remediation:
     tool: push_to_remote

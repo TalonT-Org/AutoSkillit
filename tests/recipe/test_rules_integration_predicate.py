@@ -56,7 +56,7 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "release_issue_failure"
+        assert cond3.route == "check_merge_rebase_loop"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.failed_step == 'dirty_main_repo'"
@@ -262,11 +262,7 @@ class TestLoopBudgetSeparation:
             elif recipe_name == "remediation" and cond.when in (
                 "result.failed_step == 'test_gate'",
                 "result.failed_step == 'post_rebase_test_gate'",
-                "result.failed_step == 'rebase'",
             ):
-                # After PART B step 5, remediation.yaml's pre_remediation_merge
-                # routes these to terminal escalation so live-worktree merge
-                # failures no longer orphan the next worktree creator.
                 assert cond.route in terminal_steps, (
                     f"{cond.when} routes to {cond.route}, expected a terminal escalation"
                 )

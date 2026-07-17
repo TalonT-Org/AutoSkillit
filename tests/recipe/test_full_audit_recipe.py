@@ -60,11 +60,12 @@ def test_full_audit_recipe_step_names() -> None:
 
 
 def test_full_audit_routing_chain() -> None:
-    """checkout → run_audits → validate_audits → create_issues → done."""
+    """checkout → init_audit_run → run_audits → validate_audits → create_issues → done."""
     from autoskillit.recipe.io import load_recipe
 
     recipe = load_recipe(RECIPE_PATH)
-    assert recipe.steps["checkout"].on_success == "run_audits"
+    assert recipe.steps["checkout"].on_success == "init_audit_run"
+    assert recipe.steps["init_audit_run"].on_success == "run_audits"
     assert recipe.steps["run_audits"].on_success == "validate_audits"
     assert recipe.steps["validate_audits"].on_success == "create_issues"
     assert recipe.steps["create_issues"].on_success == "done"

@@ -54,6 +54,16 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         if step_backend is None:
             continue
         uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
+        _step_origin = (ctx.backend_origin_map or {}).get(step_name)
+        _step_remedy = (
+            (
+                f"Remove or change '{_step_origin}' in ~/.autoskillit/config.yaml "
+                "or <project>/.autoskillit/config.yaml, or pin a backend with the "
+                "required capability."
+            )
+            if _step_origin
+            else None
+        )
         if skill_info.backend_requirements and step_backend not in skill_info.backend_requirements:
             cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
             _required = CLAUDE_CODE_CAPABILITIES.git_metadata_writable
@@ -71,6 +81,8 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                         f"{sorted(skill_info.backend_requirements)} but recipe targets "
                         f"backend '{step_backend}'.{git_detail}"
                     ),
+                    origin=_step_origin,
+                    remedy=_step_remedy,
                 )
             )
         # Independent hard-capability property check (sibling if, not elif) —
@@ -91,6 +103,8 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                             f"'{mismatch.capability}') but backend '{step_backend}' has "
                             f"{mismatch.property_name}={mismatch.actual_value!r}."
                         ),
+                        origin=_step_origin,
+                        remedy=_step_remedy,
                     )
                 )
     return findings

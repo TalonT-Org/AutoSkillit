@@ -110,8 +110,9 @@ def _check_dispatch_feasibility(
         #   for git_metadata_write skills), dispatch is infeasible and the
         #   gate refuses the recipe.
         if config_backend is not None:
-            _explicit = _resolve_backend_override(step_name, recipe_name, config_backend)
-            if _explicit is not None:
+            _resolution = _resolve_backend_override(step_name, recipe_name, config_backend)
+            if _resolution is not None:
+                _explicit = _resolution.backend
                 try:
                     _pinned_backend = get_backend(_explicit)
                 except (ValueError, KeyError):
@@ -178,7 +179,13 @@ def _check_dispatch_feasibility(
                                     "stage": "dispatch_feasibility_preflight",
                                     "backend": _explicit,
                                     "step": step_name,
-                                    "override_source": "explicit_config",
+                                    "origin": _resolution.key_path,
+                                    "remedy": (
+                                        f"Remove or change '{_resolution.key_path}' in "
+                                        "~/.autoskillit/config.yaml or "
+                                        "<project>/.autoskillit/config.yaml, or pin a "
+                                        "backend with the required capability."
+                                    ),
                                 }
                             )
                 continue

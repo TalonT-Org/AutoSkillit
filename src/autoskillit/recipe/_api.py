@@ -201,6 +201,7 @@ def load_and_validate(
     backend_name: str | None = None,
     effective_backend_map: dict[str, str] | None = None,
     backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
+    backend_origin_map: dict[str, str] | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -398,6 +399,7 @@ def load_and_validate(
                 skill_resolver=_skill_resolver,
                 effective_backend_map=effective_backend_map,
                 backend_capabilities_map=backend_capabilities_map,
+                backend_origin_map=backend_origin_map,
             )
             _pre_prune_findings = run_semantic_rules(_pre_prune_val_ctx)
             _pre_prune_steps = dict(active_recipe.steps)
@@ -468,6 +470,7 @@ def load_and_validate(
                 backend_name=backend_name,
                 effective_backend_map=effective_backend_map,
                 backend_capabilities_map=backend_capabilities_map,
+                backend_origin_map=backend_origin_map,
             )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)

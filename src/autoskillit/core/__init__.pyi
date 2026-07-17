@@ -406,5 +406,6 @@ from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
+from .types import describe_capability_mismatches as describe_capability_mismatches
 from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import validate_label_transition as validate_label_transition

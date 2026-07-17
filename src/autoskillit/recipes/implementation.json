@@ -607,9 +607,22 @@
       "capture": {
         "merge_test_fix_loop_count": "${{ result.value }}"
       },
+      "on_success": "reset_merge_fix_counter",
+      "on_failure": "reset_merge_fix_counter",
+      "note": "Resets merge_test_fix_loop_count to 0 so each audit-remediation cycle gets a fresh merge-gate fix budget."
+    },
+    "reset_merge_fix_counter": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.init_counter",
+        "counter_value": ""
+      },
+      "capture": {
+        "merge_fix_count": "${{ result.value }}"
+      },
       "on_success": "reset_ref_push_counter",
       "on_failure": "reset_ref_push_counter",
-      "note": "Resets merge_test_fix_loop_count to 0 so each audit-remediation cycle gets a fresh merge-gate fix budget."
+      "note": "Resets merge_fix_count to 0 so each audit-remediation cycle gets a fresh merge-fix budget (dirty-tree, rebase, dirty-main retries)."
     },
     "reset_ref_push_counter": {
       "tool": "run_python",

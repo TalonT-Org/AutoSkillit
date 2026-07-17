@@ -47,6 +47,14 @@ _RECIPES: tuple[str, ...] = (
 _BACKENDS: tuple[str, ...] = tuple(sorted(BACKEND_REGISTRY.keys()))
 _SKILL_RESOLVER = DefaultSkillResolver()
 
+_EXPECTED_INFEASIBLE: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("implementation", "codex"),  # by-design: gate_backend_write reachable post-prune
+        ("implementation-groups", "codex"),  # by-design: gate_backend_write reachable post-prune
+        ("remediation", "codex"),  # by-design: gate_backend_write reachable post-prune
+    }
+)
+
 
 def _step_effective_backend(
     step: RecipeStep,
@@ -121,13 +129,20 @@ def test_admission_dispatch_agreement(
         lister=_SKILL_RESOLVER,
     )
 
-    if not result.get("dispatch_feasible", True):
-        # If admission refuses feasibility, the contract is trivially satisfied.
+    if (recipe_name, backend_name) in _EXPECTED_INFEASIBLE:
+        assert result.get("dispatch_feasible") is False, (
+            f"{recipe_name}/{backend_name} expected infeasible but got "
+            f"dispatch_feasible={result.get('dispatch_feasible')}"
+        )
         return
 
-    if not result.get("valid", False):
-        # If admission produced errors, contract still holds (not feasible).
-        return
+    assert result.get("valid") is True, (
+        f"{recipe_name}/{backend_name} expected valid=True but got valid={result.get('valid')}"
+    )
+    assert result.get("dispatch_feasible") is True, (
+        f"{recipe_name}/{backend_name} expected dispatch_feasible=True but got "
+        f"dispatch_feasible={result.get('dispatch_feasible')}"
+    )
 
     # Admission says feasible + valid → dispatch must agree for every step.
     dispatch_backends = _dispatch_effective_backends(raw_recipe, backend_name, effective_map)
@@ -308,14 +323,6 @@ def test_provider_aware_overrides_capability_route_none_providers(
     assert detail.resolution_path == "capability_route"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Part A exposes latent defects in bundled implementation.yaml "
-        "(merge_fix_count without reset). Part B resolves the recipe defect; "
-        "remove xfail when Part B lands."
-    ),
-)
 def test_admission_dispatch_agreement_real_providers_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

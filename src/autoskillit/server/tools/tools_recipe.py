@@ -247,7 +247,7 @@ async def load_recipe(
             _config_layer = build_config_authoritative_layer(_defaults)
             _config_default = build_config_default_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
-            _effective_backend_map = _compute_effective_backend_map(
+            _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                 _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
                 tool_ctx.config.providers,
@@ -272,6 +272,7 @@ async def load_recipe(
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                 effective_backend_map=_effective_backend_map,
                 backend_capabilities_map=_backend_capabilities_map,
+                backend_origin_map=_backend_origin_map,
             )
             recipe_info = _recipe_info_pre
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
@@ -379,13 +380,15 @@ async def validate_recipe(script_path: str) -> str:
                 skill_resolver=tool_ctx.skill_resolver,
                 config_backend=tool_ctx.config.agent_backend,
             )
-            _validate_effective_backend_map = _compute_effective_backend_map(
-                _validate_recipe_steps,
-                tool_ctx.backend.name if tool_ctx.backend else None,
-                tool_ctx.config.providers,
-                _validate_recipe_name,
-                skill_resolver=tool_ctx.skill_resolver,
-                config_backend=tool_ctx.config.agent_backend,
+            _validate_effective_backend_map, _validate_backend_origin_map = (
+                _compute_effective_backend_map(
+                    _validate_recipe_steps,
+                    tool_ctx.backend.name if tool_ctx.backend else None,
+                    tool_ctx.config.providers,
+                    _validate_recipe_name,
+                    skill_resolver=tool_ctx.skill_resolver,
+                    config_backend=tool_ctx.config.agent_backend,
+                )
             )
             _validate_backend_capabilities_map = build_backend_capabilities_map(
                 _validate_effective_backend_map, tool_ctx.backend

@@ -149,15 +149,6 @@ class TestRecipeIntegrationPredicateRouting:
         ip_errors = validate_recipe_structure(self.ip_recipe)
         assert ip_errors == [], f"implementation.yaml has validation errors: {ip_errors}"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Part A exposes latent defects in bundled recipes: "
-            "merge_fix_count without reset, and shared-counter-cross-site-"
-            "without-push-symmetry on remediation.yaml. Part B resolves "
-            "these defects; remove xfail when Part B lands."
-        ),
-    )
     def test_all_recipes_no_error_semantic_findings(self) -> None:
         """All bundled implementation-family recipes have no ERROR-severity findings."""
         for recipe, name in [

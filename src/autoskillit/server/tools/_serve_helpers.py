@@ -148,6 +148,7 @@ def serve_recipe(
     temp_dir: Path | str | None = None,
     temp_dir_relpath: str | None = None,
     backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
+    backend_origin_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Unified recipe serve path. Only legal caller of load_and_validate in server/tools/."""
     ingredient_overrides = _build_serve_override_stack(
@@ -169,6 +170,8 @@ def serve_recipe(
         kwargs["effective_backend_map"] = effective_backend_map
     if backend_capabilities_map is not None:
         kwargs["backend_capabilities_map"] = backend_capabilities_map
+    if backend_origin_map:
+        kwargs["backend_origin_map"] = backend_origin_map
     if suppressed is not None:
         kwargs["suppressed"] = suppressed
     if backend_name is not None:

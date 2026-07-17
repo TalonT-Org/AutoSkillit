@@ -292,50 +292,21 @@ class TestLoopCounterNotResetOnOuterCycle:
         ("remediation", "implementation", "implementation-groups"),
     )
     def test_bundled_recipes_no_missing_reset(self, recipe_name: str) -> None:
-        """After the dominator fix to ``loop-counter-not-reset-on-outer-cycle``,
-        this test asserts the rule fires on the bundled recipes for the
-        counters that lack a reset step on the audit-remediation NO-GO path.
+        """Permanent regression gate: bundled recipes must have zero
+        ``loop-counter-not-reset-on-outer-cycle`` findings.
 
-        Before the fix this test asserted zero findings (the original
-        existential-path BFS mistakenly accepted parallel guards' ``capture``
-        as resets). The fix correctly excludes ``check_loop_iteration`` guards
-        from the reset candidate list because their capture is an INCREMENT,
-        not a reset — so parallel guards sharing a counter no longer
-        masquerade as resets.
-
-        The merged findings here represent latent defects in the bundled
-        recipes (``merge_fix_count`` is shared by ``check_merge_fix_loop``,
-        ``check_merge_rebase_loop``, ``check_dirty_main_retry`` with no
-        ``init_counter`` reset on the audit-remediation NO-GO path). Part B
-        will add the missing reset steps; once it lands this test will need
-        updating to assert zero findings again.
+        Every counter shared by parallel guards (``check_merge_fix_loop``,
+        ``check_merge_rebase_loop``, ``check_dirty_main_retry``) must be
+        reset by an ``init_counter`` step on the audit-remediation NO-GO
+        path before reaching the guard.
         """
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
         findings = run_semantic_rules(recipe)
         rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
 
-        # Expected findings per recipe: counters shared by parallel guards with
-        # no reset step on the audit-remediation NO-GO path.
-        expected_inner_steps = {
-            "remediation": {"check_merge_fix_loop", "check_dirty_main_retry"},
-            "implementation": {
-                "check_merge_fix_loop",
-                "check_merge_rebase_loop",
-                "check_dirty_main_retry",
-            },
-            "implementation-groups": {
-                "check_merge_fix_loop",
-                "check_merge_rebase_loop",
-                "check_dirty_main_retry",
-            },
-        }
-        expected = expected_inner_steps.get(recipe_name, set())
-
-        actual = {f.step_name for f in rule_findings}
-        assert expected <= actual, (
-            f"{recipe_name}: expected at least {sorted(expected)}, "
-            f"got {sorted(actual)}. Findings: "
-            f"{[(f.step_name, f.message) for f in rule_findings]}"
+        assert rule_findings == [], (
+            f"{recipe_name}: expected zero loop-counter-not-reset-on-outer-cycle "
+            f"findings, got: {[(f.step_name, f.message) for f in rule_findings]}"
         )
 
     def test_branching_reentry_reset_on_only_one_branch_fires(self) -> None:

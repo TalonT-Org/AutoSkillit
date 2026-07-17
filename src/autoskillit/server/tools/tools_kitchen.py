@@ -129,11 +129,15 @@ def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
         if len(_structural_errs) > 3:
             _error_parts.append(f"+{len(_structural_errs) - 3} more errors")
     else:
-        _all_errors = [
-            f"[{s.get('rule', 'unknown-rule')}] {s.get('message', '')}"
-            for s in result.get("suggestions", [])
-            if isinstance(s, dict) and s.get("severity") == "error"
-        ]
+        _all_errors = []
+        for s in result.get("suggestions", []):
+            if isinstance(s, dict) and s.get("severity") == "error":
+                _line = f"[{s.get('rule', 'unknown-rule')}] {s.get('message', '')}"
+                if s.get("origin"):
+                    _line += f" (origin: {s['origin']})"
+                if s.get("remedy"):
+                    _line += f" — remedy: {s['remedy']}"
+                _all_errors.append(_line)
         _error_parts = _all_errors[:3]
         if len(_all_errors) > 3:
             _error_parts.append(f"+{len(_all_errors) - 3} more errors")
@@ -590,7 +594,7 @@ def get_recipe(name: str) -> str:
             skill_resolver=ctx.skill_resolver,
             config_backend=ctx.config.agent_backend,
         )
-        _effective_backend_map = _compute_effective_backend_map(
+        _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
             _raw_recipe.steps,
             ctx.backend.name if ctx.backend else None,
             ctx.config.providers,
@@ -614,6 +618,7 @@ def get_recipe(name: str) -> str:
             effective_backend_map=_effective_backend_map,
             backend_name=ctx.backend.name if ctx.backend else None,
             backend_capabilities_map=_backend_capabilities_map,
+            backend_origin_map=_backend_origin_map,
         )
     except ProcessStaleError:
         logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
@@ -835,7 +840,7 @@ async def open_kitchen(
             _config_layer = build_config_authoritative_layer(_defaults)
             _config_default = build_config_default_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
-            _effective_backend_map = _compute_effective_backend_map(
+            _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                 _raw_recipe.steps if _raw_recipe is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
                 tool_ctx.config.providers,
@@ -872,6 +877,7 @@ async def open_kitchen(
                         backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                         effective_backend_map=_effective_backend_map,
                         backend_capabilities_map=_backend_capabilities_map,
+                        backend_origin_map=_backend_origin_map,
                     )
                 except ProcessStaleError as exc:
                     logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
@@ -983,6 +989,7 @@ async def open_kitchen(
                     backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                     effective_backend_map=_effective_backend_map,
                     backend_capabilities_map=_backend_capabilities_map,
+                    backend_origin_map=_backend_origin_map,
                 )
             except ProcessStaleError as exc:
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)

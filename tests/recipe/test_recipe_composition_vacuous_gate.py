@@ -155,14 +155,6 @@ def test_is_vacuous_gate_returns_true_when_gate_unreachable_post_prune() -> None
     "recipe_name",
     ["implementation", "remediation", "implementation-groups"],
 )
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Part A exposes latent defects in bundled recipes: "
-        "merge_fix_count without reset on the audit-remediation NO-GO path. "
-        "Part B adds the reset step; remove xfail when Part B lands."
-    ),
-)
 def test_compute_capability_feasibility_returns_infeasible_for_codex_recipes(
     recipe_name: str,
 ) -> None:

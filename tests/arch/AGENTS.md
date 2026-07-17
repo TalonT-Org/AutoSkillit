@@ -82,6 +82,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_recipe_contract_freshness.py` | Parametrized JSON card freshness enforcement: contract cards must have non-stale .json companions with content parity |
 | `test_recipe_rule_registration.py` | REQ-RECIPE-001: every recipe/rules_*.py file must be imported by recipe/__init__.py |
 | `test_rule_severity_consistency.py` | AST guards: rule functions must use make_finding()/make_block_finding(); RuleFinding severity must match @semantic_rule decorator severity; _KNOWN_NON_CONFORMING_RULES entries must carry tracking comments |
+| `test_xfail_bridge_policy.py` | xfail(strict=True) bridge governance: reasons must cite tracking issue (#NNNN); size-capped exemption registry with rationale enforcement |
 | `test_regex_guards.py` | Arch guard: keyword regexes in cmd-scanning rules must use path-safe lookbehind guards |
 | `test_regex_import.py` | Structural guard: src/ must use `import regex as re`, not bare `import re` (hooks/ exempt) |
 | `test_registry.py` | Symbolic rule registry tests (RuleDescriptor, RULES, Violation) |

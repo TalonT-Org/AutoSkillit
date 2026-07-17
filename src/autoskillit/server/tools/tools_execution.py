@@ -910,10 +910,13 @@ async def run_skill(
             # capability-driven routing for this step (REQ-RES-001).
             from autoskillit.server._guards import _resolve_backend_override  # circular-break
 
-            _explicit_backend_override: str | None = _resolve_backend_override(
+            _explicit_resolution = _resolve_backend_override(
                 step_name or "",
                 tool_ctx.recipe_name or "",
                 _cfg.agent_backend,
+            )
+            _explicit_backend_override: str | None = (
+                _explicit_resolution.backend if _explicit_resolution else None
             )
 
             _skill_caps: frozenset[str] = (
@@ -999,8 +1002,8 @@ async def run_skill(
             )
 
             _backend_override_source: str | None = None
-            if _explicit_backend_override is not None:
-                _backend_override_source = "explicit_config"
+            if _explicit_resolution is not None:
+                _backend_override_source = _explicit_resolution.key_path
             elif _skill_requires_claude:
                 _backend_override_source = "skill_requirement"
             elif _provider_override:

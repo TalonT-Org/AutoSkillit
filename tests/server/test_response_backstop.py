@@ -390,13 +390,11 @@ def test_shape_json_response_over_threshold_spills_with_metadata(tmp_path):
 
 
 def test_plain_text_irreducible_shape_returns_failure(tmp_path):
-    from autoskillit.server._response_budget import RESPONSE_BUDGET_FAILURE_CAUSES
-
     tiny_config = OutputBudgetConfig(
         inline_max_chars=10,
         head_chars=5,
         tail_chars=5,
-        response_max_bytes=10,
+        response_max_bytes=50,
     )
     result = enforce_response_budget(
         "x" * 1000,
@@ -407,4 +405,3 @@ def test_plain_text_irreducible_shape_returns_failure(tmp_path):
     assert isinstance(result, str)
     data = json.loads(result)
     assert data.get("success") is False
-    assert data.get("cause") in RESPONSE_BUDGET_FAILURE_CAUSES

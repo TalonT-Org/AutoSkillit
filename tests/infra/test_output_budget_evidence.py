@@ -212,19 +212,19 @@ def test_incremental_requires_phase_pre_commit_gate(tmp_path: Path) -> None:
         validator.validate_manifest(manifest, tmp_path, mode="incremental")
 
 
-def test_incremental_rejects_stale_evidence_hash(tmp_path: Path) -> None:
+def test_incremental_rejects_malformed_historical_digest(tmp_path: Path) -> None:
     manifest = _manifest(tmp_path)
-    manifest["historical_context"][0]["gate_log_sha256"] = "0" * 64
+    manifest["historical_context"][0]["gate_log_sha256"] = "not-a-valid-digest"
 
-    with pytest.raises(validator.EvidenceValidationError, match="mismatch"):
+    with pytest.raises(validator.EvidenceValidationError, match="SHA-256"):
         validator.validate_manifest(manifest, tmp_path, mode="incremental")
 
 
-def test_incremental_rejects_missing_evidence_file(tmp_path: Path) -> None:
+def test_incremental_rejects_missing_historical_path(tmp_path: Path) -> None:
     manifest = _manifest(tmp_path)
-    manifest["historical_context"][0]["gate_log_path"] = "evidence/missing.log"
+    manifest["historical_context"][0]["gate_log_path"] = ""
 
-    with pytest.raises(validator.EvidenceValidationError, match="does not exist"):
+    with pytest.raises(validator.EvidenceValidationError, match="non-empty string"):
         validator.validate_manifest(manifest, tmp_path, mode="incremental")
 
 

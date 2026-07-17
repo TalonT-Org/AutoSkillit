@@ -88,10 +88,40 @@ def test_real_command_battery_passes_output_budget_guard(
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip(), (
-        f"guard produced no classification output for: {rendered}\nstderr: {result.stderr}"
+    if result.stdout.strip():
+        hook_output = json.loads(result.stdout)["hookSpecificOutput"]
+        assert hook_output.get("permissionDecision") != "deny", (
+            f"real audit-friction command was denied: {rendered}\n{result.stdout}"
+        )
+
+
+def test_guard_denies_known_hazardous_command(tmp_path: Path) -> None:
+    """Guard actually classifies input (not silently bailing on all commands)."""
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "grep -r TODO ."},
+        "cwd": str(tmp_path),
+    }
+    isolated_home = tmp_path / "home"
+    isolated_home.mkdir()
+    env = {key: value for key, value in os.environ.items() if not key.startswith("AUTOSKILLIT_")}
+    env.update(
+        {
+            "AUTOSKILLIT_CWD": str(tmp_path),
+            "HOME": str(isolated_home),
+            "XDG_CONFIG_HOME": str(isolated_home / ".config"),
+        }
     )
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(GUARD_PATH)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=env,
+        timeout=5,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip(), "guard produced no output for a hazardous command"
     hook_output = json.loads(result.stdout)["hookSpecificOutput"]
-    assert hook_output.get("permissionDecision") != "deny", (
-        f"real audit-friction command was denied: {rendered}\n{result.stdout}"
-    )
+    assert hook_output.get("permissionDecision") == "deny"

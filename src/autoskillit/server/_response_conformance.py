@@ -137,7 +137,11 @@ class ResponseConformanceMiddleware(Middleware):
             converted_result_conforms=converted_result_conforms,
         )
         if decision is ResponseConformanceDecision.REWRITE_NONCONFORMING:
-            assert isinstance(registered_tool, FunctionTool)
+            if not isinstance(registered_tool, FunctionTool):
+                raise TypeError(
+                    f"registered tool {context.message.name!r} is not a FunctionTool "
+                    "despite a REWRITE_NONCONFORMING decision"
+                )
             emit_response_budget_failure(
                 context.message.name,
                 "schema_nonconforming",

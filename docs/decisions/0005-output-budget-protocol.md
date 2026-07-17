@@ -78,13 +78,13 @@ estimate.
 
 The project therefore requires the stricter relationship
 `response_max_bytes // 3 < CODEX_TOOL_OUTPUT_TOKEN_LIMIT`. The three-byte divisor is
-deliberate margin: the 90,000-byte response backstop must fire before Codex's 53,000-token
+deliberate margin: the 90,000-byte response backstop must fire before Codex's 54,500-token
 transport ceiling can clip a producer-blind response. A static test pins the relationship,
 and the live large-output probe must pass before either side is retuned.
 
 The measured raw-text exemptions, `open_kitchen` and `load_recipe`, must each remain below
 their own registered character and UTF-8 byte ceilings, which in turn remain below the
-212,000-byte budget implied by the current 53,000-token, four-byte heuristic. Their
+218,000-byte budget implied by the current 54,500-token, four-byte heuristic. Their
 measurements are independent release gates; the heuristic is not permission to omit those
 tests or reuse one surface's observed maximum as the other's authority.
 

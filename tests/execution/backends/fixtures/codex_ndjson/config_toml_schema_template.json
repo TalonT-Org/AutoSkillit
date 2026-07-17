@@ -28,7 +28,7 @@
     "tool_output_token_limit": {
       "constraint": "exact",
       "expected_type": "int",
-      "expected_value": 53000
+      "expected_value": 54500
     }
   }
 }

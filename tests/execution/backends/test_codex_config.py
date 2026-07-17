@@ -36,9 +36,9 @@ def test_codex_tool_output_limit_is_derived_from_largest_measured_exemption() ->
     max_bytes = max(
         definition.max_utf8_bytes for definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.values()
     )
-    assert max_bytes == 180_000
+    assert max_bytes == 186_000
     assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == ((max_bytes + 3) // 4) + 8_000
-    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == 53_000
+    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == 54_500
 
 
 def test_response_backstop_fires_below_codex_transport_ceiling() -> None:

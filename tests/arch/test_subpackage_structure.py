@@ -61,8 +61,8 @@ class TestCoreSubpackages:
         assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
             "Duplicate symbols across split modules"
         )
-        assert len(combined) == 106, (
-            f"Expected 106 symbols total, got {len(combined)} "
+        assert len(combined) == 108, (
+            f"Expected 108 symbols total, got {len(combined)} "
             f"(remaining={len(remaining)}, env={len(env)}, "
             f"features={len(features)}, registries={len(registries)})"
         )

@@ -36,6 +36,18 @@ class ResultFieldSpec:
 
 
 @dataclasses.dataclass
+class OutcomeInvariantEntry:
+    when: str
+    require: str
+
+
+@dataclasses.dataclass
+class SuccessQualifierEntry:
+    when: str
+    qualifier: str
+
+
+@dataclasses.dataclass
 class SkillContract:
     inputs: list[SkillInput]
     outputs: list[SkillOutput]
@@ -46,6 +58,8 @@ class SkillContract:
     read_only: bool = False
     completion_required: bool = False
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
+    outcome_invariants: list[OutcomeInvariantEntry] = dataclasses.field(default_factory=list)
+    success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

@@ -175,6 +175,10 @@ skills:
         - ci_only_failure
     - name: fixes_applied
       type: integer
+    - name: accept_count
+      type: integer
+    - name: fix_failures
+      type: integer
     - name: deferred_observations_path
       type: string
       description: "Written when mode=local (accumulated critical/warning DISCUSS findings, excluding info-severity) or when mode=github (posted from prior local rounds)."
@@ -186,6 +190,12 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"
+    outcome_invariants:
+    - when: "accept_count > 0"
+      require: "fix_failures == 0"
+    success_qualifiers:
+    - when: "accept_count > 0 and fixes_applied == 0 and fix_failures == 0"
+      qualifier: "accepted_without_changes"
   dry-walkthrough:
     inputs:
     - name: plan_path

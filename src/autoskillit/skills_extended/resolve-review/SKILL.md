@@ -72,7 +72,7 @@ normal commit protocol.
 
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {work_dir} status --porcelain`
-2. If any files are dirty: `git -C {work_dir} add -- <files you modified> && git -C {work_dir} commit -m "fix: commit pending review changes"` — do NOT use `--amend`.
+2. If any files are dirty: `git -C {work_dir} add -- <files you modified> && git -C {work_dir} commit -m "fix: commit pending review changes"` — do NOT use `--amend`. Count any failed commit attempt toward `fix_failures`.
 3. Only then proceed with the test or structured output
 
 This ensures that even if context exhaustion interrupts the fix loop, all applied
@@ -867,12 +867,17 @@ Then determine and emit the structured output tokens (required for the
 ```
 verdict = {verdict}
 fixes_applied = {accept_count - skipped_in_fix_phase}
+accept_count = {accept_count}
+fix_failures = {fix_failures}
 ```
 
 Where:
 - `{verdict}` is `real_fix` if fixes were applied, `already_green` otherwise
 - `{accept_count - skipped_in_fix_phase}` is the number of ACCEPT findings
   where code changes were actually committed
+- `{accept_count}` is the total number of ACCEPT-classified findings
+- `{fix_failures}` is the number of ACCEPT findings whose apply/commit attempt
+  errored (distinct from `skipped_in_fix_phase` which counts legitimate pre-attempt skips)
 
 The Step 1 graceful degradation exit must NOT emit these tokens — no tokens
 when skipping due to no PR found.
@@ -886,9 +891,13 @@ When a PR is processed, the following structured output tokens are emitted:
 ```
 verdict = real_fix|already_green
 fixes_applied = {N}
+accept_count = {N}
+fix_failures = {N}
 ```
 
-Where `{N}` is the count of ACCEPT findings where code changes were committed.
+Where `fixes_applied` is the count of ACCEPT findings where code changes were
+committed. `accept_count` is the total number of ACCEPT-classified findings.
+`fix_failures` is the count of ACCEPT findings whose apply/commit attempt failed.
 `verdict = real_fix` means fixes were applied; `verdict = already_green` means
 all review findings were already addressed and no code changes were needed.
 

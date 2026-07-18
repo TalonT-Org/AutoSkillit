@@ -36,6 +36,7 @@ __all__ = [
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "VALID_INPUT_SPEC_TYPES",
+    "OutcomeInvariantSpec",
     "WriteBehaviorSpec",
     "WriteEvidence",
     "FailureRecord",
@@ -144,6 +145,20 @@ class ValidatedWorktreePath:
 
     def is_dir(self) -> bool:
         return Path(self.path).is_dir()
+
+
+@dataclass(frozen=True, slots=True)
+class OutcomeInvariantSpec:
+    """Outcome invariant evaluated against skill-emitted output fields.
+
+    when: predicate expression, e.g. "accept_count > 0"
+    require: requirement expression, e.g. "fix_failures == 0"
+    Both use grammar: <declared_int_field> <op> <int_literal>
+    with ops: >, >=, ==, !=, <=, <
+    """
+
+    when: str
+    require: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -828,4 +843,7 @@ class SessionIndexEntry(TypedDict):
     api_retry_last_status: int | None
     ndjson_unknown_event_count: int
     ndjson_unknown_item_count: int
+    outcome_fields: dict[str, int | str] | None
+    outcome_invariant_violated: bool
+    outcome_qualifier: str | None
     schema_version: int

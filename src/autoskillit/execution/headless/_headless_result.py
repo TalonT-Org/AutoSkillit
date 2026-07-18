@@ -36,6 +36,10 @@ from autoskillit.execution.headless._headless_evidence import (
     _extract_file_changes,
     _stdout_mentions_write_tools,
 )
+from autoskillit.execution.headless._headless_outcome import (
+    evaluate_outcome_invariants,
+    parse_outcome_fields,
+)
 from autoskillit.execution.headless._headless_path_tokens import (
     _extract_branch_name,
     _extract_output_paths,
@@ -65,6 +69,7 @@ from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
     _compute_success,
 )
+from autoskillit.recipe._contracts_types import SkillContract
 
 if TYPE_CHECKING:
     from autoskillit.core import AuditLog, CodingAgentBackend, SubprocessResult
@@ -160,6 +165,54 @@ def _has_out_of_cwd_file_change(file_changes: Sequence[str], cwd: str) -> bool:
     return False
 
 
+def _apply_post_session_adjudication(
+    sr: SkillResult,
+    evidence: WriteEvidence,
+    write_behavior: WriteBehaviorSpec | None,
+    skill_contract: SkillContract | None,
+) -> SkillResult:
+    """Consolidated post-session adjudication: zero-write gate + outcome invariants.
+
+    Invoked as the last adjudication step before each success-finalizing
+    return. Makes "a success path that skips adjudication" unrepresentable.
+    """
+    if not sr.success:
+        return sr
+
+    if not evidence.has_implementation_evidence and write_behavior is not None:
+        write_expected = False
+        if write_behavior.mode == "always":
+            write_expected = True
+        elif write_behavior.mode == "conditional" and write_behavior.expected_when:
+            write_expected = _check_expected_patterns(
+                sr.result,
+                write_behavior.expected_when,
+            )
+        if write_expected:
+            return dataclasses.replace(
+                sr,
+                success=False,
+                subtype="zero_writes",
+                needs_retry=True,
+                retry_reason=RetryReason.ZERO_WRITES,
+            )
+
+    if skill_contract is not None and skill_contract.outcome_invariants:
+        fields = parse_outcome_fields(sr.result, skill_contract)
+        violated, detail = evaluate_outcome_invariants(fields, skill_contract.outcome_invariants)
+        if violated:
+            logger.warning("outcome_invariant_violated", detail=detail)
+            return dataclasses.replace(
+                sr,
+                success=False,
+                subtype="outcome_invariant_violation",
+                needs_retry=True,
+                retry_reason=RetryReason.OUTCOME_INVARIANT,
+            )
+
+    return sr
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
@@ -184,6 +237,21 @@ def _build_skill_result(
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
+
+    skill_contract: SkillContract | None = None
+    if skill_command:
+        from autoskillit.core import resolve_skill_name
+        from autoskillit.recipe._contracts_manifest import (
+            get_skill_contract as _get_contract,
+        )
+        from autoskillit.recipe._contracts_manifest import (
+            load_bundled_manifest,
+        )
+
+        _sname = resolve_skill_name(skill_command)
+        if _sname:
+            skill_contract = _get_contract(_sname, load_bundled_manifest())
+
     branch = (
         "idle_stall"
         if result.termination == TerminationReason.IDLE_STALL
@@ -249,26 +317,9 @@ def _build_skill_result(
                     provider_used=provider_used,
                     api_retry=stale_api_retry,
                 )
-                if (
-                    _stale_success_sr.success
-                    and write_behavior is not None
-                    and not stale_evidence.has_implementation_evidence
-                ):
-                    _stale_write_expected = write_behavior.mode == "always" or (
-                        write_behavior.mode == "conditional"
-                        and write_behavior.expected_when
-                        and _check_expected_patterns(
-                            _stale_success_sr.result, write_behavior.expected_when
-                        )
-                    )
-                    if _stale_write_expected:
-                        _stale_success_sr = dataclasses.replace(
-                            _stale_success_sr,
-                            success=False,
-                            subtype="zero_writes",
-                            needs_retry=True,
-                            retry_reason=RetryReason.ZERO_WRITES,
-                        )
+                _stale_success_sr = _apply_post_session_adjudication(
+                    _stale_success_sr, stale_evidence, write_behavior, skill_contract
+                )
                 return _stale_success_sr
         # No valid result in stdout — fall through to original stale response
         _stale_is_rate_limited = has_rate_limit_signal(stale_session, result)
@@ -356,26 +407,9 @@ def _build_skill_result(
                     provider_used=provider_used,
                     api_retry=idle_api_retry,
                 )
-                if (
-                    _idle_success_sr.success
-                    and write_behavior is not None
-                    and not idle_evidence.has_implementation_evidence
-                ):
-                    _idle_write_expected = write_behavior.mode == "always" or (
-                        write_behavior.mode == "conditional"
-                        and write_behavior.expected_when
-                        and _check_expected_patterns(
-                            _idle_success_sr.result, write_behavior.expected_when
-                        )
-                    )
-                    if _idle_write_expected:
-                        _idle_success_sr = dataclasses.replace(
-                            _idle_success_sr,
-                            success=False,
-                            subtype="zero_writes",
-                            needs_retry=True,
-                            retry_reason=RetryReason.ZERO_WRITES,
-                        )
+                _idle_success_sr = _apply_post_session_adjudication(
+                    _idle_success_sr, idle_evidence, write_behavior, skill_contract
+                )
                 return _idle_success_sr
         _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
         _idle_is_api_error = idle_session.api_retry_exhausted or (
@@ -647,18 +681,6 @@ def _build_skill_result(
         needs_retry = False
         retry_reason = RetryReason.NONE
 
-    if (
-        success
-        and write_behavior is not None
-        and write_behavior.mode == "always"
-        and not evidence.has_implementation_evidence
-    ):
-        normalized_subtype = "zero_writes"
-        outcome = SessionOutcome.RETRIABLE
-        success = False
-        needs_retry = True
-        retry_reason = RetryReason.ZERO_WRITES
-
     # Invariant: TIMED_OUT sessions must produce subtype='timeout'.
     if (
         result.termination == TerminationReason.TIMED_OUT
@@ -836,26 +858,7 @@ def _build_skill_result(
         )
         sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
-    # Zero-write gate: demote success to retriable failure when a write-expected
-    # skill produced zero Edit/Write calls (silent degradation detection).
-    # Write expectation is resolved from skill_contracts.yaml via WriteBehaviorSpec.
-    if sr.success and not evidence.has_implementation_evidence and write_behavior is not None:
-        write_expected = False
-        if write_behavior.mode == "always":
-            write_expected = True
-        elif write_behavior.mode == "conditional" and write_behavior.expected_when:
-            write_expected = _check_expected_patterns(
-                sr.result,
-                write_behavior.expected_when,
-            )
-        if write_expected:
-            sr = dataclasses.replace(
-                sr,
-                success=False,
-                subtype="zero_writes",
-                needs_retry=True,
-                retry_reason=RetryReason.ZERO_WRITES,
-            )
+    sr = _apply_post_session_adjudication(sr, evidence, write_behavior, skill_contract)
 
     # Closure verification gate: when a ClosureAuthoritySpec is active, independently
     # verify the canonical closure report. On failure, demote to execution error so

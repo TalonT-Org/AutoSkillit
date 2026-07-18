@@ -89,6 +89,22 @@ def _shape_failed_test_output(
     return shaped
 
 
+def validate_commit_paths(cwd: str, paths: list[str]) -> str | None:
+    """Validate that every path resolves inside cwd and has no ``.git`` component.
+
+    Returns an error message string on the first violation found, or None if
+    every path is valid.
+    """
+    resolved_cwd = os.path.realpath(cwd)
+    for p in paths:
+        full = os.path.realpath(os.path.join(resolved_cwd, p))
+        if not full.startswith(resolved_cwd + os.sep) and full != resolved_cwd:
+            return f"path escapes cwd: {p}"
+        if ".git" in Path(p).parts:
+            return f"path contains .git component: {p}"
+    return None
+
+
 def _filter_changed_files(stdout: str, prefixes: list[str]) -> tuple[list[str], list[str]]:
     """Parse git diff stdout into (changed_files, critical_files).
 

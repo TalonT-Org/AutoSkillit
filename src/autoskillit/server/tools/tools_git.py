@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import time
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -660,9 +662,6 @@ async def commit_files(
         with structlog.contextvars.bound_contextvars(tool="commit_files", cwd=cwd):
             logger.info("commit_files", path_count=len(paths), cwd=cwd)
 
-            import shutil
-            from pathlib import Path
-
             if not cwd or not os.path.isdir(cwd):
                 return json.dumps(
                     {"success": False, "error": f"cwd does not exist or is not a directory: {cwd}"}
@@ -670,15 +669,10 @@ async def commit_files(
             if not paths:
                 return json.dumps({"success": False, "error": "paths list is empty"})
 
-            resolved_cwd = os.path.realpath(cwd)
-            for p in paths:
-                full = os.path.realpath(os.path.join(resolved_cwd, p))
-                if not full.startswith(resolved_cwd + os.sep) and full != resolved_cwd:
-                    return json.dumps({"success": False, "error": f"path escapes cwd: {p}"})
-                if ".git" in Path(p).parts:
-                    return json.dumps(
-                        {"success": False, "error": f"path contains .git component: {p}"}
-                    )
+            from autoskillit.server.git import validate_commit_paths  # circular-break
+
+            if (path_error := validate_commit_paths(cwd, paths)) is not None:
+                return json.dumps({"success": False, "error": path_error})
 
             from autoskillit.server import _get_ctx  # circular-break
 
@@ -687,9 +681,7 @@ async def commit_files(
 
             try:
                 rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "add", "--"] + paths,
-                    cwd=cwd,
-                    timeout=30,
+                    ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
                 )
                 if rc != 0:
                     return json.dumps(
@@ -706,33 +698,21 @@ async def commit_files(
                         hook_cmd = [pre_commit_bin, "run", "--files"] + paths
 
                 if hook_cmd is not None:
-                    rc, stdout, stderr = await _run_subprocess(
-                        hook_cmd,
-                        cwd=cwd,
-                        timeout=120,
-                    )
+                    rc, stdout, stderr = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
                     if rc != 0:
                         rc2, _, _ = await _run_subprocess(
-                            ["git", "-C", cwd, "add", "--"] + paths,
-                            cwd=cwd,
-                            timeout=30,
+                            ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
                         )
                         if rc2 != 0:
                             _err = f"pre-commit + re-add failed: {stderr.strip()}"
                             return json.dumps({"success": False, "error": _err})
-                        rc3, _, stderr3 = await _run_subprocess(
-                            hook_cmd,
-                            cwd=cwd,
-                            timeout=120,
-                        )
+                        rc3, _, stderr3 = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
                         if rc3 != 0:
                             _err = f"pre-commit retry failed: {stderr3.strip()}"
                             return json.dumps({"success": False, "error": _err})
 
                 rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "commit", "-m", message],
-                    cwd=cwd,
-                    timeout=30,
+                    ["git", "-C", cwd, "commit", "-m", message], cwd=cwd, timeout=30
                 )
                 if rc != 0:
                     return json.dumps(
@@ -740,9 +720,7 @@ async def commit_files(
                     )
 
                 rc, stdout, stderr = await _run_subprocess(
-                    ["git", "-C", cwd, "rev-parse", "HEAD"],
-                    cwd=cwd,
-                    timeout=10,
+                    ["git", "-C", cwd, "rev-parse", "HEAD"], cwd=cwd, timeout=10
                 )
                 commit_sha = stdout.strip()
 

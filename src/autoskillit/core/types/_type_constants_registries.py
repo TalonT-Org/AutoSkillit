@@ -124,7 +124,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check", "unlock_agent_pack"})
+HEADLESS_TOOLS: frozenset[str] = frozenset({"test_check", "unlock_agent_pack", "commit_files"})
 
 FLEET_TOOLS: frozenset[str] = frozenset(
     {

@@ -23,6 +23,7 @@ from autoskillit.recipe._recipe_ingredients import (  # noqa: E402
     format_ingredients_table,
 )
 from autoskillit.recipe.contracts import (  # noqa: E402
+    SkillContract,
     StaleItem,
     check_contract_staleness,
     generate_recipe_card,
@@ -316,6 +317,7 @@ __all__ = [
     "resolve_input_specs",
     "resolve_skill_name",
     "validate_recipe_cards",
+    "SkillContract",
     "DefaultRecipeRepository",
     "parse_recipe_metadata",
     "load_and_validate",

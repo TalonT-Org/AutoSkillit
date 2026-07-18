@@ -62,12 +62,12 @@ from autoskillit.pipeline import (
 )
 from autoskillit.recipe import (
     DefaultRecipeRepository,
+    SkillContract,
     get_skill_contract,
     load_bundled_manifest,
     resolve_input_specs,
     resolve_skill_name,
 )
-from autoskillit.recipe._contracts_types import SkillContract
 from autoskillit.workspace import (
     DefaultCloneManager,
     DefaultSessionSkillManager,

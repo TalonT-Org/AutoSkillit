@@ -362,6 +362,7 @@ from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
 from .types import SkillCapabilityDef as SkillCapabilityDef
+from .types import SkillContractResolver as SkillContractResolver
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver

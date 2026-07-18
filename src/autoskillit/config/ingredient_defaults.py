@@ -30,6 +30,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "create_and_publish_branch",
             "check_pr_mergeable",
             "set_commit_status",
+            "commit_files",
         ),
     ),
     ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),

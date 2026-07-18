@@ -202,9 +202,9 @@ def _count_semantic_rule_files() -> int:
 # ----- tests ------------------------------------------------------------------
 
 
-def test_kitchen_tagged_tool_count_is_39() -> None:
+def test_kitchen_tagged_tool_count_is_40() -> None:
     count = _count_kitchen_tools()
-    assert count == 39, f"Expected 39 kitchen-tagged tools; found {count}"
+    assert count == 40, f"Expected 40 kitchen-tagged tools; found {count}"
 
 
 def test_free_range_tool_count_is_17() -> None:
@@ -213,9 +213,9 @@ def test_free_range_tool_count_is_17() -> None:
     )
 
 
-def test_headless_tool_count_is_2() -> None:
-    assert _count_headless_tools() == 2, (
-        f"Expected 2 headless-tagged tools; found {_count_headless_tools()}"
+def test_headless_tool_count_is_3() -> None:
+    assert _count_headless_tools() == 3, (
+        f"Expected 3 headless-tagged tools; found {_count_headless_tools()}"
     )
 
 
@@ -297,8 +297,8 @@ def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_57_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 58)
+def test_docs_state_59_mcp_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "MCP tools", 59)
 
 
 @pytest.mark.parametrize(

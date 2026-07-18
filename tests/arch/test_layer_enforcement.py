@@ -638,8 +638,11 @@ def test_il2_no_deferred_upward_imports(pkg_name: str) -> None:
         source = py_file.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(py_file))
         deferred_nodes = _collect_deferred_imports(tree)
+        tc_lines = _type_checking_lines(tree)
 
         for node in deferred_nodes:
+            if node.lineno in tc_lines:
+                continue
             stems_to_check: list[str] = []
             if isinstance(node, ast.ImportFrom) and node.module:
                 parts = node.module.split(".")

@@ -8,16 +8,18 @@ invariants and success qualifiers against parsed fields.
 from __future__ import annotations
 
 import operator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import regex as re
 
 from autoskillit.core import get_logger
-from autoskillit.recipe._contracts_types import (
-    OutcomeInvariantEntry,
-    SkillContract,
-    SuccessQualifierEntry,
-)
+
+if TYPE_CHECKING:
+    from autoskillit.recipe._contracts_types import (
+        OutcomeInvariantEntry,
+        SkillContract,
+        SuccessQualifierEntry,
+    )
 
 logger = get_logger(__name__)
 

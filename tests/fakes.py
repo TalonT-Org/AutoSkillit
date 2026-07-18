@@ -104,6 +104,7 @@ class ExecutorCall:
     network_access: bool = False
     closure_spec: ClosureAuthoritySpec | None = None
     closure_report_root: Path | None = None
+    skill_contract: Any | None = None
 
 
 @dataclasses.dataclass
@@ -214,6 +215,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         network_access: bool = False,
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
+        skill_contract: Any | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -256,6 +258,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 network_access=network_access,
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,
+                skill_contract=skill_contract,
             )
         )
         if self._queue:

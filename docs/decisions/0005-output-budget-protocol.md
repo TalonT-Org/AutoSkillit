@@ -173,8 +173,10 @@ reserve-trigger metrics, so instrumentation must not claim those mechanisms exis
   and oscillated during July 2026 (openai/codex#31860, #32806) — re-verify, do not
   assume an upgrade restores headroom.
 - openai/codex#25458 / #27830: `fork_turns "none"` task-envelope delivery bug gates
-  the intake digest's sub-agent spawn rule (see Verification 6 in the
-  implementation plan).
+  the intake digest's sub-agent spawn rule — until the upstream bug is fixed,
+  `codex --json` sessions cannot reliably deliver task-envelope context to
+  sub-agents, so the intake discipline's "do not spawn sub-agents" guard remains
+  the operative constraint.
 - openai/codex#33881: agent-TOML `model`/`model_reasoning_effort` reportedly ignored
   on 0.144.5 — affects the pins `_generate_agent_tomls` writes.
 - Upstream auto-compact semantics are scope-dependent

@@ -82,12 +82,15 @@ from autoskillit.execution.pr_analysis import (
     partition_files_by_domain,
 )
 from autoskillit.execution.process import (
+    CaptureReadError,
+    CaptureSetupError,
     DefaultSubprocessRunner,
     _has_active_execution_marker,  # noqa: F401 — re-exported for cli/app.py signal guard
     async_kill_process_tree,
     kill_process_tree,
     run_managed_async,
     run_managed_sync,
+    summarize_capture,
 )
 from autoskillit.execution.quota import (
     QUOTA_CACHE_SCHEMA_VERSION,
@@ -146,9 +149,12 @@ __all__ = [
     "CmdSpec",
     "ClaudeHeadlessCmd",
     # process
+    "CaptureReadError",
+    "CaptureSetupError",
     "DefaultSubprocessRunner",
     "run_managed_async",
     "run_managed_sync",
+    "summarize_capture",
     # recording
     "RecordingSubprocessRunner",
     "ReplayingSubprocessRunner",

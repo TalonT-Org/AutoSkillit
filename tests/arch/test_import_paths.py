@@ -348,7 +348,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("server/_factory.py"),
         Path("server/git.py"),
         Path("server/tools/tools_kitchen.py"),
-        Path("server/tools/tools_execution.py"),  # capture-mode exceptions from execution.process
+        Path("server/tools/tools_execution.py"),  # capture-mode types from execution gateway
         Path("cli/app.py"),
         Path("cli/session/_session_cook.py"),  # REQ-IMP-011
         Path("cli/_workspace.py"),  # REQ-IMP-012

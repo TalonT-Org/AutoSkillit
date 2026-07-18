@@ -49,7 +49,7 @@ from autoskillit.core import (
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.execution.process import (
+from autoskillit.execution import (
     CaptureReadError,
     CaptureSetupError,
     summarize_capture,

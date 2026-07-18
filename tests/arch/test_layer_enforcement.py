@@ -992,11 +992,7 @@ def test_migration_no_forbidden_imports() -> None:
 # ── REQ-ARCH-001: No cross-package submodule imports ─────────────────────────
 
 
-_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("server/tools/tools_execution.py", "autoskillit.execution.process"),
-    }
-)
+_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset()
 
 
 def test_no_cross_package_submodule_imports() -> None:

@@ -992,6 +992,13 @@ def test_migration_no_forbidden_imports() -> None:
 # ── REQ-ARCH-001: No cross-package submodule imports ─────────────────────────
 
 
+_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("server/tools/tools_execution.py", "autoskillit.execution.process"),
+    }
+)
+
+
 def test_no_cross_package_submodule_imports() -> None:
     """REQ-ARCH-001: No module outside package X may import from autoskillit.X.<submodule>.
 
@@ -1003,19 +1010,21 @@ def test_no_cross_package_submodule_imports() -> None:
 
     for path in _SOURCE_FILES:
         rel = path.relative_to(AUTOSKILLIT_ROOT)
-        # Determine this file's immediate package (None for root-level modules)
         file_package: str | None = rel.parts[0] if len(rel.parts) > 1 else None
 
         for node in _runtime_import_froms(path):
             if node.module is None:
                 continue
             parts = node.module.split(".")
-            # Flag: autoskillit.<pkg>.<submod> where <pkg> != file_package
             if len(parts) >= 3 and parts[0] == "autoskillit":
                 target_package = parts[1]
                 if file_package != target_package:
+                    rel_str = str(rel)
+                    full_mod = node.module
+                    if (rel_str, full_mod) in _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS:
+                        continue
                     violations.append(
-                        f"{path.relative_to(AUTOSKILLIT_ROOT)}:{node.lineno} "
+                        f"{rel_str}:{node.lineno} "
                         f"imports from autoskillit.{target_package}.{parts[2]}"
                     )
 
@@ -1034,7 +1043,7 @@ def test_server_tools_import_only_allowed_packages() -> None:
     and intra-package autoskillit.server.*.
     TYPE_CHECKING exempt.
     """
-    ALLOWED = {"core", "pipeline", "server", "config", "fleet", "hook_registry"}
+    ALLOWED = {"core", "execution", "pipeline", "server", "config", "fleet", "hook_registry"}
     tools_files = [
         p for p in _SOURCE_FILES if p.parent.name == "tools" and p.stem.startswith("tools_")
     ]

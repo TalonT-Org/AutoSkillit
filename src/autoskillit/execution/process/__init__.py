@@ -31,7 +31,13 @@ from autoskillit.core import (
     get_logger,
     read_starttime_ticks,
 )
-from autoskillit.execution.process._process_io import create_temp_io, read_temp_output
+from autoskillit.execution.process._process_io import (
+    CaptureReadError,
+    CaptureSetupError,
+    create_temp_io,
+    read_temp_output,
+    summarize_capture,
+)
 from autoskillit.execution.process._process_jsonl import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
@@ -96,6 +102,8 @@ __all__ = [
     "_watch_process",
     "_watch_session_log",
     "async_kill_process_tree",
+    "CaptureReadError",
+    "CaptureSetupError",
     "create_temp_io",
     "decide_termination_action",
     "execute_termination_action",
@@ -105,6 +113,7 @@ __all__ = [
     "resolve_termination",
     "run_managed_async",
     "run_managed_sync",
+    "summarize_capture",
 ]
 
 

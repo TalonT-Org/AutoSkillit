@@ -140,8 +140,9 @@ recorded explicitly in the issue body.
    members must retrieve bounded slices from that artifact.
 7. Repeated individually bounded calls can still exhaust cumulative context. No pre-call
    component owns current context usage, so reserve instructions remain advisory.
-8. Subprocess output is still materialized in worker memory before model-context shaping.
-   The protocol does not bound worker memory or temporary-disk consumption.
+8. Closed for the `run_cmd` channel by #4286 (capture files promoted in place; only
+   bounded slices enter worker memory). Still open for `run_skill` and `test_check`,
+   whose adjudication requires the full text.
 
 ## Operational Signals
 

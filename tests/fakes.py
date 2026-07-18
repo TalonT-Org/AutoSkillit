@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import re
+import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
@@ -865,4 +866,19 @@ class MockSubprocessRunner(SubprocessRunner):
         on_pid_resolved = kwargs.get("on_pid_resolved")
         if callable(on_pid_resolved) and result.pid > 0:
             on_pid_resolved(result.pid, 0)
+        capture_dir = kwargs.get("capture_dir")
+        if capture_dir is not None:
+            capture_dir_path = Path(capture_dir)  # type: ignore[arg-type]
+            capture_dir_path.mkdir(parents=True, exist_ok=True)
+            stdout_path = capture_dir_path / f"proc_stdout_{uuid.uuid4().hex[:8]}.tmp"
+            stderr_path = capture_dir_path / f"proc_stderr_{uuid.uuid4().hex[:8]}.tmp"
+            stdout_path.write_text(result.stdout, encoding="utf-8")
+            stderr_path.write_text(result.stderr, encoding="utf-8")
+            result = dataclasses.replace(
+                result,
+                stdout="",
+                stderr="",
+                stdout_path=stdout_path,
+                stderr_path=stderr_path,
+            )
         return result

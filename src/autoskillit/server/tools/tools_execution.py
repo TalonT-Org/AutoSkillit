@@ -26,10 +26,13 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
+    CapturedStream,
     ClaudeDirectoryConventions,
     ClosureAuthoritySpec,
     CodingAgentBackend,
     SkillResult,
+    SpillSpec,
+    SubprocessResult,
     TerminationReason,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -46,7 +49,7 @@ from autoskillit.core import (
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.execution.process._process_io import (
+from autoskillit.execution.process import (
     CaptureReadError,
     CaptureSetupError,
     summarize_capture,
@@ -106,6 +109,30 @@ _PURE_SLEEP_RE = re.compile(
 )
 
 INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
+
+
+def _summarize_streams(
+    sub_result: SubprocessResult,
+    spec: SpillSpec,
+    complete: bool,
+) -> tuple[CapturedStream | None, CapturedStream | None, str | None]:
+    stdout_capture = None
+    stderr_capture = None
+    capture_error: str | None = None
+    for stream_name in ("stdout", "stderr"):
+        stream_path = getattr(sub_result, f"{stream_name}_path")
+        if stream_path is not None:
+            try:
+                cap = summarize_capture(stream_path, spec, complete=complete)
+                if stream_name == "stdout":
+                    stdout_capture = cap
+                else:
+                    stderr_capture = cap
+            except CaptureReadError as exc:
+                capture_error = str(exc)
+    return stdout_capture, stderr_capture, capture_error
+
+
 DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"
 
 
@@ -448,20 +475,9 @@ async def run_cmd(
                     execution_error = f"Unexpected termination: {term.value}"
                     complete = False
 
-                stdout_capture = None
-                stderr_capture = None
-                capture_error: str | None = None
-                for stream_name in ("stdout", "stderr"):
-                    stream_path = getattr(sub_result, f"{stream_name}_path")
-                    if stream_path is not None:
-                        try:
-                            cap = summarize_capture(stream_path, spec, complete=complete)
-                            if stream_name == "stdout":
-                                stdout_capture = cap
-                            else:
-                                stderr_capture = cap
-                        except CaptureReadError as exc:
-                            capture_error = str(exc)
+                stdout_capture, stderr_capture, capture_error = _summarize_streams(
+                    sub_result, spec, complete
+                )
 
                 result = spill_run_cmd_result(
                     tool_ctx,

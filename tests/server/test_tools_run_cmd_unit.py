@@ -133,7 +133,7 @@ class TestRunCmdRecording:
         mock_recorder.record_non_session_step.assert_called_once_with(
             step_name="setup",
             tool="run_cmd",
-            result_summary={"exit_code": 0, "stdout_head": "task output"},
+            result_summary={"exit_code": 0, "stdout_head": "(capture mode)"},
         )
 
     @pytest.mark.anyio

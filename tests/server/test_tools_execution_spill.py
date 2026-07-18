@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from autoskillit.core import SubprocessResult, TerminationReason
 from autoskillit.server._response_budget import RESPONSE_SPILL_METADATA_KEY
 from autoskillit.server.tools.tools_execution import run_cmd, run_python, run_skill
 from tests.conftest import _make_result
@@ -16,12 +18,46 @@ from tests.conftest import _make_result
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+def _write_capture_result(
+    capture_dir: Path,
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+) -> SubprocessResult:
+    """Write stdout/stderr content to real files under capture_dir and return the result.
+
+    Mirrors what the real ``_run_subprocess_captured`` -> ``run_managed_async`` path
+    does: stdout/stderr strings are empty; the content lives in files referenced by
+    stdout_path/stderr_path.
+    """
+    capture_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = capture_dir / f"proc_stdout_{uuid.uuid4().hex[:8]}.tmp"
+    stderr_path = capture_dir / f"proc_stderr_{uuid.uuid4().hex[:8]}.tmp"
+    stdout_path.write_text(stdout, encoding="utf-8")
+    stderr_path.write_text(stderr, encoding="utf-8")
+    return SubprocessResult(
+        returncode=returncode,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=12345,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+    )
+
+
 @pytest.mark.anyio
 async def test_run_cmd_spills_large_stdout_under_calling_project(tool_ctx_kitchen_open, tmp_path):
     stdout = "head-sentinel\n" + ("x" * 10_000) + "\ntail-sentinel"
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, stdout=stdout)
+
     with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess",
-        new=AsyncMock(return_value=(0, stdout, "")),
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
 
@@ -43,10 +79,16 @@ async def test_run_cmd_resolves_absolute_cwd_only_for_spill_anchor(
     project_link = tmp_path / "project-link"
     project_link.symlink_to(project, target_is_directory=True)
     stdout = "x" * 10_000
-    subprocess = AsyncMock(return_value=(0, stdout, ""))
+    capture_dir = project / ".autoskillit" / "temp" / "run_cmd"
+
+    subprocess = AsyncMock(
+        side_effect=lambda cmd, *, cwd, timeout, env=None, capture_dir=capture_dir: (
+            _write_capture_result(capture_dir, stdout=stdout)
+        )
+    )
 
     with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess",
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
         new=subprocess,
     ):
         data = json.loads(await run_cmd("bounded-command", str(project_link)))
@@ -61,9 +103,14 @@ async def test_run_cmd_resolves_absolute_cwd_only_for_spill_anchor(
 @pytest.mark.parametrize("cwd", ["", "relative-project"])
 async def test_run_cmd_empty_or_relative_cwd_uses_injected_temp_dir(tool_ctx_kitchen_open, cwd):
     stdout = "x" * 10_000
+    capture_dir = tool_ctx_kitchen_open.temp_dir / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, stdout=stdout)
+
     with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess",
-        new=AsyncMock(return_value=(0, stdout, "")),
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", cwd))
 
@@ -72,9 +119,14 @@ async def test_run_cmd_empty_or_relative_cwd_uses_injected_temp_dir(tool_ctx_kit
 
 @pytest.mark.anyio
 async def test_run_cmd_small_output_shape_is_unchanged(tool_ctx_kitchen_open, tmp_path):
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, stdout="small")
+
     with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess",
-        new=AsyncMock(return_value=(0, "small", "")),
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
     ):
         raw = await run_cmd("bounded-command", str(tmp_path))
 

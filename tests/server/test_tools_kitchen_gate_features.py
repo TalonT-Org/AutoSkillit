@@ -425,6 +425,7 @@ def test_recipe_resource_returns_composed_content():
         defer_unresolved=True,
         resolved_defaults={},
         backend_capabilities_map={},
+        backend_origin_map={},
     )
     assert result == ("name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n")
     assert "optional: true" not in result

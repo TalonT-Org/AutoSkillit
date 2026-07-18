@@ -538,6 +538,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     ),
     "registry": frozenset(
         {
+            "cli",
             "recipe",
             "server/test_smoke_pipeline.py",
             "contracts/test_skill_yaml_validation.py",

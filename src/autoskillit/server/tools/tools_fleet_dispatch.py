@@ -366,7 +366,7 @@ async def dispatch_food_truck(
                     config_backend=tool_ctx.config.agent_backend,
                 )
                 _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
-                _effective_backend_map = _compute_effective_backend_map(
+                _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                     _preflight_raw_steps,
                     _override_backend.name if _override_backend else None,
                     tool_ctx.config.providers,

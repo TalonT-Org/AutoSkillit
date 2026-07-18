@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, assert_never
+from typing import TYPE_CHECKING, Any, NamedTuple, assert_never
 
 import regex as re
 
@@ -464,15 +464,24 @@ def _resolve_provider_profile(
     return (name, _profile_to_env(profile))
 
 
+class BackendPinResolution(NamedTuple):
+    """Result of resolving an explicit backend override from config."""
+
+    backend: str
+    tier: str
+    key_path: str
+
+
 def _resolve_backend_override(
     step_name: str,
     recipe_name: str,
     config_backend: AgentBackendConfig,
-) -> str | None:
+) -> BackendPinResolution | None:
     """Resolve explicit backend override from config.
 
-    Returns the backend name if an explicit override matches, or ``None``
-    to fall through to capability/provider routing.
+    Returns a ``BackendPinResolution`` with backend name, tier, and the
+    dotted config key path, or ``None`` to fall through to
+    capability/provider routing.
 
     Precedence (highest first):
       Tier 0:  ``recipe_overrides[recipe][step]``  (exact)
@@ -495,7 +504,11 @@ def _resolve_backend_override(
                 step=step_name,
                 backend=recipe_map[step_name],
             )
-            return recipe_map[step_name]
+            return BackendPinResolution(
+                recipe_map[step_name],
+                "recipe_step",
+                f"agent_backend.recipe_overrides.{recipe_name}.{step_name}",
+            )
         if "*" in recipe_map:
             logger.debug(
                 "backend_override_resolved",
@@ -504,7 +517,11 @@ def _resolve_backend_override(
                 step=step_name,
                 backend=recipe_map["*"],
             )
-            return recipe_map["*"]
+            return BackendPinResolution(
+                recipe_map["*"],
+                "recipe_wildcard",
+                f"agent_backend.recipe_overrides.{recipe_name}.*",
+            )
 
     if recipe_name and step_name and step_name in config_backend.step_overrides:
         logger.debug(
@@ -513,7 +530,11 @@ def _resolve_backend_override(
             step=step_name,
             backend=config_backend.step_overrides[step_name],
         )
-        return config_backend.step_overrides[step_name]
+        return BackendPinResolution(
+            config_backend.step_overrides[step_name],
+            "step_override",
+            f"agent_backend.step_overrides.{step_name}",
+        )
 
     if recipe_name and "*" in config_backend.step_overrides:
         logger.debug(
@@ -522,7 +543,11 @@ def _resolve_backend_override(
             step=step_name,
             backend=config_backend.step_overrides["*"],
         )
-        return config_backend.step_overrides["*"]
+        return BackendPinResolution(
+            config_backend.step_overrides["*"],
+            "step_wildcard",
+            "agent_backend.step_overrides.*",
+        )
 
     return None
 

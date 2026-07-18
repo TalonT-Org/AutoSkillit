@@ -41,31 +41,12 @@ _MATRIX_IDS: list[tuple[str, str]] = [
 ]
 
 
-# -- Known-broken combos (xfail strict) -------------------------------------
-KNOWN_BROKEN: dict[tuple[str, str], str] = {
-    (recipe, backend): (
-        "Part A exposes latent defects in bundled recipes (merge_fix_count "
-        "without reset on the audit-remediation NO-GO path; "
-        "ref_push_count shared with asymmetric push symmetry in remediation.yaml). "
-        "Part B adds reset steps and a push step to close these defects. "
-        "Remove this xfail entry when Part B lands."
-    )
-    for recipe in ("remediation", "implementation", "implementation-groups")
-    for backend in _BACKEND_NAMES
-}
-
 _SKILL_RESOLVER = DefaultSkillResolver()
 
 
 def _apply_marks(matrix_ids: list[tuple[str, str]]) -> list[Any]:
-    """Wrap matrix tuples in pytest.param, attaching xfail marks for KNOWN_BROKEN."""
-    params: list[Any] = []
-    for r, b in matrix_ids:
-        marks: list[Any] = []
-        if (r, b) in KNOWN_BROKEN:
-            marks.append(pytest.mark.xfail(strict=True, reason=KNOWN_BROKEN[(r, b)]))
-        params.append(pytest.param(r, b, marks=marks, id=f"{r}/{b}"))
-    return params
+    """Wrap matrix tuples in pytest.param."""
+    return [pytest.param(r, b, id=f"{r}/{b}") for r, b in matrix_ids]
 
 
 @pytest.mark.parametrize("recipe_name,backend_name", _apply_marks(_MATRIX_IDS))
@@ -76,7 +57,7 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeyp
     )
     backend = get_backend(backend_name)
     _raw = load_recipe(_RECIPE_PATHS[recipe_name])
-    _eff_map = _compute_effective_backend_map(
+    _eff_map, _ = _compute_effective_backend_map(
         _raw.steps,
         backend_name,
         None,
@@ -143,7 +124,7 @@ def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str, monk
     )
     backend = get_backend(backend_name)
     _raw = load_recipe(_RECIPE_PATHS[recipe_name])
-    _eff_map = _compute_effective_backend_map(
+    _eff_map, _ = _compute_effective_backend_map(
         _raw.steps,
         backend_name,
         None,
@@ -200,14 +181,6 @@ def test_matrix_collection_count() -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Part A exposes latent defects in bundled implementation.yaml "
-        "(merge_fix_count without reset on the audit-remediation NO-GO path). "
-        "Part B adds the reset step; remove xfail when Part B lands."
-    ),
-)
 def test_recipe_backend_matrix_codex_with_provider_override() -> None:
     """Codex with backend_supports_git_write=true: recipe is valid and feasible.
 

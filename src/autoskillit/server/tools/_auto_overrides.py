@@ -113,7 +113,10 @@ def _provider_aware_capability_overrides(
             if config_backend is not None:
                 from autoskillit.server._guards import _resolve_backend_override  # circular-break
 
-                _explicit_be = _resolve_backend_override(step_name, recipe_name, config_backend)
+                _explicit_resolution = _resolve_backend_override(
+                    step_name, recipe_name, config_backend
+                )
+                _explicit_be = _explicit_resolution.backend if _explicit_resolution else None
                 if _explicit_be == AGENT_BACKEND_CLAUDE_CODE:
                     cap_resolved = skill_resolver.resolve(skill_name)
                     if cap_resolved:
@@ -233,7 +236,7 @@ def _compute_effective_backend_map(
     *,
     skill_resolver: SkillResolver | None = None,
     config_backend: AgentBackendConfig | None = None,
-) -> dict[str, str] | None:
+) -> tuple[dict[str, str] | None, dict[str, str]]:
     """Build a per-step effective backend map mirroring ``tools_execution`` dispatch logic.
 
     For each ``run_skill`` step, returns the backend that ``run_skill`` would dispatch
@@ -255,10 +258,11 @@ def _compute_effective_backend_map(
     (REQ-ADMIT-002).
     """
     if backend_name is None or recipe_steps is None:
-        return None
+        return None, {}
     from autoskillit.server._guards import _resolve_provider_profile  # circular-break
 
     result: dict[str, str] = {}
+    origin_map: dict[str, str] = {}
     for step_name, step in recipe_steps.items():
         if getattr(step, "tool", None) not in SKILL_TOOLS:
             continue
@@ -270,7 +274,8 @@ def _compute_effective_backend_map(
 
             _explicit = _resolve_backend_override(step_name, recipe_name, config_backend)
             if _explicit is not None:
-                result[step_name] = _explicit
+                result[step_name] = _explicit.backend
+                origin_map[step_name] = _explicit.key_path
                 continue
 
         has_base_url = False
@@ -307,4 +312,4 @@ def _compute_effective_backend_map(
                     continue
 
         result[step_name] = backend_name
-    return result if result else None
+    return (result if result else None), origin_map

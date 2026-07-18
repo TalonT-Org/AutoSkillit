@@ -87,6 +87,7 @@ def validate_from_path(
     ingredient_overrides: dict[str, str] | None = None,
     effective_backend_map: dict[str, str] | None = None,
     backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
+    backend_origin_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
 
@@ -143,6 +144,7 @@ def validate_from_path(
             backend_name=backend_name,
             effective_backend_map=effective_backend_map,
             backend_capabilities_map=backend_capabilities_map,
+            backend_origin_map=backend_origin_map,
         )
         _pre_prune_findings = run_semantic_rules(pre_prune_ctx)
         recipe, _skip_resolutions = _prune_skipped_steps(
@@ -161,6 +163,7 @@ def validate_from_path(
         backend_name=backend_name,
         effective_backend_map=effective_backend_map,
         backend_capabilities_map=backend_capabilities_map,
+        backend_origin_map=backend_origin_map,
     )
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)

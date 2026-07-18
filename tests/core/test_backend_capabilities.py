@@ -284,3 +284,39 @@ def test_cmd_spec_has_is_resume_bool_field():
     hints = typing.get_type_hints(CmdSpec)
     assert "is_resume" in hints, "CmdSpec must have an is_resume field"
     assert hints["is_resume"] is bool
+
+
+def test_describe_capability_mismatches_convergence():
+    """describe_capability_mismatches() output appears in both consumer messages."""
+    from autoskillit.core import (
+        BackendCapabilities,
+        HardCapabilityMismatch,
+        describe_capability_mismatches,
+        unsatisfied_backend_capabilities,
+    )
+
+    caps = BackendCapabilities(
+        channel_b_capable=True,
+        pty_required=False,
+        session_resume_capable=False,
+        skill_injection_capable=False,
+        supports_thinking_blocks=False,
+        supports_claude_format_stdout=False,
+        exit_code_is_terminal=False,
+        mcp_config_capable=False,
+        food_truck_capable=False,
+        completion_record_types=frozenset(),
+        session_record_types=frozenset(),
+        git_metadata_writable=False,
+    )
+    mismatches = unsatisfied_backend_capabilities(frozenset({"git_metadata_write"}), caps)
+    assert mismatches, "Expected at least one mismatch for git_metadata_write"
+    formatted = describe_capability_mismatches(mismatches)
+    assert "git_metadata_writable" in formatted
+    assert "True" in formatted
+
+    single = [HardCapabilityMismatch("git_metadata_write", "git_metadata_writable", False)]
+    assert describe_capability_mismatches(single) == (
+        "git_metadata_writable=True required (via 'git_metadata_write') "
+        "but backend has git_metadata_writable=False"
+    )

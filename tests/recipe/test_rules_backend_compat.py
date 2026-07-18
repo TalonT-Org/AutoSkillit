@@ -330,7 +330,7 @@ class TestBundledRecipeBackendCompat:
 
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
         resolver = DefaultSkillResolver()
-        eff_map = _compute_effective_backend_map(
+        eff_map, _ = _compute_effective_backend_map(
             recipe.steps,
             "codex",
             None,

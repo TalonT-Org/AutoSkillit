@@ -48,6 +48,7 @@ __all__ = [
     "SkillCapabilityDef",
     "HardCapabilityMismatch",
     "SKILL_CAPABILITY_REGISTRY",
+    "describe_capability_mismatches",
     "unsatisfied_backend_capabilities",
 ]
 
@@ -483,6 +484,19 @@ for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
             f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}].required_backend_property="
             f"{_cap_def.required_backend_property!r} is not a field on BackendCapabilities."
         )
+
+
+def describe_capability_mismatches(
+    mismatches: tuple[HardCapabilityMismatch, ...] | list[HardCapabilityMismatch],
+) -> str:
+    """Format capability mismatches into a human-readable string."""
+    parts = []
+    for m in mismatches:
+        parts.append(
+            f"{m.property_name}=True required (via '{m.capability}') "
+            f"but backend has {m.property_name}={m.actual_value!r}"
+        )
+    return "; ".join(parts)
 
 
 def unsatisfied_backend_capabilities(

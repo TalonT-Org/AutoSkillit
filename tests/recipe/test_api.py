@@ -321,6 +321,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
             "resolved_defaults",
             "lister",
             "temp_dir",
+            "backend_origin_map",
         }
     )
 
@@ -476,6 +477,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         defer_unresolved=False,
         backend_name=None,
         effective_backend_map=None,
+        backend_origin_map=None,
     ):
         captured["recipe_info"] = recipe_info
         captured["backend_capabilities_map"] = locals().get("backend_capabilities_map")
@@ -494,6 +496,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             backend_name=backend_name,
             effective_backend_map=effective_backend_map,
             backend_capabilities_map=backend_capabilities_map,
+            backend_origin_map=backend_origin_map,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)
@@ -1241,14 +1244,6 @@ steps:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Part A exposes latent defects in bundled implementation.yaml "
-        "(merge_fix_count without reset). Part B resolves the recipe defect; "
-        "remove xfail when Part B lands."
-    ),
-)
 def test_load_and_validate_produces_valid_content_after_step_pruning(tmp_path: Path) -> None:
     """After structural repair (when=None catch-alls on resolve_review), pruning
     skip_when_false steps must produce a recipe with non-empty content and no
@@ -1292,14 +1287,6 @@ def test_load_and_validate_produces_valid_content_after_step_pruning(tmp_path: P
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Part A exposes latent defects in bundled implementation.yaml "
-        "(merge_fix_count without reset). Part B resolves the recipe defect; "
-        "remove xfail when Part B lands."
-    ),
-)
 def test_validate_from_path_codex_backend_valid_after_pruning(tmp_path: Path) -> None:
     """validate_from_path must prune steps when ingredient_overrides are provided.
 

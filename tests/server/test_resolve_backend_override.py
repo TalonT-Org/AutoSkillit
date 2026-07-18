@@ -11,18 +11,24 @@ def _make_backend(**kwargs):
     return AgentBackendConfig(**kwargs)
 
 
+def _backend(result):
+    """Extract .backend from a BackendPinResolution, or return None."""
+    return result.backend if result is not None else None
+
+
 class TestResolveBackendOverride:
     def test_exact_recipe_step_match(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"dry_walkthrough": "codex"}})
-        assert _resolve_backend_override("dry_walkthrough", "remediation", cfg) == "codex"
+        result = _resolve_backend_override("dry_walkthrough", "remediation", cfg)
+        assert _backend(result) == "codex"
 
     def test_recipe_wildcard(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"*": "codex"}})
-        assert _resolve_backend_override("any_step", "remediation", cfg) == "codex"
+        assert _backend(_resolve_backend_override("any_step", "remediation", cfg)) == "codex"
 
     def test_exact_beats_wildcard(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
@@ -30,13 +36,18 @@ class TestResolveBackendOverride:
         cfg = _make_backend(
             recipe_overrides={"remediation": {"*": "codex", "dry_walkthrough": "claude-code"}}
         )
-        assert _resolve_backend_override("dry_walkthrough", "remediation", cfg) == "claude-code"
+        assert (
+            _backend(_resolve_backend_override("dry_walkthrough", "remediation", cfg))
+            == "claude-code"
+        )
 
     def test_step_override_with_recipe_context(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(step_overrides={"dry_walkthrough": "codex"})
-        assert _resolve_backend_override("dry_walkthrough", "remediation", cfg) == "codex"
+        assert (
+            _backend(_resolve_backend_override("dry_walkthrough", "remediation", cfg)) == "codex"
+        )
 
     def test_step_override_requires_recipe_context(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
@@ -51,13 +62,16 @@ class TestResolveBackendOverride:
             step_overrides={"dry_walkthrough": "codex"},
             recipe_overrides={"remediation": {"dry_walkthrough": "claude-code"}},
         )
-        assert _resolve_backend_override("dry_walkthrough", "remediation", cfg) == "claude-code"
+        assert (
+            _backend(_resolve_backend_override("dry_walkthrough", "remediation", cfg))
+            == "claude-code"
+        )
 
     def test_step_wildcard_with_recipe_context(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(step_overrides={"*": "codex"})
-        assert _resolve_backend_override("anything", "any_recipe", cfg) == "codex"
+        assert _backend(_resolve_backend_override("anything", "any_recipe", cfg)) == "codex"
 
     def test_step_wildcard_requires_recipe_context(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
@@ -75,7 +89,7 @@ class TestResolveBackendOverride:
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"*": "codex"}})
-        assert _resolve_backend_override("", "remediation", cfg) == "codex"
+        assert _backend(_resolve_backend_override("", "remediation", cfg)) == "codex"
 
     def test_empty_recipe_name_skips_recipe_overrides(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override

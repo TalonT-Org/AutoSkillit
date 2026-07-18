@@ -49,7 +49,7 @@ steps:
       Ensure the working directory is on the target branch before audits run.
       If the checkout fails (e.g., dirty working tree, unknown branch), route
       to escalate — audits cannot proceed on the wrong branch.
-    on_success: run_audits
+    on_success: init_audit_run
     on_failure: escalate_stop
     retries: 0
     on_exhausted: escalate_stop

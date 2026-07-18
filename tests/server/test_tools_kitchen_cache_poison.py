@@ -12,14 +12,6 @@ import pytest
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Part A exposes latent defects in bundled implementation.yaml "
-        "(merge_fix_count without reset). Part B resolves the recipe defect; "
-        "remove xfail when Part B lands."
-    ),
-)
 async def test_open_kitchen_ingredients_only_does_not_poison_load_recipe(
     tool_ctx_kitchen_open,
     monkeypatch,

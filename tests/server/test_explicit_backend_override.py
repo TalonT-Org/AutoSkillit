@@ -49,7 +49,7 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
             recipe_overrides={"remediation": {"dry_walkthrough": "codex"}},
         )
         # Admission side
-        admission_map = _compute_effective_backend_map(
+        admission_map, _ = _compute_effective_backend_map(
             cast(Any, steps), "codex", None, "remediation", config_backend=cfg
         )
         assert admission_map == {"dry_walkthrough": "codex"}
@@ -97,7 +97,7 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
             recipe_overrides={"remediation": {"dry_walkthrough": "codex"}},
         )
         resolver = _make_resolver("dry-walkthrough")
-        admission_map = _compute_effective_backend_map(
+        admission_map, _ = _compute_effective_backend_map(
             cast(Any, steps),
             "codex",
             None,
@@ -198,7 +198,9 @@ class TestBothRoutingDirections:
             backend="codex",
             step_overrides={"implement": "claude-code"},
         )
-        assert _resolve_backend_override("implement", "any_recipe", cfg) == "claude-code"
+        result = _resolve_backend_override("implement", "any_recipe", cfg)
+        assert result is not None
+        assert result.backend == "claude-code"
 
     def test_claude_to_codex_explicit_override(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
@@ -207,7 +209,9 @@ class TestBothRoutingDirections:
             backend="claude-code",
             step_overrides={"implement": "codex"},
         )
-        assert _resolve_backend_override("implement", "any_recipe", cfg) == "codex"
+        result = _resolve_backend_override("implement", "any_recipe", cfg)
+        assert result is not None
+        assert result.backend == "codex"
 
     def test_dry_walkthrough_codex_pin(self) -> None:
         """The exact scenario from issue #4242: backend=codex + recipe override to codex +
@@ -225,7 +229,7 @@ class TestBothRoutingDirections:
             recipe_overrides={"remediation": {"dry_walkthrough": "codex"}},
         )
         resolver = _make_resolver("dry-walkthrough")
-        admission_map = _compute_effective_backend_map(
+        admission_map, _ = _compute_effective_backend_map(
             cast(Any, steps),
             "codex",
             providers,
@@ -258,7 +262,7 @@ class TestBothRoutingDirections:
             recipe_overrides={"remediation": {"dry_walkthrough": "codex"}},
         )
         resolver = _make_resolver("dry-walkthrough")
-        admission_map = _compute_effective_backend_map(
+        admission_map, _ = _compute_effective_backend_map(
             cast(Any, steps),
             "codex",
             None,

@@ -6,7 +6,11 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import CodingAgentBackend, unsatisfied_backend_capabilities
+from autoskillit.core import (
+    CodingAgentBackend,
+    describe_capability_mismatches,
+    unsatisfied_backend_capabilities,
+)
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
 
@@ -40,12 +44,7 @@ def check_hard_capability_feasibility(
     """
     mismatches = unsatisfied_backend_capabilities(uses_capabilities, backend.capabilities)
     if mismatches:
-        mismatch = mismatches[0]
-        return (
-            f"Capability '{mismatch.capability}' requires backend property "
-            f"'{mismatch.property_name}' to be True, but backend '{backend.name}' has "
-            f"{mismatch.property_name}={mismatch.actual_value!r}."
-        )
+        return f"Backend '{backend.name}': {describe_capability_mismatches(mismatches)}."
     return None
 
 
@@ -110,8 +109,9 @@ def _check_dispatch_feasibility(
         #   for git_metadata_write skills), dispatch is infeasible and the
         #   gate refuses the recipe.
         if config_backend is not None:
-            _explicit = _resolve_backend_override(step_name, recipe_name, config_backend)
-            if _explicit is not None:
+            _resolution = _resolve_backend_override(step_name, recipe_name, config_backend)
+            if _resolution is not None:
+                _explicit = _resolution.backend
                 try:
                     _pinned_backend = get_backend(_explicit)
                 except (ValueError, KeyError):
@@ -178,7 +178,13 @@ def _check_dispatch_feasibility(
                                     "stage": "dispatch_feasibility_preflight",
                                     "backend": _explicit,
                                     "step": step_name,
-                                    "override_source": "explicit_config",
+                                    "origin": _resolution.key_path,
+                                    "remedy": (
+                                        f"Remove or change '{_resolution.key_path}' in "
+                                        "~/.autoskillit/config.yaml or "
+                                        "<project>/.autoskillit/config.yaml, or pin a "
+                                        "backend with the required capability."
+                                    ),
                                 }
                             )
                 continue

@@ -29,14 +29,21 @@ class RuleFinding:
     severity: Severity
     step_name: str
     message: str
+    origin: str | None = None
+    remedy: str | None = None
 
     def to_dict(self) -> dict[str, str]:
-        return {
+        d = {
             "rule": self.rule,
             "severity": self.severity.value,
             "step": self.step_name,
             "message": self.message,
         }
+        if self.origin is not None:
+            d["origin"] = self.origin
+        if self.remedy is not None:
+            d["remedy"] = self.remedy
+        return d
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +113,8 @@ def make_finding(
     message: str,
     *,
     severity: Severity | None = None,
+    origin: str | None = None,
+    remedy: str | None = None,
 ) -> RuleFinding:
     """Create a RuleFinding using the registered severity for the named rule.
 
@@ -121,6 +130,8 @@ def make_finding(
         severity=severity if severity is not None else rule_def.severity,
         step_name=step_name,
         message=message,
+        origin=origin,
+        remedy=remedy,
     )
 
 

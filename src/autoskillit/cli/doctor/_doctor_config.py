@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import Severity, get_logger
 
@@ -128,3 +129,245 @@ def _check_secret_scanning_hook(project_dir: Path) -> DoctorResult:
             f"({scanners}). Add one to prevent credential leaks."
         )
     return DoctorResult(Severity.ERROR, "secret_scanning_hook", msg)
+
+
+def _iter_backend_pins(data: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Yield (recipe_name, step_name, backend_name) tuples for every pin in a config layer.
+
+    ``recipe_name`` is empty for global ``step_overrides`` pins, which are not
+    scoped to a single recipe.
+    """
+    agent_backend = data.get("agent_backend")
+    if not isinstance(agent_backend, dict):
+        return []
+    pins: list[tuple[str, str, str]] = []
+    recipe_overrides = agent_backend.get("recipe_overrides")
+    if isinstance(recipe_overrides, dict):
+        for recipe_name, step_map in recipe_overrides.items():
+            if not isinstance(step_map, dict):
+                continue
+            for step_name, backend_name in step_map.items():
+                if isinstance(backend_name, str):
+                    pins.append((str(recipe_name), str(step_name), backend_name))
+    step_overrides = agent_backend.get("step_overrides")
+    if isinstance(step_overrides, dict):
+        for step_name, backend_name in step_overrides.items():
+            if isinstance(backend_name, str):
+                pins.append(("", str(step_name), backend_name))
+    return pins
+
+
+def _check_standing_backend_pins_feasibility(
+    project_dir: Path | None = None,
+) -> list[DoctorResult]:
+    """Check that every standing agent_backend pin targets a capability-feasible backend.
+
+    Re-reads each config.yaml layer individually (mirrors
+    ``_check_config_layers_for_secrets``) and resolves every ``recipe_overrides``
+    and ``step_overrides`` pin against the step's skill capabilities. A pin that
+    forces a backend lacking a hard capability the step's skill requires is
+    reported as an ERROR since it would fail at dispatch time.
+    """
+    from autoskillit.core import (
+        YAMLError,
+        describe_capability_mismatches,
+        load_yaml,
+        unsatisfied_backend_capabilities,
+    )
+    from autoskillit.execution import get_backend
+    from autoskillit.recipe import find_recipe_by_name, load_recipe
+    from autoskillit.workspace import DefaultSkillResolver
+
+    root = project_dir or Path.cwd()
+    config_paths = [
+        Path.home() / ".autoskillit" / "config.yaml",
+        root / ".autoskillit" / "config.yaml",
+    ]
+    resolver = DefaultSkillResolver()
+    results: list[DoctorResult] = []
+
+    for config_path in config_paths:
+        if not config_path.is_file():
+            continue
+        try:
+            data = load_yaml(config_path) or {}
+        except YAMLError as exc:
+            results.append(
+                DoctorResult(
+                    Severity.WARNING,
+                    "standing_backend_pins_feasibility",
+                    f"Could not parse {str(config_path)!r} as YAML: {exc}",
+                )
+            )
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        for recipe_name, step_name, backend_name in _iter_backend_pins(data):
+            is_recipe_pin = bool(recipe_name)
+            dotted_key = (
+                f"agent_backend.recipe_overrides.{recipe_name}.{step_name}"
+                if is_recipe_pin
+                else f"agent_backend.step_overrides.{step_name}"
+            )
+
+            try:
+                backend = get_backend(backend_name)
+            except ValueError:
+                results.append(
+                    DoctorResult(
+                        Severity.WARNING,
+                        "standing_backend_pins_feasibility",
+                        f"{config_path}: {dotted_key} references unknown backend "
+                        f"{backend_name!r}.",
+                    )
+                )
+                continue
+
+            if not is_recipe_pin:
+                # Global step_overrides pins are not tied to a single recipe's step
+                # definition, so there is no skill to resolve capabilities from.
+                continue
+
+            recipe_info = find_recipe_by_name(recipe_name, root)
+            if recipe_info is None:
+                results.append(
+                    DoctorResult(
+                        Severity.WARNING,
+                        "standing_backend_pins_feasibility",
+                        f"{config_path}: {dotted_key} references unknown recipe {recipe_name!r}.",
+                    )
+                )
+                continue
+
+            try:
+                recipe = load_recipe(recipe_info.path)
+            except (OSError, ValueError, YAMLError) as exc:
+                results.append(
+                    DoctorResult(
+                        Severity.WARNING,
+                        "standing_backend_pins_feasibility",
+                        f"{config_path}: {dotted_key} could not load recipe "
+                        f"{recipe_name!r}: {exc}",
+                    )
+                )
+                continue
+
+            step = recipe.steps.get(step_name)
+            if step_name != "*" and step is None:
+                results.append(
+                    DoctorResult(
+                        Severity.WARNING,
+                        "standing_backend_pins_feasibility",
+                        f"{config_path}: {dotted_key} references unknown step "
+                        f"{step_name!r} in recipe {recipe_name!r}.",
+                    )
+                )
+                continue
+
+            steps_to_check = [step] if step is not None else list(recipe.steps.values())
+            for target_step in steps_to_check:
+                skill_name = target_step.skill_name
+                if not skill_name:
+                    continue
+                skill_info = resolver.resolve(skill_name)
+                if skill_info is None:
+                    results.append(
+                        DoctorResult(
+                            Severity.WARNING,
+                            "standing_backend_pins_feasibility",
+                            f"{config_path}: {dotted_key} references skill "
+                            f"{skill_name!r} (step {target_step.name!r}) which could "
+                            "not be resolved.",
+                        )
+                    )
+                    continue
+
+                mismatches = unsatisfied_backend_capabilities(
+                    skill_info.uses_capabilities, backend.capabilities
+                )
+                if mismatches:
+                    results.append(
+                        DoctorResult(
+                            Severity.ERROR,
+                            "standing_backend_pins_feasibility",
+                            f"{config_path}: {dotted_key} pins backend {backend_name!r} "
+                            f"for step {target_step.name!r}, but "
+                            f"{describe_capability_mismatches(mismatches)}. "
+                            "Remove or update this pin, or choose a backend that "
+                            "satisfies the step's required capabilities.",
+                        )
+                    )
+
+    if not results:
+        results.append(
+            DoctorResult(
+                Severity.OK,
+                "standing_backend_pins_feasibility",
+                "All standing agent_backend pins are capability-feasible.",
+            )
+        )
+    return results
+
+
+def _check_local_recipe_validity(project_dir: Path | None = None) -> list[DoctorResult]:
+    """Check every recipe in .autoskillit/recipes/ passes semantic validation.
+
+    Local project recipes are not covered by the bundled recipe test suite, so
+    a broken local recipe would otherwise only surface when it is dispatched.
+    """
+    from autoskillit.core import YAMLError
+    from autoskillit.recipe import load_recipe, run_semantic_rules
+
+    root = project_dir or Path.cwd()
+    recipes_dir = root / ".autoskillit" / "recipes"
+    if not recipes_dir.is_dir():
+        return [DoctorResult(Severity.OK, "local_recipe_validity", "No local recipes directory")]
+
+    results: list[DoctorResult] = []
+    for yaml_path in sorted(recipes_dir.glob("*.yaml")):
+        try:
+            recipe = load_recipe(yaml_path)
+        except (OSError, ValueError, YAMLError) as exc:
+            results.append(
+                DoctorResult(
+                    Severity.ERROR,
+                    "local_recipe_validity",
+                    f"{yaml_path}: failed to load: {exc}",
+                )
+            )
+            continue
+
+        try:
+            findings = run_semantic_rules(recipe)
+        except Exception as exc:  # noqa: BLE001 - doctor must never crash
+            logger.warning("local_recipe_validation_error", path=str(yaml_path), error=str(exc))
+            results.append(
+                DoctorResult(
+                    Severity.WARNING,
+                    "local_recipe_validity",
+                    f"{yaml_path}: semantic validation could not run: {exc}",
+                )
+            )
+            continue
+
+        error_findings = [f for f in findings if f.severity == Severity.ERROR]
+        if error_findings:
+            rule_names = ", ".join(sorted({f.rule for f in error_findings}))
+            results.append(
+                DoctorResult(
+                    Severity.ERROR,
+                    "local_recipe_validity",
+                    f"{yaml_path}: failed semantic validation ({rule_names}).",
+                )
+            )
+
+    if not results:
+        results.append(
+            DoctorResult(
+                Severity.OK,
+                "local_recipe_validity",
+                "All local recipes pass semantic validation.",
+            )
+        )
+    return results

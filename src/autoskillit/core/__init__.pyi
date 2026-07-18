@@ -391,6 +391,7 @@ from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_remaining as compute_remaining
+from .types import describe_capability_mismatches as describe_capability_mismatches
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name

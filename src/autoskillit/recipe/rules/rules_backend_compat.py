@@ -7,6 +7,7 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
     Severity,
+    describe_capability_mismatches,
     unsatisfied_backend_capabilities,
 )
 from autoskillit.recipe._analysis import ValidationContext
@@ -54,6 +55,16 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         if step_backend is None:
             continue
         uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
+        _step_origin = (ctx.backend_origin_map or {}).get(step_name)
+        _step_remedy = (
+            (
+                f"Remove or change '{_step_origin}' in ~/.autoskillit/config.yaml "
+                "or <project>/.autoskillit/config.yaml, or pin a backend with the "
+                "required capability."
+            )
+            if _step_origin
+            else None
+        )
         if skill_info.backend_requirements and step_backend not in skill_info.backend_requirements:
             cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
             _required = CLAUDE_CODE_CAPABILITIES.git_metadata_writable
@@ -71,6 +82,8 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                         f"{sorted(skill_info.backend_requirements)} but recipe targets "
                         f"backend '{step_backend}'.{git_detail}"
                     ),
+                    origin=_step_origin,
+                    remedy=_step_remedy,
                 )
             )
         # Independent hard-capability property check (sibling if, not elif) —
@@ -80,17 +93,19 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         # diagnostic from backend_requirements — both findings surface together.
         step_backend_caps = (ctx.backend_capabilities_map or {}).get(step_backend)
         if step_backend_caps and uses_caps:
-            for mismatch in unsatisfied_backend_capabilities(uses_caps, step_backend_caps):
+            mismatches = unsatisfied_backend_capabilities(uses_caps, step_backend_caps)
+            if mismatches:
                 findings.append(
                     make_finding(
                         rule_name="backend-incompatible-skill",
                         step_name=step_name,
                         message=(
-                            f"step '{step_name}': skill '{skill_name}' requires "
-                            f"{mismatch.property_name}=True (via capability "
-                            f"'{mismatch.capability}') but backend '{step_backend}' has "
-                            f"{mismatch.property_name}={mismatch.actual_value!r}."
+                            f"step '{step_name}': skill '{skill_name}' requires backend "
+                            f"'{step_backend}' to satisfy: "
+                            f"{describe_capability_mismatches(mismatches)}."
                         ),
+                        origin=_step_origin,
+                        remedy=_step_remedy,
                     )
                 )
     return findings

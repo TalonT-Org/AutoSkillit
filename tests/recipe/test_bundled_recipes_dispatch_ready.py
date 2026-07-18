@@ -37,38 +37,12 @@ _RECIPES_WITH_OTHER_ERROR_RULES: frozenset[str] = frozenset(
 _DISPATCH_GATE_STEMS = [s for s in _RECIPE_STEMS if s not in _RECIPES_WITH_OTHER_ERROR_RULES]
 
 
-_PART_A_AFFECTED_RECIPES = frozenset({"remediation", "implementation", "implementation-groups"})
-"""Recipes that Part A's rule changes reveal latent defects in.
-
-The xfail bridges on these recipes survive until Part B resolves the defects
-in the bundled recipes themselves.
-"""
-
-
-def _part_a_param(recipe_name: str):
-    """Return pytest.param for ``recipe_name`` with xfail on Part A recipes only."""
-    if recipe_name in _PART_A_AFFECTED_RECIPES:
-        return pytest.param(
-            recipe_name,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "Part A exposes latent defects in bundled recipes: "
-                    "merge_fix_count without reset, and shared-counter-cross-"
-                    "site-without-push-symmetry on remediation.yaml. Part B "
-                    "resolves these defects; remove xfail when Part B lands."
-                ),
-            ),
-        )
-    return pytest.param(recipe_name)
-
-
 def _part_a_dispatch_gate_params() -> list:
-    return [_part_a_param(n) for n in _DISPATCH_GATE_STEMS]
+    return [pytest.param(n) for n in _DISPATCH_GATE_STEMS]
 
 
 def _part_a_recipe_params() -> list:
-    return [_part_a_param(n) for n in _RECIPE_STEMS]
+    return [pytest.param(n) for n in _RECIPE_STEMS]
 
 
 @pytest.mark.parametrize("recipe_name", _part_a_dispatch_gate_params(), ids=lambda n: n)
@@ -315,14 +289,6 @@ def test_codex_implementation_dispatch_infeasible() -> None:
     assert "gate_backend_write" in result.get("infeasible_steps", [])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Part A exposes latent defects in bundled implementation.yaml "
-        "(merge_fix_count without reset on the audit-remediation NO-GO path). "
-        "Part B adds the reset step; remove xfail when Part B lands."
-    ),
-)
 def test_claude_implementation_dispatch_feasible() -> None:
     """Claude Code backend + implementation recipe must report dispatch_feasible=True."""
     result = load_and_validate(

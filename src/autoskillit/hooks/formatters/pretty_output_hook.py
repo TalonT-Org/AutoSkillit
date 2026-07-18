@@ -10,6 +10,7 @@ private helper modules to keep this file under its line budget:
 
   * ``_fmt_primitives`` — payload dataclasses, token formatter, pipeline-mode
     detector, and short-name extractor.
+  * ``_fmt_response_spill`` — artifact metadata trust and integrity validation.
   * ``_fmt_execution``  — ``run_skill``, ``run_cmd``, ``test_check``,
     ``merge_worktree``.
   * ``_fmt_status``     — ``get_token_summary``, ``get_timing_summary``,
@@ -62,11 +63,20 @@ from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402, F
     _CHECK_MARK,
     _CROSS_MARK,
     _HOOK_CONFIG_PATH_COMPONENTS,
+    _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    _RESPONSE_SPILL_METADATA_KEY,
+    _RESPONSE_SPILL_METADATA_KEYS,
+    _RESPONSE_SPILL_REASONS,
+    _RESPONSE_SPILL_SCHEMA_DIGEST,
+    _RESPONSE_SPILL_SCHEMA_VERSION,
     _DictPayload,
     _extract_tool_short_name,
+    _fmt_generic,
     _is_pipeline_mode,
     _Payload,
     _PlainTextPayload,
+    _validate_response_spill_metadata,
 )
 from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _FMT_LIST_RECIPES_RENDERED,
@@ -78,7 +88,6 @@ from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _FMT_RECIPE_LIST_ITEM_RENDERED,
     _FMT_RECIPE_LIST_ITEM_SUPPRESSED,
     _LOAD_RECIPE_CONTENT_DERIVED_FROM,
-    _OPEN_KITCHEN_OUTPUT_BUDGET_BYTES,
     _fmt_list_recipes,
     _fmt_load_recipe,
     _fmt_open_kitchen,
@@ -118,48 +127,10 @@ def _fmt_gate_error(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
-_GENERIC_NESTED_VALUE_MAX_CHARS = 2000
-
-
-def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
-    lines = [f"## {short_name}", ""]
-    for key, val in data.items():
-        if isinstance(val, list):
-            val = list(val)
-            if not val:
-                lines.append(f"{key}: []")
-            elif all(isinstance(item, str) for item in val):
-                lines.append(f"{key}:")
-                for item in val[:20]:
-                    lines.append(f"  - {item}")
-            else:
-                lines.append(f"{key}:")
-                for item in val[:20]:
-                    if isinstance(item, dict):
-                        kvs = [
-                            f"{k}: {(s := str(v))[:120] + ('...' if len(s) > 120 else '')}"
-                            for k, v in item.items()
-                        ]
-                        lines.append(f"  - {', '.join(kvs)}")
-                    else:
-                        c = json.dumps(item, separators=(",", ":"))
-                        lines.append(f"  - {c[:2000] + '...' if len(c) > 2000 else c}")
-            if len(val) > 20:
-                lines.append(f"  ... and {len(val) - 20} more")
-        elif isinstance(val, dict):
-            if not val:
-                lines.append(f"{key}: {{}}")
-            else:
-                lines.append(f"{key}:")
-                for k, v in val.items():
-                    if isinstance(v, (dict, list)):
-                        c = json.dumps(v, separators=(",", ":"))
-                        lines.append(f"  {k}: {c[:2000] + '...' if len(c) > 2000 else c}")
-                    else:
-                        lines.append(f"  {k}: {v}")
-        else:
-            lines.append(f"{key}: {val}")
-    return "\n".join(lines)
+def _response_spill_notice(metadata: dict) -> str:
+    path = metadata.get("artifact_path", "unavailable")
+    original_bytes = metadata.get("original_utf8_bytes", "unknown")
+    return f"response_spilled: {original_bytes} bytes\nartifact_path: {path}"
 
 
 # Dispatch table: short tool name → formatter function
@@ -295,21 +266,39 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
         return handler(payload.text, pipeline) if handler is not None else payload.text
 
     # DictPayload path — envelope was successfully unwrapped (or was never an envelope).
-    data = payload.data
+    data = dict(payload.data)
+    raw_spill_metadata = data.get(_RESPONSE_SPILL_METADATA_KEY)
+    spill_metadata = _validate_response_spill_metadata(raw_spill_metadata)
+    artifact_backed = spill_metadata is not None
+    if artifact_backed:
+        data.pop(_RESPONSE_SPILL_METADATA_KEY)
+    elif _RESPONSE_SPILL_METADATA_KEY in data:
+        return _fmt_generic(short_name, data, pipeline, artifact_backed=False)
+
+    def with_spill(formatted: str) -> str:
+        if not isinstance(spill_metadata, dict):
+            return formatted
+        notice = _response_spill_notice(spill_metadata)
+        return f"{notice}\n\n{formatted}" if formatted else notice
+
+    if isinstance(spill_metadata, dict) and set(data) == {"preview"}:
+        return with_spill(str(data["preview"]))
 
     if data.get("subtype") == "gate_error":
-        return _fmt_gate_error(data, pipeline)
+        return with_spill(_fmt_gate_error(data, pipeline))
     if data.get("subtype") == "tool_exception":
-        return _fmt_tool_exception(data, pipeline)
+        return with_spill(_fmt_tool_exception(data, pipeline))
 
     if short_name in _UNFORMATTED_TOOLS:
-        return _fmt_generic(short_name, data, pipeline)
+        return with_spill(
+            _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
+        )
 
     formatter = _FORMATTERS.get(short_name)
     if formatter is not None:
-        return formatter(data, pipeline)
+        return with_spill(formatter(data, pipeline))
 
-    return _fmt_generic(short_name, data, pipeline)
+    return with_spill(_fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed))
 
 
 def main() -> None:

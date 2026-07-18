@@ -30,6 +30,8 @@ __all__ = [
     "LoadReport",
     "LoadResult",
     "ModelIdentity",
+    "SpilledOutput",
+    "SpillSpec",
     "TestResult",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
@@ -159,6 +161,47 @@ class WriteBehaviorSpec:
 
     mode: str | None = None
     expected_when: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SpillSpec:
+    """Character budgets for lossless artifact-backed output previews."""
+
+    inline_max_chars: int = 5000
+    head_chars: int = 2500
+    tail_chars: int = 2500
+
+    def __post_init__(self) -> None:
+        if self.inline_max_chars < 0 or self.head_chars < 0 or self.tail_chars < 0:
+            raise ValueError("spill character budgets must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
+class SpilledOutput:
+    """Lossless spill result with a bounded inline representation."""
+
+    spilled: bool
+    text: str
+    artifact_path: str | None
+    head: str = ""
+    tail: str = ""
+    sha256: str = ""
+    total_chars: int = 0
+    total_utf8_bytes: int = 0
+    total_lines: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "spilled": self.spilled,
+            "text": self.text,
+            "artifact_path": self.artifact_path,
+            "head": self.head,
+            "tail": self.tail,
+            "sha256": self.sha256,
+            "total_chars": self.total_chars,
+            "total_utf8_bytes": self.total_utf8_bytes,
+            "total_lines": self.total_lines,
+        }
 
 
 @dataclass(frozen=True, slots=True)

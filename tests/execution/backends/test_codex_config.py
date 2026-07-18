@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR
+from autoskillit.config import OutputBudgetConfig
+from autoskillit.core import (
+    CODEX_MCP_ENV_FORWARD_VARS,
+    HEADLESS_AUTO_GATE_ENV_VAR,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+)
 from autoskillit.execution.backends import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_config import (
     CODEX_AUTO_COMPACT_LIMIT,
@@ -20,6 +25,24 @@ from autoskillit.execution.backends._codex_config import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def test_codex_tool_output_limit_is_derived_from_largest_measured_exemption() -> None:
+    """The four-byte relation is Codex's coarse truncation heuristic, not tokenization.
+
+    This ceiling is a blast-radius damage bound; producer guards and output
+    spilling remain the load-bearing protections.
+    """
+    max_bytes = max(
+        definition.max_utf8_bytes for definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.values()
+    )
+    assert max_bytes == 186_000
+    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == ((max_bytes + 3) // 4) + 8_000
+    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == 54_500
+
+
+def test_response_backstop_fires_below_codex_transport_ceiling() -> None:
+    assert OutputBudgetConfig().response_max_bytes // 3 < CODEX_TOOL_OUTPUT_TOKEN_LIMIT
 
 
 class TestReadCodexConfig:
@@ -337,6 +360,22 @@ class TestIsAutoskillitRegistered:
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
 
+    def test_high_tool_output_token_limit_returns_false(self):
+        """The tool-output setting is exact, not a minimum."""
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT + 1,
+            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
+
     def test_missing_auto_compact_limit_returns_false(self):
         """Must return False when model_auto_compact_token_limit is missing."""
         config = {
@@ -403,7 +442,7 @@ class TestEnsureCodexMcpRegistered:
         ensure_codex_mcp_registered(config_path=p)
         config = _read_codex_config(p).data
         assert "tool_output_token_limit" in config
-        assert config["tool_output_token_limit"] >= 50_000
+        assert config["tool_output_token_limit"] == CODEX_TOOL_OUTPUT_TOKEN_LIMIT
         assert "tool_output_token_limit" not in config["mcp_servers"]["autoskillit"], (
             "tool_output_token_limit is a Codex global key, not a server-entry key"
         )
@@ -428,6 +467,20 @@ class TestEnsureCodexMcpRegistered:
         assert result is True
         config = _read_codex_config(p).data
         assert config["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
+
+    def test_parseable_config_rewrites_tool_limit_without_lowering_compact_minimum(self, tmp_path):
+        p = tmp_path / "config.toml"
+        ensure_codex_mcp_registered(config_path=p)
+        higher_compact_limit = CODEX_AUTO_COMPACT_LIMIT + 1
+        text = p.read_text(encoding="utf-8")
+        text = text.replace(str(CODEX_TOOL_OUTPUT_TOKEN_LIMIT), "50000")
+        text = text.replace(str(CODEX_AUTO_COMPACT_LIMIT), str(higher_compact_limit))
+        p.write_text(text, encoding="utf-8")
+
+        assert ensure_codex_mcp_registered(config_path=p) is True
+        config = _read_codex_config(p).data
+        assert config["tool_output_token_limit"] == CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+        assert config["model_auto_compact_token_limit"] == higher_compact_limit
 
     def test_headless_auto_gate_true_includes_auto_gate_env(self, tmp_path):
         p = tmp_path / "config.toml"
@@ -594,6 +647,20 @@ class TestDestructiveOverwritePrevention:
         assert f"tool_output_token_limit = {CODEX_TOOL_OUTPUT_TOKEN_LIMIT}" in content
         assert "[mcp_servers.autoskillit]" in content
 
+    def test_corrupt_file_rewrites_existing_tool_output_limit_exactly(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text(
+            "tool_output_token_limit = 50_000\nnot valid toml = =\n",
+            encoding="utf-8",
+        )
+
+        ensure_codex_mcp_registered(config_path=p)
+
+        content = p.read_text(encoding="utf-8")
+        assert f"tool_output_token_limit = {CODEX_TOOL_OUTPUT_TOKEN_LIMIT}" in content
+        assert "tool_output_token_limit = 50_000" not in content
+        assert content.count("tool_output_token_limit =") == 1
+
     def test_corrupt_file_writes_auto_compact_limit(self, tmp_path):
         """The corrupt-file path must also insert the auto-compact limit at the top."""
         p = tmp_path / "config.toml"
@@ -601,6 +668,28 @@ class TestDestructiveOverwritePrevention:
         ensure_codex_mcp_registered(config_path=p)
         content = p.read_text(encoding="utf-8")
         assert f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}" in content
+
+    @pytest.mark.parametrize(
+        ("existing", "expected"),
+        [
+            (100_000, CODEX_AUTO_COMPACT_LIMIT),
+            (CODEX_AUTO_COMPACT_LIMIT + 1, CODEX_AUTO_COMPACT_LIMIT + 1),
+        ],
+    )
+    def test_corrupt_file_preserves_auto_compact_minimum_semantics(
+        self, tmp_path, existing, expected
+    ):
+        p = tmp_path / "config.toml"
+        p.write_text(
+            f"model_auto_compact_token_limit = {existing}\nnot valid toml = =\n",
+            encoding="utf-8",
+        )
+
+        ensure_codex_mcp_registered(config_path=p)
+
+        content = p.read_text(encoding="utf-8")
+        assert f"model_auto_compact_token_limit = {expected}" in content
+        assert content.count("model_auto_compact_token_limit =") == 1
 
     def test_preserves_unknown_top_level_scalars(self, tmp_path):
         """Unknown top-level scalar keys (model/theme/disable_telemetry) must survive

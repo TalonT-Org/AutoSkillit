@@ -195,6 +195,9 @@ def _invoke_guard(
     return json.loads(stdout)
 
 
+_OUTPUT_BUDGET_PROBE_COMMAND = "rg -n output_budget_probe ."
+
+
 def _build_payload(tool_class: str, session_mode: str) -> dict:
     """Deep-copy the deny-triggering payload for a tool class, plus subagent fields."""
     payload = copy.deepcopy(TOOL_CLASS_PAYLOADS[tool_class])
@@ -314,3 +317,56 @@ def test_probe_collection_count() -> None:
     deny-mechanism hook automatically fails this test until the matrix adapts.
     """
     assert len(_collect_probe_params()) == EXPECTED_TOTAL_PROBE_COUNT
+
+
+def test_output_budget_guard_has_non_inert_bash_and_run_cmd_rows(tmp_path: Path) -> None:
+    script = "guards/output_budget_guard.py"
+    hookdef_idx, hookdef = next(
+        (idx, hookdef) for idx, hookdef in enumerate(HOOK_REGISTRY) if script in hookdef.scripts
+    )
+    expected_rows = {
+        (tool_class, session_mode, backend)
+        for tool_class in ("Bash", "mcp_run_cmd")
+        for session_mode in SESSION_MODES
+        for backend in BACKENDS
+    }
+    actual_rows = {
+        (values[2], values[3], values[4])
+        for parameter in _collect_probe_params()
+        if (values := parameter.values)[0] == hookdef_idx and values[1] == script
+    }
+    assert actual_rows == expected_rows
+
+    codex_entries = generate_codex_hooks_config()["PreToolUse"]
+    codex_entry = next(entry for entry in codex_entries if entry["matcher"] == hookdef.matcher)
+    codex_hook = next(
+        hook for hook in codex_entry["hooks"] if "guards/output_budget_guard" in hook["command"]
+    )
+    assert codex_hook["trusted_hash"]
+
+    env = {
+        **BACKEND_ENV["codex"],
+        "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES": str(tmp_path),
+        "AUTOSKILLIT_CWD": str(tmp_path),
+    }
+    (tmp_path / ".autoskillit" / "temp").mkdir(parents=True)
+    for tool_class in ("Bash", "mcp_run_cmd"):
+        payload = _build_payload(tool_class, "interactive")
+        tool_input = payload["tool_input"]
+        if tool_class == "Bash":
+            tool_input["command"] = _OUTPUT_BUDGET_PROBE_COMMAND
+        else:
+            tool_input.pop("command")
+            tool_input["cmd"] = _OUTPUT_BUDGET_PROBE_COMMAND
+        result = _invoke_guard(
+            HOOKS_DIR / script,
+            payload,
+            env,
+            tmp_path,
+        )
+        hook_output = result["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
+        reason = hook_output["permissionDecisionReason"]
+        assert "rg -l" in reason
+        assert "head -c 4000" in reason
+        assert ".autoskillit/temp/" in reason

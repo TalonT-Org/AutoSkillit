@@ -26,11 +26,16 @@ from autoskillit.execution.backends._codex_config import (
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR
 from tests.execution.backends._conformance_assertions import (
+    assert_boundary_spill_behavior,
     assert_config_schema,
     assert_hook_event_format,
+    assert_inline_within_byte_budget,
     assert_no_unknown_event_types,
     assert_order_up_marker_standalone,
+    assert_sentinels_present,
     assert_session_start_present,
+    assert_spill_artifact_integrity,
+    assert_terminal_sentinel_preserved,
     assert_turn_completed_usage_nonzero,
     assert_vocabulary_coverage,
 )
@@ -80,8 +85,8 @@ def _generate_config_template() -> dict:
         "top_level_keys": {
             "tool_output_token_limit": {
                 "expected_type": "int",
-                "constraint": "minimum",
-                "floor_value": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+                "constraint": "exact",
+                "expected_value": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
             },
             "model_auto_compact_token_limit": {
                 "expected_type": "int",
@@ -204,6 +209,19 @@ class TestCodexHookEventFormatFixture:
 class TestCodexConfigTomlSchemaTemplate:
     _TEMPLATE_PATH = FIXTURES_DIR / "config_toml_schema_template.json"
 
+    def test_generator_preserves_distinct_top_level_constraint_semantics(self) -> None:
+        top = _generate_config_template()["top_level_keys"]
+        assert top["tool_output_token_limit"] == {
+            "constraint": "exact",
+            "expected_type": "int",
+            "expected_value": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+        }
+        assert top["model_auto_compact_token_limit"] == {
+            "constraint": "minimum",
+            "expected_type": "int",
+            "floor_value": CODEX_AUTO_COMPACT_LIMIT,
+        }
+
     def test_required_keys_present(self) -> None:
         template = json.loads(self._TEMPLATE_PATH.read_text(encoding="utf-8"))
         fixture_keys = set(template["_codex_mcp_required_keys"])
@@ -217,11 +235,11 @@ class TestCodexConfigTomlSchemaTemplate:
     def test_pinned_constants_match(self) -> None:
         template = json.loads(self._TEMPLATE_PATH.read_text(encoding="utf-8"))
         top = template["top_level_keys"]
-        assert top["tool_output_token_limit"]["floor_value"] == CODEX_TOOL_OUTPUT_TOKEN_LIMIT, (
-            f"CODEX_TOOL_OUTPUT_TOKEN_LIMIT drift: "
-            f"fixture={top['tool_output_token_limit']['floor_value']} "
-            f"vs live={CODEX_TOOL_OUTPUT_TOKEN_LIMIT}"
-        )
+        assert top["tool_output_token_limit"] == {
+            "constraint": "exact",
+            "expected_type": "int",
+            "expected_value": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+        }
         assert top["model_auto_compact_token_limit"]["floor_value"] == CODEX_AUTO_COMPACT_LIMIT, (
             f"CODEX_AUTO_COMPACT_LIMIT drift: "
             f"fixture={top['model_auto_compact_token_limit']['floor_value']} "
@@ -249,7 +267,7 @@ class TestCodexConfigTomlSchemaTemplate:
         reloaded = json.loads(self._TEMPLATE_PATH.read_text(encoding="utf-8"))
         assert set(reloaded["_codex_mcp_required_keys"]) == CODEX_MCP_REQUIRED_KEYS
         assert (
-            reloaded["top_level_keys"]["tool_output_token_limit"]["floor_value"]
+            reloaded["top_level_keys"]["tool_output_token_limit"]["expected_value"]
             == CODEX_TOOL_OUTPUT_TOKEN_LIMIT
         )
         assert (
@@ -287,6 +305,21 @@ class TestConformanceAssertionsSyntheticExercise:
     def test_config_schema_valid(self) -> None:
         assert_config_schema({"model": "o4-mini", "instructions": "test"}, "synthetic")
 
+    def test_output_budget_assertions(self, tmp_path: Path) -> None:
+        assert_boundary_spill_behavior({4999: False, 5000: False, 5001: True}, 5000)
+        sentinels = ("HEAD", "MIDDLE", "TAIL")
+        payload = "HEAD\nMIDDLE\nTAIL"
+        assert_sentinels_present(payload, sentinels)
+        artifact = tmp_path / "spill.txt"
+        artifact.write_text(payload, encoding="utf-8")
+        assert_spill_artifact_integrity(str(artifact), payload, sentinels)
+        assert_inline_within_byte_budget("bounded", 7, envelope_slack_bytes=0)
+        assert_terminal_sentinel_preserved(
+            "complete\nTERMINAL",
+            "TERMINAL",
+            ("[truncated]", "... output omitted ..."),
+        )
+
 
 class TestConformanceAssertionsFullCoverage:
     """Meta-test: every assert_* name from _conformance_assertions is called in this file."""
@@ -304,21 +337,21 @@ class TestConformanceAssertionsFullCoverage:
             if name.startswith("assert_") and callable(getattr(ca_mod, name))
         }
 
-        source = inspect.getsource(
-            importlib.import_module(
-                "tests.execution.backends.test_codex_deterministic_conformance"
-            )
-        )
-        tree = ast.parse(source)
-
+        test_modules = [
+            "tests.execution.backends.test_codex_deterministic_conformance",
+            "tests.execution.backends.test_cli_conformance_probes",
+        ]
         called_names: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                func = node.func
-                if isinstance(func, ast.Name) and func.id in exported_names:
-                    called_names.add(func.id)
-                elif isinstance(func, ast.Attribute) and func.attr in exported_names:
-                    called_names.add(func.attr)
+        for mod_name in test_modules:
+            source = inspect.getsource(importlib.import_module(mod_name))
+            tree = ast.parse(source)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    if isinstance(func, ast.Name) and func.id in exported_names:
+                        called_names.add(func.id)
+                    elif isinstance(func, ast.Attribute) and func.attr in exported_names:
+                        called_names.add(func.attr)
 
         missing = exported_names - called_names
-        assert not missing, f"Conformance assertions not called in test file: {sorted(missing)}"
+        assert not missing, f"Conformance assertions not called in test files: {sorted(missing)}"

@@ -87,8 +87,8 @@ def test_agents_md_architecture_tree_has_subpackages() -> None:
 def test_agents_md_dataclass_count_is_28() -> None:
     assert AGENTS_MD.exists(), f"AGENTS.md not found at {AGENTS_MD}"
     content = AGENTS_MD.read_text()
-    assert "28 leaf dataclasses" in content
-    assert "27 leaf dataclasses" not in content
+    assert "29 leaf dataclasses" in content
+    assert "28 leaf dataclasses" not in content
 
 
 def test_claude_md_has_lsp_section() -> None:

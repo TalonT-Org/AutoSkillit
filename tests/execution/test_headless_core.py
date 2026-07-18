@@ -1250,8 +1250,8 @@ class TestBuildSkillResultStderr:
         )
         assert response["stderr"] == "queue contention"
 
-    def test_stderr_truncated(self):
-        """Stderr exceeding 5000 chars is truncated."""
+    def test_stderr_reaches_tool_boundary_losslessly(self):
+        """Headless results retain stderr until the MCP response boundary."""
         valid_json = json.dumps(
             {
                 "type": "result",
@@ -1272,8 +1272,7 @@ class TestBuildSkillResultStderr:
         response = json.loads(
             _build_skill_result(result_obj, backend=ClaudeCodeBackend()).to_json()
         )
-        assert len(response["stderr"]) < len(long_stderr)
-        assert "truncated" in response["stderr"]
+        assert response["stderr"] == long_stderr
 
     def test_empty_stderr_is_empty_string(self):
         """Empty stderr produces empty string, not omitted."""
@@ -2956,6 +2955,7 @@ def test_prompt_injector_registry():
     assert "completion-directive" in names
     assert "cwd-anchor" in names
     assert "narration-suppression" in names
+    assert "output-discipline" in names
     assert "output-format-reinforcement" in names
     assert "completion-reminder" in names
     assert names[0] == "completion-directive"
@@ -2966,6 +2966,24 @@ def test_prompt_injector_registry():
         assert func_name in source, (
             f"Chain entry '{entry.name}' missing dispatch call to {func_name}"
         )
+
+
+def test_output_discipline_injector_is_backend_conditional():
+    from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+    from autoskillit.execution.backends._claude_prompt import (
+        PromptBuildContext,
+        apply_prompt_injector_chain,
+    )
+
+    codex_prompt = apply_prompt_injector_chain(
+        "base", PromptBuildContext(include_output_discipline=True)
+    )
+    claude_prompt = apply_prompt_injector_chain(
+        "base", PromptBuildContext(include_output_discipline=False)
+    )
+
+    assert OUTPUT_DISCIPLINE_DIGEST in codex_prompt
+    assert OUTPUT_DISCIPLINE_DIGEST not in claude_prompt
 
 
 def test_inject_output_format_reinforcement_non_anthropic():

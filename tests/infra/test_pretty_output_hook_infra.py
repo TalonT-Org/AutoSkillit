@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
@@ -33,6 +35,23 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
+
+def _valid_spill_metadata(project_root: Path, artifact_text: str) -> dict[str, object]:
+    artifact = project_root / ".autoskillit" / "temp" / "responses" / "full.log"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(artifact_text, encoding="utf-8")
+    encoded = artifact_text.encode("utf-8")
+    return {
+        "schema_version": 1,
+        "artifact_path": str(artifact.resolve()),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "original_utf8_bytes": len(encoded),
+        "projected_utf8_bytes": 2048,
+        "omitted_chars": 100,
+        "omitted_items": 2,
+        "reason": "oversized_values",
+    }
 
 
 # PHK-1
@@ -87,6 +106,114 @@ def test_hook_fail_open_on_missing_tool_response():
     out, code = _run_hook(event=event)
     assert code == 0
     assert out.strip() == ""
+
+
+def test_valid_spill_metadata_preserves_named_formatter_and_one_notice(tmp_path: Path):
+    """A trusted artifact keeps normal named dispatch and adds one recovery route."""
+    metadata = _valid_spill_metadata(tmp_path, "authoritative run_skill response")
+    payload = {
+        "success": True,
+        "result": "complete",
+        "session_id": "session-1",
+        "subtype": "end_turn",
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "worktree_path": "/project/worktree",
+        "_autoskillit_response_spill": metadata,
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__run_skill",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, code = _run_hook(event=event, cwd=tmp_path)
+    assert code == 0
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+    assert "## run_skill" in text
+    assert "session_id: session-1" in text
+    assert "worktree_path: /project/worktree" in text
+    assert text.count("response_spilled:") == 1
+    assert text.count(f"artifact_path: {metadata['artifact_path']}") == 1
+
+
+@pytest.mark.parametrize(
+    "invalid_case",
+    [
+        "missing_key",
+        "extra_key",
+        "schema_version",
+        "schema_version_bool",
+        "negative_number",
+        "numeric_bool",
+        "invalid_reason",
+        "non_string_reason",
+        "relative_path",
+        "outside_project_temp",
+        "symlink",
+        "directory",
+        "size_mismatch",
+        "digest_mismatch",
+        "uppercase_digest",
+    ],
+)
+def test_invalid_spill_metadata_remains_lossless_response_data(invalid_case: str, tmp_path: Path):
+    """Every malformed or untrusted reserved value stays visible and unbounded."""
+    artifact_text = "authoritative response"
+    metadata = _valid_spill_metadata(tmp_path, artifact_text)
+    if invalid_case == "missing_key":
+        metadata.pop("reason")
+    elif invalid_case == "extra_key":
+        metadata["unexpected"] = "collision"
+    elif invalid_case == "schema_version":
+        metadata["schema_version"] = 2
+    elif invalid_case == "schema_version_bool":
+        metadata["schema_version"] = True
+    elif invalid_case == "negative_number":
+        metadata["omitted_chars"] = -1
+    elif invalid_case == "numeric_bool":
+        metadata["omitted_items"] = False
+    elif invalid_case == "invalid_reason":
+        metadata["reason"] = "other"
+    elif invalid_case == "non_string_reason":
+        metadata["reason"] = ["oversized_values"]
+    elif invalid_case == "relative_path":
+        metadata["artifact_path"] = ".autoskillit/temp/responses/full.log"
+    elif invalid_case == "outside_project_temp":
+        outside = tmp_path / "outside.log"
+        outside.write_text(artifact_text, encoding="utf-8")
+        metadata["artifact_path"] = str(outside)
+    elif invalid_case == "symlink":
+        link = tmp_path / ".autoskillit" / "temp" / "responses" / "link.log"
+        link.symlink_to(Path(str(metadata["artifact_path"])))
+        metadata["artifact_path"] = str(link)
+    elif invalid_case == "directory":
+        metadata["artifact_path"] = str(tmp_path / ".autoskillit" / "temp" / "responses")
+    elif invalid_case == "size_mismatch":
+        metadata["original_utf8_bytes"] = len(artifact_text.encode("utf-8")) + 1
+    elif invalid_case == "digest_mismatch":
+        metadata["sha256"] = "0" * 64
+    elif invalid_case == "uppercase_digest":
+        metadata["sha256"] = str(metadata["sha256"]).upper()
+
+    long_tail = "LONG-HEAD::" + ("x" * 2500) + "::LONG-TAIL"
+    payload = {
+        "success": True,
+        "result": long_tail,
+        "_autoskillit_response_spill": metadata,
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__run_skill",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, code = _run_hook(event=event, cwd=tmp_path)
+    assert code == 0
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+    assert "_autoskillit_response_spill:" in text
+    assert "::LONG-TAIL" in text
+    assert "response_spilled:" not in text
 
 
 # ---------------------------------------------------------------------------

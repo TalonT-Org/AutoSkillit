@@ -17,7 +17,7 @@ jobs:
   codex-probe:
     name: Codex CLI conformance probe
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 75
     env:
       CODEX_SMOKE_TEST: "1"
       AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
@@ -67,12 +67,21 @@ jobs:
           fi
           echo "cli_version=${CLI_VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Validate installed Codex config parsing
+        run: task test-codex-config-parse
+
+      - name: Export output discipline policy identity
+        id: resolve-policy
+        run: |
+          POLICY_IDENTITY=$(.venv/bin/python -c 'from autoskillit.execution.backends._probe_cache import PROBE_POLICY_IDENTITY; print(PROBE_POLICY_IDENTITY)')
+          echo "policy_identity=${POLICY_IDENTITY}" >> "$GITHUB_OUTPUT"
+
       - name: Restore probe cache
         id: restore-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/codex
-          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}
+          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}
 
       - name: Run Codex conformance probes
         if: steps.restore-cache.outputs.cache-hit != 'true'
@@ -89,6 +98,7 @@ jobs:
           .venv/bin/python -m pytest \
             tests/execution/test_smoke_codex.py \
             tests/execution/backends/test_cli_conformance_probes.py \
+            tests/server/test_output_budget_e2e.py \
             -m smoke -v --tb=short -o "addopts=" \
             --basetemp="$TMPDIR/basetemp" \
             -o "cache_dir=$TMPDIR/cache"
@@ -99,7 +109,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/codex
-          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}
+          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}
 
       - name: Post probe failure
         if: failure()
@@ -115,7 +125,7 @@ jobs:
   claude-probe:
     name: Claude Code CLI conformance probe
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 75
     env:
       CLAUDE_CODE_SMOKE_TEST: "1"
       AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
@@ -165,19 +175,33 @@ jobs:
           fi
           echo "cli_version=${CLI_VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Export output discipline policy identity
+        id: resolve-policy
+        run: |
+          POLICY_IDENTITY=$(.venv/bin/python -c 'from autoskillit.execution.backends._probe_cache import PROBE_POLICY_IDENTITY; print(PROBE_POLICY_IDENTITY)')
+          echo "policy_identity=${POLICY_IDENTITY}" >> "$GITHUB_OUTPUT"
+
       - name: Restore probe cache
         id: restore-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/claude
-          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}
+          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}
 
       - name: Run Claude Code conformance probes
         if: steps.restore-cache.outputs.cache-hit != 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
+          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::No isolated Claude credential is configured — cannot run Claude probes"
+            exit 1
+          fi
           mkdir -p .autoskillit/temp/probe-cache/claude
           .venv/bin/python -m pytest \
             tests/execution/backends/test_cli_conformance_probes.py \
+            tests/server/test_output_budget_e2e.py \
             -m smoke -v --tb=short -o "addopts=" \
             --basetemp="$TMPDIR/basetemp" \
             -o "cache_dir=$TMPDIR/cache"
@@ -188,7 +212,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/claude
-          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}
+          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}
 
       - name: Post probe failure
         if: failure()

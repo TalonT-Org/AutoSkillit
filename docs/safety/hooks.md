@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 26 Claude Code hook scripts: 18 PreToolUse, 7 PostToolUse,
+AutoSkillit registers 43 Claude Code hook scripts: 32 PreToolUse, 10 PostToolUse,
 and 1 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (18)
+## PreToolUse hooks (32)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -84,6 +84,16 @@ and nested-shell forms. Session scope: headless only. Orchestrator sessions
 are exempt. Per-subcommand allow-overrides are available via `git_ops_policy`
 in `.hook_config.json` for future recipes that legitimately need these operations.
 
+### `output_budget_guard.py`
+**Guarded tools:** `Bash`, `run_cmd`
+Denies high-confidence unbounded recursive searches, JSONL reads, and `find`
+operations before execution. Commands can prove bounded output by routing both
+stdout and stderr through a same-pipeline byte cap, redirecting both descriptors
+under `.autoskillit/temp/`, or using a narrowly defined output-free/small-file
+exception. The guard applies to interactive and headless sessions. Set
+`output_budget.guard_enabled: false` to disable it; byte caps are constrained by
+`output_budget.shell_max_inline_bytes`.
+
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`
 Denies writes to generated files (`hooks.json`, `settings.json`). The hooks
@@ -135,7 +145,7 @@ dependencies. Permission is always `allow` — the server-side `_check_pipeline_
 in `run_skill` is the primary enforcer. Fails open on missing tracker or
 malformed input.
 
-## PostToolUse hooks (7)
+## PostToolUse hooks (10)
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools

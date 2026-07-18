@@ -251,6 +251,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "cli",
             "config",
             "core",
+            "execution",
             "pipeline",
             "recipe",
             "server",
@@ -864,6 +865,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_resume_precondition.py",
             # file-level: cross-layer test that imports server TypedDict schemas
             "execution/backends/test_failure_predicate_spanning.py",
+            # file-level: Codex output-budget config and generated agent contracts
+            "execution/backends/test_codex_config.py",
+            "execution/backends/test_codex_backend.py",
         }
     ),
     "cli": frozenset(
@@ -886,6 +890,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_kitchen_gate_hook_config.py",
             "execution/test_quota_sleep.py",
             "execution/test_session_log_fields.py",
+            # file-level: Codex output-budget config and generated agent contracts
+            "execution/backends/test_codex_config.py",
+            "execution/backends/test_codex_backend.py",
         }
     ),
     "hook_registry": frozenset(
@@ -900,6 +907,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_fleet_dispatch_preflight.py",
             "server/test_lifespan.py",
             "server/test_run_skill_backend_compat.py",
+            # file-level: live output-budget E2E imports the hook registry directly
+            "server/test_output_budget_e2e.py",
             # infra/ narrowed to 7 files
             "infra/test_adr_runtime_guard_coverage.py",
             "infra/test_command_guard_completeness.py",
@@ -958,6 +967,20 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
 # otherwise test_file_level_entries_import_their_cascade_package will
 # incorrectly require a direct AST import from those test files.
 _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
+    # Output-budget hook/server changes affect the derived Codex ceiling and generated
+    # agent contracts even though those backend tests intentionally import execution only.
+    "hooks": frozenset(
+        {
+            "execution/backends/test_codex_backend.py",
+            "execution/backends/test_codex_config.py",
+        }
+    ),
+    "server": frozenset(
+        {
+            "execution/backends/test_codex_backend.py",
+            "execution/backends/test_codex_config.py",
+        }
+    ),
     "workspace": frozenset(
         {
             "recipe/test_api.py",

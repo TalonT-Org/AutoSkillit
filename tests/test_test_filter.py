@@ -501,6 +501,14 @@ class TestFilterModes:
                     f"Aggressive cascade for {pkg} is not a subset of conservative"
                 )
 
+    @pytest.mark.parametrize("package", ["hooks", "server"])
+    def test_output_budget_changes_cascade_to_codex_contracts(self, package: str) -> None:
+        expected = {
+            "execution/backends/test_codex_config.py",
+            "execution/backends/test_codex_backend.py",
+        }
+        assert expected <= LAYER_CASCADE_CONSERVATIVE[package]
+
 
 # ---------------------------------------------------------------------------
 # Git Diff Edge Cases (G1–G5)

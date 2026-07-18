@@ -1,4 +1,4 @@
-"""Codex CLI NDJSON test fixtures."""
+"""Codex CLI event and data-payload test fixtures."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ CODEX_FIXTURE_MIN_VERSION: str = "0.130.0"
 HAPPY_PATH_SINGLE_TURN: str = "happy_path_single_turn_v0133.ndjson"
 HAPPY_PATH_V0136: str = "happy_path_v0136.ndjson"
 MARKER_DETECTION_V0136: str = "marker_detection_v0136.ndjson"
+LARGE_EMBEDDED_PAYLOAD_V1: str = "large_embedded_payload_v1.jsonl"
 MULTI_TURN_WITH_COMPACTION: str = "multi_turn_with_compaction_v0133.ndjson"
 TURN_FAILED_ERROR: str = "turn_failed_error_v0133.ndjson"
 SESSION_WITH_REASONING: str = "session_with_reasoning_v0133.ndjson"
@@ -26,6 +27,7 @@ __all__ = [
     "CODEX_SCHEMA_VERSION",
     "HAPPY_PATH_SINGLE_TURN",
     "HAPPY_PATH_V0136",
+    "LARGE_EMBEDDED_PAYLOAD_V1",
     "MARKER_DETECTION_V0136",
     "MULTI_TURN_WITH_COMPACTION",
     "SESSION_WITH_MCP_TOOL_CALL",

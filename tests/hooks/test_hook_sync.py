@@ -46,6 +46,51 @@ def test_hook_config_path_single_source_of_truth():
     )
 
 
+def test_response_spill_schema_mirror_matches_server_contract():
+    """The standalone formatter's trust schema must exactly mirror the producer."""
+    from autoskillit.hooks.formatters.pretty_output_hook import (
+        _RESPONSE_SPILL_METADATA_KEY,
+        _RESPONSE_SPILL_METADATA_KEYS,
+        _RESPONSE_SPILL_REASONS,
+        _RESPONSE_SPILL_SCHEMA_DIGEST,
+        _RESPONSE_SPILL_SCHEMA_VERSION,
+    )
+    from autoskillit.server._response_budget import (
+        RESPONSE_SPILL_METADATA_KEY,
+        RESPONSE_SPILL_METADATA_KEYS,
+        RESPONSE_SPILL_REASONS,
+        RESPONSE_SPILL_SCHEMA_DIGEST,
+        RESPONSE_SPILL_SCHEMA_VERSION,
+    )
+
+    assert _RESPONSE_SPILL_METADATA_KEY == RESPONSE_SPILL_METADATA_KEY
+    assert _RESPONSE_SPILL_METADATA_KEYS == RESPONSE_SPILL_METADATA_KEYS
+    assert _RESPONSE_SPILL_REASONS == RESPONSE_SPILL_REASONS
+    assert _RESPONSE_SPILL_SCHEMA_VERSION == RESPONSE_SPILL_SCHEMA_VERSION
+    assert _RESPONSE_SPILL_SCHEMA_DIGEST == RESPONSE_SPILL_SCHEMA_DIGEST
+
+
+def test_response_backstop_exemption_mirror_matches_core_registry():
+    """The standalone formatter mirror must match the canonical measured registry."""
+    from autoskillit.core import (
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    )
+    from autoskillit.hooks.formatters.pretty_output_hook import (
+        _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+        _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    )
+
+    canonical = {
+        tool_name: definition._asdict()
+        for tool_name, definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.items()
+    }
+    assert _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY == canonical
+    assert (
+        _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST == RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST
+    )
+
+
 def test_quota_guard_deny_trigger_sync():
     """QUOTA_GUARD_DENY_TRIGGER must be identical in core and quota_guard."""
     from autoskillit.core import QUOTA_GUARD_DENY_TRIGGER

@@ -29,6 +29,7 @@ from autoskillit.core import (
     SkillSessionConfig,
     StreamParser,
     ValidatedAddDir,
+    load_yaml,
     pkg_root,
 )
 from autoskillit.execution.backends.codex import (
@@ -514,6 +515,12 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "EFFICIENCY DIRECTIVE" in spec.cmd[-1]
 
+    def test_fresh_headless_includes_output_discipline_digest(self) -> None:
+        from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert OUTPUT_DISCIPLINE_DIGEST in spec.cmd[-1]
+
     def test_completion_reminder_injected(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "Remember: end your final response with" in spec.cmd[-1]
@@ -801,11 +808,21 @@ class TestCodexBuildInteractiveCmd:
         assert "abc" not in spec.cmd
 
     def test_system_prompt_with_no_resume_appends_config_override(self) -> None:
+        import tomllib
+
+        from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+
         spec = CodexBackend().build_interactive_cmd(system_prompt="foo")
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
-        assert "developer_instructions=foo" in overrides
+        rendered = next(
+            value.partition("=")[2]
+            for value in overrides
+            if value.startswith("developer_instructions=")
+        )
+        parsed = tomllib.loads(f"developer_instructions = {rendered}")
+        assert parsed["developer_instructions"] == f"foo\n\n{OUTPUT_DISCIPLINE_DIGEST}"
         assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_named_resume_does_not_append_config_override(self) -> None:
@@ -967,6 +984,12 @@ class TestCodexBuildFoodTruckCmd:
     def test_mcp_tools_only_prompt_reinforcement(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "ORCHESTRATION DIRECTIVE" in spec.cmd[-1]
+
+    def test_fresh_orchestrator_includes_output_discipline_digest(self) -> None:
+        from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert OUTPUT_DISCIPLINE_DIGEST in spec.cmd[-1]
 
     def test_prompt_is_last_token(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
@@ -1757,11 +1780,11 @@ class TestCodexBackendSetupSessionDir:
         CodexBackend().setup_session_dir(self.session_dir)
         assert (self.session_dir / "agents").is_dir()
 
-    def test_agent_toml_count_matches_md_sources(self) -> None:
+    def test_agent_toml_set_and_count_match_md_sources(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         toml_files = list((self.session_dir / "agents").glob("*.toml"))
-        expected = 0
+        expected_names: set[str] = set()
         for md_path in (pkg_root() / "agents").glob("*.md"):
             if md_path.name in ("CLAUDE.md", "AGENTS.md"):
                 continue
@@ -1771,10 +1794,14 @@ class TestCodexBackendSetupSessionDir:
             parts = text.split("---", 2)
             if len(parts) < 3 or not parts[2].strip() or "'''" in parts[2]:
                 continue
-            expected += 1
-        assert len(toml_files) == expected, (
-            f"TOML count {len(toml_files)} != valid source count {expected}"
+            meta = load_yaml(parts[1])
+            if isinstance(meta, dict) and meta.get("name") and meta.get("description"):
+                expected_names.add(f"{meta['name']}.toml")
+        actual_names = {path.name for path in toml_files}
+        assert actual_names == expected_names, (
+            f"generated TOMLs {actual_names} != valid source set {expected_names}"
         )
+        assert len(toml_files) == len(expected_names)
 
     def test_agent_toml_required_fields_present_and_nonempty(self) -> None:
         import tomllib
@@ -1788,9 +1815,41 @@ class TestCodexBackendSetupSessionDir:
             assert data["developer_instructions"], (
                 f"{toml_path.name}: developer_instructions empty"
             )
+            from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+
+            assert (
+                data["developer_instructions"].rstrip().endswith(OUTPUT_DISCIPLINE_DIGEST.rstrip())
+            )
             assert data["sandbox_mode"] == "workspace-write", (
                 f"{toml_path.name}: wrong sandbox_mode"
             )
+
+    def test_generated_agents_are_registered_in_session_config(self) -> None:
+        import tomllib
+
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        generated_names = {path.stem for path in (self.session_dir / "agents").glob("*.toml")}
+        assert generated_names <= config["agents"].keys()
+        wp_role = config["agents"]["wp-elaborator"]
+        assert wp_role["config_file"] == "agents/wp-elaborator.toml"
+        assert wp_role["description"]
+
+    def test_profile_agent_registration_takes_precedence(self) -> None:
+        import tomllib
+
+        (self.codex_home / "config.toml").write_text(
+            '[agents."wp-elaborator"]\n'
+            'description = "profile role"\n'
+            'config_file = "/profile/wp-elaborator.toml"\n'
+        )
+        CodexBackend().setup_session_dir(self.session_dir)
+        config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        assert config["agents"]["wp-elaborator"] == {
+            "description": "profile role",
+            "config_file": "/profile/wp-elaborator.toml",
+        }
 
     def test_agent_toml_model_alias_mapped(self) -> None:
         import tomllib

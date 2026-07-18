@@ -85,6 +85,8 @@ class RunCmdResult(_RunCmdResultBase, total=False):
 
     stdout: str
     stderr: str
+    stdout_artifact_path: str
+    stderr_artifact_path: str
     error: str
 
 
@@ -99,6 +101,7 @@ class TestCheckResult(_TestCheckResultBase, total=False):
 
     stdout: str
     stderr: str
+    raw_output_artifact_path: str
     duration_seconds: float
     filter_mode: str
     tests_selected: int
@@ -127,6 +130,7 @@ class MergeWorktreeResult(TypedDict, total=False):
     merge_commits: list[str]
     test_stdout: str
     test_stderr: str
+    raw_output_artifact_path: str
     abort_failed: bool
     abort_stderr: str
     poisoned_installs: list[str]
@@ -177,9 +181,8 @@ class DispatchEnvelopeResult(TypedDict, total=False):
     Covers DispatchCompleted.to_envelope(), DispatchRejected.to_envelope(),
     and fleet_error() output. The error paths do NOT carry a ``subtype`` key
     so they reach this formatter rather than the gate_error/tool_exception
-    guards. Nested structured fields (l3_payload, health_report, token_usage,
-    resume_checkpoint) must be rendered without size-based truncation to
-    preserve dispatch_plan visibility for downstream orchestrators.
+    guards. Nested structured fields may be projected when the complete
+    response is available through response-spill artifact metadata.
     """
 
     success: bool

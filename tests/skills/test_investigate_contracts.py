@@ -188,14 +188,14 @@ def test_investigate_always_caps_subagent_spawns(skill_text: str) -> None:
         if next_section_idx != -1
         else skill_text[always_idx:]
     )
-    has_spawn_cap_nine = bool(
+    has_spawn_cap = bool(
         re.search(
-            r"(?:total\s+subagent\s+spawns|subagent\s+spawns).*?\b9\b"
-            r"|\b9\b.*?(?:total\s+subagent|subagent\s+spawn)",
+            r"(?:total\s+subagent\s+spawns|subagent\s+spawns).*?\b16\b"
+            r"|\b16\b.*?(?:total\s+subagent|subagent\s+spawn)",
             always_block.lower(),
         )
     )
-    assert has_spawn_cap_nine, (
-        "ALWAYS constraints must include a rule capping total subagent spawns at 9 "
+    assert has_spawn_cap, (
+        "ALWAYS constraints must include a rule capping total subagent spawns at 16 "
         "across all batches (standard and deep mode)"
     )

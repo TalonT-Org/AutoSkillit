@@ -5,20 +5,28 @@ from __future__ import annotations
 import functools
 import json
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from anyio import BrokenResourceError as _BrokenResource
 from anyio import ClosedResourceError as _ClosedResource
 
+from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, get_logger
+from autoskillit.server._response_budget import (
+    bounded_response_budget_failure,
+    enforce_response_budget,
+)
 
 if TYPE_CHECKING:
     from fastmcp import Context
 
+    from autoskillit.pipeline import ToolContext
+
 logger = get_logger(__name__)
 
 
-def _get_ctx_or_none():  # type: ignore[return]
+def _get_ctx_or_none() -> ToolContext | None:
     from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn  # circular-break
 
     return _ctx_none_fn()
@@ -94,39 +102,84 @@ def track_response_size(
                         ),
                     }
                 )
-                logger.exception("Unhandled exception in tool %s", tool_name)
+                logger.exception("track_response_size_handler_failed", tool_name=tool_name)
+            ctx = _get_ctx_or_none()
             try:
-                ctx = _get_ctx_or_none()
-                if ctx is not None:
-                    response_str = result if isinstance(result, str) else json.dumps(result)
+                response_str = result if isinstance(result, str) else json.dumps(result)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "track_response_size_nonserializable_result",
+                    tool_name=tool_name,
+                )
+                response_str = None
+            exceeded = False
+            try:
+                if ctx is not None and response_str is not None:
                     threshold = ctx.config.mcp_response.alert_threshold_tokens
                     exceeded = ctx.response_log.record(
                         tool_name, response_str, alert_threshold_tokens=threshold
                     )
-                    if exceeded:
-                        from fastmcp import Context as FmcpContext
-
-                        mcp_ctx = next(
-                            (a for a in args if isinstance(a, FmcpContext)),
-                            next(
-                                (v for v in kwargs.values() if isinstance(v, FmcpContext)),
-                                None,
-                            ),
-                        )
-                        if mcp_ctx is not None:
-                            await _notify(
-                                mcp_ctx,
-                                "info",
-                                f"MCP tool '{tool_name}' response exceeded "
-                                f"{threshold} estimated token threshold",
-                                logger_name="autoskillit.server.response_size",
-                            )
             except Exception:
                 logger.warning(
-                    "track_response_size_failed",
+                    "track_response_size_telemetry_failed",
                     tool_name=tool_name,
-                    exc_info=True,
                 )
+
+            configured_budget = (
+                getattr(ctx.config, "output_budget", None) if ctx is not None else None
+            )
+            budget = (
+                configured_budget
+                if isinstance(configured_budget, OutputBudgetConfig)
+                else OutputBudgetConfig()
+            )
+            temp_dir = getattr(ctx, "temp_dir", None) if ctx is not None else None
+            artifact_dir = (
+                temp_dir / "responses" / tool_name if isinstance(temp_dir, Path) else None
+            )
+            try:
+                result = enforce_response_budget(
+                    result,
+                    tool_name=tool_name,
+                    artifact_dir=artifact_dir,
+                    config=budget,
+                )
+            except Exception:
+                logger.error("track_response_size_enforcement_failed", tool_name=tool_name)
+                result = bounded_response_budget_failure(
+                    result,
+                    cause="internal_invariant_failed",
+                    tool_name=tool_name,
+                    max_bytes=budget.response_max_bytes,
+                    original_utf8_bytes=(
+                        len(response_str.encode("utf-8")) if response_str is not None else 0
+                    ),
+                )
+
+            if exceeded:
+                try:
+                    from fastmcp import Context as FmcpContext
+
+                    mcp_ctx = next(
+                        (a for a in args if isinstance(a, FmcpContext)),
+                        next(
+                            (v for v in kwargs.values() if isinstance(v, FmcpContext)),
+                            None,
+                        ),
+                    )
+                    if mcp_ctx is not None:
+                        await _notify(
+                            mcp_ctx,
+                            "info",
+                            f"MCP tool '{tool_name}' response exceeded "
+                            f"{threshold} estimated token threshold",
+                            logger_name="autoskillit.server.response_size",
+                        )
+                except Exception:
+                    logger.warning(
+                        "track_response_size_notification_failed",
+                        tool_name=tool_name,
+                    )
             return result
 
         return wrapper

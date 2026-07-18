@@ -319,8 +319,14 @@ def test_skill_visibility_states_142_skills() -> None:
     _assert_doc_states_number(DOCS_DIR / "skills" / "visibility.md", "skills total", 142)
 
 
-def test_safety_hooks_states_24_hooks() -> None:
-    _assert_doc_states_number(DOCS_DIR / "safety" / "hooks.md", "hooks total", 26)
+def test_safety_hook_counts_match_registry() -> None:
+    counts = _count_hooks_by_event()
+    text = _read(DOCS_DIR / "safety" / "hooks.md")
+
+    assert f"AutoSkillit registers {sum(counts.values())} Claude Code hook scripts" in text
+    assert f"## PreToolUse hooks ({counts['PreToolUse']})" in text
+    assert f"## PostToolUse hooks ({counts['PostToolUse']})" in text
+    assert f"## SessionStart hook ({counts['SessionStart']})" in text
 
 
 def test_configuration_states_quota_thresholds() -> None:

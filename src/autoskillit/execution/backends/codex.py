@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
@@ -28,6 +29,7 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
+    OUTPUT_DISCIPLINE_DIGEST,
     PROVIDER_PROFILE_ENV_VAR,
     RESUME_SESSION_BASELINE_KEYS,
     SESSION_TYPE_ORCHESTRATOR,
@@ -466,11 +468,51 @@ def _generate_agent_tomls(session_dir: Path) -> int:
             effort = CODEX_EFFORT_MAPPING.get(model_key)
             if effort:
                 lines.append(f"model_reasoning_effort = {_format_toml_value(effort)}")
+        body = f"{body}\n\n{OUTPUT_DISCIPLINE_DIGEST}"
         lines.append(f"developer_instructions = '''\n{body}\n'''")
-        atomic_write(out_dir / f"{name}.toml", "\n".join(lines) + "\n")
+        toml_path = out_dir / f"{name}.toml"
+        atomic_write(toml_path, "\n".join(lines) + "\n")
+        tomllib.loads(toml_path.read_text(encoding="utf-8"))
         count += 1
     logger.debug("codex_agents_generated", count=count, dest=str(out_dir))
     return count
+
+
+def _register_agent_tomls(session_dir: Path) -> int:
+    """Register generated agent config layers in the session config."""
+    config_path = session_dir / "config.toml"
+    config_text = config_path.read_text(encoding="utf-8")
+    config = tomllib.loads(config_text)
+    configured_agents = config.get("agents", {})
+    if not isinstance(configured_agents, dict):
+        configured_agents = {}
+
+    registrations: list[str] = []
+    for agent_path in sorted((session_dir / "agents").glob("*.toml")):
+        agent = tomllib.loads(agent_path.read_text(encoding="utf-8"))
+        name = agent.get("name")
+        description = agent.get("description")
+        if not isinstance(name, str) or not name or name in configured_agents:
+            continue
+        if not isinstance(description, str) or not description:
+            continue
+        registrations.extend(
+            [
+                f"[agents.{_format_toml_value(name)}]",
+                f"description = {_format_toml_value(description)}",
+                f"config_file = {_format_toml_value(f'agents/{agent_path.name}')}",
+                "",
+            ]
+        )
+
+    if not registrations:
+        return 0
+    separator = "\n" if config_text.endswith("\n") else "\n\n"
+    registration_text = "\n".join(registrations)
+    updated = f"{config_text}{separator}{registration_text}"
+    tomllib.loads(updated)
+    atomic_write(config_path, updated)
+    return len(registrations) // 4
 
 
 def _materialize_profile_skills(session_dir: Path) -> int:
@@ -751,6 +793,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 temp_dir_relpath=temp_dir_relpath,
                 has_skill_prefix=_has_prefix,
                 profile_name=profile_name,
+                include_output_discipline=True,
             ),
         )
 
@@ -863,6 +906,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 temp_dir_relpath=temp_dir_relpath,
                 has_skill_prefix=False,
                 profile_name="",
+                include_output_discipline=True,
             ),
         )
 
@@ -958,8 +1002,16 @@ class CodexBackend(BackendCmdBuilderBase):
             for override in self.model_config_overrides(model):
                 builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, override)
         builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
-        if system_prompt is not None and isinstance(resume_spec, NoResume):
-            builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, f"developer_instructions={system_prompt}")
+        if isinstance(resume_spec, NoResume):
+            developer_instructions = (
+                f"{system_prompt}\n\n{OUTPUT_DISCIPLINE_DIGEST}"
+                if system_prompt is not None
+                else OUTPUT_DISCIPLINE_DIGEST
+            )
+            builder.kv_flag(
+                CodexFlags.CONFIG_OVERRIDE,
+                f"developer_instructions={_format_toml_value(developer_instructions)}",
+            )
         if initial_prompt is not None:
             builder.positional(initial_prompt)
         for d in add_dirs:
@@ -1094,6 +1146,8 @@ class CodexBackend(BackendCmdBuilderBase):
 
         try:
             _generate_agent_tomls(session_dir)
+            registered = _register_agent_tomls(session_dir)
+            logger.debug("codex_agents_registered", count=registered)
         except Exception:
             logger.warning("codex_agent_toml_generation_failed", exc_info=True)
 

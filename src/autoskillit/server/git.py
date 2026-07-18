@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,11 +21,14 @@ from autoskillit.core import (
     GENERATED_FILES,
     MergeFailedStep,
     MergeState,
+    SpillSpec,
     SubprocessRunner,
     get_logger,
     is_generated_path,
     is_protected_branch,
     resolve_main_worktree,
+    resolve_temp_dir,
+    spill_output,
     truncate_text,
 )
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
@@ -34,9 +38,55 @@ from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.core import TestRunner
+    from autoskillit.core import TestResult, TestRunner
 
 logger = get_logger(__name__)
+
+
+def _shape_failed_test_output(
+    test_result: TestResult,
+    worktree_path: str,
+    config: AutomationConfig,
+) -> dict[str, str]:
+    spec = SpillSpec(
+        inline_max_chars=config.output_budget.inline_max_chars,
+        head_chars=config.output_budget.head_chars,
+        tail_chars=config.output_budget.tail_chars,
+    )
+    raw = json.dumps({"stdout": test_result.stdout, "stderr": test_result.stderr})
+    spilled = spill_output(
+        raw,
+        resolve_temp_dir(Path(worktree_path), config.workspace.temp_dir) / "merge_worktree",
+        "raw_test_output",
+        spec,
+    )
+    condensed_stdout, condensed_stderr = condense_test_output(test_result)
+
+    if spilled.artifact_path is None and (
+        len(condensed_stdout) > spec.inline_max_chars
+        or len(condensed_stderr) > spec.inline_max_chars
+    ):
+        spilled = spill_output(
+            raw,
+            resolve_temp_dir(Path(worktree_path), config.workspace.temp_dir) / "merge_worktree",
+            "raw_test_output",
+            SpillSpec(inline_max_chars=0, head_chars=spec.head_chars, tail_chars=spec.tail_chars),
+        )
+
+    def preview(text: str) -> str:
+        if len(text) <= spec.inline_max_chars:
+            return text
+        marker = f"[raw test output spilled -> {spilled.artifact_path}]"
+        tail = text[-spec.tail_chars :] if spec.tail_chars else ""
+        return "\n".join(part for part in (text[: spec.head_chars], marker, tail) if part)
+
+    shaped = {
+        "test_stdout": preview(condensed_stdout),
+        "test_stderr": preview(condensed_stderr),
+    }
+    if spilled.artifact_path is not None:
+        shaped["raw_output_artifact_path"] = spilled.artifact_path
+    return shaped
 
 
 def _filter_changed_files(stdout: str, prefixes: list[str]) -> tuple[list[str], list[str]]:
@@ -298,14 +348,12 @@ async def perform_merge(
             }
         test_result = await tester.run(Path(worktree_path))
         if not test_result.passed:
-            condensed_stdout, condensed_stderr = condense_test_output(test_result)
             return {
                 "error": "Tests failed in worktree — merge blocked",
                 "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_stdout": truncate_text(condensed_stdout),
-                "test_stderr": truncate_text(condensed_stderr),
+                **_shape_failed_test_output(test_result, worktree_path, config),
             }
 
     # 5. Fetch
@@ -399,7 +447,6 @@ async def perform_merge(
         test_result = await tester.run(Path(worktree_path))
         passed = test_result.passed
         if not passed:
-            condensed_stdout, condensed_stderr = condense_test_output(test_result)
             return {
                 "error": (
                     "Tests failed after rebase. The worktree is intact; "
@@ -408,8 +455,7 @@ async def perform_merge(
                 "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_stdout": truncate_text(condensed_stdout),
-                "test_stderr": truncate_text(condensed_stderr),
+                **_shape_failed_test_output(test_result, worktree_path, config),
             }
 
     # 7. Discover main repo path

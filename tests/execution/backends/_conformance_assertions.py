@@ -6,6 +6,10 @@ AssertionError with a descriptive message on failure.
 
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 from autoskillit.core.types._type_enums import CodexEventType
 from autoskillit.execution.process._process_jsonl import _marker_is_standalone
 
@@ -95,4 +99,155 @@ def assert_config_schema(config_dict: dict, version_str: str) -> None:
     missing = expected_keys - present
     assert not missing, (
         f"Config (version {version_str}) missing expected top-level keys: {sorted(missing)}"
+    )
+
+
+def assert_boundary_spill_behavior(spilled_by_size: dict[int, bool], threshold: int) -> None:
+    """Assert the lossless-spill contract immediately around a source threshold."""
+    expected = {threshold - 1: False, threshold: False, threshold + 1: True}
+    observed = {size: spilled_by_size.get(size) for size in expected}
+    assert observed == expected, (
+        f"spill boundary mismatch at {threshold}: expected {expected}, observed {observed}"
+    )
+
+
+def assert_sentinels_present(text: str, sentinels: tuple[str, ...]) -> None:
+    """Assert distinct workload sentinels survived a delivery or artifact path."""
+    missing = [sentinel for sentinel in sentinels if sentinel not in text]
+    assert not missing, f"missing sentinels: {missing}"
+
+
+def assert_spill_artifact_integrity(
+    artifact_path: str,
+    expected_text: str,
+    sentinels: tuple[str, ...],
+) -> None:
+    """Assert an atomically published spill is byte-complete and content-addressable."""
+    path = Path(artifact_path)
+    assert path.is_file(), f"spill artifact does not exist: {path}"
+    artifact_bytes = path.read_bytes()
+    expected_bytes = expected_text.encode("utf-8")
+    assert artifact_bytes == expected_bytes, (
+        f"spill artifact differs from source: {len(artifact_bytes)} != {len(expected_bytes)} bytes"
+    )
+    expected_sha256 = hashlib.sha256(expected_bytes).hexdigest()
+    actual_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+    assert actual_sha256 == expected_sha256, (
+        f"spill sha256 mismatch: {actual_sha256} != {expected_sha256}"
+    )
+    assert_sentinels_present(artifact_bytes.decode("utf-8"), sentinels)
+
+
+def assert_inline_within_byte_budget(
+    inline_text: str,
+    byte_budget: int,
+    *,
+    envelope_slack_bytes: int = 0,
+) -> None:
+    """Assert inline output stays within a transport ceiling plus explicit envelope slack."""
+    inline_bytes = len(inline_text.encode("utf-8"))
+    effective_budget = byte_budget + envelope_slack_bytes
+    assert inline_bytes <= effective_budget, (
+        f"inline output is {inline_bytes} bytes, over {byte_budget} + "
+        f"{envelope_slack_bytes} envelope bytes"
+    )
+
+
+def assert_terminal_sentinel_preserved(
+    delivered_text: str,
+    terminal_sentinel: str,
+    truncation_markers: tuple[str, ...],
+) -> None:
+    """Assert a terminal sentinel arrived and no known transport truncation marker did."""
+    assert terminal_sentinel in delivered_text, (
+        f"terminal sentinel missing from delivered text: {terminal_sentinel!r}"
+    )
+    observed_markers = [marker for marker in truncation_markers if marker in delivered_text]
+    assert not observed_markers, f"transport truncation markers present: {observed_markers}"
+
+
+def assert_generated_child_delivery(
+    parent_events: list[dict],
+    child_events: list[dict],
+    *,
+    parent_id: str,
+    agent_role: str,
+    output_discipline_digest: str,
+) -> None:
+    """Assert a generated Codex role reached one completed, linked child session."""
+    function_calls = [
+        event.get("payload", {})
+        for event in parent_events
+        if event.get("type") == "response_item"
+        and event.get("payload", {}).get("type") == "function_call"
+    ]
+    call_outputs = {
+        str(payload.get("call_id", "")): payload.get("output", "")
+        for event in parent_events
+        if event.get("type") == "response_item"
+        and (payload := event.get("payload", {})).get("type") == "function_call_output"
+    }
+
+    spawn_calls = [call for call in function_calls if call.get("name") == "spawn_agent"]
+    assert len(spawn_calls) == 1, f"expected one spawn_agent call, got {len(spawn_calls)}"
+    spawn = spawn_calls[0]
+    spawn_args = json.loads(str(spawn.get("arguments", "{}")))
+    assert spawn_args.get("agent_type") == agent_role
+    spawn_output = json.loads(str(call_outputs.get(str(spawn.get("call_id", "")), "{}")))
+    agent_id = spawn_output.get("agent_id")
+    assert isinstance(agent_id, str) and agent_id, "spawn_agent returned no agent_id"
+
+    wait_calls = [call for call in function_calls if call.get("name") == "wait_agent"]
+    matching_waits = []
+    for wait_call in wait_calls:
+        wait_args = json.loads(str(wait_call.get("arguments", "{}")))
+        if wait_args.get("targets") == [agent_id]:
+            matching_waits.append(wait_call)
+    assert matching_waits, f"no wait_agent call targeted spawned child {agent_id}"
+    wait_outputs = [
+        str(call_outputs.get(str(wait_call.get("call_id", "")), ""))
+        for wait_call in matching_waits
+    ]
+    assert any('"completed"' in output for output in wait_outputs), (
+        f"wait_agent never reported child {agent_id} completed"
+    )
+
+    child_session_metas = [
+        event.get("payload", {}) for event in child_events if event.get("type") == "session_meta"
+    ]
+    linked_children = [
+        meta
+        for meta in child_session_metas
+        if (meta.get("forked_from_id") or meta.get("parent_thread_id")) == parent_id
+    ]
+    assert len(linked_children) == 1, (
+        f"expected one child linked to {parent_id}, got {len(linked_children)}"
+    )
+    child = linked_children[0]
+    assert child.get("id") == agent_id
+    assert child.get("id") != parent_id
+    assert (child.get("forked_from_id") or child.get("parent_thread_id")) == parent_id
+    assert child.get("agent_role") == agent_role
+    base_instructions = child.get("base_instructions", {})
+    assert isinstance(base_instructions, dict)
+    base_text = base_instructions.get("text", "")
+    developer_blocks = []
+    for event in child_events:
+        payload = event.get("payload", {})
+        if (
+            event.get("type") != "response_item"
+            or payload.get("type") != "message"
+            or payload.get("role") != "developer"
+        ):
+            continue
+        content = payload.get("content", [])
+        if isinstance(content, str):
+            developer_blocks.append(content)
+        elif isinstance(content, list):
+            developer_blocks.extend(
+                str(block.get("text", "")) for block in content if isinstance(block, dict)
+            )
+    developer_text = "\n".join(developer_blocks)
+    assert output_discipline_digest in base_text or output_discipline_digest in developer_text, (
+        "generated child instructions omitted output discipline digest"
     )

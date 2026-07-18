@@ -5,11 +5,18 @@ Zero autoskillit imports.
 
 from __future__ import annotations
 
+from hashlib import sha256
 from typing import NamedTuple
 
 from ._type_constants_registries import SKILL_CAPABILITY_REGISTRY
 
 __all__ = [
+    "OUTPUT_DISCIPLINE_POLICY_VERSION",
+    "OUTPUT_DISCIPLINE_BLOCK",
+    "OUTPUT_DISCIPLINE_BLOCK_SHA256",
+    "OUTPUT_DISCIPLINE_COMBINED_SHA256",
+    "OUTPUT_DISCIPLINE_DIGEST",
+    "OUTPUT_DISCIPLINE_REQUIRED_SKILLS",
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
     "SKILL_COMMAND_PREFIX",
@@ -43,6 +50,111 @@ __all__ = [
     "GITHUB_API_SKILL_FAMILIES",
     "CODEX_SESSIONS_SUBDIR",
 ]
+
+OUTPUT_DISCIPLINE_POLICY_VERSION = 1
+
+OUTPUT_DISCIPLINE_BLOCK = "\n".join(
+    (
+        "### Output Discipline Policy v1",
+        "",
+        (
+            "- Treat shell and tool output as a bounded resource. Choose the smallest "
+            "useful producer and set a byte limit before running it."
+        ),
+        (
+            "- Bound discovery itself: use forms such as "
+            "`rg -l PATTERN PATH 2>&1 | head -c N`, where `N` is within the configured "
+            "inline-output ceiling, or redirect both descriptors to a project-temp artifact."
+        ),
+        (
+            "- For JSONL, use record-aware search with a per-record limit such as "
+            "`rg -M 500`; never rely on a bare line cap because one record may contain "
+            "an arbitrarily large payload."
+        ),
+        (
+            "- Route stdout and stderr from every stage of an output-producing pipeline "
+            "into the terminal byte cap. Intermediate stderr must not bypass the cap."
+        ),
+        (
+            "- Follow `jq` field extraction with a byte cap. Selecting one field does not "
+            "make its contents small."
+        ),
+        (
+            "- Redirect potentially unbounded output to "
+            "`{{AUTOSKILLIT_TEMP}}/<skill>/out.txt` with both descriptors captured, then "
+            "inspect only bounded searches or byte slices from that artifact."
+        ),
+        (
+            "- Read complete files only when their size is known to be small. Otherwise "
+            "locate matches first and read only the bounded relevant region."
+        ),
+        (
+            "- Give every subagent an explicit maximum size for its final report and "
+            "request only evidence needed by the parent synthesis."
+        ),
+        (
+            "- Before authorizing each deep-mode batch, reserve enough context for "
+            "synthesis, report writing, and validation. Stop gathering and begin "
+            "synthesis when another batch would cross that reserve."
+        ),
+        (
+            "- A command's success does not make oversized inline output safe. Preserve "
+            "full evidence in project temp and return a bounded summary plus the "
+            "artifact path."
+        ),
+    )
+)
+
+OUTPUT_DISCIPLINE_BLOCK_SHA256 = sha256(OUTPUT_DISCIPLINE_BLOCK.encode("utf-8")).hexdigest()
+
+OUTPUT_DISCIPLINE_DIGEST = "\n".join(
+    (
+        "Output Discipline Policy v1:",
+        (
+            "- Bound every shell/tool producer by bytes before execution; discovery "
+            "output is also bounded."
+        ),
+        (
+            "- Merge stdout and stderr through the final byte cap so neither descriptor "
+            "bypasses it."
+        ),
+        ("- Use record-aware limits such as `rg -M 500` for JSONL; never trust bare line caps."),
+        (
+            "- Put a byte cap after `jq` field extraction because a selected field may "
+            "still be huge."
+        ),
+        (
+            "- Send potentially unbounded output to "
+            "`{{AUTOSKILLIT_TEMP}}/<skill>/out.txt`, capturing both descriptors."
+        ),
+        (
+            "- Inspect saved output only with bounded searches or byte slices; directly "
+            "read only known-small files."
+        ),
+        (
+            "- Give subagents explicit final-report size targets and request only "
+            "synthesis-relevant evidence."
+        ),
+        (
+            "- Before each deep-mode batch, reserve context for synthesis, report "
+            "writing, and validation."
+        ),
+        (
+            "- Stop gathering when another batch would cross that reserve; preserve "
+            "evidence by artifact path."
+        ),
+    )
+)
+
+# Covers both policy texts (SKILL.md block and runtime-injected digest) so
+# editing either one invalidates cache keys derived from the policy content.
+OUTPUT_DISCIPLINE_COMBINED_SHA256 = sha256(
+    (OUTPUT_DISCIPLINE_BLOCK + "\x00" + OUTPUT_DISCIPLINE_DIGEST).encode("utf-8")
+).hexdigest()
+
+OUTPUT_DISCIPLINE_REQUIRED_SKILLS: frozenset[str] = frozenset(
+    {"investigate", "rectify", "audit-bugs", "audit-friction"}
+)
 
 RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
     {

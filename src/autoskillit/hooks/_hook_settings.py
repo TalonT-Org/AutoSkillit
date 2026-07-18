@@ -1,6 +1,6 @@
-"""Shared stdlib-only settings resolver for quota guard hooks.
+"""Shared stdlib-only settings bridge for hook subprocesses.
 
-Resolves hook settings from a layered hierarchy that mirrors the
+Resolves quota settings from a layered hierarchy that mirrors the
 dynaconf-backed settings system without importing third-party packages:
 
     1. Function parameter (``cache_path_override`` — for tests/DI)
@@ -9,9 +9,10 @@ dynaconf-backed settings system without importing third-party packages:
        resolved settings
     4. Module default (matches ``config/defaults.yaml``) — lowest
 
-This module is stdlib-only: no third-party imports, no ``autoskillit.*``
-imports. It runs unchanged under the bare Python interpreter used by
-Claude Code hook subprocesses.
+Other hook policies consume the base/overlay snapshot through
+``read_merged_hook_config``. This module is stdlib-only: no third-party
+imports, no ``autoskillit.*`` imports. It runs unchanged under the bare
+Python interpreter used by Claude Code hook subprocesses.
 """
 
 import json
@@ -42,6 +43,13 @@ ENV_DISABLED = "AUTOSKILLIT_QUOTA_GUARD__DISABLED"
 # serializer's payload keys — update both together.
 QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
     {"cache_path", "cache_max_age", "buffer_seconds", "disabled"}
+)
+
+# The exact keys the output-budget guard reads from
+# hook_config["output_budget_policy"]. Keep this stdlib-only declaration in
+# sync with _output_budget_policy_hook_payload() in server/tools/tools_kitchen.py.
+OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
+    {"disabled", "small_file_max_bytes", "shell_max_inline_bytes"}
 )
 
 # The exact keys that appear in token_usage.json files written by flush_session_log.

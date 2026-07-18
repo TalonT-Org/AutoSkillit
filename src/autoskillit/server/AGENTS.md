@@ -14,6 +14,8 @@ Sub-package: tools/ (see tools/AGENTS.md).
 | `_lifespan.py` | FastMCP lifespan context manager — deferred startup (recovery, audit loading, stale cleanup, drift check) |
 | `_misc.py` | Quota, hook-config, triage, and miscellaneous server utilities; re-exports selected execution/workspace symbols for tools |
 | `_notify.py` | MCP notification dispatch and response-size tracking |
+| `_response_budget.py` | Lossless response spill, exact canonical projection finalization, measured exemptions, and privacy-safe budget telemetry |
+| `_response_conformance.py` | Post-FastMCP-conversion conformance gate for registered string tool responses |
 | `_session_type.py` | Session-type tag visibility dispatcher — controls which tools are visible per session type |
 | `_state.py` | Mutable singleton state and context accessor functions (`_ctx` sentinel, `get_ctx`, `set_ctx`) |
 | `_subprocess.py` | Subprocess execution helpers for MCP tools |

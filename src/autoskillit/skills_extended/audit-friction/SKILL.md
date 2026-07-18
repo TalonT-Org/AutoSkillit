@@ -26,6 +26,21 @@ Mine Claude Code conversation logs to identify and categorize friction — repea
 
 The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last month`). If not specified, use `AskUserQuestion` to ask what the earliest lookback date should be before proceeding. If the resulting window contains no logs, fall back to the last 30 days and note the adjustment.
 
+<!-- output-discipline:begin -->
+### Output Discipline Policy v1
+
+- Treat shell and tool output as a bounded resource. Choose the smallest useful producer and set a byte limit before running it.
+- Bound discovery itself: use forms such as `rg -l PATTERN PATH 2>&1 | head -c N`, where `N` is within the configured inline-output ceiling, or redirect both descriptors to a project-temp artifact.
+- For JSONL, use record-aware search with a per-record limit such as `rg -M 500`; never rely on a bare line cap because one record may contain an arbitrarily large payload.
+- Route stdout and stderr from every stage of an output-producing pipeline into the terminal byte cap. Intermediate stderr must not bypass the cap.
+- Follow `jq` field extraction with a byte cap. Selecting one field does not make its contents small.
+- Redirect potentially unbounded output to `{{AUTOSKILLIT_TEMP}}/<skill>/out.txt` with both descriptors captured, then inspect only bounded searches or byte slices from that artifact.
+- Read complete files only when their size is known to be small. Otherwise locate matches first and read only the bounded relevant region.
+- Give every subagent an explicit maximum size for its final report and request only evidence needed by the parent synthesis.
+- Before authorizing each deep-mode batch, reserve enough context for synthesis, report writing, and validation. Stop gathering and begin synthesis when another batch would cross that reserve.
+- A command's success does not make oversized inline output safe. Preserve full evidence in project temp and return a bounded summary plus the artifact path.
+<!-- output-discipline:end -->
+
 ## Critical Constraints
 
 **NEVER:**
@@ -60,32 +75,35 @@ Friction is any pattern where repeated effort yields no progress:
 
 ## Friction Signal Patterns
 
-Logs are too large to read in full. All analysis uses targeted grep commands to surface signal lines, then reads only the surrounding context (a few lines via `-A`/`-B`) to confirm the event. Use this keyword battery against each file:
+Logs are too large to read in full. All analysis uses targeted search commands to surface signal lines, then reads only the surrounding context (a few lines via `-A`/`-B`) to confirm the event. Use this keyword battery against each file:
 
 ```bash
 # Tool errors — direct flag
-grep -n '"is_error".*true' FILE | head -100
+rg -n -M 500 '"is_error".*true' FILE 2>&1 | head -c 12000
 
 # Error keywords in content
-rg -i '"not found|permission denied|no such file|command not found|ENOENT|"failed|"cannot|"error"|exit code [1-9]|Traceback|AssertionError' FILE | head -200
+rg -i -M 500 '"not found|permission denied|no such file|command not found|ENOENT|"failed|"cannot|"error"|exit code [1-9]|Traceback|AssertionError' FILE 2>&1 | head -c 12000
 
 # Human correction language (look inside "type":"human" lines)
-rg -n '"type":"human"' FILE | rg -i 'wrong|"no,|try again|you already|that.s not|incorrect|revert|undo|stop' | head -50
+rg -n -M 500 '"type":"human"' FILE 2>&1 | rg -i 'wrong|"no,|try again|you already|that.s not|incorrect|revert|undo|stop' 2>&1 | head -c 12000
 
 # Test / build failures
-rg -i 'FAILED|test.*failed|build.*failed|compile.*error|syntax error' FILE | head -100
+rg -i -M 500 'FAILED|test.*failed|build.*failed|compile.*error|syntax error' FILE 2>&1 | head -c 12000
 
 # Consecutive tool call loops — extract tool names in document order, show runs of 2+ back-to-back
-grep -o '"name":"[^"]*"' FILE | awk -F'"' '{print $4}' | uniq -c | awk '$1>=2' | head -30
+rg -o -M 500 '"name":"[^"]*"' FILE 2>&1 | awk -F'"' '{print $4}' 2>&1 | uniq -c 2>&1 | awk '$1>=2' 2>&1 | head -c 12000
 
 # Once you know which tool is looping, get its line numbers to find the range:
-grep -n '"name":"TOOL_NAME"' FILE | head -30
+rg -n -M 500 '"name":"TOOL_NAME"' FILE 2>&1 | head -c 12000
 
 # Permission / access blockers
-rg -i 'permission denied|access denied|not allowed|forbidden' FILE | head -50
+rg -i -M 500 'permission denied|access denied|not allowed|forbidden' FILE 2>&1 | head -c 12000
+
+# Confirm a match with bounded surrounding context
+rg -n -M 500 -A 10 -B 10 'CONFIRMING_PATTERN' FILE 2>&1 | head -c 12000
 ```
 
-For each match batch, pull context (`-A 10 -B 10`) to confirm it is a real friction event rather than incidental text, then record the line range and category.
+For each match batch, use the bounded `-A 10 -B 10` command above to confirm it is a real friction event rather than incidental text, then record the line range and category.
 
 ## Workflow
 
@@ -163,7 +181,7 @@ After all Haiku agents return, group all indicators by category. Dispatch **Sonn
 Each Sonnet subagent should:
 
 - Receive the list of `(file, line_start, line_end)` pointers for its assigned category
-- Read those specific line ranges to confirm or reclassify each indicator (Haiku may misfire on edge cases)
+- Read those specific line ranges with the bounded `rg -n -M 500 -A 10 -B 10 ... 2>&1 | head -c 12000` form to confirm or reclassify each indicator (Haiku may misfire on edge cases)
 - Expand the line range further if context is insufficient to understand the event
 - For confirmed instances: extract session date, the specific sequence of events, and what was blocking progress
 - Count confirmed occurrences and distinct sessions affected

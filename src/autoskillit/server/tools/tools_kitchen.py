@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
-    from autoskillit.config.settings import QuotaGuardConfig
+    from autoskillit.config.settings import OutputBudgetConfig, QuotaGuardConfig
     from autoskillit.pipeline import ToolContext
 
 from fastmcp import Context
@@ -80,6 +80,9 @@ from autoskillit.server.tools._preflight import (
 )
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
+    build_open_kitchen_recipe_payload,
+    render_served_response,
+    response_backstop_tool_meta,
     serve_recipe,
 )
 from autoskillit.server.tools._types import _validate_result
@@ -202,6 +205,12 @@ class QuotaGuardHookPayload(TypedDict):
     disabled: bool
 
 
+class OutputBudgetPolicyHookPayload(TypedDict):
+    disabled: bool
+    small_file_max_bytes: int
+    shell_max_inline_bytes: int
+
+
 def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     """Return the quota_guard section of .hook_config.json for a given config.
 
@@ -219,18 +228,39 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
     }
 
 
-def _write_hook_config() -> None:
-    """Write user-configured quota values to .autoskillit/temp/.hook_config.json.
+def _output_budget_policy_hook_payload(
+    cfg: OutputBudgetConfig,
+) -> OutputBudgetPolicyHookPayload:
+    """Return the output-budget guard section of ``.hook_config.json``.
 
-    The hook subprocess (quota_guard.py) reads this file to apply user settings
-    without importing the autoskillit package.
+    Keep these keys in sync with ``OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS``
+    in the stdlib-only hook settings bridge.
+    """
+    return {
+        "disabled": not cfg.guard_enabled,
+        "small_file_max_bytes": cfg.small_file_max_bytes,
+        "shell_max_inline_bytes": cfg.shell_max_inline_bytes,
+    }
+
+
+def _write_hook_config() -> None:
+    """Write hook policy snapshots to .autoskillit/temp/.hook_config.json.
+
+    Hook subprocesses read this file to apply user settings without importing
+    the autoskillit package.
     """
     from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
-    cfg = ctx.config.quota_guard
+    response_temp_root = (
+        ctx.temp_dir
+        if isinstance(getattr(ctx, "temp_dir", None), Path)
+        else ctx.project_dir / ".autoskillit" / "temp"
+    )
     payload = {
-        "quota_guard": _quota_guard_hook_payload(cfg),
+        "quota_guard": _quota_guard_hook_payload(ctx.config.quota_guard),
+        "output_budget_policy": _output_budget_policy_hook_payload(ctx.config.output_budget),
+        "response_temp_root": str(response_temp_root.resolve()),
         "kitchen_id": ctx.kitchen_id,
         "git_ops_policy": {},
     }
@@ -646,7 +676,7 @@ def _check_override_keys(
 @mcp.tool(
     tags={"autoskillit"},
     annotations={"readOnlyHint": True},
-    meta={"anthropic/maxResultSizeChars": 100_000, "anthropic/alwaysLoad": True},
+    meta=response_backstop_tool_meta("open_kitchen", always_load=True),
 )
 @_cancellation_shield()
 @track_response_size("open_kitchen")
@@ -913,11 +943,7 @@ async def open_kitchen(
                         tool_ctx.gate_infrastructure_ready = False
                         await ctx.disable_components(tags={"kitchen"})
                         return _preflight_err
-                result["success"] = True
-                result["kitchen"] = "open"
-                result["version"] = __version__
-                if "ingredients_table" not in result or not result["ingredients_table"]:
-                    result["ingredients_table"] = None
+                result = build_open_kitchen_recipe_payload(result, version=__version__)
                 try:
                     result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
                 except Exception as exc:
@@ -943,7 +969,7 @@ async def open_kitchen(
                 if overrides is not None:
                     tool_ctx.session_serve_overrides = dict(overrides)
                     tool_ctx.session_serve_defer_unresolved = not bool(overrides)
-                return json.dumps(result)
+                return render_served_response(result)
             try:
                 result = serve_recipe(
                     tool_ctx,
@@ -1053,15 +1079,10 @@ async def open_kitchen(
             tool_ctx.session_serve_overrides = dict(overrides) if overrides else {}
             tool_ctx.session_serve_defer_unresolved = not bool(overrides)
 
-            result["success"] = True
-            result["kitchen"] = "open"
-            result["version"] = __version__
+            result = build_open_kitchen_recipe_payload(result, version=__version__)
 
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
-
-            if "ingredients_table" not in result or not result["ingredients_table"]:
-                result["ingredients_table"] = None
 
             if _normal_recipe_obj is not None:
                 _override_warnings = _check_override_keys(
@@ -1095,7 +1116,7 @@ async def open_kitchen(
                 )
                 return _validation_err
 
-            return json.dumps(result)
+            return render_served_response(result)
 
         text = (
             f"Kitchen is open. AutoSkillit {__version__}. Tools are ready for service.\n\n"
@@ -1138,7 +1159,7 @@ async def open_kitchen(
         if warning:
             text += warning
 
-        return json.dumps(
+        return render_served_response(
             {
                 "success": True,
                 "kitchen": "open",

@@ -27,7 +27,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_graphql_invocation_completeness.py` | SKILL.md GraphQL invocation completeness: every parameterized graphql block must have a matching `gh api graphql` bash invocation with individual -F flag bindings |
 | `test_file_audit_issues_contracts.py` | Contract tests for file-audit-issues SKILL.md behavioral invariants |
 | `test_investigate_contracts.py` | Structural contracts for the investigate historical recurrence check step |
-| `test_investigate_deep_mode_contracts.py` | Structural contracts for the investigate deep analysis mode |
+| `test_investigate_deep_mode_contracts.py` | Structural contracts for investigate deep mode, including spawn ceiling, completed wave ordering, and bounded validator responses |
 | `test_investigate_design_intent_contracts.py` | Contract tests for Design Intent Analysis requirements in the investigate skill |
 | `test_isolation_guidance_contracts.py` | Contract tests verifying shared mutable state isolation guidance exists in pipeline skills |
 | `test_make_campaign_compliance.py` | Compliance tests for the make-campaign skill: classification, placeholder hygiene, contract registration |

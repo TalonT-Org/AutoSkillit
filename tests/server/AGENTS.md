@@ -33,6 +33,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_misc_module.py` | Contract tests: server._misc module |
 | `test_no_raw_signal_handler.py` | AST guard: no raw signal.signal(SIGTERM, ...) in cli/app.py |
 | `test_notify_module.py` | Contract tests: server._notify module |
+| `test_response_backstop.py` | Universal response-budget spill, exact projection, exemption, fail-closed, and telemetry contracts |
 | `test_perform_merge_editable_guard.py` | Integration tests verifying perform_merge() aborts before cleanup on poisoned installs |
 | `test_profile_to_env.py` | Tests for _profile_to_env — ProviderProfileDef to env dict conversion in _guards.py |
 | `test_quota_refresh_loop.py` | Tests for _quota_refresh_loop in server/_misc.py |
@@ -81,12 +82,13 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_execution_provider.py` | Tests for provider_extras/profile_name forwarding through run_skill() |
 | `test_tools_execution_response.py` | Contract tests: MCP tool response fields use correct enum types |
 | `test_tools_execution_results.py` | Tests for run_skill result shapes, failure paths, timing, flush telemetry, and gate checks |
+| `test_tools_execution_spill.py` | Lossless spill and anchor contracts for execution and dispatch handlers |
 | `test_tools_execution_routing.py` | Tests for run_skill routing, executor delegation, and session skill management |
 | `test_tools_execution_step_resolution.py` | Tests for server-side recipe step parameter resolution in run_skill (output_dir, stale_threshold, idle_output_timeout, step_provider auto-filled from cached recipe step definitions) |
 | `test_tools_execution_backend_mixing.py` | Integration tests for per-step backend mixing in run_skill() — provider-profile and skill-requirement-driven backend_override derivation + structured log emission |
 | `test_tools_execution_write_prefix.py` | Tests for allowed_write_prefix computation decoupled from read_only |
 | `test_tools_fleet_reset.py` | Tests for the `reset_dispatch` MCP tool — happy paths, errors, edge cases, force-bypass acceptance (REQ-GUARD-003), resume-gate-state cleanup (REQ-STATE-002) |
-| `test_tools_git.py` | Tests for merge_worktree core flow: happy path, test gate, rebase abort, bypass prevention |
+| `test_tools_git.py` | Tests for merge_worktree flow, both large-output gates, passing-output drop, rebase abort, and bypass prevention |
 | `test_tools_git_branch.py` | Tests for create_unique_branch and check_pr_mergeable tools |
 | `test_tools_git_classify_fix.py` | Tests for classify_fix tool |
 | `test_tools_git_merge_cleanup.py` | Tests for merge_worktree cleanup reporting and warnings |
@@ -108,7 +110,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_error_count_surfacing.py` | Tests for the +N more errors indicator in validation error responses (R4) |
 | `test_tools_kitchen_gate.py` | Tests for tools_kitchen.py: gate toggle, review gate cleanup, kitchen_id, misc |
 | `test_tools_kitchen_gate_features.py` | Tests for tools_kitchen.py: recipe packs, quota refresh, ingredients_only, project_dir |
-| `test_tools_kitchen_gate_hook_config.py` | Tests for tools_kitchen.py: hook config lifecycle, overlay, and quota guard tool |
+| `test_tools_kitchen_gate_hook_config.py` | Tests for tools_kitchen.py: hook config lifecycle, quota/output-budget policy snapshots, overlay, and quota guard tool |
 | `test_tools_kitchen_gate_split.py` | Kitchen gate split structural guard |
 | `test_tools_kitchen_visibility.py` | Tests for tools_kitchen.py: visibility, component management, sous-chef, redisable_subsets |
 | `test_lock_ingredients.py` | Tests for the lock_ingredients MCP tool and _write_ingredient_locks helper |
@@ -121,6 +123,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_no_path_cwd_in_tools.py` | Regression guard: Path.cwd() must not appear in server tool handlers |
 | `test_open_kitchen_staleness.py` | Tests for ProcessStaleError propagation through open_kitchen — failure envelope with staleness context |
 | `test_open_kitchen_deferred_recall.py` | Tests for the _is_deferred_recall=True path: active_recipe_steps and fail-closed guard |
+| `test_output_budget_e2e.py` | Env-gated real kitchen/run_skill deep-investigate probes proving backend/model selection, completed agent waves, bounded large-fixture evidence, and post-report validation for Codex and Claude Code 200K |
 | `test_tools_label_validation.py` | Tests for label whitelist validation in server tool handlers |
 | `test_tools_list_recipes.py` | Tests for autoskillit server list_recipes tool |
 | `test_tools_load_recipe.py` | Tests for autoskillit server load_recipe tool |
@@ -148,9 +151,10 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_types_module.py` | Tests for server/tools/_types.py TypedDict imports and failure envelope factory functions |
 | `test_tools_types_validate.py` | Tests for _validate_result helper in server/tools/_types.py — shape invariant enforcement and fail-closed envelope validation |
 | `test_tools_workspace.py` | Tests for autoskillit server workspace tools |
+| `test_tools_workspace_spill.py` | Lossless raw-output spill contracts for test_check |
 | `test_tools_agents.py` | Tests for agent pack registry, MCP resources, and `unlock_agent_pack` |
-| `test_track_response_size.py` | Tests for the track_response_size decorator in autoskillit.server._notify |
-| `test_wire_compat.py` | Wire compatibility tests |
+| `test_track_response_size.py` | Tests for response tracking, non-fatal diagnostics, and universal fail-closed enforcement |
+| `test_wire_compat.py` | Registered/advertised/handler/converted response conformance and wire compatibility tests |
 | `test_backend_ingredient_injection.py` | Tests for backend_capability_overrides injection via open_kitchen, load_recipe, and get_recipe resource |
 
 | `test_tools_git_branch_isolation.py` | Integration tests for create_and_publish_branch with clone-isolated origin topology |

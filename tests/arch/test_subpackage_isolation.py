@@ -91,6 +91,13 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
+        # Canonical output-discipline block/digest and their SHA-256 cache identity are
+        # deliberately derived once at import time from the single source of truth.
+        "_type_constants",
+        "_type_constants_registries",  # measured response-exemption registry digest
+        "_codex_config",  # Codex output ceiling derived from measured exemptions
+        "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
+        "_response_budget",  # canonical spill schema digest
         # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
         "_label_cleanup",  # fleet/_label_cleanup.py: _REMOVE_LABELS constant (see comment above)
         "_step_context",  # core/_step_context.py: current_step_name, current_order_id ContextVars
@@ -859,6 +866,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             (interpreter/wrapper detection) for all command-classifying guards.
             quota_guard_state_post_hook.py is a stdlib-only PostToolUse script that
             maintains the per-session quota-disable marker. Exempt at 15 files.
+            output_budget_guard.py is a standalone stdlib-only PreToolUse script that
+            enforces the output-budget protocol without importing package runtime code.
+            Exempt at 33 files.
           pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
             GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
             Exempt at 12 files.
@@ -885,7 +895,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
-        "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
+        "hooks/guards": 33,  # +output_budget_guard (REQ-CNST-003-E6)
         "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
     }
     violations: list[str] = []
@@ -951,13 +961,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
-    "_command_classification.py": (
-        1100,
+    "hooks/_command_classification.py": (
+        1500,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
-        "interpreter-write detection, protected-path reads, and recursive "
-        "payload segmentation for nested-shell verb-position enforcement; "
-        "stdlib-only stdlib boundary prevents splitting across modules.",
+        "interpreter-write detection, protected-path reads, recursive payload "
+        "segmentation, and descriptor-flow output-budget analysis; the stdlib-only "
+        "hook boundary and shared parser prevent policy drift across guard processes.",
     ),
     "session.py": (
         1060,
@@ -981,7 +991,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1540,
+        1560,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1015,7 +1025,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "established pattern (+1 net line)"
         "; serve_recipe backend_capabilities_map threading at get_recipe + deferred-recall + "
         "normal open_kitchen paths with safe _distinct_backends extraction from "
-        "_effective_backend_map and tool_ctx.backend.name (+28 net lines)",
+        "_effective_backend_map and tool_ctx.backend.name (+28 net lines)"
+        "; output-budget hook payload type, serializer, and hook-config bridge "
+        "(+21 net lines); response artifact temp-root bridge (+2 net lines)",
     ),
     "tools_execution.py": (
         1600,
@@ -1047,7 +1059,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and ambiguous/empty step_name dependency-deny branches (+126 net lines)",
     ),
     "execution/backends/codex.py": (
-        1155,
+        1210,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1073,7 +1085,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; explicit parameter dispositions for "
         "plugin_source/output_format/exit_after_stop_delay_ms "
         "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1"
-        "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)",
+        "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)"
+        "; output-discipline delivery for fresh interactive sessions and generated agent "
+        "TOMLs (+12 net lines)"
+        "; _register_agent_tomls session-config registration for generated roles "
+        "(+39 net lines)",
     ),
 }
 

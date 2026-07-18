@@ -1,13 +1,44 @@
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import tomllib
 from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BareResume, CmdSpec, NamedResume, NoResume
+from autoskillit.core import (
+    OUTPUT_DISCIPLINE_DIGEST,
+    BareResume,
+    CmdSpec,
+    NamedResume,
+    NoResume,
+)
 from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _developer_instructions(spec: CmdSpec) -> str | None:
+    overrides = [
+        spec.cmd[i + 1]
+        for i, value in enumerate(spec.cmd[:-1])
+        if value == CodexFlags.CONFIG_OVERRIDE
+    ]
+    rendered = next(
+        (
+            value.partition("=")[2]
+            for value in overrides
+            if value.startswith("developer_instructions=")
+        ),
+        None,
+    )
+    if rendered is None:
+        return None
+    return tomllib.loads(f"developer_instructions = {rendered}")["developer_instructions"]
 
 
 class TestCodexInteractiveCmdBaseStructure:
@@ -66,10 +97,10 @@ class TestCodexInteractiveCmdSystemPrompt:
             system_prompt="do stuff",
             resume_spec=NoResume(),
         )
+        assert _developer_instructions(spec) == f"do stuff\n\n{OUTPUT_DISCIPLINE_DIGEST}"
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
-        assert "developer_instructions=do stuff" in overrides
         assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_named_resume_suppressed(self) -> None:
@@ -99,7 +130,62 @@ class TestCodexInteractiveCmdSystemPrompt:
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
-        assert overrides == ["features.image_generation=false"]
+        assert _developer_instructions(spec) == OUTPUT_DISCIPLINE_DIGEST
+        assert "features.image_generation=false" in overrides
+
+    def test_system_prompt_override_is_valid_toml_with_quotes_and_newlines(self) -> None:
+        caller_prompt = 'line one "quoted"\nline two \\ path'
+        spec = CodexBackend().build_interactive_cmd(
+            system_prompt=caller_prompt,
+            resume_spec=NoResume(),
+        )
+        assert _developer_instructions(spec) == (f"{caller_prompt}\n\n{OUTPUT_DISCIPLINE_DIGEST}")
+
+    def test_installed_codex_parses_exact_fresh_config_overrides(self, tmp_path: Path) -> None:
+        binary = shutil.which("codex")
+        if binary is None:
+            pytest.skip("installed Codex CLI is absent")
+
+        caller_prompt = (
+            'caller """ prompt = "quoted"\n[features]\npath = C:\\temp\\$HOME\n# literal text'
+        )
+        spec = CodexBackend().build_interactive_cmd(
+            system_prompt=caller_prompt,
+            resume_spec=NoResume(),
+        )
+        config_pairs: list[str] = []
+        for index, value in enumerate(spec.cmd[:-1]):
+            if value == CodexFlags.CONFIG_OVERRIDE:
+                config_pairs.extend(spec.cmd[index : index + 2])
+
+        overrides = config_pairs[1::2]
+        assert len(config_pairs) == 4
+        assert len(overrides) == 2
+        assert {value.partition("=")[0] for value in overrides} == {
+            "developer_instructions",
+            "features.image_generation",
+        }
+        assert caller_prompt in _developer_instructions(spec)
+
+        project_temp = Path(__file__).resolve().parents[3] / ".autoskillit" / "temp"
+        project_temp.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix="codex-config-parse-", dir=project_temp
+        ) as codex_home:
+            env = dict(os.environ)
+            env["CODEX_HOME"] = codex_home
+            result = subprocess.run(  # noqa: S603
+                [binary, *config_pairs, "doctor", "--json"],
+                cwd=tmp_path,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+
+        assert result.stdout, result.stderr
+        config_check = json.loads(result.stdout)["checks"]["config.load"]
+        assert config_check["status"] == "ok", config_check
 
 
 class TestCodexInteractiveCmdAddDirs:

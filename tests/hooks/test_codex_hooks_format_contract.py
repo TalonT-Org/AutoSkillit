@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.execution import _serialize_toml
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
+from autoskillit.hook_registry import HOOK_REGISTRY, generate_hooks_json
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -53,3 +54,20 @@ class TestCodexTomlFormatContract:
                 assert "event" not in entry, (
                     f"Entry under hooks.{event_type} has redundant 'event' scalar"
                 )
+
+    def test_output_budget_guard_is_wired_with_identical_matchers(self):
+        expected = next(
+            hook for hook in HOOK_REGISTRY if "guards/output_budget_guard.py" in hook.scripts
+        )
+        codex_entries = generate_codex_hooks_config()["PreToolUse"]
+        codex_entry = next(
+            entry for entry in codex_entries if entry["matcher"] == expected.matcher
+        )
+        claude_entries = generate_hooks_json()["hooks"]["PreToolUse"]
+        claude_entry = next(
+            entry for entry in claude_entries if entry["matcher"] == expected.matcher
+        )
+
+        assert any("output_budget_guard" in hook["command"] for hook in codex_entry["hooks"])
+        assert any("output_budget_guard" in hook["command"] for hook in claude_entry["hooks"])
+        assert codex_entry["matcher"].encode() == claude_entry["matcher"].encode()

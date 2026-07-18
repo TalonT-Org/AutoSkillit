@@ -60,6 +60,7 @@ from .io import read_versioned_json as read_versioned_json
 from .io import resolve_skill_temp_dir as resolve_skill_temp_dir
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import safe_upsert_section as safe_upsert_section
+from .io import spill_output as spill_output
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_versioned_json as write_versioned_json
 from .logging import configure_logging as configure_logging
@@ -185,6 +186,12 @@ from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
 from .types import ORCHESTRATOR_SESSION_REQUIRED_ENV as ORCHESTRATOR_SESSION_REQUIRED_ENV
 from .types import ORDER_INTERACTIVE_REQUIRED_ENV as ORDER_INTERACTIVE_REQUIRED_ENV
+from .types import OUTPUT_DISCIPLINE_BLOCK as OUTPUT_DISCIPLINE_BLOCK
+from .types import OUTPUT_DISCIPLINE_BLOCK_SHA256 as OUTPUT_DISCIPLINE_BLOCK_SHA256
+from .types import OUTPUT_DISCIPLINE_COMBINED_SHA256 as OUTPUT_DISCIPLINE_COMBINED_SHA256
+from .types import OUTPUT_DISCIPLINE_DIGEST as OUTPUT_DISCIPLINE_DIGEST
+from .types import OUTPUT_DISCIPLINE_POLICY_VERSION as OUTPUT_DISCIPLINE_POLICY_VERSION
+from .types import OUTPUT_DISCIPLINE_REQUIRED_SKILLS as OUTPUT_DISCIPLINE_REQUIRED_SKILLS
 from .types import PACK_REGISTRY as PACK_REGISTRY
 from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
 from .types import PR_TELEMETRY_SECTIONS as PR_TELEMETRY_SECTIONS
@@ -199,6 +206,10 @@ from .types import RECIPE_PACK_REGISTRY as RECIPE_PACK_REGISTRY
 from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS
 from .types import REQUIRED_CONSUMER_FIELDS as REQUIRED_CONSUMER_FIELDS
 from .types import RESERVED_LOG_RECORD_KEYS as RESERVED_LOG_RECORD_KEYS
+from .types import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY as RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+from .types import (
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST as RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+)
 from .types import RESUME_SESSION_BASELINE_KEYS as RESUME_SESSION_BASELINE_KEYS
 from .types import RETIRED_AGENT_NAMES as RETIRED_AGENT_NAMES
 from .types import RETIRED_FEATURES as RETIRED_FEATURES
@@ -334,6 +345,7 @@ from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
 from .types import RecipeSource as RecipeSource
+from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
@@ -354,6 +366,8 @@ from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSource as SkillSource
+from .types import SpilledOutput as SpilledOutput
+from .types import SpillSpec as SpillSpec
 from .types import StreamParser as StreamParser
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner

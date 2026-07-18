@@ -11,7 +11,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import get_logger, truncate_text
+from autoskillit.core import SpillSpec, get_logger, resolve_temp_dir, spill_output, truncate_text
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import condense_test_output
@@ -20,6 +20,15 @@ from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
+
+
+def _bounded_test_stream(text: str, spec: SpillSpec, artifact_path: str | None) -> str:
+    if len(text) <= spec.inline_max_chars:
+        return text
+    head = text[: spec.head_chars]
+    tail = text[-spec.tail_chars :] if spec.tail_chars else ""
+    marker = f"[raw test output spilled -> {artifact_path}]"
+    return "\n".join(part for part in (head, marker, tail) if part)
 
 
 @mcp.tool(
@@ -103,12 +112,45 @@ async def test_check(
                         extra={"worktree": worktree_path},
                     )
 
+                raw_artifact_path: str | None = None
+                spec = SpillSpec(
+                    inline_max_chars=tool_ctx.config.output_budget.inline_max_chars,
+                    head_chars=tool_ctx.config.output_budget.head_chars,
+                    tail_chars=tool_ctx.config.output_budget.tail_chars,
+                )
                 condensed_stdout, condensed_stderr = condense_test_output(test_result)
+                if not test_result.passed:
+                    raw_output = json.dumps(
+                        {"stdout": test_result.stdout, "stderr": test_result.stderr}
+                    )
+                    spill_dir = (
+                        resolve_temp_dir(Path(resolved), tool_ctx.config.workspace.temp_dir)
+                        / "test_check"
+                    )
+                    raw_spill = spill_output(raw_output, spill_dir, "raw_output", spec)
+                    raw_artifact_path = raw_spill.artifact_path
+                    if raw_artifact_path is None and (
+                        len(condensed_stdout) > spec.inline_max_chars
+                        or len(condensed_stderr) > spec.inline_max_chars
+                    ):
+                        raw_spill = spill_output(
+                            raw_output,
+                            spill_dir,
+                            "raw_output",
+                            SpillSpec(
+                                inline_max_chars=0,
+                                head_chars=spec.head_chars,
+                                tail_chars=spec.tail_chars,
+                            ),
+                        )
+                        raw_artifact_path = raw_spill.artifact_path
                 response = {
                     "passed": test_result.passed,
-                    "stdout": truncate_text(condensed_stdout),
-                    "stderr": truncate_text(condensed_stderr),
+                    "stdout": _bounded_test_stream(condensed_stdout, spec, raw_artifact_path),
+                    "stderr": _bounded_test_stream(condensed_stderr, spec, raw_artifact_path),
                 }
+                if raw_artifact_path is not None:
+                    response["raw_output_artifact_path"] = raw_artifact_path
                 if test_result.duration_seconds is not None:
                     response["duration_seconds"] = round(test_result.duration_seconds, 2)
                 if test_result.filter_mode is not None:

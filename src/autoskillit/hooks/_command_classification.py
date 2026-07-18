@@ -11,7 +11,8 @@ import ast
 import os
 import re
 import shlex
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from enum import Enum
 from typing import Protocol
 
 _INTERPRETER_RE = re.compile(
@@ -224,6 +225,21 @@ _SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
 _PROTECTED_READ_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 _WC_FLAG_RE = re.compile(r"-l+|--lines$")
 
+OUTPUT_BUDGET_MAX_COMMAND_CHARS = 65_536
+OUTPUT_BUDGET_MAX_NESTING_DEPTH = 8
+
+
+class CommandBudgetDisposition(Enum):
+    BOUNDED = "bounded"
+    HAZARDOUS = "hazardous"
+    UNKNOWN = "unknown"
+
+
+# A producer classifier returns whether the producer's stdout and stderr are
+# intrinsically bounded, respectively.  Returning None means the segment is
+# outside the caller's risky-producer policy.
+OutputBudgetProducerClassifier = Callable[[list[str]], tuple[bool, bool] | None]
+
 
 class SearchPattern(Protocol):
     def search(self, string: str, /): ...
@@ -310,6 +326,369 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     if current:
         segments.append(current)
     return segments
+
+
+def tokenize_command_structure(command: str) -> list[tuple[str, list[str]]] | None:
+    """Tokenize shell segments while retaining the connector before each segment."""
+    if len(command) > OUTPUT_BUDGET_MAX_COMMAND_CHARS:
+        return None
+    try:
+        stripped = _HEREDOC_MARKER_RE.sub(r"\2", strip_heredoc_bodies(command))
+        lexer = shlex.shlex(
+            _normalize_newlines_for_tokenize(stripped), posix=True, punctuation_chars=";&|"
+        )
+        lexer.whitespace_split = True
+        raw_tokens = list(lexer)
+    except (ValueError, TypeError):
+        return None
+    tokens: list[str] = []
+    i = 0
+    while i < len(raw_tokens):
+        token = raw_tokens[i]
+        # shlex splits the ampersand in descriptor duplication (2>&1) because
+        # ampersand is also shell punctuation.  Recombine only when the token
+        # before it is a redirect operator and the target is a literal fd.
+        if (
+            re.fullmatch(r"\d*>{1,2}", token)
+            and i + 2 < len(raw_tokens)
+            and raw_tokens[i + 1] == "&"
+            and re.fullmatch(r"\d+|-", raw_tokens[i + 2])
+        ):
+            tokens.append(f"{token}&{raw_tokens[i + 2]}")
+            i += 3
+            continue
+        tokens.append(token)
+        i += 1
+    result: list[tuple[str, list[str]]] = []
+    current: list[str] = []
+    connector = ""
+    for token in tokens:
+        if token in {"&&", "||", ";", "|", "|&", "&"}:
+            if current:
+                result.append((connector, current))
+                current = []
+            connector = token
+        else:
+            current.append(token)
+    if current:
+        result.append((connector, current))
+    return result
+
+
+_OUTPUT_REDIRECT_RE = re.compile(r"^(?P<fd>[012]?)(?P<op>>{1,2})(?P<target>.*)$")
+_OUTPUT_FD_DUP_RE = re.compile(r"^(?P<fd>[012]?)(?P<op>>{1,2})&(?P<target>\d+|-)$")
+_OUTPUT_DYNAMIC_TARGET_RE = re.compile(r"[$`*?\[\]{}]")
+_OUTPUT_UNSUPPORTED_SYNTAX_RE = re.compile(r"[<>]\(|<<<|(?:[3-9]\d*)>&|>&-")
+_OUTPUT_BYTE_CAP_VERBS: frozenset[str] = frozenset({"head", "tail"})
+
+_DEST_MODEL = "model"
+_DEST_PIPE = "pipe"
+_DEST_SAFE = "safe"
+_DEST_UNSAFE = "unsafe"
+_DEST_UNKNOWN = "unknown"
+
+
+def _is_project_temp_target(target: str, cwd: str) -> bool:
+    if target == "/dev/null":
+        return True
+    if not target or _OUTPUT_DYNAMIC_TARGET_RE.search(target):
+        return False
+    root = os.path.realpath(cwd or os.getcwd())
+    temp_root = os.path.join(root, ".autoskillit", "temp")
+    resolved = os.path.realpath(target if os.path.isabs(target) else os.path.join(root, target))
+    try:
+        return os.path.commonpath((temp_root, resolved)) == temp_root
+    except ValueError:
+        return False
+
+
+def _redirect_target_destination(target: str, cwd: str) -> str:
+    if not target or _OUTPUT_DYNAMIC_TARGET_RE.search(target):
+        return _DEST_UNKNOWN
+    return _DEST_SAFE if _is_project_temp_target(target, cwd) else _DEST_UNSAFE
+
+
+def _segment_output_destinations(
+    tokens: list[str], *, stdout_base: str, stderr_base: str, cwd: str
+) -> tuple[str, str, list[str], bool]:
+    """Apply ordered stdout/stderr redirects and return remaining argv.
+
+    The bool result reports unsupported or ambiguous descriptor syntax.  The
+    destination copy for ``2>&1`` is intentionally immediate, matching shell
+    left-to-right redirection semantics.
+    """
+    stdout = stdout_base
+    stderr = stderr_base
+    argv: list[str] = []
+    unknown = False
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        fd_dup = _OUTPUT_FD_DUP_RE.fullmatch(token)
+        if fd_dup:
+            fd = int(fd_dup.group("fd") or "1")
+            target = fd_dup.group("target")
+            if fd not in {1, 2} or target not in {"1", "2"}:
+                unknown = True
+            elif fd == 1:
+                stdout = stdout if target == "1" else stderr
+            else:
+                stderr = stdout if target == "1" else stderr
+            i += 1
+            continue
+
+        redirect = _OUTPUT_REDIRECT_RE.fullmatch(token)
+        if redirect:
+            fd = int(redirect.group("fd") or "1")
+            target = redirect.group("target")
+            if not target:
+                if i + 1 >= len(tokens):
+                    unknown = True
+                    i += 1
+                    continue
+                target = tokens[i + 1]
+                i += 1
+            destination = _redirect_target_destination(target, cwd)
+            if fd == 1:
+                stdout = destination
+            elif fd == 2:
+                stderr = destination
+            else:
+                unknown = True
+            i += 1
+            continue
+
+        if token.startswith("<") or re.match(r"\d+<", token):
+            # Ordinary literal stdin redirection does not affect model-visible
+            # output.  Dynamic/process forms were rejected before tokenization.
+            if _OUTPUT_DYNAMIC_TARGET_RE.search(token):
+                unknown = True
+            argv.append(token)
+            i += 1
+            continue
+        argv.append(token)
+        i += 1
+    return (stdout, stderr, argv, unknown)
+
+
+def command_tokens_without_output_redirections(tokens: list[str]) -> list[str] | None:
+    """Return command argv with stdout/stderr redirects removed.
+
+    ``None`` means descriptor syntax was ambiguous or unsupported.  This is
+    primarily exposed for stdlib-only guards that need to classify arguments
+    without accidentally treating redirect targets as input paths.
+    """
+    _stdout, _stderr, argv, unknown = _segment_output_destinations(
+        tokens, stdout_base=_DEST_MODEL, stderr_base=_DEST_MODEL, cwd=os.getcwd()
+    )
+    return None if unknown else argv
+
+
+def _byte_cap_value(argv: list[str], max_inline_bytes: int) -> int | None:
+    verb, args = command_verb_and_args(argv)
+    if os.path.basename(verb) not in _OUTPUT_BYTE_CAP_VERBS:
+        return None
+    value: str | None = None
+    for index, arg in enumerate(args):
+        if arg in {"-c", "--bytes"} and index + 1 < len(args):
+            value = args[index + 1]
+            break
+        if arg.startswith("-c") and len(arg) > 2:
+            value = arg[2:]
+            break
+        if arg.startswith("--bytes="):
+            value = arg.partition("=")[2]
+            break
+    if value is None or not value.isdigit():
+        return None
+    parsed = int(value)
+    return parsed if 0 < parsed <= max_inline_bytes else None
+
+
+def _combine_budget_dispositions(
+    left: CommandBudgetDisposition, right: CommandBudgetDisposition
+) -> CommandBudgetDisposition:
+    if CommandBudgetDisposition.UNKNOWN in {left, right}:
+        return CommandBudgetDisposition.UNKNOWN
+    if CommandBudgetDisposition.HAZARDOUS in {left, right}:
+        return CommandBudgetDisposition.HAZARDOUS
+    return CommandBudgetDisposition.BOUNDED
+
+
+def _trace_pipeline_destination(
+    parsed: list[tuple[str, list[str]]],
+    producer_index: int,
+    destination: str,
+    *,
+    max_inline_bytes: int,
+    cwd: str,
+    input_already_bounded: bool = False,
+) -> CommandBudgetDisposition:
+    if destination == _DEST_SAFE:
+        return CommandBudgetDisposition.BOUNDED
+    if destination in {_DEST_MODEL, _DEST_UNSAFE}:
+        return CommandBudgetDisposition.HAZARDOUS
+    if destination == _DEST_UNKNOWN:
+        return CommandBudgetDisposition.UNKNOWN
+
+    # The content is on a pipeline.  It remains unbounded until a terminal
+    # byte cap; every intermediate stderr must stay in that pipeline or go to
+    # an approved sink, otherwise that branch remains model-visible.
+    index = producer_index + 1
+    while index < len(parsed) and parsed[index][0] in {"|", "|&"}:
+        connector, tokens = parsed[index]
+        next_connector = parsed[index + 1][0] if index + 1 < len(parsed) else ""
+        has_next_pipe = next_connector in {"|", "|&"}
+        stdout_base = _DEST_PIPE if has_next_pipe else _DEST_MODEL
+        stderr_base = _DEST_PIPE if has_next_pipe and next_connector == "|&" else _DEST_MODEL
+        stdout, stderr, argv, unknown = _segment_output_destinations(
+            tokens, stdout_base=stdout_base, stderr_base=stderr_base, cwd=cwd
+        )
+        if unknown or os.path.basename(command_verb(argv)) == "tee":
+            return CommandBudgetDisposition.UNKNOWN
+        cap = _byte_cap_value(argv, max_inline_bytes)
+        if cap is not None:
+            # A downstream transform can amplify a capped stream, so only a
+            # terminal cap (or one writing directly to a safe sink) proves the
+            # model-visible response bound.
+            if has_next_pipe:
+                return CommandBudgetDisposition.UNKNOWN
+            if stdout == _DEST_UNKNOWN:
+                return CommandBudgetDisposition.UNKNOWN
+            return (
+                CommandBudgetDisposition.BOUNDED
+                if stdout in {_DEST_MODEL, _DEST_SAFE}
+                else CommandBudgetDisposition.HAZARDOUS
+            )
+        if input_already_bounded:
+            # An arbitrary transform may amplify even a small source record.
+            # Without a terminal byte cap or safe-file sink its output bound is
+            # not statically knowable.
+            return (
+                CommandBudgetDisposition.BOUNDED
+                if stdout == _DEST_SAFE
+                else CommandBudgetDisposition.UNKNOWN
+            )
+        if stdout == _DEST_SAFE:
+            return CommandBudgetDisposition.BOUNDED
+        if stdout != _DEST_PIPE:
+            return (
+                CommandBudgetDisposition.UNKNOWN
+                if stdout == _DEST_UNKNOWN
+                else CommandBudgetDisposition.HAZARDOUS
+            )
+        if stderr not in {_DEST_PIPE, _DEST_SAFE}:
+            return (
+                CommandBudgetDisposition.UNKNOWN
+                if stderr == _DEST_UNKNOWN
+                else CommandBudgetDisposition.HAZARDOUS
+            )
+        index += 1
+    return CommandBudgetDisposition.HAZARDOUS
+
+
+def _classify_parsed_output_budget(
+    parsed: list[tuple[str, list[str]]],
+    producer_classifier: OutputBudgetProducerClassifier,
+    *,
+    max_inline_bytes: int,
+    cwd: str,
+) -> CommandBudgetDisposition:
+    profiles = [producer_classifier(tokens) for _connector, tokens in parsed]
+    if not any(profile is not None for profile in profiles):
+        return CommandBudgetDisposition.BOUNDED
+
+    disposition = CommandBudgetDisposition.BOUNDED
+    for index, profile in enumerate(profiles):
+        if profile is None:
+            continue
+        if any(os.path.basename(command_verb(tokens)) == "tee" for _c, tokens in parsed):
+            return CommandBudgetDisposition.UNKNOWN
+        connector_after = parsed[index + 1][0] if index + 1 < len(parsed) else ""
+        stdout_base = _DEST_PIPE if connector_after in {"|", "|&"} else _DEST_MODEL
+        stderr_base = _DEST_PIPE if connector_after == "|&" else _DEST_MODEL
+        stdout, stderr, _argv, unknown = _segment_output_destinations(
+            parsed[index][1], stdout_base=stdout_base, stderr_base=stderr_base, cwd=cwd
+        )
+        if unknown:
+            return CommandBudgetDisposition.UNKNOWN
+        stdout_intrinsic, stderr_intrinsic = profile
+        for stream_intrinsic, destination in (
+            (stdout_intrinsic, stdout),
+            (stderr_intrinsic, stderr),
+        ):
+            if stream_intrinsic:
+                stream_disposition = (
+                    _trace_pipeline_destination(
+                        parsed,
+                        index,
+                        destination,
+                        max_inline_bytes=max_inline_bytes,
+                        cwd=cwd,
+                        input_already_bounded=True,
+                    )
+                    if destination == _DEST_PIPE
+                    else CommandBudgetDisposition.BOUNDED
+                )
+            else:
+                stream_disposition = _trace_pipeline_destination(
+                    parsed,
+                    index,
+                    destination,
+                    max_inline_bytes=max_inline_bytes,
+                    cwd=cwd,
+                )
+            disposition = _combine_budget_dispositions(disposition, stream_disposition)
+    return disposition
+
+
+def classify_command_output_budget(
+    command: str,
+    producer_classifier: OutputBudgetProducerClassifier,
+    *,
+    max_inline_bytes: int,
+    cwd: str = "",
+    _depth: int = 0,
+) -> CommandBudgetDisposition:
+    """Classify whether every risky producer has a proven bounded output path.
+
+    The caller supplies the producer policy so this shared parser remains
+    independent of any one guard.  Commands outside that policy are BOUNDED;
+    malformed, over-limit, deeply nested, or unsupported shell structures are
+    UNKNOWN and therefore cannot establish a guard exception.
+    """
+    if (
+        _depth > OUTPUT_BUDGET_MAX_NESTING_DEPTH
+        or len(command) > OUTPUT_BUDGET_MAX_COMMAND_CHARS
+        or max_inline_bytes <= 0
+    ):
+        return CommandBudgetDisposition.UNKNOWN
+    if _OUTPUT_UNSUPPORTED_SYNTAX_RE.search(command):
+        return CommandBudgetDisposition.UNKNOWN
+    parsed = tokenize_command_structure(command)
+    if parsed is None or (not parsed and command.strip()):
+        return CommandBudgetDisposition.UNKNOWN
+    if any(connector == "&" for connector, _tokens in parsed):
+        return CommandBudgetDisposition.UNKNOWN
+
+    root = cwd or os.getcwd()
+    disposition = _classify_parsed_output_budget(
+        parsed, producer_classifier, max_inline_bytes=max_inline_bytes, cwd=root
+    )
+    seen: set[str] = set()
+    for payload in extract_shell_command_payloads(command):
+        if payload in seen:
+            continue
+        seen.add(payload)
+        child = classify_command_output_budget(
+            payload,
+            producer_classifier,
+            max_inline_bytes=max_inline_bytes,
+            cwd=root,
+            _depth=_depth + 1,
+        )
+        disposition = _combine_budget_dispositions(disposition, child)
+    return disposition
 
 
 def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
@@ -499,6 +878,9 @@ def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
     start = 0
     while start < len(segment):
         token = segment[start]
+        if token in {"do", "then", "elif", "else"}:
+            start += 1
+            continue
         if _is_posix_assignment(token):
             start += 1
             continue

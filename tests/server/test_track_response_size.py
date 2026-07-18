@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import structlog
 
+from autoskillit.config import OutputBudgetConfig
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -131,3 +133,114 @@ class TestTrackResponseSize:
         assert data["exit_code"] == -1
         assert data["subtype"] == "tool_exception"
         assert "user_visible_message" in data
+
+    @pytest.mark.anyio
+    async def test_nonserializable_result_fails_closed_instead_of_returning_original(self):
+        from autoskillit.server._notify import track_response_size
+
+        original = {"private": object()}
+
+        @track_response_size("nonserializable_tool")
+        async def fake_handler():
+            return original
+
+        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+            result = await fake_handler()
+
+        assert result is not original
+        assert result["success"] is False
+        assert "serialization_failed" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_response_log_failure_is_nonfatal_and_does_not_log_exception_path(self):
+        from autoskillit.server._notify import track_response_size
+
+        response_log = MagicMock()
+        response_log.record.side_effect = OSError("/private/project/response.json")
+        ctx = MagicMock(
+            response_log=response_log,
+            config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),
+        )
+
+        @track_response_size("small_tool")
+        async def fake_handler():
+            return "small"
+
+        with (
+            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
+            structlog.testing.capture_logs() as logs,
+        ):
+            result = await fake_handler()
+
+        assert result == "small"
+        assert "/private/project" not in repr(logs)
+        assert any(log["event"] == "track_response_size_telemetry_failed" for log in logs)
+
+    @pytest.mark.anyio
+    async def test_notification_failure_is_nonfatal_and_does_not_log_exception_path(self):
+        from autoskillit.server._notify import track_response_size
+
+        class FakeContext:
+            pass
+
+        response_log = MagicMock()
+        response_log.record.return_value = True
+        ctx = MagicMock(
+            response_log=response_log,
+            config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),
+        )
+
+        @track_response_size("notified_tool")
+        async def fake_handler(_mcp_ctx):
+            return "small"
+
+        with (
+            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
+            patch("fastmcp.Context", FakeContext),
+            patch(
+                "autoskillit.server._notify._notify",
+                new=AsyncMock(side_effect=RuntimeError("/private/project/session.json")),
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            result = await fake_handler(FakeContext())
+
+        assert result == "small"
+        assert "/private/project" not in repr(logs)
+        assert any(log["event"] == "track_response_size_notification_failed" for log in logs)
+
+    @pytest.mark.anyio
+    async def test_unexpected_enforcement_failure_is_bounded_and_centrally_emitted(self):
+        from autoskillit.server._notify import track_response_size
+
+        tool_name = "/private/tool/" + "x" * 200
+        ctx = MagicMock(
+            response_log=MagicMock(record=MagicMock(return_value=False)),
+            config=MagicMock(
+                mcp_response=MagicMock(alert_threshold_tokens=0),
+                output_budget=OutputBudgetConfig(response_max_bytes=200),
+            ),
+        )
+
+        @track_response_size(tool_name)
+        async def fake_handler():
+            return "small"
+
+        with (
+            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
+            patch(
+                "autoskillit.server._notify.enforce_response_budget",
+                side_effect=RuntimeError("/private/project/enforcement.log"),
+            ),
+            patch("autoskillit.server._response_budget.logger.info") as log_info,
+        ):
+            result = await fake_handler()
+
+        assert len(result.encode("utf-8")) <= 200
+        assert "/private/project" not in result
+        assert "/private/project" not in repr(log_info.call_args_list)
+        event = next(
+            call for call in log_info.call_args_list if call.args == ("response_budget_failure",)
+        )
+        assert event.kwargs["cause"] == "internal_invariant_failed"
+        assert event.kwargs["original_utf8_bytes"] == len(b"small")

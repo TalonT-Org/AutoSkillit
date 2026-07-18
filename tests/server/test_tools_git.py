@@ -63,8 +63,10 @@ class TestMergeWorktree:
         tool_ctx_kitchen_open.runner.push(
             _make_result(0, "", "")
         )  # git status --porcelain (clean)
+        huge_passing_stdout = "P" * 100_000 + "\n= 100 passed ="
+        huge_passing_stderr = "W" * 100_000
         tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "PASS\n= 100 passed =", "")
+            _make_result(0, huge_passing_stdout, huge_passing_stderr)
         )  # pre-rebase test-check
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git fetch
         tool_ctx_kitchen_open.runner.push(
@@ -75,7 +77,7 @@ class TestMergeWorktree:
         )  # git log --merges (no merge commits — step 5.6)
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git rebase
         tool_ctx_kitchen_open.runner.push(
-            _make_result(0, "PASS\n= 100 passed =", "")
+            _make_result(0, huge_passing_stdout, huge_passing_stderr)
         )  # post-rebase test-check
         tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
@@ -93,6 +95,10 @@ class TestMergeWorktree:
         assert result["cleanup_succeeded"] is True
         assert result["worktree_removed"] is True
         assert result["branch_deleted"] is True
+        assert "test_stdout" not in result
+        assert "test_stderr" not in result
+        assert "raw_output_artifact_path" not in result
+        assert not (wt / ".autoskillit" / "temp" / "merge_worktree").exists()
         # Verify merge command cwd is the main_repo (/repo)
         merge_call = next(
             args
@@ -215,8 +221,10 @@ class TestMergeWorktreeNoBypass:
         assert "test_summary" not in result
 
     @pytest.mark.anyio
-    async def test_gate_failure_truncates_large_output(self, tool_ctx_kitchen_open, tmp_path):
-        """merge_worktree truncates test_stdout and test_stderr in failure response."""
+    async def test_gate_failure_spills_large_output_losslessly(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        """merge_worktree bounds previews and preserves exact raw output in an artifact."""
         wt = tmp_path / "worktree"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
@@ -234,5 +242,56 @@ class TestMergeWorktreeNoBypass:
         )  # test-check
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
-        assert len(result["test_stdout"]) <= 5100
-        assert len(result["test_stderr"]) <= 5100
+        artifact = Path(result["raw_output_artifact_path"])
+        assert artifact.is_relative_to(wt / ".autoskillit" / "temp")
+        raw = json.loads(artifact.read_text())
+        assert raw == {"stdout": large_stdout, "stderr": large_stderr}
+        assert "raw test output spilled" in result["test_stdout"]
+        assert "raw test output spilled" in result["test_stderr"]
+        preview_bound = (
+            tool_ctx_kitchen_open.config.output_budget.head_chars
+            + tool_ctx_kitchen_open.config.output_budget.tail_chars
+            + 512
+        )
+        assert len(result["test_stdout"]) <= preview_bound
+        assert len(result["test_stderr"]) <= preview_bound
+
+    @pytest.mark.anyio
+    async def test_post_rebase_gate_failure_spills_large_output_losslessly(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "/repo/.git/worktrees/wt\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "impl-branch\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "= 100 passed =", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "abc123\n", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
+        large_stdout = "F" * 100_000 + "\n= 3 failed, 97 passed ="
+        large_stderr = "E" * 100_000
+        tool_ctx_kitchen_open.runner.push(_make_result(1, large_stdout, large_stderr))
+
+        result = json.loads(await merge_worktree(str(wt), "dev"))
+
+        assert result["failed_step"] == MergeFailedStep.POST_REBASE_TEST_GATE
+        artifact = Path(result["raw_output_artifact_path"])
+        assert artifact.is_relative_to(wt / ".autoskillit" / "temp")
+        assert json.loads(artifact.read_text()) == {
+            "stdout": large_stdout,
+            "stderr": large_stderr,
+        }
+        assert "raw test output spilled" in result["test_stdout"]
+        assert "raw test output spilled" in result["test_stderr"]
+        preview_bound = (
+            tool_ctx_kitchen_open.config.output_budget.head_chars
+            + tool_ctx_kitchen_open.config.output_budget.tail_chars
+            + 512
+        )
+        assert len(result["test_stdout"]) <= preview_bound
+        assert len(result["test_stderr"]) <= preview_bound

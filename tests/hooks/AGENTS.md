@@ -10,7 +10,7 @@ Hook script behavior, registration, and bridge tests.
 | `conftest.py` | Per-test project-root CWD isolation for every hook test (autouse `_isolate_hook_cwd`) |
 | `test_fmt_status.py` | Tests for autoskillit.hooks.formatters._fmt_status |
 | `test_hook_dispatch.py` | Tests for the stable hook dispatcher (_dispatch.py) — resolution, retired mapping, graceful degrade |
-| `test_hook_config_bridge.py` | Regression tests for the quota_guard.py → .hook_config.json bridge |
+| `test_hook_config_bridge.py` | Regression tests for quota and output-budget policy serialization into the stdlib hook config bridge |
 | `test_hook_executability.py` | Tests for hook command executability — validates invocation path via subprocess |
 | `test_hook_registration_coverage.py` | Structural test: every hook script is registered in HOOK_REGISTRY |
 | `test_hook_registry.py` | Tests for hook_registry.py — L0 hook identity model |
@@ -36,6 +36,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_compose_pr_body_guard.py` | Tests for compose_pr_body_guard.py PreToolUse hook — body file Closes #N validation |
 | `test_command_classification.py` | Tests for the shared _command_classification.py command classification primitives |
 | `test_command_classification_git.py` | Tests for the git command classification primitives (is_git_command, extract_git_subcommand_and_flags) |
+| `test_output_budget_guard.py` | Tests for output_budget_guard.py PreToolUse classification, bounded exceptions, config bridge, and registration |
 | `test_pr_create_guard.py` | Tests for pr_create_guard.py interpreter bypass detection |
 | `test_planner_gh_discovery_guard.py` | Tests for planner_gh_discovery_guard.py interpreter bypass detection |
 | `test_ingredient_lock_guard.py` | Tests for ingredient_lock_guard.py PreToolUse hook: deny/allow, fail-open, pipeline scoping |

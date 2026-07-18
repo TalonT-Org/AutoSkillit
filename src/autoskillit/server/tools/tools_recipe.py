@@ -35,6 +35,8 @@ from autoskillit.server.tools._auto_overrides import (
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
+    render_served_response,
+    response_backstop_tool_meta,
     serve_recipe,
 )
 from autoskillit.server.tools._types import _validate_result
@@ -85,7 +87,7 @@ async def list_recipes() -> str:
 @mcp.tool(
     tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
     annotations={"readOnlyHint": True},
-    meta={"anthropic/maxResultSizeChars": 100_000},
+    meta=response_backstop_tool_meta("load_recipe"),
 )
 @_cancellation_shield()
 @track_response_size("load_recipe")
@@ -321,7 +323,7 @@ async def load_recipe(
                     stage="validate_result",
                 )
                 return _validation_err
-            return json.dumps(result)
+            return render_served_response(result)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

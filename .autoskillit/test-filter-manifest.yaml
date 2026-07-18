@@ -153,6 +153,9 @@ tests/recipe/fixtures/*:
 tests/fixtures/codex/*.ndjson:
   - execution/
 
+tests/fixtures/codex/*.jsonl:
+  - hooks/
+
 tests/execution/backends/fixtures/codex_ndjson/*.json:
   - execution/
 
@@ -164,6 +167,9 @@ tests/execution/backends/fixtures/codex_ndjson/*.json:
   - infra/
 
 .autoskillit/config.yaml:
+  - infra/
+
+.autoskillit/evidence/output-budget-remediation/**/*:
   - infra/
 
 .autoskillit/recipes/*.yaml:
@@ -219,6 +225,8 @@ scripts/check_sub_agents_md.py:
 scripts/check_tool_annotations.py:
   - arch/
 scripts/compare-coverage-ast.py:
+  - infra/
+scripts/validate_output_budget_evidence.py:
   - infra/
 scripts/compile_recipes.py:
   - recipe/

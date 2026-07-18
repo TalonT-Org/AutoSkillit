@@ -75,6 +75,12 @@ class TestJobEnvironment:
     def test_claude_probe_smoke_env(self, workflow: dict) -> None:
         assert workflow["jobs"]["claude-probe"]["env"]["CLAUDE_CODE_SMOKE_TEST"] == "1"
 
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_live_probe_timeout_covers_default_dispatch(
+        self, workflow: dict, job_name: str
+    ) -> None:
+        assert workflow["jobs"][job_name]["timeout-minutes"] == 75
+
 
 class TestActionPinning:
     _SHA_RE = re.compile(r"@[0-9a-f]{40}\b")
@@ -124,6 +130,41 @@ class TestVersionResolution:
 
 
 class TestCacheGate:
+    def test_codex_config_parse_gate_precedes_cache_and_live_probe(self, workflow: dict) -> None:
+        steps = workflow["jobs"]["codex-probe"]["steps"]
+        parse_index, parse_step = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Validate installed Codex config parsing"
+        )
+        restore_index = next(
+            index
+            for index, step in enumerate(steps)
+            if "cache/restore" in (step.get("uses") or "")
+        )
+        live_index = next(
+            index
+            for index, step in enumerate(steps)
+            if step.get("name") == "Run Codex conformance probes"
+        )
+
+        assert parse_step.get("run") == "task test-codex-config-parse"
+        assert "if" not in parse_step
+        assert parse_step.get("continue-on-error") is not True
+        assert parse_index < restore_index < live_index
+
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_exports_output_discipline_policy_identity(
+        self, workflow: dict, job_name: str
+    ) -> None:
+        steps = workflow["jobs"][job_name]["steps"]
+        policy_steps = [s for s in steps if s.get("id") == "resolve-policy"]
+        assert len(policy_steps) == 1
+        run = policy_steps[0].get("run", "")
+        assert "PROBE_POLICY_IDENTITY" in run
+        assert "policy_identity=${POLICY_IDENTITY}" in run
+        assert "GITHUB_OUTPUT" in run
+
     @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
     def test_cache_restore_step(self, workflow: dict, job_name: str) -> None:
         steps = workflow["jobs"][job_name]["steps"]
@@ -155,6 +196,38 @@ class TestCacheGate:
         for step in restore_steps:
             key = step.get("with", {}).get("key", "")
             assert f"probe-{expected_backend}" in key
+
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_restore_and_save_keys_include_policy_identity(
+        self, workflow: dict, job_name: str
+    ) -> None:
+        steps = workflow["jobs"][job_name]["steps"]
+        cache_steps = [
+            s
+            for s in steps
+            if "cache/restore" in (s.get("uses") or "") or "cache/save" in (s.get("uses") or "")
+        ]
+        assert len(cache_steps) == 2
+        for step in cache_steps:
+            key = step.get("with", {}).get("key", "")
+            assert "steps.resolve-policy.outputs.policy_identity" in key
+
+
+class TestOutputBudgetE2E:
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_job_runs_real_server_harness(self, workflow: dict, job_name: str) -> None:
+        run_steps = [step.get("run", "") for step in workflow["jobs"][job_name]["steps"]]
+        assert any("tests/server/test_output_budget_e2e.py" in run for run in run_steps)
+
+    def test_claude_job_exports_isolated_credential(self, workflow: dict) -> None:
+        steps = workflow["jobs"]["claude-probe"]["steps"]
+        probe_step = next(
+            step for step in steps if step.get("name") == "Run Claude Code conformance probes"
+        )
+        env = probe_step["env"]
+        assert "ANTHROPIC_API_KEY" in env
+        assert "CLAUDE_CODE_OAUTH_TOKEN" in env
+        assert "No isolated Claude credential" in probe_step["run"]
 
 
 class TestPostFailure:

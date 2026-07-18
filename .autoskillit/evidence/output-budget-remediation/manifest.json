@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "implementation_baseline_sha": "093179c8f7eb3ebe3b5783d84409d0b074333686",
+  "historical_context": [
+    {
+      "phase": 1,
+      "phase_commit_sha": "8091755f5d4beffbf5d368625a5fb7fb055aae6e",
+      "bound_to_commit": false,
+      "summary": "30649 passed; historical log contains no embedded command or tested-SHA provenance",
+      "gate_log_path": "temp/test-2026-07-15_170319.txt",
+      "gate_log_sha256": "42f8cd8214abc10b5b075cdd88d81ca48c5040d642be6f7273de5aecc949ec14"
+    },
+    {
+      "phase": 2,
+      "phase_commit_sha": "0726dc802bc7d04b16a30d96ecf8642164dcb4f3",
+      "bound_to_commit": false,
+      "summary": "29467 passed; historical log contains no embedded command or tested-SHA provenance",
+      "gate_log_path": "temp/test-2026-07-15_174512.txt",
+      "gate_log_sha256": "7702f2eb677daf51d8bfb187f2dcc42fc4c894d5fe8c342713d92cd9db0a6d84"
+    },
+    {
+      "phase": 3,
+      "phase_commit_sha": "f43b98ddefbf7e4089f88d8f3ec089c1d17bc7ae",
+      "bound_to_commit": false,
+      "summary": "29504 passed; historical log contains no embedded command or tested-SHA provenance",
+      "gate_log_path": "temp/test-2026-07-15_180133.txt",
+      "gate_log_sha256": "1e8f2f003cfe88d389bf2d2ecc130d556cd447f82312b7eee918f364b9e3100b"
+    },
+    {
+      "phase": 4,
+      "phase_commit_sha": "093179c8f7eb3ebe3b5783d84409d0b074333686",
+      "bound_to_commit": false,
+      "summary": "29561 passed; historical log contains no embedded command or tested-SHA provenance",
+      "gate_log_path": "temp/test-2026-07-15_182329.txt",
+      "gate_log_sha256": "7e5aff24b916a215711506be116026891d9fd9be4baa31a9ed58c44053cb5706"
+    }
+  ],
+  "baseline_regression": {
+    "command": "task test-check",
+    "status": "pass",
+    "summary": "T1-T8 pre-remediation baseline: 180 passed, 10 skipped",
+    "gate_tested_sha": "093179c8f7eb3ebe3b5783d84409d0b074333686",
+    "gate_log_path": "temp/test-2026-07-15_224649.txt",
+    "gate_log_sha256": "110cc8fc22aa832efcc461166f3c95052ec39fabc33ac95410fe8ac2697c0a16"
+  },
+  "phases": [
+    {
+      "phase": 1,
+      "phase_commit_sha": "016f88931997347705586c00834d9ef8b6e4003c",
+      "gate_tested_sha": "016f88931997347705586c00834d9ef8b6e4003c",
+      "gates": [
+        {
+          "command": "task test-all",
+          "status": "pass",
+          "summary": "30912 passed, 611 skipped, 55 xfailed",
+          "gate_tested_sha": "016f88931997347705586c00834d9ef8b6e4003c",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase1-task-test-all-016f88931.log",
+          "gate_log_sha256": "ab8f5a0c0958e78d23c9075eaabd773ba76f3eff93ff8d8f97e3b5aa27501c34"
+        },
+        {
+          "command": "pre-commit run --all-files",
+          "status": "pass",
+          "summary": "all configured hooks passed",
+          "gate_tested_sha": "016f88931997347705586c00834d9ef8b6e4003c",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase1-pre-commit-016f88931.log",
+          "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
+        }
+      ]
+    },
+    {
+      "phase": 2,
+      "phase_commit_sha": "a1a129d3719087a828d3a2352ff66477ee0aef48",
+      "gate_tested_sha": "a1a129d3719087a828d3a2352ff66477ee0aef48",
+      "gates": [
+        {
+          "command": "task test-all",
+          "status": "pass",
+          "summary": "30924 passed, 611 skipped, 55 xfailed",
+          "gate_tested_sha": "a1a129d3719087a828d3a2352ff66477ee0aef48",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase2-task-test-all-a1a129d37.log",
+          "gate_log_sha256": "c5492d564a04f212a8910b3978219ff6fef3d1ad428264610541674d7a9cba6f"
+        },
+        {
+          "command": "pre-commit run --all-files",
+          "status": "pass",
+          "summary": "all configured hooks passed",
+          "gate_tested_sha": "a1a129d3719087a828d3a2352ff66477ee0aef48",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase2-pre-commit-a1a129d37.log",
+          "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
+        }
+      ]
+    },
+    {
+      "phase": 3,
+      "phase_commit_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+      "gate_tested_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+      "gates": [
+        {
+          "command": "task test-codex-config-parse",
+          "status": "pass",
+          "summary": "23 passed with installed Codex CLI",
+          "gate_tested_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase3-codex-config-parse-a261f23fb.log",
+          "gate_log_sha256": "dc842555a8bc071f11cd589d796c4f2406dd704c0fcb20659b74ca6ec12dd62b"
+        },
+        {
+          "command": "task test-all",
+          "status": "pass",
+          "summary": "30929 passed, 611 skipped, 55 xfailed",
+          "gate_tested_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase3-task-test-all-a261f23fb.log",
+          "gate_log_sha256": "9ea5c4e6f2ac4b2b0c591b1f4e15d1bde51c84a28da2592482b43fbb125b73bb"
+        },
+        {
+          "command": "pre-commit run --all-files",
+          "status": "pass",
+          "summary": "all configured hooks passed",
+          "gate_tested_sha": "a261f23fb9f19337710ff9423cb89e0f780c784f",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase3-pre-commit-a261f23fb.log",
+          "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
+        }
+      ]
+    },
+    {
+      "phase": 4,
+      "phase_commit_sha": "3e10de464f9a9d796b5c563b760c8604412c34b1",
+      "gate_tested_sha": "3e10de464f9a9d796b5c563b760c8604412c34b1",
+      "gates": [
+        {
+          "command": "task test-all",
+          "status": "pass",
+          "summary": "30941 passed, 611 skipped, 55 xfailed",
+          "gate_tested_sha": "3e10de464f9a9d796b5c563b760c8604412c34b1",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase4-task-test-all-3e10de464.log",
+          "gate_log_sha256": "1c87194951ac47a26ff59ad6796bfaca85d4f4f8b47f8a8e6a45765dfebff407"
+        },
+        {
+          "command": "pre-commit run --all-files",
+          "status": "pass",
+          "summary": "all configured hooks passed",
+          "gate_tested_sha": "3e10de464f9a9d796b5c563b760c8604412c34b1",
+          "gate_log_path": ".autoskillit/evidence/output-budget-remediation/phase4-pre-commit-3e10de464.log",
+          "gate_log_sha256": "3d5ddb6e5709e7a5ca872d3df964b6bf72355850c622aa7ed43e86f2df3f8998"
+        }
+      ]
+    }
+  ],
+  "closure": {
+    "historical_mutation_transcript": "non-reconstructible",
+    "historical_artifacts": [
+      {
+        "path": ".autoskillit/temp/phase4-closure-prefetch.json",
+        "response_content_sha256": "3cfce1c21918abd78076fbf4c83dff5394ff5815c725b04d1f96980559d9431a"
+      },
+      {
+        "path": ".autoskillit/temp/phase4-closure-verification.json",
+        "response_content_sha256": "02c4ca724ff9df480f85284da6e035ce0c36510b9055919164b185325f465847"
+      },
+      {
+        "path": ".autoskillit/temp/issue-3938-body-before.md",
+        "response_content_sha256": "669352d9d9eaaa73cff6fe9ca2537884d6943024b60020d63e87afdab2d9aa5b"
+      },
+      {
+        "path": ".autoskillit/temp/issue-3938-body-after.md",
+        "response_content_sha256": "1b27a003a689a67d6346dbfb126b1639b21e309dd69397351b84b0a2421ab012"
+      },
+      {
+        "path": ".autoskillit/temp/issue-3938-closure.md",
+        "response_content_sha256": "72ba53afbd52d1a9eff1af0ba91e55e7bd33d12ff9e846df99c16601bb035873"
+      },
+      {
+        "path": ".autoskillit/temp/issue-4253-body-before.md",
+        "response_content_sha256": "47feed1ea52be757c13590e264f487a6ddacfc49fdfd0dc1a66710e70d56569a"
+      },
+      {
+        "path": ".autoskillit/temp/issue-4253-body-after.md",
+        "response_content_sha256": "2c79084734e3c4f4b662942ee006f0aff88d73653e27cb593711cb21a5a85402"
+      },
+      {
+        "path": ".autoskillit/temp/issue-4253-closure.md",
+        "response_content_sha256": "d503654553ecedc746c2048f660d9db8a5b358481b86a83dff56e1f48d60fd85"
+      },
+      {
+        "path": ".autoskillit/temp/pr-4259-body.md",
+        "response_content_sha256": "c60d2be6da0318b5ccfc2b023d0deec6e31d3a6ea6dc1ff0e27cab91df7b1c79"
+      },
+      {
+        "path": ".autoskillit/temp/build_phase4_closure_bodies.py",
+        "response_content_sha256": "5ee14719e5160716c418cf4bddab94383072e4e39dd1e762ad0bf4b6a173ee81"
+      },
+      {
+        "path": ".autoskillit/temp/phase4_prefetch_graphql.py",
+        "response_content_sha256": "edacf2fb5520a02e2ec36d8525f6209bc716344d94ad53770fe50d3a187962ed"
+      },
+      {
+        "path": ".autoskillit/temp/verify_phase4_issue_closures.py",
+        "response_content_sha256": "7ac277b06543b682e5115b8f6f4d63f4748ecb84f9d9db95c47e371f5e030111"
+      },
+      {
+        "path": ".autoskillit/temp/apply_phase4_issue_closures.sh",
+        "response_content_sha256": "56f8b56c6bc48a4f1dc9af8b98c5e1efedaeeae836beae5d6e2b44765e3fe25e"
+      }
+    ],
+    "postcondition": {
+      "path": ".autoskillit/evidence/output-budget-remediation/phase4-closure-postcondition.json",
+      "response_content_sha256": "991db41b843f32c540d4827c6dcd1a026a293ab1e1a4e802a347e5ae140ab096",
+      "query": "aliased GraphQL read for issues #4253/#3938 and PR #4259",
+      "assertions": {
+        "issue_4253": "CLOSED with Closure section",
+        "issue_3938": "CLOSED with Closure section",
+        "pr_4259": "MERGED at 1e2670ec7"
+      }
+    }
+  }
+}

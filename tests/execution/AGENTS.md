@@ -140,6 +140,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 
 | File | Purpose |
 |------|---------|
+| `_conformance_assertions.py` | Pytest-free live/deterministic conformance assertions, including output-boundary, sentinel, and spill-integrity checks |
 | `test_claude_backend.py` | Equivalence tests for retained shims; backend method tests, config adapter, resume preservation |
 | `test_claude_code_backend.py` | Structural tests for ClaudeCodeBackend |
 | `test_claude_env_policy.py` | Tests for ClaudeEnvPolicy |
@@ -148,7 +149,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_claude_stream_parser.py` | Tests for ClaudeStreamParser |
 | `test_backend_registry.py` | Tests for backend registry |
 | `test_codex_backend.py` | Tests for CodexFlags, CodexBackend protocol conformance, headless/resume command builders, skill session cmd config adapter, food truck cmd builder |
-| `test_codex_interactive.py` | Parametrized structural validation of CodexBackend.build_interactive_cmd — resume variants, model, system_prompt suppression, add_dirs |
+| `test_codex_interactive.py` | Parametrized structural validation of CodexBackend.build_interactive_cmd plus the required installed-CLI parse gate for exact fresh config overrides |
 | `test_codex_session_locator.py` | Tests for CodexSessionLocator: locate_session walk, read_session decompression, codex_home constructor-field priority over env var, protocol conformance |
 | `test_codex_env_policy.py` | Tests for CodexEnvPolicy three-layer scrub |
 | `test_codex_mcp_registration.py` | Tests for ensure_codex_mcp_registered: file creation, TOML fields, idempotency, foreign section preservation, dir creation |
@@ -158,4 +159,5 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_deterministic_conformance.py` | Sealed-enum vocabulary, hook event format, and config.toml schema template conformance tests with --update-fixtures review gate |
 | `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |
 | `test_coding_agent_backend_conformance.py` | Parametrized conformance tests for all CodingAgentBackend implementations via BackendContractBase |
-| `test_cli_conformance_probes.py` | Live Codex CLI conformance probes: CODEX_SMOKE_TEST-gated probe class wiring real codex exec through shared assertion functions with ProbeCache and CanaryIssueUpdater |
+| `test_cli_conformance_probes.py` | Live backend CLI conformance probes: schema checks, isolated output-budget deny round trips, and generated Codex child delivery/linkage with ProbeCache and shared error discrimination |
+| `test_probe_cache.py` | Versioned probe-cache tests: CLI/policy identity invalidation, TTL, schema, and write preservation |

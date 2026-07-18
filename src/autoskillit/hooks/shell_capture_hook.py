@@ -127,6 +127,9 @@ def main() -> None:
     except (json.JSONDecodeError, AttributeError, OSError, TypeError):
         sys.exit(0)
 
+    if not isinstance(data, dict):
+        sys.exit(0)
+
     if not _is_codex_session(data):
         sys.exit(0)
 

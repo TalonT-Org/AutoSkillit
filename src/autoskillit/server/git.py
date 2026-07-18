@@ -92,23 +92,18 @@ def _shape_failed_test_output(
 def validate_commit_paths(cwd: str, paths: list[str]) -> str | None:
     """Validate that every path resolves inside cwd and has no ``.git`` component.
 
-    Uses ``resolve_contained_path`` from ``core/path_containment`` for escape
-    detection, plus a ``.git`` component check specific to commit_files.
     Returns an error message string on the first violation found, or None if
-    every path is valid.
+    every path is valid. Uses realpath containment (same algorithm as
+    ``core.path_containment.resolve_contained_path``) without the file-existence,
+    hardlink, and size guards that are inappropriate for staging-time validation.
     """
-    from autoskillit.core.path_containment import ContainmentError, resolve_contained_path
-
+    resolved_cwd = os.path.realpath(cwd)
     for p in paths:
         if ".git" in Path(p).parts:
             return f"path contains .git component: {p}"
-        full = Path(cwd) / p
-        if not full.exists():
-            continue
-        try:
-            resolve_contained_path(full, cwd)
-        except ContainmentError as exc:
-            return f"path escapes cwd: {p} ({exc})"
+        full = os.path.realpath(os.path.join(resolved_cwd, p))
+        if not full.startswith(resolved_cwd + os.sep) and full != resolved_cwd:
+            return f"path escapes cwd: {p}"
     return None
 
 

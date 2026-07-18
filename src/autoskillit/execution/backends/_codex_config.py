@@ -41,6 +41,12 @@ CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = ((_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES + 
 # re-reading recipe files via run_cmd/run_python after compaction.
 CODEX_AUTO_COMPACT_LIMIT: int = 999_999_999
 
+# Codex CLI version against which the numeric limits above were last verified:
+# the 4-bytes-per-token truncation heuristic behind CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+# and the context-window assumption behind CODEX_AUTO_COMPACT_LIMIT. The doctor
+# check `codex_limits_verified` warns when the installed CLI is newer.
+CODEX_LIMITS_LAST_VERIFIED_VERSION: tuple[int, int, int] = (0, 144, 1)
+
 # Keys that must be present in the autoskillit MCP server entry for the Codex
 # backend. Validated against the entry dict actually written by
 # `ensure_codex_mcp_registered` via the arch test

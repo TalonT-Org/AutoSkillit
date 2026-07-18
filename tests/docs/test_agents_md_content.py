@@ -148,6 +148,10 @@ class TestAgentsMdContentQuality:
     def test_agents_md_testing_mentions_parallel_safety(self, agents_md: str) -> None:
         assert "parallel" in agents_md.lower()
 
+    def test_agents_md_package_table_is_marked_as_index(self, agents_md: str) -> None:
+        assert "an index, not required reading" in agents_md
+        assert "| Package | IL | Purpose |" in agents_md
+
     def test_agents_md_diagnostics_mentions_codex(self, agents_md: str) -> None:
         parts = agents_md.split("## **6. Session Diagnostics**")
         assert len(parts) > 1, "Session Diagnostics section not found"

@@ -88,6 +88,24 @@ their own registered character and UTF-8 byte ceilings, which in turn remain bel
 measurements are independent release gates; the heuristic is not permission to omit those
 tests or reuse one surface's observed maximum as the other's authority.
 
+### Per-Repo Ceiling Guidance
+
+The global `~/.codex/config.toml` `tool_output_token_limit` (54,500, written by
+`autoskillit init` via `ensure_codex_mcp_registered`) is intentionally sized for
+autoskillit kitchen sessions (the `open_kitchen` exemption ceiling above). For
+non-autoskillit repos, two lower-ceiling launch paths cap casual reads at ~40 KB
+(10,000 tokens × 4 bytes/token):
+
+1. **Per-invocation**: `codex -c tool_output_token_limit=10000`
+2. **Per-project `CODEX_HOME`**: `export CODEX_HOME=<project>/.codex` with its own
+   `config.toml` containing `tool_output_token_limit = 10000`
+
+The ceiling clamps regular-path exec/tool output via
+`min(model request, tool_output_token_limit)`, but code-mode models (gpt-5.6-sol)
+honor model-declared `max_output_tokens` unclamped — for those sessions the ceiling
+is not a hard cap and the intake discipline digest's numeric rule
+(`max_output_tokens` <= 10000) is the operative bound.
+
 ## Corrections of Record
 
 Commit `6b421e38e` introduced the `_codex_config.py` comment framing
@@ -145,6 +163,26 @@ reserve-trigger metrics, so instrumentation must not claim those mechanisms exis
 - Run and pass the live large-output probe before making any of those changes effective.
 - Preserve ADR-0004's end-to-end `load_recipe` re-delivery obligation if the
   999,999,999 auto-compaction sentinel is ever relaxed.
+- After each codex-cli upgrade, re-verify the truncation heuristic
+  (`CODEX_TOOL_OUTPUT_TOKEN_LIMIT`) and auto-compact sentinel
+  (`CODEX_AUTO_COMPACT_LIMIT`) against the upstream registry AND observed session
+  windows, then bump `CODEX_LIMITS_LAST_VERIFIED_VERSION`. Doctor Check 39
+  (`codex_limits_verified`) mechanizes the reminder. Issue #4280's investigation
+  found upstream models.json (post-0.144.1) listing gpt-5.6-sol at 372,000 tokens
+  vs 258,400 in cli 0.144.1, but the effective window is server/catalog-controlled
+  and oscillated during July 2026 (openai/codex#31860, #32806) — re-verify, do not
+  assume an upgrade restores headroom.
+- openai/codex#25458 / #27830: `fork_turns "none"` task-envelope delivery bug gates
+  the intake digest's sub-agent spawn rule — until the upstream bug is fixed,
+  `codex --json` sessions cannot reliably deliver task-envelope context to
+  sub-agents, so the intake discipline's "do not spawn sub-agents" guard remains
+  the operative constraint.
+- openai/codex#33881: agent-TOML `model`/`model_reasoning_effort` reportedly ignored
+  on 0.144.5 — affects the pins `_generate_agent_tomls` writes.
+- Upstream auto-compact semantics are scope-dependent
+  (`model_auto_compact_token_limit` is consulted only under `BodyAfterPrefix` scope;
+  a separate full-context-window trigger ignores it) — re-verify
+  `CODEX_AUTO_COMPACT_LIMIT`'s disabling effect per upgrade.
 
 ## Consequences
 

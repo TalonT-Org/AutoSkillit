@@ -220,12 +220,25 @@ class TestCodexBackendCommands:
         assert spec.cwd == "/work"
 
     def test_build_resume_cmd_with_session_id(self) -> None:
+        from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+
         spec = CodexBackend().build_resume_cmd(resume_session_id="sess-123", prompt="continue")
         assert spec.cmd[0] == "codex"
         assert spec.cmd[1] == "exec"
         assert "resume" in spec.cmd
         assert "sess-123" in spec.cmd
-        assert spec.cmd[-1] == "continue"
+        assert spec.cmd[-1].endswith("continue")
+        assert OUTPUT_DISCIPLINE_DIGEST in spec.cmd[-1]
+
+    def test_resume_cmd_prepends_discipline_digests(self) -> None:
+        from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
+
+        spec = CodexBackend().build_resume_cmd(
+            resume_session_id="sess-123", prompt="continue working"
+        )
+        assert spec.cmd[-1].startswith(OUTPUT_DISCIPLINE_DIGEST)
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert spec.cmd[-1].endswith("continue working")
 
     def test_build_resume_cmd_empty_id_raises(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
@@ -422,8 +435,10 @@ class TestCodexHeadlessCmd:
 
 class TestCodexResumeCmd:
     def test_positional_structure(self) -> None:
+        from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        assert spec.cmd == (
+        assert spec.cmd[:-1] == (
             "codex",
             "exec",
             "--json",
@@ -433,8 +448,9 @@ class TestCodexResumeCmd:
             "features.image_generation=false",
             "resume",
             "abc123",
-            "continue",
         )
+        assert spec.cmd[-1].startswith(OUTPUT_DISCIPLINE_DIGEST)
+        assert spec.cmd[-1].endswith("continue")
 
     def test_empty_session_id_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
@@ -520,6 +536,12 @@ class TestCodexBuildSkillSessionCmd:
 
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert OUTPUT_DISCIPLINE_DIGEST in spec.cmd[-1]
+
+    def test_fresh_headless_includes_intake_discipline_digest(self) -> None:
+        from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST
+
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
 
     def test_completion_reminder_injected(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
@@ -810,7 +832,7 @@ class TestCodexBuildInteractiveCmd:
     def test_system_prompt_with_no_resume_appends_config_override(self) -> None:
         import tomllib
 
-        from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+        from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_interactive_cmd(system_prompt="foo")
         overrides = [
@@ -822,7 +844,10 @@ class TestCodexBuildInteractiveCmd:
             if value.startswith("developer_instructions=")
         )
         parsed = tomllib.loads(f"developer_instructions = {rendered}")
-        assert parsed["developer_instructions"] == f"foo\n\n{OUTPUT_DISCIPLINE_DIGEST}"
+        assert (
+            parsed["developer_instructions"]
+            == f"foo\n\n{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
+        )
         assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_named_resume_does_not_append_config_override(self) -> None:
@@ -990,6 +1015,12 @@ class TestCodexBuildFoodTruckCmd:
 
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert OUTPUT_DISCIPLINE_DIGEST in spec.cmd[-1]
+
+    def test_food_truck_includes_intake_discipline_digest(self) -> None:
+        from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST
+
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
 
     def test_prompt_is_last_token(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
@@ -1815,10 +1846,13 @@ class TestCodexBackendSetupSessionDir:
             assert data["developer_instructions"], (
                 f"{toml_path.name}: developer_instructions empty"
             )
-            from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
+            from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
 
+            assert OUTPUT_DISCIPLINE_DIGEST in data["developer_instructions"]
             assert (
-                data["developer_instructions"].rstrip().endswith(OUTPUT_DISCIPLINE_DIGEST.rstrip())
+                data["developer_instructions"]
+                .rstrip()
+                .endswith(CODEX_INTAKE_DISCIPLINE_DIGEST.rstrip())
             )
             assert data["sandbox_mode"] == "workspace-write", (
                 f"{toml_path.name}: wrong sandbox_mode"

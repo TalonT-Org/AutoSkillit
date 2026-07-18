@@ -29,7 +29,6 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
-    OUTPUT_DISCIPLINE_DIGEST,
     PROVIDER_PROFILE_ENV_VAR,
     RESUME_SESSION_BASELINE_KEYS,
     SESSION_TYPE_ORCHESTRATOR,
@@ -71,6 +70,7 @@ from autoskillit.execution.backends._claude_prompt import (
     _compose_resume_prompt,
     _ensure_skill_prefix,
     apply_prompt_injector_chain,
+    codex_discipline_suffix,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._codex_config import (
@@ -468,7 +468,7 @@ def _generate_agent_tomls(session_dir: Path) -> int:
             effort = CODEX_EFFORT_MAPPING.get(model_key)
             if effort:
                 lines.append(f"model_reasoning_effort = {_format_toml_value(effort)}")
-        body = f"{body}\n\n{OUTPUT_DISCIPLINE_DIGEST}"
+        body = f"{body}\n\n{codex_discipline_suffix()}"
         lines.append(f"developer_instructions = '''\n{body}\n'''")
         toml_path = out_dir / f"{name}.toml"
         atomic_write(toml_path, "\n".join(lines) + "\n")
@@ -794,6 +794,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 has_skill_prefix=_has_prefix,
                 profile_name=profile_name,
                 include_output_discipline=True,
+                include_intake_discipline=True,
             ),
         )
 
@@ -907,6 +908,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 has_skill_prefix=False,
                 profile_name="",
                 include_output_discipline=True,
+                include_intake_discipline=True,
             ),
         )
 
@@ -1004,9 +1006,9 @@ class CodexBackend(BackendCmdBuilderBase):
         builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
         if isinstance(resume_spec, NoResume):
             developer_instructions = (
-                f"{system_prompt}\n\n{OUTPUT_DISCIPLINE_DIGEST}"
+                f"{system_prompt}\n\n{codex_discipline_suffix()}"
                 if system_prompt is not None
-                else OUTPUT_DISCIPLINE_DIGEST
+                else codex_discipline_suffix()
             )
             builder.kv_flag(
                 CodexFlags.CONFIG_OVERRIDE,
@@ -1060,7 +1062,7 @@ class CodexBackend(BackendCmdBuilderBase):
         cmd = _codex_exec_base(sandbox="read-only", json=(output_format == OutputFormat.JSON))
         cmd.append(CodexFlags.RESUME_SUBCOMMAND)
         cmd.append(resume_session_id)
-        cmd.append(prompt)
+        cmd.append(f"{codex_discipline_suffix()}\n\n{prompt}")
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras = _codex_exec_extras(
             session_type="", include_session_baseline=True, include_agent_backend_flat=True

@@ -66,6 +66,7 @@ from ._doctor_runtime import (
     _check_claude_process_state_breakdown,
     _check_cli_conformance_probes,
     _check_codex_graduation,
+    _check_codex_limits_verified,
     _check_codex_model_alias_staleness,
     _check_codex_ndjson_drift,
     _check_codex_version,
@@ -228,6 +229,9 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.extend(_check_standing_backend_pins_feasibility())
     # Check 38: Local recipe validity
     results.extend(_check_local_recipe_validity())
+
+    # Check 39: Codex limits version pin freshness
+    results.append(_check_codex_limits_verified(backend=_backend))
 
     # Output
     if output_json:

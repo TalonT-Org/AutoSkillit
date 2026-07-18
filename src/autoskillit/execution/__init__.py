@@ -20,6 +20,7 @@ from autoskillit.execution.anomaly_detection import (
 from autoskillit.execution.backends import (
     BACKEND_REGISTRY,
     CODEX_AUTO_COMPACT_LIMIT,
+    CODEX_LIMITS_LAST_VERIFIED_VERSION,
     CODEX_MCP_REQUIRED_KEYS,
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
@@ -226,6 +227,7 @@ __all__ = [
     "CODEX_MCP_STARTUP_TIMEOUT_SEC",
     "CODEX_MCP_TOOL_TIMEOUT_FLOOR",
     "CODEX_TOOL_OUTPUT_TOKEN_LIMIT",
+    "CODEX_LIMITS_LAST_VERIFIED_VERSION",
     "CODEX_AUTO_COMPACT_LIMIT",
     "ClaudeCodeBackend",
     "CodexBackend",

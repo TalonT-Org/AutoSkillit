@@ -30,6 +30,7 @@ from autoskillit.core import (
     ClosureAuthoritySpec,
     CodingAgentBackend,
     SkillResult,
+    TerminationReason,
     ValidatedAddDir,
     WriteBehaviorSpec,
     closure_authority_spec_from_args,
@@ -45,6 +46,11 @@ from autoskillit.core import (
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
+from autoskillit.execution.process._process_io import (
+    CaptureReadError,
+    CaptureSetupError,
+    summarize_capture,
+)
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
@@ -68,7 +74,7 @@ from autoskillit.server._misc import (
     get_backend as _get_backend,
 )
 from autoskillit.server._notify import _notify, track_response_size
-from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server._subprocess import _run_subprocess_captured
 from autoskillit.server.tools._backend_compat import (
     _check_backend_compat,
     _is_backend_incompatible,  # noqa: F401  (re-exported for tests/arch/test_cross_registry_dispatch_sufficiency.py and tests/server/test_run_skill_backend_compat.py)
@@ -76,11 +82,13 @@ from autoskillit.server.tools._backend_compat import (
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
+    _spill_spec,
     clear_run_skill_state,
     maybe_promote_work_dir,
     persist_run_skill_state,
     propagate_session_deadline,
     resolve_relative_path_args,
+    run_cmd_artifact_root,
     shape_execution_response,
     spill_run_cmd_result,
     validate_path_arg_anchoring,
@@ -398,20 +406,75 @@ async def run_cmd(
                 _env: dict[str, str] | None = (
                     {**os.environ, SCENARIO_STEP_NAME_ENV: step_name} if step_name else None
                 )
-                returncode, stdout, stderr = await _run_subprocess(
-                    ["bash", "-c", cmd],
-                    cwd=cwd,
-                    timeout=float(timeout),
-                    env=_env,
-                )
+                artifact_root = run_cmd_artifact_root(tool_ctx, cwd)
+                _timeout_f = float(timeout)
+                try:
+                    sub_result = await _run_subprocess_captured(
+                        ["bash", "-c", cmd],
+                        cwd=cwd,
+                        timeout=_timeout_f,
+                        env=_env,
+                        capture_dir=artifact_root,
+                    )
+                except CaptureSetupError as exc:
+                    result = spill_run_cmd_result(
+                        tool_ctx,
+                        cwd=cwd,
+                        returncode=-1,
+                        stdout="",
+                        stderr="",
+                        capture_error=str(exc),
+                    )
+                    return json.dumps(result)
+
+                spec = _spill_spec(tool_ctx)
+                returncode = sub_result.returncode
+                execution_error: str | None = None
+                complete = True
+
+                term = sub_result.termination
+                if term == TerminationReason.NATURAL_EXIT:
+                    returncode = sub_result.returncode
+                elif term == TerminationReason.TIMED_OUT:
+                    returncode = -1
+                    execution_error = f"Process timed out after {_timeout_f}s"
+                    complete = False
+                elif term == TerminationReason.SIGNAL_DEATH:
+                    execution_error = (
+                        f"Process died to signal (returncode={sub_result.returncode})"
+                    )
+                    complete = False
+                else:
+                    execution_error = f"Unexpected termination: {term.value}"
+                    complete = False
+
+                stdout_capture = None
+                stderr_capture = None
+                capture_error: str | None = None
+                for stream_name in ("stdout", "stderr"):
+                    stream_path = getattr(sub_result, f"{stream_name}_path")
+                    if stream_path is not None:
+                        try:
+                            cap = summarize_capture(stream_path, spec, complete=complete)
+                            if stream_name == "stdout":
+                                stdout_capture = cap
+                            else:
+                                stderr_capture = cap
+                        except CaptureReadError as exc:
+                            capture_error = str(exc)
+
                 result = spill_run_cmd_result(
                     tool_ctx,
                     cwd=cwd,
                     returncode=returncode,
-                    stdout=stdout,
-                    stderr=stderr,
+                    stdout="",
+                    stderr="",
+                    stdout_capture=stdout_capture,
+                    stderr_capture=stderr_capture,
+                    capture_error=capture_error,
+                    execution_error=execution_error,
                 )
-                if not result["success"]:
+                if not result.get("success"):
                     await _notify(
                         ctx,
                         "error",

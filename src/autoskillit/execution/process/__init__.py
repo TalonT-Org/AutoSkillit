@@ -262,6 +262,7 @@ async def run_managed_async(
     workload_basenames: frozenset[str] | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
     child_deferral_ceiling: float = 0.0,
+    capture_dir: Path | None = None,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -280,7 +281,12 @@ async def run_managed_async(
     if pty_mode:
         cmd = pty_wrap_command(cmd)
 
-    with create_temp_io(input_data) as (stdout_file, stderr_file, stdin_path):
+    _keep = capture_dir is not None
+    with create_temp_io(input_data, capture_dir=capture_dir, keep_streams=_keep) as (
+        stdout_file,
+        stderr_file,
+        stdin_path,
+    ):
         stdout_path = Path(stdout_file.name)
         stderr_path = Path(stderr_file.name)
 
@@ -528,7 +534,15 @@ async def run_managed_async(
             stdout_file.close()
             stderr_file.close()
 
-            stdout, stderr = read_temp_output(stdout_path, stderr_path)
+            if capture_dir is not None:
+                stdout = ""
+                stderr = ""
+                _stdout_path = stdout_path
+                _stderr_path = stderr_path
+            else:
+                stdout, stderr = read_temp_output(stdout_path, stderr_path)
+                _stdout_path = None
+                _stderr_path = None
 
             sub_result = SubprocessResult(
                 returncode=proc.returncode if proc.returncode is not None else -1,
@@ -546,6 +560,8 @@ async def run_managed_async(
                 tracked_comm=_tracked_comm,
                 orphaned_tool_result=signals.channel_b_orphaned_tool_result,
                 inspector_verdict=signals.inspector_verdict,
+                stdout_path=_stdout_path,
+                stderr_path=_stderr_path,
             )
             proc_log.debug(
                 "run_managed_async_result",
@@ -583,13 +599,19 @@ def run_managed_sync(
     timeout: float,
     input_data: str | None = None,
     env: Mapping[str, str] | None = None,
+    capture_dir: Path | None = None,
 ) -> SubprocessResult:
     """Sync subprocess execution with temp file I/O and process tree cleanup.
 
     Same composition pattern as run_managed_async but uses subprocess.Popen
     with start_new_session=True. No channel monitoring — wall-clock timeout only.
     """
-    with create_temp_io(input_data) as (stdout_file, stderr_file, stdin_path):
+    _keep = capture_dir is not None
+    with create_temp_io(input_data, capture_dir=capture_dir, keep_streams=_keep) as (
+        stdout_file,
+        stderr_file,
+        stdin_path,
+    ):
         stdout_path = Path(stdout_file.name)
         stderr_path = Path(stderr_file.name)
 
@@ -628,7 +650,15 @@ def run_managed_sync(
             stdout_file.close()
             stderr_file.close()
 
-            stdout, stderr = read_temp_output(stdout_path, stderr_path)
+            if capture_dir is not None:
+                stdout = ""
+                stderr = ""
+                _stdout_path = stdout_path
+                _stderr_path = stderr_path
+            else:
+                stdout, stderr = read_temp_output(stdout_path, stderr_path)
+                _stdout_path = None
+                _stderr_path = None
 
             return SubprocessResult(
                 returncode=process.returncode if process.returncode is not None else -1,
@@ -637,6 +667,8 @@ def run_managed_sync(
                 termination=termination,
                 pid=process.pid,
                 channel_confirmation=ChannelConfirmation.UNMONITORED,
+                stdout_path=_stdout_path,
+                stderr_path=_stderr_path,
             )
         except Exception:
             if process is not None and process.returncode is None:
@@ -681,6 +713,7 @@ class DefaultSubprocessRunner:
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
+        capture_dir: Path | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -708,4 +741,5 @@ class DefaultSubprocessRunner:
             inspector_callback=inspector_callback,
             workload_basenames=workload_basenames,
             on_session_id_resolved=on_session_id_resolved,
+            capture_dir=capture_dir,
         )

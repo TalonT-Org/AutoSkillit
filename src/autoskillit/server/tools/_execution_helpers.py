@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     RUN_PYTHON_SENTINEL_KEYS,
+    CapturedStream,
     SpillSpec,
     get_logger,
     resolve_temp_dir,
@@ -51,6 +52,14 @@ def _spill_spec(tool_ctx: ToolContext) -> SpillSpec:
     )
 
 
+def run_cmd_artifact_root(tool_ctx: ToolContext, cwd: str) -> Path:
+    if cwd and Path(cwd).is_absolute():
+        return (
+            resolve_temp_dir(Path(cwd).resolve(), tool_ctx.config.workspace.temp_dir) / "run_cmd"
+        )
+    return tool_ctx.temp_dir / "run_cmd"
+
+
 def spill_run_cmd_result(
     tool_ctx: ToolContext,
     *,
@@ -58,16 +67,41 @@ def spill_run_cmd_result(
     returncode: int,
     stdout: str,
     stderr: str,
+    stdout_capture: CapturedStream | None = None,
+    stderr_capture: CapturedStream | None = None,
+    capture_error: str | None = None,
+    execution_error: str | None = None,
 ) -> dict[str, object]:
-    artifact_root = (
-        resolve_temp_dir(Path(cwd).resolve(), tool_ctx.config.workspace.temp_dir) / "run_cmd"
-        if cwd and Path(cwd).is_absolute()
-        else tool_ctx.temp_dir / "run_cmd"
-    )
+    if capture_error is not None:
+        result: dict[str, object] = {
+            "success": False,
+            "exit_code": returncode,
+            "error": f"capture_failed: {capture_error}",
+        }
+        for stream_name, capture in [("stdout", stdout_capture), ("stderr", stderr_capture)]:
+            if capture is not None:
+                _process_capture_stream(result, stream_name, capture)
+        return result
+
+    if stdout_capture is not None or stderr_capture is not None:
+        result = {
+            "success": returncode == 0 and execution_error is None,
+            "exit_code": returncode,
+            "stdout": "",
+            "stderr": "",
+        }
+        if execution_error:
+            result["error"] = execution_error
+        for stream_name, capture in [("stdout", stdout_capture), ("stderr", stderr_capture)]:
+            if capture is not None:
+                _process_capture_stream(result, stream_name, capture)
+        return result
+
+    artifact_root = run_cmd_artifact_root(tool_ctx, cwd)
     spec = _spill_spec(tool_ctx)
     shaped_stdout = spill_output(stdout, artifact_root, "stdout", spec)
     shaped_stderr = spill_output(stderr, artifact_root, "stderr", spec)
-    result: dict[str, object] = {
+    result = {
         "success": returncode == 0,
         "exit_code": returncode,
         "stdout": shaped_stdout.text,
@@ -78,6 +112,44 @@ def spill_run_cmd_result(
     if shaped_stderr.artifact_path is not None:
         result["stderr_artifact_path"] = shaped_stderr.artifact_path
     return result
+
+
+def _process_capture_stream(
+    result: dict[str, object],
+    stream_name: str,
+    capture: CapturedStream,
+) -> None:
+    if capture.inline_text is not None:
+        result[stream_name] = capture.inline_text
+        try:
+            capture.path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    else:
+        promoted_name = f"{stream_name}_{_uuid8()}.log"
+        promoted = capture.path.parent / promoted_name
+        import os as _os  # noqa: PLC0415
+
+        _os.replace(capture.path, promoted)
+        try:
+            _os.fsync(_os.open(str(promoted.parent), _os.O_RDONLY))
+        except OSError:
+            pass
+        complete_str = "true" if capture.complete else "false"
+        marker = (
+            f"\n[spilled {capture.total_bytes} bytes -> {promoted}"
+            f" sha256={capture.sha256} complete={complete_str}]\n"
+        )
+        result[stream_name] = capture.head + marker + capture.tail
+        result[f"{stream_name}_artifact_path"] = str(promoted)
+        result[f"{stream_name}_total_bytes"] = capture.total_bytes
+        result[f"{stream_name}_sha256"] = capture.sha256
+
+
+def _uuid8() -> str:
+    import uuid  # noqa: PLC0415
+
+    return uuid.uuid4().hex[:8]
 
 
 def shape_execution_response(

@@ -184,6 +184,11 @@ def _inject_narration_suppression(skill_command: str, *, has_skill_prefix: bool 
     return skill_command + directive
 
 
+def codex_discipline_suffix() -> str:
+    """Canonical combined discipline suffix: output-discipline + intake-discipline."""
+    return f"{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
+
+
 def _inject_output_discipline(prompt: str, *, include: bool = False) -> str:
     """Append the shared output-discipline digest on supported delivery surfaces."""
     if not include:

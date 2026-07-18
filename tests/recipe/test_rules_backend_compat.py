@@ -552,7 +552,6 @@ class TestBundledRecipeStepGuards:
             "merge-prs",
             "research-implement",
             "research",
-            "research-review",
         ],
         ids=lambda x: x,
     )

@@ -33,7 +33,7 @@ class TestNoSkillsDirectoryProvider:
 
 
 class TestToolRegistration:
-    """All 54 tools are registered on the MCP server."""
+    """All tools are registered on the MCP server."""
 
     @pytest.mark.anyio
     async def test_all_tools_exist(self, kitchen_enabled):
@@ -55,6 +55,7 @@ class TestToolRegistration:
             "test_check",
             "reset_test_dir",
             "classify_fix",
+            "commit_files",
             "reset_workspace",
             "merge_worktree",
             "read_db",

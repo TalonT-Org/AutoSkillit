@@ -1034,6 +1034,10 @@ async def run_skill(
             if tool_ctx.write_expected_resolver:
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
+            _skill_contract = None
+            if tool_ctx.skill_contract_resolver:
+                _skill_contract = tool_ctx.skill_contract_resolver(skill_command)
+
             # Resolve closure spec from explicit MCP tool parameters.
             # Closure args are first-class parameters (not embedded in skill_command text)
             # because the skill_command string is prompt text consumed by the LLM session,
@@ -1375,6 +1379,7 @@ async def run_skill(
                                 network_access=_network_access,
                                 closure_spec=closure_spec,
                                 closure_report_root=closure_report_root,
+                                skill_contract=_skill_contract,
                             )
                 except TimeoutError as exc:
                     logger.error(

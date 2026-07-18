@@ -28,6 +28,7 @@ class SkillInfo:
     categories: frozenset[str] = frozenset()
     backend_requirements: frozenset[str] = frozenset()
     uses_capabilities: frozenset[str] = frozenset()
+    invalid_reason: str | None = None
 
 
 def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
@@ -142,7 +143,12 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
         frozenset(str(c) for c in caps_raw) if isinstance(caps_raw, list) else frozenset()
     )
     unknown_caps = uses_capabilities - frozenset(SKILL_CAPABILITY_REGISTRY)
+    _invalid_reason: str | None = None
     if unknown_caps:
+        _invalid_reason = (
+            f"unknown uses_capabilities: {sorted(unknown_caps)} "
+            f"(valid: {sorted(SKILL_CAPABILITY_REGISTRY)})"
+        )
         logger.warning(
             "unrecognized_uses_capabilities",
             invalid=sorted(unknown_caps),
@@ -166,6 +172,7 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
         categories=categories,
         backend_requirements=backend_requirements,
         uses_capabilities=uses_capabilities,
+        invalid_reason=_invalid_reason,
     )
 
 

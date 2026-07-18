@@ -44,6 +44,18 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         skill_info = ctx.skill_resolver.resolve(skill_name)
         if skill_info is None:
             continue
+        if getattr(skill_info, "invalid_reason", None):
+            findings.append(
+                make_finding(
+                    rule_name="backend-incompatible-skill",
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}': skill '{skill_name}' has invalid capabilities: "
+                        f"{skill_info.invalid_reason}"
+                    ),
+                )
+            )
+            continue
         # Per-step effective backend: when providers route a single step to
         # a different backend (ANTHROPIC_BASE_URL → claude-code), the global
         # ctx.backend_name would incorrectly flag that covered step.

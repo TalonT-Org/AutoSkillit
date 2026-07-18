@@ -71,6 +71,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_ci_split.py` | CI split structural guard |
 | `test_tools_ci_watch.py` | Tests for wait_for_ci event validation, null coercion, and auto_trigger recovery |
 | `test_tools_clone.py` | Tests for autoskillit server clone tools |
+| `test_tools_commit_files.py` | Tests for commit_files MCP tool: path containment, pre-commit hooks, error envelopes |
 | `test_tools_dispatch.py` | Tests for dispatch_food_truck execution lifecycle: lock, success envelope, PID, quota, cleanup |
 | `test_tools_dispatch_halt.py` | Tests for dispatch_food_truck campaign halt enforcement gate |
 | `test_tools_dispatch_params.py` | Tests for dispatch_food_truck parameter passthrough: resume, idle_timeout, marketplace |

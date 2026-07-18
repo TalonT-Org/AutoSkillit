@@ -1,7 +1,7 @@
 ---
 name: resolve-claims-review
 categories: [research]
-uses_capabilities: [agent_model, git_metadata_write, github_api_write]
+uses_capabilities: [agent_model, commit_files, github_api_write]
 description: >
   Fetch claim findings from audit-claims, run citation-aware intent validation
   (ACCEPT/REJECT/DISCUSS), apply targeted citation fixes, escalate findings
@@ -311,13 +311,13 @@ For each ACCEPT finding, route by `fix_strategy`:
 3. Continue processing — escalation does not change the exit code (exit code remains 0)
 
 **`add_citation` / `qualify_claim` / `remove_claim` → apply edit → commit:**
-```bash
-git -C "$worktree_path" add {file}
-# If pre-commit hooks exist:
-pre-commit run --files {file} && git -C "$worktree_path" add {file}
-git -C "$worktree_path" commit -m "fix(claims-review): {description} [{dimension}]"
-# Do NOT use --amend — always create new commits.
 ```
+commit_files(paths=["{file}"], message="fix(claims-review): {description} [{dimension}]", cwd="{work_dir}")
+```
+The tool runs pre-commit hooks, handles auto-fix re-staging, and returns
+`{"success": true, "commit_sha": "..."}` or `{"success": false, "error": "..."}`.
+A finding counts toward `fixes_applied` ONLY when `commit_files` returns `success: true`.
+A failed call increments `fix_failures`. Do NOT use `--amend` — always create new commits.
 Append `thread_node_id` to `addressed_thread_ids` (if not `None`).
 
 **Classification gate — REJECT/DISCUSS bypass:**
@@ -483,6 +483,8 @@ output tokens:
 needs_rerun = {true|false}
 verdict = {real_fix|already_green}
 fixes_applied = {N}
+accept_count = {N}
+fix_failures = {N}
 ```
 
 - **`needs_rerun = true`**: At least one finding was classified as `rerun_required` in

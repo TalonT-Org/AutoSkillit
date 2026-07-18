@@ -20,10 +20,12 @@ from autoskillit.recipe._contracts_types import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,
+    OutcomeInvariantEntry,
     ResultFieldSpec,
     SkillContract,
     SkillInput,
     SkillOutput,
+    SuccessQualifierEntry,
     ToolOutputContractSpec,
     ToolOutputFieldSpec,
 )
@@ -82,6 +84,40 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         raise KeyError(
             f"Malformed result_fields entry for skill '{skill_name}': missing key {exc}"
         ) from exc
+
+    output_names = {o.name for o in outputs}
+    int_output_names = {o.name for o in outputs if o.type == "integer"}
+
+    outcome_invariants: list[OutcomeInvariantEntry] = []
+    for inv in skill_data.get("outcome_invariants", []):
+        w, r = inv.get("when", ""), inv.get("require", "")
+        if not w or not r:
+            raise ValueError(
+                f"outcome_invariants entry for skill '{skill_name}' missing 'when' or 'require'"
+            )
+        for expr_label, expr in [("when", w), ("require", r)]:
+            field_name = expr.split()[0] if expr.split() else ""
+            if field_name not in output_names:
+                raise ValueError(
+                    f"outcome_invariants.{expr_label} references undeclared output "
+                    f"'{field_name}' in skill '{skill_name}'"
+                )
+            if field_name not in int_output_names:
+                raise ValueError(
+                    f"outcome_invariants.{expr_label} references non-integer output "
+                    f"'{field_name}' in skill '{skill_name}'"
+                )
+        outcome_invariants.append(OutcomeInvariantEntry(when=w, require=r))
+
+    success_qualifiers: list[SuccessQualifierEntry] = []
+    for sq in skill_data.get("success_qualifiers", []):
+        w, q = sq.get("when", ""), sq.get("qualifier", "")
+        if not w or not q:
+            raise ValueError(
+                f"success_qualifiers entry for skill '{skill_name}' missing 'when' or 'qualifier'"
+            )
+        success_qualifiers.append(SuccessQualifierEntry(when=w, qualifier=q))
+
     return SkillContract(
         inputs=inputs,
         outputs=outputs,
@@ -92,6 +128,8 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         read_only=read_only,
         completion_required=completion_required,
         result_fields=result_fields,
+        outcome_invariants=outcome_invariants,
+        success_qualifiers=success_qualifiers,
     )
 
 

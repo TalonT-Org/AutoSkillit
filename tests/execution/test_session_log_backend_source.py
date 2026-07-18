@@ -71,7 +71,10 @@ class TestBackendOverrideSourceInSessionsJsonl:
             "api_retry_last_status": None,
             "ndjson_unknown_event_count": 0,
             "ndjson_unknown_item_count": 0,
-            "schema_version": 4,
+            "outcome_fields": None,
+            "outcome_invariant_violated": False,
+            "outcome_qualifier": None,
+            "schema_version": 5,
         }
         assert entry["backend_override_source"] is None
 

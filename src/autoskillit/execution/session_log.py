@@ -158,6 +158,9 @@ def flush_session_log(
     channel_b_capable: bool = True,
     backend_override_source: str | None = None,
     telemetry: SessionTelemetry,
+    outcome_fields: dict[str, int | str] | None = None,
+    outcome_invariant_violated: bool = False,
+    outcome_qualifier: str | None = None,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -588,10 +591,13 @@ def flush_session_log(
         "api_retry_last_status": api_retry_last_status,
         "ndjson_unknown_event_count": ndjson_unknown_event_count,
         "ndjson_unknown_item_count": ndjson_unknown_item_count,
+        "outcome_fields": outcome_fields,
+        "outcome_invariant_violated": outcome_invariant_violated,
+        "outcome_qualifier": outcome_qualifier,
         "model_identifier": effective_model_id,
         "configured_model": model_identity.configured_model,
         "profile_name": model_identity.profile_name,
-        "schema_version": 4,
+        "schema_version": 5,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

@@ -66,6 +66,7 @@ from autoskillit.execution.headless._headless_result import _build_skill_result
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
     from autoskillit.pipeline.context import ToolContext
+    from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
 
@@ -116,6 +117,7 @@ async def _execute_claude_headless(
     on_session_id_resolved: Callable[[str], None] | None = None,
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
+    skill_contract: SkillContract | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -444,6 +446,7 @@ async def _execute_claude_headless(
             readonly_skill=_readonly_skill,
             closure_spec=closure_spec,
             closure_report_root=closure_report_root,
+            skill_contract=skill_contract,
         )
 
         if (
@@ -588,6 +591,9 @@ async def _execute_claude_headless(
                 backend=cast(Literal["claude-code", "codex"], _step_backend.name),
                 channel_b_capable=_step_backend.capabilities.channel_b_capable,
                 backend_override_source=backend_override_source,
+                outcome_fields=skill_result.outcome_fields,
+                outcome_invariant_violated=skill_result.outcome_invariant_violated,
+                outcome_qualifier=skill_result.outcome_qualifier,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

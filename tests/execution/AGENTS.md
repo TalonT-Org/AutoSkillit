@@ -126,6 +126,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_trace_target_resolver.py` | Tests for resolve_trace_target — descendant-walk and basename-match contract |
 | `test_write_evidence.py` | Write evidence: multi-directory fs snapshot and write_watch_dirs plumbing |
 | `test_write_evidence_invariants.py` | Write-evidence invariants: 'no work done' retry reasons must be overridden by write evidence |
+| `test_outcome_invariants.py` | Outcome-contract adjudication: invariant evaluation, field parsing, success qualifiers |
 | `test_zero_write_detection.py` | Contract: sessions expected to write must actually write (behavioral write-count gate) |
 | `test_closure_gate.py` | Execution-layer closure verification gate tests — demote unverifiable closure reports, pass valid reports, no-op without spec |
 

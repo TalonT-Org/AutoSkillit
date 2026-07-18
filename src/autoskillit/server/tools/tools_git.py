@@ -1,11 +1,13 @@
-"""MCP tool handlers: merge_worktree, classify_fix, create_and_publish_branch."""
+"""MCP tool handlers: merge_worktree, classify_fix, create_and_publish_branch, commit_files."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import os
+import shutil
 import time
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -627,3 +629,112 @@ async def create_and_publish_branch(
     except Exception as exc:
         logger.error("create_and_publish_branch unhandled exception", exc_info=True)
         return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
+@mcp.tool(
+    tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
+    annotations={"readOnlyHint": True},
+)
+@_cancellation_shield()
+@track_response_size("commit_files")
+async def commit_files(
+    paths: list[str],
+    message: str,
+    cwd: str,
+    step_name: str = "",
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Stage and commit specified files in a worktree via the server process.
+
+    Runs pre-commit hooks on the staged files before committing. If hooks
+    auto-fix files, re-stages and retries the commit once. On hard hook
+    failure, returns an error envelope without committing.
+
+    Args:
+        paths: List of file paths (relative to cwd) to stage and commit.
+        message: Commit message.
+        cwd: Absolute path to the git worktree.
+        step_name: Optional YAML step key for wall-clock timing accumulation.
+
+    Never raises.
+    """
+    try:
+        with structlog.contextvars.bound_contextvars(tool="commit_files", cwd=cwd):
+            logger.info("commit_files", path_count=len(paths), cwd=cwd)
+
+            if not cwd or not os.path.isdir(cwd):
+                return json.dumps(
+                    {"success": False, "error": f"cwd does not exist or is not a directory: {cwd}"}
+                )
+            if not paths:
+                return json.dumps({"success": False, "error": "paths list is empty"})
+
+            from autoskillit.server.git import validate_commit_paths  # circular-break
+
+            if (path_error := validate_commit_paths(cwd, paths)) is not None:
+                return json.dumps({"success": False, "error": path_error})
+
+            from autoskillit.server import _get_ctx  # circular-break
+
+            tool_ctx = _get_ctx()
+            _start = time.monotonic()
+
+            try:
+                rc, stdout, stderr = await _run_subprocess(
+                    ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
+                )
+                if rc != 0:
+                    return json.dumps(
+                        {"success": False, "error": f"git add failed: {stderr.strip()}"}
+                    )
+
+                pre_commit_bin = shutil.which("pre-commit", path=os.environ.get("PATH", ""))
+                uv_bin = shutil.which("uv", path=os.environ.get("PATH", ""))
+                hook_cmd: list[str] | None = None
+                if (Path(cwd) / ".pre-commit-config.yaml").exists():
+                    if uv_bin and (Path(cwd) / "uv.lock").exists():
+                        hook_cmd = [uv_bin, "run", "pre-commit", "run", "--files"] + paths
+                    elif pre_commit_bin:
+                        hook_cmd = [pre_commit_bin, "run", "--files"] + paths
+                    else:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "error": "pre-commit config exists but no pre-commit binary found",
+                            }
+                        )
+
+                if hook_cmd is not None:
+                    rc, stdout, stderr = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
+                    if rc != 0:
+                        rc2, _, _ = await _run_subprocess(
+                            ["git", "-C", cwd, "add", "--"] + paths, cwd=cwd, timeout=30
+                        )
+                        if rc2 != 0:
+                            _err = f"pre-commit + re-add failed: {stderr.strip()}"
+                            return json.dumps({"success": False, "error": _err})
+                        rc3, _, stderr3 = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)
+                        if rc3 != 0:
+                            _err = f"pre-commit retry failed: {stderr3.strip()}"
+                            return json.dumps({"success": False, "error": _err})
+
+                rc, stdout, stderr = await _run_subprocess(
+                    ["git", "-C", cwd, "commit", "-m", message], cwd=cwd, timeout=30
+                )
+                if rc != 0:
+                    return json.dumps(
+                        {"success": False, "error": f"git commit failed: {stderr.strip()}"}
+                    )
+
+                rc, stdout, stderr = await _run_subprocess(
+                    ["git", "-C", cwd, "rev-parse", "HEAD"], cwd=cwd, timeout=10
+                )
+                commit_sha = stdout.strip()
+
+                return json.dumps({"success": True, "commit_sha": commit_sha})
+            finally:
+                if step_name:
+                    tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
+    except Exception as exc:
+        logger.error("commit_files unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

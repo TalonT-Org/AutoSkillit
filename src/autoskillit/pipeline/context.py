@@ -38,6 +38,7 @@ from autoskillit.core import (
     RecipeRepository,
     ServeOverridesSnapshot,
     SessionSkillManager,
+    SkillContractResolver,
     SkillResolver,
     SubprocessRunner,
     TestRunner,
@@ -105,6 +106,8 @@ class ToolContext:
                           skill contracts.
     completion_required_resolver: CompletionRequiredResolver — resolves whether a skill
                           requires the completion marker.
+    skill_contract_resolver: SkillContractResolver — resolves a skill's full contract
+                          from skill contracts.
     quota_refresh_task:   QuotaRefreshTask — cancellable handle for the kitchen-scoped
                           quota refresh background task.
     fleet_lock:           FleetLock — semaphore-style guard for concurrent fleet dispatch.
@@ -162,6 +165,7 @@ class ToolContext:
     read_only_resolver: ReadOnlyResolver | None = field(default=None)
     input_contract_resolver: InputContractResolver | None = field(default=None)
     completion_required_resolver: CompletionRequiredResolver | None = field(default=None)
+    skill_contract_resolver: SkillContractResolver | None = field(default=None)
     backend: CodingAgentBackend | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)

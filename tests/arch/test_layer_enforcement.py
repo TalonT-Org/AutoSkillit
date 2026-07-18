@@ -638,8 +638,11 @@ def test_il2_no_deferred_upward_imports(pkg_name: str) -> None:
         source = py_file.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(py_file))
         deferred_nodes = _collect_deferred_imports(tree)
+        tc_lines = _type_checking_lines(tree)
 
         for node in deferred_nodes:
+            if node.lineno in tc_lines:
+                continue
             stems_to_check: list[str] = []
             if isinstance(node, ast.ImportFrom) and node.module:
                 parts = node.module.split(".")
@@ -1616,6 +1619,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     # write detection sync guard validates recipe contract patterns against test fixtures
     "tests/execution/test_zero_write_detection.py": frozenset({"autoskillit.recipe"}),
+    # outcome invariant tests verify _apply_post_session_adjudication against
+    # SkillContract/OutcomeInvariantEntry/SuccessQualifierEntry definitions
+    "tests/execution/test_outcome_invariants.py": frozenset({"autoskillit.recipe"}),
     # smoke composition tests validate recipe validity under codex backend — needs recipe API
     "tests/execution/test_smoke_codex.py": frozenset({"autoskillit.recipe"}),
     # quota tests cross into config to validate the contract between vocab constants

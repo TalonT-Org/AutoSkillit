@@ -1,7 +1,7 @@
 ---
 name: resolve-review
 categories: [github]
-uses_capabilities: [agent_model, git_metadata_write, github_api_write, run_skill, test_check]
+uses_capabilities: [agent_model, commit_files, github_api_write, run_skill, test_check]
 description: Fetch PR review comments, run intent validation (ACCEPT/REJECT/DISCUSS) before applying fixes, and post inline replies. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
 hooks:
   PreToolUse:
@@ -72,7 +72,7 @@ normal commit protocol.
 
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {work_dir} status --porcelain`
-2. If any files are dirty: `git -C {work_dir} add -- <files you modified> && git -C {work_dir} commit -m "fix: commit pending review changes"` — do NOT use `--amend`.
+2. If any files are dirty: call `commit_files(paths=[<dirty files>], message="fix: commit pending review changes", cwd="{work_dir}")`. Count any failed call toward `fix_failures`.
 3. Only then proceed with the test or structured output
 
 This ensures that even if context exhaustion interrupts the fix loop, all applied
@@ -608,14 +608,14 @@ For each finding where the classification map shows `verdict = ACCEPT`
    the edit — the pre-built context covers understanding only, not the write.
 2. Understand what the reviewer is requesting
 3. Apply the fix
-4. Stage and commit:
-   ```bash
-   git add {file}
-   # If pre-commit hooks are configured:
-   pre-commit run --files {file} && git add {file}
-   git commit -m "fix(review): {brief description of reviewer's request}"
-   # Do NOT use --amend — always create new commits.
+4. Stage and commit via the `commit_files` MCP tool:
    ```
+   commit_files(paths=["{file}"], message="fix(review): {brief description of reviewer's request}", cwd="{work_dir}")
+   ```
+   The tool runs pre-commit hooks, handles auto-fix re-staging, and returns
+   `{"success": true, "commit_sha": "..."}` or `{"success": false, "error": "..."}`.
+   A finding counts toward `fixes_applied` ONLY when `commit_files` returns `success: true`.
+   A failed call increments `fix_failures`. Do NOT use `--amend` — always create new commits.
 
 **Classification gate — REJECT/DISCUSS bypass:**
 For findings where the classification map shows `verdict = REJECT` or `verdict = DISCUSS`:
@@ -867,12 +867,17 @@ Then determine and emit the structured output tokens (required for the
 ```
 verdict = {verdict}
 fixes_applied = {accept_count - skipped_in_fix_phase}
+accept_count = {accept_count}
+fix_failures = {fix_failures}
 ```
 
 Where:
 - `{verdict}` is `real_fix` if fixes were applied, `already_green` otherwise
 - `{accept_count - skipped_in_fix_phase}` is the number of ACCEPT findings
   where code changes were actually committed
+- `{accept_count}` is the total number of ACCEPT-classified findings
+- `{fix_failures}` is the number of ACCEPT findings whose apply/commit attempt
+  errored (distinct from `skipped_in_fix_phase` which counts legitimate pre-attempt skips)
 
 The Step 1 graceful degradation exit must NOT emit these tokens — no tokens
 when skipping due to no PR found.
@@ -886,9 +891,13 @@ When a PR is processed, the following structured output tokens are emitted:
 ```
 verdict = real_fix|already_green
 fixes_applied = {N}
+accept_count = {N}
+fix_failures = {N}
 ```
 
-Where `{N}` is the count of ACCEPT findings where code changes were committed.
+Where `fixes_applied` is the count of ACCEPT findings where code changes were
+committed. `accept_count` is the total number of ACCEPT-classified findings.
+`fix_failures` is the count of ACCEPT findings whose apply/commit attempt failed.
 `verdict = real_fix` means fixes were applied; `verdict = already_green` means
 all review findings were already addressed and no code changes were needed.
 

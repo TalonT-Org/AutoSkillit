@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from autoskillit.recipe._contracts_types import SkillContract
     from autoskillit.recipe.schema import Recipe, RecipeInfo
 
     from ._type_backend import BackendCapabilities
@@ -24,6 +25,7 @@ __all__ = [
     "MigrationService",
     "DatabaseReader",
     "ReadOnlyResolver",
+    "SkillContractResolver",
     "ServeOverridesSnapshot",
 ]
 
@@ -131,3 +133,10 @@ class ReadOnlyResolver(Protocol):
     """Protocol for resolving whether a skill is read-only from skill contracts."""
 
     def __call__(self, skill_command: str) -> bool: ...
+
+
+@runtime_checkable
+class SkillContractResolver(Protocol):
+    """Protocol for resolving a skill's full contract from skill contracts."""
+
+    def __call__(self, skill_command: str) -> SkillContract | None: ...

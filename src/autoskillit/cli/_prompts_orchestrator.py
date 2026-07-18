@@ -243,6 +243,10 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     via CLI). Partial progress may exist on disk. Follow on_context_limit.
   - If the progress signal is false OR the step has no on_context_limit: fall through
     to on_failure — no recoverable progress evidence.
+- When run_skill returns "needs_retry: true" AND "retry_reason: outcome_invariant":
+  - The skill's contract-declared outcome invariant was violated (e.g. accept_count > 0
+    but fix_failures > 0). This is a logical failure — the skill ran but its core function
+    failed. Always fall through to on_failure. Do NOT route to on_context_limit.
 - When run_skill returns "needs_retry: true" AND "retry_reason: contract_recovery":
   - The model ran to completion and wrote artifacts but the structured output tokens
     failed pattern validation. Infrastructure nudge was attempted but could not recover.

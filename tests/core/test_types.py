@@ -62,6 +62,7 @@ def test_retry_reason_values():
         RetryReason.IDLE_STALL,
         RetryReason.RATE_LIMITED,
         RetryReason.CANCELLED,
+        RetryReason.OUTCOME_INVARIANT,
     }
     assert RetryReason.NONE.value == "none"
 

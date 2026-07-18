@@ -27,7 +27,7 @@ class TestStandingBackendPinsFeasibility:
         config_dir = tmp_path / "home" / ".autoskillit"
         _write_config(
             config_dir / "config.yaml",
-            "agent_backend:\n  recipe_overrides:\n    remediation:\n      resolve_review: codex\n",
+            "agent_backend:\n  recipe_overrides:\n    remediation:\n      assess: codex\n",
         )
 
         project_dir = tmp_path / "project"
@@ -37,7 +37,7 @@ class TestStandingBackendPinsFeasibility:
         errors = [r for r in results if r.severity == Severity.ERROR]
         assert errors, f"Expected at least one ERROR result, got: {results}"
         msg = errors[0].message
-        assert "resolve_review" in msg and "codex" in msg
+        assert "assess" in msg and "codex" in msg
 
     def test_feasible_pin_reports_ok(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

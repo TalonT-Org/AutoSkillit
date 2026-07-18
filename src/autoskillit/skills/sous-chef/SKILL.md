@@ -110,6 +110,7 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   defines `on_context_limit`** → follow `on_context_limit`. The model made filesystem contact
   but made no Write/Edit tool calls. Partial progress may exist on disk.
 - **If `retry_reason: zero_writes` AND `has_progress_evidence` is false** → fall through to `on_failure`.
+- **If `retry_reason: outcome_invariant`** → fall through to `on_failure`. The skill's contract-declared outcome invariant was violated (e.g. fix application failures detected). This is a logical failure, not infrastructure — do not route to `on_context_limit`.
 - **If `retry_reason: stale`** → decrement the `retries` counter for this step.
   Re-execute the same step if retries remain. If retries are exhausted, fall through
   to `on_failure`. Do NOT route to `on_context_limit` — stale is a transient failure,
@@ -157,6 +158,7 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=zero_writes` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=zero_writes` + `has_progress_evidence=false` → `on_failure`.
+         `needs_retry=true` + `retry_reason=outcome_invariant` → `on_failure`.
          `needs_retry=true` + `retry_reason=stale` → decrement retries counter → `on_failure` when exhausted (no partial progress, not a context limit).
          `needs_retry=true` + `retry_reason=stale` + worktree-creating step → one-shot re-execute (bypasses retries budget; on_failure if repeated stale).
 

@@ -62,6 +62,7 @@ from autoskillit.pipeline import (
 )
 from autoskillit.recipe import (
     DefaultRecipeRepository,
+    SkillContract,
     get_skill_contract,
     load_bundled_manifest,
     resolve_input_specs,
@@ -392,10 +393,17 @@ def make_context(
         contract = get_skill_contract(name, load_bundled_manifest())
         return contract.completion_required if contract else False
 
+    def _resolve_skill_contract(skill_command: str) -> SkillContract | None:
+        name = resolve_skill_name(skill_command)
+        if not name:
+            return None
+        return get_skill_contract(name, load_bundled_manifest())
+
     ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.write_expected_resolver = _resolve_write_behavior
     ctx.read_only_resolver = _resolve_read_only
     ctx.completion_required_resolver = _resolve_completion_required
+    ctx.skill_contract_resolver = _resolve_skill_contract
     ctx.input_contract_resolver = resolve_input_specs
     ctx.token_factory = token_factory
     ctx.build_protected_campaign_ids = build_protected_campaign_ids

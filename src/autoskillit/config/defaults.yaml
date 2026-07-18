@@ -136,7 +136,6 @@ output_budget:
   tail_chars: 2500
   response_max_bytes: 90000
   guard_enabled: true
-  small_file_max_bytes: 5000
   shell_max_inline_bytes: 12000
 
 branching:

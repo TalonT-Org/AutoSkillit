@@ -577,11 +577,11 @@ def test_generated_codex_child_receives_output_discipline(
     )
 
 
-def _run_output_budget_deny_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutput:
+def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutput:
     tmp_path.mkdir(parents=True, exist_ok=True)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    env, codex_home, claude_config = _isolated_cli_env(tmp_path, workspace)
+    env, codex_home, _claude_config = _isolated_cli_env(tmp_path, workspace)
 
     if backend == "codex":
         env["AUTOSKILLIT_AGENT_BACKEND"] = "codex"
@@ -605,23 +605,6 @@ def _run_output_budget_deny_probe(backend: str, tmp_path: Path) -> _DenyRoundTri
             "workspace-write",
             _OUTPUT_BUDGET_CANARY_PROMPT,
         ]
-    elif backend == "claude-code":
-        settings_path = claude_config / "settings.json"
-        settings_path.write_text(
-            json.dumps(generate_hooks_json(), indent=2) + "\n",
-            encoding="utf-8",
-        )
-        command = [
-            "claude",
-            "-p",
-            _OUTPUT_BUDGET_CANARY_PROMPT,
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--dangerously-skip-permissions",
-            "--tools",
-            "Bash",
-        ]
     else:  # pragma: no cover - callers pass a sealed backend literal
         raise ValueError(f"unsupported probe backend: {backend}")
 
@@ -636,33 +619,30 @@ def _run_output_budget_deny_probe(backend: str, tmp_path: Path) -> _DenyRoundTri
     )
     transcript = result.stdout + "\n" + result.stderr
     if result.returncode != 0:
-        raise OSError(f"{backend} deny probe failed with rc={result.returncode}: {transcript}")
+        raise OSError(
+            f"{backend} shell-capture probe failed with rc={result.returncode}: {transcript}"
+        )
     return _DenyRoundTripOutput(
         transcript=transcript,
         cli_version=_cli_version(command[0], env),
     )
 
 
-def _assert_output_budget_deny_round_trip(output: _DenyRoundTripOutput) -> None:
+def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
     assert _OUTPUT_BUDGET_CANARY_COMMAND in output.transcript
-    assert "AutoSkillit" in output.transcript
-    from autoskillit.hooks.guards.output_budget_guard import (  # noqa: PLC0415
-        OUTPUT_BUDGET_DENY_TRIGGER,
-    )
-
-    assert OUTPUT_BUDGET_DENY_TRIGGER in output.transcript
+    assert "autoskillit-shell-capture" in output.transcript
 
 
-def _exercise_output_budget_deny_probe(backend: str, tmp_path: Path) -> None:
+def _exercise_shell_capture_probe(backend: str, tmp_path: Path) -> None:
     workspace = tmp_path / "version-workspace"
     workspace.mkdir()
     version_env, _, _ = _isolated_cli_env(tmp_path / "version-env", workspace)
     binary = "codex" if backend == "codex" else "claude"
     cli_version = _cli_version(binary, version_env)
-    cache_path = tmp_path / f"{backend}-output-budget-probe-cache.json"
+    cache_path = tmp_path / f"{backend}-shell-capture-probe-cache.json"
     cached = read_probe_cache(cache_path, cli_version, PROBE_POLICY_IDENTITY)
     if cached is not None and cached.passed:
-        pytest.skip(f"Output-budget deny probe cached as passed for {cli_version}")
+        pytest.skip(f"Shell-capture probe cached as passed for {cli_version}")
 
     def _record(passed: bool, version: str, detail: str | None) -> None:
         write_probe_cache(
@@ -688,25 +668,19 @@ def _exercise_output_budget_deny_probe(backend: str, tmp_path: Path) -> None:
         _record(False, version, f"{kind.value}:{probe_name}:{detail}")
 
     _run_probe_with_discrimination(
-        f"output_budget_deny_round_trip_{backend}",
+        f"shell_capture_round_trip_{backend}",
         cli_version,
-        lambda: _run_output_budget_deny_probe(backend, tmp_path / "round-trip"),
-        _assert_output_budget_deny_round_trip,
+        lambda: _run_shell_capture_probe(backend, tmp_path / "round-trip"),
+        _assert_shell_capture_round_trip,
         record_success=_record_success,
         record_failure=_record_failure,
     )
 
 
 @_skip_unless_codex_output_budget_smoke
-class TestCodexOutputBudgetDenyRoundTrip:
-    def test_hook_fires_and_reason_reaches_model(self, tmp_path: Path) -> None:
-        _exercise_output_budget_deny_probe("codex", tmp_path)
-
-
-@_skip_unless_claude_output_budget_smoke
-class TestClaudeCodeOutputBudgetDenyRoundTrip:
-    def test_hook_fires_and_reason_reaches_model(self, tmp_path: Path) -> None:
-        _exercise_output_budget_deny_probe("claude-code", tmp_path)
+class TestCodexShellCaptureRoundTrip:
+    def test_hook_fires_and_command_is_rewritten(self, tmp_path: Path) -> None:
+        _exercise_shell_capture_probe("codex", tmp_path)
 
 
 _SOURCE_SPILL_THRESHOLD = OutputBudgetConfig().inline_max_chars

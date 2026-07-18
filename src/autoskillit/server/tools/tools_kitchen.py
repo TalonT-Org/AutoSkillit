@@ -211,7 +211,6 @@ class QuotaGuardHookPayload(TypedDict):
 
 class OutputBudgetPolicyHookPayload(TypedDict):
     disabled: bool
-    small_file_max_bytes: int
     shell_max_inline_bytes: int
 
 
@@ -242,7 +241,6 @@ def _output_budget_policy_hook_payload(
     """
     return {
         "disabled": not cfg.guard_enabled,
-        "small_file_max_bytes": cfg.small_file_max_bytes,
         "shell_max_inline_bytes": cfg.shell_max_inline_bytes,
     }
 

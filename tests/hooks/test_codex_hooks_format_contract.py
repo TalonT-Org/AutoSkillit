@@ -55,10 +55,8 @@ class TestCodexTomlFormatContract:
                     f"Entry under hooks.{event_type} has redundant 'event' scalar"
                 )
 
-    def test_output_budget_guard_is_wired_with_identical_matchers(self):
-        expected = next(
-            hook for hook in HOOK_REGISTRY if "guards/output_budget_guard.py" in hook.scripts
-        )
+    def test_shell_capture_hook_is_wired_with_identical_matchers(self):
+        expected = next(hook for hook in HOOK_REGISTRY if "shell_capture_hook.py" in hook.scripts)
         codex_entries = generate_codex_hooks_config()["PreToolUse"]
         codex_entry = next(
             entry for entry in codex_entries if entry["matcher"] == expected.matcher
@@ -68,6 +66,6 @@ class TestCodexTomlFormatContract:
             entry for entry in claude_entries if entry["matcher"] == expected.matcher
         )
 
-        assert any("output_budget_guard" in hook["command"] for hook in codex_entry["hooks"])
-        assert any("output_budget_guard" in hook["command"] for hook in claude_entry["hooks"])
+        assert any("shell_capture_hook" in hook["command"] for hook in codex_entry["hooks"])
+        assert any("shell_capture_hook" in hook["command"] for hook in claude_entry["hooks"])
         assert codex_entry["matcher"].encode() == claude_entry["matcher"].encode()

@@ -252,8 +252,8 @@ from .types import CampaignProtector as CampaignProtector
 from .types import CanonicalTokenUsage as CanonicalTokenUsage
 from .types import CapabilityNotSupportedError as CapabilityNotSupportedError
 from .types import CapabilityResolutionDetail as CapabilityResolutionDetail
-from .types import CaptureEntrySpec as CaptureEntrySpec
 from .types import CapturedStream as CapturedStream
+from .types import CaptureEntrySpec as CaptureEntrySpec
 from .types import CaptureValueType as CaptureValueType
 from .types import CaptureValueTypeError as CaptureValueTypeError
 from .types import ChannelBStatus as ChannelBStatus

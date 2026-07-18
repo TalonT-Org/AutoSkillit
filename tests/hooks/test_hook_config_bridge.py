@@ -216,7 +216,6 @@ def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
     payload = _output_budget_policy_hook_payload(
         OutputBudgetConfig(
             guard_enabled=False,
-            small_file_max_bytes=321,
             shell_max_inline_bytes=654,
         )
     )
@@ -224,7 +223,6 @@ def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
     assert set(payload) == OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS
     assert payload == {
         "disabled": True,
-        "small_file_max_bytes": 321,
         "shell_max_inline_bytes": 654,
     }
 
@@ -240,7 +238,6 @@ def test_output_budget_policy_overlay_overrides_snapshot(tmp_path):
             {
                 "output_budget_policy": {
                     "disabled": False,
-                    "small_file_max_bytes": 5000,
                     "shell_max_inline_bytes": 12000,
                 }
             }
@@ -251,7 +248,6 @@ def test_output_budget_policy_overlay_overrides_snapshot(tmp_path):
             {
                 "output_budget_policy": {
                     "disabled": True,
-                    "small_file_max_bytes": 17,
                 }
             }
         )
@@ -261,7 +257,6 @@ def test_output_budget_policy_overlay_overrides_snapshot(tmp_path):
 
     assert policy == {
         "disabled": True,
-        "small_file_max_bytes": 17,
         "shell_max_inline_bytes": 12000,
     }
 

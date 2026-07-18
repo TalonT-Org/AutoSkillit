@@ -151,7 +151,6 @@ async def test_open_kitchen_bridges_output_budget_policy(
     mock_ctx.config.quota_guard = QuotaGuardConfig()
     mock_ctx.config.output_budget = OutputBudgetConfig(
         guard_enabled=guard_enabled,
-        small_file_max_bytes=4321,
         shell_max_inline_bytes=8765,
     )
 
@@ -167,7 +166,6 @@ async def test_open_kitchen_bridges_output_budget_policy(
     data = json.loads(tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS).read_text())
     assert data["output_budget_policy"] == {
         "disabled": expected_disabled,
-        "small_file_max_bytes": 4321,
         "shell_max_inline_bytes": 8765,
     }
 

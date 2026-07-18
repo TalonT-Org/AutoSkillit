@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "9efe20e7a8aa5ce077872554be96bca90e77a8e2b8baac769467783f080279e3",
+  "_registry_hash": "9e6225e994bb5e769312af5d4b4507a66b0f556369900dc95df8723e6228e6a6",
   "hooks": {
     "PostToolUse": [
       {
@@ -186,14 +186,19 @@
             "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/test_runner_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
-          },
+          }
+        ],
+        "matcher": "Bash|mcp__.*autoskillit.*__run_cmd"
+      },
+      {
+        "hooks": [
           {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/output_budget_guard",
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py shell_capture_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
         ],
-        "matcher": "Bash|mcp__.*autoskillit.*__run_cmd"
+        "matcher": "Bash"
       },
       {
         "hooks": [

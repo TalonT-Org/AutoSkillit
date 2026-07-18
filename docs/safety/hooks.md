@@ -84,15 +84,17 @@ and nested-shell forms. Session scope: headless only. Orchestrator sessions
 are exempt. Per-subcommand allow-overrides are available via `git_ops_policy`
 in `.hook_config.json` for future recipes that legitimately need these operations.
 
-### `output_budget_guard.py`
-**Guarded tools:** `Bash`, `run_cmd`
-**Scope:** Codex sessions only (#4286); Claude Code covered by native Bash spill.
-Denies high-confidence unbounded recursive searches, JSONL reads, and `find`
-operations before execution on Codex. Deny messages carry typed provenance
-(AutoSkillit identity, hook id, version, decision, reason code) and include a
-classifier-validated rewrite suggestion when one exists. Set
-`output_budget.guard_enabled: false` to disable; byte caps constrained by
-`output_budget.shell_max_inline_bytes`.
+### `shell_capture_hook.py`
+**Matched tool:** `Bash`
+**Scope:** Codex sessions only (#4286 / ADR-0006); Claude Code is unaffected.
+PreToolUse input-rewrite hook that wraps every native shell command on Codex in a
+capture harness. The original command runs unmodified in a subshell; its complete
+combined stdout+stderr goes to a mechanism-owned artifact at
+`<cwd>/.autoskillit/temp/shell_capture/shell_<uuid8>.log`. Only a bounded inline
+slice enters context: full content when small (artifact deleted), else head +
+provenance marker (bytes, sha256, path) + tail. Exit codes are preserved via a
+trap-EXIT postlude. Set `output_budget.guard_enabled: false` to disable;
+inline threshold controlled by `output_budget.shell_max_inline_bytes`.
 
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`

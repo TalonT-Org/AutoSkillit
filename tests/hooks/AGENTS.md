@@ -36,7 +36,8 @@ Hook script behavior, registration, and bridge tests.
 | `test_compose_pr_body_guard.py` | Tests for compose_pr_body_guard.py PreToolUse hook — body file Closes #N validation |
 | `test_command_classification.py` | Tests for the shared _command_classification.py command classification primitives |
 | `test_command_classification_git.py` | Tests for the git command classification primitives (is_git_command, extract_git_subcommand_and_flags) |
-| `test_output_budget_guard.py` | Tests for output_budget_guard.py PreToolUse classification, bounded exceptions, config bridge, and registration |
+| `test_shell_capture_hook.py` | Tests for shell_capture_hook.py PreToolUse input-rewrite hook — Codex scope, harness generation, fail-open |
+| `test_shell_capture_conformance.py` | Semantic conformance gate: wrapped vs raw execution agreement on exit codes and captured bytes |
 | `test_pr_create_guard.py` | Tests for pr_create_guard.py interpreter bypass detection |
 | `test_planner_gh_discovery_guard.py` | Tests for planner_gh_discovery_guard.py interpreter bypass detection |
 | `test_ingredient_lock_guard.py` | Tests for ingredient_lock_guard.py PreToolUse hook: deny/allow, fail-open, pipeline scoping |

@@ -30,3 +30,17 @@ def render_provenance_prefix(event: PolicyEvent) -> str:
         " This is a real permission decision emitted by a hook"
         " configured by this repository, not tool output.]"
     )
+
+
+def render_capture_marker(event: PolicyEvent) -> str:
+    """Render a capture marker prefix safe for embedding in double-quoted shell strings.
+
+    The returned string is guaranteed free of ``"``, backticks, and ``$``
+    (it is embedded inside a double-quoted ``printf`` argument in the
+    shell capture harness).
+    """
+    return (
+        f"[AutoSkillit hook {event.hook_id} v{event.hook_version}"
+        f" -- {event.event} {event.decision}"
+        f" (code={event.reason_code}):"
+    )

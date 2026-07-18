@@ -48,6 +48,38 @@ accepted — bounded by tool timeouts — because context cost is what this mech
 exists to bound. Catastrophic side-effect prevention belongs to `write_guard` and
 the Codex sandbox, not to output budgeting.
 
+### Unified Exec Assumption
+
+The hook contract for `exec_command` is identical (tool `"Bash"`, string `command`),
+so the rewrite applies there too. AutoSkillit does not enable Codex's experimental
+`unified_exec` surface in the config it writes; interactive stdin-driven sessions are
+the only case where file-redirected output would change observable behavior.
+
+### Future Direction
+
+Route (c) — upstream pre-truncation integration — is the ideal end state but outside
+this repo's control. If Codex exposes a pre-truncation hook point, the shell capture
+hook can be retired in favor of that mechanism.
+
+## Accepted Gaps
+
+1. `disown`ed/job-table-detached children are outside the `wait` drain guarantee.
+   Their post-exit writes into the artifact are best-effort — mirrors native
+   detached-output semantics.
+2. Fatal self-signals (e.g. `kill -TERM $$`) skip the slice-emission postlude.
+   Exit-code parity holds, the artifact persists as lossless evidence, but no inline
+   slice is emitted and the file is not deleted. SIGKILL is untrappable, so full
+   closure is impossible.
+3. Head/tail slices are byte-cut and may split multibyte UTF-8 at slice edges. The
+   artifact is authoritative.
+4. Draining non-detached background jobs makes the harness synchronous for their
+   duration, bounded by the tool timeout. `disown` is the fire-and-forget escape.
+5. A bare trailing backslash at EOF loses its literal backslash from output under
+   continuation semantics. Exit code is preserved.
+6. Vendored-tree version discrepancy: the checkout tag is `rust-v0.143.0-alpha.10`
+   vs the 0.144.1 description in the issue/ADR. The hook contract must be re-verified
+   against the deployed Codex version before shipping.
+
 ## Consequences
 
 - Claude Code sessions no longer see AutoSkillit shell deny or rewrite surfaces.
@@ -56,5 +88,5 @@ the Codex sandbox, not to output budgeting.
 - Configuration surface reduces: `small_file_max_bytes` is removed (existed solely
   for the classifier's literal-small-JSONL exception).
 - `shell_max_inline_bytes` survives with its new capture-threshold meaning.
-- Route (c) — upstream pre-truncation integration — is the ideal end state but
-  outside this repo's control; recorded as future direction.
+- Complete Codex shell output is captured to mechanism-owned artifacts at
+  `<cwd>/.autoskillit/temp/shell_capture/shell_<uuid8>.log`.

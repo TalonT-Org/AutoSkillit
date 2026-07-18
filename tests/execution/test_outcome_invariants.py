@@ -70,6 +70,23 @@ def _result_record(result_text: str, session_id: str = "test-sess") -> str:
     )
 
 
+def _stdout_with_edit_evidence(result_text: str, session_id: str = "test-sess") -> str:
+    """Build NDJSON stdout with an Edit tool_use plus a success result record.
+
+    Used for ``verdict = real_fix`` fixtures: the write-expectation gate
+    (checked before outcome invariants) requires write evidence when the
+    conditional pattern matches, so these fixtures must carry an Edit call
+    to reach the outcome-invariant adjudication being tested.
+    """
+    assistant = {
+        "type": "assistant",
+        "message": {
+            "content": [{"type": "tool_use", "name": "Edit", "id": "tu_0"}],
+        },
+    }
+    return "\n".join([json.dumps(assistant), _result_record(result_text, session_id)])
+
+
 # ---------------------------------------------------------------------------
 # RECT-011 / RECT-012: E6-shaped demotion via full _build_skill_result pipeline
 # ---------------------------------------------------------------------------
@@ -104,8 +121,13 @@ class TestOutcomeInvariantDemotion:
         assert sr.retry_reason == RetryReason.OUTCOME_INVARIANT
 
     def test_lying_model_real_fix_with_fix_failures_demoted(self) -> None:
-        """RECT-012: verdict=real_fix, fixes_applied=0, fix_failures=3 demotes identically."""
-        stdout = _result_record(
+        """RECT-012: verdict=real_fix, fixes_applied=0, fix_failures=3 demotes identically.
+
+        Carries Edit-tool write evidence so the case reaches outcome-invariant
+        adjudication rather than being intercepted by the zero-write gate
+        (verdict=real_fix alone triggers the write-expectation pattern).
+        """
+        stdout = _stdout_with_edit_evidence(
             _e6_result_text(verdict="real_fix", accept_count=3, fixes_applied=0, fix_failures=3)
         )
         sr = _build_skill_result(
@@ -150,8 +172,13 @@ class TestOutcomeInvariantCounterCases:
         assert sr.subtype != "outcome_invariant_violation"
 
     def test_full_success_stays_unqualified_success(self) -> None:
-        """accept_count=3, fixes_applied=3, fix_failures=0 → invariant satisfied → success."""
-        stdout = _result_record(
+        """accept_count=3, fixes_applied=3, fix_failures=0 → invariant satisfied → success.
+
+        Carries Edit-tool write evidence to satisfy the write-expectation gate
+        (verdict=real_fix triggers it) so this exercises outcome-invariant
+        adjudication rather than being intercepted upstream.
+        """
+        stdout = _stdout_with_edit_evidence(
             _e6_result_text(verdict="real_fix", accept_count=3, fixes_applied=3, fix_failures=0)
         )
         sr = _build_skill_result(
@@ -228,9 +255,12 @@ class TestOutcomeInvariantRecoveryPaths:
         assert sr.retry_reason == RetryReason.OUTCOME_INVARIANT
 
     def test_recovered_idle_stall_demotes(self) -> None:
+        """Carries Edit-tool write evidence: verdict=real_fix triggers the
+        write-expectation gate, which must be satisfied to reach outcome-invariant
+        adjudication on the recovered-IDLE_STALL path."""
         from autoskillit.core.types._type_enums import TerminationReason
 
-        stdout = _result_record(
+        stdout = _stdout_with_edit_evidence(
             _e6_result_text(verdict="real_fix", accept_count=3, fixes_applied=0, fix_failures=3)
         )
         sr = _build_skill_result(

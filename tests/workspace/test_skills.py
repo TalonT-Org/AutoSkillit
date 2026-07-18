@@ -815,6 +815,8 @@ class TestBackendRequirements:
         with structlog.testing.capture_logs() as logs:
             info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.backend_requirements == frozenset()
+        assert info.invalid_reason is not None
+        assert "nonexistent_cap" in info.invalid_reason
         assert any(log["event"] == "unrecognized_uses_capabilities" for log in logs)
 
     def test_mixed_capabilities_derive_backend_requirements(self, tmp_path) -> None:
@@ -868,7 +870,7 @@ class TestSkillInfoSchemaExhaustiveness:
 
         dc_fields = {f.name for f in dataclasses.fields(SkillInfo)}
         constructor_only = {"name", "source", "path"}
-        derived_fields = {"backend_requirements"}
+        derived_fields = {"backend_requirements", "invalid_reason"}
         parseable_fields = dc_fields - constructor_only - derived_fields
 
         source = inspect.getsource(_skill_info_from_frontmatter)

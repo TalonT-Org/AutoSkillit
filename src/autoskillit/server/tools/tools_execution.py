@@ -26,13 +26,10 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
-    CapturedStream,
     ClaudeDirectoryConventions,
     ClosureAuthoritySpec,
     CodingAgentBackend,
     SkillResult,
-    SpillSpec,
-    SubprocessResult,
     TerminationReason,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -50,9 +47,7 @@ from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution import (
-    CaptureReadError,
     CaptureSetupError,
-    summarize_capture,
 )
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
@@ -86,6 +81,7 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
     _spill_spec,
+    _summarize_streams,
     clear_run_skill_state,
     maybe_promote_work_dir,
     persist_run_skill_state,
@@ -109,32 +105,6 @@ _PURE_SLEEP_RE = re.compile(
 )
 
 INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
-
-
-def _summarize_streams(
-    sub_result: SubprocessResult,
-    spec: SpillSpec,
-    complete: bool,
-) -> tuple[CapturedStream | None, CapturedStream | None, str | None]:
-    stdout_capture = None
-    stderr_capture = None
-    capture_error: str | None = None
-    for stream_name in ("stdout", "stderr"):
-        stream_path = getattr(sub_result, f"{stream_name}_path")
-        if stream_path is not None:
-            try:
-                cap = summarize_capture(stream_path, spec, complete=complete)
-                if stream_name == "stdout":
-                    stdout_capture = cap
-                else:
-                    stderr_capture = cap
-            except CaptureReadError as exc:
-                capture_error = f"{exc} [orphan={stream_path}]"
-                try:
-                    stream_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-    return stdout_capture, stderr_capture, capture_error
 
 
 DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"

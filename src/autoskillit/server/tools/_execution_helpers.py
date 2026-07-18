@@ -16,10 +16,12 @@ from autoskillit.core import (
     RUN_PYTHON_SENTINEL_KEYS,
     CapturedStream,
     SpillSpec,
+    SubprocessResult,
     get_logger,
     resolve_temp_dir,
     spill_output,
 )
+from autoskillit.execution import CaptureReadError, summarize_capture
 from autoskillit.server._misc import _hook_config_overlay_path
 from autoskillit.server._response_budget import shape_json_response
 
@@ -159,6 +161,32 @@ def _process_capture_stream(
 
 def _uuid8() -> str:
     return uuid.uuid4().hex[:8]
+
+
+def _summarize_streams(
+    sub_result: SubprocessResult,
+    spec: SpillSpec,
+    complete: bool,
+) -> tuple[CapturedStream | None, CapturedStream | None, str | None]:
+    stdout_capture = None
+    stderr_capture = None
+    capture_error: str | None = None
+    for stream_name in ("stdout", "stderr"):
+        stream_path = getattr(sub_result, f"{stream_name}_path")
+        if stream_path is not None:
+            try:
+                cap = summarize_capture(stream_path, spec, complete=complete)
+                if stream_name == "stdout":
+                    stdout_capture = cap
+                else:
+                    stderr_capture = cap
+            except CaptureReadError as exc:
+                capture_error = f"{exc} [orphan={stream_path}]"
+                try:
+                    stream_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+    return stdout_capture, stderr_capture, capture_error
 
 
 def shape_execution_response(

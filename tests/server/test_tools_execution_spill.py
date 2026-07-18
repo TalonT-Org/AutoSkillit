@@ -317,7 +317,7 @@ async def test_run_cmd_capture_read_failure_is_fail_stop(
         raise CaptureReadError(errno.EIO, "test read error")
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.summarize_capture",
+        "autoskillit.server.tools._execution_helpers.summarize_capture",
         _raise_read_error,
     )
     with patch(
@@ -430,7 +430,7 @@ async def test_run_cmd_partial_capture_error_leaves_no_orphan(
         return real_summarize(path, spec, complete=complete)
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.summarize_capture",
+        "autoskillit.server.tools._execution_helpers.summarize_capture",
         _fail_stderr_only,
     )
     with patch(

@@ -442,8 +442,11 @@ async def test_run_cmd_partial_capture_error_leaves_no_orphan(
     assert data["success"] is False
     assert data["error"].startswith("capture_failed")
     # stdout succeeded and was inline-sized -> its capture file must be unlinked, not orphaned.
-    remaining = list(capture_dir.glob("proc_stdout_*.tmp"))
-    assert remaining == []
+    remaining_stdout = list(capture_dir.glob("proc_stdout_*.tmp"))
+    assert remaining_stdout == []
+    # stderr failed summarize_capture() -> its raw file must also be unlinked, not orphaned.
+    remaining_stderr = list(capture_dir.glob("proc_stderr_*.tmp"))
+    assert remaining_stderr == []
 
 
 @pytest.mark.anyio

@@ -129,7 +129,11 @@ def _summarize_streams(
                 else:
                     stderr_capture = cap
             except CaptureReadError as exc:
-                capture_error = str(exc)
+                capture_error = f"{exc} [orphan={stream_path}]"
+                try:
+                    stream_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
     return stdout_capture, stderr_capture, capture_error
 
 

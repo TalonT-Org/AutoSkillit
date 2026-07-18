@@ -1619,6 +1619,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     # write detection sync guard validates recipe contract patterns against test fixtures
     "tests/execution/test_zero_write_detection.py": frozenset({"autoskillit.recipe"}),
+    # outcome invariant tests verify _apply_post_session_adjudication against
+    # SkillContract/OutcomeInvariantEntry/SuccessQualifierEntry definitions
+    "tests/execution/test_outcome_invariants.py": frozenset({"autoskillit.recipe"}),
     # smoke composition tests validate recipe validity under codex backend — needs recipe API
     "tests/execution/test_smoke_codex.py": frozenset({"autoskillit.recipe"}),
     # quota tests cross into config to validate the contract between vocab constants

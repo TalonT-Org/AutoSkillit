@@ -676,6 +676,7 @@ def test_admission_dispatch_agreement_with_explicit_pin(
     skill_info.name = target_skill_name
     skill_info.backend_requirements = frozenset()
     skill_info.uses_capabilities = frozenset({"git_metadata_write"})
+    skill_info.invalid_reason = None
     # Path pointing at a non-existent file so the SKILL.md read in
     # `_check_undefined_bash_placeholder` raises OSError (caught by the rule)
     # instead of returning a MagicMock that crashes `extract_bash_blocks`.

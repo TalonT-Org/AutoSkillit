@@ -124,15 +124,16 @@ def test_marker_provenance_and_shell_safety(monkeypatch):
 
     import re
 
-    marker_matches = re.findall(r"printf '\\n%s\\n' '(.+)'", command)
+    marker_matches = re.findall(r"printf '\\n%s\\n' (.+)", command)
     assert marker_matches, "expected a printf-embedded capture marker in the harness"
     marker = marker_matches[0]
 
-    assert '"' not in marker
     assert "`" not in marker
 
-    allowed_dollar_vars = ("$__as_sz", "$__as_f", "$__as_sha")
+    for var in ("$__as_sz", "$__as_f", "$__as_sha"):
+        assert f'"{var}"' in marker, f"expected expansion-safe {var} in marker"
+
     stripped = marker
-    for var in allowed_dollar_vars:
-        stripped = stripped.replace(var, "")
+    for var in ("$__as_sz", "$__as_f", "$__as_sha"):
+        stripped = stripped.replace(f'"{var}"', "")
     assert "$" not in stripped

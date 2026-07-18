@@ -8,6 +8,7 @@ import os
 import time
 import types
 import typing
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -128,15 +129,21 @@ def _process_capture_stream(
     else:
         promoted_name = f"{stream_name}_{_uuid8()}.log"
         promoted = capture.path.parent / promoted_name
-        import os as _os  # noqa: PLC0415
-
-        _os.replace(capture.path, promoted)
         try:
-            fd = _os.open(str(promoted.parent), _os.O_RDONLY)
+            os.replace(capture.path, promoted)
+        except OSError as exc:
+            result["success"] = False
+            result["error"] = (
+                f"capture_failed: promote {stream_name} artifact "
+                f"{capture.path} -> {promoted}: {exc}"
+            )
+            return
+        try:
+            fd = os.open(str(promoted.parent), os.O_RDONLY)
             try:
-                _os.fsync(fd)
+                os.fsync(fd)
             finally:
-                _os.close(fd)
+                os.close(fd)
         except OSError:
             pass
         complete_str = "true" if capture.complete else "false"
@@ -151,8 +158,6 @@ def _process_capture_stream(
 
 
 def _uuid8() -> str:
-    import uuid  # noqa: PLC0415
-
     return uuid.uuid4().hex[:8]
 
 

@@ -577,6 +577,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                 has_skill_prefix=_has_prefix,
                 profile_name=profile_name,
                 include_output_discipline=False,
+                include_intake_discipline=False,
             ),
         )
         extras = self._assemble_shared_env_extras(
@@ -667,6 +668,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                 has_skill_prefix=False,
                 profile_name="",
                 include_output_discipline=False,
+                include_intake_discipline=False,
             ),
         )
 

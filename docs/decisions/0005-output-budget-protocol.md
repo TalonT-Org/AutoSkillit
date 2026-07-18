@@ -37,7 +37,9 @@ containment; downstream layers are independent backstops rather than substitutes
    projected safely fails closed without returning the original payload.
 3. **Pre-spend command guard:** enumerated high-confidence unbounded shell shapes are
    denied before execution and receive a bounded-rewrite instruction. This is static,
-   pre-execution enforcement for rules R1 through R3.
+   pre-execution enforcement for rules R1 through R3. *Superseded in part by ADR-0006
+   (#4286): Layer 3's universal scope is narrowed to Codex-only pending output-boundary
+   capture; the shape-classification mechanism is scheduled for retirement.*
 4. **Producer-aware discipline and derived transport ceiling:** one evidence-output
    policy is delivered on backend surfaces that support it, while Codex's stored
    tool/function output receives a derived damage ceiling. The policy is advisory;

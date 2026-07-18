@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""PreToolUse guard for high-confidence unbounded shell output shapes.
+"""PreToolUse guard for high-confidence unbounded shell output shapes (Codex only).
 
-The guard is deliberately enumerated: recursive search (R1), JSONL producers
-(R2), and directory traversal with find (R3).  Shell syntax and descriptor
-flow are delegated to the shared stdlib-only command classifier.
+Scoped to Codex sessions only (#4286): Claude Code is covered by its native
+Bash spill mechanism (ADR-0005 line 62).  The guard is deliberately enumerated:
+recursive search (R1), JSONL producers (R2), and directory traversal with
+find (R3).  Shell syntax and descriptor flow are delegated to the shared
+stdlib-only command classifier.
+
+Pending retirement: the lossless output-boundary mechanism (Phase C, #4286)
+will replace this pre-execution shape classifier entirely.
 
 stdlib-only; no autoskillit imports.
 """
@@ -27,6 +32,10 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     command_verb_and_args,
 )
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
+from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
+    PolicyEvent,
+    render_provenance_prefix,
+)
 
 OUTPUT_BUDGET_DENY_TRIGGER: str = "Unbounded command output is prohibited"
 
@@ -299,6 +308,33 @@ def _classify_command(
     )
 
 
+def _is_codex_session(payload: dict) -> bool:
+    return os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex" or "turn_id" in payload
+
+
+def _suggest_bounded_rewrite(
+    command: str,
+    *,
+    shell_max_inline_bytes: int,
+    small_file_max_bytes: int,
+    cwd: str,
+) -> str | None:
+    cap = min(4000, shell_max_inline_bytes)
+    candidate = f"{command} 2>&1 | head -c {cap}"
+
+    def classify(tokens: list[str]) -> tuple[bool, bool] | None:
+        return _producer_classifier(
+            tokens, cwd=Path(cwd), small_file_max_bytes=small_file_max_bytes
+        )
+
+    disposition = classify_command_output_budget(
+        candidate, classify, max_inline_bytes=shell_max_inline_bytes, cwd=cwd
+    )
+    if disposition is CommandBudgetDisposition.BOUNDED:
+        return candidate
+    return None
+
+
 def main() -> None:
     skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
     if skill_name in _EXEMPT_SKILLS:
@@ -313,25 +349,50 @@ def main() -> None:
     if not isinstance(command, str) or not command:
         sys.exit(0)
 
+    if not _is_codex_session(data):
+        sys.exit(0)
+
     disabled, small_file_max_bytes, shell_max_inline_bytes = _read_policy()
     if disabled:
         sys.exit(0)
 
+    cwd = Path.cwd()
     disposition = _classify_command(
         command,
-        cwd=Path.cwd(),
+        cwd=cwd,
         small_file_max_bytes=small_file_max_bytes,
         shell_max_inline_bytes=shell_max_inline_bytes,
     )
     if disposition is CommandBudgetDisposition.BOUNDED:
         sys.exit(0)
 
-    reason = (
-        f"{OUTPUT_BUDGET_DENY_TRIGGER}: this R1-R3 producer has no proven byte-bounded "
-        "stdout/stderr path. Run `rg -l ... 2>&1 | head -c 4000` for bounded "
-        "discovery, or redirect both descriptors under `.autoskillit/temp/` then read "
-        "slices."
+    provenance = render_provenance_prefix(
+        PolicyEvent(
+            hook_id="output_budget_guard",
+            hook_version=2,
+            event="PreToolUse",
+            decision="deny",
+            reason_code="UNBOUNDED_SHELL_OUTPUT",
+        )
     )
+
+    suggestion = _suggest_bounded_rewrite(
+        command,
+        shell_max_inline_bytes=shell_max_inline_bytes,
+        small_file_max_bytes=small_file_max_bytes,
+        cwd=str(cwd),
+    )
+
+    detail = (
+        f"{OUTPUT_BUDGET_DENY_TRIGGER}: the command has no proven byte-bounded"
+        " output path on the Codex backend."
+    )
+    if suggestion:
+        detail += f" Compliant rewrite of your command: `{suggestion}`."
+    else:
+        detail += " Redirect both descriptors under `.autoskillit/temp/` then read bounded slices."
+
+    reason = f"{provenance} {detail}"
     payload = json.dumps(
         {
             "hookSpecificOutput": {

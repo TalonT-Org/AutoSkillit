@@ -71,6 +71,7 @@ def test_real_command_battery_passes_output_budget_guard(
     env = {key: value for key, value in os.environ.items() if not key.startswith("AUTOSKILLIT_")}
     env.update(
         {
+            "AUTOSKILLIT_AGENT_BACKEND": "codex",
             "AUTOSKILLIT_CWD": str(tmp_path),
             "HOME": str(isolated_home),
             "XDG_CONFIG_HOME": str(isolated_home / ".config"),
@@ -107,6 +108,7 @@ def test_guard_denies_known_hazardous_command(tmp_path: Path) -> None:
     env = {key: value for key, value in os.environ.items() if not key.startswith("AUTOSKILLIT_")}
     env.update(
         {
+            "AUTOSKILLIT_AGENT_BACKEND": "codex",
             "AUTOSKILLIT_CWD": str(tmp_path),
             "HOME": str(isolated_home),
             "XDG_CONFIG_HOME": str(isolated_home / ".config"),

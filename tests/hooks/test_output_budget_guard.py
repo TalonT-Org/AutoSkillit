@@ -52,6 +52,7 @@ def _build_event(command: str, *, run_cmd: bool = False) -> dict:
 def _run_hook(event: dict | None, monkeypatch, *, raw_stdin: str | None = None) -> str:
     from autoskillit.hooks.guards.output_budget_guard import main  # noqa: PLC0415
 
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event)
     monkeypatch.setattr("sys.stdin", io.StringIO(stdin_text))
     output = io.StringIO()
@@ -98,11 +99,15 @@ def test_reads_both_command_input_keys(run_cmd, monkeypatch, tmp_path):
 @pytest.mark.parametrize("command", [INCIDENT_LOG_SEARCH, INCIDENT_RESOLVE_REVIEW_SEARCH])
 @pytest.mark.parametrize("run_cmd", [False, True])
 def test_denies_verbatim_incident_commands_with_concrete_rewrite(command, run_cmd, monkeypatch):
+    from autoskillit.hooks.guards.output_budget_guard import (  # noqa: PLC0415
+        OUTPUT_BUDGET_DENY_TRIGGER,
+    )
+
     output = _run_hook(_build_event(command, run_cmd=run_cmd), monkeypatch)
     assert _is_denied(output)
     reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "2>&1 | head -c 4000" in reason
-    assert ".autoskillit/temp/" in reason
+    assert OUTPUT_BUDGET_DENY_TRIGGER in reason
+    assert reason.startswith("[AutoSkillit")
 
 
 @pytest.mark.parametrize(
@@ -274,10 +279,30 @@ def test_config_disable_and_overlay_priority(monkeypatch, tmp_path):
     assert _is_denied(_run_hook(_build_event("rg pat src/"), monkeypatch))
 
 
-def test_guard_fires_without_headless_gate(monkeypatch, tmp_path):
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+def test_guard_scope_is_codex_only(monkeypatch, tmp_path):
+    """Guard fires only on Codex sessions (#4286)."""
+    from autoskillit.hooks.guards.output_budget_guard import main  # noqa: PLC0415
+
     (tmp_path / "src").mkdir()
-    assert _is_denied(_run_hook(_build_event("rg pat src/"), monkeypatch))
+    event = _build_event("rg pat src/")
+
+    def _raw_run(env_backend, payload_extra=None):
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+        if env_backend is not None:
+            monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", env_backend)
+        data = {**event}
+        if payload_extra:
+            data.update(payload_extra)
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(data)))
+        output = io.StringIO()
+        with pytest.raises(SystemExit), redirect_stdout(output):
+            main()
+        return output.getvalue()
+
+    assert _raw_run(None) == "", "no backend env, no turn_id → allow"
+    assert _raw_run("claude_code") == "", "claude_code backend → allow"
+    assert _is_denied(_raw_run("codex")), "codex backend → deny"
+    assert _is_denied(_raw_run(None, {"turn_id": "turn-1"})), "turn_id in payload → deny"
 
 
 def test_malformed_json_fails_open(monkeypatch):
@@ -293,5 +318,54 @@ def test_deny_reason_has_concrete_rewrite(monkeypatch, tmp_path):
     output = _run_hook(_build_event("rg pat src/"), monkeypatch)
     reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
     assert OUTPUT_BUDGET_DENY_TRIGGER in reason
-    assert "2>&1 | head -c 4000" in reason
-    assert ".autoskillit/temp/" in reason
+    assert "`" in reason
+
+
+def test_deny_reason_carries_provenance(monkeypatch, tmp_path):
+    (tmp_path / "src").mkdir()
+    output = _run_hook(_build_event("rg pat src/"), monkeypatch)
+    reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert reason.startswith("[AutoSkillit hook output_budget_guard v2")
+    assert "R1-R3" not in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "find . -type f 2>&1 | wc -l | head -c 4000",
+        "rg -n pat src/ tests/ 2>&1 | sort | uniq -c | head -c 3000",
+        "jq -c 'keys' x.jsonl 2>&1 | head -1 | head -c 1000",
+        "rg -n pat src/",
+    ],
+)
+def test_suggested_rewrite_is_classifier_validated(command, monkeypatch, tmp_path):
+    from autoskillit.hooks._command_classification import (  # noqa: PLC0415
+        classify_command_output_budget,
+    )
+    from autoskillit.hooks.guards.output_budget_guard import (  # noqa: PLC0415
+        _producer_classifier,
+    )
+
+    (tmp_path / "src").mkdir(exist_ok=True)
+    (tmp_path / "tests").mkdir(exist_ok=True)
+    output = _run_hook(_build_event(command), monkeypatch)
+    assert _is_denied(output)
+    reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
+
+    import re as _re  # noqa: PLC0415
+
+    backtick_match = _re.search(r"`([^`]+)`", reason)
+    if backtick_match:
+        suggestion = backtick_match.group(1)
+
+        def classify(tokens):
+            return _producer_classifier(tokens, cwd=tmp_path, small_file_max_bytes=5000)
+
+        disposition = classify_command_output_budget(
+            suggestion, classify, max_inline_bytes=12000, cwd=str(tmp_path)
+        )
+        from autoskillit.hooks._command_classification import (  # noqa: PLC0415
+            CommandBudgetDisposition,
+        )
+
+        assert disposition is CommandBudgetDisposition.BOUNDED

@@ -105,7 +105,11 @@ class TestHookDefCodexStatus:
 
     def test_enforcement_strength_claude_code_values_are_valid(self):
         for hd in HOOK_REGISTRY:
-            assert hd.enforcement_strength["claude_code"] in ("hard", "soft"), (
+            assert hd.enforcement_strength["claude_code"] in (
+                "hard",
+                "soft",
+                "not-applicable",
+            ), (
                 f"Hook {hd.scripts} has invalid claude_code: "
                 f"{hd.enforcement_strength['claude_code']!r}"
             )

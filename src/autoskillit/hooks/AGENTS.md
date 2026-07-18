@@ -23,6 +23,7 @@ Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS
 | `ingredient_lock_guard.py` | PreToolUse guard script (see guards/AGENTS.md) |
 | `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`) |
 | `_command_classification.py` | Shared stdlib-only command classification primitives for guard scripts (interpreter/wrapper detection, git command classification) |
+| `_policy_event.py` | Typed policy-event formatter for hook provenance messages (stdlib-only) |
 
 ## Architecture Notes
 

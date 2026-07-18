@@ -86,12 +86,12 @@ in `.hook_config.json` for future recipes that legitimately need these operation
 
 ### `output_budget_guard.py`
 **Guarded tools:** `Bash`, `run_cmd`
+**Scope:** Codex sessions only (#4286); Claude Code covered by native Bash spill.
 Denies high-confidence unbounded recursive searches, JSONL reads, and `find`
-operations before execution. Commands can prove bounded output by routing both
-stdout and stderr through a same-pipeline byte cap, redirecting both descriptors
-under `.autoskillit/temp/`, or using a narrowly defined output-free/small-file
-exception. The guard applies to interactive and headless sessions. Set
-`output_budget.guard_enabled: false` to disable it; byte caps are constrained by
+operations before execution on Codex. Deny messages carry typed provenance
+(AutoSkillit identity, hook id, version, decision, reason code) and include a
+classifier-validated rewrite suggestion when one exists. Set
+`output_budget.guard_enabled: false` to disable; byte caps constrained by
 `output_budget.shell_max_inline_bytes`.
 
 ### `generated_file_write_guard.py`

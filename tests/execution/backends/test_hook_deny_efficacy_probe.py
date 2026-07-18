@@ -367,6 +367,9 @@ def test_output_budget_guard_has_non_inert_bash_and_run_cmd_rows(tmp_path: Path)
         hook_output = result["hookSpecificOutput"]
         assert hook_output["permissionDecision"] == "deny"
         reason = hook_output["permissionDecisionReason"]
-        assert "rg -l" in reason
-        assert "head -c 4000" in reason
-        assert ".autoskillit/temp/" in reason
+        assert reason.startswith("[AutoSkillit")
+        from autoskillit.hooks.guards.output_budget_guard import (  # noqa: PLC0415
+            OUTPUT_BUDGET_DENY_TRIGGER,
+        )
+
+        assert OUTPUT_BUDGET_DENY_TRIGGER in reason

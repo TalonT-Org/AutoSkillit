@@ -584,6 +584,7 @@ def _run_output_budget_deny_probe(backend: str, tmp_path: Path) -> _DenyRoundTri
     env, codex_home, claude_config = _isolated_cli_env(tmp_path, workspace)
 
     if backend == "codex":
+        env["AUTOSKILLIT_AGENT_BACKEND"] = "codex"
         config_path = codex_home / "config.toml"
         sync_hooks_to_codex_config(config_path=config_path)
         init_result = subprocess.run(  # noqa: S603
@@ -644,9 +645,12 @@ def _run_output_budget_deny_probe(backend: str, tmp_path: Path) -> _DenyRoundTri
 
 def _assert_output_budget_deny_round_trip(output: _DenyRoundTripOutput) -> None:
     assert _OUTPUT_BUDGET_CANARY_COMMAND in output.transcript
-    assert "rg -l" in output.transcript
-    assert "head -c 4000" in output.transcript
-    assert ".autoskillit/temp/" in output.transcript
+    assert "AutoSkillit" in output.transcript
+    from autoskillit.hooks.guards.output_budget_guard import (  # noqa: PLC0415
+        OUTPUT_BUDGET_DENY_TRIGGER,
+    )
+
+    assert OUTPUT_BUDGET_DENY_TRIGGER in output.transcript
 
 
 def _exercise_output_budget_deny_probe(backend: str, tmp_path: Path) -> None:

@@ -64,7 +64,7 @@ class HookDef:
 # artifact_download_guard                | works-as-is
 # git_ops_guard                          | works-as-is
 # test_runner_guard                      | works-as-is
-# output_budget_guard                    | works-as-is
+# output_budget_guard                    | works-as-is (Codex-only in-script gate, #4286)
 # generated_file_write_guard             | works-as-is
 # write_guard                            | works-as-is
 # planner_result_naming_guard            | works-as-is
@@ -208,7 +208,8 @@ HOOK_REGISTRY: list[HookDef] = [
         exempt_skills=frozenset(),
         codex_status="works-as-is",
         mechanism="deny",
-        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        # In-script Codex gate (#4286): exits 0 on non-Codex sessions.
+        enforcement_strength={"claude_code": "not-applicable", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Write|Edit",

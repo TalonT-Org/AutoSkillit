@@ -49,6 +49,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_reset_resume_gate.py` | Tests for reset_resume_gate.py PreToolUse guard — deny/allow, name→UUID resolution, REFUSED bypass, fail-open |
 | `test_recipe_confirmed_post_hook.py` | Tests for recipe_confirmed_post_hook.py PostToolUse hook — marker write, idempotency, fail-open |
 | `test_quota_guard_state_post_hook.py` | Tests for quota_guard_state_post_hook.py PostToolUse hook — per-session quota-disable marker write/clear, atomic-failure rewrite, session isolation |
+| `test_policy_event.py` | Tests for _policy_event.py typed policy-event formatter — provenance prefix rendering |
 
 ## Architecture Notes
 

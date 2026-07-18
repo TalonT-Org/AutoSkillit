@@ -887,7 +887,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 24,  # +closure_hashing +path_containment +closure_verifier
         "core/types": 32,  # +invariant_registry (INVARIANT_REGISTRY) +closure_report
         "cli": 21,
-        "hooks": 15,  # +recipe_confirmed_post_hook.py, +quota_guard_state_post_hook.py
+        "hooks": 16,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event (#4286)  # noqa: E501
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501

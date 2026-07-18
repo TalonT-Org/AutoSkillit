@@ -132,7 +132,11 @@ def _process_capture_stream(
 
         _os.replace(capture.path, promoted)
         try:
-            _os.fsync(_os.open(str(promoted.parent), _os.O_RDONLY))
+            fd = _os.open(str(promoted.parent), _os.O_RDONLY)
+            try:
+                _os.fsync(fd)
+            finally:
+                _os.close(fd)
         except OSError:
             pass
         complete_str = "true" if capture.complete else "false"

@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 from datetime import date
 from pathlib import Path
+from typing import NamedTuple
 
 import regex as re
 
@@ -33,13 +34,20 @@ CODEX_MIN_VERSION: tuple[int, ...] = (0, 130, 0)
 _CODEX_ALIAS_STALENESS_DAYS: int = 90
 
 
+class CodexVersionResult(NamedTuple):
+    """Result of parsing the Codex CLI version."""
+
+    parsed: tuple[int, int, int] | None
+    skip_reason: str | None
+
+
 def _parse_codex_version(
     *,
     backend: CodingAgentBackend | None = None,
-) -> tuple[int, int, int] | str:
-    """Parse the installed Codex CLI version, returning (major,minor,patch) or a skip reason."""
+) -> CodexVersionResult:
+    """Parse the installed Codex CLI version."""
     if backend is None or not backend.capabilities.version_check_command:
-        return "no version check command"
+        return CodexVersionResult(parsed=None, skip_reason="no version check command")
     try:
         result = subprocess.run(
             backend.capabilities.version_check_command.split(),
@@ -48,44 +56,51 @@ def _parse_codex_version(
             timeout=5,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
-        return f"codex unavailable ({type(exc).__name__})"
+        return CodexVersionResult(
+            parsed=None, skip_reason=f"codex unavailable ({type(exc).__name__})"
+        )
 
     if result.returncode != 0:
-        return f"codex exited {result.returncode}"
+        return CodexVersionResult(parsed=None, skip_reason=f"codex exited {result.returncode}")
 
     for line in (result.stdout + result.stderr).splitlines():
         m = re.search(r"(\d+)\.(\d+)\.(\d+)", line)
         if m:
-            return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            return CodexVersionResult(
+                parsed=(int(m.group(1)), int(m.group(2)), int(m.group(3))),
+                skip_reason=None,
+            )
 
-    return "codex --version output unparseable"
+    return CodexVersionResult(parsed=None, skip_reason="codex --version output unparseable")
 
 
 def _check_codex_version(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
     check_name = "codex_version"
-    parsed = _parse_codex_version(backend=backend)
-    if isinstance(parsed, str):
-        return DoctorResult(Severity.OK, check_name, f"Skipped ({parsed})")
-    if parsed < CODEX_MIN_VERSION:
+    ver = _parse_codex_version(backend=backend)
+    if ver.skip_reason is not None:
+        return DoctorResult(Severity.OK, check_name, f"Skipped ({ver.skip_reason})")
+    assert ver.parsed is not None
+    if ver.parsed < CODEX_MIN_VERSION:
         min_str = ".".join(str(v) for v in CODEX_MIN_VERSION)
-        cur_str = ".".join(str(v) for v in parsed)
+        cur_str = ".".join(str(v) for v in ver.parsed)
         return DoctorResult(
             Severity.WARNING,
             check_name,
             f"Codex CLI {cur_str} is below minimum {min_str}",
         )
-    cur_str = ".".join(str(v) for v in parsed)
+    cur_str = ".".join(str(v) for v in ver.parsed)
     return DoctorResult(Severity.OK, check_name, f"Codex CLI {cur_str}")
 
 
 def _check_codex_limits_verified(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
     check_name = "codex_limits_verified"
-    parsed = _parse_codex_version(backend=backend)
-    if isinstance(parsed, str):
-        return DoctorResult(Severity.OK, check_name, f"Skipped ({parsed})")
-    if parsed > CODEX_LIMITS_LAST_VERIFIED_VERSION:
+    ver = _parse_codex_version(backend=backend)
+    if ver.skip_reason is not None:
+        return DoctorResult(Severity.OK, check_name, f"Skipped ({ver.skip_reason})")
+    assert ver.parsed is not None
+    if ver.parsed > CODEX_LIMITS_LAST_VERIFIED_VERSION:
         pin_str = ".".join(str(v) for v in CODEX_LIMITS_LAST_VERIFIED_VERSION)
-        cur_str = ".".join(str(v) for v in parsed)
+        cur_str = ".".join(str(v) for v in ver.parsed)
         return DoctorResult(
             Severity.WARNING,
             check_name,
@@ -93,7 +108,7 @@ def _check_codex_limits_verified(*, backend: CodingAgentBackend | None = None) -
             f"re-verify CODEX_TOOL_OUTPUT_TOKEN_LIMIT and CODEX_AUTO_COMPACT_LIMIT "
             f"against upstream registry, then bump CODEX_LIMITS_LAST_VERIFIED_VERSION",
         )
-    cur_str = ".".join(str(v) for v in parsed)
+    cur_str = ".".join(str(v) for v in ver.parsed)
     return DoctorResult(Severity.OK, check_name, f"Codex CLI {cur_str} at or below verified pin")
 
 

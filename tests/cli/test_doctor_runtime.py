@@ -90,7 +90,11 @@ class TestCheckCodexLimitsVerified:
         from autoskillit.core import Severity
         from autoskillit.execution.backends.codex import CodexBackend
 
-        monkeypatch.setattr(mod, "_parse_codex_version", lambda *, backend=None: (0, 145, 0))
+        monkeypatch.setattr(
+            mod,
+            "_parse_codex_version",
+            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 145, 0), skip_reason=None),
+        )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.WARNING
         assert "CODEX_TOOL_OUTPUT_TOKEN_LIMIT" in result.message
@@ -103,7 +107,11 @@ class TestCheckCodexLimitsVerified:
         from autoskillit.core import Severity
         from autoskillit.execution.backends.codex import CodexBackend
 
-        monkeypatch.setattr(mod, "_parse_codex_version", lambda *, backend=None: (0, 144, 1))
+        monkeypatch.setattr(
+            mod,
+            "_parse_codex_version",
+            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 144, 1), skip_reason=None),
+        )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.OK
 
@@ -114,7 +122,11 @@ class TestCheckCodexLimitsVerified:
         from autoskillit.core import Severity
         from autoskillit.execution.backends.codex import CodexBackend
 
-        monkeypatch.setattr(mod, "_parse_codex_version", lambda *, backend=None: (0, 135, 0))
+        monkeypatch.setattr(
+            mod,
+            "_parse_codex_version",
+            lambda *, backend=None: mod.CodexVersionResult(parsed=(0, 135, 0), skip_reason=None),
+        )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.OK
 
@@ -128,7 +140,9 @@ class TestCheckCodexLimitsVerified:
         monkeypatch.setattr(
             mod,
             "_parse_codex_version",
-            lambda *, backend=None: "codex unavailable (FileNotFoundError)",
+            lambda *, backend=None: mod.CodexVersionResult(
+                parsed=None, skip_reason="codex unavailable (FileNotFoundError)"
+            ),
         )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.OK

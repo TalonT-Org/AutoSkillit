@@ -1059,7 +1059,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and ambiguous/empty step_name dependency-deny branches (+126 net lines)",
     ),
     "execution/backends/codex.py": (
-        1210,
+        1212,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "

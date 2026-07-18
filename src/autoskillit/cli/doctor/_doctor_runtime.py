@@ -22,8 +22,7 @@ from autoskillit.core import (
     get_logger,
     is_valid_codex_model_id,
 )
-from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
-from autoskillit.execution.backends._codex_config import CODEX_LIMITS_LAST_VERIFIED_VERSION
+from autoskillit.execution import CODEX_LIMITS_LAST_VERIFIED_VERSION, QUOTA_CACHE_SCHEMA_VERSION
 
 from ._doctor_types import DoctorResult
 

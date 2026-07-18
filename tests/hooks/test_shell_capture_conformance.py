@@ -80,6 +80,16 @@ def _run_raw(command: str, tmp_path: Path) -> subprocess.CompletedProcess[bytes]
     )
 
 
+def _run_raw_merged(command: str, tmp_path: Path) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["bash", "-c", command],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        cwd=str(tmp_path),
+        timeout=_TIMEOUT,
+    )
+
+
 def _run_wrapped(command: str, tmp_path: Path) -> subprocess.CompletedProcess[bytes]:
     wrapped = _build_harness(command, str(tmp_path), _INLINE_BYTES)
     return subprocess.run(
@@ -189,6 +199,27 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
         assert artifact_bytes == raw_combined, (
             f"[{label}] artifact content mismatch with raw combined output"
         )
+
+
+def test_interleaved_stdout_stderr_ordering(tmp_path: Path) -> None:
+    """Verify harness preserves interleaved stdout+stderr ordering via 2>&1."""
+    command = "echo out1; echo err1 >&2; echo out2; echo err2 >&2; echo out3"
+    _make_project_dirs(tmp_path)
+
+    raw_merged = _run_raw_merged(command, tmp_path)
+    wrapped = _run_wrapped(command, tmp_path)
+
+    assert wrapped.returncode == raw_merged.returncode == 0
+
+    artifacts = _artifact_files(tmp_path)
+    if artifacts:
+        actual = artifacts[0].read_bytes()
+    else:
+        actual = wrapped.stdout
+
+    assert actual == raw_merged.stdout, (
+        f"Interleaved ordering mismatch.\n  raw_merged={raw_merged.stdout!r}\n  actual={actual!r}"
+    )
 
 
 def test_capture_dir_uncreatable_fail_stops(tmp_path: Path) -> None:

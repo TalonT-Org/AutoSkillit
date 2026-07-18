@@ -1596,8 +1596,7 @@
         "step_name": "resolve_review_integration"
       },
       "capture": {
-        "verdict": "${{ result.verdict }}",
-        "fixes_applied": "${{ result.fixes_applied }}"
+        "verdict": "${{ result.verdict }}"
       },
       "retries": 2,
       "on_exhausted": "register_clone_failure",

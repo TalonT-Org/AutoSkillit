@@ -323,6 +323,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "reset_test_dir": frozenset({"kitchen-core"}),
     "reset_workspace": frozenset({"kitchen-core"}),
     "classify_fix": frozenset({"kitchen-core"}),
+    "commit_files": frozenset({"kitchen-core"}),
     "list_recipes": frozenset({"kitchen-core", "fleet-dispatch"}),
     "load_recipe": frozenset({"kitchen-core", "fleet-dispatch"}),
     "validate_recipe": frozenset({"kitchen-core"}),

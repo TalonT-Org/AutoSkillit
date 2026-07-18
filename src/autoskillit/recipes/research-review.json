@@ -327,8 +327,7 @@
         "output_dir": "."
       },
       "capture": {
-        "review_needs_rerun": "${{ result.needs_rerun }}",
-        "fixes_applied": "${{ result.fixes_applied }}"
+        "review_needs_rerun": "${{ result.needs_rerun }}"
       },
       "retries": 2,
       "on_exhausted": "route_claims_resolve",
@@ -362,8 +361,7 @@
         "output_dir": "."
       },
       "capture": {
-        "claims_needs_rerun": "${{ result.needs_rerun }}",
-        "fixes_applied": "${{ result.fixes_applied }}"
+        "claims_needs_rerun": "${{ result.needs_rerun }}"
       },
       "retries": 2,
       "on_exhausted": "merge_escalations",

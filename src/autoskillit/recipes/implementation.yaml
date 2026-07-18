@@ -1164,7 +1164,6 @@ steps:
       step_name: resolve_review
     capture:
       verdict: ${{ result.verdict }}
-      fixes_applied: ${{ result.fixes_applied }}
     retries: 2
     on_exhausted: release_issue_failure
     on_context_limit: release_issue_failure
@@ -1180,7 +1179,6 @@ steps:
       route: pre_review_rebase
     - route: release_issue_failure
     on_failure: release_issue_failure
-    optional: true
     optional_context_refs:
     - review_mode
     note: 'Runs when review_pr reports issues (verdict=changes_requested). The clone

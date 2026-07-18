@@ -58,23 +58,31 @@ def create_temp_io(
                 ) from exc
 
         _dir = str(capture_dir) if capture_dir is not None else None
-        stdout_file = tempfile.NamedTemporaryFile(
-            mode="w+b",
-            prefix="proc_stdout_",
-            suffix=".tmp",
-            delete=False,
-            dir=_dir,
-        )
+        try:
+            stdout_file = tempfile.NamedTemporaryFile(
+                mode="w+b",
+                prefix="proc_stdout_",
+                suffix=".tmp",
+                delete=False,
+                dir=_dir,
+            )
+        except OSError as exc:
+            raise CaptureSetupError(f"Cannot create stdout temp file in {_dir}: {exc}") from exc
         if not keep_streams and capture_dir is None:
             paths_to_clean.append(Path(stdout_file.name))
 
-        stderr_file = tempfile.NamedTemporaryFile(
-            mode="w+b",
-            prefix="proc_stderr_",
-            suffix=".tmp",
-            delete=False,
-            dir=_dir,
-        )
+        try:
+            stderr_file = tempfile.NamedTemporaryFile(
+                mode="w+b",
+                prefix="proc_stderr_",
+                suffix=".tmp",
+                delete=False,
+                dir=_dir,
+            )
+        except OSError as exc:
+            stdout_file.close()
+            Path(stdout_file.name).unlink(missing_ok=True)
+            raise CaptureSetupError(f"Cannot create stderr temp file in {_dir}: {exc}") from exc
         if not keep_streams and capture_dir is None:
             paths_to_clean.append(Path(stderr_file.name))
 

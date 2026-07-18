@@ -126,6 +126,18 @@ def test_decision_limits_operational_signal_claims(decision_text: str) -> None:
         assert required in signals
 
 
+def test_adr_0005_contains_per_repo_ceiling_and_upgrade_tracking(decision_text: str) -> None:
+    for required in [
+        "codex -c tool_output_token_limit=10000",
+        "CODEX_HOME",
+        "40 KB",
+        "372,000",
+        "CODEX_LIMITS_LAST_VERIFIED_VERSION",
+        "codex_limits_verified",
+    ]:
+        assert required in decision_text
+
+
 def test_decision_ratchets_forward_obligations(decision_text: str) -> None:
     obligations = decision_text.split("## Forward Obligations", maxsplit=1)[1].split(
         "## Consequences", maxsplit=1

@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    CODEX_INTAKE_DISCIPLINE_DIGEST,
+    CODEX_INTAKE_DISCIPLINE_VERSION,
     OUTPUT_DISCIPLINE_BLOCK,
     OUTPUT_DISCIPLINE_BLOCK_SHA256,
     OUTPUT_DISCIPLINE_DIGEST,
@@ -78,3 +80,27 @@ def test_policy_marker_has_no_unmanaged_skill_copies() -> None:
 
 def test_digest_is_safe_for_agent_toml_multiline_literal_guard() -> None:
     assert "'''" not in OUTPUT_DISCIPLINE_DIGEST
+
+
+def test_intake_digest_pins_numeric_rules() -> None:
+    anchors = [
+        "at most 2 files per exec command",
+        "at most 250 lines",
+        "max_output_tokens above 10000",
+        "at most 2 of the listed files",
+        "an index, not required reading",
+        "fresh context",
+        'fork_turns "none"',
+        'defaults to "all"',
+        "explicit narrow brief",
+        "return a summary",
+    ]
+    for anchor in anchors:
+        assert anchor in CODEX_INTAKE_DISCIPLINE_DIGEST, (
+            f"Missing anchor in intake digest: {anchor!r}"
+        )
+    assert f"v{CODEX_INTAKE_DISCIPLINE_VERSION}" in CODEX_INTAKE_DISCIPLINE_DIGEST
+
+
+def test_intake_digest_is_safe_for_agent_toml_multiline_literal() -> None:
+    assert "'''" not in CODEX_INTAKE_DISCIPLINE_DIGEST

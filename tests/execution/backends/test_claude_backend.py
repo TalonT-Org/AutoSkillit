@@ -180,6 +180,18 @@ class TestResumePromptPreservation:
         prompt = self._extract_prompt(spec.cmd)
         assert marker_text in prompt
 
+    def test_claude_resume_cmd_excludes_discipline_digests(self) -> None:
+        from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
+
+        backend = ClaudeCodeBackend()
+        spec = backend.build_resume_cmd(
+            resume_session_id="sess-789",
+            prompt="continue the task",
+        )
+        prompt = self._extract_prompt(spec.cmd)
+        assert OUTPUT_DISCIPLINE_DIGEST not in prompt
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST not in prompt
+
 
 class TestOutputDisciplineDelivery:
     @staticmethod
@@ -198,6 +210,12 @@ class TestOutputDisciplineDelivery:
 
         spec = ClaudeCodeBackend().build_food_truck_cmd(**FOOD_TRUCK_BASE)
         assert OUTPUT_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
+
+    def test_claude_prompt_excludes_intake_discipline(self) -> None:
+        from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST
+
+        spec = ClaudeCodeBackend().build_skill_session_cmd("/plan", **SKILL_BASE)
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
 
 
 class TestBuildSkillSessionCmdConfigAdapter:

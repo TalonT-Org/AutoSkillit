@@ -78,3 +78,58 @@ class TestCheckCodexModelAliasStaleness:
 
         result = _check_codex_model_alias_staleness()
         assert result.check == "codex_model_alias_staleness"
+
+
+class TestCheckCodexLimitsVerified:
+    """Tests for the codex_limits_verified doctor check (Check 39)."""
+
+    def test_codex_limits_verified_warns_when_cli_newer_than_pin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.cli.doctor._doctor_runtime as mod
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(mod, "_parse_codex_version", lambda *, backend=None: (0, 145, 0))
+        result = mod._check_codex_limits_verified(backend=CodexBackend())
+        assert result.severity == Severity.WARNING
+        assert "CODEX_TOOL_OUTPUT_TOKEN_LIMIT" in result.message
+        assert "CODEX_AUTO_COMPACT_LIMIT" in result.message
+
+    def test_codex_limits_verified_ok_at_pinned_version(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.cli.doctor._doctor_runtime as mod
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(mod, "_parse_codex_version", lambda *, backend=None: (0, 144, 1))
+        result = mod._check_codex_limits_verified(backend=CodexBackend())
+        assert result.severity == Severity.OK
+
+    def test_codex_limits_verified_ok_between_min_and_pin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.cli.doctor._doctor_runtime as mod
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(mod, "_parse_codex_version", lambda *, backend=None: (0, 135, 0))
+        result = mod._check_codex_limits_verified(backend=CodexBackend())
+        assert result.severity == Severity.OK
+
+    def test_codex_limits_verified_skips_when_codex_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.cli.doctor._doctor_runtime as mod
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(
+            mod,
+            "_parse_codex_version",
+            lambda *, backend=None: "codex unavailable (FileNotFoundError)",
+        )
+        result = mod._check_codex_limits_verified(backend=CodexBackend())
+        assert result.severity == Severity.OK
+        assert "Skipped" in result.message

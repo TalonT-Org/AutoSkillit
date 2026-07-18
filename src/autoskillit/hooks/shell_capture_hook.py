@@ -95,8 +95,8 @@ def _build_harness(command: str, cwd: str, inline_bytes: int) -> str:
     )
     marker_line = (
         f"  printf '\\n%s\\n' '{marker_prefix}"
-        " full output $__as_sz bytes"
-        " -> $__as_f sha256=$__as_sha complete=true]'"
+        " full output '\"$__as_sz\"' bytes"
+        " -> '\"$__as_f\"' sha256='\"$__as_sha\"' complete=true]'"
     )
 
     return f"""{_HARNESS_SENTINEL}

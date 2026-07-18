@@ -483,6 +483,8 @@ output tokens:
 needs_rerun = {true|false}
 verdict = {real_fix|already_green}
 fixes_applied = {N}
+accept_count = {N}
+fix_failures = {N}
 ```
 
 - **`needs_rerun = true`**: At least one finding was classified as `rerun_required` in

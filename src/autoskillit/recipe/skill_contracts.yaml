@@ -1914,16 +1914,24 @@ skills:
         - ci_only_failure
     - name: fixes_applied
       type: integer
+    - name: accept_count
+      type: integer
+    - name: fix_failures
+      type: integer
     expected_output_patterns:
     - "needs_rerun[ \\t]*=[ \\t]*(true|false)"
     pattern_examples:
-    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%"
-    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
-    - "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\n%%ORDER_UP%%"
-    - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\n%%ORDER_UP%%"
+    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\naccept_count = 2\nfix_failures = 0\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"
+    outcome_invariants:
+    - when: "accept_count > 0"
+      require: "fix_failures == 0"
+    success_qualifiers:
+    - when: "accept_count > 0 and fixes_applied == 0 and fix_failures == 0"
+      qualifier: "accepted_without_changes"
 
   resolve-research-review:
     inputs:
@@ -1945,16 +1953,24 @@ skills:
         - ci_only_failure
     - name: fixes_applied
       type: integer
+    - name: accept_count
+      type: integer
+    - name: fix_failures
+      type: integer
     expected_output_patterns:
     - "needs_rerun[ \\t]*=[ \\t]*(true|false)"
     pattern_examples:
-    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\n%%ORDER_UP%%"
-    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\n%%ORDER_UP%%"
-    - "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\n%%ORDER_UP%%"
-    - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\n%%ORDER_UP%%"
+    - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\naccept_count = 2\nfix_failures = 0\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"
+    outcome_invariants:
+    - when: "accept_count > 0"
+      require: "fix_failures == 0"
+    success_qualifiers:
+    - when: "accept_count > 0 and fixes_applied == 0 and fix_failures == 0"
+      qualifier: "accepted_without_changes"
 
   vis-lens-always-on:
     inputs:

@@ -26,13 +26,14 @@ from autoskillit.execution.headless._headless_outcome import (
     parse_outcome_fields,
 )
 from autoskillit.execution.headless._headless_result import _apply_post_session_adjudication
-from autoskillit.recipe._contracts_types import (
+from autoskillit.recipe import (
     OutcomeInvariantEntry,
     SkillContract,
     SkillOutput,
     SuccessQualifierEntry,
+    get_skill_contract,
+    load_bundled_manifest,
 )
-from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]

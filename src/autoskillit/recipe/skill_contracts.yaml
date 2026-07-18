@@ -1923,6 +1923,8 @@ skills:
     pattern_examples:
     - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\naccept_count = 2\nfix_failures = 0\n%%ORDER_UP%%"
     - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
+    - "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"
@@ -1962,6 +1964,8 @@ skills:
     pattern_examples:
     - "needs_rerun = true\nverdict = real_fix\nfixes_applied = 2\naccept_count = 2\nfix_failures = 0\n%%ORDER_UP%%"
     - "needs_rerun = false\nverdict = already_green\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
+    - "needs_rerun = true\nverdict = flake_suspected\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
+    - "needs_rerun = false\nverdict = ci_only_failure\nfixes_applied = 0\naccept_count = 0\nfix_failures = 0\n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"

@@ -44,7 +44,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         skill_info = ctx.skill_resolver.resolve(skill_name)
         if skill_info is None:
             continue
-        if skill_info.invalid_reason:
+        if getattr(skill_info, "invalid_reason", None):
             findings.append(
                 make_finding(
                     rule_name="backend-incompatible-skill",

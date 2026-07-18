@@ -41,17 +41,40 @@ def parse_outcome_fields(
     result_text: str,
     contract: SkillContract,
 ) -> dict[str, int | str]:
-    """Extract declared output fields from session result text.
+    """Extract declared output fields from the trailing contiguous block.
 
     Only fields declared in the contract's ``outputs`` are extracted.
+    Walks backward from the end of the text, skipping non-field trailing
+    lines (gate tags, blank lines), then collects the contiguous run of
+    ``KEY = value`` lines. This ensures earlier prose containing field-like
+    syntax cannot overwrite the authoritative final output block.
+
     Integer-typed fields are parsed to int; malformed integer values are
     recorded as the raw string (the invariant evaluator treats missing/
     malformed fields as violations when referenced by a ``require``).
     """
     declared = {o.name: o.type for o in contract.outputs}
+    lines = result_text.splitlines()
+    field_lines: list[str] = []
+    collecting = False
+    for line in reversed(lines):
+        if not collecting:
+            if _FIELD_RE.match(line):
+                collecting = True
+                field_lines.append(line)
+            # else: skip trailing non-field lines (gate tags, blanks)
+        else:
+            if _FIELD_RE.match(line):
+                field_lines.append(line)
+            else:
+                break
+
     parsed: dict[str, int | str] = {}
-    for match in _FIELD_RE.finditer(result_text):
-        name, raw_value = match.group(1), match.group(2).strip()
+    for line in field_lines:
+        m = _FIELD_RE.match(line)
+        if not m:
+            continue
+        name, raw_value = m.group(1), m.group(2).strip()
         if name not in declared:
             continue
         if declared[name] == "integer":

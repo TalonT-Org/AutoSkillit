@@ -332,6 +332,47 @@ class TestParseOutcomeFields:
         assert fields["fixes_applied"] == 4
         assert fields["fix_failures"] == 0
 
+    def test_adversarial_prose_before_block_does_not_overwrite(self) -> None:
+        """Trailing-block parser ignores field-like lines in earlier prose."""
+        result_text = (
+            "I set verdict = already_green because there was nothing to fix.\n"
+            "The accept_count = 2 findings were all rejected.\n"
+            "\n"
+            "resolve-review complete\n"
+            "Fixes applied: 3\n"
+            "\n"
+            "verdict = real_fix\n"
+            "fixes_applied = 3\n"
+            "accept_count = 4\n"
+            "fix_failures = 0\n"
+            "%%ORDER_UP%%"
+        )
+        fields = parse_outcome_fields(result_text, self._contract())
+        assert fields["verdict"] == "real_fix"
+        assert fields["fixes_applied"] == 3
+        assert fields["accept_count"] == 4
+        assert fields["fix_failures"] == 0
+
+    def test_trailing_gate_tag_skipped(self) -> None:
+        """Gate tags after the field block don't break contiguous detection."""
+        result_text = (
+            "verdict = real_fix\n"
+            "fixes_applied = 1\n"
+            "accept_count = 1\n"
+            "fix_failures = 0\n"
+            "%%ORDER_UP::abc123%%"
+        )
+        fields = parse_outcome_fields(result_text, self._contract())
+        assert fields["verdict"] == "real_fix"
+        assert fields["fixes_applied"] == 1
+
+    def test_fields_only_no_trailing_tag(self) -> None:
+        """Parser works when no gate tag follows the field block."""
+        result_text = "verdict = already_green\nfixes_applied = 0\n"
+        fields = parse_outcome_fields(result_text, self._contract())
+        assert fields["verdict"] == "already_green"
+        assert fields["fixes_applied"] == 0
+
 
 # ---------------------------------------------------------------------------
 # RECT-016: token-emission sync — SKILL.md must declare every invariant field

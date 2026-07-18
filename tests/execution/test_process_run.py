@@ -453,3 +453,52 @@ class TestCaptureMode:
                 timeout=10,
                 capture_dir=blocker / "nested",
             )
+
+
+class TestCaptureModeSync:
+    """Behavioral capture-mode tests for run_managed_sync."""
+
+    def test_sync_capture_mode_retains_stream_files(self, tmp_path):
+        capture_dir = tmp_path / "capture"
+        script = tmp_path / "write.py"
+        script.write_text(CLEAN_OUTPUT_SCRIPT)
+        result = run_managed_sync(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+            capture_dir=capture_dir,
+        )
+        assert result.stdout_path is not None
+        assert result.stderr_path is not None
+        assert result.stdout_path.exists()
+        assert result.stderr_path.exists()
+        assert result.stdout == ""
+        assert result.stderr == ""
+        content = result.stdout_path.read_text()
+        for i in range(10):
+            assert f"line {i}" in content
+
+    def test_sync_capture_dir_uncreatable_raises_capture_setup_error(self, tmp_path):
+        from autoskillit.execution.process._process_io import CaptureSetupError
+
+        blocker = tmp_path / "blocker"
+        blocker.write_text("file")
+        with pytest.raises(CaptureSetupError):
+            run_managed_sync(
+                [sys.executable, "-c", "pass"],
+                cwd=tmp_path,
+                timeout=10,
+                capture_dir=blocker / "nested",
+            )
+
+    def test_sync_default_mode_clears_output(self, tmp_path):
+        script = tmp_path / "write.py"
+        script.write_text(CLEAN_OUTPUT_SCRIPT)
+        result = run_managed_sync(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+        )
+        assert result.stdout_path is None
+        assert result.stderr_path is None
+        assert "line 0" in result.stdout

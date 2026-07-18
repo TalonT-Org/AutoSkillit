@@ -565,6 +565,9 @@ class SkillResult:
     ndjson_drift: NdjsonDriftOutcome = field(default_factory=NdjsonDriftOutcome)
     """NDJSON parser vocabulary drift counters — populated by Codex sessions."""
     completion_required: bool = False
+    outcome_fields: dict[str, int | str] | None = None
+    outcome_invariant_violated: bool = False
+    outcome_qualifier: str | None = None
 
     def to_json(self) -> str:
         data: dict[str, Any] = {

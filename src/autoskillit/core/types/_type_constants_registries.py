@@ -433,6 +433,10 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
         codex_status="not-applicable",
         worker_routable=True,
     ),
+    "commit_files": SkillCapabilityDef(
+        description="commit_files MCP tool — server-side git stage/commit",
+        codex_status="works-as-is",
+    ),
     "git_metadata_write": SkillCapabilityDef(
         description=(
             "Requires .git/ metadata write access (git commit, git rebase, "

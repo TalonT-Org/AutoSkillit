@@ -66,6 +66,7 @@ from autoskillit.execution.headless._headless_result import _build_skill_result
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
     from autoskillit.pipeline.context import ToolContext
+    from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
 
@@ -116,6 +117,7 @@ async def _execute_claude_headless(
     on_session_id_resolved: Callable[[str], None] | None = None,
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
+    skill_contract: SkillContract | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -444,6 +446,7 @@ async def _execute_claude_headless(
             readonly_skill=_readonly_skill,
             closure_spec=closure_spec,
             closure_report_root=closure_report_root,
+            skill_contract=skill_contract,
         )
 
         if (
@@ -512,30 +515,7 @@ async def _execute_claude_headless(
         or bool(step_name)
         or skill_result.token_usage is not None
     ):
-        from autoskillit.core import resolve_skill_name as _rsn
-        from autoskillit.execution.headless._headless_outcome import (
-            evaluate_success_qualifier,
-            parse_outcome_fields,
-        )
         from autoskillit.execution.session_log import flush_session_log
-        from autoskillit.recipe._contracts_manifest import (
-            get_skill_contract as _get_sc,
-        )
-        from autoskillit.recipe._contracts_manifest import (
-            load_bundled_manifest as _load_manifest,
-        )
-
-        _sc_name = _rsn(skill_command) if skill_command else ""
-        _sc = _get_sc(_sc_name, _load_manifest()) if _sc_name else None
-        _outcome_fields: dict[str, int | str] | None = None
-        _outcome_qualifier: str | None = None
-        _outcome_violated = skill_result.retry_reason == RetryReason.OUTCOME_INVARIANT
-        if _sc is not None and _sc.outputs:
-            _outcome_fields = parse_outcome_fields(skill_result.result, _sc)
-            if skill_result.success and _sc.success_qualifiers:
-                _outcome_qualifier = evaluate_success_qualifier(
-                    _outcome_fields, _sc.success_qualifiers
-                )
 
         try:
             flush_session_log(
@@ -611,9 +591,9 @@ async def _execute_claude_headless(
                 backend=cast(Literal["claude-code", "codex"], _step_backend.name),
                 channel_b_capable=_step_backend.capabilities.channel_b_capable,
                 backend_override_source=backend_override_source,
-                outcome_fields=_outcome_fields,
-                outcome_invariant_violated=_outcome_violated,
-                outcome_qualifier=_outcome_qualifier,
+                outcome_fields=skill_result.outcome_fields,
+                outcome_invariant_violated=skill_result.outcome_invariant_violated,
+                outcome_qualifier=skill_result.outcome_qualifier,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

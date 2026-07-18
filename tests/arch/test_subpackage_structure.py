@@ -109,6 +109,7 @@ class TestExecutionSubpackages:
             "_headless_execute",
             "_headless_git",
             "_headless_helpers",
+            "_headless_outcome",
             "_headless_path_tokens",
             "_headless_recovery",
             "_headless_result",

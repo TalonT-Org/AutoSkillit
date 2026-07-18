@@ -269,9 +269,9 @@ def test_bundled_recipe_count_is_15() -> None:
     assert recipes == expected, f"Recipes drifted: {recipes}"
 
 
-def test_retry_reason_value_count_is_16() -> None:
+def test_retry_reason_value_count_is_17() -> None:
     values = _retry_reason_values()
-    assert len(values) == 16, f"RetryReason has {len(values)} values: {values}"
+    assert len(values) == 17, f"RetryReason has {len(values)} values: {values}"
 
 
 def test_semantic_rule_family_count_is_current() -> None:

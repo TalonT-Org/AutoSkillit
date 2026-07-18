@@ -92,6 +92,7 @@ from autoskillit.execution.recording import RecordingSubprocessRunner
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
+    from autoskillit.recipe._contracts_types import SkillContract
 
 __all__ = [
     "DefaultHeadlessExecutor",
@@ -148,6 +149,7 @@ async def run_headless_core(
     network_access: bool = False,
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
+    skill_contract: SkillContract | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -263,6 +265,7 @@ async def run_headless_core(
             backend_override_source=backend_override_source,
             closure_spec=closure_spec,
             closure_report_root=closure_report_root,
+            skill_contract=skill_contract,
         )
 
 
@@ -314,6 +317,7 @@ class DefaultHeadlessExecutor:
         network_access: bool = False,
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
+        skill_contract: SkillContract | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -359,6 +363,7 @@ class DefaultHeadlessExecutor:
             network_access=network_access,
             closure_spec=closure_spec,
             closure_report_root=closure_report_root,
+            skill_contract=skill_contract,
         )
 
     async def dispatch_food_truck(

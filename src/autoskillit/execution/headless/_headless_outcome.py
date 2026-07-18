@@ -8,8 +8,9 @@ invariants and success qualifiers against parsed fields.
 from __future__ import annotations
 
 import operator
-import re
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import get_logger
 from autoskillit.recipe._contracts_types import (

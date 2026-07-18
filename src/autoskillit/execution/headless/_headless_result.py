@@ -69,10 +69,10 @@ from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
     _compute_success,
 )
-from autoskillit.recipe._contracts_types import SkillContract
 
 if TYPE_CHECKING:
     from autoskillit.core import AuditLog, CodingAgentBackend, SubprocessResult
+    from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
 
@@ -234,23 +234,10 @@ def _build_skill_result(
     readonly_skill: bool = False,
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
+    skill_contract: SkillContract | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
-
-    skill_contract: SkillContract | None = None
-    if skill_command:
-        from autoskillit.core import resolve_skill_name
-        from autoskillit.recipe._contracts_manifest import (
-            get_skill_contract as _get_contract,
-        )
-        from autoskillit.recipe._contracts_manifest import (
-            load_bundled_manifest,
-        )
-
-        _sname = resolve_skill_name(skill_command)
-        if _sname:
-            skill_contract = _get_contract(_sname, load_bundled_manifest())
 
     branch = (
         "idle_stall"
@@ -898,6 +885,24 @@ def _build_skill_result(
             retry_reason=RetryReason.COMPLETED_NO_FLUSH,
         )
         sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
+
+    if skill_contract is not None and skill_contract.outputs:
+        _parsed_fields = parse_outcome_fields(sr.result, skill_contract)
+        _qualifier: str | None = None
+        if sr.success and skill_contract.success_qualifiers:
+            from autoskillit.execution.headless._headless_outcome import (
+                evaluate_success_qualifier,
+            )
+
+            _qualifier = evaluate_success_qualifier(
+                _parsed_fields, skill_contract.success_qualifiers
+            )
+        sr = dataclasses.replace(
+            sr,
+            outcome_fields=_parsed_fields if _parsed_fields else None,
+            outcome_invariant_violated=sr.retry_reason == RetryReason.OUTCOME_INVARIANT,
+            outcome_qualifier=_qualifier,
+        )
 
     logger.debug(
         "build_skill_result_exit",

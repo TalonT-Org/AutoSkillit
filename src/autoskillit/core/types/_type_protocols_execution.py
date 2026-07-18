@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
 from ._type_results import (
@@ -84,6 +84,7 @@ class HeadlessExecutor(Protocol):
         network_access: bool = False,
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
+        skill_contract: Any | None = None,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

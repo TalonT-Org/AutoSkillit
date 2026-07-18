@@ -327,14 +327,14 @@
         "output_dir": "."
       },
       "capture": {
-        "review_needs_rerun": "${{ result.needs_rerun }}"
+        "review_needs_rerun": "${{ result.needs_rerun }}",
+        "fixes_applied": "${{ result.fixes_applied }}"
       },
       "retries": 2,
       "on_exhausted": "route_claims_resolve",
       "on_context_limit": "route_claims_resolve",
       "on_success": "route_claims_resolve",
-      "on_failure": "route_claims_resolve",
-      "skip_when_false": "inputs.backend_supports_git_write"
+      "on_failure": "route_claims_resolve"
     },
     "route_claims_resolve": {
       "action": "route",
@@ -362,14 +362,14 @@
         "output_dir": "."
       },
       "capture": {
-        "claims_needs_rerun": "${{ result.needs_rerun }}"
+        "claims_needs_rerun": "${{ result.needs_rerun }}",
+        "fixes_applied": "${{ result.fixes_applied }}"
       },
       "retries": 2,
       "on_exhausted": "merge_escalations",
       "on_context_limit": "merge_escalations",
       "on_success": "merge_escalations",
-      "on_failure": "merge_escalations",
-      "skip_when_false": "inputs.backend_supports_git_write"
+      "on_failure": "merge_escalations"
     },
     "merge_escalations": {
       "action": "route",

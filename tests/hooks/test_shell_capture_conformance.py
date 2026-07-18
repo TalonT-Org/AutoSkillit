@@ -9,6 +9,7 @@ output lands inline vs. in an artifact file.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -43,6 +44,15 @@ _CORPUS = [
     ("true_cmd", "true"),
     ("self_bg", "{ sleep 0.2; echo late; } & echo started"),
     ("large_output", "seq 1 200000"),
+    ("rg_sort", "rg pat . 2>&1 | sort | uniq -c | head -c 3000"),
+    ("jq_keys", "jq -c 'keys' x.jsonl 2>&1 | head -1 | head -c 1000"),
+    ("heredoc_no_newline", "cat <<'END'\nsome text\nEND"),
+    ("trailing_backslash", "echo one \\"),
+    ("self_signal", "echo pre; kill -TERM $$"),
+    (
+        "unicode_heavy",
+        "python3 -c \"import sys; sys.stdout.buffer.write(b'\\xc3\\xa9' * 8000)\"",
+    ),
     ("nested_wrap", None),  # filled in below once _build_harness is available
 ]
 
@@ -50,6 +60,7 @@ _CORPUS = [
 def _make_project_dirs(tmp_path: Path) -> None:
     (tmp_path / _CAPTURE_SUBDIR).mkdir(parents=True, exist_ok=True)
     (tmp_path / ".autoskillit" / "temp" / "investigate").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "x.jsonl").write_text('{"a":1}\n{"b":2}\n')
 
 
 def _capture_dir(tmp_path: Path) -> Path:
@@ -87,6 +98,11 @@ _CORPUS[-1] = ("nested_wrap", _build_harness(_NESTED_WRAP_INNER, "/tmp", _INLINE
 
 @pytest.mark.parametrize("label,command", _CORPUS, ids=[row[0] for row in _CORPUS])
 def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
+    if label == "rg_sort" and shutil.which("rg") is None:
+        pytest.skip("rg not available")
+    if label == "jq_keys" and shutil.which("jq") is None:
+        pytest.skip("jq not available")
+
     _make_project_dirs(tmp_path)
 
     raw = _run_raw(command, tmp_path)
@@ -138,6 +154,28 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
     if label == "errexit":
         assert raw.returncode == 1
         assert wrapped.returncode == 1
+
+    if label == "self_signal":
+        # subprocess.run reports signal-terminated processes as -signum
+        # (SIGTERM -> -15) rather than the 128+signum shells report via $?.
+        assert raw.returncode == -15
+        assert wrapped.returncode == -15
+        if artifacts:
+            assert b"pre" in artifacts[0].read_bytes()
+        return
+
+    if label == "trailing_backslash":
+        return
+
+    if label == "unicode_heavy":
+        assert artifacts, f"[{label}] expected an artifact for large unicode output"
+        assert len(artifacts) == 1, f"[{label}] expected exactly one artifact, found {artifacts}"
+        artifact_bytes = artifacts[0].read_bytes()
+        assert artifact_bytes == raw_combined, (
+            f"[{label}] artifact content mismatch with raw combined output"
+        )
+        artifact_bytes.decode("utf-8")
+        return
 
     if len(raw_combined) <= _INLINE_BYTES:
         assert wrapped.stdout == raw_combined, (

@@ -473,3 +473,23 @@ async def test_run_cmd_signal_death_marks_incomplete(tool_ctx_kitchen_open, tmp_
     assert data["success"] is False
     assert "signal" in data["error"].lower()
     assert "complete=false" in data["stdout"]
+
+
+def test_summarize_capture_never_loads_full_content(tmp_path):
+    """Verify summarize_capture returns bounded slices without materializing the full file."""
+    from autoskillit.core import SpillSpec
+
+    large_file = tmp_path / "big_output.tmp"
+    content = b"HEAD-MARKER\n" + (b"x" * 200_000) + b"\nTAIL-MARKER\n"
+    large_file.write_bytes(content)
+
+    spec = SpillSpec(inline_max_chars=1000, head_chars=500, tail_chars=500)
+    result = summarize_capture(large_file, spec, complete=True)
+
+    assert result.inline_text is None
+    assert result.total_bytes == len(content)
+    assert len(result.head) <= spec.head_chars
+    assert len(result.tail) <= spec.tail_chars
+    assert "HEAD-MARKER" in result.head
+    assert "TAIL-MARKER" in result.tail
+    assert len(result.sha256) == 64

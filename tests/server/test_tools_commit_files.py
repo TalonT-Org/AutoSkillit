@@ -471,3 +471,20 @@ class TestCommitFilesTiming:
         await commit_files(paths=["a.py"], message="msg", cwd=str(wt))
 
         assert tool_ctx.timing_log.get_report() == []
+
+    @pytest.mark.anyio
+    async def test_pre_commit_config_present_but_binary_missing_returns_error(
+        self, tool_ctx, tmp_path, monkeypatch
+    ):
+        wt = tmp_path / "wt"
+        wt.mkdir()
+        (wt / ".pre-commit-config.yaml").write_text("repos: []")
+        (wt / "a.py").write_text("x = 1\n")
+        tool_ctx.runner.push(_make_result(0, "", ""))
+
+        monkeypatch.setattr(shutil, "which", lambda *a, **kw: None)
+
+        result = json.loads(await commit_files(paths=["a.py"], message="msg", cwd=str(wt)))
+        assert result["success"] is False
+        assert "pre-commit" in result["error"]
+        assert "binary" in result["error"] or "not found" in result["error"]

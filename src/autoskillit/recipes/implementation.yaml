@@ -1164,6 +1164,7 @@ steps:
       step_name: resolve_review
     capture:
       verdict: ${{ result.verdict }}
+      fixes_applied: ${{ result.fixes_applied }}
     retries: 2
     on_exhausted: release_issue_failure
     on_context_limit: release_issue_failure

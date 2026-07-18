@@ -1555,6 +1555,7 @@ steps:
       step_name: resolve_review_integration
     capture:
       verdict: ${{ result.verdict }}
+      fixes_applied: ${{ result.fixes_applied }}
     retries: 2
     on_exhausted: register_clone_failure
     on_context_limit: pre_review_rebase_integration

@@ -696,6 +696,13 @@ async def commit_files(
                         hook_cmd = [uv_bin, "run", "pre-commit", "run", "--files"] + paths
                     elif pre_commit_bin:
                         hook_cmd = [pre_commit_bin, "run", "--files"] + paths
+                    else:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "error": "pre-commit config exists but no pre-commit binary found",
+                            }
+                        )
 
                 if hook_cmd is not None:
                     rc, stdout, stderr = await _run_subprocess(hook_cmd, cwd=cwd, timeout=120)

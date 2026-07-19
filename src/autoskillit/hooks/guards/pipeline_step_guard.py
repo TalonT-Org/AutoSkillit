@@ -28,24 +28,33 @@ _SUFFIX_RE = re.compile(r"-\d+$")
 
 
 def _resolve_order_id_from_kitchen(tracker_dir: Path, kitchen_id: str) -> str:
-    """Select tracker by internal kitchen_id field (same rule as the server)."""
+    """Select tracker by internal kitchen_id field (same rule as the server).
+
+    Skips the self-named file (``{kitchen_id}.json``) from the candidate scan,
+    matching ``resolve_tracker_order_id`` in ``tools_pipeline_tracker.py``.
+    When exactly one non-self candidate exists, returns that candidate's stem.
+    When no non-self candidates exist, returns ``kitchen_id`` (the self-named
+    file is the implicit default). Returns ``""`` on ambiguity (>1 candidate).
+    """
     if not tracker_dir.is_dir():
         return ""
-    candidates = []
+    active: set[str] = set()
     for f in tracker_dir.iterdir():
         if f.suffix != ".json" or f.name.startswith("."):
+            continue
+        if f.stem == kitchen_id:
             continue
         try:
             data = json.loads(f.read_text())
         except (json.JSONDecodeError, OSError):
             continue
         if data.get("kitchen_id") == kitchen_id:
-            candidates.append(f.stem)
-    if kitchen_id in candidates:
-        return kitchen_id
-    if len(candidates) == 1:
-        return candidates[0]
-    return ""
+            active.add(f.stem)
+    if len(active) > 1:
+        return ""
+    if len(active) == 1:
+        return next(iter(active))
+    return kitchen_id
 
 
 def main() -> None:

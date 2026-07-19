@@ -57,6 +57,7 @@ def _setup_project(tmp_path, tool_ctx_kitchen_open):
     (temp_dir / ".hook_config.json").write_text("{}")
     tool_ctx_kitchen_open.project_dir = tmp_path
     tool_ctx_kitchen_open.active_recipe_steps = {"rectify": {}, "review_approach": {}}
+    tool_ctx_kitchen_open.input_contract_resolver = None
 
 
 def _read_tracker(tmp_path, kitchen_id="test-kitchen"):

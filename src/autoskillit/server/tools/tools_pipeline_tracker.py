@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol
 
 import regex as re
 
@@ -26,6 +27,11 @@ logger = get_logger(__name__)
 _STEP_SUFFIX_RE = re.compile(r"-\d+$")
 
 
+class _TrackerCtx(Protocol):
+    kitchen_id: str
+    project_dir: Path
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedTracker:
     """Successfully resolved tracker file."""
@@ -39,10 +45,11 @@ class ResolutionRefusal:
     """Tracker resolution failed — carry a reason for the caller to wrap."""
 
     reason: str
+    multi_pipeline: bool = False
 
 
 def resolve_tracker_order_id(
-    tool_ctx: object, order_id: str
+    tool_ctx: _TrackerCtx, order_id: str
 ) -> ResolvedTracker | ResolutionRefusal:
     """Resolve the effective tracker order_id with three-tier precedence.
 
@@ -55,8 +62,8 @@ def resolve_tracker_order_id(
     which tracker file to target.
     """
     effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-    kitchen_id: str = getattr(tool_ctx, "kitchen_id", "")
-    project_dir: Path = getattr(tool_ctx, "project_dir", Path("."))
+    kitchen_id = tool_ctx.kitchen_id
+    project_dir = tool_ctx.project_dir
 
     if not effective_oid:
         if not kitchen_id:
@@ -80,7 +87,8 @@ def resolve_tracker_order_id(
                     f"multiple pipelines are active under this kitchen "
                     f"({sorted(active)}). Pass order_id explicitly to scope "
                     "the dependency check."
-                )
+                ),
+                multi_pipeline=True,
             )
         effective_oid = kitchen_id
     tracker_path = _pipeline_tracker_path(project_dir, effective_oid)
@@ -296,7 +304,7 @@ def _handle_status(tracker_path: Path, effective_pipeline_id: str) -> str:
     )
 
 
-def _handle_complete(ctx: object, effective_pipeline_id: str, step_name: str) -> str:
+def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: str) -> str:
     if not step_name:
         return json.dumps(
             {
@@ -349,10 +357,19 @@ def mark_step_complete(
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
-        import fcntl
+    except OSError as exc:
+        return {
+            "success": False,
+            "is_error": True,
+            "error": f"mark_step_complete: failed to open lock file: {exc}",
+        }
 
+    import fcntl
+
+    try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
     except OSError as exc:
+        os.close(lock_fd)
         return {
             "success": False,
             "is_error": True,
@@ -422,7 +439,5 @@ def mark_step_complete(
             )
         return result
     finally:
-        import fcntl
-
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         os.close(lock_fd)

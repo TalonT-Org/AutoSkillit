@@ -171,7 +171,7 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     ctx = _get_ctx()
     resolved = resolve_tracker_order_id(ctx, order_id)
     if isinstance(resolved, ResolutionRefusal):
-        if "multiple pipelines" in resolved.reason:
+        if resolved.multi_pipeline:
             return json.dumps(
                 deny_envelope(
                     f"{DEPENDENCY_DENY_PREFIX}: {resolved.reason}",

@@ -347,6 +347,76 @@ def test_same_process_reopen_replaces_registry_entry(monkeypatch, tmp_path):
     assert not (tracker_dir / "K1.json").exists()
 
 
+def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_path):
+    """open_kitchen wires sweep_stale_markers() which removes aged kitchen_state markers."""
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "state"))
+    state_dir = tmp_path / "state" / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    stale_marker = state_dir / "stale-session.json"
+    stale_marker.write_text(
+        json.dumps(
+            {
+                "session_id": "stale-session",
+                "opened_at": (datetime.now(UTC) - timedelta(hours=25)).isoformat(),
+                "recipe_name": "test",
+                "marker_version": 1,
+            }
+        )
+    )
+    fresh_marker = state_dir / "fresh-session.json"
+    fresh_marker.write_text(
+        json.dumps(
+            {
+                "session_id": "fresh-session",
+                "opened_at": datetime.now(UTC).isoformat(),
+                "recipe_name": "test",
+                "marker_version": 1,
+            }
+        )
+    )
+
+    from autoskillit.core import sweep_stale_markers
+
+    deleted = sweep_stale_markers(ttl_hours=24)
+
+    assert deleted == 1
+    assert not stale_marker.exists()
+    assert fresh_marker.exists()
+
+
+def test_deferred_recall_open_still_prunes(monkeypatch, tmp_path):
+    """The deferred-recall open_kitchen path must prune stale trackers.
+
+    When gate_infrastructure_ready is already True, open_kitchen skips
+    _open_kitchen_handler entirely and takes the deferred-recall path.
+    prune_stale_kitchen_state must still execute on that path.
+    """
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    _write_tracker(
+        tracker_dir, "dead-kitchen", initialized_at=datetime.now(UTC) - timedelta(hours=2)
+    )
+    _write_registry(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "kitchen_id": "dead-kitchen",
+                "pid": 99999,
+                "create_time": 1234567890.0,
+                "project_path": str(tmp_path),
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        ],
+    )
+
+    assert (tracker_dir / "dead-kitchen.json").exists()
+
+    prune_stale_kitchen_state(tmp_path, "live-kitchen")
+
+    assert not (tracker_dir / "dead-kitchen.json").exists()
+
+
 async def test_close_kitchen_removes_overlay_lock_sidecar(monkeypatch, tmp_path):
     """The overlay lock sidecar file must be removed alongside the overlay file."""
     monkeypatch.chdir(tmp_path)

@@ -98,4 +98,4 @@ class TestRecordPipelineStepComplete:
             await record_pipeline_step(pipeline_id="", op="complete", step_name="rectify")
         )
         assert result["success"] is False
-        assert "cannot resolve pipeline tracker" in result["error"]
+        assert "pipeline_id is required" in result["error"]

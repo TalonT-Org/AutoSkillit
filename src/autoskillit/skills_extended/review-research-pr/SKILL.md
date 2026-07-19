@@ -20,12 +20,13 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 
 ## Arguments
 
-`/autoskillit:review-research-pr <worktree-path-or-feature-branch> <base-branch> [hunk_ranges_path=<path>] [valid_lines_path=<path>]`
+`/autoskillit:review-research-pr <worktree-path-or-feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [valid_lines_path=<path>]`
 
 - **worktree-path-or-feature-branch** — Either an absolute path to the research worktree
   (preferred; skill derives the feature branch from `git rev-parse --abbrev-ref HEAD`)
   or the feature branch name directly
 - **base-branch** — The base branch the PR targets (e.g., "main")
+- **annotated_diff_path** (optional) — absolute path to a pre-computed annotated diff file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 - **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided, loaded in Step 2.7 instead of parsing from the diff inline.
 - **valid_lines_path** (optional) — absolute path to a pre-computed valid lines JSON file (produced by `annotate_pr_diff` run_python step). Contains exact `{filepath: [line_numbers]}` set. When provided, enables exact set-membership validation in Step 4.
 
@@ -48,6 +49,7 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
   results are valid outcomes for research PRs (do not flag them)
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Embed diff content inline in subagent prompts — always pass by path and instruct subagents to Read
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
@@ -226,8 +228,12 @@ Subagent prompt template (all 8 dimensions):
 > `+` or context line's marker in the same hunk.
 >
 > If no issues found, return an empty array [].
-> Annotated diff content (each line prefixed with [LNNN] markers):
-> {annotated_diff_content}
+> Read the annotated diff file at path: {annotated_diff_path}
+> Each line is prefixed with [LNNN] markers. Use the [LNNN] number as the `line` value.
+
+If `annotated_diff_path` is unset or the file does not exist, state "No annotated diff is
+available for this run — evaluate the diff without [LNNN] anchors and approximate `line` from
+context" instead of emitting a reference to a nonexistent path.
 
 ### Step 4: Aggregate and Deduplicate Findings
 

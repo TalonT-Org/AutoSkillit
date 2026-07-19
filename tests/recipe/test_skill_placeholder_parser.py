@@ -2,7 +2,11 @@
 
 import pytest
 
-from autoskillit.recipe._skill_placeholder_parser import extract_validation_rule_block
+from autoskillit.recipe._skill_placeholder_parser import (
+    extract_blockquote_placeholders,
+    extract_blockquote_sections,
+    extract_validation_rule_block,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -55,3 +59,96 @@ def test_extract_validation_rule_block_different_rule() -> None:
     assert "V1" not in block
     assert "V2" in block
     assert "V3" not in block
+
+
+# --- extract_blockquote_sections ---
+
+
+def test_extract_blockquote_sections_identifies_contiguous_blocks() -> None:
+    """A 3+ line contiguous blockquote run is yielded with the nearest step heading."""
+    sample = (
+        "### Step 3: Dispatch subagent\n"
+        "\n"
+        "> Review the diff.\n"
+        "> Report findings.\n"
+        "> Be concise.\n"
+        "\n"
+        "Trailing prose.\n"
+    )
+    blocks = extract_blockquote_sections(sample)
+    assert len(blocks) == 1
+    heading, text = blocks[0]
+    assert heading == "Step 3"
+    assert "Review the diff." in text
+    assert "Report findings." in text
+    assert "Be concise." in text
+
+
+def test_extract_blockquote_sections_excludes_single_line_callouts() -> None:
+    """Single-line `>` callouts without content signals are stylistic, not prompts."""
+    sample = "### Step 1: Note\n\n> **Note:** This is a stylistic callout.\n\nBody prose.\n"
+    blocks = extract_blockquote_sections(sample)
+    assert blocks == []
+
+
+def test_extract_blockquote_sections_includes_two_line_prompt_with_banned_var() -> None:
+    """A 2-line blockquote containing a {*_content} placeholder IS returned (content signal)."""
+    sample = (
+        "### Step 2: Inline content\n\n> Review {annotated_diff_content}.\n> Report findings.\n"
+    )
+    blocks = extract_blockquote_sections(sample)
+    assert len(blocks) == 1
+    heading, text = blocks[0]
+    assert heading == "Step 2"
+    assert "{annotated_diff_content}" in text
+
+
+def test_extract_blockquote_sections_strips_prefix() -> None:
+    """Returned text has the `> ` prefix stripped from each line."""
+    sample = "### Step 4\n\n> First line.\n> Second line.\n> Third line.\n"
+    blocks = extract_blockquote_sections(sample)
+    assert len(blocks) == 1
+    _, text = blocks[0]
+    for line in text.splitlines():
+        assert not line.startswith(">"), f"Prefix not stripped: {line!r}"
+
+
+def test_extract_blockquote_sections_trailing_block_at_eof() -> None:
+    """A blockquote that runs to end of file is flushed, not silently dropped."""
+    sample = "### Step 5\n\n> Line one.\n> Line two.\n> Line three."
+    blocks = extract_blockquote_sections(sample)
+    assert len(blocks) == 1
+    heading, text = blocks[0]
+    assert heading == "Step 5"
+    assert "Line one." in text
+    assert "Line two." in text
+    assert "Line three." in text
+
+
+def test_extract_blockquote_sections_tuple_order_heading_first() -> None:
+    """First tuple element is the step heading, second is the body text."""
+    sample = "### Step 7\n\n> First.\n> Second.\n> Third.\n"
+    blocks = extract_blockquote_sections(sample)
+    assert len(blocks) == 1
+    heading, body = blocks[0]
+    assert heading == "Step 7"
+    assert isinstance(heading, str)
+    assert isinstance(body, str)
+    assert "First." in body
+
+
+# --- extract_blockquote_placeholders ---
+
+
+def test_extract_blockquote_placeholders_extracts_content_suffix_vars() -> None:
+    """Given a blockquote with {annotated_diff_content} and {diff_content}, return both names."""
+    text = "Review the following:\n{annotated_diff_content}\nand {diff_content} here.\n"
+    placeholders = extract_blockquote_placeholders(text)
+    assert placeholders == {"annotated_diff_content", "diff_content"}
+
+
+def test_extract_blockquote_placeholders_ignores_non_content_vars() -> None:
+    """A blockquote with only {*_path} vars (no {*_content}) returns an empty set."""
+    text = "Read {annotated_diff_path}.\nInspect {diff_path}.\n"
+    placeholders = extract_blockquote_placeholders(text)
+    assert placeholders == set()

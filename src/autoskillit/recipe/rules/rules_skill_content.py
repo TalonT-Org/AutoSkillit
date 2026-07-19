@@ -17,6 +17,8 @@ from autoskillit.recipe._skill_placeholder_parser import (
     _VRULE_RE,
     extract_bash_blocks,
     extract_bash_placeholders,
+    extract_blockquote_placeholders,
+    extract_blockquote_sections,
     extract_declared_ingredients,
     extract_graphql_blocks,
     extract_python_blocks,
@@ -959,4 +961,73 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
                     )
                 )
 
+    return findings
+
+
+_BANNED_BLOCKQUOTE_VARS: frozenset[str] = frozenset(
+    {
+        "annotated_diff_content",
+        "diff_content",
+        "section_diff_content",
+    }
+)
+
+
+@semantic_rule(
+    name="inline-content-in-subagent-prompt",
+    description=(
+        "A SKILL.md blockquoted subagent prompt references a banned *_content "
+        "variable. Subagent prompts must use *_path variables and instruct the "
+        "subagent to Read the file, per the inline-content-in-subagent-prompt "
+        "architectural rule (PR #3651)."
+    ),
+)
+def _check_inline_content_in_subagent_prompt(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire WARNING when a run_skill step's SKILL.md uses banned *_content placeholders.
+
+    Detection scans blockquote subagent prompts for ``{*_content}`` variables
+    that are never defined as ingredients. The naming convention is wrong:
+    subagent prompts must reference content by PATH (``*_path``) with the
+    subagent reading the file. Inline content placeholders are dangling and
+    will be silently dropped by the recipe framework, leaving the subagent
+    prompt incomplete.
+    """
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue  # unknown-skill-command rule handles missing skills
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue  # file deleted or unreadable between resolution and read
+
+        for step_context, block_text in extract_blockquote_sections(content):
+            banned_found = extract_blockquote_placeholders(block_text) & _BANNED_BLOCKQUOTE_VARS
+            if not banned_found:
+                continue
+            for banned_var in sorted(banned_found):
+                context_label = f"step {step_context!r}" if step_context else "no step heading"
+                findings.append(
+                    make_finding(
+                        rule_name="inline-content-in-subagent-prompt",
+                        step_name=step_name,
+                        message=(
+                            f"Skill '{skill_name}' blockquote subagent prompt in {context_label} "
+                            f"references banned {{placeholder}} {{{banned_var}}}. "
+                            f"Subagent prompts must use a *_path variable (e.g., "
+                            f"{{{banned_var.removesuffix('_content')}_path}}) and instruct the "
+                            f"subagent to Read the file. Inline content placeholders are "
+                            f"never populated and produce incomplete prompts."
+                        ),
+                    )
+                )
     return findings

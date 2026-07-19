@@ -202,13 +202,18 @@ def filter_findings(
     """Partition findings into filtered (in-range) and unpostable (out-of-range).
 
     When valid_lines is provided, uses exact set-membership for validation instead
-    of hunk-span interval checking. When both are absent, all findings pass through.
+    of hunk-span interval checking. When both are absent, all findings pass through
+    except those with null/zero line numbers, which route to unpostable.
     Sets all_unpostable=True when total findings > 0 and filtered is empty.
     """
     if not findings:
         return FilterResult()
 
     if not valid_ranges and valid_lines is None:
+        good = [f for f in findings if f.get("line") and f["line"] != 0]
+        bad = [f for f in findings if not f.get("line") or f["line"] == 0]
+        if bad:
+            return FilterResult(filtered=good, unpostable=bad, all_unpostable=not good)
         return FilterResult(filtered=list(findings))
 
     filtered: list[dict] = []
@@ -216,7 +221,10 @@ def filter_findings(
 
     for finding in findings:
         file_path = finding.get("file", "")
-        line_num = finding.get("line", 0)
+        line_num = finding.get("line") or 0
+        if line_num == 0:
+            unpostable.append(finding)
+            continue
 
         if valid_lines is not None:
             valid_set = set(valid_lines.get(file_path, []))

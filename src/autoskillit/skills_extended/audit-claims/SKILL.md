@@ -51,6 +51,7 @@ comments and emits a verdict for recipe routing.
 - Generate findings for `experimental` claims — they are self-evidencing by definition
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Embed diff content inline in subagent prompts — always pass by path and instruct subagents to Read
 
 **ALWAYS:**
 - Use the explicit `pr_url` argument instead of re-discovering via `gh pr list`
@@ -119,6 +120,14 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 Divide the diff by top-level markdown section: `## Executive Summary`, `## Results`,
 `## Methodology`, `## Discussion`, `## Limitations`, and any other top-level `##` section.
 
+After dividing the diff by section, write each section's diff chunk to its own file at
+`{{AUTOSKILLIT_TEMP}}/audit-claims/section_diff_{section_slug}_{pr_number}.txt` where
+`{section_slug}` is the section name lowercased with spaces replaced by underscores (e.g.
+`executive_summary`, `results`, `methodology`). Use `jq -n` or the Write tool — do not use
+inline Python one-liners or heredoc scripts with `open()` (these are blocked by the sandbox,
+per the existing convention at Step 1 of this file). Then bind `{section_diff_path}` to that
+section's file path when building each subagent's prompt.
+
 Launch one subagent via `Agent(model="sonnet")` per section containing `+` diff lines.
 Each subagent returns a JSON array of extracted claims:
 
@@ -154,8 +163,7 @@ Subagent prompt template:
 > - comparative: compares to prior work, published results, or baselines
 >
 > If no claims found in this section, return an empty array [].
-> Diff content for section [{section_name}]:
-> {section_diff_content}
+> Read the section diff from: {section_diff_path}
 
 Aggregate all extracted claims from all subagents. Save to
 `{{AUTOSKILLIT_TEMP}}/audit-claims/claims_{pr_number}.json`. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
@@ -189,6 +197,12 @@ returns findings:
 - `comparative` — requires attribution; "comparable to state-of-the-art" without citation
   is `critical`
 
+When building each subagent's prompt, bind:
+- `{claims_json_path}` to `{{AUTOSKILLIT_TEMP}}/audit-claims/claims_{pr_number}.json`
+  (the file written in Phase 1 above)
+- `{diff_file_path}` to `{{AUTOSKILLIT_TEMP}}/audit-claims/diff_{pr_number}.txt`
+  (the file written in Step 2 above)
+
 Subagent prompt template:
 
 > You are checking citation evidence for [{claim_type}] claims in a GitHub PR diff.
@@ -203,13 +217,17 @@ Subagent prompt template:
 > remove claim).
 >
 > Evidence rules for [{claim_type}]:
-> {evidence_rules_for_type}
+> Apply the rule for your claim type as enumerated under "Evidence rules per claim type"
+> earlier in this skill (skipped entirely for `experimental` claims; warning for missing
+> `external` citations or for specific numeric comparisons in `external` claims being
+> critical; warning for missing `methodological` rationale; critical for unattributed
+> `comparative` claims such as "comparable to state-of-the-art" without citation).
 >
 > If all claims have adequate evidence, return an empty array [].
 > Claims to check:
-> {claims_json}
+> Read the claims file at: {claims_json_path}
 > Full PR diff:
-> {diff_content}
+> Read the diff file at: {diff_file_path}
 
 Save findings to `{{AUTOSKILLIT_TEMP}}/audit-claims/findings_{pr_number}.json`. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
@@ -410,6 +428,7 @@ Exit 1 only for unrecoverable tool-level errors.
 ```
 {{AUTOSKILLIT_TEMP}}/audit-claims/
 ├── diff_{pr_number}.txt
+├── section_diff_{section_slug}_{pr_number}.txt  (Phase 1 intermediate, one per section)
 ├── claims_{pr_number}.json          (Phase 1 output)
 ├── findings_{pr_number}.json        (Phase 2 output)
 └── summary_{pr_number}_{ts}.md

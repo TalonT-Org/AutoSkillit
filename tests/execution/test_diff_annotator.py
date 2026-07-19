@@ -191,6 +191,62 @@ class TestFilterFindings:
         result = filter_findings([], {"f.py": [(10, 20)]})
         assert result.all_unpostable is False
 
+    def test_filter_findings_null_line_routes_to_unpostable(self):
+        """A finding with `"line": None` goes to `unpostable` and does not raise
+        (with non-empty `valid_ranges`)."""
+        ranges = {"f.py": [(10, 20)]}
+        findings = [{"file": "f.py", "line": None, "message": "null line"}]
+        result = filter_findings(findings, ranges)
+        assert len(result.filtered) == 0
+        assert len(result.unpostable) == 1
+        assert result.unpostable[0]["line"] is None
+        assert result.all_unpostable is True
+
+    def test_filter_findings_missing_line_key_routes_to_unpostable(self):
+        """A finding without a `line` key goes to `unpostable`."""
+        ranges = {"f.py": [(10, 20)]}
+        findings = [{"file": "f.py", "message": "missing line"}]
+        result = filter_findings(findings, ranges)
+        assert len(result.filtered) == 0
+        assert len(result.unpostable) == 1
+        assert "line" not in result.unpostable[0]
+
+    def test_filter_findings_zero_line_routes_to_unpostable(self):
+        """A finding with `"line": 0` goes to `unpostable` (valid lines start at 1)."""
+        ranges = {"f.py": [(10, 20)]}
+        findings = [{"file": "f.py", "line": 0, "message": "zero line"}]
+        result = filter_findings(findings, ranges)
+        assert len(result.filtered) == 0
+        assert len(result.unpostable) == 1
+        assert result.unpostable[0]["line"] == 0
+
+    def test_filter_findings_null_line_not_in_filtered_when_validation_absent(self):
+        """A finding with `"line": None` is NOT placed in `filtered` even when both
+        `valid_ranges={}` and `valid_lines=None` (the early-return branch)."""
+        findings = [
+            {"file": "f.py", "line": None, "message": "null line"},
+            {"file": "f.py", "line": 15, "message": "valid"},
+        ]
+        result = filter_findings(findings, {})
+        assert len(result.filtered) == 1
+        assert result.filtered[0]["line"] == 15
+        assert len(result.unpostable) == 1
+        assert result.unpostable[0]["line"] is None
+        assert result.all_unpostable is False
+
+    def test_filter_findings_null_line_hunk_range_branch_no_typeerror(self):
+        """A finding with `"line": None` against the hunk-range interval branch
+        (`valid_ranges={"f.py": [(10, 20)]}`, `valid_lines=None`) routes to
+        `unpostable` without raising `TypeError`. Exercises the
+        `start <= line_num <= end` comparison path that previously crashed on
+        `None`."""
+        ranges = {"f.py": [(10, 20)]}
+        findings = [{"file": "f.py", "line": None, "message": "null line"}]
+        result = filter_findings(findings, ranges)
+        assert len(result.filtered) == 0
+        assert len(result.unpostable) == 1
+        assert result.unpostable[0]["line"] is None
+
 
 # --- End-to-end ---
 

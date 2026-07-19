@@ -215,3 +215,72 @@ def extract_validation_rule_block(content: str, rule_label: str) -> str | None:
         if m.group(1) == rule_label:
             return m.group(0).strip()
     return None
+
+
+_CONTENT_VAR_SIGNAL_RE = re.compile(r"\{[a-z_]+_content\}")
+
+
+def extract_blockquote_sections(content: str) -> list[tuple[str, str]]:
+    """Extract blockquote sections from SKILL.md content that are subagent prompts.
+
+    Returns ``(step_context, block_text)`` tuples where ``step_context`` is the
+    nearest ``### `` heading above the block and ``block_text`` is the joined
+    blockquote content with the ``> `` prefix stripped.
+
+    Inclusion criteria — a contiguous blockquote run is yielded if ANY of:
+
+    - It contains at least 3 contiguous ``> `` lines (likely a subagent prompt)
+    - It contains a ``{*_content}`` placeholder (content signal — even 1-2 line
+      blocks with these are subagent-prompt-shaped, not stylistic callouts)
+
+    Single-line ``>`` callouts without content signals (e.g., ``> **Note:**``)
+    are excluded — those are stylistic, not subagent prompts.
+
+    A trailing blockquote that runs to end of file is flushed (not silently
+    dropped).
+    """
+    sections: list[tuple[str, str]] = []
+    current_heading = ""
+    buf: list[str] = []
+
+    def flush() -> None:
+        if not buf:
+            return
+        joined = "\n".join(buf)
+        has_content_signal = bool(_CONTENT_VAR_SIGNAL_RE.search(joined))
+        if len(buf) >= 3 or has_content_signal:
+            sections.append((current_heading, joined))
+        buf.clear()
+
+    for line in content.splitlines():
+        heading_match = _STEP_RE.match(line)
+        if heading_match:
+            flush()
+            current_heading = heading_match.group(1)
+            continue
+        if line.startswith("> "):
+            buf.append(line[2:])
+        elif line.strip() == ">":
+            buf.append("")
+        elif line.startswith(">"):
+            # '>' without space (rare) — still blockquote, strip the '>'
+            buf.append(line[1:].lstrip())
+        else:
+            flush()
+
+    flush()  # trailing blockquote at EOF
+    return sections
+
+
+_BANNED_CONTENT_SUFFIX_RE = re.compile(r"\{([a-z_]+_content)\}")
+
+
+def extract_blockquote_placeholders(blockquote_text: str) -> set[str]:
+    """Extract ``{identifier}`` tokens from blockquote text matching ``*_content``.
+
+    The naming convention is the key signal: ``*_content`` in a subagent-facing
+    blockquote is always wrong — should be ``*_path`` with the subagent reading
+    the file. Other placeholder patterns (``*_path``, ``*_name``, etc.) are
+    intentionally excluded; those are valid.
+    """
+    return {m.group(1) for m in _BANNED_CONTENT_SUFFIX_RE.finditer(blockquote_text)}

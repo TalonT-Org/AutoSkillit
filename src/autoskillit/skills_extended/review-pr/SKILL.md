@@ -50,6 +50,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 - Specify `subagent_type` when spawning audit subagents — these are ephemeral agents, not registered agent definitions. Use `Agent(model="sonnet")` exactly as shown, with no `subagent_type` parameter.
+- Embed diff content inline in subagent prompts — always pass by path and instruct subagents to Read
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
@@ -410,8 +411,9 @@ Subagent prompt template (dimensions 1–6):
 > `+` or context line's marker in the same hunk.
 >
 > If no issues found, return an empty array [].
-> Annotated diff content (each line prefixed with [LNNN] markers):
-> {annotated_diff_content}
+> Read the annotated diff file at path: {annotated_diff_path}
+> Each line in the file is prefixed with [LNNN] markers indicating the GitHub diff line number.
+> Use the [LNNN] number as the `line` value in your findings JSON.
 >
 > Prior resolved findings (DO NOT RE-RAISE — these have been addressed by resolve-review):
 > {json_list_of_prior_resolved_findings or "[]"}
@@ -442,7 +444,11 @@ Subagent prompt template (dimensions 1–6):
 > are repetitive.
 
 Pass `prior_resolved_findings` and `prior_unresolved_findings` (both as JSON arrays) into each
-subagent prompt via template substitution, same as `annotated_diff_content`.
+subagent prompt via template substitution. The annotated diff is available at `annotated_diff_path`
+— instruct subagents to Read it. If `annotated_diff_path` is unset or the file does not exist,
+state "No annotated diff is available for this run — evaluate the diff without [LNNN] anchors and
+approximate `line` from context" instead of emitting a reference to a nonexistent path. This
+mirrors the existing graceful-degradation fallback for `DISPATCH_AGENTS` documented in Step 2.9.
 
 Subagent prompt template (dimension 7 — deletion_regression, only when `deletion_context` is non-null):
 
@@ -455,7 +461,7 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 > Deleted symbols: {deletion_context.deleted_symbols}
 >
 > PR diff:
-> {diff_content}
+> Read the raw diff file at path: {diff_file_path}
 >
 > Instructions:
 > - For each deleted file in the deletion context: check if the diff adds or recreates it

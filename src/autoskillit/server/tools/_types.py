@@ -24,6 +24,7 @@ __all__ = [
     "ToolFailureEnvelope",
     "server_failure_envelope",
     "input_failure_envelope",
+    "deny_envelope",
     "_validate_result",
 ]
 

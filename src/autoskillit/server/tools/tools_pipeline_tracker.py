@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._types import deny_envelope
 
 logger = get_logger(__name__)
 
@@ -188,14 +190,11 @@ async def record_pipeline_step(
             return _handle_complete(ctx, effective_pipeline_id, step_name)
 
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": (
-                    f"record_pipeline_step: unknown op '{op}'. "
-                    "Use 'init', 'status', or 'complete'."
-                ),
-            }
+            deny_envelope(
+                f"record_pipeline_step: unknown op '{op}'. Use 'init', 'status', or 'complete'.",
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
         )
     except Exception:
         logger.exception("record_pipeline_step_unexpected_error")
@@ -307,34 +306,30 @@ def _handle_status(tracker_path: Path, effective_pipeline_id: str) -> str:
 def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: str) -> str:
     if not step_name:
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": "record_pipeline_step: step_name is required for op='complete'.",
-            }
+            deny_envelope(
+                "record_pipeline_step: step_name is required for op='complete'.",
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
         )
 
     resolved = resolve_tracker_order_id(ctx, effective_pipeline_id)
     if isinstance(resolved, ResolutionRefusal):
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": (
-                    f"record_pipeline_step: cannot resolve pipeline tracker: {resolved.reason}"
-                ),
-            }
+            deny_envelope(
+                f"record_pipeline_step: cannot resolve pipeline tracker: {resolved.reason}",
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
         )
     if not resolved.path.exists():
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": (
-                    f"record_pipeline_step: no tracker found for pipeline "
-                    f"'{resolved.order_id}'. Initialize with op='init' first."
-                ),
-            }
+            deny_envelope(
+                f"record_pipeline_step: no tracker found for pipeline "
+                f"'{resolved.order_id}'. Initialize with op='init' first.",
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
         )
 
     result = mark_step_complete(resolved.path, step_name, resolved.order_id)
@@ -363,8 +358,6 @@ def mark_step_complete(
             "is_error": True,
             "error": f"mark_step_complete: failed to open lock file: {exc}",
         }
-
-    import fcntl
 
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)

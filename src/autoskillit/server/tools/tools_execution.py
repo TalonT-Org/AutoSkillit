@@ -195,15 +195,23 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     if not unmet:
         return None
     dep_status = {d: steps.get(d, {}).get("status", "unknown") for d in unmet}
+    from autoskillit.server.tools._types import deny_envelope
+
     return json.dumps(
-        {
-            "success": False,
-            "is_error": True,
-            "error": (
+        deny_envelope(
+            (
                 f"{DEPENDENCY_DENY_PREFIX}: Step '{step_name}' requires {unmet} to complete "
                 f"first. Pipeline '{resolved.order_id}': {dep_status}."
             ),
-        }
+            stage="preflight:pipeline_deps",
+            retriable=True,
+            recovery=(
+                "This denial is deterministic but may reflect stale tracker state. "
+                "Call record_pipeline_step(op='status') to inspect the current tracker. "
+                "If the prerequisite step genuinely has not run, run it first. "
+                "If the tracker is stale, escalate with the status output."
+            ),
+        )
     )
 
 

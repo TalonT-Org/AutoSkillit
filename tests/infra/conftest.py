@@ -31,6 +31,9 @@ def _run_skill_json_producer() -> dict:
     for r in (r1, r2):
         result.update(json.loads(r.to_json()))
     result["pipeline_tracker"] = {"step": "rectify", "order_id": "test-id", "status": "complete"}
+    result["error"] = "DEPENDENCY UNMET: test deny envelope"
+    result["stage"] = "preflight:pipeline_deps"
+    result["retriable"] = True
     return result
 
 

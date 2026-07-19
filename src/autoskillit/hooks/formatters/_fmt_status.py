@@ -156,20 +156,18 @@ def _fmt_clone_repo(data: dict, _pipeline: bool) -> str:
 
 
 _FMT_TOKEN_SUMMARY_RENDERED: frozenset[str] = frozenset(
-    {"steps", "total", "mcp_responses", "model_totals"}
+    {"steps", "total", "mcp_responses", "model_totals", "error"}
 )
 _FMT_TOKEN_SUMMARY_SUPPRESSED: frozenset[str] = frozenset(
     {
         "success",  # only emitted from exception guard paths, not accessed by the formatter
-        "error",  # only emitted from exception guard paths, not accessed by the formatter
     }
 )
 
-_FMT_TIMING_SUMMARY_RENDERED: frozenset[str] = frozenset({"steps", "total"})
+_FMT_TIMING_SUMMARY_RENDERED: frozenset[str] = frozenset({"steps", "total", "error"})
 _FMT_TIMING_SUMMARY_SUPPRESSED: frozenset[str] = frozenset(
     {
         "success",  # only emitted from exception guard paths, not accessed by the formatter
-        "error",  # only emitted from exception guard paths, not accessed by the formatter
     }
 )
 

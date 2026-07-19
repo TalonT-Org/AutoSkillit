@@ -219,6 +219,7 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "provider_used",
         "provider_fallback",
         "pipeline_tracker",
+        "error",
     }
 )
 _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
@@ -244,6 +245,8 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "completion_required",
         "ndjson_unknown_event_count",
         "ndjson_unknown_item_count",
+        "stage",
+        "retriable",
     }
 )
 
@@ -255,9 +258,10 @@ _FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset(
         "stderr",
         "stdout_artifact_path",
         "stderr_artifact_path",
+        "error",
     }
 )
-_FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset({"error"})
+_FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset()
 
 _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
     {

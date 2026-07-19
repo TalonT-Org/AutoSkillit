@@ -927,6 +927,25 @@ configuration that should be invisible.
 
 ---
 
+## DEPENDENCY UNMET PROTOCOL — MANDATORY
+
+When `run_skill` returns with `DEPENDENCY UNMET` in the error text:
+
+1. **Read the error carefully** — it names the unmet prerequisite steps and their status.
+2. **Inspect tracker state**: Call `record_pipeline_step(op="status")` to get the
+   current tracker. Do NOT blind-retry the denied call.
+3. **Distinguish two cases**:
+   - **Prerequisite genuinely incomplete**: The prerequisite step has not run. Execute
+     it via `run_skill` with the prerequisite's `step_name`, then retry the original call.
+   - **Stale tracker state**: The prerequisite completed but the tracker was not updated
+     (e.g. prior session ended without close_kitchen). Escalate with the status output —
+     do NOT use `record_pipeline_step(op="complete")` to paper over it unless the operator
+     explicitly instructs you to.
+4. **Never classify DEPENDENCY UNMET as an opaque tool failure.** It is a deterministic
+   denial with a structured recovery path — not a transient error.
+
+---
+
 ## RECORD PIPELINE STEP COMPLETE — OPERATOR REPAIR ONLY
 
 `record_pipeline_step(op="complete", pipeline_id="...", step_name="...")` marks

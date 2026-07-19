@@ -281,6 +281,10 @@ HOOK DENIAL COMPLIANCE — ALL HOOKS:
 SPECIFIC HOOK DENIAL PATTERNS:
 - "QUOTA WAIT REQUIRED": Temporary — sleep and retry (see QUOTA DENIAL ROUTING below).
 - "REVIEW LOOP REQUIRED": Call check_review_loop before retrying wait_for_ci/enqueue_pr.
+- "DEPENDENCY UNMET": A prerequisite pipeline step has not completed. \
+Call record_pipeline_step(op="status") to inspect tracker state. \
+Run the missing prerequisite, or escalate if the tracker is stale. \
+Never blind-retry the denied call.
 - All other denials: Follow the corrective instruction in the deny reason text.
 
 QUOTA DENIAL ROUTING — run_skill only (check BEFORE on_failure):

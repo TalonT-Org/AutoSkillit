@@ -290,15 +290,17 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
         return with_spill(_fmt_tool_exception(data, pipeline))
 
     if short_name in _UNFORMATTED_TOOLS:
-        return with_spill(
-            _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
-        )
+        rendered = _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
+    elif (formatter := _FORMATTERS.get(short_name)) is not None:
+        rendered = formatter(data, pipeline)
+    else:
+        rendered = _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
 
-    formatter = _FORMATTERS.get(short_name)
-    if formatter is not None:
-        return with_spill(formatter(data, pipeline))
+    error_text = data.get("error", "")
+    if error_text and isinstance(error_text, str) and error_text not in rendered:
+        rendered = f"{rendered}\nerror: {error_text}"
 
-    return with_spill(_fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed))
+    return with_spill(rendered)
 
 
 def main() -> None:

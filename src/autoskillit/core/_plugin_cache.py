@@ -148,6 +148,16 @@ class _InstallLock:
             self._lock_file = None
 
 
+def kitchen_entry_alive(entry: dict) -> bool:
+    """Return True if an active_kitchens.json entry's process is still running."""
+    pid = entry.get("pid")
+    if not isinstance(pid, int):
+        return False
+    create_time = entry.get("create_time")
+    stored: float | None = float(create_time) if isinstance(create_time, (int, float)) else None
+    return _pid_alive(pid, stored_create_time=stored)
+
+
 def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
     try:
         os.kill(pid, 0)

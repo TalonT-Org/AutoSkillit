@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,7 +11,11 @@ from autoskillit.core.types._type_plugin_source import DirectInstall
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.server import _state
 from autoskillit.server._factory import make_context
-from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler, _open_kitchen_handler
+from autoskillit.server.tools.tools_kitchen import (
+    _close_kitchen_handler,
+    _open_kitchen_handler,
+    prune_stale_kitchen_state,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -168,3 +174,132 @@ async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, t
         _close_kitchen_handler()
         await asyncio.sleep(0)
         assert second_task.cancelled() or second_task.done()
+
+
+def _write_tracker(tracker_dir, kitchen_id, *, initialized_at=None):
+    tracker_dir.mkdir(parents=True, exist_ok=True)
+    tracker_data = {
+        "kitchen_id": kitchen_id,
+        "pipeline_id": kitchen_id,
+        "initialized_at": (initialized_at or datetime.now(UTC)).isoformat(),
+        "steps": {},
+        "dependencies": {},
+    }
+    (tracker_dir / f"{kitchen_id}.json").write_text(json.dumps(tracker_data))
+
+
+def _write_registry(monkeypatch, tmp_path, entries):
+    from autoskillit.core._plugin_cache import write_versioned_json
+
+    registry_path = tmp_path / "active_kitchens.json"
+    monkeypatch.setattr(
+        "autoskillit.core._plugin_cache._active_kitchens_path",
+        lambda: registry_path,
+    )
+    monkeypatch.setattr(
+        "autoskillit.core._plugin_cache._active_kitchens_lock",
+        lambda: tmp_path / "active_kitchens.lock",
+    )
+    write_versioned_json(registry_path, {"kitchens": entries}, schema_version=1)
+    return registry_path
+
+
+def test_open_without_close_prunes_dead_kitchen_tracker(monkeypatch, tmp_path):
+    """A tracker whose registered PID is dead must be reaped on next open."""
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    _write_tracker(tracker_dir, "K1")
+    _write_registry(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "kitchen_id": "K1",
+                "pid": 99999,
+                "create_time": 1234567890.0,
+                "project_path": str(tmp_path),
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        ],
+    )
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert not (tracker_dir / "K1.json").exists()
+
+
+def test_open_preserves_live_foreign_kitchen_tracker(monkeypatch, tmp_path):
+    """A tracker whose registered PID is alive (a different kitchen) must survive."""
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    _write_tracker(tracker_dir, "K1")
+    _write_registry(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "kitchen_id": "K1",
+                "pid": os.getpid(),
+                "create_time": None,
+                "project_path": str(tmp_path),
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        ],
+    )
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert (tracker_dir / "K1.json").exists()
+
+
+def test_open_preserves_young_orphan_tracker(monkeypatch, tmp_path):
+    """A tracker with no registry entry at all, but within the grace window, survives."""
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC))
+    _write_registry(monkeypatch, tmp_path, [])
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert (tracker_dir / "K1.json").exists()
+
+
+def test_open_reaps_aged_orphan_tracker(monkeypatch, tmp_path):
+    """A tracker with no registry entry at all, past the grace window, is reaped."""
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC) - timedelta(hours=24))
+    _write_registry(monkeypatch, tmp_path, [])
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert not (tracker_dir / "K1.json").exists()
+
+
+async def test_close_kitchen_removes_overlay_lock_sidecar(monkeypatch, tmp_path):
+    """The overlay lock sidecar file must be removed alongside the overlay file."""
+    monkeypatch.chdir(tmp_path)
+
+    ctx = make_context(
+        AutomationConfig(),
+        runner=None,
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        project_dir=tmp_path,
+    )
+    monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
+
+    with (
+        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
+        patch("autoskillit.core.register_active_kitchen"),
+        patch("autoskillit.core.unregister_active_kitchen"),
+    ):
+        await _open_kitchen_handler()
+
+        from autoskillit.server._misc import _hook_config_overlay_path
+
+        overlay_path = _hook_config_overlay_path(ctx.project_dir)
+        overlay_lock_path = overlay_path.with_suffix(".lock")
+        overlay_lock_path.parent.mkdir(parents=True, exist_ok=True)
+        overlay_lock_path.write_text("")
+        assert overlay_lock_path.exists()
+
+        _close_kitchen_handler()
+
+        assert not overlay_lock_path.exists()

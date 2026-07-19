@@ -16,7 +16,7 @@ Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS
 | `token_summary_hook.py` | Appends Token Usage Summary to PR body |
 | `session_start_hook.py` | Injects open-kitchen reminder on resume |
 | `skill_load_post_hook.py` | `PostToolUse`: writes skill-loaded flag for non-Anthropic provider guard |
-| `pipeline_step_post_hook.py` | `PostToolUse`: auto-marks pipeline steps complete after `run_skill` |
+| ~~`pipeline_step_post_hook.py`~~ | **RETIRED** — step completion is now server-authoritative (written at `run_skill` adjudication point in `tools_execution.py`) |
 | `recipe_confirmed_post_hook.py` | `PostToolUse`: writes recipe-load-confirmed marker after first successful `run_skill` |
 | `resume_gate_post_hook.py` | `PostToolUse`: records resume attempts to `resume_gate_state.json` for the reset_dispatch resume gate |
 | `quota_guard_state_post_hook.py` | `PostToolUse`: writes / clears the per-session quota-disable marker after `disable_quota_guard` / `close_kitchen` |

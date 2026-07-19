@@ -30,6 +30,7 @@ def _run_skill_json_producer() -> dict:
     result: dict = {}
     for r in (r1, r2):
         result.update(json.loads(r.to_json()))
+    result["pipeline_tracker"] = {"step": "rectify", "order_id": "test-id", "status": "complete"}
     return result
 
 

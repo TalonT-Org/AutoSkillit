@@ -62,6 +62,12 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         if worktree:
             lines.append(f"worktree_path: {worktree}")
         _maybe_provider_line(data, lines)
+        tracker = data.get("pipeline_tracker")
+        if isinstance(tracker, dict):
+            step = tracker.get("step", "")
+            oid = tracker.get("order_id", "")
+            tstatus = tracker.get("status", "")
+            lines.append(f"--- Pipeline Tracker: {step} {tstatus} ({oid}) ---")
         result = data.get("result", "")
         if result:
             lines.append(f"\nresult:\n{result}")
@@ -99,6 +105,12 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         cw = token_usage.get("cache_write_tokens", 0)
         if cw:
             lines.append(f"tokens_cache_write: {_fmt_tokens(cw)}")
+    tracker = data.get("pipeline_tracker")
+    if isinstance(tracker, dict):
+        step = tracker.get("step", "")
+        oid = tracker.get("order_id", "")
+        tstatus = tracker.get("status", "")
+        lines.extend(["", f"--- Pipeline Tracker: {step} {tstatus} ({oid}) ---"])
     result = data.get("result", "")
     if result:
         lines.extend(["", "### Result", result])
@@ -206,6 +218,7 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "has_progress_evidence",
         "provider_used",
         "provider_fallback",
+        "pipeline_tracker",
     }
 )
 _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(

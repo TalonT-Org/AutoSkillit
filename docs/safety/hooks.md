@@ -188,12 +188,12 @@ state file. When `run_python` calls `check_review_loop`, marks
 `check_review_loop_called: True` in the state so `review_loop_gate.py` will
 unblock `wait_for_ci`/`enqueue_pr`.
 
-### `pipeline_step_post_hook.py`
-**Guarded tool:** `run_skill`
-After a successful `run_skill`, auto-marks the step as `complete` in the
-pipeline tracker file. Appends a progress banner via `updatedMCPToolOutput`.
-Uses `AUTOSKILLIT_DISPATCH_ID` env fallback for `order_id` resolution to
-handle fleet-dispatched pipelines. Fails open on missing tracker or errors.
+### ~~`pipeline_step_post_hook.py`~~ (RETIRED)
+Step completion marking is now **server-authoritative**: the `run_skill`
+handler in `tools_execution.py` writes step completion at the adjudication
+point, using the same tracker resolver as the dependency enforcer. This
+eliminates the split-brain between client-side hook writes and server-side
+enforcement reads that caused false `DEPENDENCY UNMET` denials (#4293).
 
 ### `recipe_confirmed_post_hook.py`
 **Guarded tool:** `run_skill`

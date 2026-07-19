@@ -117,6 +117,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_lock_ingredients.py` | Tests for the lock_ingredients MCP tool and _write_ingredient_locks helper |
 | `test_run_skill_locks.py` | Tests for server-side ingredient lock enforcement in run_skill (incl. resume exemption) |
 | `test_pipeline_tracker.py` | Tests for record_pipeline_step MCP tool — init, status, gaps, and get_pipeline_report tracker integration; open_kitchen auto-init tracker creation/idempotency and kitchen-scoped multi-pipeline fallback denial |
+| `test_record_pipeline_step_complete.py` | Tests for record_pipeline_step op='complete' — marking, suffix canonicalization, error cases |
 | `test_run_skill_pipeline_deps.py` | Tests for _check_pipeline_deps server-side pipeline dependency enforcement in run_skill, incl. kitchen-scoped fallback and empty/ambiguous step_name deny paths |
 | `test_pipeline_deps_derivation.py` | Tests for _derive_phase_a_deps curated Phase A dependency derivation from recipe routing graphs |
 | `test_review_approach_input_contract.py` | Tests for the review_approach plan-path input contract enforced server-side in run_skill |

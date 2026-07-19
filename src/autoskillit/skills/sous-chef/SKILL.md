@@ -927,6 +927,22 @@ configuration that should be invisible.
 
 ---
 
+## RECORD PIPELINE STEP COMPLETE — OPERATOR REPAIR ONLY
+
+`record_pipeline_step(op="complete", pipeline_id="...", step_name="...")` marks
+a tracked step as complete. This is an **operator repair tool** — use it ONLY when:
+
+- A step completed successfully but the server-side marker failed (infrastructure error)
+- An operator explicitly instructs you to mark a step complete for recovery purposes
+
+**NEVER** use `op="complete"` to bypass running a prerequisite skill. The dependency
+enforcer will allow the dependent step, but the prerequisite's work will be missing —
+the pipeline will produce incorrect results silently.
+
+When in doubt, call `record_pipeline_step(op="status")` first to inspect tracker state.
+
+---
+
 ## Recipe Content Authority
 
 NEVER read recipe YAML files from the filesystem. Raw files contain unresolved metadata

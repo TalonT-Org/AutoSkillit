@@ -71,6 +71,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     pre_contamination_subtype: str
     ndjson_unknown_event_count: int
     ndjson_unknown_item_count: int
+    pipeline_tracker: dict[str, str]
 
 
 class _RunCmdResultBase(TypedDict):

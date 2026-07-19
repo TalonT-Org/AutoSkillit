@@ -44,6 +44,13 @@ def _is_github_cli_call(cmd: list[str]) -> bool:
     return len(cmd) >= 2 and cmd[0] == "gh" and cmd[1] in _GH_API_SUBCOMMANDS
 
 
+def _validate_cwd(cwd: str) -> None:
+    if not cwd:
+        raise ValueError("_run_subprocess: cwd must not be empty")
+    if not os.path.isdir(cwd):
+        raise ValueError(f"_run_subprocess: cwd does not exist: {cwd}")
+
+
 async def _run_subprocess(
     cmd: list[str],
     *,
@@ -56,10 +63,7 @@ async def _run_subprocess(
     Delegates to run_managed_async which uses temp file I/O (immune to
     pipe-blocking from child FD inheritance) and psutil process tree cleanup.
     """
-    if not cwd:
-        raise ValueError("_run_subprocess: cwd must not be empty")
-    if not os.path.isdir(cwd):
-        raise ValueError(f"_run_subprocess: cwd does not exist: {cwd}")
+    _validate_cwd(cwd)
 
     runner = _get_ctx().runner
     assert runner is not None, "No subprocess runner configured"
@@ -84,3 +88,20 @@ async def _run_subprocess(
             )
 
     return returncode, stdout, stderr
+
+
+async def _run_subprocess_captured(
+    cmd: list[str],
+    *,
+    cwd: str,
+    timeout: float,
+    env: Mapping[str, str] | None = None,
+    capture_dir: Path | None = None,
+) -> SubprocessResult:
+    """Run a subprocess with capture-mode output. Returns the full SubprocessResult."""
+    _validate_cwd(cwd)
+
+    runner = _get_ctx().runner
+    assert runner is not None, "No subprocess runner configured"
+
+    return await runner(cmd, cwd=Path(cwd), timeout=timeout, env=env, capture_dir=capture_dir)

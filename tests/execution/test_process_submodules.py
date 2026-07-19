@@ -14,6 +14,8 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
     {
+        "CaptureReadError",
+        "CaptureSetupError",
         "DefaultSubprocessRunner",
         "_extract_stdout_session_id",
         "_resolve_session_id",
@@ -42,6 +44,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "resolve_termination",
         "run_managed_async",
         "run_managed_sync",
+        "summarize_capture",
     }
 )
 

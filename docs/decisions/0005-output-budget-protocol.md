@@ -35,9 +35,12 @@ containment; downstream layers are independent backstops rather than substitutes
    handler representation and uses routing- and shape-preserving projection. This is
    producer-blind, post-execution enforcement. A response that cannot be persisted or
    projected safely fails closed without returning the original payload.
-3. **Pre-spend command guard:** enumerated high-confidence unbounded shell shapes are
-   denied before execution and receive a bounded-rewrite instruction. This is static,
-   pre-execution enforcement for rules R1 through R3.
+3. **Pre-spend command guard:** *Retired by ADR-0006 (#4286).* The command-shape
+   classifier and its `output_budget_guard` are deleted. Codex native shell is now
+   bounded by a PreToolUse input-rewrite hook (`shell_capture_hook`) that captures
+   complete output to a mechanism-owned artifact and emits only a bounded inline
+   slice. The transport ceiling (CODEX_TOOL_OUTPUT_TOKEN_LIMIT) remains as the
+   backstop for hook-failure paths.*
 4. **Producer-aware discipline and derived transport ceiling:** one evidence-output
    policy is delivered on backend surfaces that support it, while Codex's stored
    tool/function output receives a derived damage ceiling. The policy is advisory;
@@ -61,11 +64,12 @@ an exemption requires re-measurement and a deliberate registry-digest change.
 | `response_max_bytes = 90_000` | Bound the exact compact serialized handler payload before a coarser transport can clip it. Bytes are authoritative here; this is not a token or full JSON-RPC-envelope estimate. |
 | `MAX_MCP_OUTPUT_TOKENS = 50_000` | Keep Claude's independently defined setting separate. It has no shared source of truth with `CODEX_TOOL_OUTPUT_TOKEN_LIMIT` and does not control Claude Code's observed disk-persistence gate. Claude's native Bash spill behavior covers shell output on that backend. |
 
-The command guard also reads `small_file_max_bytes = 5_000` for its narrow literal-JSONL
-exception and accepts proven byte sinks only through `shell_max_inline_bytes = 12_000`.
-Those are classification bounds, not transport limits. Parser limits of 65,536 command
-characters and nesting depth 8 bound classification work; exceeding them produces an
-unknown disposition and cannot authorize a risky R1-R3 command.
+The shell capture hook uses `shell_max_inline_bytes = 12_000` as the inline threshold:
+commands whose combined output fits within that budget are inlined in full (artifact
+deleted); larger outputs are captured losslessly to a mechanism-owned artifact with a
+bounded head/tail slice and provenance marker inlined.
+`small_file_max_bytes` was removed — it existed solely for the classifier's
+literal-small-JSONL exception, which is no longer needed.
 
 ## Ceiling and Backstop Reconciliation
 
@@ -121,9 +125,9 @@ recorded explicitly in the issue body.
 
 ## Accepted Gaps
 
-1. Non-JSONL single-file searches and shell verbs outside R1-R3, including `python -c`
-   file dumps, `git log -p`, and `curl`, are bounded on Codex only by the derived ceiling.
-   Codex may still truncate and discard their excess output.
+1. Non-JSONL single-file searches and arbitrary shell verbs (`python -c` file dumps,
+   `git log -p`, `curl`) are now captured losslessly on Codex by the shell capture hook
+   (#4286 / ADR-0006). The transport ceiling remains the backstop for hook-failure paths.
 2. The interactive discipline digest does not survive Codex `resume` and cannot
    guarantee post-compaction reinjection. Those paths retain the command guard, transport
    ceilings, and file-materialized skill content.
@@ -138,8 +142,9 @@ recorded explicitly in the issue body.
    members must retrieve bounded slices from that artifact.
 7. Repeated individually bounded calls can still exhaust cumulative context. No pre-call
    component owns current context usage, so reserve instructions remain advisory.
-8. Subprocess output is still materialized in worker memory before model-context shaping.
-   The protocol does not bound worker memory or temporary-disk consumption.
+8. Closed for the `run_cmd` channel by #4286 (capture files promoted in place; only
+   bounded slices enter worker memory). Still open for `run_skill` and `test_check`,
+   whose adjudication requires the full text.
 
 ## Operational Signals
 

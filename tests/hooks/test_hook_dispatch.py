@@ -202,6 +202,7 @@ class TestGenerateHooksJsonFormat:
                         "pipeline_step_post_hook",
                         "resume_gate_post_hook",
                         "recipe_confirmed_post_hook",
+                        "shell_capture_hook",
                     ), f"Unexpected logical name format: {logical_name}"
 
 

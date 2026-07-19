@@ -143,6 +143,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
+        capture_dir: Path | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -180,6 +181,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     completion_record_types=completion_record_types,
                     session_record_types=session_record_types,
                     child_deferral_ceiling=child_deferral_ceiling,
+                    capture_dir=capture_dir,
                 )
 
             # Non-Codex, non-PTY with step_name: run inner + record summary.
@@ -206,13 +208,15 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 completion_record_types=completion_record_types,
                 session_record_types=session_record_types,
                 child_deferral_ceiling=child_deferral_ceiling,
+                capture_dir=capture_dir,
             )
+            _head = (result.stdout or "")[:500] if not capture_dir else "(capture mode)"
             self.recorder.record_non_session_step(
                 step_name=step_name,
                 tool="run_cmd",
                 result_summary={
                     "exit_code": result.returncode,
-                    "stdout_head": (result.stdout or "")[:500],
+                    "stdout_head": _head,
                 },
             )
             return result
@@ -241,6 +245,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
             child_deferral_ceiling=child_deferral_ceiling,
+            capture_dir=capture_dir,
         )
 
     async def _record_session(
@@ -317,6 +322,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         child_deferral_ceiling: float = 0.0,
+        capture_dir: Path | None = None,
     ) -> SubprocessResult:
         """Record a non-PTY (Codex) session step via cassette files."""
         result = await self._inner(
@@ -342,6 +348,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
             child_deferral_ceiling=child_deferral_ceiling,
+            capture_dir=capture_dir,
         )
 
         if self._scenario_dir is None:
@@ -440,6 +447,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
+        capture_dir: Path | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

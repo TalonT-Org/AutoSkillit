@@ -8,9 +8,7 @@ import pytest
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
-_PERSONAL_HOME_PATH_FIXTURES: dict[Path, frozenset[int]] = {
-    Path("tests/hooks/test_output_budget_guard.py"): frozenset({17, 18}),
-}
+_PERSONAL_HOME_PATH_FIXTURES: dict[Path, frozenset[int]] = {}
 
 
 def test_no_personal_home_paths_in_test_files():

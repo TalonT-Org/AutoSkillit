@@ -355,7 +355,6 @@ class OutputBudgetConfig:
     tail_chars: int = 2500
     response_max_bytes: int = 90_000
     guard_enabled: bool = True
-    small_file_max_bytes: int = 5000
     shell_max_inline_bytes: int = 12_000
 
     def __post_init__(self) -> None:

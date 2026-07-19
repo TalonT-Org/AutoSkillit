@@ -412,6 +412,7 @@ class TestGroupDApiContractPreservation:
             "workload_basenames",
             "on_session_id_resolved",
             "child_deferral_ceiling",
+            "capture_dir",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -485,6 +486,7 @@ class TestGroupDApiContractPreservation:
             "workload_basenames",
             "on_session_id_resolved",
             "child_deferral_ceiling",
+            "capture_dir",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
@@ -543,7 +545,7 @@ class TestGroupDApiContractPreservation:
         """run_managed_sync parameter set is unchanged."""
         sig = inspect.signature(run_managed_sync)
         params = set(sig.parameters)
-        expected = {"cmd", "cwd", "timeout", "input_data", "env"}
+        expected = {"cmd", "cwd", "timeout", "input_data", "env", "capture_dir"}
         assert expected == params, (
             f"run_managed_sync params changed.\n"
             f"  Missing: {expected - params}\n"
@@ -621,7 +623,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 16 canonical fields."""
+        """SubprocessResult must have exactly the 18 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -642,6 +644,8 @@ class TestGroupDApiContractPreservation:
             "tracked_comm",
             "orphaned_tool_result",
             "inspector_verdict",
+            "stdout_path",
+            "stderr_path",
         }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"

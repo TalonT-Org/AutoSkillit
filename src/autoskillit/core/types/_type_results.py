@@ -30,6 +30,7 @@ __all__ = [
     "LoadReport",
     "LoadResult",
     "ModelIdentity",
+    "CapturedStream",
     "SpilledOutput",
     "SpillSpec",
     "TestResult",
@@ -180,7 +181,12 @@ class WriteBehaviorSpec:
 
 @dataclass(frozen=True, slots=True)
 class SpillSpec:
-    """Character budgets for lossless artifact-backed output previews."""
+    """Character budgets for lossless artifact-backed output previews.
+
+    Dual denomination: ``spill_output`` uses ``inline_max_chars`` as a character
+    threshold; ``summarize_capture`` uses it as a byte threshold (identical for
+    ASCII; at most more conservative for multibyte).
+    """
 
     inline_max_chars: int = 5000
     head_chars: int = 2500
@@ -189,6 +195,19 @@ class SpillSpec:
     def __post_init__(self) -> None:
         if self.inline_max_chars < 0 or self.head_chars < 0 or self.tail_chars < 0:
             raise ValueError("spill character budgets must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedStream:
+    """Streaming capture result — bounded slices only, never a full read."""
+
+    path: Path
+    total_bytes: int
+    sha256: str
+    inline_text: str | None
+    head: str
+    tail: str
+    complete: bool
 
 
 @dataclass(frozen=True, slots=True)

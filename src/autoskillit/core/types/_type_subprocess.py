@@ -129,6 +129,8 @@ class SubprocessResult:
     ``SubprocessRunner.__call__`` and the callback completes before process exit.
     Consumed downstream to annotate termination provenance.
     """
+    stdout_path: Path | None = None
+    stderr_path: Path | None = None
 
 
 @runtime_checkable
@@ -177,4 +179,5 @@ class SubprocessRunner(Protocol):
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
+        capture_dir: Path | None = None,
     ) -> Awaitable[SubprocessResult]: ...

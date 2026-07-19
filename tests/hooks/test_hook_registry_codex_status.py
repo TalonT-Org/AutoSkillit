@@ -67,11 +67,16 @@ class TestHookDefCodexStatus:
                 "deny",
                 "additionalContext",
                 "output-rewrite",
+                "input-rewrite",
             ), f"Hook {hook_def.scripts} has invalid mechanism: {hook_def.mechanism!r}"
 
     def test_pretooluse_deny_mechanism_is_set(self):
         for hook_def in HOOK_REGISTRY:
-            if hook_def.event_type == "PreToolUse" and hook_def.codex_status != "not-applicable":
+            if (
+                hook_def.event_type == "PreToolUse"
+                and hook_def.codex_status != "not-applicable"
+                and hook_def.mechanism != "input-rewrite"
+            ):
                 assert hook_def.mechanism == "deny", (
                     f"Hook {hook_def.scripts} has mechanism={hook_def.mechanism!r}, "
                     "expected 'deny' for PreToolUse hooks"
@@ -105,7 +110,11 @@ class TestHookDefCodexStatus:
 
     def test_enforcement_strength_claude_code_values_are_valid(self):
         for hd in HOOK_REGISTRY:
-            assert hd.enforcement_strength["claude_code"] in ("hard", "soft"), (
+            assert hd.enforcement_strength["claude_code"] in (
+                "hard",
+                "soft",
+                "not-applicable",
+            ), (
                 f"Hook {hd.scripts} has invalid claude_code: "
                 f"{hd.enforcement_strength['claude_code']!r}"
             )

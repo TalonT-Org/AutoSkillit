@@ -83,6 +83,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_kill.py` | Integration tests for process tree kill and async cancellation |
 | `test_process_pty.py` | Tests for PTY wrapping and pipeline adjudication boundary tests |
 | `test_process_race.py` | Unit tests for _process_race.py: resolve_termination and ChannelBStatus |
+| `test_process_io_capture.py` | Unit tests for capture-mode summarize_capture — inline/spill thresholds, multibyte, errors |
 | `test_process_run.py` | Integration tests for normal subprocess run, stdin, timeout, temp I/O, and logging |
 | `test_process_session_log_monitor.py` | Unit tests for _session_log_monitor — core detection + session ID + wiring |
 | `test_process_session_log_monitor_dispatch_marker.py` | Dispatch marker suppression gate tests for _session_log_monitor |

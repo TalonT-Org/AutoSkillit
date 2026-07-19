@@ -30,7 +30,7 @@ class HookDef:
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"] = (
         "works-as-is"
     )
-    mechanism: Literal["deny", "additionalContext", "output-rewrite"] = "deny"
+    mechanism: Literal["deny", "additionalContext", "output-rewrite", "input-rewrite"] = "deny"
     enforcement_strength: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -64,7 +64,7 @@ class HookDef:
 # artifact_download_guard                | works-as-is
 # git_ops_guard                          | works-as-is
 # test_runner_guard                      | works-as-is
-# output_budget_guard                    | works-as-is
+# shell_capture_hook                     | works-as-is (Codex-only input-rewrite, #4286/ADR-0006)
 # generated_file_write_guard             | works-as-is
 # write_guard                            | works-as-is
 # planner_result_naming_guard            | works-as-is
@@ -202,13 +202,14 @@ HOOK_REGISTRY: list[HookDef] = [
         enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
-        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
-        scripts=["guards/output_budget_guard.py"],
+        matcher=r"Bash",
+        scripts=["shell_capture_hook.py"],
         session_scope="any",
-        exempt_skills=frozenset(),
         codex_status="works-as-is",
-        mechanism="deny",
-        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        mechanism="input-rewrite",
+        # In-script Codex gate (#4286 / ADR-0006): exits 0 on non-Codex sessions.
+        # Matcher excludes mcp__.*run_cmd — that channel is lossless server-side.
+        enforcement_strength={"claude_code": "not-applicable", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Write|Edit",
@@ -402,6 +403,7 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "unsafe_install_guard.py",
         "write_guard.py",
         "pretty_output_hook.py",
+        "output_budget_guard.py",
         # Append any future retired basenames here, atomically with the rename commit.
     }
 )
@@ -423,7 +425,6 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "git_ops_guard.py",
         "compose_pr_body_guard.py",
         "test_runner_guard.py",
-        "output_budget_guard.py",
         "fleet_claim_guard.py",
         "reset_resume_gate.py",
         "recipe_read_guard.py",

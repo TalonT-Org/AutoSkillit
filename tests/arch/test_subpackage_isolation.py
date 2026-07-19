@@ -866,9 +866,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             (interpreter/wrapper detection) for all command-classifying guards.
             quota_guard_state_post_hook.py is a stdlib-only PostToolUse script that
             maintains the per-session quota-disable marker. Exempt at 15 files.
-            output_budget_guard.py is a standalone stdlib-only PreToolUse script that
-            enforces the output-budget protocol without importing package runtime code.
-            Exempt at 33 files.
+            output_budget_guard.py was deleted and retired; its enforcement moved to
+            shell_capture_hook.py (input-rewrite mechanism) at the hooks/ package root.
+            Exempt at 32 files.
           pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
             GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
             Exempt at 12 files.
@@ -887,7 +887,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 24,  # +closure_hashing +path_containment +closure_verifier
         "core/types": 32,  # +invariant_registry (INVARIANT_REGISTRY) +closure_report
         "cli": 21,
-        "hooks": 15,  # +recipe_confirmed_post_hook.py, +quota_guard_state_post_hook.py
+        "hooks": 17,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286)  # noqa: E501
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501
@@ -895,7 +895,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
-        "hooks/guards": 33,  # +output_budget_guard (REQ-CNST-003-E6)
+        "hooks/guards": 32,  # -output_budget_guard (#4286)
         "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
     }
     violations: list[str] = []

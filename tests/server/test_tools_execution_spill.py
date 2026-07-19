@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from autoskillit.core import SubprocessResult, TerminationReason
+from autoskillit.execution.process import CaptureReadError, CaptureSetupError, summarize_capture
 from autoskillit.server._response_budget import RESPONSE_SPILL_METADATA_KEY
 from autoskillit.server.tools.tools_execution import run_cmd, run_python, run_skill
 from tests.conftest import _make_result
@@ -16,12 +20,46 @@ from tests.conftest import _make_result
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+def _write_capture_result(
+    capture_dir: Path,
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+) -> SubprocessResult:
+    """Write stdout/stderr content to real files under capture_dir and return the result.
+
+    Mirrors what the real ``_run_subprocess_captured`` -> ``run_managed_async`` path
+    does: stdout/stderr strings are empty; the content lives in files referenced by
+    stdout_path/stderr_path.
+    """
+    capture_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = capture_dir / f"proc_stdout_{uuid.uuid4().hex[:8]}.tmp"
+    stderr_path = capture_dir / f"proc_stderr_{uuid.uuid4().hex[:8]}.tmp"
+    stdout_path.write_text(stdout, encoding="utf-8")
+    stderr_path.write_text(stderr, encoding="utf-8")
+    return SubprocessResult(
+        returncode=returncode,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=12345,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+    )
+
+
 @pytest.mark.anyio
 async def test_run_cmd_spills_large_stdout_under_calling_project(tool_ctx_kitchen_open, tmp_path):
     stdout = "head-sentinel\n" + ("x" * 10_000) + "\ntail-sentinel"
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, stdout=stdout)
+
     with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess",
-        new=AsyncMock(return_value=(0, stdout, "")),
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
 
@@ -43,10 +81,16 @@ async def test_run_cmd_resolves_absolute_cwd_only_for_spill_anchor(
     project_link = tmp_path / "project-link"
     project_link.symlink_to(project, target_is_directory=True)
     stdout = "x" * 10_000
-    subprocess = AsyncMock(return_value=(0, stdout, ""))
+    capture_dir = project / ".autoskillit" / "temp" / "run_cmd"
+
+    subprocess = AsyncMock(
+        side_effect=lambda cmd, *, cwd, timeout, env=None, capture_dir=capture_dir: (
+            _write_capture_result(capture_dir, stdout=stdout)
+        )
+    )
 
     with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess",
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
         new=subprocess,
     ):
         data = json.loads(await run_cmd("bounded-command", str(project_link)))
@@ -61,9 +105,14 @@ async def test_run_cmd_resolves_absolute_cwd_only_for_spill_anchor(
 @pytest.mark.parametrize("cwd", ["", "relative-project"])
 async def test_run_cmd_empty_or_relative_cwd_uses_injected_temp_dir(tool_ctx_kitchen_open, cwd):
     stdout = "x" * 10_000
+    capture_dir = tool_ctx_kitchen_open.temp_dir / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, stdout=stdout)
+
     with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess",
-        new=AsyncMock(return_value=(0, stdout, "")),
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", cwd))
 
@@ -72,9 +121,14 @@ async def test_run_cmd_empty_or_relative_cwd_uses_injected_temp_dir(tool_ctx_kit
 
 @pytest.mark.anyio
 async def test_run_cmd_small_output_shape_is_unchanged(tool_ctx_kitchen_open, tmp_path):
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, stdout="small")
+
     with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess",
-        new=AsyncMock(return_value=(0, "small", "")),
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
     ):
         raw = await run_cmd("bounded-command", str(tmp_path))
 
@@ -248,3 +302,197 @@ async def test_decorated_dispatch_preserves_routing_scalars_artifact_and_small_i
         await tools_fleet_dispatch.dispatch_food_truck(recipe="probe", task="small")
         == small_envelope
     )
+
+
+@pytest.mark.anyio
+async def test_run_cmd_capture_read_failure_is_fail_stop(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+):
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, returncode=3, stdout="some output")
+
+    def _raise_read_error(path, spec, *, complete=True):
+        raise CaptureReadError(errno.EIO, "test read error")
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._execution_helpers.summarize_capture",
+        _raise_read_error,
+    )
+    with patch(
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
+    ):
+        data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
+
+    assert data["success"] is False
+    assert data["error"].startswith("capture_failed")
+    assert data["exit_code"] == 3
+
+
+@pytest.mark.anyio
+async def test_run_cmd_capture_setup_failure_is_fail_stop(tool_ctx_kitchen_open, tmp_path):
+    # Simulates the real create_temp_io() failure mode: the capture directory path
+    # exists but is a regular file, so mkdir(parents=True, exist_ok=True) raises
+    # OSError, which run_managed_async wraps into CaptureSetupError before any
+    # subprocess is spawned.
+    subprocess = AsyncMock(
+        side_effect=CaptureSetupError("Cannot create capture directory: not a directory")
+    )
+    with patch(
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=subprocess,
+    ):
+        data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
+
+    assert data["exit_code"] == -1
+    assert data["success"] is False
+    assert tool_ctx_kitchen_open.runner.call_args_list == []
+
+
+@pytest.mark.anyio
+async def test_run_cmd_timeout_promotes_partial_capture(tool_ctx_kitchen_open, tmp_path):
+    stdout = "partial-head\n" + ("x" * 10_000) + "\npartial-tail"
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        result = _write_capture_result(capture_dir, returncode=-1, stdout=stdout)
+        return SubprocessResult(
+            returncode=result.returncode,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=result.pid,
+            stdout_path=result.stdout_path,
+            stderr_path=result.stderr_path,
+        )
+
+    with patch(
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
+    ):
+        data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
+
+    assert data["success"] is False
+    assert data["exit_code"] == -1
+    assert "timed out" in data["error"]
+    assert "partial-head" in data["stdout"]
+    assert "partial-tail" in data["stdout"]
+    assert "complete=false" in data["stdout"]
+
+
+@pytest.mark.anyio
+async def test_run_cmd_never_materializes_full_output(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+):
+    def _raise_read_temp_output(stdout_path, stderr_path):
+        raise RuntimeError("read_temp_output must not be called on the capture path")
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_io.read_temp_output",
+        _raise_read_temp_output,
+    )
+    stdout = "head-sentinel\n" + ("x" * 50_000) + "\ntail-sentinel"
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, stdout=stdout)
+
+    with patch(
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
+    ):
+        data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
+
+    assert data["success"] is True
+    assert data["exit_code"] == 0
+    assert "head-sentinel" in data["stdout"]
+    assert "tail-sentinel" in data["stdout"]
+
+
+@pytest.mark.anyio
+async def test_run_cmd_partial_capture_error_leaves_no_orphan(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+):
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(
+            capture_dir, returncode=0, stdout="small", stderr="also small"
+        )
+
+    real_summarize = summarize_capture
+
+    def _fail_stderr_only(path, spec, *, complete=True):
+        if "stderr" in path.name:
+            raise CaptureReadError(errno.EIO, "test stderr read error")
+        return real_summarize(path, spec, complete=complete)
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._execution_helpers.summarize_capture",
+        _fail_stderr_only,
+    )
+    with patch(
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
+    ):
+        data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
+
+    assert data["success"] is False
+    assert data["error"].startswith("capture_failed")
+    # stdout succeeded and was inline-sized -> its capture file must be unlinked, not orphaned.
+    remaining_stdout = list(capture_dir.glob("proc_stdout_*.tmp"))
+    assert remaining_stdout == []
+    # stderr failed summarize_capture() -> its raw file must also be unlinked, not orphaned.
+    remaining_stderr = list(capture_dir.glob("proc_stderr_*.tmp"))
+    assert remaining_stderr == []
+
+
+@pytest.mark.anyio
+async def test_run_cmd_signal_death_marks_incomplete(tool_ctx_kitchen_open, tmp_path):
+    stdout = "before-signal\n" + ("x" * 10_000) + "\nnever-reached"
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        result = _write_capture_result(capture_dir, returncode=137, stdout=stdout)
+        return SubprocessResult(
+            returncode=137,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.SIGNAL_DEATH,
+            pid=result.pid,
+            stdout_path=result.stdout_path,
+            stderr_path=result.stderr_path,
+        )
+
+    with patch(
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
+    ):
+        data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
+
+    assert data["exit_code"] == 137
+    assert data["success"] is False
+    assert "signal" in data["error"].lower()
+    assert "complete=false" in data["stdout"]
+
+
+def test_summarize_capture_never_loads_full_content(tmp_path):
+    """Verify summarize_capture returns bounded slices without materializing the full file."""
+    from autoskillit.core import SpillSpec
+
+    large_file = tmp_path / "big_output.tmp"
+    content = b"HEAD-MARKER\n" + (b"x" * 200_000) + b"\nTAIL-MARKER\n"
+    large_file.write_bytes(content)
+
+    spec = SpillSpec(inline_max_chars=1000, head_chars=500, tail_chars=500)
+    result = summarize_capture(large_file, spec, complete=True)
+
+    assert result.inline_text is None
+    assert result.total_bytes == len(content)
+    assert len(result.head) <= spec.head_chars
+    assert len(result.tail) <= spec.tail_chars
+    assert "HEAD-MARKER" in result.head
+    assert "TAIL-MARKER" in result.tail
+    assert len(result.sha256) == 64

@@ -45,11 +45,11 @@ QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
     {"cache_path", "cache_max_age", "buffer_seconds", "disabled"}
 )
 
-# The exact keys the output-budget guard reads from
+# The exact keys the shell capture hook reads from
 # hook_config["output_budget_policy"]. Keep this stdlib-only declaration in
 # sync with _output_budget_policy_hook_payload() in server/tools/tools_kitchen.py.
 OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
-    {"disabled", "small_file_max_bytes", "shell_max_inline_bytes"}
+    {"disabled", "shell_max_inline_bytes"}
 )
 
 # The exact keys that appear in token_usage.json files written by flush_session_log.

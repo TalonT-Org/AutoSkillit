@@ -1091,6 +1091,23 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; _register_agent_tomls session-config registration for generated roles "
         "(+39 net lines)",
     ),
+    "rules_skill_content.py": (
+        1200,
+        "REQ-CNST-010-E11: SKILL.md content validation rules registry — accumulating "
+        "semantic rules (undefined-bash-placeholder, hardcoded-origin-remote, "
+        "blind-git-add, no-interpreter-mediated-writes, no-autoskillit-import, "
+        "no-posix-char-class, no-grep-bre-alternation, output-section-no-markdown-directive, "
+        "no-gh-issue-comment, transition-boundary-anti-confirmation, "
+        "executable-field-content-validity, reviews-post-requires-input-flag, "
+        "source-attribution-directive, graphql-query-requires-shell-invocation, "
+        "inline-content-in-subagent-prompt) co-located to keep SKILL.md validation "
+        "discovery a single import; splitting into sub-modules per rule would fragment "
+        "the @semantic_rule registration surface and break the test filter cascade."
+        "; inline-content-in-subagent-prompt rule (#4289 manifestation, #3636 architectural): "
+        "extract_blockquote_sections + extract_blockquote_placeholders helpers co-located "
+        "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
+        "and the tests/skills/ contract linters (+~60 net lines)",
+    ),
 }
 
 

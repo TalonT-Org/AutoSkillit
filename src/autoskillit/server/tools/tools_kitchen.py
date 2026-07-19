@@ -39,6 +39,7 @@ from autoskillit.core import (
     is_marker_fresh,
     kitchen_entry_alive,
     pkg_root,
+    read_active_kitchens_registry,
     read_marker,
     register_active_kitchen,
     resolve_kitchen_id,
@@ -343,29 +344,13 @@ def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> Non
     only when all matching entries are dead. No matching entry at all → reap
     only if ``initialized_at`` exceeds the grace window.
     """
-    from autoskillit.core._plugin_cache import (
-        _active_kitchens_lock,
-        _active_kitchens_path,
-        _open_lock,
-        read_versioned_json,
-    )
-
     logger = get_logger(__name__)
     tracker_dir = _pipeline_tracker_dir(project_dir)
     if not tracker_dir.is_dir():
         return
 
     try:
-        akp = _active_kitchens_path()
-        lock = _active_kitchens_lock()
-        fh = _open_lock(lock)
-        try:
-            entries: list[dict] = []
-            if akp.exists():
-                data = read_versioned_json(akp, 1, logger=logger)
-                entries = data.get("kitchens", []) if data is not None else []
-        finally:
-            fh.close()
+        entries = read_active_kitchens_registry()
     except Exception:
         logger.warning("prune_kitchen_state_registry_read_failed", exc_info=True)
         return

@@ -38,6 +38,18 @@ def _maybe_provider_line(data: dict, lines: list[str]) -> None:
         lines.append(f"provider: {provider_used}{suffix}")
 
 
+def _maybe_tracker_line(data: dict, lines: list[str], *, blank_before: bool = False) -> None:
+    tracker = data.get("pipeline_tracker")
+    if not isinstance(tracker, dict):
+        return
+    line = (
+        f"--- Pipeline Tracker: {tracker.get('step', '')} {tracker.get('status', '')}"
+        f" ({tracker.get('order_id', '')}) ---"
+    )
+    lines.extend([""] if blank_before else [])
+    lines.append(line)
+
+
 def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     """Format run_skill result as Markdown-KV."""
     success = data.get("success", False)
@@ -62,12 +74,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         if worktree:
             lines.append(f"worktree_path: {worktree}")
         _maybe_provider_line(data, lines)
-        tracker = data.get("pipeline_tracker")
-        if isinstance(tracker, dict):
-            step = tracker.get("step", "")
-            oid = tracker.get("order_id", "")
-            tstatus = tracker.get("status", "")
-            lines.append(f"--- Pipeline Tracker: {step} {tstatus} ({oid}) ---")
+        _maybe_tracker_line(data, lines)
         result = data.get("result", "")
         if result:
             lines.append(f"\nresult:\n{result}")
@@ -105,12 +112,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         cw = token_usage.get("cache_write_tokens", 0)
         if cw:
             lines.append(f"tokens_cache_write: {_fmt_tokens(cw)}")
-    tracker = data.get("pipeline_tracker")
-    if isinstance(tracker, dict):
-        step = tracker.get("step", "")
-        oid = tracker.get("order_id", "")
-        tstatus = tracker.get("status", "")
-        lines.extend(["", f"--- Pipeline Tracker: {step} {tstatus} ({oid}) ---"])
+    _maybe_tracker_line(data, lines, blank_before=True)
     result = data.get("result", "")
     if result:
         lines.extend(["", "### Result", result])

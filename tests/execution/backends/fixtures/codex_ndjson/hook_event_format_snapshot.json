@@ -1,6 +1,78 @@
 {
   "_registry_hash": "9d99ecc511cc4592d920a0981a639751e6ab31996a64d0d7d70c4ee757855773",
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py formatters/pretty_output_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py token_summary_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py quota_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py recipe_confirmed_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__run_skill.*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py quota_guard_state_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__(disable_quota_guard|close_kitchen).*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py review_gate_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__(run_skill|run_python).*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py resume_gate_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "(mcp__.*autoskillit.*__)?dispatch_food_truck"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py lint_after_edit_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      }
+    ],
     "PreToolUse": [
       {
         "hooks": [
@@ -46,21 +118,12 @@
         "hooks": [
           {
             "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/open_kitchen_guard",
+            "timeout": 5,
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           }
         ],
         "matcher": "mcp__.*autoskillit.*__open_kitchen.*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/ask_user_question_guard",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "AskUserQuestion"
       },
       {
         "hooks": [
@@ -143,11 +206,6 @@
             "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/planner_result_naming_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
-          },
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/recipe_write_advisor",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
           }
         ],
         "matcher": "Write|Edit"
@@ -161,26 +219,6 @@
           }
         ],
         "matcher": "Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/grep_pattern_lint_guard",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "Grep"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/mcp_health_advisor",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash|Write|Edit|Read|Glob|Grep"
       },
       {
         "hooks": [
@@ -266,99 +304,6 @@
           }
         ],
         "matcher": "(mcp__.*autoskillit.*__)?reset_dispatch"
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py formatters/pretty_output_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__.*autoskillit.*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py token_summary_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          },
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py quota_post_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          },
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py recipe_confirmed_post_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__.*autoskillit.*__run_skill.*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py quota_guard_state_post_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__.*autoskillit.*__(disable_quota_guard|close_kitchen).*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py review_gate_post_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__.*autoskillit.*__(run_skill|run_python).*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py resume_gate_post_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "(mcp__.*autoskillit.*__)?dispatch_food_truck"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py lint_after_edit_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "Write|Edit"
-      },
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py skill_load_post_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "Skill"
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py session_start_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ]
       }
     ]
   }

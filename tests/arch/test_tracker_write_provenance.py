@@ -50,8 +50,15 @@ def _has_file_write(tree: ast.Module) -> list[int]:
                     ):
                         violations.append(node.lineno)
                         break
-            # Check os.open with O_CREAT/O_RDWR (the hook's flock pattern)
-            if isinstance(node.func, ast.Attribute) and node.func.attr == "write":
+            # Check os.write(fd, ...) — the retired hook's raw fd-write pattern.
+            # Deliberately narrower than "any .write attribute call" to avoid
+            # false positives on sys.stdout.write()/logger writes/etc.
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "write"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "os"
+            ):
                 violations.append(node.lineno)
     return violations
 

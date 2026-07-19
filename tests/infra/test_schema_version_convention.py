@@ -119,12 +119,14 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
     ("src/autoskillit/server/_lifespan.py", 90),
     # tools_kitchen.py — hook config, quota guard, git_ops_policy, ingredient locks overlay
-    ("src/autoskillit/server/tools/tools_kitchen.py", 272),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 291),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 325),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 1301),
-    # tools_pipeline_tracker.py — tracker_data dict
-    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 166),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 276),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 295),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 329),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 1391),
+    # tools_pipeline_tracker.py — tracker_data dict (init) and mark_step_complete write
+    # (same tracker file schema as init — not a new format, grandfathered alongside it)
+    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 247),
+    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 392),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 536),
     # tools_github.py — bug report dict (non-blocking report-bug status file)

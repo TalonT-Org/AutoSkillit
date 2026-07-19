@@ -18,6 +18,7 @@ from ._plugin_cache import any_kitchen_open as any_kitchen_open
 from ._plugin_cache import append_retiring_entry as append_retiring_entry
 from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
 from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
+from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
 from ._plugin_cache import sweep_retiring_cache as sweep_retiring_cache
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen

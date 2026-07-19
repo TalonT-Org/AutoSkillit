@@ -1,6 +1,6 @@
 # Hooks
 
-AutoSkillit registers 43 Claude Code hook scripts: 32 PreToolUse, 10 PostToolUse,
+AutoSkillit registers 42 Claude Code hook scripts: 32 PreToolUse, 9 PostToolUse,
 and 1 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
@@ -147,7 +147,7 @@ dependencies. Permission is always `allow` — the server-side `_check_pipeline_
 in `run_skill` is the primary enforcer. Fails open on missing tracker or
 malformed input.
 
-## PostToolUse hooks (10)
+## PostToolUse hooks (9)
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools

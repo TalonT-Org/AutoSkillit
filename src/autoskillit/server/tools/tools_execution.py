@@ -93,7 +93,7 @@ from autoskillit.server.tools._execution_helpers import (
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
 )
-from autoskillit.server.tools._types import ToolFailureEnvelope
+from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 
 logger = get_logger(__name__)
 
@@ -116,7 +116,6 @@ def _is_absolute_path(path: str) -> bool:
 def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     """Check if step_name is locked out by ingredient locks. Returns deny JSON or None."""
     from autoskillit.server import _get_ctx  # circular-break
-    from autoskillit.server.tools._types import deny_envelope
 
     ctx = _get_ctx()
     overlay_path = _hook_config_overlay_path(ctx.project_dir)
@@ -164,8 +163,7 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
 def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
     from autoskillit.server import _get_ctx  # circular-break
-    from autoskillit.server.tools._types import deny_envelope
-    from autoskillit.server.tools.tools_pipeline_tracker import (
+    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
         ResolutionRefusal,
         resolve_tracker_order_id,
     )
@@ -266,7 +264,7 @@ def _has_active_locks(order_id: str) -> bool:
 def _has_active_deps() -> bool:
     """Return True if a kitchen-scoped tracker exists with any dependencies defined."""
     from autoskillit.server import _get_ctx  # circular-break
-    from autoskillit.server.tools.tools_pipeline_tracker import (
+    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
         ResolvedTracker,
         resolve_tracker_order_id,
     )
@@ -299,8 +297,6 @@ def _check_review_approach_plan_path(step_name: str, skill_command: str) -> str 
         return None
     first_arg = parts[1]
     if first_arg.startswith("https://") or first_arg.startswith("http://"):
-        from autoskillit.server.tools._types import deny_envelope
-
         return json.dumps(
             deny_envelope(
                 (
@@ -342,7 +338,7 @@ def _mark_step_complete_server_side(
     same tracker file as ``_check_pipeline_deps``. Failures are logged but
     never fail the tool call.
     """
-    from autoskillit.server.tools.tools_pipeline_tracker import (
+    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
         ResolvedTracker,
         mark_step_complete,
         resolve_tracker_order_id,
@@ -767,8 +763,6 @@ async def run_skill(
     if not resume_session_id and (cmd_error := _validate_skill_command(skill_command)) is not None:
         return cmd_error
     if cwd and not _is_absolute_path(cwd):
-        from autoskillit.server.tools._types import deny_envelope
-
         return json.dumps(
             deny_envelope(
                 (
@@ -781,8 +775,6 @@ async def run_skill(
             )
         )
     if cwd and not os.path.isdir(cwd):
-        from autoskillit.server.tools._types import deny_envelope
-
         return json.dumps(
             deny_envelope(
                 f"run_skill: cwd does not exist: {cwd}",
@@ -837,8 +829,6 @@ async def run_skill(
                     return _plan_path_denial
             elif _ambiguous:
                 if _has_active_deps():
-                    from autoskillit.server.tools._types import deny_envelope
-
                     return json.dumps(
                         deny_envelope(
                             (
@@ -851,8 +841,6 @@ async def run_skill(
                         )
                     )
             elif _has_active_locks(order_id):
-                from autoskillit.server.tools._types import deny_envelope
-
                 return json.dumps(
                     deny_envelope(
                         (
@@ -866,8 +854,6 @@ async def run_skill(
                     )
                 )
             elif _has_active_deps():
-                from autoskillit.server.tools._types import deny_envelope
-
                 return json.dumps(
                     deny_envelope(
                         (

@@ -52,11 +52,16 @@ def _write_tracker(tmp_path, pipeline_id, steps, dependencies, kitchen_id="test-
 
 
 def _setup_project(tmp_path, tool_ctx_kitchen_open):
+    from autoskillit.recipe.schema import RecipeStep
+
     temp_dir = tmp_path / ".autoskillit" / "temp"
     temp_dir.mkdir(parents=True, exist_ok=True)
     (temp_dir / ".hook_config.json").write_text("{}")
     tool_ctx_kitchen_open.project_dir = tmp_path
-    tool_ctx_kitchen_open.active_recipe_steps = {"rectify": {}, "review_approach": {}}
+    tool_ctx_kitchen_open.active_recipe_steps = {
+        "rectify": RecipeStep(name="rectify"),
+        "review_approach": RecipeStep(name="review_approach"),
+    }
     tool_ctx_kitchen_open.input_contract_resolver = None
 
 

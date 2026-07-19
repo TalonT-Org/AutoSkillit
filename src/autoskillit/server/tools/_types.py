@@ -72,6 +72,9 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     ndjson_unknown_event_count: int
     ndjson_unknown_item_count: int
     pipeline_tracker: dict[str, str]
+    error: str
+    stage: str
+    retriable: bool
 
 
 class _RunCmdResultBase(TypedDict):

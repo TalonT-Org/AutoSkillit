@@ -12,7 +12,7 @@ MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 | `_cancellation_shield.py` | `_cancellation_shield` decorator — catches `asyncio.CancelledError` at MCP tool boundary, returns structured JSON |
 | `_backend_compat.py` | Shared target resolution and fail-closed backend compatibility gate for direct headless executor callers |
 | `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, ToolFailureEnvelope, etc.), failure envelope factory helpers, and `deny_envelope()` canonical pre-flight deny constructor |
-| `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource, `prune_stale_kitchen_state` (liveness-gated tracker pruning at open), `kitchen_entry_alive` (registry liveness check) |
+| `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource, `prune_stale_kitchen_state` (liveness-gated tracker pruning at open; uses `kitchen_entry_alive` from `core/_plugin_cache`) |
 | `tools_config.py` | `configure_fleet`, `configure_order` (session config overlay) |
 | `tools_agents.py` | `unlock_agent_pack` tool + `agent://` resource templates |
 | `tools_ci.py` | `set_commit_status`, `check_repo_merge_state` |

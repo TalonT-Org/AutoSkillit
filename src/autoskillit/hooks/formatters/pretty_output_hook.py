@@ -285,11 +285,10 @@ def _format_response(tool_name: str, tool_response: str, pipeline: bool) -> str 
         return with_spill(str(data["preview"]))
 
     if data.get("subtype") == "gate_error":
-        return with_spill(_fmt_gate_error(data, pipeline))
-    if data.get("subtype") == "tool_exception":
-        return with_spill(_fmt_tool_exception(data, pipeline))
-
-    if short_name in _UNFORMATTED_TOOLS:
+        rendered = _fmt_gate_error(data, pipeline)
+    elif data.get("subtype") == "tool_exception":
+        rendered = _fmt_tool_exception(data, pipeline)
+    elif short_name in _UNFORMATTED_TOOLS:
         rendered = _fmt_generic(short_name, data, pipeline, artifact_backed=artifact_backed)
     elif (formatter := _FORMATTERS.get(short_name)) is not None:
         rendered = formatter(data, pipeline)

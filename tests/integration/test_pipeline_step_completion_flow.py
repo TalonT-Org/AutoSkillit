@@ -119,6 +119,7 @@ class TestDependentStepAllowedAfterServerSideMarking:
                 step_name="review_approach",
             )
         )
+        assert result.get("success") is True, f"Expected success but got: {result}"
         assert "DEPENDENCY UNMET" not in result.get("error", "")
 
 

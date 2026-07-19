@@ -15,12 +15,6 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
 
-# Patterns indicating a file write operation
-_WRITE_FUNC_NAMES = frozenset(
-    {"write_text", "open", "atomic_write", "_atomic_write", "os.replace"}
-)
-_TRACKER_PATH_SEGMENTS = frozenset({"pipeline_tracker"})
-
 
 def _has_tracker_reference(tree: ast.Module) -> bool:
     """Check if the module references the pipeline_tracker path segment."""

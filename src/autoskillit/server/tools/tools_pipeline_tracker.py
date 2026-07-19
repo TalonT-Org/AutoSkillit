@@ -160,24 +160,27 @@ async def record_pipeline_step(
 
     try:
         effective_pipeline_id = pipeline_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-        if not effective_pipeline_id:
-            return json.dumps(
-                {
-                    "success": False,
-                    "is_error": True,
-                    "error": (
-                        "record_pipeline_step: pipeline_id is required. "
-                        "Pass pipeline_id explicitly or set "
-                        "AUTOSKILLIT_DISPATCH_ID in the environment."
-                    ),
-                }
-            )
 
         from autoskillit.server import (  # circular-break
             _get_ctx,
         )  # circular-break: server-internal circular dependency
 
         ctx = _get_ctx()
+
+        if op == "complete":
+            return _handle_complete(ctx, effective_pipeline_id, step_name)
+
+        if not effective_pipeline_id:
+            return json.dumps(
+                deny_envelope(
+                    "record_pipeline_step: pipeline_id is required. "
+                    "Pass pipeline_id explicitly or set "
+                    "AUTOSKILLIT_DISPATCH_ID in the environment.",
+                    stage="preflight:pipeline_tracker",
+                    retriable=False,
+                )
+            )
+
         tracker_path = _pipeline_tracker_path(ctx.project_dir, effective_pipeline_id)
 
         if op == "init":
@@ -185,9 +188,6 @@ async def record_pipeline_step(
 
         if op == "status":
             return _handle_status(tracker_path, effective_pipeline_id)
-
-        if op == "complete":
-            return _handle_complete(ctx, effective_pipeline_id, step_name)
 
         return json.dumps(
             deny_envelope(
@@ -353,48 +353,46 @@ def mark_step_complete(
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
     except OSError as exc:
-        return {
-            "success": False,
-            "is_error": True,
-            "error": f"mark_step_complete: failed to open lock file: {exc}",
-        }
+        return deny_envelope(
+            f"mark_step_complete: failed to open lock file: {exc}",
+            stage="mark_step_complete",
+            retriable=True,
+        )
 
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
     except OSError as exc:
         os.close(lock_fd)
-        return {
-            "success": False,
-            "is_error": True,
-            "error": f"mark_step_complete: failed to acquire lock: {exc}",
-        }
+        return deny_envelope(
+            f"mark_step_complete: failed to acquire lock: {exc}",
+            stage="mark_step_complete",
+            retriable=True,
+        )
 
     try:
         if not tracker_path.exists():
-            return {
-                "success": False,
-                "is_error": True,
-                "error": f"mark_step_complete: tracker file disappeared: {tracker_path}",
-            }
+            return deny_envelope(
+                f"mark_step_complete: tracker file disappeared: {tracker_path}",
+                stage="mark_step_complete",
+                retriable=False,
+            )
         try:
             tracker = json.loads(tracker_path.read_text())
         except (json.JSONDecodeError, OSError) as exc:
-            return {
-                "success": False,
-                "is_error": True,
-                "error": f"mark_step_complete: failed to read tracker: {exc}",
-            }
+            return deny_envelope(
+                f"mark_step_complete: failed to read tracker: {exc}",
+                stage="mark_step_complete",
+                retriable=False,
+            )
 
         steps = tracker.get("steps", {})
         if canonical not in steps:
-            return {
-                "success": False,
-                "is_error": True,
-                "error": (
-                    f"mark_step_complete: step '{canonical}' not found in tracker. "
-                    f"Known steps: {sorted(steps.keys())}"
-                ),
-            }
+            return deny_envelope(
+                f"mark_step_complete: step '{canonical}' not found in tracker. "
+                f"Known steps: {sorted(steps.keys())}",
+                stage="mark_step_complete",
+                retriable=False,
+            )
 
         steps[canonical]["status"] = "complete"
         steps[canonical]["completed_at"] = datetime.now(UTC).isoformat()

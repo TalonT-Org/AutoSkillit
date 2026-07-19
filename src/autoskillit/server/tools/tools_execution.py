@@ -861,7 +861,7 @@ async def run_skill(
                             "not be resolved from the recipe. Cannot verify dependency "
                             "status. Pass step_name explicitly."
                         ),
-                        stage="preflight:ambiguous_step",
+                        stage="preflight:unresolved_step",
                         retriable=False,
                     )
                 )

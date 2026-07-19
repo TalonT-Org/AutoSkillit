@@ -395,7 +395,18 @@ def mark_step_complete(
         total = len(steps)
         pipeline_id = tracker.get("pipeline_id", order_id)
 
-        return {
+        dependencies = tracker.get("dependencies", {})
+        dependents_with_unmet = sorted(
+            dependent
+            for dependent, prereqs in dependencies.items()
+            if canonical in prereqs
+            and any(
+                steps.get(prereq, {}).get("status") not in ("complete", "skipped")
+                for prereq in prereqs
+            )
+        )
+
+        result = {
             "success": True,
             "step": canonical,
             "order_id": order_id,
@@ -404,6 +415,12 @@ def mark_step_complete(
             "done": done,
             "total": total,
         }
+        if dependents_with_unmet:
+            result["advisory"] = (
+                f"Step '{canonical}' marked complete but dependent steps "
+                f"{dependents_with_unmet} still show unmet prerequisites — verify correctness"
+            )
+        return result
     finally:
         import fcntl
 

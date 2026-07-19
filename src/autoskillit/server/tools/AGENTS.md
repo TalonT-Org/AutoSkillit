@@ -11,8 +11,8 @@ MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 | `_authority_feedback.py` | Authority-clobber warning builder and structured rejection envelope constructor for server-authoritative ingredient violations (single source of truth shared by open_kitchen, load_recipe, lock_ingredients) |
 | `_cancellation_shield.py` | `_cancellation_shield` decorator — catches `asyncio.CancelledError` at MCP tool boundary, returns structured JSON |
 | `_backend_compat.py` | Shared target resolution and fail-closed backend compatibility gate for direct headless executor callers |
-| `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, ToolFailureEnvelope, etc.) and failure envelope factory helpers |
-| `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource |
+| `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, ToolFailureEnvelope, etc.), failure envelope factory helpers, and `deny_envelope()` canonical pre-flight deny constructor |
+| `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource, `prune_stale_kitchen_state` (liveness-gated tracker pruning at open), `kitchen_entry_alive` (registry liveness check) |
 | `tools_config.py` | `configure_fleet`, `configure_order` (session config overlay) |
 | `tools_agents.py` | `unlock_agent_pack` tool + `agent://` resource templates |
 | `tools_ci.py` | `set_commit_status`, `check_repo_merge_state` |
@@ -36,7 +36,7 @@ MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 | `tools_pr_ops.py` | `get_pr_reviews`, `bulk_close_issues` |
 | `tools_recipe.py` | `load_recipe`, `list_recipes`, `validate_recipe`, `migrate_recipe` |
 | `tools_status.py` | `kitchen_status`, `get_pipeline_report`, `get_token_summary`, `get_timing_summary`, `analyze_tool_sequences`, `get_quota_events`, `write_telemetry_files`, `read_db` |
-| `tools_pipeline_tracker.py` | `record_pipeline_step` (pipeline step tracker init/status) |
+| `tools_pipeline_tracker.py` | `record_pipeline_step` (pipeline step tracker init/status/complete), `resolve_tracker_order_id` (shared 3-tier tracker resolver), `mark_step_complete` (adjudication-point marker) |
 | `tools_workspace.py` | `test_check`, `reset_test_dir`, `reset_workspace` |
 
 ## Test Files

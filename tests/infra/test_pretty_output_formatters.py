@@ -7,6 +7,11 @@ import json
 import pytest
 
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+from autoskillit.hooks.formatters.pretty_output_hook import (
+    _FORMATTERS,
+    _UNFORMATTED_TOOLS,
+    _format_response,
+)
 from tests.infra._pretty_output_helpers import _make_run_skill_event, _run_hook
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -1008,3 +1013,73 @@ def test_fleet_error_through_formatter_renders_error_fields():
     assert "quota limit hit" in text, (
         f"fleet_error() user_visible_message must appear in output: {text!r}"
     )
+
+
+# --- Error field backstop: every registered formatter must preserve `error` ---
+
+_SAMPLE_UNFORMATTED_TOOLS = ("run_python", "get_pipeline_report", "record_pipeline_step")
+_ALL_FORMATTER_TOOL_NAMES = sorted(_FORMATTERS) + sorted(_SAMPLE_UNFORMATTED_TOOLS)
+
+
+@pytest.mark.parametrize("tool_short_name", _ALL_FORMATTER_TOOL_NAMES)
+@pytest.mark.parametrize("subtype", [None, "gate_error", "tool_exception"])
+def test_error_field_survives_every_registered_formatter(tool_short_name, subtype):
+    """The `error` field must survive formatting for every registered formatter
+    (and a representative sample of _UNFORMATTED_TOOLS), including the early-return
+    gate_error/tool_exception subtype paths.
+    """
+    assert tool_short_name in _FORMATTERS or tool_short_name in _UNFORMATTED_TOOLS
+
+    payload: dict = {
+        "success": False,
+        "is_error": True,
+        "error": "ERR-SENTINEL-7f3a",
+    }
+    if subtype is not None:
+        payload["subtype"] = subtype
+
+    outer = json.dumps({"result": json.dumps(payload)})
+    text = _format_response(
+        f"mcp__plugin_autoskillit_autoskillit__{tool_short_name}", outer, pipeline=False
+    )
+    assert text is not None
+    assert "ERR-SENTINEL-7f3a" in text, (
+        f"error field lost for tool={tool_short_name!r} subtype={subtype!r}: {text!r}"
+    )
+
+
+# --- DEPENDENCY UNMET envelope fidelity through the pretty_output hook ---
+
+
+def test_dependency_unmet_deny_envelope_fidelity():
+    """The DEPENDENCY UNMET deny envelope produced by _check_pipeline_deps must
+    round-trip through _format_response with both the marker string and the
+    per-step status dict intact.
+    """
+    envelope = {
+        "success": False,
+        "is_error": True,
+        "error": (
+            "DEPENDENCY UNMET: Step 'review_approach' requires ['rectify'] to complete "
+            "first. Pipeline 'kitchen-1': {'rectify': 'pending'}."
+        ),
+        "stage": "preflight:pipeline_deps",
+        "retriable": True,
+    }
+    outer = json.dumps({"result": json.dumps(envelope)})
+    text = _format_response("mcp__plugin_autoskillit_autoskillit__run_skill", outer, pipeline=True)
+    assert text is not None
+    assert "DEPENDENCY UNMET" in text
+    assert "{'rectify': 'pending'}" in text
+
+
+def test_dependency_unmet_routing_documented():
+    """The DEPENDENCY UNMET recovery path must be documented for both orchestrator
+    prompt surfaces and the sous-chef skill, so agents know how to recover.
+    """
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+    for rel in ("cli/_prompts_orchestrator.py", "fleet/_prompts.py", "skills/sous-chef/SKILL.md"):
+        content = (src / rel).read_text()
+        assert "DEPENDENCY UNMET" in content, f"DEPENDENCY UNMET not found in {rel}"

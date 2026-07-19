@@ -129,6 +129,9 @@ def _fmt_kitchen_status(data: dict, _pipeline: bool) -> str:
     warning = data.get("warning")
     if warning:
         lines.extend(["", f"warning: {warning}"])
+    error = data.get("error")
+    if error:
+        lines.extend(["", f"error: {error}"])
     return "\n".join(lines)
 
 

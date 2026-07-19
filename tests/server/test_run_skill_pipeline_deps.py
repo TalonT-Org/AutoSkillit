@@ -305,3 +305,45 @@ class TestPipelineDepsEmptyStepNameBypass:
         )
         assert result["success"] is False
         assert "DEPENDENCY UNMET" in result["error"]
+
+
+class TestPipelineDepsRecoveryInstruction:
+    @pytest.mark.anyio
+    async def test_dependency_deny_carries_recovery_instruction(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
+
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        _write_tracker(
+            tmp_path,
+            "AB",
+            {"a": {"status": "pending"}, "b": {"status": "pending"}},
+            {"b": ["a"]},
+        )
+        raw = _check_pipeline_deps("b", "AB")
+        assert raw is not None
+        result = json.loads(raw)
+        assert "record_pipeline_step" in result["error"]
+        assert "op='status'" in result["error"] or 'op="status"' in result["error"]
+
+
+class TestPreflightDenyEnvelopeShape:
+    @pytest.mark.anyio
+    async def test_preflight_denials_use_canonical_envelope(self, tool_ctx_kitchen_open, tmp_path):
+        from autoskillit.server.tools.tools_execution import _check_pipeline_deps
+
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        _write_tracker(
+            tmp_path,
+            "AB",
+            {"a": {"status": "pending"}, "b": {"status": "pending"}},
+            {"b": ["a"]},
+        )
+        raw = _check_pipeline_deps("b", "AB")
+        assert raw is not None
+        result = json.loads(raw)
+        assert result["success"] is False
+        assert result["is_error"] is True
+        assert result["error"]
+        assert "stage" in result

@@ -25,6 +25,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_helpers_gate.py` | Contract tests: server helpers gate response schema |
 | `test_helpers_tier_guards.py` | Tests for tier-aware guard helpers in server._guards |
 | `test_kitchen_lifecycle.py` | Kitchen lifecycle tests |
+| `test_kitchen_state_pruning.py` | Prune-safety unit tests for prune_stale_kitchen_state — malformed JSON, missing kitchen_id, registry read failure |
 | `test_lifespan.py` | Tests that the FastMCP lifespan calls recorder.finalize() on server shutdown |
 | `test_lifespan_fleet_boot.py` | Tests for fleet and food-truck lifespan auto-gate boot functions |
 | `test_lifespan_readiness_structural.py` | AST structural guard for _autoskillit_lifespan readiness invariants |

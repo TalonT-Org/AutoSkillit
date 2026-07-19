@@ -272,6 +272,81 @@ def test_open_reaps_aged_orphan_tracker(monkeypatch, tmp_path):
     assert not (tracker_dir / "K1.json").exists()
 
 
+def test_multi_entry_same_kitchen_one_alive_preserves_tracker(monkeypatch, tmp_path):
+    """Fleet-campaign shape: multiple registry entries share one kitchen_id.
+
+    If any matching entry is alive, the tracker must survive even though
+    another entry for the same kitchen_id is dead.
+    """
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    _write_tracker(tracker_dir, "K1")
+    _write_registry(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "kitchen_id": "K1",
+                "pid": 99999,
+                "create_time": 1234567890.0,
+                "project_path": str(tmp_path),
+                "opened_at": datetime.now(UTC).isoformat(),
+            },
+            {
+                "kitchen_id": "K1",
+                "pid": os.getpid(),
+                "create_time": None,
+                "project_path": str(tmp_path),
+                "opened_at": datetime.now(UTC).isoformat(),
+            },
+        ],
+    )
+
+    prune_stale_kitchen_state(tmp_path, "different-kitchen")
+
+    assert (tracker_dir / "K1.json").exists()
+
+
+def test_same_process_reopen_replaces_registry_entry(monkeypatch, tmp_path):
+    """A tracker survives while its registry entry is alive, then is reaped once dead."""
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    _write_tracker(tracker_dir, "K1")
+    _write_registry(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "kitchen_id": "K1",
+                "pid": os.getpid(),
+                "create_time": None,
+                "project_path": str(tmp_path),
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        ],
+    )
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert (tracker_dir / "K1.json").exists()
+
+    _write_registry(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "kitchen_id": "K1",
+                "pid": 99999,
+                "create_time": 1234567890.0,
+                "project_path": str(tmp_path),
+                "opened_at": datetime.now(UTC).isoformat(),
+            }
+        ],
+    )
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert not (tracker_dir / "K1.json").exists()
+
+
 async def test_close_kitchen_removes_overlay_lock_sidecar(monkeypatch, tmp_path):
     """The overlay lock sidecar file must be removed alongside the overlay file."""
     monkeypatch.chdir(tmp_path)

@@ -116,6 +116,7 @@ def _is_absolute_path(path: str) -> bool:
 def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     """Check if step_name is locked out by ingredient locks. Returns deny JSON or None."""
     from autoskillit.server import _get_ctx  # circular-break
+    from autoskillit.server.tools._types import deny_envelope
 
     ctx = _get_ctx()
     overlay_path = _hook_config_overlay_path(ctx.project_dir)
@@ -133,29 +134,29 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
         if locked_steps[effective_oid].get(step_name) is False:
             ingredient_info = overlay.get("locked_ingredients", {}).get(effective_oid, {})
             return json.dumps(
-                {
-                    "success": False,
-                    "is_error": True,
-                    "error": (
+                deny_envelope(
+                    (
                         f"{INGREDIENT_LOCK_DENY_PREFIX}: Step '{step_name}' is locked out. "
                         f"Locked ingredients for pipeline '{effective_oid}': {ingredient_info}. "
                         f"Call lock_ingredients(unlock=[...]) to release."
                     ),
-                }
+                    stage="preflight:ingredient_locks",
+                    retriable=False,
+                )
             )
     elif not effective_oid:
         for pid, steps in locked_steps.items():
             if steps.get(step_name) is False:
                 return json.dumps(
-                    {
-                        "success": False,
-                        "is_error": True,
-                        "error": (
+                    deny_envelope(
+                        (
                             f"{INGREDIENT_LOCK_DENY_PREFIX}: Step '{step_name}' is locked out "
                             f"by pipeline '{pid}'. Pass order_id to scope the check, "
                             f"or call lock_ingredients(unlock=[...]) to release."
                         ),
-                    }
+                        stage="preflight:ingredient_locks",
+                        retriable=False,
+                    )
                 )
     return None
 
@@ -163,6 +164,7 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
 def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
     from autoskillit.server import _get_ctx  # circular-break
+    from autoskillit.server.tools._types import deny_envelope
     from autoskillit.server.tools.tools_pipeline_tracker import (
         ResolutionRefusal,
         resolve_tracker_order_id,
@@ -173,11 +175,11 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     if isinstance(resolved, ResolutionRefusal):
         if "multiple pipelines" in resolved.reason:
             return json.dumps(
-                {
-                    "success": False,
-                    "is_error": True,
-                    "error": f"{DEPENDENCY_DENY_PREFIX}: {resolved.reason}",
-                }
+                deny_envelope(
+                    f"{DEPENDENCY_DENY_PREFIX}: {resolved.reason}",
+                    stage="preflight:pipeline_deps",
+                    retriable=False,
+                )
             )
         return None
     if not resolved.path.exists():
@@ -195,8 +197,6 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     if not unmet:
         return None
     dep_status = {d: steps.get(d, {}).get("status", "unknown") for d in unmet}
-    from autoskillit.server.tools._types import deny_envelope
-
     return json.dumps(
         deny_envelope(
             (
@@ -299,16 +299,18 @@ def _check_review_approach_plan_path(step_name: str, skill_command: str) -> str 
         return None
     first_arg = parts[1]
     if first_arg.startswith("https://") or first_arg.startswith("http://"):
+        from autoskillit.server.tools._types import deny_envelope
+
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": (
+            deny_envelope(
+                (
                     "review_approach requires a plan file path argument (a path "
                     "under the project's temp directory produced by "
                     "rectify/make_plan), not an issue URL."
                 ),
-            }
+                stage="preflight:plan_path",
+                retriable=False,
+            )
         )
     return None
 
@@ -765,22 +767,28 @@ async def run_skill(
     if not resume_session_id and (cmd_error := _validate_skill_command(skill_command)) is not None:
         return cmd_error
     if cwd and not _is_absolute_path(cwd):
+        from autoskillit.server.tools._types import deny_envelope
+
         return json.dumps(
-            {
-                "success": False,
-                "error": (
+            deny_envelope(
+                (
                     f"run_skill: cwd must be an absolute path, got: {cwd!r}. "
                     "Check that the skill resolved the worktree_path to absolute "
                     '(e.g. WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)").'
                 ),
-            }
+                stage="preflight:cwd",
+                retriable=False,
+            )
         )
     if cwd and not os.path.isdir(cwd):
+        from autoskillit.server.tools._types import deny_envelope
+
         return json.dumps(
-            {
-                "success": False,
-                "error": f"run_skill: cwd does not exist: {cwd}",
-            }
+            deny_envelope(
+                f"run_skill: cwd does not exist: {cwd}",
+                stage="preflight:cwd",
+                retriable=False,
+            )
         )
     if (
         step_name
@@ -829,41 +837,47 @@ async def run_skill(
                     return _plan_path_denial
             elif _ambiguous:
                 if _has_active_deps():
+                    from autoskillit.server.tools._types import deny_envelope
+
                     return json.dumps(
-                        {
-                            "success": False,
-                            "is_error": True,
-                            "error": (
+                        deny_envelope(
+                            (
                                 f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and matched "
                                 "multiple recipe steps by skill_command prefix (ambiguous). "
                                 "Cannot verify dependency status. Pass step_name explicitly."
                             ),
-                        }
+                            stage="preflight:ambiguous_step",
+                            retriable=False,
+                        )
                     )
             elif _has_active_locks(order_id):
+                from autoskillit.server.tools._types import deny_envelope
+
                 return json.dumps(
-                    {
-                        "success": False,
-                        "is_error": True,
-                        "error": (
+                    deny_envelope(
+                        (
                             f"{INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and could "
                             "not be resolved from the recipe. Cannot verify lock "
                             "status. Pass step_name explicitly or call "
                             "lock_ingredients(unlock=[...]) to release all locks."
                         ),
-                    }
+                        stage="preflight:ingredient_locks",
+                        retriable=False,
+                    )
                 )
             elif _has_active_deps():
+                from autoskillit.server.tools._types import deny_envelope
+
                 return json.dumps(
-                    {
-                        "success": False,
-                        "is_error": True,
-                        "error": (
+                    deny_envelope(
+                        (
                             f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
                             "not be resolved from the recipe. Cannot verify dependency "
                             "status. Pass step_name explicitly."
                         ),
-                    }
+                        stage="preflight:ambiguous_step",
+                        retriable=False,
+                    )
                 )
 
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):

@@ -938,7 +938,7 @@ def _large_output_prompt(workspace: Path) -> str:
         '{"task":"test task","issue_url":"https://github.com/test/test/issues/1",'
         '"is_fleet_dispatch":"true","adversarial_review_level":"true",'
         '"local_review_rounds":"true","base_branch":"true",'
-        '"post_run_diagnostics":"true"}. Then make every autoskillit run_cmd call below, '
+        '"pipeline_health":"true"}. Then make every autoskillit run_cmd call below, '
         "in order. Do not substitute native shell tools and do not omit a call.\n"
         f"{calls}\nAfter all calls, respond with exactly: probe-complete"
     )

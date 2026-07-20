@@ -26,7 +26,7 @@ _ALL_TRUTHY_SKIP_INGREDIENTS: dict[str, str] = {
     "adversarial_review_level": "true",
     "local_review_rounds": "true",
     "base_branch": "true",
-    "post_run_diagnostics": "true",
+    "pipeline_health": "true",
 }
 
 

@@ -39,24 +39,24 @@ def test_analyze_pipeline_health_coordinator_validates_scanners():
     )
 
 
-# DIAG_C9: run_diagnostic steps have required fields in implementation recipe
+# DIAG_C9: pipeline_health steps have required fields in implementation recipe
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "merge-prs"])
-def test_run_diagnostic_steps_have_required_fields(recipe_name):
-    """run_diagnostic steps must have on_context_limit, optional=true, skip_when_false."""
+def test_pipeline_health_steps_have_required_fields(recipe_name):
+    """pipeline_health steps must have on_context_limit, optional=true, skip_when_false."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     for name, step in recipe.steps.items():
-        if name.startswith("run_diagnostic"):
+        if name.startswith("pipeline_health"):
             assert step.on_context_limit is not None, f"{name} missing on_context_limit"
             assert step.optional is True, f"{name} optional must be True"
-            assert step.skip_when_false == "inputs.post_run_diagnostics", (
-                f"{name} skip_when_false must be inputs.post_run_diagnostics"
+            assert step.skip_when_false == "inputs.pipeline_health", (
+                f"{name} skip_when_false must be inputs.pipeline_health"
             )
 
 
 # T7: REQ-TEST-004
 def test_implementation_family_recipes_route_terminals_through_diagnostics() -> None:
     """REQ-TEST-004: Every register_clone_* terminal in implementation-family recipes
-    routes through a run_diagnostic* step gated on post_run_diagnostics."""
+    routes through a pipeline_health* step gated on pipeline_health."""
     recipes_dir = builtin_recipes_dir()
     target_names = ["implementation.yaml", "implementation-groups.yaml"]
     missing: list[str] = []
@@ -66,8 +66,8 @@ def test_implementation_family_recipes_route_terminals_through_diagnostics() -> 
             missing.append(name)
     assert not missing, f"Recipe files not found: {missing}"
 
-    diag_step_prefixes = ("run_diagnostic",)
-    required_post_run_refs = ("inputs.post_run_diagnostics",)
+    diag_step_prefixes = ("pipeline_health",)
+    required_post_run_refs = ("inputs.pipeline_health",)
 
     for name in target_names:
         recipe_path = recipes_dir / name
@@ -76,14 +76,14 @@ def test_implementation_family_recipes_route_terminals_through_diagnostics() -> 
         clone_steps = [(n, s) for n, s in steps.items() if n.startswith("register_clone_")]
         assert clone_steps, f"{name}: expected at least one register_clone_* step"
         for step_name, cs in clone_steps:
-            # The step must route on_success to a run_diagnostic* step
+            # The step must route on_success to a pipeline_health* step
             next_step = cs.on_success
             assert next_step is not None, f"{name}: {step_name} has no on_success"
             assert next_step.startswith(diag_step_prefixes), (
                 f"{name}: {step_name}.on_success={next_step!r} must start with "
                 f"{diag_step_prefixes!r}"
             )
-            # The run_diagnostic* step must gate on inputs.post_run_diagnostics
+            # The pipeline_health* step must gate on inputs.pipeline_health
             diag = steps.get(next_step)
             assert diag is not None, (
                 f"{name}: step {step_name} routes to {next_step!r} but no such step exists"

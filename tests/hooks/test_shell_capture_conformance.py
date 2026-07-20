@@ -145,7 +145,8 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
         assert raw_combined == b""
         assert wrapped.stdout == b""
         assert raw.returncode == 0
-        assert not artifacts
+        assert artifacts, "[true_cmd] expected artifact retained (Python-side cleanup)"
+        assert len(artifacts) == 1
         return
 
     if label == "self_bg":
@@ -298,7 +299,9 @@ def test_sweep_rejects_symlinks_and_traversals(tmp_path: Path) -> None:
     assert deleted == 0
     assert outside.exists(), "outside target file must be untouched by sweep"
     assert outside.read_text() == "must-survive"
-    assert not symlink.exists(), "symlink should remain (sweep must not follow into the target)"
+    assert symlink.is_symlink(), (
+        "symlink must remain after sweep (sweep must not follow into the target)"
+    )
 
 
 def test_sweep_filename_allowlist(tmp_path: Path) -> None:

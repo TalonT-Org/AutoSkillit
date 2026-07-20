@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tomllib
@@ -330,6 +331,13 @@ _OUTPUT_BUDGET_CANARY_PROMPT = (
     "After the tool is denied, repeat the complete denial reason verbatim and stop. "
     "Do not run any other tool."
 )
+_POLICY_DENIAL_MARKERS = (
+    "blocked by policy",
+    "not permitted",
+    "policy_violation",
+    "rejected:",
+)
+_CAPTURE_ARTIFACT_PATH_RE = re.compile(r"\.autoskillit/temp/shell_capture/shell_[0-9a-f]{16}\.log")
 
 _skip_unless_codex_output_budget_smoke = pytest.mark.skipif(
     not os.environ.get("CODEX_SMOKE_TEST")
@@ -577,6 +585,14 @@ def test_generated_codex_child_receives_output_discipline(
     )
 
 
+def _policy_denial_reason(transcript: str) -> str | None:
+    for line in transcript.splitlines():
+        lowered = line.lower()
+        if any(marker in lowered for marker in _POLICY_DENIAL_MARKERS):
+            return line.strip()
+    return None
+
+
 def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutput:
     tmp_path.mkdir(parents=True, exist_ok=True)
     workspace = tmp_path / "workspace"
@@ -618,7 +634,7 @@ def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutp
         timeout=timeout,
     )
     transcript = result.stdout + "\n" + result.stderr
-    if result.returncode != 0:
+    if result.returncode != 0 and _policy_denial_reason(transcript) is None:
         raise OSError(
             f"{backend} shell-capture probe failed with rc={result.returncode}: {transcript}"
         )
@@ -629,8 +645,145 @@ def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutp
 
 
 def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
-    assert _OUTPUT_BUDGET_CANARY_COMMAND in output.transcript
-    assert "autoskillit-shell-capture" in output.transcript
+    denial_reason = _policy_denial_reason(output.transcript)
+    assert denial_reason is None, (
+        "Policy denial detected in shell-capture transcript. "
+        f"The generated harness was rejected by Codex's exec-policy engine: {denial_reason}"
+    )
+    assert "autoskillit-shell-capture" in output.transcript, (
+        "Harness sentinel missing — hook may not have fired"
+    )
+    assert _OUTPUT_BUDGET_CANARY_COMMAND in output.transcript, (
+        "Canary command text missing from transcript"
+    )
+
+    completed_commands: list[str] = []
+    for line in output.transcript.splitlines():
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(event, dict) or event.get("type") != "item.completed":
+            continue
+        item = event.get("item")
+        if not isinstance(item, dict) or item.get("type") != "command_execution":
+            continue
+        if item.get("status") == "completed":
+            completed_commands.append(str(item.get("command", "")))
+
+    assert completed_commands, (
+        "No completed command_execution event found — the rewritten command did not execute"
+    )
+    assert any(
+        _OUTPUT_BUDGET_CANARY_COMMAND in command
+        and "autoskillit-shell-capture" in command
+        and _CAPTURE_ARTIFACT_PATH_RE.search(command)
+        for command in completed_commands
+    ), "No completed rewritten command referenced the shell-capture artifact path"
+
+
+def test_shell_capture_assertion_requires_completed_rewritten_command() -> None:
+    capture_path = "/tmp/workspace/.autoskillit/temp/shell_capture/shell_0123456789abcdef.log"
+    rewritten_command = (
+        f"# autoskillit-shell-capture v1\n__as_f={capture_path}\n{_OUTPUT_BUDGET_CANARY_COMMAND}\n"
+    )
+
+    def _output(*, status: str, command: str = rewritten_command) -> _DenyRoundTripOutput:
+        event = {
+            "type": "item.completed",
+            "item": {
+                "type": "command_execution",
+                "command": command,
+                "status": status,
+            },
+        }
+        return _DenyRoundTripOutput(
+            transcript=json.dumps(event),
+            cli_version="codex-cli test",
+        )
+
+    _assert_shell_capture_round_trip(_output(status="completed"))
+
+    for noncompleted_status in ("denied", "failed"):
+        with pytest.raises(AssertionError, match="No completed command_execution"):
+            _assert_shell_capture_round_trip(_output(status=noncompleted_status))
+
+    command_without_capture_path = rewritten_command.replace(capture_path, "/tmp/missing.log")
+    with pytest.raises(AssertionError, match="shell-capture artifact path"):
+        _assert_shell_capture_round_trip(
+            _output(status="completed", command=command_without_capture_path)
+        )
+
+
+def test_probe_distinguishes_policy_denial_from_transport_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exec_result = subprocess.CompletedProcess(
+        args=["codex", "exec"],
+        returncode=1,
+        stdout=("blocked by policy\nrm -f style commands are not permitted\n"),
+        stderr="",
+    )
+
+    def _fake_run(
+        command: list[str],
+        **_kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        if command[:2] == ["git", "init"]:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if command == ["codex", "--version"]:
+            return subprocess.CompletedProcess(command, 0, "codex-cli test\n", "")
+        if command[:2] == ["codex", "exec"]:
+            return exec_result
+        raise AssertionError(f"unexpected subprocess command: {command}")
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    policy_output = _run_shell_capture_probe("codex", tmp_path / "policy")
+    with pytest.raises(AssertionError, match="Policy denial detected"):
+        _assert_shell_capture_round_trip(policy_output)
+
+    failures: list[tuple[ErrorKind, str, str, str]] = []
+    with pytest.raises(AssertionError, match="Policy denial detected"):
+        _run_probe_with_discrimination(
+            "shell_capture_policy_denial",
+            "codex-cli test",
+            lambda: policy_output,
+            _assert_shell_capture_round_trip,
+            record_success=lambda _version: pytest.fail(
+                "policy denial must not record probe success"
+            ),
+            record_failure=lambda kind, name, version, detail: failures.append(
+                (kind, name, version, detail)
+            ),
+        )
+    assert failures[0][0] is ErrorKind.SCHEMA
+
+    exec_result = subprocess.CompletedProcess(
+        args=["codex", "exec"],
+        returncode=1,
+        stdout="request timed out before any event was emitted",
+        stderr="codex process crashed",
+    )
+    with pytest.raises(OSError, match="shell-capture probe failed"):
+        _run_shell_capture_probe("codex", tmp_path / "transport-direct")
+
+    failures.clear()
+    with pytest.raises(OSError, match="shell-capture probe failed"):
+        _run_probe_with_discrimination(
+            "shell_capture_transport_failure",
+            "codex-cli test",
+            lambda: _run_shell_capture_probe("codex", tmp_path / "transport-dispatch"),
+            _assert_shell_capture_round_trip,
+            record_success=lambda _version: pytest.fail(
+                "transport failure must not record probe success"
+            ),
+            record_failure=lambda kind, name, version, detail: failures.append(
+                (kind, name, version, detail)
+            ),
+        )
+    assert failures[0][0] is ErrorKind.NETWORK
 
 
 def _exercise_shell_capture_probe(backend: str, tmp_path: Path) -> None:

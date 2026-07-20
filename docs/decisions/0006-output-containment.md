@@ -89,4 +89,4 @@ hook can be retired in favor of that mechanism.
   for the classifier's literal-small-JSONL exception).
 - `shell_max_inline_bytes` survives with its new capture-threshold meaning.
 - Complete Codex shell output is captured to mechanism-owned artifacts at
-  `<cwd>/.autoskillit/temp/shell_capture/shell_<uuid8>.log`.
+  `<cwd>/.autoskillit/temp/shell_capture/shell_<uuid16>.log`.

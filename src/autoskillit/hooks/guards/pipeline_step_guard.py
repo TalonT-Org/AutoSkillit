@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -23,8 +22,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
-
-_SUFFIX_RE = re.compile(r"-\d+$")
+from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa: E402
 
 
 def _resolve_order_id_from_kitchen(tracker_dir: Path, kitchen_id: str) -> str:
@@ -93,7 +91,7 @@ def main() -> None:
             )
             sys.exit(0)
 
-    canonical = _SUFFIX_RE.sub("", step_name)
+    canonical = STEP_SUFFIX_RE.sub("", step_name)
     tracker_path = Path.cwd() / ".autoskillit" / "temp" / "pipeline_tracker" / f"{order_id}.json"
     if not tracker_path.exists():
         sys.exit(0)

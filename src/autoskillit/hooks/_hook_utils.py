@@ -6,7 +6,10 @@ via sys.path bootstrap.  Stdlib-only — no autoskillit imports.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+STEP_SUFFIX_RE = re.compile(r"-\d+$")
 
 
 def find_project_root() -> Path:

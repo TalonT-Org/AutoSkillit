@@ -88,13 +88,13 @@ linux_tracing:
 
 ## Per-Run Enablement
 
-By default, `post_run_diagnostics` resolves from `diagnostics.post_run_analysis` (shipped
+By default, `pipeline_health` resolves from `diagnostics.pipeline_health` (shipped
 default: `false`). To enable diagnostics for a single run, the orchestrator can pass
-`overrides={"post_run_diagnostics": "true"}` to `open_kitchen`. The override takes effect
+`overrides={"pipeline_health": "true"}` to `open_kitchen`. The override takes effect
 for that kitchen session only and does not modify the persistent config.
 
 The orchestrator can also lock the value for the session via
-`lock_ingredients(locked={"post_run_diagnostics": "true"})` to ensure it is not overridden
+`lock_ingredients(locked={"pipeline_health": "true"})` to ensure it is not overridden
 by downstream steps.
 
 For post-hoc diagnostics on a completed run, use:

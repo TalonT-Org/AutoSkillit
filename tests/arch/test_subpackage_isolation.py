@@ -1013,7 +1013,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_dispatch_infeasible_response accepting capability_detail kwarg for none_pass "
         "diagnostic enrichment (+24 net lines)"
         "; config-default ingredient layer: build_config_default_layer call and "
-        "docstring update for post_run_diagnostics demotion (+10 net lines)"
+        "docstring update for pipeline_health demotion (+10 net lines)"
         "; get_recipe session_serve_overrides replay via serve_recipe; "
         "deferred-recall snapshot update guard (+3 net lines)"
         "; per-step backend override config_backend kwarg threading (+5 net lines)"

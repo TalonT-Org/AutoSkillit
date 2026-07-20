@@ -118,7 +118,7 @@ logging:
   json_output: null
 
 diagnostics:
-  post_run_analysis: false
+  pipeline_health: false
 
 linux_tracing:
   enabled: true

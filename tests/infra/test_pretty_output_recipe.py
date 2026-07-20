@@ -916,7 +916,7 @@ _COMPACT_TEST_OVERRIDES = {
         "adversarial_review_level": "true",
         "local_review_rounds": "true",
         "base_branch": "true",
-        "post_run_diagnostics": "true",
+        "pipeline_health": "true",
     },
 }
 
@@ -1052,8 +1052,8 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
         for ingredients_only in (False, True)
     }
     assert maxima == {
-        "load_recipe": (182_759, "remediation", "all_truthy"),
-        "open_kitchen": (182_818, "remediation", "all_truthy"),
+        "load_recipe": (183_420, "remediation", "all_truthy"),
+        "open_kitchen": (183_479, "remediation", "all_truthy"),
     }
 
 

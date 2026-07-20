@@ -444,7 +444,7 @@ async def test_open_kitchen_config_authority_overrides_caller(tmp_path, monkeypa
                             "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
                             return_value={
                                 "base_branch": "develop",
-                                "post_run_diagnostics": "false",
+                                "pipeline_health": "false",
                                 "is_fleet_dispatch": "false",
                                 "dispatch_id": "",
                             },
@@ -538,7 +538,7 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
         "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
         lambda _: {
             "base_branch": "develop",
-            "post_run_diagnostics": "false",
+            "pipeline_health": "false",
             "is_fleet_dispatch": "false",
             "dispatch_id": "",
         },
@@ -1095,21 +1095,21 @@ def test_recipe_validation_error_response_handles_malformed_suggestions():
 
 
 # ---------------------------------------------------------------------------
-# post_run_diagnostics demotion tests (T1, T2, T5)
+# pipeline_health demotion tests (T1, T2, T5)
 # ---------------------------------------------------------------------------
 
 
 # T1: REQ-ING-001
 @pytest.mark.anyio
-async def test_post_run_diagnostics_override_wins_over_config(tmp_path, monkeypatch):
-    """REQ-ING-001: open_kitchen override for post_run_diagnostics wins over config."""
+async def test_pipeline_health_override_wins_over_config(tmp_path, monkeypatch):
+    """REQ-ING-001: open_kitchen override for pipeline_health wins over config."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
     mock_recipe_obj = MagicMock()
     mock_recipe_obj.steps = {"do": MagicMock()}
-    mock_recipe_obj.ingredients = {"post_run_diagnostics": MagicMock()}
+    mock_recipe_obj.ingredients = {"pipeline_health": MagicMock()}
     mock_ctx.recipes.load.return_value = mock_recipe_obj
     mock_ctx.recipes.load_and_validate.return_value = {
         "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
@@ -1139,7 +1139,7 @@ async def test_post_run_diagnostics_override_wins_over_config(tmp_path, monkeypa
                             "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
                             return_value={
                                 "base_branch": "develop",
-                                "post_run_diagnostics": "false",
+                                "pipeline_health": "false",
                                 "is_fleet_dispatch": "false",
                                 "dispatch_id": "",
                             },
@@ -1148,22 +1148,20 @@ async def test_post_run_diagnostics_override_wins_over_config(tmp_path, monkeypa
 
                             await open_kitchen(
                                 name="demo",
-                                overrides={"post_run_diagnostics": "true"},
+                                overrides={"pipeline_health": "true"},
                                 ctx=mock_ctx,
                             )
 
     call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
-    assert overrides["post_run_diagnostics"] == "true", (
-        f"Override must win; got overrides={overrides}"
-    )
+    assert overrides["pipeline_health"] == "true", f"Override must win; got overrides={overrides}"
     call_args_list = mock_ctx.recipes.load_and_validate.call_args_list
     assert call_args_list, "open_kitchen should call load_and_validate"
 
 
 # T2: REQ-ING-002
 @pytest.mark.anyio
-async def test_post_run_diagnostics_config_default_applied(tmp_path, monkeypatch):
+async def test_pipeline_health_config_default_applied(tmp_path, monkeypatch):
     """REQ-ING-002: Without override, config value is used as default."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
@@ -1171,7 +1169,7 @@ async def test_post_run_diagnostics_config_default_applied(tmp_path, monkeypatch
     mock_ctx.recipes = MagicMock()
     mock_recipe_obj = MagicMock()
     mock_recipe_obj.steps = {"do": MagicMock()}
-    mock_recipe_obj.ingredients = {"post_run_diagnostics": MagicMock()}
+    mock_recipe_obj.ingredients = {"pipeline_health": MagicMock()}
     mock_ctx.recipes.load.return_value = mock_recipe_obj
     mock_ctx.recipes.load_and_validate.return_value = {
         "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
@@ -1201,7 +1199,7 @@ async def test_post_run_diagnostics_config_default_applied(tmp_path, monkeypatch
                             "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
                             return_value={
                                 "base_branch": "develop",
-                                "post_run_diagnostics": "true",
+                                "pipeline_health": "true",
                                 "is_fleet_dispatch": "false",
                                 "dispatch_id": "",
                             },
@@ -1212,7 +1210,7 @@ async def test_post_run_diagnostics_config_default_applied(tmp_path, monkeypatch
 
     call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
-    assert overrides["post_run_diagnostics"] == "true", (
+    assert overrides["pipeline_health"] == "true", (
         f"Config default must apply; got overrides={overrides}"
     )
 

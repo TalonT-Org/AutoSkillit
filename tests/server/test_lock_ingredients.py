@@ -490,8 +490,8 @@ class TestLockIngredientsConcurrentFlock:
 
 # T3: REQ-ING-004
 @pytest.mark.anyio
-async def test_post_run_diagnostics_lockable(tmp_path):
-    """REQ-ING-004: lock_ingredients accepts post_run_diagnostics."""
+async def test_pipeline_health_lockable(tmp_path):
+    """REQ-ING-004: lock_ingredients accepts pipeline_health."""
     temp_dir = tmp_path / ".autoskillit" / "temp"
     temp_dir.mkdir(parents=True)
     (temp_dir / ".hook_config.json").write_text("{}")
@@ -503,11 +503,7 @@ async def test_post_run_diagnostics_lockable(tmp_path):
     with patch("autoskillit.server._get_ctx", return_value=ctx):
         from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
-        result_str = await lock_ingredients(
-            locked={"post_run_diagnostics": "true"}, pipeline_id="a"
-        )
+        result_str = await lock_ingredients(locked={"pipeline_health": "true"}, pipeline_id="a")
 
     result = json.loads(result_str)
-    assert result.get("success") is True, (
-        f"post_run_diagnostics must be lockable; got result={result}"
-    )
+    assert result.get("success") is True, f"pipeline_health must be lockable; got result={result}"

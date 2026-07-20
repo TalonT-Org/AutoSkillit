@@ -128,7 +128,7 @@ def test_prune_skipped_steps_truthy_clears_field() -> None:
         name="test",
         description="test",
         ingredients={
-            "post_run_diagnostics": RecipeIngredient(
+            "pipeline_health": RecipeIngredient(
                 description="Enable post-run diagnostics",
                 default="false",
                 hidden=True,
@@ -141,7 +141,7 @@ def test_prune_skipped_steps_truthy_clears_field() -> None:
             "diag": RecipeStep(
                 tool="run_skill",
                 optional=True,
-                skip_when_false="inputs.post_run_diagnostics",
+                skip_when_false="inputs.pipeline_health",
                 on_success="done",
                 on_failure="done",
                 with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
@@ -152,14 +152,14 @@ def test_prune_skipped_steps_truthy_clears_field() -> None:
     )
 
     pruned, resolutions = _prune_skipped_steps(
-        recipe, ingredient_overrides={"post_run_diagnostics": "true"}
+        recipe, ingredient_overrides={"pipeline_health": "true"}
     )
     assert "diag" in pruned.steps
     assert pruned.steps["diag"].skip_when_false is None
     assert resolutions["diag"] is True
 
     pruned2, resolutions2 = _prune_skipped_steps(
-        recipe, ingredient_overrides={"post_run_diagnostics": "false"}
+        recipe, ingredient_overrides={"pipeline_health": "false"}
     )
     assert "diag" not in pruned2.steps
     assert resolutions2["diag"] is False
@@ -173,7 +173,7 @@ def test_prune_skipped_steps_removes_step_and_cleans_routes() -> None:
         name="test",
         description="test",
         ingredients={
-            "post_run_diagnostics": RecipeIngredient(
+            "pipeline_health": RecipeIngredient(
                 description="Enable diagnostics",
                 default="false",
                 hidden=True,
@@ -186,7 +186,7 @@ def test_prune_skipped_steps_removes_step_and_cleans_routes() -> None:
             "diag": RecipeStep(
                 tool="run_skill",
                 optional=True,
-                skip_when_false="inputs.post_run_diagnostics",
+                skip_when_false="inputs.pipeline_health",
                 on_success="done",
                 on_failure="done",
                 with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
@@ -196,9 +196,7 @@ def test_prune_skipped_steps_removes_step_and_cleans_routes() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, _ = _prune_skipped_steps(
-        recipe, ingredient_overrides={"post_run_diagnostics": "false"}
-    )
+    pruned, _ = _prune_skipped_steps(recipe, ingredient_overrides={"pipeline_health": "false"})
     assert "diag" not in pruned.steps
     # Route repaired: upstream.on_success now points to diag's on_success (done)
     assert pruned.steps["upstream"].on_success == "done"
@@ -392,7 +390,7 @@ recipe_version: "0.0.1"
 kitchen_rules:
   - no native tools
 ingredients:
-  post_run_diagnostics:
+  pipeline_health:
     description: Enable diagnostics
     default: "false"
     hidden: true
@@ -405,7 +403,7 @@ steps:
   diag:
     tool: run_skill
     optional: true
-    skip_when_false: inputs.post_run_diagnostics
+    skip_when_false: inputs.pipeline_health
     with:
       skill_command: /autoskillit:diagnose /tmp/x.md
       cwd: /tmp
@@ -422,9 +420,9 @@ steps:
     result = load_and_validate(
         "test-skip-guards",
         project_dir=tmp_path,
-        ingredient_overrides={"post_run_diagnostics": "true"},
+        ingredient_overrides={"pipeline_health": "true"},
     )
-    assert "inputs.post_run_diagnostics" not in result["content"]
+    assert "inputs.pipeline_health" not in result["content"]
     content = result["content"]
     diag_block_start = content.index("  diag:\n")
     next_step_start = content.find("\n  done:\n", diag_block_start)
@@ -435,9 +433,9 @@ steps:
     result2 = load_and_validate(
         "test-skip-guards",
         project_dir=tmp_path,
-        ingredient_overrides={"post_run_diagnostics": "false"},
+        ingredient_overrides={"pipeline_health": "false"},
     )
-    assert "inputs.post_run_diagnostics" not in result2["content"]
+    assert "inputs.pipeline_health" not in result2["content"]
     assert 'skip_when_false: "false"' not in result2["content"]
     assert "  diag:\n" not in result2["content"]
 

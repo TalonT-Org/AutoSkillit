@@ -684,18 +684,18 @@ def test_recipe_has_unconditional_register_steps(recipe_name: str) -> None:
     assert "register_clone_failure" in recipe.steps
     s = recipe.steps["register_clone_success"]
     f = recipe.steps["register_clone_failure"]
-    # Accept direct routing to done/escalate_stop OR indirect via optional run_diagnostic steps
-    assert s.on_success in ("done", "run_diagnostic"), (
-        "register_clone_success.on_success must route to done or run_diagnostic, "
+    # Accept direct routing or indirect routing through optional pipeline-health analysis
+    assert s.on_success in ("done", "analyze_pipeline_health"), (
+        "register_clone_success.on_success must route to done or analyze_pipeline_health, "
         f"got {s.on_success!r}"
     )
-    assert f.on_success in ("escalate_stop", "run_diagnostic_error"), (
+    assert f.on_success in ("escalate_stop", "analyze_pipeline_health_error"), (
         "register_clone_failure.on_success must route to escalate_stop or "
-        f"run_diagnostic_error, got {f.on_success!r}"
+        f"analyze_pipeline_health_error, got {f.on_success!r}"
     )
-    assert f.on_failure in ("escalate_stop", "run_diagnostic_error"), (
+    assert f.on_failure in ("escalate_stop", "analyze_pipeline_health_error"), (
         "register_clone_failure.on_failure must route to escalate_stop or "
-        f"run_diagnostic_error, got {f.on_failure!r}"
+        f"analyze_pipeline_health_error, got {f.on_failure!r}"
     )
     assert "check_defer_cleanup" not in recipe.steps
     assert "check_defer_on_failure" not in recipe.steps

@@ -77,8 +77,8 @@ def test_resolve_ingredient_defaults_includes_adversarial_review_level(tmp_path)
     assert defaults.get("adversarial_review_level") is not None
 
 
-def test_resolve_ingredient_defaults_includes_post_run_diagnostics(tmp_path):
-    """DIAG_C3: resolve_ingredient_defaults includes post_run_diagnostics default false."""
+def test_resolve_ingredient_defaults_includes_pipeline_health(tmp_path):
+    """DIAG_C3: resolve_ingredient_defaults includes pipeline_health default false."""
     from autoskillit.config import resolve_ingredient_defaults
 
     repo = tmp_path / "repo"
@@ -90,7 +90,7 @@ def test_resolve_ingredient_defaults_includes_post_run_diagnostics(tmp_path):
     )
 
     defaults = resolve_ingredient_defaults(repo)
-    assert defaults.get("post_run_diagnostics") == "false"
+    assert defaults.get("pipeline_health") == "false"
 
 
 def test_resolve_ingredient_defaults_includes_is_fleet_dispatch_false(tmp_path):
@@ -183,7 +183,7 @@ def test_resolve_ingredient_defaults_base_branch_from_config(tmp_path):
     mock_cfg.branching.default_base_branch = "develop"
     mock_cfg.review.local_review_rounds = 3
     mock_cfg.plan.adversarial_review_level = "aggressive"
-    mock_cfg.diagnostics.post_run_analysis = False
+    mock_cfg.diagnostics.pipeline_health = False
 
     with patch("autoskillit.config.settings.load_config", return_value=mock_cfg):
         defaults = resolve_ingredient_defaults(repo)
@@ -280,16 +280,16 @@ def test_apply_config_authoritative_overrides_unknown_key_retains_caller_value(t
 
 
 # T4: REQ-ING-003
-def test_post_run_diagnostics_not_server_authoritative() -> None:
-    """post_run_diagnostics must be a config-default, not server-authoritative."""
+def test_pipeline_health_not_server_authoritative() -> None:
+    """pipeline_health must be a config-default, not server-authoritative."""
     from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS
 
-    assert "post_run_diagnostics" not in SERVER_AUTHORITATIVE_INGREDIENTS
+    assert "pipeline_health" not in SERVER_AUTHORITATIVE_INGREDIENTS
 
 
 # T6: REQ-ING-005
-def test_post_run_diagnostics_in_config_default_ingredients() -> None:
-    """post_run_diagnostics must be in CONFIG_DEFAULT_INGREDIENTS."""
+def test_pipeline_health_in_config_default_ingredients() -> None:
+    """pipeline_health must be in CONFIG_DEFAULT_INGREDIENTS."""
     from autoskillit.config import CONFIG_DEFAULT_INGREDIENTS
 
-    assert "post_run_diagnostics" in CONFIG_DEFAULT_INGREDIENTS
+    assert "pipeline_health" in CONFIG_DEFAULT_INGREDIENTS

@@ -64,7 +64,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         assert result.get("valid") is True
 
         # Verify user-supplied overrides were passed through to load_and_validate
-        # (merged with auto-injected kitchen_id and post_run_diagnostics)
+        # (merged with auto-injected kitchen_id and pipeline_health)
         mock_recipes.load_and_validate.assert_called_once()
         call_kwargs = mock_recipes.load_and_validate.call_args
         actual_overrides = call_kwargs.kwargs.get("ingredient_overrides") or {}
@@ -121,7 +121,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
         assert result.get("valid") is True
 
         # Verify user-supplied overrides were passed through to load_and_validate
-        # (merged with auto-injected kitchen_id and post_run_diagnostics)
+        # (merged with auto-injected kitchen_id and pipeline_health)
         mock_recipes.load_and_validate.assert_called_once()
         call_kwargs = mock_recipes.load_and_validate.call_args
         actual_overrides = call_kwargs.kwargs.get("ingredient_overrides") or {}

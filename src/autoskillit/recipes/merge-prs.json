@@ -42,7 +42,7 @@
       "description": "Plan files for audit",
       "default": "{{AUTOSKILLIT_TEMP}}/merge-prs"
     },
-    "post_run_diagnostics": {
+    "pipeline_health": {
       "description": "Run diagnostic analysis after pipeline completion",
       "default": "false",
       "hidden": true
@@ -1792,8 +1792,8 @@
         "status": "success",
         "step_name": "register_clone_success"
       },
-      "on_success": "run_diagnostic",
-      "on_failure": "run_diagnostic"
+      "on_success": "analyze_pipeline_health",
+      "on_failure": "analyze_pipeline_health"
     },
     "register_clone_failure": {
       "description": "Register clone as preserved (error pipeline)",
@@ -1803,20 +1803,20 @@
         "status": "error",
         "step_name": "register_clone_failure"
       },
-      "on_success": "run_diagnostic_error",
-      "on_failure": "run_diagnostic_error"
+      "on_success": "analyze_pipeline_health_error",
+      "on_failure": "analyze_pipeline_health_error"
     },
-    "run_diagnostic": {
+    "analyze_pipeline_health": {
       "description": "Run post-pipeline diagnostic analysis on session logs",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
       "optional": true,
-      "skip_when_false": "inputs.post_run_diagnostics",
+      "skip_when_false": "inputs.pipeline_health",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "post_run_diagnostics"
+        "step_name": "analyze_pipeline_health"
       },
       "on_success": "done",
       "on_failure": "done",
@@ -1824,17 +1824,17 @@
       "on_rate_limit": "done",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
     },
-    "run_diagnostic_error": {
+    "analyze_pipeline_health_error": {
       "description": "Run post-pipeline diagnostic analysis on session logs (error path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
       "optional": true,
-      "skip_when_false": "inputs.post_run_diagnostics",
+      "skip_when_false": "inputs.pipeline_health",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "post_run_diagnostics"
+        "step_name": "analyze_pipeline_health"
       },
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",

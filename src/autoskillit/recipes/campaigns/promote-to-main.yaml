@@ -36,7 +36,7 @@ ingredients:
     description: "Model context window in tokens; set to 1000000 for Opus 1M"
     default: "200000"
     hidden: true
-  post_run_diagnostics:
+  pipeline_health:
     description: Run diagnostic analysis after pipeline completion
     default: "false"
     hidden: true
@@ -110,7 +110,7 @@ dispatches:
   - name: consolidate-diagnostics
     recipe: consolidate-health-reports
     task: "Consolidate pipeline health reports from all dispatches in this campaign."
-    skip_when: "${{ inputs.post_run_diagnostics }} == false"
+    skip_when: "${{ inputs.pipeline_health }} == false"
     ingredients:
       kitchen_id: "${{ inputs.kitchen_id }}"
       diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"

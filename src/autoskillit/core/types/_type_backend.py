@@ -162,6 +162,12 @@ class BackendCapabilities:
     # directory rather than written with gating frontmatter that the backend
     # would ignore.
     supports_model_invocation_gating: bool = True
+    # Worst-case delivery bound in tokens: the lowest operative bound that
+    # could apply to this backend's tool-output transport. Distinct from any
+    # config-file ceiling (e.g. `tool_output_token_limit`), which code-mode
+    # models may bypass. Used by `enforce_response_budget` to spill payloads
+    # the downstream transport cannot deliver at full size.
+    effective_delivery_token_limit: int = 0
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
@@ -291,6 +297,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     skill_sigil="/",
     session_dir_persistent=False,
     supports_model_invocation_gating=True,
+    effective_delivery_token_limit=46_500,
 )
 
 

@@ -34,7 +34,9 @@ RESPONSE_SPILL_METADATA_KEYS = frozenset(
         "reason",
     }
 )
-RESPONSE_SPILL_REASONS = frozenset({"oversized_values", "minimal_projection", "plain_text"})
+RESPONSE_SPILL_REASONS = frozenset(
+    {"oversized_values", "minimal_projection", "plain_text", "delivery_bound"}
+)
 RESPONSE_SPILL_SCHEMA_DIGEST = hashlib.sha256(
     json.dumps(
         {
@@ -68,6 +70,16 @@ class _ProjectionNonconvergentError(RuntimeError):
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _estimated_tokens(original_size: int) -> int:
+    """Estimate tokens via the four-UTF-8-byte ceiling-division heuristic.
+
+    Matches the ``CODEX_TOOL_OUTPUT_TOKEN_LIMIT`` derivation: a coarse
+    transport-layer estimate, not a tokenizer count. Used to compare
+    payload size against ``effective_delivery_token_limit``.
+    """
+    return (original_size + 3) // 4
 
 
 def _serialized(value: Any) -> str:
@@ -345,6 +357,143 @@ def _plain_spill_envelope(
         preview_limit //= 2
 
 
+def _spill_for_delivery_bound(
+    result: Any,
+    *,
+    tool_name: str,
+    config: OutputBudgetConfig,
+    artifact_dir: Path | None,
+    original: str,
+    original_size: int,
+    effective_delivery_token_limit: int,
+) -> Any:
+    """Persist ``original`` and return a bounded projection honoring the delivery bound.
+
+    Used when an exempted or under-byte-budget payload still exceeds the
+    downstream backend's effective delivery token limit. Mirrors the
+    non-exempted spill machinery (atomic_write, _artifact_path,
+    _project_json_object) so the caller sees the same envelope shape, with
+    ``reason="delivery_bound"`` so downstream formatters distinguish it.
+    """
+    if artifact_dir is None:
+        return bounded_response_budget_failure(
+            result,
+            cause="context_unavailable",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
+        )
+    path = _artifact_path(artifact_dir, tool_name)
+    try:
+        atomic_write(path, original)
+    except OSError:
+        return bounded_response_budget_failure(
+            result,
+            cause="artifact_publication_failed",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
+        )
+    published = str(path.resolve())
+    metadata: dict[str, Any] = {
+        "artifact_path": published,
+        "sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
+        "original_utf8_bytes": original_size,
+        "reason": "delivery_bound",
+    }
+    parsed: Any
+    if isinstance(result, str):
+        try:
+            parsed = json.loads(result)
+        except (TypeError, ValueError, RecursionError):
+            parsed = None
+    else:
+        parsed = result
+    rendered: str | None
+    try:
+        if isinstance(parsed, dict):
+            rendered = _project_json_object(
+                parsed,
+                metadata=metadata,
+                max_bytes=config.response_max_bytes,
+                inline_chars=config.inline_max_chars,
+            )
+        else:
+            rendered = _plain_spill_envelope(
+                original,
+                metadata=metadata,
+                max_bytes=config.response_max_bytes,
+                inline_chars=config.inline_max_chars,
+            )
+    except _ProjectionNonconvergentError as exc:
+        _emit_response_budget_event(
+            "response_budget_projection_nonconvergent",
+            tool_name=_bounded_tool_name(tool_name),
+            detail=str(exc),
+        )
+        return bounded_response_budget_failure(
+            "",
+            cause="projection_nonconvergent",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
+            artifact_path=published,
+        )
+    except RecursionError:
+        return bounded_response_budget_failure(
+            "",
+            cause="irreducible_shape",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
+            artifact_path=published,
+        )
+    if rendered is None:
+        return bounded_response_budget_failure(
+            "",
+            cause="irreducible_shape",
+            tool_name=tool_name,
+            max_bytes=config.response_max_bytes,
+            original_utf8_bytes=original_size,
+            artifact_path=published,
+        )
+    bound = effective_delivery_token_limit * 4
+    if len(rendered.encode("utf-8")) > bound:
+        truncated_metadata = dict(metadata)
+        truncated_metadata["reason"] = "delivery_bound"
+        truncated_metadata["delivery_bound_utf8_bytes"] = bound
+        truncated_metadata["projected_utf8_bytes"] = len(rendered.encode("utf-8"))
+        truncated_metadata["omitted_chars"] = max(0, len(rendered.encode("utf-8")) - bound)
+        preview_limit = min(config.inline_max_chars, bound)
+        preview = original[:preview_limit]
+        truncated = _canonical_json(
+            {
+                "delivery_bound_spill": True,
+                "preview": preview,
+                RESPONSE_SPILL_METADATA_KEY: truncated_metadata,
+            }
+        )
+        truncated = _finalize_envelope({**truncated_metadata, "preview": preview}, max_bytes=bound)
+        if isinstance(result, str):
+            return truncated
+        try:
+            return json.loads(truncated)
+        except (ValueError, RecursionError):
+            return {"success": False, "error": "response_budget_projection_invalid"}
+    _emit_response_budget_event(
+        "response_budget_spill",
+        tool_name=_bounded_tool_name(tool_name),
+        original_utf8_bytes=original_size,
+        projected_utf8_bytes=len(rendered.encode("utf-8")),
+    )
+    if isinstance(result, str):
+        return rendered
+    try:
+        return json.loads(rendered)
+    except (ValueError, RecursionError):
+        return {"success": False, "error": "response_budget_projection_invalid"}
+
+
 def enforce_response_budget(
     result: Any,
     *,
@@ -352,12 +501,19 @@ def enforce_response_budget(
     artifact_dir: Path | None,
     config: OutputBudgetConfig,
     force_spill: bool = False,
+    effective_delivery_token_limit: int | None = None,
 ) -> Any:
     """Return a bounded response of the same handler type.
 
     Oversized content is atomically persisted before a projection is returned.
     Artifact failure and missing-context cases fail closed without echoing the
     original payload.
+
+    ``effective_delivery_token_limit`` is the worst-case operative bound on the
+    downstream transport (e.g. Codex code-mode default ~10K). When set, payloads
+    whose estimated token count exceeds it are spilled even if they pass the
+    server-side exemption or response-byte ceilings, because the transport
+    cannot deliver them at full size.
     """
     try:
         original = _serialized(result)
@@ -371,9 +527,17 @@ def enforce_response_budget(
         )
     original_bytes = original.encode("utf-8")
     original_size = len(original_bytes)
+    over_delivery_bound = (
+        effective_delivery_token_limit is not None
+        and _estimated_tokens(original_size) > effective_delivery_token_limit
+    )
     exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(tool_name)
     if exemption is not None:
-        if len(original) <= exemption.max_chars and original_size <= exemption.max_utf8_bytes:
+        if (
+            not over_delivery_bound
+            and len(original) <= exemption.max_chars
+            and original_size <= exemption.max_utf8_bytes
+        ):
             _emit_response_budget_event(
                 "response_budget_exemption",
                 tool_name=_bounded_tool_name(tool_name),
@@ -384,6 +548,17 @@ def enforce_response_budget(
                 max_utf8_bytes=exemption.max_utf8_bytes,
             )
             return result
+        if over_delivery_bound:
+            assert effective_delivery_token_limit is not None  # narrowed by over_delivery_bound
+            return _spill_for_delivery_bound(
+                result,
+                tool_name=tool_name,
+                config=config,
+                artifact_dir=artifact_dir,
+                original=original,
+                original_size=original_size,
+                effective_delivery_token_limit=effective_delivery_token_limit,
+            )
         return bounded_response_budget_failure(
             result,
             cause="exemption_ceiling_exceeded",
@@ -391,7 +566,11 @@ def enforce_response_budget(
             max_bytes=config.response_max_bytes,
             original_utf8_bytes=original_size,
         )
-    if not force_spill and len(original_bytes) <= config.response_max_bytes:
+    if (
+        not force_spill
+        and not over_delivery_bound
+        and len(original_bytes) <= config.response_max_bytes
+    ):
         return result
     if artifact_dir is None:
         return bounded_response_budget_failure(
@@ -501,6 +680,7 @@ def shape_json_response(
     tool_name: str,
     artifact_dir: Path,
     config: OutputBudgetConfig,
+    effective_delivery_token_limit: int | None = None,
 ) -> str:
     """Serialize a tool dict, spilling once it crosses the source threshold."""
     rendered = json.dumps(payload)
@@ -512,6 +692,7 @@ def shape_json_response(
         artifact_dir=artifact_dir,
         config=config,
         force_spill=True,
+        effective_delivery_token_limit=effective_delivery_token_limit,
     )
     return shaped if isinstance(shaped, str) else json.dumps(shaped)
 

@@ -45,6 +45,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "channel_b_capable": "OPTIONAL",
     "completion_record_types": "REQUIRED",
     "default_skill_sandbox_mode": "REQUIRED",
+    "effective_delivery_token_limit": "REQUIRED",
     "env_denylist_prefixes": "REQUIRED",
     "exit_code_is_terminal": "REQUIRED",
     "food_truck_capable": "OPTIONAL",

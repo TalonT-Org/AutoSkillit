@@ -469,3 +469,25 @@ def test_plain_text_irreducible_shape_returns_failure(tmp_path):
     assert isinstance(result, str)
     data = json.loads(result)
     assert data.get("success") is False
+
+
+def test_exempted_payload_spills_when_over_delivery_bound(tmp_path):
+    """An exempted payload that fits the exemption byte ceiling but exceeds the
+    backend's effective delivery token limit must be spilled, not passed through."""
+    payload = {"success": True, "data": "x" * 80_000}
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=_config(),
+        effective_delivery_token_limit=10_000,
+    )
+    assert isinstance(result, str)
+    bound = 10_000 * 4
+    assert len(result.encode("utf-8")) <= bound
+    data = json.loads(result)
+    metadata = data[RESPONSE_SPILL_METADATA_KEY]
+    artifact_path = metadata["artifact_path"]
+    assert Path(artifact_path).read_text() == original
+    assert metadata["reason"] in {"delivery_bound", "oversized_values", "minimal_projection"}

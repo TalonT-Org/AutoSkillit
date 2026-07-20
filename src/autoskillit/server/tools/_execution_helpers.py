@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     RUN_PYTHON_SENTINEL_KEYS,
+    BackendCapabilities,
     CapturedStream,
     SpillSpec,
     SubprocessResult,
@@ -22,6 +23,7 @@ from autoskillit.core import (
     spill_output,
 )
 from autoskillit.execution import CaptureReadError, summarize_capture
+from autoskillit.execution.backends import resolve_effective_delivery_bound
 from autoskillit.server._misc import _hook_config_overlay_path
 from autoskillit.server._response_budget import shape_json_response
 
@@ -201,11 +203,18 @@ def shape_execution_response(
         if work_dir and Path(work_dir).is_absolute()
         else tool_ctx.temp_dir / tool_name
     )
+    effective_delivery_token_limit: int | None = None
+    backend = getattr(tool_ctx, "backend", None)
+    caps = getattr(backend, "capabilities", None) if backend is not None else None
+
+    if isinstance(caps, BackendCapabilities):
+        effective_delivery_token_limit = resolve_effective_delivery_bound(caps)
     return shape_json_response(
         payload,
         tool_name=tool_name,
         artifact_dir=artifact_root,
         config=tool_ctx.config.output_budget,
+        effective_delivery_token_limit=effective_delivery_token_limit,
     )
 
 

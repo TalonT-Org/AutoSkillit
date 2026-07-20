@@ -204,6 +204,7 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         matcher=r"Bash",
         scripts=["shell_capture_hook.py"],
+        timeout_seconds=5,
         session_scope="any",
         codex_status="works-as-is",
         mechanism="input-rewrite",

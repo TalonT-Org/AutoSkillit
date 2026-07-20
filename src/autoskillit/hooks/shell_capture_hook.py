@@ -58,7 +58,7 @@ def _read_policy(cwd: str) -> tuple[bool, int]:
 
 
 def _build_harness(command: str, cwd: str, inline_bytes: int) -> str:
-    uid = uuid4().hex[:8]
+    uid = uuid4().hex[:16]
     capture_dir = str(Path(cwd) / _CAPTURE_SUBDIR)
     capture_file = str(Path(cwd) / _CAPTURE_SUBDIR / f"shell_{uid}.log")
     head = (2 * inline_bytes) // 3
@@ -110,7 +110,6 @@ __as_ec=$?
 __as_sz=$(wc -c < "$__as_f")
 if [ "$__as_sz" -le {inline_bytes} ]; then
   cat "$__as_f"
-  rm -f -- "$__as_f"
 else
 {sha_line}
   head -c {head} "$__as_f"

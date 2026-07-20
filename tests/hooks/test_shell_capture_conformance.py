@@ -9,12 +9,20 @@ output lands inline vs. in an artifact file.
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
+from autoskillit.hooks._capture_cleanup import (
+    _CAPTURE_FILENAME_RE,
+    _is_safe_capture_file,
+    sweep_stale_captures,
+)
 from autoskillit.hooks.shell_capture_hook import _build_harness
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -191,7 +199,10 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
         assert wrapped.stdout == raw_combined, (
             f"[{label}] inline output mismatch.\nraw={raw_combined!r}\nwrapped={wrapped.stdout!r}"
         )
-        assert not artifacts, f"[{label}] expected no artifact for small output, found {artifacts}"
+        assert artifacts, (
+            f"[{label}] expected artifact retained for small output (Python-side cleanup)"
+        )
+        assert len(artifacts) == 1
     else:
         assert artifacts, f"[{label}] expected an artifact for large output, found none"
         assert len(artifacts) == 1, f"[{label}] expected exactly one artifact, found {artifacts}"
@@ -234,3 +245,115 @@ def test_capture_dir_uncreatable_fail_stops(tmp_path: Path) -> None:
     combined = (wrapped.stdout + wrapped.stderr).decode(errors="replace")
     assert "capture_failed" in combined.lower() or "CAPTURE_FAILED" in combined
     assert "should_not_run" not in combined
+
+
+def test_harness_contains_no_destructive_verbs() -> None:
+    """Generated harness must not embed destructive shell verbs (Codex exec-policy rejection)."""
+    harness = _build_harness("echo hello", "/tmp/test", _INLINE_BYTES)
+    destructive = {"rm", "unlink", "shred", "truncate", "mv"}
+    for raw_line in harness.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        first = (
+            line.split(";", 1)[0].split("&&", 1)[0].split("||", 1)[0].strip().split(maxsplit=1)[0]
+        )
+        first = first.removeprefix("{").removeprefix("(")
+        first = first.strip("\"'")
+        assert first not in destructive, (
+            f"destructive verb {first!r} found in harness line: {raw_line!r}"
+        )
+
+
+def test_small_output_artifact_cleaned_by_sweep(tmp_path: Path) -> None:
+    """Small-output captures are retained on disk but reaped by the Python-side sweep."""
+    _make_project_dirs(tmp_path)
+    command = "echo hello_small"
+    wrapped = _run_wrapped(command, tmp_path)
+    assert wrapped.returncode == 0
+    artifacts = _artifact_files(tmp_path)
+    assert artifacts, "small-output harness must leave capture file on disk for sweep cleanup"
+    assert len(artifacts) == 1
+
+    target = artifacts[0]
+    # Force mtime into the past so max_age_seconds=0 sweeps it.
+    os.utime(target, (0, 0))
+    deleted = sweep_stale_captures(_capture_dir(tmp_path), max_age_seconds=0)
+    assert deleted == 1
+    assert not target.exists()
+
+
+def test_sweep_rejects_symlinks_and_traversals(tmp_path: Path) -> None:
+    """Sweep must not follow symlinks or operate outside the capture directory."""
+    _make_project_dirs(tmp_path)
+    capture = _capture_dir(tmp_path)
+
+    outside = tmp_path / "outside_target.log"
+    outside.write_text("must-survive")
+    symlink = capture / f"shell_{uuid4().hex[:16]}.log"
+    symlink.symlink_to(outside)
+    assert symlink.is_symlink()
+
+    deleted = sweep_stale_captures(capture, max_age_seconds=0)
+    assert deleted == 0
+    assert outside.exists(), "outside target file must be untouched by sweep"
+    assert outside.read_text() == "must-survive"
+    assert not symlink.exists(), "symlink should remain (sweep must not follow into the target)"
+
+
+def test_sweep_filename_allowlist(tmp_path: Path) -> None:
+    """Sweep only deletes files matching the strict ``shell_<16hex>.log`` allowlist."""
+    _make_project_dirs(tmp_path)
+    capture = _capture_dir(tmp_path)
+
+    valid = capture / f"shell_{uuid4().hex[:16]}.log"
+    valid.write_text("x")
+    short_uid = capture / "shell_abcd1234.log"  # 8-char format — legacy, must NOT be swept
+    short_uid.write_text("x")
+    invalid_ext = capture / "evil.sh"
+    invalid_ext.write_text("x")
+
+    deleted = sweep_stale_captures(capture, max_age_seconds=0)
+    assert deleted == 1
+    assert not valid.exists()
+    assert short_uid.exists(), "old 8-char uid format files must not be deleted"
+    assert invalid_ext.exists(), "files outside the shell_*.log allowlist must not be deleted"
+
+
+def test_capture_cleanup_containment_parity(tmp_path: Path) -> None:
+    """_is_safe_capture_file rejects the same attack vectors as core.path_containment."""
+    from autoskillit.core.path_containment import ContainmentError, resolve_contained_path
+
+    _make_project_dirs(tmp_path)
+    capture = _capture_dir(tmp_path)
+
+    # Valid file — both should accept.
+    good = capture / f"shell_{uuid4().hex[:16]}.log"
+    good.write_text("ok")
+    assert _is_safe_capture_file(good, capture) is True
+    try:
+        resolve_contained_path(good, capture)
+    except ContainmentError as exc:
+        pytest.fail(f"core containment rejected a valid capture file: {exc}")
+
+    # Symlink — both should reject.
+    sym = capture / f"shell_{uuid4().hex[:16]}.log"
+    sym.symlink_to(good)
+    assert _is_safe_capture_file(sym, capture) is False
+    with pytest.raises(ContainmentError):
+        resolve_contained_path(sym, capture)
+
+    # Traversal-shaped filename — allowlist rejects outright.
+    traversal = capture / "../../escape.log"
+    traversal.write_text("x")
+    assert _is_safe_capture_file(traversal, capture) is False
+
+
+def test_capture_filename_regex_consistency() -> None:
+    """Hook module and sweep module must agree on the shell_*.log regex."""
+    sample = f"shell_{uuid4().hex[:16]}.log"
+    assert _CAPTURE_FILENAME_RE.match(sample) is not None
+
+    # The inline literal in session_start_hook.py must accept the same filename.
+    inline_pattern = r"^shell_[0-9a-f]{16}\.log$"
+    assert re.match(inline_pattern, sample) is not None

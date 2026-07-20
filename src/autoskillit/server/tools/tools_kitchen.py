@@ -787,7 +787,7 @@ async def open_kitchen(
             with ``authority: config`` (base_branch, local_review_rounds,
             adversarial_review_level) cannot be set via overrides — they resolve from
             server config and caller values are ignored with a warning.
-            Config-default ingredients (post_run_diagnostics) use config as the default
+            Config-default ingredients (pipeline_health) use config as the default
             but an explicit override wins.
         ingredients_only: When True and name is provided, return only the ingredient
             schema (ingredients_table, validity, suggestions) without the full recipe

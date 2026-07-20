@@ -305,7 +305,7 @@ class LoggingConfig:
 
 @dataclass
 class DiagnosticsConfig:
-    post_run_analysis: bool = False
+    pipeline_health: bool = False
 
 
 @dataclass

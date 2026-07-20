@@ -90,7 +90,7 @@ def test_no_direct_escalate_stop_no_ci_callers_except_safety_net(recipe):
         "escalate_stop_no_ci",
         "mark_issue_failed_no_ci",
         "register_clone_no_ci",
-        "pipeline_health_no_ci",
+        "analyze_pipeline_health_no_ci",
     }
     for name, step in recipe.steps.items():
         if name in EXCLUDED:
@@ -116,14 +116,14 @@ def test_register_clone_no_ci_routes_to_escalate_stop_no_ci(recipe):
     """register_clone_no_ci registers clone as error and routes toward escalate_stop_no_ci."""
     step = recipe.steps["register_clone_no_ci"]
     assert step.tool == "register_clone_status"
-    # May route via optional pipeline_health_no_ci step first
-    assert step.on_success in ("escalate_stop_no_ci", "pipeline_health_no_ci"), (
+    # May route via optional analyze_pipeline_health_no_ci step first
+    assert step.on_success in ("escalate_stop_no_ci", "analyze_pipeline_health_no_ci"), (
         "register_clone_no_ci.on_success must route to escalate_stop_no_ci "
-        f"or pipeline_health_no_ci, got {step.on_success!r}"
+        f"or analyze_pipeline_health_no_ci, got {step.on_success!r}"
     )
-    assert step.on_failure in ("escalate_stop_no_ci", "pipeline_health_no_ci"), (
+    assert step.on_failure in ("escalate_stop_no_ci", "analyze_pipeline_health_no_ci"), (
         "register_clone_no_ci.on_failure must route to escalate_stop_no_ci "
-        f"or pipeline_health_no_ci, got {step.on_failure!r}"
+        f"or analyze_pipeline_health_no_ci, got {step.on_failure!r}"
     )
     assert step.with_args.get("status") == "error"
 
@@ -139,8 +139,8 @@ def test_no_ci_failure_chain_complete(recipe):
     assert mark_step.on_success == "register_clone_no_ci"
 
     reg_step = recipe.steps["register_clone_no_ci"]
-    # May route via optional pipeline_health_no_ci step that then routes to escalate_stop_no_ci
-    assert reg_step.on_success in ("escalate_stop_no_ci", "pipeline_health_no_ci"), (
+    # The optional analysis step may route onward to escalate_stop_no_ci.
+    assert reg_step.on_success in ("escalate_stop_no_ci", "analyze_pipeline_health_no_ci"), (
         "register_clone_no_ci.on_success must route toward escalate_stop_no_ci, "
         f"got {reg_step.on_success!r}"
     )

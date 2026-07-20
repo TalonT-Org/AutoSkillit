@@ -68,7 +68,7 @@ def test_done_unconfirmed_stop_exists(recipe) -> None:
 
 
 def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
-    """register_clone_unconfirmed must route to pipeline_health_unconfirmed."""
+    """register_clone_unconfirmed must route to analyze_pipeline_health_unconfirmed."""
     step = recipe.steps["register_clone_unconfirmed"]
-    assert step.on_success == "pipeline_health_unconfirmed"
-    assert step.on_failure == "pipeline_health_unconfirmed"
+    assert step.on_success == "analyze_pipeline_health_unconfirmed"
+    assert step.on_failure == "analyze_pipeline_health_unconfirmed"

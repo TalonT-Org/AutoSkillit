@@ -1440,10 +1440,10 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "error"
       step_name: register_clone_no_ci
-    on_success: pipeline_health_no_ci
-    on_failure: pipeline_health_no_ci
+    on_success: analyze_pipeline_health_no_ci
+    on_failure: analyze_pipeline_health_no_ci
 
-  pipeline_health_no_ci:
+  analyze_pipeline_health_no_ci:
     description: Run post-pipeline diagnostic analysis on session logs (no-CI path)
     tool: run_skill
     model: ''
@@ -1454,7 +1454,7 @@ steps:
       skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
         --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
-      step_name: pipeline_health
+      step_name: analyze_pipeline_health
     on_success: escalate_stop_no_ci
     on_failure: escalate_stop_no_ci
     on_context_limit: escalate_stop_no_ci
@@ -2252,15 +2252,15 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "unconfirmed"
       step_name: register_clone_unconfirmed
-    on_success: pipeline_health_unconfirmed
-    on_failure: pipeline_health_unconfirmed
+    on_success: analyze_pipeline_health_unconfirmed
+    on_failure: analyze_pipeline_health_unconfirmed
     note: >
       Called when a merge-wait step times out before merge is confirmed.
       Does NOT call release_issue — the in-progress label stays on the issue
       so operators can see the PR is still actively queued. The clone is
       preserved (status: unconfirmed) for human inspection.
 
-  pipeline_health_unconfirmed:
+  analyze_pipeline_health_unconfirmed:
     description: Run post-pipeline diagnostic analysis (unconfirmed path)
     tool: run_skill
     model: ''
@@ -2271,7 +2271,7 @@ steps:
       skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
         --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
-      step_name: pipeline_health
+      step_name: analyze_pipeline_health
     on_success: done_unconfirmed
     on_failure: done_unconfirmed
     on_context_limit: done_unconfirmed
@@ -2390,10 +2390,10 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "success"
       step_name: register_clone_success
-    on_success: pipeline_health
-    on_failure: pipeline_health
+    on_success: analyze_pipeline_health
+    on_failure: analyze_pipeline_health
 
-  pipeline_health:
+  analyze_pipeline_health:
     description: Run post-pipeline diagnostic analysis on session logs
     tool: run_skill
     model: ''
@@ -2404,7 +2404,7 @@ steps:
       skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
         --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
-      step_name: pipeline_health
+      step_name: analyze_pipeline_health
     on_success: done
     on_failure: done
     on_context_limit: done
@@ -2420,10 +2420,10 @@ steps:
       clone_path: "${{ context.work_dir }}"
       status: "error"
       step_name: register_clone_failure
-    on_success: pipeline_health_error
-    on_failure: pipeline_health_error
+    on_success: analyze_pipeline_health_error
+    on_failure: analyze_pipeline_health_error
 
-  pipeline_health_error:
+  analyze_pipeline_health_error:
     description: Run post-pipeline diagnostic analysis on session logs (error path)
     tool: run_skill
     model: ''
@@ -2434,7 +2434,7 @@ steps:
       skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
         --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
-      step_name: pipeline_health
+      step_name: analyze_pipeline_health
     on_success: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
@@ -2455,4 +2455,3 @@ steps:
       Pipeline failed — human intervention needed. Check the worktree and plan for details.
       Emit the L3 result sentinel JSON block now with success=false.
       Example sentinel: {"success": false, "reason": "implementation-groups pipeline failed"}
-

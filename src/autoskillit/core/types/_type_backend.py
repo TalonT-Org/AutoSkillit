@@ -167,7 +167,14 @@ class BackendCapabilities:
     # config-file ceiling (e.g. `tool_output_token_limit`), which code-mode
     # models may bypass. Used by `enforce_response_budget` to spill payloads
     # the downstream transport cannot deliver at full size.
-    effective_delivery_token_limit: int = 0
+    #
+    # Default of 10,000 matches the smallest registered backend bound
+    # (Codex code-mode). Any new backend that omits this field inherits
+    # conservative bounding rather than the historical 0-sentinel "skip
+    # bounding" behavior — preventing a silent opt-out where a future
+    # backend without an explicit capability setting would be delivered
+    # without any delivery-bound enforcement.
+    effective_delivery_token_limit: int = 10_000
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (

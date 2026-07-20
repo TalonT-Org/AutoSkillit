@@ -285,9 +285,35 @@ def _project_json_object(
     metadata: dict[str, Any],
     max_bytes: int,
     inline_chars: int,
+    delivery_bound_triggered: bool = False,
 ) -> str | None:
+    """Project a non-exempted JSON object into a bounded envelope.
+
+    When ``delivery_bound_triggered`` is True, the caller is in the
+    delivery-bound spill path; the function routes to ``_tiered_projection``
+    to protect a content-equivalent key (``"result"`` for run_skill-shaped
+    SkillResult payloads) from the identical starvation defect that affects
+    ``_delivery_bound_summary``'s ``content`` field.
+
+    When ``delivery_bound_triggered`` is False (the default), the existing
+    uniform per-key ``_project_value`` algorithm runs unchanged — preserving
+    the behavior pinned by ``test_minimal_projection_has_exact_bytes_and_omission_aggregates``.
+    """
     if RESPONSE_SPILL_METADATA_KEY in parsed:
         return None
+
+    if delivery_bound_triggered:
+        return _tiered_projection(
+            parsed,
+            metadata=metadata,
+            bound=max_bytes,
+            content_key="result",
+            deprioritized_keys=(),
+            priority_keys=(),
+            droppable_keys=(),
+            reason="delivery_bound",
+            top_level_flag=None,
+        )
 
     key_count = max(1, len(parsed))
     value_limit = max(16, min(inline_chars, max_bytes // (key_count + 1)))
@@ -358,18 +384,255 @@ def _plain_spill_envelope(
         preview_limit //= 2
 
 
-_DELIVERY_BOUND_PRESERVED_KEYS: tuple[str, ...] = (
+_DELIVERY_BOUND_PRIORITY_KEYS: tuple[str, ...] = (
     "success",
     "kitchen",
     "version",
-    "ingredients_table",
     "orchestration_rules",
     "stop_step_semantics",
     "errors",
+)
+_DELIVERY_BOUND_DEPRIORITIZED_KEYS: tuple[str, ...] = (
     "suggestions",
+    "ingredients_table",
 )
 _DELIVERY_BOUND_CONTENT_KEY = "content"
 _DELIVERY_BOUND_DROPPABLE_KEYS: tuple[str, ...] = ("diagram",)
+
+# Floor (bytes) reserved per present deprioritized key. Covers the smallest
+# plausible serialized ``"key": value`` pair once a value is projected down
+# toward empty (``_minimal_same_type`` reduces list/dict to ``[]``/``{}``,
+# the floor covers the surrounding key/quote/colon overhead). Guarantees
+# deprioritized keys remain *present* in the envelope — projected but
+# never dropped entirely.
+_DEPRIORITIZED_KEY_FLOOR_BYTES = 16
+
+
+def _tiered_projection(
+    parsed: dict[str, Any],
+    *,
+    metadata: dict[str, Any],
+    bound: int,
+    content_key: str,
+    deprioritized_keys: tuple[str, ...],
+    priority_keys: tuple[str, ...] = (),
+    droppable_keys: tuple[str, ...] = (),
+    reason: str,
+    top_level_flag: str | None = "delivery_bound_spill",
+) -> str | None:
+    """Build a tiered projection honoring a byte ``bound``.
+
+    Budget allocation order:
+    1. Priority keys (caller-supplied ``priority_keys``) are preserved
+       verbatim first — these are small and structurally necessary.
+    2. Deprioritized keys (``deprioritized_keys``) are reserved a per-key
+       floor (``_DEPRIORITIZED_KEY_FLOOR_BYTES``) so they remain *present*
+       in the envelope even after projection.
+    3. ``content_key`` is allocated a guaranteed floor from the remaining
+       budget (at least half the post-floor remainder).
+    4. Any remaining budget flows to the deprioritized keys (which are
+       projected to fit).
+    5. ``droppable_keys`` are included verbatim if they fit within the
+       remaining budget; otherwise they are dropped (counted as omission).
+       They are not part of the priority verbatim set.
+    6. Keys not in any tier are always dropped (counted as omission).
+
+    Returns the rendered envelope string when it fits ``bound``; otherwise
+    ``None`` so the caller fails closed.
+    """
+    present_priority = [k for k in priority_keys if k in parsed]
+    present_deprioritized = [k for k in deprioritized_keys if k in parsed]
+    present_droppable = [k for k in droppable_keys if k in parsed]
+    tier_all = set(priority_keys) | set(deprioritized_keys) | set(droppable_keys) | {content_key}
+    other_keys = [k for k in parsed if k not in tier_all]
+
+    content_text = parsed.get(content_key) if content_key in parsed else None
+    content_is_str = isinstance(content_text, str)
+
+    # Step 1: Measure the priority-only envelope (content excluded, deprioritized
+    # excluded, droppable excluded) to size the remaining budget for content +
+    # deprioritized + droppable.
+    def _build_priority_only() -> dict[str, Any]:
+        env: dict[str, Any] = {RESPONSE_SPILL_METADATA_KEY: dict(metadata)}
+        if top_level_flag is not None:
+            env[top_level_flag] = True
+        for k in present_priority:
+            env[k] = parsed[k]
+        # Account for omitted "other" keys up front (always dropped).
+        base_chars = 0
+        base_items = 0
+        for k in other_keys:
+            chars, items = _total_omissions(parsed[k])
+            base_chars += chars
+            base_items += items
+        env[RESPONSE_SPILL_METADATA_KEY] = _spill_metadata(
+            env[RESPONSE_SPILL_METADATA_KEY],
+            reason=reason,
+            omitted_chars=base_chars,
+            omitted_items=base_items,
+        )
+        return env
+
+    priority_envelope = _build_priority_only()
+    try:
+        priority_rendered = _finalize_envelope(priority_envelope, max_bytes=bound)
+    except _ProjectionNonconvergentError:
+        return None
+    priority_bytes = len(priority_rendered.encode("utf-8"))
+
+    # Step 2: Deprioritized key floor (reserved bytes per present deprioritized key).
+    deprioritized_floor = _DEPRIORITIZED_KEY_FLOOR_BYTES * len(present_deprioritized)
+
+    # Step 3: Content budget = remaining after priority + deprioritized floor.
+    content_budget = max(0, bound - priority_bytes - deprioritized_floor - 64)
+
+    # Step 4: Reserve a content floor (at least half of content_budget).
+    if content_is_str:
+        text = content_text or ""
+        content_floor = min(content_budget // 2, content_budget, len(text))
+        content_floor = max(0, content_floor)
+    else:
+        text = ""
+        content_floor = 0
+
+    # Deprioritized keys get their floor plus any share of the remaining
+    # budget after the content floor.
+    deprioritized_budget = deprioritized_floor + max(0, content_budget - content_floor)
+
+    def _build_with_lengths(
+        content_head: int,
+        deprioritized_projector: Any = None,
+        include_content: bool = True,
+        include_deprioritized: bool = True,
+        include_droppable: bool = True,
+    ) -> dict[str, Any]:
+        env: dict[str, Any] = {RESPONSE_SPILL_METADATA_KEY: dict(metadata)}
+        if top_level_flag is not None:
+            env[top_level_flag] = True
+        base_chars = 0
+        base_items = 0
+
+        for k in present_priority:
+            env[k] = parsed[k]
+
+        # Always-omitted "other" keys (counted as omissions).
+        for k in other_keys:
+            chars, items = _total_omissions(parsed[k])
+            base_chars += chars
+            base_items += items
+
+        if include_deprioritized and deprioritized_projector is not None:
+            for k in present_deprioritized:
+                projected = deprioritized_projector(parsed[k])
+                env[k] = projected
+                if not (
+                    isinstance(projected, (list, dict))
+                    and RESPONSE_SPILL_METADATA_KEY in projected
+                ):
+                    chars, items = _total_omissions(parsed[k])
+                    base_chars += chars
+                    base_items += items
+        elif include_deprioritized:
+            for k in present_deprioritized:
+                env[k] = parsed[k]
+
+        if include_droppable:
+            for k in present_droppable:
+                env[k] = parsed[k]
+        else:
+            for k in present_droppable:
+                chars, items = _total_omissions(parsed[k])
+                base_chars += chars
+                base_items += items
+
+        if include_content and content_is_str:
+            env[content_key] = text[:content_head]
+            base_chars += max(0, len(text) - content_head)
+        elif content_key in parsed and include_content:
+            env[content_key] = parsed[content_key]
+        elif content_key in parsed and not include_content:
+            chars, items = _total_omissions(parsed[content_key])
+            base_chars += chars
+            base_items += items
+
+        env[RESPONSE_SPILL_METADATA_KEY] = _spill_metadata(
+            env[RESPONSE_SPILL_METADATA_KEY],
+            reason=reason,
+            omitted_chars=base_chars,
+            omitted_items=base_items,
+        )
+        return env
+
+    def _fits(env: dict[str, Any]) -> str | None:
+        try:
+            rendered = _finalize_envelope(env, max_bytes=bound)
+        except _ProjectionNonconvergentError:
+            return None
+        if len(rendered.encode("utf-8")) <= bound:
+            return rendered
+        return None
+
+    # Tier 1: priority verbatim + content floor + deprioritized verbatim + droppable.
+    if content_is_str:
+        rendered = _fits(_build_with_lengths(content_head=content_floor))
+        if rendered is not None:
+            return rendered
+
+    # Tier 2: deprioritized keys projected to fit deprioritized_budget; binary-search
+    # for the largest content_head that fits. Droppable keys are dropped to
+    # maximize budget for content.
+    if content_is_str and present_deprioritized:
+        value_limit = max(16, deprioritized_budget // (len(present_deprioritized) + 1))
+        while value_limit >= _DEPRIORITIZED_KEY_FLOOR_BYTES:
+
+            def _project_with_limit(value: Any, _limit: int = value_limit) -> Any:
+                projected = _project_value(value, _limit)[0]
+                return projected
+
+            low, high = content_floor, len(text)
+            best_rendered: str | None = None
+            while low <= high:
+                mid = (low + high) // 2
+                candidate = _fits(
+                    _build_with_lengths(
+                        content_head=mid,
+                        deprioritized_projector=_project_with_limit,
+                        include_droppable=False,
+                    )
+                )
+                if candidate is not None:
+                    best_rendered = candidate
+                    low = mid + 1
+                else:
+                    high = mid - 1
+            if best_rendered is not None:
+                return best_rendered
+            value_limit //= 2
+
+        # Fallback: deprioritized at minimum (still present, projected to floor).
+        rendered = _fits(
+            _build_with_lengths(
+                content_head=content_floor,
+                deprioritized_projector=lambda v: _minimal_same_type(v),
+                include_droppable=False,
+            )
+        )
+        if rendered is not None:
+            return rendered
+
+    # Tier 3: drop droppable + deprioritized at floor; content already at floor.
+    if present_deprioritized:
+        rendered = _fits(
+            _build_with_lengths(
+                content_head=0,
+                deprioritized_projector=lambda v: _minimal_same_type(v),
+                include_droppable=False,
+            )
+        )
+        if rendered is not None:
+            return rendered
+
+    return None
 
 
 def _delivery_bound_summary(
@@ -380,135 +643,37 @@ def _delivery_bound_summary(
 ) -> str | None:
     """Build a bounded inline summary honoring the delivery bound.
 
-    Preserves ``success``, ``kitchen``, ``version``, ``ingredients_table``,
-    ``orchestration_rules``, ``stop_step_semantics``, ``errors``,
-    ``suggestions`` verbatim (when present and fitting); truncates ``content``;
-    drops ``diagram``; nests spill metadata under ``RESPONSE_SPILL_METADATA_KEY``
-    with ``reason="delivery_bound"``; sets top-level ``delivery_bound_spill=True``.
+    Preserves the priority keys (``success``, ``kitchen``, ``version``,
+    ``orchestration_rules``, ``stop_step_semantics``, ``errors``) verbatim;
+    allocates a guaranteed floor to ``content``; reserves a per-key floor
+    for deprioritized keys (``suggestions``, ``ingredients_table``) so they
+    remain present but projected; drops ``diagram``; nests spill metadata
+    under ``RESPONSE_SPILL_METADATA_KEY`` with ``reason="delivery_bound"``;
+    sets top-level ``delivery_bound_spill=True``.
 
     Returns the rendered envelope string when it fits ``bound``; otherwise
     ``None`` so the caller fails closed.
+
+    Regression guard for issue #4304: the historical algorithm computed
+    ``head_limit = max(0, bound - base_bytes - 64)`` from the unshrunk
+    preserved-key envelope, found ``base_bytes > bound`` when ``suggestions``
+    was at the real-world 48KB+ size regime, and starved ``content`` to
+    ``""``. This implementation allocates the budget in priority order:
+    priority keys verbatim → deprioritized floor → content floor → any
+    remaining to deprioritized keys. Droppable keys (diagram) are included
+    only if budget allows.
     """
-    content_text = parsed.get(_DELIVERY_BOUND_CONTENT_KEY)
-    content_is_str = isinstance(content_text, str)
-
-    precomputed_base_chars = 0
-    precomputed_base_items = 0
-    for key, value in parsed.items():
-        if key in _DELIVERY_BOUND_PRESERVED_KEYS or key == _DELIVERY_BOUND_CONTENT_KEY:
-            continue
-        chars, items = _total_omissions(value)
-        precomputed_base_chars += chars
-        precomputed_base_items += items
-
-    if not content_is_str and _DELIVERY_BOUND_CONTENT_KEY in parsed:
-        chars, items = _total_omissions(parsed[_DELIVERY_BOUND_CONTENT_KEY])
-        precomputed_base_chars += chars
-        precomputed_base_items += items
-
-    present_preserved = [key for key in _DELIVERY_BOUND_PRESERVED_KEYS if key in parsed]
-
-    def _build(head_len: int, include_droppable: bool, value_projector=None) -> dict[str, Any]:
-        envelope: dict[str, Any] = {RESPONSE_SPILL_METADATA_KEY: dict(metadata)}
-        envelope["delivery_bound_spill"] = True
-
-        base_chars = precomputed_base_chars
-        base_items = precomputed_base_items
-
-        for key in present_preserved:
-            if value_projector is None:
-                envelope[key] = parsed[key]
-            else:
-                envelope[key] = value_projector(parsed[key])
-
-        if include_droppable:
-            for key in _DELIVERY_BOUND_DROPPABLE_KEYS:
-                if key in parsed:
-                    envelope[key] = parsed[key]
-        else:
-            for key in _DELIVERY_BOUND_DROPPABLE_KEYS:
-                if key in parsed:
-                    chars, items = _total_omissions(parsed[key])
-                    base_chars += chars
-                    base_items += items
-
-        if content_is_str:
-            text = content_text or ""
-            truncated = text[:head_len]
-            envelope[_DELIVERY_BOUND_CONTENT_KEY] = truncated
-            base_chars += max(0, len(text) - head_len)
-        elif _DELIVERY_BOUND_CONTENT_KEY in parsed:
-            envelope[_DELIVERY_BOUND_CONTENT_KEY] = parsed[_DELIVERY_BOUND_CONTENT_KEY]
-
-        if value_projector is not None:
-            for key in present_preserved:
-                projected_value = envelope[key]
-                if (
-                    isinstance(projected_value, dict)
-                    and RESPONSE_SPILL_METADATA_KEY in projected_value
-                ):
-                    continue
-                chars, items = _total_omissions(parsed[key])
-                base_chars += chars
-                base_items += items
-
-        envelope[RESPONSE_SPILL_METADATA_KEY] = _spill_metadata(
-            envelope[RESPONSE_SPILL_METADATA_KEY],
-            reason="delivery_bound",
-            omitted_chars=base_chars,
-            omitted_items=base_items,
-        )
-        return envelope
-
-    def _fits(envelope: dict[str, Any]) -> str | None:
-        try:
-            rendered = _finalize_envelope(envelope, max_bytes=bound)
-        except _ProjectionNonconvergentError:
-            return None
-        if len(rendered.encode("utf-8")) <= bound:
-            return rendered
-        return None
-
-    zero_envelope = _build(0, True)
-    base_rendered = _finalize_envelope(zero_envelope, max_bytes=bound)
-    base_bytes = len(base_rendered.encode("utf-8"))
-    head_limit = max(0, bound - base_bytes - 64) if content_is_str else 0
-
-    while head_limit > 0 and content_is_str:
-        rendered = _fits(_build(head_limit, True))
-        if rendered is not None:
-            return rendered
-        head_limit //= 2
-
-    if content_is_str:
-        zero_head_envelope = _build(0, True)
-        rendered = _fits(zero_head_envelope)
-        if rendered is not None:
-            return rendered
-
-    rendered = _fits(_build(0, False))
-    if rendered is not None:
-        return rendered
-
-    if present_preserved:
-        value_limit = max(16, bound // (len(present_preserved) + 2))
-        while value_limit >= 16:
-
-            def _project_with_limit(value: Any, _limit: int = value_limit) -> Any:
-                projected, _chars, _items = _project_value(value, _limit)
-                return projected
-
-            rendered = _fits(_build(0, False, value_projector=_project_with_limit))
-            if rendered is not None:
-                return rendered
-            value_limit //= 2
-
-        minimal_envelope = _build(0, False, value_projector=_minimal_same_type)
-        rendered = _fits(minimal_envelope)
-        if rendered is not None:
-            return rendered
-
-    return None
+    return _tiered_projection(
+        parsed,
+        metadata=metadata,
+        bound=bound,
+        content_key=_DELIVERY_BOUND_CONTENT_KEY,
+        deprioritized_keys=_DELIVERY_BOUND_DEPRIORITIZED_KEYS,
+        priority_keys=_DELIVERY_BOUND_PRIORITY_KEYS,
+        droppable_keys=_DELIVERY_BOUND_DROPPABLE_KEYS,
+        reason="delivery_bound",
+        top_level_flag="delivery_bound_spill",
+    )
 
 
 def _spill_for_delivery_bound(
@@ -758,6 +923,7 @@ def enforce_response_budget(
                 metadata=metadata,
                 max_bytes=projection_max_bytes,
                 inline_chars=projection_inline_chars,
+                delivery_bound_triggered=over_delivery_bound,
             )
         if rendered is None and not isinstance(parsed, dict):
             rendered = _plain_spill_envelope(

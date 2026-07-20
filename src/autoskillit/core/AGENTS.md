@@ -14,6 +14,7 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 | `logging.py` | Logging configuration |
 | `paths.py` | `pkg_root()`, `is_git_worktree()`, `is_git_main_checkout()`, `is_in_git_repo()` |
 | `_claude_env.py` | IDE-scrubbing canonical env builder for agent subprocesses |
+| `_delivery_bounds.py` | `resolve_effective_delivery_bound()` — canonical accessor for per-backend effective delivery token limits |
 | `_terminal_table.py` | IL-0 color-agnostic terminal table primitive |
 | `_version_snapshot.py` | Process-scoped version snapshot for session telemetry (`lru_cache`'d) |
 | `branch_guard.py` | Branch protection helpers |

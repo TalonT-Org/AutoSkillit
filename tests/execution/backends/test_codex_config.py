@@ -45,6 +45,19 @@ def test_response_backstop_fires_below_codex_transport_ceiling() -> None:
     assert OutputBudgetConfig().response_max_bytes // 3 < CODEX_TOOL_OUTPUT_TOKEN_LIMIT
 
 
+def test_resolve_effective_delivery_bound_per_backend() -> None:
+    from autoskillit.core import BackendCapabilities, resolve_effective_delivery_bound
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    expected = {"codex": 10_000, "claude-code": 46_500}
+    observed: dict[str, int] = {}
+    for name, cls in BACKEND_REGISTRY.items():
+        caps = cls().capabilities
+        assert isinstance(caps, BackendCapabilities)
+        observed[name] = resolve_effective_delivery_bound(caps)
+    assert observed == expected
+
+
 class TestReadCodexConfig:
     def test_returns_empty_dict_when_path_missing(self, tmp_path):
         result = _read_codex_config(tmp_path / "nonexistent.toml")

@@ -265,6 +265,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
     "bash_write_targets": frozenset({"core", "execution", "server"}),
+    "_delivery_bounds": frozenset({"core", "execution", "server"}),
     "_type_closure_report": frozenset({"core"}),
     "closure_hashing": frozenset({"core"}),
     "path_containment": frozenset({"core"}),

@@ -469,3 +469,229 @@ def test_plain_text_irreducible_shape_returns_failure(tmp_path):
     assert isinstance(result, str)
     data = json.loads(result)
     assert data.get("success") is False
+
+
+def test_exempted_payload_spills_when_over_delivery_bound(tmp_path):
+    """An exempted payload that fits the exemption byte ceiling but exceeds the
+    backend's effective delivery token limit must be spilled, not passed through."""
+    payload = {"success": True, "data": "x" * 80_000}
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=_config(),
+        effective_delivery_token_limit=10_000,
+    )
+    assert isinstance(result, str)
+    bound = 10_000 * 4
+    assert len(result.encode("utf-8")) <= bound
+    data = json.loads(result)
+    assert data["success"] is True
+    assert data["delivery_bound_spill"] is True
+    metadata = data[RESPONSE_SPILL_METADATA_KEY]
+    artifact_path = metadata["artifact_path"]
+    assert Path(artifact_path).read_text() == original
+    assert metadata["reason"] == "delivery_bound"
+
+
+def test_delivery_bound_summary_preserves_operational_fields(tmp_path):
+    """Bounded summary must preserve success/kitchen/version/ingredients_table/
+    orchestration_rules/stop_step_semantics/errors/suggestions verbatim,
+    truncate content to fit, and nest spill metadata with reason='delivery_bound'
+    and top-level delivery_bound_spill=True."""
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "ingredients_table": "| a |",
+        "orchestration_rules": ["r1", "r2"],
+        "stop_step_semantics": {"on_success": "stop"},
+        "errors": [],
+        "suggestions": [{"rule": "x"}],
+        "diagram": "graph TD; A-->B",
+        "content": "x" * 150_000,
+    }
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=10_000,
+    )
+    assert isinstance(result, str)
+    bound = 10_000 * 4
+    assert len(result.encode("utf-8")) <= bound
+    data = json.loads(result)
+    assert data["delivery_bound_spill"] is True
+    assert data["success"] == payload["success"]
+    assert data["kitchen"] == payload["kitchen"]
+    assert data["version"] == payload["version"]
+    assert data["ingredients_table"] == payload["ingredients_table"]
+    assert data["orchestration_rules"] == payload["orchestration_rules"]
+    assert data["stop_step_semantics"] == payload["stop_step_semantics"]
+    assert data["errors"] == payload["errors"]
+    assert data["suggestions"] == payload["suggestions"]
+    assert data["diagram"] == payload["diagram"]
+    assert data["content"].startswith("x")
+    assert payload["content"].startswith(data["content"])
+    metadata = data[RESPONSE_SPILL_METADATA_KEY]
+    assert metadata["reason"] == "delivery_bound"
+    assert set(metadata) == RESPONSE_SPILL_METADATA_KEYS
+    assert Path(metadata["artifact_path"]).read_text() == original
+
+
+def test_delivery_bound_summary_small_bound_no_exception(tmp_path):
+    """Regression guard for the REQ-026 fallback branch: when the initial
+    projection lands between the bound and response_max_bytes, the bounded
+    summary must return a valid envelope rather than raise."""
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "ingredients_table": "| a |",
+        "orchestration_rules": ["r1", "r2"],
+        "stop_step_semantics": {"on_success": "stop"},
+        "errors": [],
+        "suggestions": [{"rule": "x"}],
+        "diagram": "graph TD; A-->B",
+        "content": "x" * 30_000,
+    }
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=500,
+    )
+    assert isinstance(result, str)
+    bound = 500 * 4
+    assert len(result.encode("utf-8")) <= bound
+    data = json.loads(result)
+    assert data["delivery_bound_spill"] is True
+    metadata = data[RESPONSE_SPILL_METADATA_KEY]
+    assert metadata["reason"] == "delivery_bound"
+    assert data["success"] is True
+    assert data["kitchen"] == payload["kitchen"]
+
+
+def test_delivery_bound_summary_drops_diagram_when_needed(tmp_path):
+    """When the bound is too small for even an empty content + diagram,
+    the summary must drop diagram while preserving the operational fields."""
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "ingredients_table": "| a |",
+        "orchestration_rules": ["r1", "r2"],
+        "stop_step_semantics": {"on_success": "stop"},
+        "errors": [],
+        "suggestions": [],
+        "diagram": "D" * 3_000,
+        "content": "x" * 50_000,
+    }
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=500,
+    )
+    assert isinstance(result, str)
+    bound = 500 * 4
+    assert len(result.encode("utf-8")) <= bound
+    data = json.loads(result)
+    assert "diagram" not in data
+    assert data["delivery_bound_spill"] is True
+    assert data["success"] is True
+    assert data["kitchen"] == payload["kitchen"]
+    metadata = data[RESPONSE_SPILL_METADATA_KEY]
+    assert metadata["reason"] == "delivery_bound"
+
+
+def test_over_ceiling_payload_fails_even_when_over_delivery_bound(tmp_path):
+    """Pin restored ordering: an over-ceiling exempted payload must fail with
+    exemption_ceiling_exceeded, not route to delivery-bound spill."""
+    payload = {"success": True, "content": "x" * 190_000}
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=10_000,
+    )
+    assert isinstance(result, str)
+    data = json.loads(result)
+    assert data["success"] is False
+    assert data["error"] == "response_budget_exemption_ceiling_exceeded"
+    assert RESPONSE_SPILL_METADATA_KEY not in data
+
+
+def test_non_exempted_projection_capped_at_delivery_bound(tmp_path):
+    """REQ-023 pin: non-exempted projection must be capped at min(
+    response_max_bytes, effective_delivery_token_limit * 4)."""
+    payload = {"data": "y" * 150_000}
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="run_skill",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=500,
+    )
+    assert isinstance(result, str)
+    bound = 500 * 4
+    assert len(result.encode("utf-8")) <= bound
+    data = json.loads(result)
+    assert RESPONSE_SPILL_METADATA_KEY in data
+
+
+def test_delivery_bound_summary_projects_oversized_preserved_fields(tmp_path):
+    """REQ-026/REQ-027 rung-4 pin: preserved fields must stay present even
+    when they alone exceed the bound — the ladder projects values, never drops
+    keys."""
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "ingredients_table": "R" * 60_000,
+        "orchestration_rules": ["r1"],
+        "stop_step_semantics": {"on_success": "stop"},
+        "errors": [],
+        "suggestions": [],
+        "content": "x" * 40_000,
+    }
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=10_000,
+    )
+    assert isinstance(result, str)
+    bound = 10_000 * 4
+    assert len(result.encode("utf-8")) <= bound
+    data = json.loads(result)
+    assert data["delivery_bound_spill"] is True
+    for key in (
+        "success",
+        "kitchen",
+        "version",
+        "ingredients_table",
+        "orchestration_rules",
+        "stop_step_semantics",
+        "errors",
+        "suggestions",
+    ):
+        assert key in data, f"preserved key {key!r} missing"
+    assert isinstance(data["ingredients_table"], str)
+    assert len(data["ingredients_table"]) < 60_000
+    metadata = data[RESPONSE_SPILL_METADATA_KEY]
+    assert metadata["reason"] == "delivery_bound"
+    assert set(metadata) == RESPONSE_SPILL_METADATA_KEYS
+    assert Path(metadata["artifact_path"]).read_text() == original

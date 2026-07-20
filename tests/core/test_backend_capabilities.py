@@ -177,6 +177,7 @@ def test_backend_capabilities_field_names_locked():
         "session_dir_persistent",
         "supports_model_invocation_gating",
         "github_api_callable",
+        "effective_delivery_token_limit",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected

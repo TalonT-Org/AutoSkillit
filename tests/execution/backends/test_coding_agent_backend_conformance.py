@@ -45,6 +45,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "channel_b_capable": "OPTIONAL",
     "completion_record_types": "REQUIRED",
     "default_skill_sandbox_mode": "REQUIRED",
+    "effective_delivery_token_limit": "REQUIRED",
     "env_denylist_prefixes": "REQUIRED",
     "exit_code_is_terminal": "REQUIRED",
     "food_truck_capable": "OPTIONAL",
@@ -113,9 +114,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """BackendCapabilities contract — exercises multiple fields.
 
         Fields cited: applicable_guards, default_skill_sandbox_mode,
-        git_metadata_writable, has_unguarded_filesystem_access,
-        process_name_aliases, project_local_skills_capable, record_capable,
-        replay_capable, session_dir_persistent, supports_context_window_suffix,
+        effective_delivery_token_limit, git_metadata_writable,
+        has_unguarded_filesystem_access, process_name_aliases,
+        project_local_skills_capable, record_capable, replay_capable,
+        session_dir_persistent, supports_context_window_suffix,
         supports_tool_list_changed, triage_capable, write_detection_strategy.
         """
         assert isinstance(self.backend.capabilities, BackendCapabilities)

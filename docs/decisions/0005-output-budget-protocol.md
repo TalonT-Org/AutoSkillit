@@ -107,8 +107,13 @@ non-autoskillit repos, two lower-ceiling launch paths cap casual reads at ~40 KB
 The ceiling clamps regular-path exec/tool output via
 `min(model request, tool_output_token_limit)`, but code-mode models (gpt-5.6-sol)
 honor model-declared `max_output_tokens` unclamped — for those sessions the ceiling
-is not a hard cap and the intake discipline digest's numeric rule
-(`max_output_tokens` <= 10000) is the operative bound.
+is not a hard cap and the operative bound is enforced server-side by
+`BackendCapabilities.effective_delivery_token_limit` (Codex: 10,000 tokens). The
+response backstop reads that capability at spill time and spills any payload whose
+estimated token count exceeds it, with the artifact path surfaced via the existing
+`_autoskillit_response_spill` envelope (`reason="delivery_bound"`). The intake
+discipline digest's numeric rule (`max_output_tokens` <= 10000) remains as the
+prompt-level reinforcement.
 
 ## Corrections of Record
 
@@ -145,6 +150,16 @@ recorded explicitly in the issue body.
 8. Closed for the `run_cmd` channel by #4286 (capture files promoted in place; only
    bounded slices enter worker memory). Still open for `run_skill` and `test_check`,
    whose adjudication requires the full text.
+
+## Resolved
+
+- **Code-mode bypass (`gpt-5.6-sol` honoring `max_output_tokens` unclamped)**: prior to
+  this revision, the `tool_output_token_limit` ceiling did not constrain code-mode
+  responses and the intake discipline digest's numeric rule was the only operative
+  bound — prompt-level and unenforced. The server-side response backstop now reads
+  `BackendCapabilities.effective_delivery_token_limit` (Codex: 10,000 tokens;
+  Claude Code: 46,500 tokens) and spills payloads that exceed it. This makes the
+  delivery bound authoritative on every backend, not advisory.
 
 ## Operational Signals
 

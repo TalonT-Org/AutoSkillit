@@ -119,6 +119,7 @@ class TestModuleCascadeCore:
             "closure_hashing",
             "path_containment",
             "closure_verifier",
+            "_delivery_bounds",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

@@ -1559,3 +1559,48 @@ def test_load_and_validate_campaign_no_steps_returns_valid(tmp_path: Path) -> No
     assert not step_errors, (
         f"Campaign recipe should not get step-related structural errors; got: {step_errors}"
     )
+
+
+def test_suggestions_accumulation_bounded(tmp_path: Path) -> None:
+    """``load_and_validate`` accumulates suggestions from 4 ``.extend()`` calls
+    (semantic, contract, contract-staleness, diagram-staleness) plus 3
+    ``.append()`` calls in exception handlers. The accumulated list is consumed
+    verbatim by the hard-budgeted ``_delivery_bound_summary`` projector, so
+    the producer must cap itself before delivering a payload that is
+    structurally impossible to fit any Codex bound.
+
+    Regression guard for issue #4304: the remediation recipe accumulated
+    48KB+ of suggestions, which starved ``content`` to ``""`` in the
+    delivery-bound summary. The fix adds ``_MAX_SUGGESTIONS_BYTES`` to cap the
+    producer, so the consumer can always deliver non-empty content.
+    """
+    import json as _json
+
+    from autoskillit.recipe._api import _MAX_SUGGESTIONS_BYTES, load_and_validate
+
+    recipe_yaml = """\
+name: test-suggestions-cap
+description: Recipe that exercises suggestion accumulation
+autoskillit_version: "0.3.0"
+ingredients:
+  task:
+    description: The task
+    required: true
+steps:
+  stop:
+    action: stop
+    message: "done"
+"""
+    recipe_path = tmp_path / "test-suggestions-cap.yaml"
+    recipe_path.write_text(recipe_yaml)
+    result = load_and_validate(
+        "test-suggestions-cap",
+        project_dir=tmp_path,
+    )
+    suggestions = result.get("suggestions", [])
+    suggestions_bytes = len(_json.dumps(suggestions).encode("utf-8"))
+    assert suggestions_bytes <= _MAX_SUGGESTIONS_BYTES, (
+        f"suggestions payload {suggestions_bytes} bytes exceeds producer cap "
+        f"{_MAX_SUGGESTIONS_BYTES} bytes — unbounded producer will starve "
+        f"delivery-bound summary content"
+    )

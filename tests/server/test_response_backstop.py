@@ -695,3 +695,55 @@ def test_delivery_bound_summary_projects_oversized_preserved_fields(tmp_path):
     assert metadata["reason"] == "delivery_bound"
     assert set(metadata) == RESPONSE_SPILL_METADATA_KEYS
     assert Path(metadata["artifact_path"]).read_text() == original
+
+
+def test_delivery_bound_summary_with_realistic_suggestions_preserves_content(tmp_path):
+    """Regression guard for the issue #4304 starvation defect: when ``suggestions``
+    is at the real-world 48KB+ size regime (the remediation recipe accumulates
+    this from semantic + contract + staleness + diagram findings), the bounded
+    summary must still allocate non-zero bytes to ``content``. The historical
+    algorithm computed ``head_limit = max(0, bound - base_bytes - 64)`` from the
+    unshrunk preserved-key envelope, found ``base_bytes > bound``, and starved
+    ``content`` to ``""``."""
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "ingredients_table": "| a |",
+        "orchestration_rules": ["r1", "r2"],
+        "stop_step_semantics": {"on_success": "stop"},
+        "errors": [],
+        "suggestions": [{"rule": f"finding-{i:04d}", "message": "m" * 80} for i in range(600)],
+        "content": "x" * 100_000,
+    }
+    original = json.dumps(payload)
+    bound_tokens = 10_000
+    bound_bytes = bound_tokens * 4
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=bound_tokens,
+    )
+    assert isinstance(result, str)
+    assert len(result.encode("utf-8")) <= bound_bytes, (
+        f"projection exceeds {bound_bytes} bytes (effective delivery bound)"
+    )
+    data = json.loads(result)
+    assert data["delivery_bound_spill"] is True
+    content = data.get("content", "")
+    assert len(content) > 0, (
+        f"content starved to empty ({len(content)} chars) when suggestions is "
+        f"~48KB — bounded summary must allocate budget to content, not just "
+        f"truncate suggestions"
+    )
+    suggestions = data.get("suggestions", [])
+    # Suggestions must be projected (truncated or shortened), not preserved
+    # verbatim at the cost of content.
+    suggestions_bytes = len(json.dumps(suggestions).encode("utf-8"))
+    assert suggestions_bytes < len(json.dumps(payload["suggestions"]).encode("utf-8")), (
+        "suggestions must be projected, not preserved verbatim"
+    )
+    metadata = data[RESPONSE_SPILL_METADATA_KEY]
+    assert metadata["reason"] == "delivery_bound"

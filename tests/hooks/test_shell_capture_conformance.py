@@ -13,6 +13,8 @@ import os
 import re
 import shutil
 import subprocess
+import time
+from collections.abc import Callable
 from pathlib import Path
 from uuid import uuid4
 
@@ -323,33 +325,95 @@ def test_sweep_filename_allowlist(tmp_path: Path) -> None:
     assert invalid_ext.exists(), "files outside the shell_*.log allowlist must not be deleted"
 
 
-def test_capture_cleanup_containment_parity(tmp_path: Path) -> None:
+def test_sweep_stale_captures_uses_wall_clock_not_directory_mtime(tmp_path: Path) -> None:
+    """Staleness must be measured against real elapsed time, not the capture
+    directory's own mtime (which only advances when its contents change)."""
+    _make_project_dirs(tmp_path)
+    capture = _capture_dir(tmp_path)
+
+    stale = capture / f"shell_{uuid4().hex[:16]}.log"
+    stale.write_text("x")
+
+    backdated = time.time() - 200
+    os.utime(stale, (backdated, backdated))
+    os.utime(capture, (backdated, backdated))
+
+    deleted = sweep_stale_captures(capture, max_age_seconds=100)
+    assert deleted == 1
+    assert not stale.exists(), (
+        "file older than max_age_seconds must be swept even when the capture "
+        "directory's own mtime is equally stale"
+    )
+
+
+def _cc_case_valid(capture: Path) -> Path:
+    good = capture / f"shell_{uuid4().hex[:16]}.log"
+    good.write_text("ok")
+    return good
+
+
+def _cc_case_symlink(capture: Path) -> Path:
+    target = capture / f"shell_{uuid4().hex[:16]}.log"
+    target.write_text("ok")
+    sym = capture / f"shell_{uuid4().hex[:16]}.log"
+    sym.symlink_to(target)
+    return sym
+
+
+def _cc_case_traversal(capture: Path) -> Path:
+    traversal = capture / "../../escape.log"
+    traversal.write_text("x")
+    return traversal
+
+
+def _cc_case_hardlink(capture: Path) -> Path:
+    source = capture.parent / "hardlink_source.log"
+    source.write_text("data")
+    hardlinked = capture / f"shell_{uuid4().hex[:16]}.log"
+    try:
+        os.link(source, hardlinked)
+    except OSError:
+        pytest.skip("hardlink not supported in this environment")
+    return hardlinked
+
+
+def _cc_case_world_writable(capture: Path) -> Path:
+    path = capture / f"shell_{uuid4().hex[:16]}.log"
+    path.write_text("x")
+    os.chmod(path, 0o666)
+    return path
+
+
+@pytest.mark.parametrize(
+    "case_builder,expect_safe",
+    [
+        (_cc_case_valid, True),
+        (_cc_case_symlink, False),
+        (_cc_case_traversal, False),
+        (_cc_case_hardlink, False),
+        (_cc_case_world_writable, False),
+    ],
+    ids=["valid", "symlink", "traversal", "hardlink", "world_writable"],
+)
+def test_capture_cleanup_containment_parity(
+    case_builder: Callable[[Path], Path], expect_safe: bool, tmp_path: Path
+) -> None:
     """_is_safe_capture_file rejects the same attack vectors as core.path_containment."""
     from autoskillit.core.path_containment import ContainmentError, resolve_contained_path
 
     _make_project_dirs(tmp_path)
     capture = _capture_dir(tmp_path)
+    path = case_builder(capture)
 
-    # Valid file — both should accept.
-    good = capture / f"shell_{uuid4().hex[:16]}.log"
-    good.write_text("ok")
-    assert _is_safe_capture_file(good, capture) is True
-    try:
-        resolve_contained_path(good, capture)
-    except ContainmentError as exc:
-        pytest.fail(f"core containment rejected a valid capture file: {exc}")
-
-    # Symlink — both should reject.
-    sym = capture / f"shell_{uuid4().hex[:16]}.log"
-    sym.symlink_to(good)
-    assert _is_safe_capture_file(sym, capture) is False
-    with pytest.raises(ContainmentError):
-        resolve_contained_path(sym, capture)
-
-    # Traversal-shaped filename — allowlist rejects outright.
-    traversal = capture / "../../escape.log"
-    traversal.write_text("x")
-    assert _is_safe_capture_file(traversal, capture) is False
+    assert _is_safe_capture_file(path, capture) is expect_safe
+    if expect_safe:
+        try:
+            resolve_contained_path(path, capture)
+        except ContainmentError as exc:
+            pytest.fail(f"core containment rejected a valid capture file: {exc}")
+    else:
+        with pytest.raises(ContainmentError):
+            resolve_contained_path(path, capture)
 
 
 def test_capture_filename_regex_consistency() -> None:

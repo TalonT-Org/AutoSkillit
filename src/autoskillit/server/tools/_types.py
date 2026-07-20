@@ -24,6 +24,7 @@ __all__ = [
     "ToolFailureEnvelope",
     "server_failure_envelope",
     "input_failure_envelope",
+    "deny_envelope",
     "_validate_result",
 ]
 
@@ -71,6 +72,10 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     pre_contamination_subtype: str
     ndjson_unknown_event_count: int
     ndjson_unknown_item_count: int
+    pipeline_tracker: dict[str, str]
+    error: str
+    stage: str
+    retriable: bool
 
 
 class _RunCmdResultBase(TypedDict):
@@ -256,6 +261,29 @@ def input_failure_envelope(
         stage=stage,
         retriable=False,
     )
+
+
+def deny_envelope(
+    error: str,
+    *,
+    stage: str,
+    retriable: bool,
+    recovery: str | None = None,
+) -> dict[str, object]:
+    """Build a canonical pre-flight deny envelope for run_skill guards.
+
+    All pre-flight guards (ingredient locks, pipeline deps, plan path,
+    ambiguous step, cwd validation) must use this constructor so the
+    ``error`` field is structurally present in every deny response.
+    """
+    full_error = f"{error}\n\nRecovery: {recovery}" if recovery else error
+    return {
+        "success": False,
+        "is_error": True,
+        "error": full_error,
+        "stage": stage,
+        "retriable": retriable,
+    }
 
 
 def _validate_result(

@@ -148,6 +148,36 @@ class _InstallLock:
             self._lock_file = None
 
 
+def kitchen_entry_alive(entry: dict) -> bool:
+    """Return True if an active_kitchens.json entry's process is still running."""
+    pid = entry.get("pid")
+    if not isinstance(pid, int):
+        return False
+    create_time = entry.get("create_time")
+    stored: float | None = float(create_time) if isinstance(create_time, (int, float)) else None
+    return _pid_alive(pid, stored_create_time=stored)
+
+
+def read_active_kitchens_registry() -> list[dict]:
+    """Return the current active_kitchens.json entries (locked read).
+
+    Public counterpart to the private ``_active_kitchens_path``/``_active_kitchens_lock``
+    pair — callers outside this module must not reach into private submodule internals
+    (REQ-ARCH-001), so this is the sanctioned read surface for registry consumers such
+    as ``prune_stale_kitchen_state``.
+    """
+    akp = _active_kitchens_path()
+    lock = _active_kitchens_lock()
+    if not akp.exists():
+        return []
+    fh = _open_lock(lock)
+    try:
+        data = read_versioned_json(akp, _SCHEMA_VERSION, logger=logger)
+        return data.get("kitchens", []) if data is not None else []
+    finally:
+        fh.close()
+
+
 def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
     try:
         os.kill(pid, 0)

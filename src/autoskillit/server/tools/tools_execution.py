@@ -64,8 +64,6 @@ from autoskillit.server._guards import (
 from autoskillit.server._misc import (
     SCENARIO_STEP_NAME_ENV,
     _hook_config_overlay_path,
-    _pipeline_tracker_dir,
-    _pipeline_tracker_path,
     resolve_closure_write_dirs,
 )
 from autoskillit.server._misc import (
@@ -95,7 +93,7 @@ from autoskillit.server.tools._execution_helpers import (
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
 )
-from autoskillit.server.tools._types import ToolFailureEnvelope
+from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 
 logger = get_logger(__name__)
 
@@ -135,89 +133,57 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
         if locked_steps[effective_oid].get(step_name) is False:
             ingredient_info = overlay.get("locked_ingredients", {}).get(effective_oid, {})
             return json.dumps(
-                {
-                    "success": False,
-                    "is_error": True,
-                    "error": (
+                deny_envelope(
+                    (
                         f"{INGREDIENT_LOCK_DENY_PREFIX}: Step '{step_name}' is locked out. "
                         f"Locked ingredients for pipeline '{effective_oid}': {ingredient_info}. "
                         f"Call lock_ingredients(unlock=[...]) to release."
                     ),
-                }
+                    stage="preflight:ingredient_locks",
+                    retriable=False,
+                )
             )
     elif not effective_oid:
         for pid, steps in locked_steps.items():
             if steps.get(step_name) is False:
                 return json.dumps(
-                    {
-                        "success": False,
-                        "is_error": True,
-                        "error": (
+                    deny_envelope(
+                        (
                             f"{INGREDIENT_LOCK_DENY_PREFIX}: Step '{step_name}' is locked out "
                             f"by pipeline '{pid}'. Pass order_id to scope the check, "
                             f"or call lock_ingredients(unlock=[...]) to release."
                         ),
-                    }
+                        stage="preflight:ingredient_locks",
+                        retriable=False,
+                    )
                 )
     return None
 
 
-def _active_order_ids_for_kitchen(ctx: ToolContext) -> set[str]:
-    """Return distinct order_ids with an order-id-scoped tracker under this kitchen.
-
-    Used by the `_check_pipeline_deps` kitchen-scoped fallback to detect when
-    multiple pipelines are concurrently active under one kitchen (e.g.
-    fleet-style parallel dispatch). In that case the kitchen_id must not be
-    used as an aliasing key — one pipeline's completed step could otherwise
-    falsely satisfy an unrelated pipeline's dependency.
-    """
-    tracker_dir = _pipeline_tracker_dir(ctx.project_dir)
-    if not tracker_dir.is_dir():
-        return set()
-    active: set[str] = set()
-    for path in tracker_dir.glob("*.json"):
-        if path.stem == ctx.kitchen_id:
-            continue
-        try:
-            tracker = json.loads(path.read_text())
-        except (OSError, json.JSONDecodeError):
-            continue
-        if tracker.get("kitchen_id") == ctx.kitchen_id:
-            active.add(path.stem)
-    return active
-
-
 def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
-    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
     from autoskillit.server import _get_ctx  # circular-break
+    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
+        ResolutionRefusal,
+        resolve_tracker_order_id,
+    )
 
     ctx = _get_ctx()
-    if not effective_oid:
-        # Kitchen-scoped fallback: interactive sessions have a kitchen_id but no
-        # order_id. Only resolve to the kitchen-scoped tracker when at most one
-        # pipeline is active under this kitchen.
-        if not ctx.kitchen_id:
-            return None
-        active_oids = _active_order_ids_for_kitchen(ctx)
-        if len(active_oids) > 1:
+    resolved = resolve_tracker_order_id(ctx, order_id)
+    if isinstance(resolved, ResolutionRefusal):
+        if resolved.multi_pipeline:
             return json.dumps(
-                {
-                    "success": False,
-                    "is_error": True,
-                    "error": (
-                        f"{DEPENDENCY_DENY_PREFIX}: multiple pipelines are active "
-                        f"under this kitchen ({sorted(active_oids)}). Pass order_id "
-                        "explicitly to scope the dependency check."
-                    ),
-                }
+                deny_envelope(
+                    f"{DEPENDENCY_DENY_PREFIX}: {resolved.reason}",
+                    stage="preflight:pipeline_deps",
+                    retriable=False,
+                )
             )
-        effective_oid = ctx.kitchen_id
-    tracker_path = _pipeline_tracker_path(ctx.project_dir, effective_oid)
-    if not tracker_path.exists():
+        return None
+    if not resolved.path.exists():
         return None
     try:
-        tracker = json.loads(tracker_path.read_text())
+        tracker = json.loads(resolved.path.read_text())
     except (json.JSONDecodeError, OSError):
         return None
     canonical = _canonical_step_name(step_name)
@@ -230,14 +196,20 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
         return None
     dep_status = {d: steps.get(d, {}).get("status", "unknown") for d in unmet}
     return json.dumps(
-        {
-            "success": False,
-            "is_error": True,
-            "error": (
+        deny_envelope(
+            (
                 f"{DEPENDENCY_DENY_PREFIX}: Step '{step_name}' requires {unmet} to complete "
-                f"first. Pipeline '{effective_oid}': {dep_status}."
+                f"first. Pipeline '{resolved.order_id}': {dep_status}."
             ),
-        }
+            stage="preflight:pipeline_deps",
+            retriable=True,
+            recovery=(
+                "This denial is deterministic but may reflect stale tracker state. "
+                "Call record_pipeline_step(op='status') to inspect the current tracker. "
+                "If the prerequisite step genuinely has not run, run it first. "
+                "If the tracker is stale, escalate with the status output."
+            ),
+        )
     )
 
 
@@ -292,15 +264,19 @@ def _has_active_locks(order_id: str) -> bool:
 def _has_active_deps() -> bool:
     """Return True if a kitchen-scoped tracker exists with any dependencies defined."""
     from autoskillit.server import _get_ctx  # circular-break
+    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
+        ResolvedTracker,
+        resolve_tracker_order_id,
+    )
 
     ctx = _get_ctx()
-    if not ctx.kitchen_id:
+    resolved = resolve_tracker_order_id(ctx, "")
+    if not isinstance(resolved, ResolvedTracker):
         return False
-    tracker_path = _pipeline_tracker_path(ctx.project_dir, ctx.kitchen_id)
-    if not tracker_path.exists():
+    if not resolved.path.exists():
         return False
     try:
-        tracker = json.loads(tracker_path.read_text())
+        tracker = json.loads(resolved.path.read_text())
     except (json.JSONDecodeError, OSError):
         return False
     return bool(tracker.get("dependencies"))
@@ -322,15 +298,15 @@ def _check_review_approach_plan_path(step_name: str, skill_command: str) -> str 
     first_arg = parts[1]
     if first_arg.startswith("https://") or first_arg.startswith("http://"):
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": (
+            deny_envelope(
+                (
                     "review_approach requires a plan file path argument (a path "
                     "under the project's temp directory produced by "
                     "rectify/make_plan), not an issue URL."
                 ),
-            }
+                stage="preflight:plan_path",
+                retriable=False,
+            )
         )
     return None
 
@@ -349,6 +325,58 @@ def _derive_run_cmd_write_prefixes() -> tuple[str, ...]:
     if single:
         return (single,)
     return ()
+
+
+def _mark_step_complete_server_side(
+    tool_ctx: ToolContext,
+    step_name: str,
+    order_id: str,
+) -> dict | None:
+    """Mark a pipeline step complete at the run_skill adjudication point.
+
+    Uses the shared ``resolve_tracker_order_id`` so the marker resolves the
+    same tracker file as ``_check_pipeline_deps``. Failures are logged but
+    never fail the tool call.
+    """
+    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
+        ResolvedTracker,
+        mark_step_complete,
+        resolve_tracker_order_id,
+    )
+
+    try:
+        resolved = resolve_tracker_order_id(tool_ctx, order_id)
+        if not isinstance(resolved, ResolvedTracker):
+            logger.debug("pipeline_marker_skip_no_tracker", reason=resolved.reason)
+            return None
+        if not resolved.path.exists():
+            logger.debug("pipeline_marker_skip_no_file", path=str(resolved.path))
+            return None
+        result = mark_step_complete(resolved.path, step_name, resolved.order_id)
+        if result.get("success"):
+            logger.info(
+                "pipeline_step_marked_complete",
+                step=result["step"],
+                order_id=result["order_id"],
+                done=result["done"],
+                total=result["total"],
+            )
+        else:
+            logger.warning(
+                "pipeline_marker_failed",
+                error=result.get("error", "unknown"),
+            )
+        marker = {
+            "step": result.get("step", step_name),
+            "order_id": resolved.order_id,
+            "status": "complete" if result.get("success") else "marker_failed",
+        }
+        if "advisory" in result:
+            marker["advisory"] = result["advisory"]
+        return marker
+    except Exception:
+        logger.warning("pipeline_marker_exception", exc_info=True)
+        return None
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -739,21 +767,23 @@ async def run_skill(
         return cmd_error
     if cwd and not _is_absolute_path(cwd):
         return json.dumps(
-            {
-                "success": False,
-                "error": (
+            deny_envelope(
+                (
                     f"run_skill: cwd must be an absolute path, got: {cwd!r}. "
                     "Check that the skill resolved the worktree_path to absolute "
                     '(e.g. WORKTREE_PATH="$(cd "${WORKTREE_PATH}" && pwd)").'
                 ),
-            }
+                stage="preflight:cwd",
+                retriable=False,
+            )
         )
     if cwd and not os.path.isdir(cwd):
         return json.dumps(
-            {
-                "success": False,
-                "error": f"run_skill: cwd does not exist: {cwd}",
-            }
+            deny_envelope(
+                f"run_skill: cwd does not exist: {cwd}",
+                stage="preflight:cwd",
+                retriable=False,
+            )
         )
     if (
         step_name
@@ -803,40 +833,40 @@ async def run_skill(
             elif _ambiguous:
                 if _has_active_deps():
                     return json.dumps(
-                        {
-                            "success": False,
-                            "is_error": True,
-                            "error": (
+                        deny_envelope(
+                            (
                                 f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and matched "
                                 "multiple recipe steps by skill_command prefix (ambiguous). "
                                 "Cannot verify dependency status. Pass step_name explicitly."
                             ),
-                        }
+                            stage="preflight:ambiguous_step",
+                            retriable=False,
+                        )
                     )
             elif _has_active_locks(order_id):
                 return json.dumps(
-                    {
-                        "success": False,
-                        "is_error": True,
-                        "error": (
+                    deny_envelope(
+                        (
                             f"{INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and could "
                             "not be resolved from the recipe. Cannot verify lock "
                             "status. Pass step_name explicitly or call "
                             "lock_ingredients(unlock=[...]) to release all locks."
                         ),
-                    }
+                        stage="preflight:ingredient_locks",
+                        retriable=False,
+                    )
                 )
             elif _has_active_deps():
                 return json.dumps(
-                    {
-                        "success": False,
-                        "is_error": True,
-                        "error": (
+                    deny_envelope(
+                        (
                             f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
                             "not be resolved from the recipe. Cannot verify dependency "
                             "status. Pass step_name explicitly."
                         ),
-                    }
+                        stage="preflight:unresolved_step",
+                        retriable=False,
+                    )
                 )
 
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
@@ -1451,7 +1481,14 @@ async def run_skill(
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)
                     clear_run_skill_state(tool_ctx.project_dir)
+                    if step_name:
+                        _pipeline_marker = _mark_step_complete_server_side(
+                            tool_ctx, step_name, order_id
+                        )
+                    else:
+                        _pipeline_marker = None
                 else:
+                    _pipeline_marker = None
                     await _notify(
                         ctx,
                         "error",
@@ -1501,6 +1538,8 @@ async def run_skill(
                             retriable=True,
                         )
                     )
+                if _pipeline_marker is not None:
+                    _parsed["pipeline_tracker"] = _pipeline_marker
                 return shape_execution_response(
                     tool_ctx,
                     _parsed,

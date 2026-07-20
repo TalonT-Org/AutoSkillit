@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "9e6225e994bb5e769312af5d4b4507a66b0f556369900dc95df8723e6228e6a6",
+  "_registry_hash": "9d99ecc511cc4592d920a0981a639751e6ab31996a64d0d7d70c4ee757855773",
   "hooks": {
     "PostToolUse": [
       {
@@ -21,11 +21,6 @@
           },
           {
             "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py quota_post_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          },
-          {
-            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py pipeline_step_post_hook",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },

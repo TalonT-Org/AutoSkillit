@@ -991,7 +991,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1560,
+        1610,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1027,10 +1027,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "normal open_kitchen paths with safe _distinct_backends extraction from "
         "_effective_backend_map and tool_ctx.backend.name (+28 net lines)"
         "; output-budget hook payload type, serializer, and hook-config bridge "
-        "(+21 net lines); response artifact temp-root bridge (+2 net lines)",
+        "(+21 net lines); response artifact temp-root bridge (+2 net lines)"
+        "; prune_stale_kitchen_state liveness-gated tracker pruning wired into both "
+        "fresh-open and deferred-recall open_kitchen paths, plus overlay lock sidecar "
+        "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)",
     ),
     "tools_execution.py": (
-        1600,
+        1650,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
@@ -1056,7 +1059,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; closure_report_root derivation after output_dir recipe auto-fill (+11 net lines)"
         "; kitchen-scoped _check_pipeline_deps fallback, _active_order_ids_for_kitchen "
         "multi-pipeline gating, _has_active_deps/_check_review_approach_plan_path gates, "
-        "and ambiguous/empty step_name dependency-deny branches (+126 net lines)",
+        "and ambiguous/empty step_name dependency-deny branches (+126 net lines)"
+        "; server-authoritative step completion: _mark_step_complete_server_side helper "
+        "called at the run_skill adjudication point, shared resolve_tracker_order_id "
+        "resolver, and deny_envelope conversion of all pre-flight deny sites "
+        "(#4293 pipeline tracker split-brain, +65 net lines)",
     ),
     "execution/backends/codex.py": (
         1212,

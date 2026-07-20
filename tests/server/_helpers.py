@@ -11,6 +11,23 @@ from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
 
 
+def _write_registry(monkeypatch: Any, tmp_path: Any, entries: list[dict[str, Any]]) -> Any:
+    """Write a fake active-kitchens registry for prune_stale_kitchen_state tests."""
+    from autoskillit.core._plugin_cache import write_versioned_json
+
+    registry_path = tmp_path / "active_kitchens.json"
+    monkeypatch.setattr(
+        "autoskillit.core._plugin_cache._active_kitchens_path",
+        lambda: registry_path,
+    )
+    monkeypatch.setattr(
+        "autoskillit.core._plugin_cache._active_kitchens_lock",
+        lambda: tmp_path / "active_kitchens.lock",
+    )
+    write_versioned_json(registry_path, {"kitchens": entries}, schema_version=1)
+    return registry_path
+
+
 def _simple_prompt_builder(**kwargs) -> str:
     """Minimal prompt builder for tests — avoids CLI imports."""
     return f"prompt-for-{kwargs.get('recipe', 'unknown')}"

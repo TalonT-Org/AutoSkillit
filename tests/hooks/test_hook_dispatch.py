@@ -199,7 +199,6 @@ class TestGenerateHooksJsonFormat:
                         "quota_guard_state_post_hook",
                         "review_gate_post_hook",
                         "skill_load_post_hook",
-                        "pipeline_step_post_hook",
                         "resume_gate_post_hook",
                         "recipe_confirmed_post_hook",
                         "shell_capture_hook",

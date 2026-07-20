@@ -38,6 +38,18 @@ def _maybe_provider_line(data: dict, lines: list[str]) -> None:
         lines.append(f"provider: {provider_used}{suffix}")
 
 
+def _maybe_tracker_line(data: dict, lines: list[str], *, blank_before: bool = False) -> None:
+    tracker = data.get("pipeline_tracker")
+    if not isinstance(tracker, dict):
+        return
+    line = (
+        f"--- Pipeline Tracker: {tracker.get('step', '')} {tracker.get('status', '')}"
+        f" ({tracker.get('order_id', '')}) ---"
+    )
+    lines.extend([""] if blank_before else [])
+    lines.append(line)
+
+
 def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     """Format run_skill result as Markdown-KV."""
     success = data.get("success", False)
@@ -62,6 +74,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         if worktree:
             lines.append(f"worktree_path: {worktree}")
         _maybe_provider_line(data, lines)
+        _maybe_tracker_line(data, lines)
         result = data.get("result", "")
         if result:
             lines.append(f"\nresult:\n{result}")
@@ -99,6 +112,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         cw = token_usage.get("cache_write_tokens", 0)
         if cw:
             lines.append(f"tokens_cache_write: {_fmt_tokens(cw)}")
+    _maybe_tracker_line(data, lines, blank_before=True)
     result = data.get("result", "")
     if result:
         lines.extend(["", "### Result", result])
@@ -206,6 +220,8 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "has_progress_evidence",
         "provider_used",
         "provider_fallback",
+        "pipeline_tracker",
+        "error",
     }
 )
 _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
@@ -231,6 +247,8 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "completion_required",
         "ndjson_unknown_event_count",
         "ndjson_unknown_item_count",
+        "stage",
+        "retriable",
     }
 )
 
@@ -242,9 +260,10 @@ _FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset(
         "stderr",
         "stdout_artifact_path",
         "stderr_artifact_path",
+        "error",
     }
 )
-_FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset({"error"})
+_FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset()
 
 _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
     {

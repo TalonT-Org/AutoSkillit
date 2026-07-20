@@ -31,15 +31,19 @@ from autoskillit.core import (
     ProcessStaleError,
     _collect_disabled_feature_tags,
     atomic_write,
+    clear_kitchens_for_pid,
     fast_dumps,
     find_latest_session_id,
     get_logger,
     get_state_dir,
     is_marker_fresh,
+    kitchen_entry_alive,
     pkg_root,
+    read_active_kitchens_registry,
     read_marker,
     register_active_kitchen,
     resolve_kitchen_id,
+    sweep_stale_markers,
     unregister_active_kitchen,
 )
 from autoskillit.fleet import (
@@ -327,6 +331,68 @@ def _update_hook_config_with_git_ops_policy() -> None:
         logger.warning("hook_config_git_ops_policy_update_write_failed", path=str(hook_cfg_path))
 
 
+_ORPHAN_GRACE_SECONDS = 600
+
+
+def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> None:
+    """Remove tracker files belonging to dead kitchens.
+
+    Per tracker file in ``pipeline_tracker/``: parse → read internal
+    ``kitchen_id`` (never the filename); if it equals *current_kitchen_id*
+    → keep; else check **all** ``active_kitchens.json`` entries sharing that
+    ``kitchen_id`` — keep the tracker iff any matching entry is alive. Reap
+    only when all matching entries are dead. No matching entry at all → reap
+    only if ``initialized_at`` exceeds the grace window.
+    """
+    logger = get_logger(__name__)
+    tracker_dir = _pipeline_tracker_dir(project_dir)
+    if not tracker_dir.is_dir():
+        return
+
+    try:
+        entries = read_active_kitchens_registry()
+    except Exception:
+        logger.warning("prune_kitchen_state_registry_read_failed", exc_info=True)
+        return
+
+    for tracker_file in list(tracker_dir.glob("*.json")):
+        if tracker_file.name.startswith("."):
+            continue
+        try:
+            tracker_data = json.loads(tracker_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            try:
+                tracker_file.unlink()
+            except OSError:
+                pass
+            continue
+
+        tracker_kid = tracker_data.get("kitchen_id", "")
+        if tracker_kid == current_kitchen_id:
+            continue
+
+        matching = [e for e in entries if e.get("kitchen_id") == tracker_kid]
+        if matching:
+            if any(kitchen_entry_alive(e) for e in matching):
+                continue
+            try:
+                tracker_file.unlink()
+            except OSError:
+                pass
+        else:
+            init_at_str = tracker_data.get("initialized_at", "")
+            try:
+                init_at = datetime.fromisoformat(init_at_str)
+                age = (datetime.now(UTC) - init_at).total_seconds()
+            except (ValueError, TypeError):
+                age = float("inf")
+            if age > _ORPHAN_GRACE_SECONDS:
+                try:
+                    tracker_file.unlink()
+                except OSError:
+                    pass
+
+
 def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> None:
     """Auto-derive and initialize the kitchen-scoped pipeline dependency tracker.
 
@@ -428,9 +494,24 @@ async def _open_kitchen_handler() -> str | None:
         return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
 
     try:
+        clear_kitchens_for_pid(os.getpid())
+    except Exception:
+        logger.warning("open_kitchen_clear_pid_failed", exc_info=True)
+
+    try:
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("open_kitchen_registry_failed", exc_info=True)
+
+    try:
+        prune_stale_kitchen_state(ctx.project_dir, ctx.kitchen_id)
+    except Exception:
+        logger.warning("open_kitchen_prune_trackers_failed", exc_info=True)
+
+    try:
+        sweep_stale_markers()
+    except Exception:
+        logger.warning("open_kitchen_sweep_markers_failed", exc_info=True)
 
     try:
         _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
@@ -522,6 +603,11 @@ def _close_kitchen_handler() -> None:
         overlay_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
+    overlay_lock_path = overlay_path.with_suffix(".lock")
+    try:
+        overlay_lock_path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("hook_config_overlay_lock_remove_failed", path=str(overlay_lock_path))
     ctx.fleet_lock = None
     try:
         ctx.fleet_lock = FleetSemaphore(
@@ -1062,6 +1148,10 @@ async def open_kitchen(
             # Dispatch-feasibility preflight: verify the backend can enforce
             # all fix-required hooks for the recipe's run_skill steps.
             if tool_ctx.active_recipe_steps is not None:
+                try:
+                    prune_stale_kitchen_state(tool_ctx.project_dir, tool_ctx.kitchen_id)
+                except Exception:
+                    logger.warning("open_kitchen_deferred_prune_failed", exc_info=True)
                 _auto_init_pipeline_tracker(tool_ctx)
                 _preflight_err = _check_dispatch_feasibility(
                     post_prune_step_names=result.get("post_prune_step_names", []),

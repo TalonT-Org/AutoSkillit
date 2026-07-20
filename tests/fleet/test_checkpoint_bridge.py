@@ -145,3 +145,18 @@ class TestCheckpointFromTracker:
         assert checkpoint is not None
         assert checkpoint.completed_items == ["plan"]
         assert checkpoint.progress_pct == pytest.approx(0.5)
+
+    def test_checkpoint_from_tracker_with_server_marked_steps(self) -> None:
+        tracker_data = {
+            "steps": {
+                "rectify": {"status": "complete", "completed_at": "2026-07-01T12:00:00+00:00"},
+                "review_approach": {"status": "pending"},
+            },
+        }
+        checkpoint = checkpoint_from_tracker(
+            tracker_data, backend_name="claude-code", skill_name="test"
+        )
+        assert checkpoint is not None
+        assert checkpoint.completed_items == ["rectify"]
+        assert checkpoint.step_name == "rectify"
+        assert checkpoint.progress_pct == pytest.approx(0.5)

@@ -242,7 +242,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
         }
     ),
     "lock_ingredients": frozenset({"locked", "pipeline_id", "unlock"}),
-    "record_pipeline_step": frozenset({"pipeline_id", "op", "dependencies"}),
+    "record_pipeline_step": frozenset({"pipeline_id", "op", "dependencies", "step_name"}),
 }
 
 

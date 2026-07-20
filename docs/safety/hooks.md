@@ -1,6 +1,6 @@
 # Hooks
 
-AutoSkillit registers 43 Claude Code hook scripts: 32 PreToolUse, 10 PostToolUse,
+AutoSkillit registers 42 Claude Code hook scripts: 32 PreToolUse, 9 PostToolUse,
 and 1 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
@@ -147,7 +147,7 @@ dependencies. Permission is always `allow` — the server-side `_check_pipeline_
 in `run_skill` is the primary enforcer. Fails open on missing tracker or
 malformed input.
 
-## PostToolUse hooks (10)
+## PostToolUse hooks (9)
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools
@@ -188,12 +188,12 @@ state file. When `run_python` calls `check_review_loop`, marks
 `check_review_loop_called: True` in the state so `review_loop_gate.py` will
 unblock `wait_for_ci`/`enqueue_pr`.
 
-### `pipeline_step_post_hook.py`
-**Guarded tool:** `run_skill`
-After a successful `run_skill`, auto-marks the step as `complete` in the
-pipeline tracker file. Appends a progress banner via `updatedMCPToolOutput`.
-Uses `AUTOSKILLIT_DISPATCH_ID` env fallback for `order_id` resolution to
-handle fleet-dispatched pipelines. Fails open on missing tracker or errors.
+### ~~`pipeline_step_post_hook.py`~~ (RETIRED)
+Step completion marking is now **server-authoritative**: the `run_skill`
+handler in `tools_execution.py` writes step completion at the adjudication
+point, using the same tracker resolver as the dependency enforcer. This
+eliminates the split-brain between client-side hook writes and server-side
+enforcement reads that caused false `DEPENDENCY UNMET` denials (#4293).
 
 ### `recipe_confirmed_post_hook.py`
 **Guarded tool:** `run_skill`

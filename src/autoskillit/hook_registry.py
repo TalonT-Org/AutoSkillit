@@ -299,7 +299,6 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=[
             "token_summary_hook.py",
             "quota_post_hook.py",
-            "pipeline_step_post_hook.py",
             "recipe_confirmed_post_hook.py",
         ],
         mechanism="output-rewrite",
@@ -404,6 +403,7 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "write_guard.py",
         "pretty_output_hook.py",
         "output_budget_guard.py",
+        "pipeline_step_post_hook.py",
         # Append any future retired basenames here, atomically with the rename commit.
     }
 )

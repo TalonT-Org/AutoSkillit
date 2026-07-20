@@ -27,8 +27,8 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
+from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa: E402
 
-_SUFFIX_RE = re.compile(r"-\d+$")
 _PR_PARTS_RE = re.compile(r"https://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 
 # v1 on-disk key names (schema_version < 2). Referenced via module constants so
@@ -50,7 +50,7 @@ def _parse_pr_url_parts(pr_url: str) -> tuple[str, str, int] | None:
 
 def _canonical(name: str) -> str:
     """Strip trailing -N numeric disambiguation suffix from a step name."""
-    return _SUFFIX_RE.sub("", name) if name else name
+    return STEP_SUFFIX_RE.sub("", name) if name else name
 
 
 def _log_root() -> pathlib.Path:

@@ -29,20 +29,26 @@ def _run(stdin_data: str, cwd: Path) -> tuple[int, str]:
     return result.returncode, result.stdout
 
 
-def _write_tracker(tmp_path, order_id, steps, dependencies):
+def _write_tracker(tmp_path, order_id, steps, dependencies, kitchen_id="test-kitchen"):
     tracker_dir = tmp_path / _TRACKER_RELPATH
     tracker_dir.mkdir(parents=True, exist_ok=True)
     tracker_dir.joinpath(f"{order_id}.json").write_text(
         json.dumps(
             {
                 "pipeline_id": order_id,
-                "kitchen_id": "test-kitchen",
+                "kitchen_id": kitchen_id,
                 "initialized_at": "2026-05-31T01:00:00Z",
                 "steps": steps,
                 "dependencies": dependencies,
             }
         )
     )
+
+
+def _write_hook_config(tmp_path, kitchen_id):
+    config_dir = tmp_path / ".autoskillit" / "temp"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_dir.joinpath(".hook_config.json").write_text(json.dumps({"kitchen_id": kitchen_id}))
 
 
 class TestPipelineStepGuard:
@@ -107,11 +113,13 @@ class TestPipelineStepGuard:
 
     def test_order_id_discovered_from_single_tracker_file(self, tmp_path, monkeypatch):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _write_hook_config(tmp_path, "kitchen-1")
         _write_tracker(
             tmp_path,
-            "kitchen-1",
+            "AB",
             {"a": {"status": "pending"}, "b": {"status": "pending"}},
             {"b": ["a"]},
+            kitchen_id="kitchen-1",
         )
         event = json.dumps({"tool_input": {"step_name": "b", "order_id": ""}})
         code, stdout = _run(event, cwd=tmp_path)
@@ -120,21 +128,37 @@ class TestPipelineStepGuard:
         assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
         assert "a" in output["hookSpecificOutput"]["additionalContext"]
 
-    def test_order_id_discovery_skipped_when_multiple_trackers(self, tmp_path, monkeypatch):
+    def test_advisory_on_ambiguous_tracker_state(self, tmp_path, monkeypatch):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _write_hook_config(tmp_path, "kitchen-1")
         _write_tracker(
             tmp_path,
-            "kitchen-1",
+            "AB",
             {"a": {"status": "pending"}, "b": {"status": "pending"}},
             {"b": ["a"]},
+            kitchen_id="kitchen-1",
         )
         _write_tracker(
             tmp_path,
-            "kitchen-2",
+            "CD",
             {"a": {"status": "pending"}, "b": {"status": "pending"}},
             {"b": ["a"]},
+            kitchen_id="kitchen-1",
         )
         event = json.dumps({"tool_input": {"step_name": "b", "order_id": ""}})
         code, stdout = _run(event, cwd=tmp_path)
         assert code == 0
-        assert stdout.strip() == ""
+        output = json.loads(stdout)
+        hook_output = output["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "allow"
+        assert "cannot resolve tracker" in hook_output["additionalContext"]
+
+    def test_advisory_when_no_kitchen_id_available(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        event = json.dumps({"tool_input": {"step_name": "b", "order_id": ""}})
+        code, stdout = _run(event, cwd=tmp_path)
+        assert code == 0
+        output = json.loads(stdout)
+        hook_output = output["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "allow"
+        assert "cannot resolve tracker" in hook_output["additionalContext"]

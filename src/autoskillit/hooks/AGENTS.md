@@ -16,12 +16,12 @@ Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS
 | `token_summary_hook.py` | Appends Token Usage Summary to PR body |
 | `session_start_hook.py` | Injects open-kitchen reminder on resume |
 | `skill_load_post_hook.py` | `PostToolUse`: writes skill-loaded flag for non-Anthropic provider guard |
-| `pipeline_step_post_hook.py` | `PostToolUse`: auto-marks pipeline steps complete after `run_skill` |
+| ~~`pipeline_step_post_hook.py`~~ | **RETIRED** — step completion is now server-authoritative (written at `run_skill` adjudication point in `tools_execution.py`) |
 | `recipe_confirmed_post_hook.py` | `PostToolUse`: writes recipe-load-confirmed marker after first successful `run_skill` |
 | `resume_gate_post_hook.py` | `PostToolUse`: records resume attempts to `resume_gate_state.json` for the reset_dispatch resume gate |
 | `quota_guard_state_post_hook.py` | `PostToolUse`: writes / clears the per-session quota-disable marker after `disable_quota_guard` / `close_kitchen` |
 | `ingredient_lock_guard.py` | PreToolUse guard script (see guards/AGENTS.md) |
-| `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`) |
+| `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`, `STEP_SUFFIX_RE`) |
 | `_command_classification.py` | Shared stdlib-only command classification primitives for guard scripts (interpreter/wrapper detection, git command classification) |
 | `_policy_event.py` | Typed policy-event formatter for hook provenance messages (stdlib-only) |
 | `shell_capture_hook.py` | `PreToolUse`: input-rewrite hook for Codex shell capture — wraps commands in a lossless capture harness (#4286 / ADR-0006) |

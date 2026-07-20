@@ -4,6 +4,9 @@
 Non-blocking advisory — permissionDecision is always "allow". The server-side
 _check_pipeline_deps in run_skill is the primary enforcer.
 
+Tracker resolution uses the kitchen_id from the merged hook config (the same
+rule the server uses) rather than the fragile single-file discovery heuristic.
+
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
 """
 
@@ -11,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -19,11 +21,38 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_utils import (  # type: ignore[import-not-found]  # noqa: E402
-    discover_single_tracker_order_id,
-)
+from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
+from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa: E402
 
-_SUFFIX_RE = re.compile(r"-\d+$")
+
+def _resolve_order_id_from_kitchen(tracker_dir: Path, kitchen_id: str) -> str:
+    """Select tracker by internal kitchen_id field (same rule as the server).
+
+    Skips the self-named file (``{kitchen_id}.json``) from the candidate scan,
+    matching ``resolve_tracker_order_id`` in ``tools_pipeline_tracker.py``.
+    When exactly one non-self candidate exists, returns that candidate's stem.
+    When no non-self candidates exist, returns ``kitchen_id`` (the self-named
+    file is the implicit default). Returns ``""`` on ambiguity (>1 candidate).
+    """
+    if not tracker_dir.is_dir():
+        return ""
+    active: set[str] = set()
+    for f in tracker_dir.iterdir():
+        if f.suffix != ".json" or f.name.startswith("."):
+            continue
+        if f.stem == kitchen_id:
+            continue
+        try:
+            data = json.loads(f.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if data.get("kitchen_id") == kitchen_id:
+            active.add(f.stem)
+    if len(active) > 1:
+        return ""
+    if len(active) == 1:
+        return next(iter(active))
+    return kitchen_id
 
 
 def main() -> None:
@@ -40,11 +69,29 @@ def main() -> None:
     order_id = tool_input.get("order_id", "") or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
     if not order_id:
         tracker_dir = Path.cwd() / ".autoskillit" / "temp" / "pipeline_tracker"
-        order_id = discover_single_tracker_order_id(tracker_dir)
+        hook_config = read_merged_hook_config()
+        kitchen_id = hook_config.get("kitchen_id", "")
+        if kitchen_id:
+            order_id = _resolve_order_id_from_kitchen(tracker_dir, kitchen_id)
         if not order_id:
+            print(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "allow",
+                            "additionalContext": (
+                                "Pipeline step guard: cannot resolve tracker — "
+                                "no order_id, no kitchen_id, or ambiguous tracker state. "
+                                "The server-side enforcer will handle dependency checks."
+                            ),
+                        }
+                    }
+                )
+            )
             sys.exit(0)
 
-    canonical = _SUFFIX_RE.sub("", step_name)
+    canonical = STEP_SUFFIX_RE.sub("", step_name)
     tracker_path = Path.cwd() / ".autoskillit" / "temp" / "pipeline_tracker" / f"{order_id}.json"
     if not tracker_path.exists():
         sys.exit(0)

@@ -336,6 +336,7 @@ def _plain_spill_envelope(
     metadata: dict[str, Any],
     max_bytes: int,
     inline_chars: int,
+    reason: str = "plain_text",
 ) -> str | None:
     preview_limit = max(0, min(inline_chars, max_bytes // 3))
     while True:
@@ -343,7 +344,7 @@ def _plain_spill_envelope(
         envelope: dict[str, Any] = {
             RESPONSE_SPILL_METADATA_KEY: _spill_metadata(
                 metadata,
-                reason="plain_text",
+                reason=reason,
                 omitted_chars=omitted_chars,
                 omitted_items=0,
             ),
@@ -355,6 +356,159 @@ def _plain_spill_envelope(
         if preview_limit == 0:
             return None
         preview_limit //= 2
+
+
+_DELIVERY_BOUND_PRESERVED_KEYS: tuple[str, ...] = (
+    "success",
+    "kitchen",
+    "version",
+    "ingredients_table",
+    "orchestration_rules",
+    "stop_step_semantics",
+    "errors",
+    "suggestions",
+)
+_DELIVERY_BOUND_CONTENT_KEY = "content"
+_DELIVERY_BOUND_DROPPABLE_KEYS: tuple[str, ...] = ("diagram",)
+
+
+def _delivery_bound_summary(
+    parsed: dict[str, Any],
+    *,
+    metadata: dict[str, Any],
+    bound: int,
+) -> str | None:
+    """Build a bounded inline summary honoring the delivery bound.
+
+    Preserves ``success``, ``kitchen``, ``version``, ``ingredients_table``,
+    ``orchestration_rules``, ``stop_step_semantics``, ``errors``,
+    ``suggestions`` verbatim (when present and fitting); truncates ``content``;
+    drops ``diagram``; nests spill metadata under ``RESPONSE_SPILL_METADATA_KEY``
+    with ``reason="delivery_bound"``; sets top-level ``delivery_bound_spill=True``.
+
+    Returns the rendered envelope string when it fits ``bound``; otherwise
+    ``None`` so the caller fails closed.
+    """
+    content_text = parsed.get(_DELIVERY_BOUND_CONTENT_KEY)
+    content_is_str = isinstance(content_text, str)
+
+    precomputed_base_chars = 0
+    precomputed_base_items = 0
+    for key, value in parsed.items():
+        if key in _DELIVERY_BOUND_PRESERVED_KEYS or key == _DELIVERY_BOUND_CONTENT_KEY:
+            continue
+        chars, items = _total_omissions(value)
+        precomputed_base_chars += chars
+        precomputed_base_items += items
+
+    if not content_is_str and _DELIVERY_BOUND_CONTENT_KEY in parsed:
+        chars, items = _total_omissions(parsed[_DELIVERY_BOUND_CONTENT_KEY])
+        precomputed_base_chars += chars
+        precomputed_base_items += items
+
+    present_preserved = [key for key in _DELIVERY_BOUND_PRESERVED_KEYS if key in parsed]
+
+    def _build(head_len: int, include_droppable: bool, value_projector=None) -> dict[str, Any]:
+        envelope: dict[str, Any] = {RESPONSE_SPILL_METADATA_KEY: dict(metadata)}
+        envelope["delivery_bound_spill"] = True
+
+        base_chars = precomputed_base_chars
+        base_items = precomputed_base_items
+
+        for key in present_preserved:
+            if value_projector is None:
+                envelope[key] = parsed[key]
+            else:
+                envelope[key] = value_projector(parsed[key])
+
+        if include_droppable:
+            for key in _DELIVERY_BOUND_DROPPABLE_KEYS:
+                if key in parsed:
+                    envelope[key] = parsed[key]
+        else:
+            for key in _DELIVERY_BOUND_DROPPABLE_KEYS:
+                if key in parsed:
+                    chars, items = _total_omissions(parsed[key])
+                    base_chars += chars
+                    base_items += items
+
+        if content_is_str:
+            text = content_text or ""
+            truncated = text[:head_len]
+            envelope[_DELIVERY_BOUND_CONTENT_KEY] = truncated
+            base_chars += max(0, len(text) - head_len)
+        elif _DELIVERY_BOUND_CONTENT_KEY in parsed:
+            envelope[_DELIVERY_BOUND_CONTENT_KEY] = parsed[_DELIVERY_BOUND_CONTENT_KEY]
+
+        if value_projector is not None:
+            for key in present_preserved:
+                projected_value = envelope[key]
+                if (
+                    isinstance(projected_value, dict)
+                    and RESPONSE_SPILL_METADATA_KEY in projected_value
+                ):
+                    continue
+                chars, items = _total_omissions(parsed[key])
+                base_chars += chars
+                base_items += items
+
+        envelope[RESPONSE_SPILL_METADATA_KEY] = _spill_metadata(
+            envelope[RESPONSE_SPILL_METADATA_KEY],
+            reason="delivery_bound",
+            omitted_chars=base_chars,
+            omitted_items=base_items,
+        )
+        return envelope
+
+    def _fits(envelope: dict[str, Any]) -> str | None:
+        try:
+            rendered = _finalize_envelope(envelope, max_bytes=bound)
+        except _ProjectionNonconvergentError:
+            return None
+        if len(rendered.encode("utf-8")) <= bound:
+            return rendered
+        return None
+
+    zero_envelope = _build(0, True)
+    base_rendered = _finalize_envelope(zero_envelope, max_bytes=bound)
+    base_bytes = len(base_rendered.encode("utf-8"))
+    head_limit = max(0, bound - base_bytes - 64) if content_is_str else 0
+
+    while head_limit > 0 and content_is_str:
+        rendered = _fits(_build(head_limit, True))
+        if rendered is not None:
+            return rendered
+        head_limit //= 2
+
+    if content_is_str:
+        zero_head_envelope = _build(0, True)
+        rendered = _fits(zero_head_envelope)
+        if rendered is not None:
+            return rendered
+
+    rendered = _fits(_build(0, False))
+    if rendered is not None:
+        return rendered
+
+    if present_preserved:
+        value_limit = max(16, bound // (len(present_preserved) + 2))
+        while value_limit >= 16:
+
+            def _project_with_limit(value: Any, _limit: int = value_limit) -> Any:
+                projected, _chars, _items = _project_value(value, _limit)
+                return projected
+
+            rendered = _fits(_build(0, False, value_projector=_project_with_limit))
+            if rendered is not None:
+                return rendered
+            value_limit //= 2
+
+        minimal_envelope = _build(0, False, value_projector=_minimal_same_type)
+        rendered = _fits(minimal_envelope)
+        if rendered is not None:
+            return rendered
+
+    return None
 
 
 def _spill_for_delivery_bound(
@@ -409,21 +563,19 @@ def _spill_for_delivery_bound(
             parsed = None
     else:
         parsed = result
+    bound = effective_delivery_token_limit * 4
+    floor_bytes = min(bound, config.response_max_bytes)
     rendered: str | None
     try:
         if isinstance(parsed, dict):
-            rendered = _project_json_object(
-                parsed,
-                metadata=metadata,
-                max_bytes=config.response_max_bytes,
-                inline_chars=config.inline_max_chars,
-            )
+            rendered = _delivery_bound_summary(parsed, metadata=metadata, bound=bound)
         else:
             rendered = _plain_spill_envelope(
                 original,
                 metadata=metadata,
-                max_bytes=config.response_max_bytes,
+                max_bytes=floor_bytes,
                 inline_chars=config.inline_max_chars,
+                reason="delivery_bound",
             )
     except _ProjectionNonconvergentError as exc:
         _emit_response_budget_event(
@@ -435,7 +587,7 @@ def _spill_for_delivery_bound(
             "",
             cause="projection_nonconvergent",
             tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
+            max_bytes=floor_bytes,
             original_utf8_bytes=original_size,
             artifact_path=published,
         )
@@ -444,7 +596,7 @@ def _spill_for_delivery_bound(
             "",
             cause="irreducible_shape",
             tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
+            max_bytes=floor_bytes,
             original_utf8_bytes=original_size,
             artifact_path=published,
         )
@@ -453,33 +605,10 @@ def _spill_for_delivery_bound(
             "",
             cause="irreducible_shape",
             tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
+            max_bytes=floor_bytes,
             original_utf8_bytes=original_size,
             artifact_path=published,
         )
-    bound = effective_delivery_token_limit * 4
-    if len(rendered.encode("utf-8")) > bound:
-        truncated_metadata = dict(metadata)
-        truncated_metadata["reason"] = "delivery_bound"
-        truncated_metadata["delivery_bound_utf8_bytes"] = bound
-        truncated_metadata["projected_utf8_bytes"] = len(rendered.encode("utf-8"))
-        truncated_metadata["omitted_chars"] = max(0, len(rendered.encode("utf-8")) - bound)
-        preview_limit = min(config.inline_max_chars, bound)
-        preview = original[:preview_limit]
-        truncated = _canonical_json(
-            {
-                "delivery_bound_spill": True,
-                "preview": preview,
-                RESPONSE_SPILL_METADATA_KEY: truncated_metadata,
-            }
-        )
-        truncated = _finalize_envelope({**truncated_metadata, "preview": preview}, max_bytes=bound)
-        if isinstance(result, str):
-            return truncated
-        try:
-            return json.loads(truncated)
-        except (ValueError, RecursionError):
-            return {"success": False, "error": "response_budget_projection_invalid"}
     _emit_response_budget_event(
         "response_budget_spill",
         tool_name=_bounded_tool_name(tool_name),
@@ -534,21 +663,17 @@ def enforce_response_budget(
     )
     exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(tool_name)
     if exemption is not None:
-        if (
-            not over_delivery_bound
-            and len(original) <= exemption.max_chars
-            and original_size <= exemption.max_utf8_bytes
-        ):
-            _emit_response_budget_event(
-                "response_budget_exemption",
-                tool_name=_bounded_tool_name(tool_name),
-                measurement_id=exemption.measurement_id,
-                original_chars=len(original),
+        within_ceiling = (
+            len(original) <= exemption.max_chars and original_size <= exemption.max_utf8_bytes
+        )
+        if not within_ceiling:
+            return bounded_response_budget_failure(
+                result,
+                cause="exemption_ceiling_exceeded",
+                tool_name=tool_name,
+                max_bytes=config.response_max_bytes,
                 original_utf8_bytes=original_size,
-                max_chars=exemption.max_chars,
-                max_utf8_bytes=exemption.max_utf8_bytes,
             )
-            return result
         if over_delivery_bound:
             assert effective_delivery_token_limit is not None  # narrowed by over_delivery_bound
             return _spill_for_delivery_bound(
@@ -560,13 +685,16 @@ def enforce_response_budget(
                 original_size=original_size,
                 effective_delivery_token_limit=effective_delivery_token_limit,
             )
-        return bounded_response_budget_failure(
-            result,
-            cause="exemption_ceiling_exceeded",
-            tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
+        _emit_response_budget_event(
+            "response_budget_exemption",
+            tool_name=_bounded_tool_name(tool_name),
+            measurement_id=exemption.measurement_id,
+            original_chars=len(original),
             original_utf8_bytes=original_size,
+            max_chars=exemption.max_chars,
+            max_utf8_bytes=exemption.max_utf8_bytes,
         )
+        return result
     if (
         not force_spill
         and not over_delivery_bound
@@ -601,6 +729,18 @@ def enforce_response_budget(
         "original_utf8_bytes": len(original_bytes),
     }
 
+    delivery_bound_bytes = (
+        effective_delivery_token_limit * 4
+        if effective_delivery_token_limit is not None and effective_delivery_token_limit > 0
+        else None
+    )
+    projection_max_bytes = (
+        min(config.response_max_bytes, delivery_bound_bytes)
+        if delivery_bound_bytes is not None
+        else config.response_max_bytes
+    )
+    projection_inline_chars = min(config.inline_max_chars, projection_max_bytes)
+
     parsed: Any = None
     if isinstance(result, str):
         try:
@@ -616,15 +756,15 @@ def enforce_response_budget(
             rendered = _project_json_object(
                 parsed,
                 metadata=metadata,
-                max_bytes=config.response_max_bytes,
-                inline_chars=config.inline_max_chars,
+                max_bytes=projection_max_bytes,
+                inline_chars=projection_inline_chars,
             )
         if rendered is None and not isinstance(parsed, dict):
             rendered = _plain_spill_envelope(
                 original,
                 metadata=metadata,
-                max_bytes=config.response_max_bytes,
-                inline_chars=config.inline_max_chars,
+                max_bytes=projection_max_bytes,
+                inline_chars=projection_inline_chars,
             )
     except _ProjectionNonconvergentError as exc:
         _emit_response_budget_event(
@@ -636,7 +776,7 @@ def enforce_response_budget(
             "",
             cause="projection_nonconvergent",
             tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
+            max_bytes=projection_max_bytes,
             original_utf8_bytes=original_size,
             artifact_path=published,
         )
@@ -647,7 +787,7 @@ def enforce_response_budget(
             "",
             cause="irreducible_shape",
             tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
+            max_bytes=projection_max_bytes,
             original_utf8_bytes=original_size,
             artifact_path=published,
         )
@@ -656,11 +796,12 @@ def enforce_response_budget(
             "",
             cause="irreducible_shape",
             tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
+            max_bytes=projection_max_bytes,
             original_utf8_bytes=original_size,
             artifact_path=published,
         )
 
+    assert isinstance(rendered, str)
     _emit_response_budget_event(
         "response_budget_spill",
         tool_name=_bounded_tool_name(tool_name),

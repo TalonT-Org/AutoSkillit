@@ -30,6 +30,8 @@ _STEP_SUFFIX_RE = re.compile(r"-\d+$")
 
 
 class _TrackerCtx(Protocol):
+    """Minimal ToolContext duck-type — avoids circular import with tools_execution.py."""
+
     kitchen_id: str
     project_dir: Path
 

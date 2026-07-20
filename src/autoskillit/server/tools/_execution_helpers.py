@@ -19,11 +19,11 @@ from autoskillit.core import (
     SpillSpec,
     SubprocessResult,
     get_logger,
+    resolve_effective_delivery_bound,
     resolve_temp_dir,
     spill_output,
 )
 from autoskillit.execution import CaptureReadError, summarize_capture
-from autoskillit.execution.backends import resolve_effective_delivery_bound
 from autoskillit.server._misc import _hook_config_overlay_path
 from autoskillit.server._response_budget import shape_json_response
 

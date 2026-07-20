@@ -12,8 +12,12 @@ from anyio import BrokenResourceError as _BrokenResource
 from anyio import ClosedResourceError as _ClosedResource
 
 from autoskillit.config import OutputBudgetConfig
-from autoskillit.core import RESERVED_LOG_RECORD_KEYS, BackendCapabilities, get_logger
-from autoskillit.execution.backends import resolve_effective_delivery_bound
+from autoskillit.core import (
+    RESERVED_LOG_RECORD_KEYS,
+    BackendCapabilities,
+    get_logger,
+    resolve_effective_delivery_bound,
+)
 from autoskillit.server._response_budget import (
     bounded_response_budget_failure,
     enforce_response_budget,

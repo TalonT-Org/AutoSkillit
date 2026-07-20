@@ -529,6 +529,7 @@ def enforce_response_budget(
     original_size = len(original_bytes)
     over_delivery_bound = (
         effective_delivery_token_limit is not None
+        and effective_delivery_token_limit > 0
         and _estimated_tokens(original_size) > effective_delivery_token_limit
     )
     exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(tool_name)

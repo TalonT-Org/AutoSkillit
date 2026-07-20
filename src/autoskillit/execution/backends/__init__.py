@@ -22,7 +22,6 @@ from ._codex_hooks import (
 )
 from ._codex_parse import CodexResultParser, CodexStreamParser
 from ._composite_locator import CompositeSessionLocator
-from ._delivery_bounds import resolve_effective_delivery_bound
 from .claude import (
     ClaudeCodeBackend,
     ClaudeEnvPolicy,
@@ -96,5 +95,4 @@ __all__ = [
     "ensure_codex_mcp_registered",
     "get_backend",
     "make_codex_scenario_player",
-    "resolve_effective_delivery_bound",
 ]

@@ -18,9 +18,8 @@ from pathlib import Path
 import pytest
 
 from autoskillit.config import OutputBudgetConfig
-from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY, resolve_effective_delivery_bound
 from autoskillit.execution.backends import BACKEND_REGISTRY
-from autoskillit.execution.backends._delivery_bounds import resolve_effective_delivery_bound
 from autoskillit.recipe import all_validated_recipe_names
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,

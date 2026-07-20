@@ -24,7 +24,9 @@ _RESPONSE_SPILL_METADATA_KEYS = frozenset(
         "reason",
     }
 )
-_RESPONSE_SPILL_REASONS = frozenset({"oversized_values", "minimal_projection", "plain_text"})
+_RESPONSE_SPILL_REASONS = frozenset(
+    {"oversized_values", "minimal_projection", "plain_text", "delivery_bound"}
+)
 _RESPONSE_SPILL_SCHEMA_DIGEST = hashlib.sha256(
     json.dumps(
         {

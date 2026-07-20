@@ -11,7 +11,7 @@ canonical accessor.
 
 from __future__ import annotations
 
-from autoskillit.core import BackendCapabilities
+from .types._type_backend import BackendCapabilities
 
 
 def resolve_effective_delivery_bound(caps: BackendCapabilities) -> int:

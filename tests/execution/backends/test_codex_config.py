@@ -46,11 +46,8 @@ def test_response_backstop_fires_below_codex_transport_ceiling() -> None:
 
 
 def test_resolve_effective_delivery_bound_per_backend() -> None:
-    from autoskillit.core import BackendCapabilities
+    from autoskillit.core import BackendCapabilities, resolve_effective_delivery_bound
     from autoskillit.execution.backends import BACKEND_REGISTRY
-    from autoskillit.execution.backends._delivery_bounds import (
-        resolve_effective_delivery_bound,
-    )
 
     expected = {"codex": 10_000, "claude-code": 46_500}
     observed: dict[str, int] = {}

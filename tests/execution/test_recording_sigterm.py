@@ -33,6 +33,8 @@ def test_sigterm_writes_scenario_json(tmp_path):
     output_dir.mkdir()
     state_dir = tmp_path / "state"
     state_dir.mkdir()
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
 
     env = {
         **os.environ,
@@ -40,12 +42,15 @@ def test_sigterm_writes_scenario_json(tmp_path):
         "RECORD_SCENARIO_DIR": str(output_dir),
         "RECORD_SCENARIO_RECIPE": "test-recipe",
         "AUTOSKILLIT_STATE_DIR": str(state_dir),
+        "HOME": str(home_dir),
     }
     # Use sys.executable -m to ensure we run the worktree-installed version,
     # not a system-wide `autoskillit` binary that may lack the lifespan fix.
-    # cwd=tmp_path and AUTOSKILLIT_STATE_DIR isolate the subprocess's
-    # filesystem state from the project tree (e.g. any real execution
-    # markers under CWD) so the sentinel location is deterministic.
+    # cwd=tmp_path, AUTOSKILLIT_STATE_DIR, and HOME isolate the subprocess's
+    # filesystem state from the project tree and the developer's real
+    # ~/.autoskillit/config.yaml (e.g. any real execution markers under CWD,
+    # or stale config keys from a prior schema) so the sentinel location and
+    # config layers are deterministic.
     proc = subprocess.Popen(
         [sys.executable, "-m", "autoskillit"],
         stdin=subprocess.PIPE,

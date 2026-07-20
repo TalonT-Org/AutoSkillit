@@ -128,7 +128,7 @@
       "default": "6",
       "hidden": true
     },
-    "post_run_diagnostics": {
+    "pipeline_health": {
       "description": "Run diagnostic analysis after pipeline completion",
       "default": "false",
       "hidden": true
@@ -1891,20 +1891,20 @@
         "status": "error",
         "step_name": "register_clone_no_ci"
       },
-      "on_success": "run_diagnostic_no_ci",
-      "on_failure": "run_diagnostic_no_ci"
+      "on_success": "pipeline_health_no_ci",
+      "on_failure": "pipeline_health_no_ci"
     },
-    "run_diagnostic_no_ci": {
+    "pipeline_health_no_ci": {
       "description": "Run post-pipeline diagnostic analysis on session logs (no-CI path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
       "optional": true,
-      "skip_when_false": "inputs.post_run_diagnostics",
+      "skip_when_false": "inputs.pipeline_health",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "post_run_diagnostics"
+        "step_name": "pipeline_health"
       },
       "on_success": "escalate_stop_no_ci",
       "on_failure": "escalate_stop_no_ci",
@@ -2843,21 +2843,21 @@
         "status": "unconfirmed",
         "step_name": "register_clone_unconfirmed"
       },
-      "on_success": "run_diagnostic_unconfirmed",
-      "on_failure": "run_diagnostic_unconfirmed",
+      "on_success": "pipeline_health_unconfirmed",
+      "on_failure": "pipeline_health_unconfirmed",
       "note": "Called when a merge-wait step times out before merge is confirmed. Does NOT call release_issue — the in-progress label stays on the issue so operators can see the PR is still actively queued. The clone is preserved (status: unconfirmed) for human inspection.\n"
     },
-    "run_diagnostic_unconfirmed": {
+    "pipeline_health_unconfirmed": {
       "description": "Run post-pipeline diagnostic analysis on session logs (unconfirmed path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
       "optional": true,
-      "skip_when_false": "inputs.post_run_diagnostics",
+      "skip_when_false": "inputs.pipeline_health",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "post_run_diagnostics"
+        "step_name": "pipeline_health"
       },
       "on_success": "done_unconfirmed",
       "on_failure": "done_unconfirmed",
@@ -2917,8 +2917,8 @@
         "status": "success",
         "step_name": "register_clone_success"
       },
-      "on_success": "run_diagnostic",
-      "on_failure": "run_diagnostic"
+      "on_success": "pipeline_health",
+      "on_failure": "pipeline_health"
     },
     "register_clone_failure": {
       "description": "Register clone as preserved (error pipeline)",
@@ -2928,20 +2928,20 @@
         "status": "error",
         "step_name": "register_clone_failure"
       },
-      "on_success": "run_diagnostic_error",
-      "on_failure": "run_diagnostic_error"
+      "on_success": "pipeline_health_error",
+      "on_failure": "pipeline_health_error"
     },
-    "run_diagnostic": {
+    "pipeline_health": {
       "description": "Run post-pipeline diagnostic analysis on session logs",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
       "optional": true,
-      "skip_when_false": "inputs.post_run_diagnostics",
+      "skip_when_false": "inputs.pipeline_health",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "post_run_diagnostics"
+        "step_name": "pipeline_health"
       },
       "on_success": "done",
       "on_failure": "done",
@@ -2949,17 +2949,17 @@
       "on_rate_limit": "done",
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
     },
-    "run_diagnostic_error": {
+    "pipeline_health_error": {
       "description": "Run post-pipeline diagnostic analysis on session logs (error path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
       "optional": true,
-      "skip_when_false": "inputs.post_run_diagnostics",
+      "skip_when_false": "inputs.pipeline_health",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "post_run_diagnostics"
+        "step_name": "pipeline_health"
       },
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",
@@ -2975,20 +2975,20 @@
         "status": "success",
         "step_name": "register_clone_no_changes"
       },
-      "on_success": "run_diagnostic_no_changes",
-      "on_failure": "run_diagnostic_no_changes"
+      "on_success": "pipeline_health_no_changes",
+      "on_failure": "pipeline_health_no_changes"
     },
-    "run_diagnostic_no_changes": {
+    "pipeline_health_no_changes": {
       "description": "Run post-pipeline diagnostic analysis (zero-change path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
       "optional": true,
-      "skip_when_false": "inputs.post_run_diagnostics",
+      "skip_when_false": "inputs.pipeline_health",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "post_run_diagnostics"
+        "step_name": "pipeline_health"
       },
       "on_success": "done_no_changes",
       "on_failure": "done_no_changes",
@@ -3004,20 +3004,20 @@
         "status": "success",
         "step_name": "register_clone_already_done"
       },
-      "on_success": "run_diagnostic_already_done",
-      "on_failure": "run_diagnostic_already_done"
+      "on_success": "pipeline_health_already_done",
+      "on_failure": "pipeline_health_already_done"
     },
-    "run_diagnostic_already_done": {
+    "pipeline_health_already_done": {
       "description": "Run post-pipeline diagnostic analysis (already-done path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
       "optional": true,
-      "skip_when_false": "inputs.post_run_diagnostics",
+      "skip_when_false": "inputs.pipeline_health",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }} --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "post_run_diagnostics"
+        "step_name": "pipeline_health"
       },
       "on_success": "done_already_done",
       "on_failure": "done_already_done",

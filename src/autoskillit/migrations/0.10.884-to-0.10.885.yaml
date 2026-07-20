@@ -1,0 +1,27 @@
+from_version: "0.10.884"
+to_version: "0.10.885"
+description: >
+  Diagnostics configuration rename: diagnostics.post_run_analysis is now
+  diagnostics.pipeline_health.
+changes:
+  - id: diagnostics-post-run-analysis-to-pipeline-health
+    description: >
+      The diagnostics.post_run_analysis config key has been renamed to
+      diagnostics.pipeline_health. The value and default behavior are unchanged.
+    instruction: |
+      In your user or project .autoskillit/config.yaml, replace:
+        diagnostics:
+          post_run_analysis: true
+      with:
+        diagnostics:
+          pipeline_health: true
+      Preserve the configured boolean value. The old 'post_run_analysis' key is
+      no longer recognized and will raise a ConfigSchemaError at startup.
+    detect:
+      key: diagnostics.post_run_analysis
+    example_before: |
+      diagnostics:
+        post_run_analysis: true
+    example_after: |
+      diagnostics:
+        pipeline_health: true

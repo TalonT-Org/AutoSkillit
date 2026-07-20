@@ -44,13 +44,18 @@ def test_analyze_pipeline_health_coordinator_validates_scanners():
 def test_analyze_pipeline_health_steps_have_required_fields(recipe_name):
     """analyze_pipeline_health steps must have required optional-step fields."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
-    for name, step in recipe.steps.items():
-        if name.startswith("analyze_pipeline_health"):
-            assert step.on_context_limit is not None, f"{name} missing on_context_limit"
-            assert step.optional is True, f"{name} optional must be True"
-            assert step.skip_when_false == "inputs.pipeline_health", (
-                f"{name} skip_when_false must be inputs.pipeline_health"
-            )
+    analysis_steps = [
+        (name, step)
+        for name, step in recipe.steps.items()
+        if name.startswith("analyze_pipeline_health")
+    ]
+    assert analysis_steps, f"{recipe_name}: expected at least one analyze_pipeline_health step"
+    for name, step in analysis_steps:
+        assert step.on_context_limit is not None, f"{name} missing on_context_limit"
+        assert step.optional is True, f"{name} optional must be True"
+        assert step.skip_when_false == "inputs.pipeline_health", (
+            f"{name} skip_when_false must be inputs.pipeline_health"
+        )
 
 
 # T7: REQ-TEST-004

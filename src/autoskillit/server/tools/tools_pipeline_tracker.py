@@ -94,7 +94,7 @@ def resolve_tracker_order_id(
                 ),
                 multi_pipeline=True,
             )
-        effective_oid = kitchen_id
+        effective_oid = next(iter(active)) if active else kitchen_id
     tracker_path = _pipeline_tracker_path(project_dir, effective_oid)
     return ResolvedTracker(order_id=effective_oid, path=tracker_path)
 

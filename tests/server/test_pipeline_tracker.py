@@ -359,3 +359,39 @@ class TestCheckPipelineDepsMultiPipelineFallback:
         parsed = json.loads(result)
         assert parsed["success"] is False
         assert "order_id" in parsed["error"]
+
+
+class TestResolveTrackerOrderIdSingleCandidate:
+    def test_kitchen_scoped_fallback_aliases_to_single_candidate(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        """When exactly one non-self tracker matches kitchen_id, resolve to its stem.
+
+        Matches _resolve_order_id_from_kitchen in pipeline_step_guard.py, which
+        returns next(iter(active)) in this same single-candidate case.
+        """
+        from autoskillit.server.tools.tools_pipeline_tracker import (
+            ResolvedTracker,
+            resolve_tracker_order_id,
+        )
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+
+        tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+        tracker_dir.mkdir(parents=True)
+        tracker_dir.joinpath("AB.json").write_text(
+            json.dumps(
+                {
+                    "pipeline_id": "AB",
+                    "kitchen_id": "kitchen-xyz",
+                    "steps": {"a": {"status": "pending"}},
+                    "dependencies": {},
+                }
+            )
+        )
+
+        result = resolve_tracker_order_id(tool_ctx_kitchen_open, "")
+
+        assert isinstance(result, ResolvedTracker)
+        assert result.order_id == "AB"

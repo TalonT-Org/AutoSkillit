@@ -32,6 +32,16 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 _INLINE_BYTES = 12_000
 _CAPTURE_SUBDIR = ".autoskillit/temp/shell_capture"
 _TIMEOUT = 30
+_HARNESS_FORBIDDEN_VERBS: frozenset[str] = frozenset(
+    {
+        "rm",
+        "unlink",
+        "shred",
+        "truncate",
+        "rmdir",
+        "mv",  # moving the capture file would break concurrent reads
+    }
+)
 
 _NESTED_WRAP_INNER = "echo hi"
 
@@ -250,10 +260,18 @@ def test_capture_dir_uncreatable_fail_stops(tmp_path: Path) -> None:
     assert "should_not_run" not in combined
 
 
-def test_harness_contains_no_destructive_verbs() -> None:
-    """Generated harness must not embed destructive shell verbs (Codex exec-policy rejection)."""
-    harness = _build_harness("echo hello", "/tmp/test", _INLINE_BYTES)
-    destructive = {"rm", "unlink", "shred", "truncate", "mv"}
+@pytest.mark.parametrize(
+    "cmd",
+    ["echo hello", "ls -la", "cat /dev/null", "python3 -c 'print(1)'", ""],
+)
+def test_harness_contains_no_destructive_verbs(cmd: str) -> None:
+    """Arch guard: hook-generated shell must not contain destructive verbs.
+
+    Codex's exec-policy engine evaluates the full rewritten command, including
+    hook-injected scaffolding. Destructive verbs (rm, unlink, etc.) are forbidden
+    by Codex's built-in policy. This test ensures the harness never introduces them.
+    """
+    harness = _build_harness(cmd, "/tmp/test", _INLINE_BYTES)
     for raw_line in harness.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -263,8 +281,9 @@ def test_harness_contains_no_destructive_verbs() -> None:
         )
         first = first.removeprefix("{").removeprefix("(")
         first = first.strip("\"'")
-        assert first not in destructive, (
-            f"destructive verb {first!r} found in harness line: {raw_line!r}"
+        assert first not in _HARNESS_FORBIDDEN_VERBS, (
+            f"forbidden verb {first!r} found in harness line: {raw_line!r}\n"
+            f"Generated from command: {cmd!r}"
         )
 
 

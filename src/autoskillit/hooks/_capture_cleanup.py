@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+import time
 from pathlib import Path
 
 __all__ = ["_CAPTURE_FILENAME_RE", "_is_safe_capture_file", "sweep_stale_captures"]
@@ -76,10 +77,10 @@ def sweep_stale_captures(
     if not capture_dir_path.is_dir():
         return 0
     try:
-        capture_dir_resolved = capture_dir_path.resolve(strict=True)
-        now_mtime_threshold = capture_dir_resolved.stat().st_mtime - max_age_seconds
+        capture_dir_path.resolve(strict=True)
     except OSError:
         return 0
+    mtime_threshold = time.time() - max_age_seconds
 
     deleted = 0
     try:
@@ -91,7 +92,7 @@ def sweep_stale_captures(
             if not _is_safe_capture_file(entry, capture_dir_path):
                 continue
             st = entry.stat()
-            if st.st_mtime > now_mtime_threshold:
+            if st.st_mtime > mtime_threshold:
                 continue
             os.unlink(entry)
             deleted += 1

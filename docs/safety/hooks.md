@@ -96,6 +96,18 @@ provenance marker (bytes, sha256, path) + tail. Exit codes are preserved via a
 trap-EXIT postlude. Set `output_budget.guard_enabled: false` to disable;
 inline threshold controlled by `output_budget.shell_max_inline_bytes`.
 
+#### Capture Artifact Lifecycle
+
+| Phase | Behavior |
+|-------|----------|
+| Creation | Harness creates `<cwd>/.autoskillit/temp/shell_capture/shell_<uuid16>.log` via `mkdir -p` + redirect |
+| Retention | Artifact is always retained after command execution (both inline and spill branches) |
+| Ownership | The hook subprocess; no downstream consumer reads these files |
+| Cleanup — session lifecycle | `session_start_hook.py` sweeps stale captures (older than 1 hour, measured against wall-clock time) at every SessionStart |
+| Naming contract | `shell_[0-9a-f]{16}.log` — files not matching this pattern are never deleted |
+| Safety | Sweep validates the filename allowlist and rejects symlinks via `lstat`-backed checks |
+| Failure mode | Sweep errors are swallowed (fail-open); cleanup failure never blocks command execution |
+
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`
 Denies writes to generated files (`hooks.json`, `settings.json`). The hooks

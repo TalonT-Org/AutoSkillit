@@ -302,7 +302,7 @@ def _project_json_object(
     if RESPONSE_SPILL_METADATA_KEY in parsed:
         return None
 
-    if delivery_bound_triggered:
+    if delivery_bound_triggered and "result" in parsed:
         return _tiered_projection(
             parsed,
             metadata=metadata,
@@ -631,6 +631,22 @@ def _tiered_projection(
         )
         if rendered is not None:
             return rendered
+
+    # Tier 4 (terminal fallback): priority verbatim only — content excluded
+    # entirely; droppable excluded; deprioritized excluded. Used when payload
+    # has no identifiable content_key (e.g. ``{"success": True, "data": ...}``)
+    # so the envelope still surfaces priority keys rather than failing closed.
+    rendered = _fits(
+        _build_with_lengths(
+            content_head=0,
+            deprioritized_projector=lambda v: _minimal_same_type(v),
+            include_content=False,
+            include_deprioritized=False,
+            include_droppable=False,
+        )
+    )
+    if rendered is not None:
+        return rendered
 
     return None
 

@@ -1115,6 +1115,18 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
         "and the tests/skills/ contract linters (+~60 net lines)",
     ),
+    "_response_budget.py": (
+        1500,
+        "REQ-CNST-010-E12: lossless response spill — atomic_write, projection "
+        "(uniform and tiered), exact canonical projection finalization, "
+        "measured exemptions, both exempted and non-exempted spill paths, "
+        "spill metadata schema, bounded-failure rendering, and shared "
+        "_tiered_projection helper for the exempted (recipe/load_recipe) and "
+        "non-exempted (run_skill) spill paths (issue #4304 priority-tier "
+        "delivery-bound summary); splitting would scatter the priority-tier "
+        "algorithm across modules that must remain the single source of "
+        "truth for the bound-vs-deprioritized budget allocation order.",
+    ),
 }
 
 

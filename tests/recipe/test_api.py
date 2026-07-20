@@ -1578,6 +1578,8 @@ def test_suggestions_accumulation_bounded(tmp_path: Path) -> None:
 
     from autoskillit.recipe._api import _MAX_SUGGESTIONS_BYTES, load_and_validate
 
+    recipe_dir = tmp_path / ".autoskillit" / "recipes"
+    recipe_dir.mkdir(parents=True, exist_ok=True)
     recipe_yaml = """\
 name: test-suggestions-cap
 description: Recipe that exercises suggestion accumulation
@@ -1591,7 +1593,7 @@ steps:
     action: stop
     message: "done"
 """
-    recipe_path = tmp_path / "test-suggestions-cap.yaml"
+    recipe_path = recipe_dir / "test-suggestions-cap.yaml"
     recipe_path.write_text(recipe_yaml)
     result = load_and_validate(
         "test-suggestions-cap",

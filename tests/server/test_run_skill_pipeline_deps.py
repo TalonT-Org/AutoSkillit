@@ -7,32 +7,16 @@ import json
 import pytest
 
 from autoskillit.server.tools.tools_execution import run_skill
+from tests.server._pipeline_test_helpers import _setup_project as _shared_setup_project
+from tests.server._pipeline_test_helpers import _write_tracker
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
-
-def _write_tracker(tmp_path, pipeline_id, steps, dependencies):
-    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
-    tracker_dir.mkdir(parents=True, exist_ok=True)
-    tracker_dir.joinpath(f"{pipeline_id}.json").write_text(
-        json.dumps(
-            {
-                "pipeline_id": pipeline_id,
-                "kitchen_id": "test-kitchen",
-                "initialized_at": "2026-05-31T01:00:00Z",
-                "steps": steps,
-                "dependencies": dependencies,
-            }
-        )
-    )
+_ACTIVE_STEPS = {"a": {}, "b": {}, "implement": {}}
 
 
 def _setup_project(tmp_path, tool_ctx_kitchen_open):
-    temp_dir = tmp_path / ".autoskillit" / "temp"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    (temp_dir / ".hook_config.json").write_text("{}")
-    tool_ctx_kitchen_open.project_dir = tmp_path
-    tool_ctx_kitchen_open.active_recipe_steps = {"a": {}, "b": {}, "implement": {}}
+    _shared_setup_project(tmp_path, tool_ctx_kitchen_open, active_recipe_steps=_ACTIVE_STEPS)
 
 
 class TestPipelineDepsDeniesUnmet:

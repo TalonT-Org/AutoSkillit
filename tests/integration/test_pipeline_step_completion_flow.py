@@ -11,6 +11,8 @@ import pytest
 from autoskillit.core.types import RetryReason
 from autoskillit.core.types._type_results import SkillResult
 from autoskillit.server.tools.tools_execution import run_skill
+from tests.server._pipeline_test_helpers import _setup_project as _shared_setup_project
+from tests.server._pipeline_test_helpers import _write_tracker
 
 pytestmark = [pytest.mark.layer("integration"), pytest.mark.medium]
 
@@ -35,33 +37,8 @@ _FAIL_RESULT = dataclasses.replace(
 )
 
 
-def _write_tracker(tmp_path, pipeline_id, steps, dependencies, kitchen_id="test-kitchen"):
-    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
-    tracker_dir.mkdir(parents=True, exist_ok=True)
-    tracker_dir.joinpath(f"{pipeline_id}.json").write_text(
-        json.dumps(
-            {
-                "pipeline_id": pipeline_id,
-                "kitchen_id": kitchen_id,
-                "initialized_at": "2026-05-31T01:00:00Z",
-                "steps": steps,
-                "dependencies": dependencies,
-            }
-        )
-    )
-
-
 def _setup_project(tmp_path, tool_ctx_kitchen_open):
-    from autoskillit.recipe.schema import RecipeStep
-
-    temp_dir = tmp_path / ".autoskillit" / "temp"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    (temp_dir / ".hook_config.json").write_text("{}")
-    tool_ctx_kitchen_open.project_dir = tmp_path
-    tool_ctx_kitchen_open.active_recipe_steps = {
-        "rectify": RecipeStep(name="rectify"),
-        "review_approach": RecipeStep(name="review_approach"),
-    }
+    _shared_setup_project(tmp_path, tool_ctx_kitchen_open)
     tool_ctx_kitchen_open.input_contract_resolver = None
 
 
@@ -225,6 +202,37 @@ class TestEmptyStepNameDoesNotWriteTracker:
 
         after = _read_tracker(tmp_path)
         assert after["steps"] == before["steps"]
+
+
+class TestAdvisorySurfacedOnUnmetDependents:
+    @pytest.mark.anyio
+    async def test_advisory_surfaced_when_dependent_still_unmet(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        """The 'advisory' key mark_step_complete() populates must reach the caller."""
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(
+            tmp_path,
+            "test-kitchen",
+            {
+                "rectify": {"status": "pending"},
+                "other_dep": {"status": "pending"},
+                "review_approach": {"status": "pending"},
+            },
+            {"review_approach": ["rectify", "other_dep"]},
+        )
+        tool_ctx_kitchen_open.executor = AsyncMock()
+        tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
+
+        result = json.loads(
+            await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        )
+
+        assert result.get("success") is True, f"Expected success but got: {result}"
+        assert "advisory" in result["pipeline_tracker"], result["pipeline_tracker"]
+        assert "review_approach" in result["pipeline_tracker"]["advisory"]
 
 
 class TestResumeWithStepNameMarksCompleteOnSuccess:

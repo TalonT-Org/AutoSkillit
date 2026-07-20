@@ -7,24 +7,9 @@ import json
 import pytest
 
 from autoskillit.server.tools.tools_pipeline_tracker import record_pipeline_step
+from tests.server._pipeline_test_helpers import _write_tracker
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _write_tracker(tmp_path, pipeline_id, steps, dependencies, kitchen_id="test-kitchen"):
-    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
-    tracker_dir.mkdir(parents=True, exist_ok=True)
-    tracker_dir.joinpath(f"{pipeline_id}.json").write_text(
-        json.dumps(
-            {
-                "pipeline_id": pipeline_id,
-                "kitchen_id": kitchen_id,
-                "initialized_at": "2026-05-31T01:00:00Z",
-                "steps": steps,
-                "dependencies": dependencies,
-            }
-        )
-    )
 
 
 class TestRecordPipelineStepComplete:

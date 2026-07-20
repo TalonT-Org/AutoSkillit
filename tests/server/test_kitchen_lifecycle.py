@@ -16,6 +16,7 @@ from autoskillit.server.tools.tools_kitchen import (
     _open_kitchen_handler,
     prune_stale_kitchen_state,
 )
+from tests.server._helpers import _write_registry
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -188,22 +189,6 @@ def _write_tracker(tracker_dir, kitchen_id, *, initialized_at=None):
     (tracker_dir / f"{kitchen_id}.json").write_text(json.dumps(tracker_data))
 
 
-def _write_registry(monkeypatch, tmp_path, entries):
-    from autoskillit.core._plugin_cache import write_versioned_json
-
-    registry_path = tmp_path / "active_kitchens.json"
-    monkeypatch.setattr(
-        "autoskillit.core._plugin_cache._active_kitchens_path",
-        lambda: registry_path,
-    )
-    monkeypatch.setattr(
-        "autoskillit.core._plugin_cache._active_kitchens_lock",
-        lambda: tmp_path / "active_kitchens.lock",
-    )
-    write_versioned_json(registry_path, {"kitchens": entries}, schema_version=1)
-    return registry_path
-
-
 def test_open_without_close_prunes_dead_kitchen_tracker(monkeypatch, tmp_path):
     """A tracker whose registered PID is dead must be reaped on next open."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
@@ -347,8 +332,9 @@ def test_same_process_reopen_replaces_registry_entry(monkeypatch, tmp_path):
     assert not (tracker_dir / "K1.json").exists()
 
 
-def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_path):
-    """open_kitchen wires sweep_stale_markers() which removes aged kitchen_state markers."""
+async def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_path):
+    """_open_kitchen_handler wires sweep_stale_markers() to remove aged kitchen_state markers."""
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "state"))
     state_dir = tmp_path / "state" / "kitchen_state"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -376,11 +362,23 @@ def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_path):
         )
     )
 
-    from autoskillit.core import sweep_stale_markers
+    ctx = make_context(
+        AutomationConfig(),
+        runner=None,
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        project_dir=tmp_path,
+    )
+    monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
 
-    deleted = sweep_stale_markers(ttl_hours=24)
+    with (
+        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
+        patch("autoskillit.core.register_active_kitchen"),
+        patch("autoskillit.core.unregister_active_kitchen"),
+    ):
+        result = await _open_kitchen_handler()
+        assert result is None
 
-    assert deleted == 1
     assert not stale_marker.exists()
     assert fresh_marker.exists()
 

@@ -8,24 +8,9 @@ from datetime import UTC, datetime
 import pytest
 
 from autoskillit.server.tools.tools_kitchen import prune_stale_kitchen_state
+from tests.server._helpers import _write_registry
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _write_registry(monkeypatch, tmp_path, entries):
-    from autoskillit.core._plugin_cache import write_versioned_json
-
-    registry_path = tmp_path / "active_kitchens.json"
-    monkeypatch.setattr(
-        "autoskillit.core._plugin_cache._active_kitchens_path",
-        lambda: registry_path,
-    )
-    monkeypatch.setattr(
-        "autoskillit.core._plugin_cache._active_kitchens_lock",
-        lambda: tmp_path / "active_kitchens.lock",
-    )
-    write_versioned_json(registry_path, {"kitchens": entries}, schema_version=1)
-    return registry_path
 
 
 def test_malformed_tracker_json_reaped(monkeypatch, tmp_path):

@@ -8,6 +8,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 |------|---------|
 | `__init__.py` | empty |
 | `_helpers.py` | Shared test builder utilities for tests/server/ |
+| `_pipeline_test_helpers.py` | Shared pipeline-tracker test helpers (`_write_tracker`, `_setup_project`) for tests/server/ and tests/integration/ |
 | `_type_coercion_fixtures.py` | Test fixtures for _import_and_call annotation-aware type coercion |
 | `conftest.py` | Shared fixtures for tests/server/ |
 | `test_capability_admission_e2e.py` | End-to-end chain tests for capability admission control: backend → load_and_validate → dispatch_feasible signal |

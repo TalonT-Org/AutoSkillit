@@ -366,11 +366,14 @@ def _mark_step_complete_server_side(
                 "pipeline_marker_failed",
                 error=result.get("error", "unknown"),
             )
-        return {
+        marker = {
             "step": result.get("step", step_name),
             "order_id": resolved.order_id,
             "status": "complete" if result.get("success") else "marker_failed",
         }
+        if "advisory" in result:
+            marker["advisory"] = result["advisory"]
+        return marker
     except Exception:
         logger.warning("pipeline_marker_exception", exc_info=True)
         return None

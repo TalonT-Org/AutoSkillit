@@ -429,6 +429,21 @@ _DELIVERY_BOUND_DROPPABLE_KEYS: tuple[str, ...] = ("diagram",)
 _DEPRIORITIZED_KEY_FLOOR_BYTES = 16
 
 
+def _serialized_string_prefix_length(value: str, max_bytes: int) -> int:
+    """Return the largest prefix whose serialized string body fits ``max_bytes``."""
+    low, high = 0, len(value)
+    best = 0
+    while low <= high:
+        midpoint = (low + high) // 2
+        serialized_bytes = len(_canonical_json(value[:midpoint]).encode("utf-8")) - 2
+        if serialized_bytes <= max_bytes:
+            best = midpoint
+            low = midpoint + 1
+        else:
+            high = midpoint - 1
+    return best
+
+
 def _tiered_projection(
     parsed: dict[str, Any],
     *,
@@ -515,13 +530,14 @@ def _tiered_projection(
     # Step 3: Content budget = remaining after priority + deprioritized floor.
     content_budget = max(0, bound - priority_bytes - deprioritized_floor - 64)
 
-    # Step 4: Search string content from zero characters. ``content_budget`` is
-    # measured in UTF-8 bytes, so it cannot be used as a safe character-count
-    # lower bound for multibyte content. The maximization search still selects
-    # the largest prefix whose final serialization fits.
+    # Step 4: Reserve at least half the remaining byte budget for string
+    # content. Convert that serialized-byte floor to a character count so
+    # multibyte and escaped content remain byte-safe. Non-empty content always
+    # retains at least one character or the projection fails closed.
     if content_is_str:
         text = content_text or ""
-        content_floor = 0
+        floor_bytes = max(1, content_budget // 2)
+        content_floor = max(1, _serialized_string_prefix_length(text, floor_bytes)) if text else 0
     else:
         text = ""
         content_floor = 0
@@ -728,13 +744,18 @@ def _tiered_projection(
     if present_deprioritized:
         rendered = _fits(
             _build_with_lengths(
-                content_head=0,
+                content_head=content_floor,
                 deprioritized_projector=lambda v: _minimal_same_type(v),
                 include_droppable=False,
             )
         )
         if rendered is not None:
             return rendered
+
+    # A non-empty string content field must retain its positive floor. Returning
+    # the priority-only fallback would silently starve the promised payload.
+    if content_is_str and text:
+        return None
 
     # Tier 4 (terminal fallback): priority verbatim only — content excluded
     # entirely; droppable excluded; deprioritized excluded. Used when payload

@@ -13,6 +13,7 @@ from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     RESPONSE_SPILL_METADATA_KEYS,
+    _delivery_bound_summary,
     enforce_response_budget,
     shape_json_response,
 )
@@ -747,6 +748,28 @@ def test_delivery_bound_summary_with_realistic_suggestions_preserves_content(tmp
     )
     metadata = data[RESPONSE_SPILL_METADATA_KEY]
     assert metadata["reason"] == "delivery_bound"
+
+
+def test_delivery_bound_summary_fails_closed_below_multibyte_content_floor():
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1",
+        "content": "界" * 100,
+        "suggestions": [{"message": "y" * 1_000}],
+    }
+    metadata = {
+        "artifact_path": "/a",
+        "sha256": "0" * 64,
+        "original_utf8_bytes": 9_999,
+        "reason": "delivery_bound",
+    }
+
+    assert _delivery_bound_summary(payload, metadata=metadata, bound=350) is None
+    rendered = _delivery_bound_summary(payload, metadata=metadata, bound=400)
+    assert rendered is not None
+    assert json.loads(rendered)["content"]
+    assert len(rendered.encode("utf-8")) <= 400
 
 
 def test_delivery_bound_summary_reallocates_freed_budget_to_content(tmp_path):

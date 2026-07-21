@@ -515,11 +515,13 @@ def _tiered_projection(
     # Step 3: Content budget = remaining after priority + deprioritized floor.
     content_budget = max(0, bound - priority_bytes - deprioritized_floor - 64)
 
-    # Step 4: Reserve a content floor (at least half of content_budget).
+    # Step 4: Search string content from zero characters. ``content_budget`` is
+    # measured in UTF-8 bytes, so it cannot be used as a safe character-count
+    # lower bound for multibyte content. The maximization search still selects
+    # the largest prefix whose final serialization fits.
     if content_is_str:
         text = content_text or ""
-        content_floor = min(content_budget // 2, content_budget, len(text))
-        content_floor = max(0, content_floor)
+        content_floor = 0
     else:
         text = ""
         content_floor = 0

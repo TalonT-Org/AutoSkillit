@@ -427,3 +427,19 @@ def test_non_exempted_delivery_bound_preserves_non_string_result(tmp_path: Path)
     projected = json.loads(result)
     assert projected["success"] is True
     assert isinstance(projected["result"], dict)
+
+
+def test_non_exempted_delivery_bound_finds_multibyte_result_prefix(tmp_path: Path) -> None:
+    payload = {"success": True, "result": "\u2603" * 100_000}
+    bound_tokens = 500
+    result = enforce_response_budget(
+        json.dumps(payload, ensure_ascii=False),
+        tool_name="run_skill",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=bound_tokens,
+    )
+    assert isinstance(result, str)
+    assert len(result.encode("utf-8")) <= bound_tokens * 4
+    projected = json.loads(result)
+    assert projected["result"]

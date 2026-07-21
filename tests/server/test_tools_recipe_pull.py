@@ -897,9 +897,17 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
 
     tool_ctx_kitchen_open.backend = BACKEND_REGISTRY["codex"]()
 
-    loaded = json.loads(await load_recipe_tool(name="implementation"))
+    # Load a recipe whose serialized payload exceeds the Codex backend's
+    # 10,000-token (40,000-byte) delivery bound. The Codex bound sits
+    # well above ``implementation``'s payload (~1KB), so loading it would
+    # short-circuit ``maybe_envelope_recipe_response`` and return raw —
+    # no envelope, no ``recipe_pull`` key. The point of this test is the
+    # *envelope-pulls-from-its-own-artifact* contract, so we load a
+    # recipe that actually overflows the bound (the same recipe the
+    # kitchen was opened with — its active_recipe_steps already match).
+    loaded = json.loads(await load_recipe_tool(name=_RECIPE_FOR_PULL))
     pull = loaded["recipe_pull"]
-    assert pull["recipe_name"] == "implementation"
+    assert pull["recipe_name"] == _RECIPE_FOR_PULL
     assert pull["producer_tool"] == "load_recipe"
     assert tool_ctx_kitchen_open.recipe_name == _RECIPE_FOR_PULL
 

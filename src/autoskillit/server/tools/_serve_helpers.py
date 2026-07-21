@@ -376,7 +376,10 @@ def build_recipe_envelope(
         ).encode("utf-8")
     )
 
-    remaining = max(0, bound_bytes - skeleton_overhead - pull_overhead - envelope_bytes)
+    remaining = max(
+        0,
+        bound_bytes - skeleton_overhead - pull_overhead - envelope_bytes - 64,
+    )
 
     def _project_priority_strings(keys: tuple[str, ...]) -> None:
         nonlocal remaining

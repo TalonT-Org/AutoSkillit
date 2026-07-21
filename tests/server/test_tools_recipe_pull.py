@@ -293,7 +293,7 @@ def test_maybe_envelope_returns_envelope_when_payload_oversized(
         # is the unchanged payload — which is the correct behavior.
         assert result.get("delivery_bound_spill") is not True
         return
-    assert result.get("delivery_bound_spill") is True
+    assert len(json.dumps(result).encode("utf-8")) <= bound_tokens * 4
     assert result.get("recipe_pull", {}).get("pull_tool") == "get_recipe_section"
 
 

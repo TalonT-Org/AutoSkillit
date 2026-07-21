@@ -13,6 +13,7 @@ recipe-prompt discipline enforcement in `cli/_prompts_kitchen.py`.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import cast
@@ -72,6 +73,10 @@ def _smallest_bound_tokens() -> int:
 
 def _bound_bytes(bound_tokens: int) -> int:
     return bound_tokens * 4
+
+
+def _artifact_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_section_chunks_fit_serialized_utf8_bound() -> None:
@@ -450,6 +455,7 @@ def test_prompt_contract_describes_pull_protocol() -> None:
         "cli/_prompts_kitchen.py must reference the pull tool name so the "
         "orchestrator knows how to retrieve step bodies."
     )
+    assert "artifact_sha256=recipe_pull.sha256" in text
 
 
 def test_pull_tool_registered_in_gated_tools() -> None:
@@ -971,10 +977,13 @@ async def test_pull_tool_returns_bounded_step_content(
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
 
     persisted = json.loads(
-        _recipe_artifact_path(
-            tool_ctx_kitchen_open.temp_dir, "open_kitchen", _RECIPE_FOR_PULL
+        (
+            artifact_path := _recipe_artifact_path(
+                tool_ctx_kitchen_open.temp_dir, "open_kitchen", _RECIPE_FOR_PULL
+            )
         ).read_text(encoding="utf-8")
     )
+    artifact_sha256 = _artifact_sha256(artifact_path)
     persisted_yaml = persisted.get("content", "") or ""
     parsed = load_yaml(persisted_yaml)
     assert isinstance(parsed, dict), "persisted content must parse as a mapping"
@@ -998,6 +1007,7 @@ async def test_pull_tool_returns_bounded_step_content(
                 section=step_name,
                 recipe_name=_RECIPE_FOR_PULL,
                 producer_tool="open_kitchen",
+                artifact_sha256=artifact_sha256,
             )
         )
         assert response.get("success") is True, (
@@ -1020,6 +1030,7 @@ async def test_pull_tool_returns_bounded_step_content(
             section="not_a_real_step",
             recipe_name=_RECIPE_FOR_PULL,
             producer_tool="open_kitchen",
+            artifact_sha256=artifact_sha256,
         )
     )
     assert unknown == {
@@ -1029,7 +1040,7 @@ async def test_pull_tool_returns_bounded_step_content(
     }
 
     persisted["post_prune_step_names"] = []
-    persist_recipe_artifact(
+    _, artifact_sha256 = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         tool_name="open_kitchen",
         recipe_name=_RECIPE_FOR_PULL,
@@ -1040,6 +1051,7 @@ async def test_pull_tool_returns_bounded_step_content(
             section=step_names[0],
             recipe_name=_RECIPE_FOR_PULL,
             producer_tool="open_kitchen",
+            artifact_sha256=artifact_sha256,
         )
     )
     assert pruned == {
@@ -1071,6 +1083,7 @@ async def test_artifact_recreation_from_parsed_recipe(
     artifact_path = _recipe_artifact_path(
         tool_ctx_kitchen_open.temp_dir, "open_kitchen", _RECIPE_FOR_PULL
     )
+    artifact_sha256 = _artifact_sha256(artifact_path)
     artifact_path.unlink()
     assert not artifact_path.exists(), "precondition: artifact file deleted"
 
@@ -1086,6 +1099,7 @@ async def test_artifact_recreation_from_parsed_recipe(
             section=step_name,
             recipe_name=_RECIPE_FOR_PULL,
             producer_tool="open_kitchen",
+            artifact_sha256=artifact_sha256,
         )
     )
     assert response.get("success") is True, (
@@ -1115,6 +1129,7 @@ async def test_artifact_recreation_from_parsed_recipe(
             section=step_name,
             recipe_name=_RECIPE_FOR_PULL,
             producer_tool="open_kitchen",
+            artifact_sha256=artifact_sha256,
         )
     )
     assert failed.get("success") is False
@@ -1153,7 +1168,7 @@ async def test_large_step_chunked_via_continuation(
         "content": (f'version: "1"\nsteps:\n  giant_step:\n    note: {oversized_field}\n'),
         "post_prune_step_names": ["giant_step"],
     }
-    persist_recipe_artifact(
+    _, artifact_sha256 = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         tool_name="open_kitchen",
         recipe_name=_RECIPE_FOR_PULL,
@@ -1179,6 +1194,7 @@ async def test_large_step_chunked_via_continuation(
                 part=part,
                 recipe_name=_RECIPE_FOR_PULL,
                 producer_tool="open_kitchen",
+                artifact_sha256=artifact_sha256,
             )
         )
         assert response.get("success") is True, f"chunk {part} failed: {response}"

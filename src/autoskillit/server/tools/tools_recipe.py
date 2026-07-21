@@ -461,6 +461,9 @@ async def get_recipe_section(
             ``recipe_pull.recipe_name`` field.
         producer_tool: Producer identity copied from the envelope's
             ``recipe_pull.producer_tool`` field.
+        artifact_sha256: Artifact digest copied from the envelope's
+            ``recipe_pull.sha256`` field. Required to bind the pull to
+            the exact composition that produced the envelope.
 
     Returns:
         JSON with ``success``, ``section``, ``content``, ``has_more``,
@@ -478,7 +481,7 @@ async def get_recipe_section(
             if tool_ctx is None or tool_ctx.recipes is None:
                 return json.dumps({"success": False, "error": "kitchen not open"})
 
-            if not recipe_name or producer_tool is None:
+            if not recipe_name or producer_tool is None or not artifact_sha256:
                 return json.dumps({"success": False, "error": "recipe_artifact_identity_required"})
             requested_recipe_name = recipe_name
 
@@ -581,11 +584,7 @@ async def get_recipe_section(
             # bounded chunk from the requested section of the recipe YAML.
             try:
                 persisted_raw = resolved_artifact_path.read_text(encoding="utf-8")
-                if (
-                    artifact_sha256 is not None
-                    and hashlib.sha256(persisted_raw.encode("utf-8")).hexdigest()
-                    != artifact_sha256
-                ):
+                if hashlib.sha256(persisted_raw.encode("utf-8")).hexdigest() != artifact_sha256:
                     return json.dumps(
                         {"success": False, "error": "invalid_recipe_artifact_identity"}
                     )

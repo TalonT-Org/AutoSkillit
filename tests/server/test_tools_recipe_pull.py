@@ -875,6 +875,39 @@ async def _open_kitchen_patched(name: str, overrides: dict | None, monkeypatch) 
 
 @pytest.mark.anyio
 @pytest.mark.medium
+async def test_load_recipe_envelope_pulls_from_its_own_artifact(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    from autoskillit.server.tools.tools_recipe import get_recipe_section
+    from autoskillit.server.tools.tools_recipe import load_recipe as load_recipe_tool
+
+    monkeypatch.chdir(tmp_path)
+    opened = await _open_kitchen_patched(_RECIPE_FOR_PULL, None, monkeypatch)
+    assert opened.get("success") is True
+    assert tool_ctx_kitchen_open.recipe_name == _RECIPE_FOR_PULL
+
+    loaded = json.loads(await load_recipe_tool(name="implementation"))
+    pull = loaded["recipe_pull"]
+    assert pull["recipe_name"] == "implementation"
+    assert pull["producer_tool"] == "load_recipe"
+    assert tool_ctx_kitchen_open.recipe_name == _RECIPE_FOR_PULL
+
+    step_name = loaded["step_flow_skeleton"]["steps"][0]["name"]
+    response = json.loads(
+        await get_recipe_section(
+            section=step_name,
+            recipe_name=pull["recipe_name"],
+            producer_tool=pull["producer_tool"],
+            artifact_path=pull["artifact_path"],
+            artifact_sha256=pull["sha256"],
+        )
+    )
+    assert response.get("success") is True, response
+    assert response["content"]
+
+
+@pytest.mark.anyio
+@pytest.mark.medium
 async def test_pull_tool_returns_bounded_step_content(
     tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
 ) -> None:

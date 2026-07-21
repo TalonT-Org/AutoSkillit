@@ -18,6 +18,7 @@ from autoskillit.core import (
     RecipeSource,
     get_logger,
     load_yaml,
+    mapping_entry_byte_ranges_from_yaml,
     pkg_root,
 )
 from autoskillit.core import fast_loads as _fast_loads
@@ -37,6 +38,12 @@ from autoskillit.recipe.schema import (
 )
 
 logger = get_logger(__name__)
+
+
+def step_byte_ranges_from_yaml(content: str) -> dict[str, tuple[int, int]]:
+    """Return UTF-8 byte ranges for entries in the recipe ``steps`` mapping."""
+    return mapping_entry_byte_ranges_from_yaml(content, ("steps",))
+
 
 RECIPE_SCAN_DIRS: tuple[str, ...] = (
     ".",  # root — standard recipes

@@ -970,6 +970,13 @@ resolved state. The `load_recipe` tool is the ONLY authoritative source of recip
 it runs the full composition pipeline (sub-recipe merging, skip-guard resolution, hidden
 ingredient interpolation) before serving content to you.
 
+When `load_recipe`/`open_kitchen` return a bounded envelope (large recipes exceeding
+the backend's delivery bound), the envelope omits full step bodies. Call
+`get_recipe_section(section=<step_name>)` to pull the body of a specific step on
+demand — this is still the authoritative channel (backed by the same persisted
+artifact `load_recipe` wrote), not a raw-file read. For sections spanning multiple
+chunks, follow `has_more`/`next_part` until exhausted.
+
 Similarly, NEVER read SKILL.md files directly from the filesystem. Use the Skill tool
 to load skill instructions — it applies runtime transformations (namespace rewriting,
 temp directory substitution, disable-model-invocation injection) that raw files lack.

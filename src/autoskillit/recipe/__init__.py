@@ -8,6 +8,10 @@ logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import registry as _reg  # noqa: E402, PLC0415
+from autoskillit.recipe._analysis import (  # noqa: E402
+    RouteEdge,
+    _extract_routing_edges,
+)
 from autoskillit.recipe._api import (  # noqa: E402
     format_recipe_list_response,
     list_all,
@@ -70,6 +74,7 @@ from autoskillit.recipe.io import (  # noqa: E402
     list_recipes,
     load_campaign_recipes_in_packs,
     load_recipe,
+    step_byte_ranges_from_yaml,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.methodology_disambiguation import (  # noqa: E402
@@ -305,6 +310,7 @@ __all__ = [
     "write_staleness_cache",
     "RuleFinding",
     "load_recipe",
+    "step_byte_ranges_from_yaml",
     "list_recipes",
     "find_recipe_by_name",
     "iter_steps_with_context",
@@ -373,6 +379,12 @@ __all__ = [
     "CampaignDispatch",
     "NON_INTERACTIVE_KINDS",
     "RecipeKind",
+    # --- routing-edge facade (canonical package-level re-export of the
+    #     recipe/_analysis_graph definitions; enables consumers in other
+    #     packages to reuse _extract_routing_edges without crossing
+    #     REQ-ARCH-001's submodule-import boundary) ---
+    "RouteEdge",
+    "_extract_routing_edges",
     "find_campaign_by_name",
     "list_campaign_recipes",
     "load_campaign_recipes_in_packs",

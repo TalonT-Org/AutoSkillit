@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -172,6 +173,47 @@ def test_load_recipe_result_has_post_prune_step_names(tmp_path):
     assert "step_a" in post_prune
     assert "step_c" in post_prune
     assert "step_b" not in post_prune, "step_b should be pruned (enable_step_b=false)"
+
+
+# ---------------------------------------------------------------------------
+# T-POSTPRUNE-2: post_prune_routing_edges field in LoadRecipeResult
+# ---------------------------------------------------------------------------
+
+
+_RECIPE_WITH_ROUTING_EDGES: Any = """\
+name: test-recipe-routing
+description: Recipe with routing edges for post_prune_routing_edges coverage
+autoskillit_version: "0.3.0"
+steps:
+  step_a:
+    tool: run_cmd
+    with:
+      step_name: step_a
+      cmd: "echo test"
+    on_success: step_b
+    on_failure: step_c
+  step_b:
+    action: stop
+    message: B
+  step_c:
+    action: stop
+    message: C
+"""
+
+
+def test_load_recipe_result_has_post_prune_routing_edges(tmp_path):
+    """LoadRecipeResult includes post_prune_routing_edges with real step-to-step
+    targets only. step_a also carries the default on_exhausted="escalate" edge,
+    which must be filtered out as a terminal sentinel rather than a step name.
+    """
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(tmp_path, "test-recipe-routing", _RECIPE_WITH_ROUTING_EDGES)
+    result = load_and_validate(name="test-recipe-routing", project_dir=tmp_path)
+    assert "post_prune_routing_edges" in result, (
+        "post_prune_routing_edges must be in LoadRecipeResult"
+    )
+    assert set(result["post_prune_routing_edges"]) == {"step_b", "step_c"}
 
 
 # ---------------------------------------------------------------------------
@@ -1559,3 +1601,38 @@ def test_load_and_validate_campaign_no_steps_returns_valid(tmp_path: Path) -> No
     assert not step_errors, (
         f"Campaign recipe should not get step-related structural errors; got: {step_errors}"
     )
+
+
+def test_suggestions_accumulation_preserves_over_bound_tail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Domain validation preserves every finding before delivery projection."""
+    import autoskillit.recipe._api as api
+
+    recipe_dir = tmp_path / ".autoskillit" / "recipes"
+    recipe_dir.mkdir(parents=True, exist_ok=True)
+    recipe_yaml = """\
+name: test-suggestions-cap
+description: Recipe that exercises suggestion accumulation
+autoskillit_version: "0.3.0"
+ingredients:
+  task:
+    description: The task
+    required: true
+steps:
+  stop:
+    action: stop
+    message: "done"
+"""
+    recipe_path = recipe_dir / "test-suggestions-cap.yaml"
+    recipe_path.write_text(recipe_yaml)
+    injected = [{"rule": f"injected-{index}", "message": "x" * 500} for index in range(100)]
+    monkeypatch.setattr(api, "run_semantic_rules", lambda _ctx: [])
+    monkeypatch.setattr(api, "findings_to_dicts", lambda _findings: list(injected))
+    result = api.load_and_validate(
+        "test-suggestions-cap",
+        project_dir=tmp_path,
+    )
+    suggestions = result.get("suggestions", [])
+    assert len(json.dumps(suggestions).encode("utf-8")) > 32_000
+    assert injected[-1] in suggestions

@@ -475,7 +475,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "_analysis_bfs": frozenset({"recipe"}),
     "_analysis_blocks": frozenset({"recipe"}),
     "_analysis_detectors": frozenset({"recipe"}),
-    "_analysis_graph": frozenset({"recipe"}),
+    "_analysis_graph": frozenset({"recipe", "server"}),
     "_git_helpers": frozenset({"recipe"}),
     "_skill_helpers": frozenset({"recipe"}),
     "_skill_placeholder_parser": frozenset(
@@ -653,6 +653,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             "fleet",
             "infra/test_pretty_output_hook_infra.py",
+            # file-level: Part C envelope-fit test imports execution.backends.BACKEND_REGISTRY
+            "infra/test_pretty_output_recipe.py",
             "_llm_triage",
             "smoke_utils",
         }
@@ -785,6 +787,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_admission_dispatch_agreement.py",
             "server/test_pipeline_deps_derivation.py",
             "server/test_pipeline_tracker.py",
+            "server/test_tools_recipe_pull.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",

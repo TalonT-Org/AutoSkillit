@@ -41,8 +41,10 @@ __all__ = [
     "ReadResult",
     "YAMLError",
     "atomic_write",
+    "compose_yaml",
     "ensure_project_temp",
     "load_yaml",
+    "mapping_entry_byte_ranges_from_yaml",
     "dump_yaml_str",
     "read_versioned_json",
     "resolve_skill_temp_dir",
@@ -406,6 +408,69 @@ def load_yaml(source: os.PathLike[str] | str) -> Any:
         with open(source, "rb") as fh:
             return yaml.load(fh, Loader=_Loader)
     return yaml.load(source, Loader=_Loader)
+
+
+def compose_yaml(source: str) -> yaml.Node | None:
+    """Parse *source* into a mark-annotated YAML node tree (not a data structure).
+
+    Unlike :func:`load_yaml`, retains ``start_mark`` / ``end_mark`` character
+    offsets on every node, which the byte-range tracker in
+    ``server/tools/_serve_helpers.py`` uses to compute per-step byte spans
+    of the original ``content`` text. Returns ``None`` when the source is
+    empty (matches :func:`yaml.compose` semantics).
+    """
+    return yaml.compose(source, Loader=_Loader)
+
+
+def mapping_entry_byte_ranges_from_yaml(
+    content: str, mapping_path: tuple[str, ...]
+) -> dict[str, tuple[int, int]]:
+    """Compute UTF-8 byte ranges for entries under a YAML mapping path.
+
+    Walks the persisted YAML ``content`` field via :func:`compose_yaml` to read
+    each selected mapping entry's key/value ``start_mark`` / ``end_mark`` character
+    offsets, then converts them to UTF-8 byte offsets so the result can be
+    used directly to slice the payload back at the byte level.
+
+    Fails open: returns ``{}`` on any malformed or non-mapping document. The
+    guards (rather than a bare ``except YAMLError``) handle the documented
+    case where ``yaml.compose`` succeeds but produces a non-mapping root
+    (a bare sequence, or a ``steps:`` key whose value is a scalar) — a bare
+    ``except`` would miss ``TypeError`` / ``ValueError`` raised from
+    tuple-unpacking such a non-mapping node tree.
+
+    Centralizes the yaml import: this module is the only place in the
+    package that imports ``yaml`` directly (REQs in
+    ``tests/arch/test_subpackage_isolation.py`` and
+    ``tests/core/test_io.py::test_only_yaml_imports_yaml_directly``).
+    """
+    out: dict[str, tuple[int, int]] = {}
+    if not content or not mapping_path:
+        return out
+    try:
+        root = compose_yaml(content)
+    except yaml.YAMLError:
+        return out
+    if not isinstance(root, yaml.MappingNode):
+        return out
+    current = root
+    for segment in mapping_path:
+        next_node = None
+        for key_node, value_node in current.value:
+            if getattr(key_node, "value", None) == segment:
+                next_node = value_node
+                break
+        if not isinstance(next_node, yaml.MappingNode):
+            return out
+        current = next_node
+    for entry_key, entry_value in current.value:
+        start_idx = entry_key.start_mark.index
+        end_idx = entry_value.end_mark.index
+        out[str(entry_key.value)] = (
+            len(content[:start_idx].encode("utf-8")),
+            len(content[:end_idx].encode("utf-8")),
+        )
+    return out
 
 
 def dump_yaml_str(data: Any, **kwargs: Any) -> str:

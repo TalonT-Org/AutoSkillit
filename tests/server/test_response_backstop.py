@@ -13,6 +13,7 @@ from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     RESPONSE_SPILL_METADATA_KEYS,
+    _delivery_bound_summary,
     enforce_response_budget,
     shape_json_response,
 )
@@ -695,3 +696,119 @@ def test_delivery_bound_summary_projects_oversized_preserved_fields(tmp_path):
     assert metadata["reason"] == "delivery_bound"
     assert set(metadata) == RESPONSE_SPILL_METADATA_KEYS
     assert Path(metadata["artifact_path"]).read_text() == original
+
+
+def test_delivery_bound_summary_with_realistic_suggestions_preserves_content(tmp_path):
+    """Regression guard for the issue #4304 starvation defect: when ``suggestions``
+    is at the real-world 48KB+ size regime (the remediation recipe accumulates
+    this from semantic + contract + staleness + diagram findings), the bounded
+    summary must still allocate non-zero bytes to ``content``. The historical
+    algorithm computed ``head_limit = max(0, bound - base_bytes - 64)`` from the
+    unshrunk preserved-key envelope, found ``base_bytes > bound``, and starved
+    ``content`` to ``""``."""
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "ingredients_table": "| a |",
+        "orchestration_rules": ["r1", "r2"],
+        "stop_step_semantics": {"on_success": "stop"},
+        "errors": [],
+        "suggestions": [{"rule": f"finding-{i:04d}", "message": "m" * 80} for i in range(600)],
+        "content": "x" * 100_000,
+    }
+    original = json.dumps(payload)
+    bound_tokens = 10_000
+    bound_bytes = bound_tokens * 4
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=bound_tokens,
+    )
+    assert isinstance(result, str)
+    assert len(result.encode("utf-8")) <= bound_bytes, (
+        f"projection exceeds {bound_bytes} bytes (effective delivery bound)"
+    )
+    data = json.loads(result)
+    assert data["delivery_bound_spill"] is True
+    content = data.get("content", "")
+    assert len(content) > 0, (
+        f"content starved to empty ({len(content)} chars) when suggestions is "
+        f"~48KB — bounded summary must allocate budget to content, not just "
+        f"truncate suggestions"
+    )
+    suggestions = data.get("suggestions", [])
+    # Suggestions must be projected (truncated or shortened), not preserved
+    # verbatim at the cost of content.
+    suggestions_bytes = len(json.dumps(suggestions).encode("utf-8"))
+    assert suggestions_bytes < len(json.dumps(payload["suggestions"]).encode("utf-8")), (
+        "suggestions must be projected, not preserved verbatim"
+    )
+    metadata = data[RESPONSE_SPILL_METADATA_KEY]
+    assert metadata["reason"] == "delivery_bound"
+
+
+def test_delivery_bound_summary_fails_closed_below_multibyte_content_floor():
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1",
+        "content": "界" * 100,
+        "suggestions": [{"message": "y" * 1_000}],
+    }
+    metadata = {
+        "artifact_path": "/a",
+        "sha256": "0" * 64,
+        "original_utf8_bytes": 9_999,
+        "reason": "delivery_bound",
+    }
+
+    assert _delivery_bound_summary(payload, metadata=metadata, bound=350) is None
+    rendered = _delivery_bound_summary(payload, metadata=metadata, bound=400)
+    assert rendered is not None
+    assert json.loads(rendered)["content"]
+    assert len(rendered.encode("utf-8")) <= 400
+
+
+def test_delivery_bound_summary_reallocates_freed_budget_to_content(tmp_path):
+    """Tier 1 regression guard: when suggestions/ingredients_table are naturally
+    small (well under their allotted share of the budget), the bytes left over
+    must flow to ``content`` rather than being stranded at ``content_floor``.
+    Today, Tier 1 tries exactly one ``content_head`` value (the floor) and
+    returns immediately if it fits, leaving the rest of the bound unused."""
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "content": "z" * 60_000,
+        "suggestions": [{"rule": "x"}],
+        "ingredients_table": "| a | b |",
+    }
+    original = json.dumps(payload)
+    bound_tokens = 10_000
+    bound_bytes = bound_tokens * 4
+    assert len(original.encode("utf-8")) > bound_bytes
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=bound_tokens,
+    )
+    assert isinstance(result, str)
+    rendered_bytes = len(result.encode("utf-8"))
+    assert rendered_bytes <= bound_bytes
+    data = json.loads(result)
+    assert len(data.get("content", "")) > 0
+    # The freed budget from the small suggestions/ingredients_table values must
+    # flow to content: the projection should consume nearly the full bound, not
+    # stop at the (much smaller) guaranteed content floor. A ratio (rather than
+    # a fixed byte margin) tolerates artifact_path-length variance in the spill
+    # metadata across different tmp_path values.
+    assert rendered_bytes >= bound_bytes * 0.95, (
+        f"projection only used {rendered_bytes} of {bound_bytes} available "
+        f"bytes; freed budget from small deprioritized keys was not "
+        f"reallocated to content"
+    )

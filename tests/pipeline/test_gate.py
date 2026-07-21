@@ -59,6 +59,7 @@ def test_gated_tools_contains_expected_names():
         "create_and_publish_branch",
         "record_pipeline_step",
         "reset_dispatch",
+        "get_recipe_section",
     }
     assert GATED_TOOLS == expected
 

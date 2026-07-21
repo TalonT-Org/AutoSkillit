@@ -991,7 +991,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1610,
+        1660,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1030,7 +1030,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(+21 net lines); response artifact temp-root bridge (+2 net lines)"
         "; prune_stale_kitchen_state liveness-gated tracker pruning wired into both "
         "fresh-open and deferred-recall open_kitchen paths, plus overlay lock sidecar "
-        "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)",
+        "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)"
+        "; envelope integration on both deferred-recall and normal open_kitchen paths: "
+        "resolve_effective_delivery_bound + BackendCapabilities isinstance guard + "
+        "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)",
     ),
     "tools_execution.py": (
         1650,
@@ -1114,6 +1117,18 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "extract_blockquote_sections + extract_blockquote_placeholders helpers co-located "
         "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
         "and the tests/skills/ contract linters (+~60 net lines)",
+    ),
+    "_response_budget.py": (
+        1500,
+        "REQ-CNST-010-E12: lossless response spill — atomic_write, projection "
+        "(uniform and tiered), exact canonical projection finalization, "
+        "measured exemptions, both exempted and non-exempted spill paths, "
+        "spill metadata schema, bounded-failure rendering, and shared "
+        "_tiered_projection helper for the exempted (recipe/load_recipe) and "
+        "non-exempted (run_skill) spill paths (issue #4304 priority-tier "
+        "delivery-bound summary); splitting would scatter the priority-tier "
+        "algorithm across modules that must remain the single source of "
+        "truth for the bound-vs-deprioritized budget allocation order.",
     ),
 }
 

@@ -128,6 +128,7 @@ class LoadRecipeResult(TypedDict, total=False):
     recipe_version: str | None
     deferred_guards: list[DeferredGuard]
     post_prune_step_names: list[str]
+    post_prune_routing_edges: list[str]
     dispatch_feasible: bool
     infeasible_steps: list[str]
     warnings: NotRequired[list[str]]
@@ -158,6 +159,7 @@ class OpenKitchenResult(TypedDict, total=False):
     recipe_version: str | None
     deferred_guards: list[DeferredGuard]
     post_prune_step_names: list[str]
+    post_prune_routing_edges: list[str]
     dispatch_feasible: bool
     infeasible_steps: list[str]
     warnings: NotRequired[list[str]]

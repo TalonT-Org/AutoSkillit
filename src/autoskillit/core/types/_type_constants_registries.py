@@ -121,6 +121,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "create_and_publish_branch",
         "record_pipeline_step",
         "reset_dispatch",
+        "get_recipe_section",
     }
 )
 
@@ -190,14 +191,14 @@ class ResponseBackstopExemptionDef(NamedTuple):
 
 RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: dict[str, ResponseBackstopExemptionDef] = {
     "load_recipe": ResponseBackstopExemptionDef(
-        max_chars=185_000,
-        max_utf8_bytes=185_000,
-        measurement_id="bundled-recipes-all-modes-2026-07-16/load-recipe",
+        max_chars=188_000,
+        max_utf8_bytes=188_000,
+        measurement_id="bundled-recipes-all-modes-2026-07-21/load-recipe",
     ),
     "open_kitchen": ResponseBackstopExemptionDef(
-        max_chars=186_000,
-        max_utf8_bytes=186_000,
-        measurement_id="bundled-recipes-all-modes-2026-07-16/open-kitchen",
+        max_chars=188_000,
+        max_utf8_bytes=188_000,
+        measurement_id="bundled-recipes-all-modes-2026-07-21/open-kitchen",
     ),
 }
 
@@ -337,6 +338,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "merge_worktree": frozenset({"kitchen-core"}),
     "unlock_agent_pack": frozenset({"kitchen-core"}),
     "record_pipeline_step": frozenset({"kitchen-core"}),
+    "get_recipe_section": frozenset({"kitchen-core"}),
 }
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(

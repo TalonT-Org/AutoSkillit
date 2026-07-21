@@ -85,6 +85,12 @@ _REGISTRY_EXEMPTIONS: dict[str, str] = {
         "test_lifespan_fleet_boot.py for fleet tool-tag parity guards; "
         "no runtime production consumer needed"
     ),
+    "FLEET_DISPATCH_TOOLS": (
+        "alias-derived: subset of GATED_TOOLS exposed as a separate constant "
+        "for session-type visibility dispatch; production consumers access "
+        "it via GATED_TOOLS membership (see test_canonical_constant_consumption.py "
+        "test_fleet_dispatch_tools_subset_of_gated_tools)"
+    ),
 }
 
 

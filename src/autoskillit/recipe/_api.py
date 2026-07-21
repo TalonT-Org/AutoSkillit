@@ -26,7 +26,7 @@ from autoskillit.core import (
     resolve_temp_dir,
 )
 from autoskillit.recipe import _api_cache
-from autoskillit.recipe._analysis import make_validation_context
+from autoskillit.recipe._analysis import _extract_routing_edges, make_validation_context
 
 # Re-export for backward compatibility
 from autoskillit.recipe._api_cache import (  # noqa: F401
@@ -666,6 +666,15 @@ def load_and_validate(
         result["deferred_guards"] = _deferred_guard_list
     if active_recipe is not None:
         result["post_prune_step_names"] = list(active_recipe.steps.keys())
+        _step_names_set = set(active_recipe.steps)
+        result["post_prune_routing_edges"] = sorted(
+            {
+                edge.target
+                for step in active_recipe.steps.values()
+                for edge in _extract_routing_edges(step)
+                if edge.target in _step_names_set
+            }
+        )
         result["dispatch_feasible"] = _dispatch_feasible
         if _infeasible_steps:
             result["infeasible_steps"] = _infeasible_steps

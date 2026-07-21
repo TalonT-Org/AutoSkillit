@@ -27,6 +27,7 @@ from autoskillit.config import (
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
+    BackendCapabilities,
     CapabilityResolutionDetail,
     ProcessStaleError,
     _collect_disabled_feature_tags,
@@ -42,6 +43,7 @@ from autoskillit.core import (
     read_active_kitchens_registry,
     read_marker,
     register_active_kitchen,
+    resolve_effective_delivery_bound,
     resolve_kitchen_id,
     sweep_stale_markers,
     unregister_active_kitchen,
@@ -85,6 +87,7 @@ from autoskillit.server.tools._preflight import (
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
+    maybe_envelope_recipe_response,
     render_served_response,
     response_backstop_tool_meta,
     serve_recipe,
@@ -1059,6 +1062,28 @@ async def open_kitchen(
                 if overrides is not None:
                     tool_ctx.session_serve_overrides = dict(overrides)
                     tool_ctx.session_serve_defer_unresolved = not bool(overrides)
+                if not ingredients_only:
+                    _backend_caps = (
+                        tool_ctx.backend.capabilities
+                        if tool_ctx.backend is not None
+                        and isinstance(
+                            getattr(tool_ctx.backend, "capabilities", None),
+                            BackendCapabilities,
+                        )
+                        else None
+                    )
+                    _edtl = (
+                        resolve_effective_delivery_bound(_backend_caps)
+                        if _backend_caps is not None
+                        else None
+                    )
+                    result = maybe_envelope_recipe_response(
+                        result,
+                        tool_name="open_kitchen",
+                        recipe_name=name,
+                        tool_ctx=tool_ctx,
+                        effective_delivery_token_limit=_edtl,
+                    )
                 return render_served_response(result)
             try:
                 result = serve_recipe(
@@ -1210,6 +1235,29 @@ async def open_kitchen(
                     stage="validate_result",
                 )
                 return _validation_err
+
+            if not ingredients_only:
+                _backend_caps_normal = (
+                    tool_ctx.backend.capabilities
+                    if tool_ctx.backend is not None
+                    and isinstance(
+                        getattr(tool_ctx.backend, "capabilities", None),
+                        BackendCapabilities,
+                    )
+                    else None
+                )
+                _edtl_normal = (
+                    resolve_effective_delivery_bound(_backend_caps_normal)
+                    if _backend_caps_normal is not None
+                    else None
+                )
+                result = maybe_envelope_recipe_response(
+                    result,
+                    tool_name="open_kitchen",
+                    recipe_name=name,
+                    tool_ctx=tool_ctx,
+                    effective_delivery_token_limit=_edtl_normal,
+                )
 
             return render_served_response(result)
 

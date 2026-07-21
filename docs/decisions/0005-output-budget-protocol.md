@@ -60,7 +60,7 @@ content available on demand via `get_recipe_section`.
 
 | Limit | Decision and rationale |
 |---|---|
-| `load_recipe`: `max_chars = 185_000`, `max_utf8_bytes = 185_000` | The 2026-07-16 independent all-recipe/all-mode pre-backstop measurement reached 183,103 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,897-unit margin makes serving growth explicit. Measurement identity: `bundled-recipes-all-modes-2026-07-16/load-recipe`. For payloads that exceed the delivery bound, see envelope note below. |
+| `load_recipe`: `max_chars = 188_000`, `max_utf8_bytes = 188_000` | The 2026-07-21 independent all-recipe/all-mode pre-backstop measurement reached 186,621 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,379-unit margin makes serving growth explicit. Measurement identity: `bundled-recipes-all-modes-2026-07-21/load-recipe`. For payloads that exceed the delivery bound, see envelope note below. |
 | `open_kitchen`: `max_chars = 186_000`, `max_utf8_bytes = 186_000` | The matching current-version pre-backstop measurement reached 183,103 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 2,897-unit margin covers the open-kitchen routing fields without conflating this handler ceiling with the smaller formatted presentation. Measurement identity: `bundled-recipes-all-modes-2026-07-16/open-kitchen`. For payloads that exceed the delivery bound, see envelope note below. |
 
 > **Envelope note (oversized recipes, issue #4304 Part B):** When a recipe's serialized payload

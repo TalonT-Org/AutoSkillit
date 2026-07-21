@@ -458,6 +458,14 @@ def test_build_routing_edges_handles_missing_extractor() -> None:
     assert build_routing_edges_by_step(None, edge_extractor=None) == {}
 
 
+def test_build_routing_edges_propagates_extractor_failure() -> None:
+    def _broken_extractor(_step: object) -> list[object]:
+        raise ValueError("invalid route")
+
+    with pytest.raises(ValueError, match="invalid route"):
+        build_routing_edges_by_step({"a": object()}, edge_extractor=_broken_extractor)
+
+
 # ---------------------------------------------------------------------------
 # Part A (REQ-B02 / REQ-B03) gap-closure regression guards
 # ---------------------------------------------------------------------------

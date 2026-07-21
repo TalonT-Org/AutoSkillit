@@ -541,15 +541,7 @@ def build_routing_edges_by_step(
     for name, step in active_recipe_steps.items():
         if not isinstance(name, str) or not name:
             continue
-        try:
-            extracted = edge_extractor(step) if edge_extractor is not None else []
-        except Exception:
-            get_logger(__name__).warning(
-                "build_routing_edges_by_step_extractor_failed",
-                step_name=name,
-                exc_info=True,
-            )
-            extracted = []
+        extracted = edge_extractor(step) if edge_extractor is not None else []
         edges_by_step[name] = [
             (edge.edge_type, edge.target)
             for edge in (extracted or [])
@@ -620,15 +612,7 @@ def maybe_envelope_recipe_response(
         post_prune_raw = []
     post_prune_names = [n for n in post_prune_raw if isinstance(n, str)]
     summaries = build_step_summaries(tool_ctx.active_recipe_steps)
-    try:
-        edges = build_routing_edges_by_step(tool_ctx.active_recipe_steps)
-    except Exception:
-        get_logger(__name__).warning(
-            "recipe_routing_edges_extraction_failed",
-            recipe_name=recipe_name,
-            exc_info=True,
-        )
-        edges = {}
+    edges = build_routing_edges_by_step(tool_ctx.active_recipe_steps)
     byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
     skeleton = extract_step_skeleton(post_prune_names, edges, summaries, byte_ranges=byte_ranges)
 

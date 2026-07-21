@@ -79,7 +79,7 @@ def response_backstop_tool_meta(
 
 def render_served_response(payload: dict[str, Any]) -> str:
     """Render the authoritative pre-backstop response used by recipe serve tools."""
-    return json.dumps(payload)
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
 def build_open_kitchen_recipe_payload(result: dict[str, Any], *, version: str) -> dict[str, Any]:
@@ -467,7 +467,10 @@ def build_recipe_envelope(
         "pull_tool": "get_recipe_section",
     }
     envelope["delivery_bound_spill"] = True
-    if len(json.dumps(envelope, ensure_ascii=False).encode("utf-8")) <= bound_bytes:
+    if (
+        len(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        <= bound_bytes
+    ):
         return envelope
 
     fallback_candidates: tuple[dict[str, Any], ...] = (
@@ -489,6 +492,8 @@ def build_recipe_envelope(
             "recipe_pull": {
                 "recipe_name": recipe_name,
                 "producer_tool": producer_tool,
+                "artifact_path": artifact_path,
+                "sha256": artifact_sha256,
                 "pull_tool": "get_recipe_section",
             },
         },
@@ -496,7 +501,10 @@ def build_recipe_envelope(
         {},
     )
     for fallback in fallback_candidates:
-        if len(json.dumps(fallback, ensure_ascii=False).encode("utf-8")) <= bound_bytes:
+        if (
+            len(json.dumps(fallback, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            <= bound_bytes
+        ):
             return fallback
     raise ValueError("delivery bound is too small for a JSON object")
 
@@ -665,9 +673,40 @@ def maybe_envelope_recipe_response(
     summaries = build_step_summaries(active_recipe_steps)
     edges = build_routing_edges_by_step(active_recipe_steps)
     byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
+    bound_bytes = effective_delivery_token_limit * 4
     skeleton = extract_step_skeleton(post_prune_names, edges, summaries, byte_ranges=byte_ranges)
 
-    bound_bytes = effective_delivery_token_limit * 4
+    def _pullable_skeleton_size(candidate: dict[str, Any]) -> int:
+        pullable = {
+            "success": payload.get("success", True),
+            "step_flow_skeleton": candidate,
+            "recipe_pull": {
+                "recipe_name": recipe_name,
+                "producer_tool": tool_name,
+                "artifact_path": artifact_path,
+                "sha256": artifact_sha256,
+                "pull_tool": "get_recipe_section",
+            },
+            "delivery_bound_spill": True,
+        }
+        return len(json.dumps(pullable, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    if _pullable_skeleton_size(skeleton) > bound_bytes:
+        for summary_limit in (120, 80, 64, 48, 32, 24, 16, 8, 0):
+            bounded_summaries = (
+                {name: summary[:summary_limit] for name, summary in summaries.items()}
+                if summary_limit
+                else {}
+            )
+            skeleton = extract_step_skeleton(
+                post_prune_names,
+                edges,
+                bounded_summaries,
+                byte_ranges=byte_ranges,
+            )
+            if _pullable_skeleton_size(skeleton) <= bound_bytes:
+                break
+
     return build_recipe_envelope(
         payload,
         artifact_path=artifact_path,

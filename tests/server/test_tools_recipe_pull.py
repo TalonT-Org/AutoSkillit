@@ -165,7 +165,7 @@ def test_envelope_fits_every_backend_by_construction(
         tool_ctx=ctx,
         effective_delivery_token_limit=bound_tokens,
     )
-    serialized = json.dumps(envelope, ensure_ascii=False)
+    serialized = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
     assert len(serialized.encode("utf-8")) <= bound_bytes, (
         f"{backend_name}: envelope for {recipe_name} exceeds "
         f"{bound_bytes} bytes (effective delivery bound)"
@@ -185,7 +185,16 @@ def test_envelope_fits_every_backend_by_construction(
         build_step_summaries(recipe.steps),
         byte_ranges=_compute_step_byte_ranges(cast(str, payload["content"])),
     )
-    assert envelope["step_flow_skeleton"] == expected_skeleton
+    actual_skeleton = envelope["step_flow_skeleton"]
+    assert actual_skeleton["step_count"] == expected_skeleton["step_count"]
+    actual_steps = actual_skeleton["steps"]
+    expected_steps = expected_skeleton["steps"]
+    assert [step["name"] for step in actual_steps] == [step["name"] for step in expected_steps]
+    for actual_step, expected_step in zip(actual_steps, expected_steps, strict=True):
+        assert actual_step["edges"] == expected_step["edges"]
+        assert actual_step.get("byte_range") == expected_step.get("byte_range")
+        if expected_step.get("summary"):
+            assert expected_step["summary"].startswith(actual_step["summary"])
 
 
 def test_envelope_carries_priority_fields_verbatim(tmp_path: Path) -> None:

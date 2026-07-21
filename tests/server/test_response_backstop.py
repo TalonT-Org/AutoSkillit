@@ -496,7 +496,12 @@ def test_exempted_payload_spills_when_over_delivery_bound(tmp_path):
     assert metadata["reason"] == "delivery_bound"
 
 
-def _delivery_starvation_payload(*, content_chars: int, suggestion_chars: int) -> dict:
+def _delivery_starvation_payload(
+    *,
+    content_chars: int,
+    suggestion_chars: int,
+    post_prune_step_names: list[str] | None = None,
+) -> dict:
     suggestions = [
         {
             "rule": f"realistic-rule-{index}",
@@ -511,7 +516,7 @@ def _delivery_starvation_payload(*, content_chars: int, suggestion_chars: int) -
     )
     content = "name: realistic-large-recipe\nsteps:\n" + step_lines + "\n"
     content += "# filler\n" * max(0, content_chars - len(content))
-    return {
+    payload = {
         "success": True,
         "kitchen": "open",
         "version": "1.2.3",
@@ -522,10 +527,23 @@ def _delivery_starvation_payload(*, content_chars: int, suggestion_chars: int) -
         "suggestions": suggestions,
         "content": content[:content_chars],
     }
+    if post_prune_step_names is not None:
+        payload["post_prune_step_names"] = list(post_prune_step_names)
+    return payload
 
 
-def test_delivery_bound_summary_content_starvation_by_suggestions(tmp_path):
-    payload = _delivery_starvation_payload(content_chars=100_000, suggestion_chars=750)
+_STARVATION_STEP_NAMES = [f"step_{index}" for index in range(200)]
+
+
+@pytest.mark.parametrize(
+    "step_names",
+    [None, _STARVATION_STEP_NAMES],
+    ids=["without_post_prune_step_names", "with_post_prune_step_names"],
+)
+def test_delivery_bound_summary_content_starvation_by_suggestions(tmp_path, step_names):
+    payload = _delivery_starvation_payload(
+        content_chars=100_000, suggestion_chars=750, post_prune_step_names=step_names
+    )
     original = json.dumps(payload)
 
     result = enforce_response_budget(
@@ -540,11 +558,20 @@ def test_delivery_bound_summary_content_starvation_by_suggestions(tmp_path):
     assert len(result.encode("utf-8")) <= 40_000
     data = json.loads(result)
     assert len(data["content"]) > 0
+    if step_names is not None:
+        for step_name in step_names:
+            assert step_name in data["content"]
 
 
-def test_delivery_bound_summary_budget_reallocation_after_projection(tmp_path):
-    payload = _delivery_starvation_payload(content_chars=30_000, suggestion_chars=850)
-    payload.pop("post_prune_step_names", None)
+@pytest.mark.parametrize(
+    "step_names",
+    [None, _STARVATION_STEP_NAMES],
+    ids=["without_post_prune_step_names", "with_post_prune_step_names"],
+)
+def test_delivery_bound_summary_budget_reallocation_after_projection(tmp_path, step_names):
+    payload = _delivery_starvation_payload(
+        content_chars=30_000, suggestion_chars=850, post_prune_step_names=step_names
+    )
     original = json.dumps(payload)
 
     result = enforce_response_budget(
@@ -559,6 +586,9 @@ def test_delivery_bound_summary_budget_reallocation_after_projection(tmp_path):
     data = json.loads(result)
     assert len(data["content"]) > 0
     assert len(result.encode("utf-8")) <= 40_000
+    if step_names is not None:
+        for step_name in step_names:
+            assert step_name in data["content"]
 
 
 def test_zero_delivery_limit_uses_worst_case_bound(tmp_path):

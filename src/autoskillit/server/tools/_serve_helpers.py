@@ -14,14 +14,12 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import yaml
-
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     atomic_write,
-    compose_yaml,
     get_logger,
+    step_byte_ranges_from_yaml,
 )
 from autoskillit.recipe import (  # noqa: F401 — canonical extractor reused by build_routing_edges_by_step default
     _extract_routing_edges,
@@ -228,43 +226,16 @@ def _step_one_line_summary(step: RecipeStep) -> str:
 def _compute_step_byte_ranges(content: str) -> dict[str, tuple[int, int]]:
     """Return ``{step_name: (start, end)}`` UTF-8 byte offsets within *content*.
 
-    Composes the persisted ``content`` field into a mark-annotated YAML
-    node tree (via :func:`autoskillit.core.compose_yaml`) and walks the
-    top-level ``steps:`` mapping to read each step key/value pair's
-    ``start_mark`` / ``end_mark``. Offsets are returned as UTF-8 byte
-    counts (not codepoint counts) so they can be used directly to slice
-    the payload back at the byte level.
-
-    Fails open: a malformed or non-mapping document returns ``{}``
-    without raising. The guards (rather than a bare ``except
-    yaml.YAMLError``) handle the documented case where ``yaml.compose()``
-    succeeds but produces a non-mapping root — a bare sequence, or a
-    ``steps:`` key whose value is a scalar — which raises
-    ``TypeError`` / ``ValueError`` from tuple-unpacking under the naive
-    implementation.
+    Thin wrapper over
+    :func:`autoskillit.core.step_byte_ranges_from_yaml` that keeps the
+    ``_serve_helpers``-local symbol stable for downstream callers and
+    tests. The yaml-handling and ``isinstance(..., MappingNode)``
+    fail-open logic lives in ``core.io`` so that yaml imports are
+    confined to the single canonical module (the package-wide invariant
+    enforced by ``tests/arch/test_subpackage_isolation.py`` and
+    ``tests/core/test_io.py::TestYamlConsolidationArchitecture``).
     """
-    if not content:
-        return {}
-    try:
-        root = compose_yaml(content)
-    except yaml.YAMLError:
-        return {}
-    if not isinstance(root, yaml.MappingNode):
-        return {}
-    ranges: dict[str, tuple[int, int]] = {}
-    for key_node, value_node in root.value:
-        if getattr(key_node, "value", None) != "steps":
-            continue
-        if not isinstance(value_node, yaml.MappingNode):
-            continue
-        for step_key, step_val in value_node.value:
-            start_idx = step_key.start_mark.index
-            end_idx = step_val.end_mark.index
-            ranges[step_key.value] = (
-                len(content[:start_idx].encode("utf-8")),
-                len(content[:end_idx].encode("utf-8")),
-            )
-    return ranges
+    return step_byte_ranges_from_yaml(content)
 
 
 def extract_step_skeleton(

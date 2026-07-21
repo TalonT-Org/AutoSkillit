@@ -65,6 +65,7 @@ from .io import resolve_skill_temp_dir as resolve_skill_temp_dir
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import safe_upsert_section as safe_upsert_section
 from .io import spill_output as spill_output
+from .io import step_byte_ranges_from_yaml as step_byte_ranges_from_yaml
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_versioned_json as write_versioned_json
 from .logging import configure_logging as configure_logging

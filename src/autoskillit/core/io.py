@@ -50,6 +50,7 @@ __all__ = [
     "resolve_temp_dir",
     "safe_upsert_section",
     "spill_output",
+    "step_byte_ranges_from_yaml",
     "temp_dir_display_str",
     "write_versioned_json",
 ]
@@ -419,6 +420,51 @@ def compose_yaml(source: str) -> yaml.Node | None:
     empty (matches :func:`yaml.compose` semantics).
     """
     return yaml.compose(source, Loader=_Loader)
+
+
+def step_byte_ranges_from_yaml(content: str) -> dict[str, tuple[int, int]]:
+    """Compute ``{step_name: (start_byte, end_byte)}`` for the ``steps:`` mapping.
+
+    Walks the persisted YAML ``content`` field via :func:`compose_yaml` to read
+    each top-level step's key/value ``start_mark`` / ``end_mark`` character
+    offsets, then converts them to UTF-8 byte offsets so the result can be
+    used directly to slice the payload back at the byte level.
+
+    Fails open: returns ``{}`` on any malformed or non-mapping document. The
+    guards (rather than a bare ``except YAMLError``) handle the documented
+    case where ``yaml.compose`` succeeds but produces a non-mapping root
+    (a bare sequence, or a ``steps:`` key whose value is a scalar) — a bare
+    ``except`` would miss ``TypeError`` / ``ValueError`` raised from
+    tuple-unpacking such a non-mapping node tree.
+
+    Centralizes the yaml import: this module is the only place in the
+    package that imports ``yaml`` directly (REQs in
+    ``tests/arch/test_subpackage_isolation.py`` and
+    ``tests/core/test_io.py::test_only_yaml_imports_yaml_directly``).
+    """
+    out: dict[str, tuple[int, int]] = {}
+    if not content:
+        return out
+    try:
+        root = compose_yaml(content)
+    except yaml.YAMLError:
+        return out
+    if not isinstance(root, yaml.MappingNode):
+        return out
+    for key_node, value_node in root.value:
+        if getattr(key_node, "value", None) != "steps":
+            continue
+        if not isinstance(value_node, yaml.MappingNode):
+            return out
+        for step_key, step_val in value_node.value:
+            start_idx = step_key.start_mark.index
+            end_idx = step_val.end_mark.index
+            out[step_key.value] = (
+                len(content[:start_idx].encode("utf-8")),
+                len(content[:end_idx].encode("utf-8")),
+            )
+        return out
+    return out
 
 
 def dump_yaml_str(data: Any, **kwargs: Any) -> str:

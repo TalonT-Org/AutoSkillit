@@ -956,7 +956,7 @@ async def test_large_step_chunked_via_continuation(
         "content": (f'version: "1"\nsteps:\n  giant_step:\n    note: {oversized_field}\n'),
     }
     persist_recipe_artifact(
-        tmp_path,
+        tool_ctx_kitchen_open.temp_dir,
         tool_name="open_kitchen",
         recipe_name=_RECIPE_FOR_PULL,
         payload=persisted_payload,

@@ -20,7 +20,7 @@ _PYRIGHT_RE = re.compile(r"#\s*pyright:\s*ignore|#.*--\s*pyright:\s*ignore")
 PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
     (
         "recipe/__init__.py",
-        278,
+        282,
     ): "lazy-registry: method added by _register_rule_module() side effects",
     ("recipe/_api.py", 326): "lazy-registry: RULE_REGISTRY_HASH set by _finalize_registry()",
 }

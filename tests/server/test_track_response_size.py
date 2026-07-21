@@ -274,3 +274,24 @@ class TestTrackResponseSize:
         data = json.loads(result)
         assert data["delivery_bound_spill"] is True
         assert data[RESPONSE_SPILL_METADATA_KEY]["reason"] == "delivery_bound"
+
+    @pytest.mark.anyio
+    async def test_capability_fail_closed_on_missing_ctx(self):
+        """ctx is None + oversized payload must fail closed, not pass through unbounded."""
+        from autoskillit.execution import resolve_worst_case_delivery_bound
+        from autoskillit.server._notify import track_response_size
+
+        payload = json.dumps({"success": True, "content": "x" * 80_000})
+
+        @track_response_size("open_kitchen")
+        async def fake_handler():
+            return payload
+
+        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+            result = await fake_handler()
+
+        assert isinstance(result, str)
+        assert len(result.encode("utf-8")) <= resolve_worst_case_delivery_bound() * 4
+        data = json.loads(result)
+        assert data["success"] is False
+        assert data["error"] == "response_budget_context_unavailable"

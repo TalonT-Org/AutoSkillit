@@ -10,6 +10,7 @@ import structlog
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+from autoskillit.execution import resolve_worst_case_delivery_bound
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     RESPONSE_SPILL_METADATA_KEYS,
@@ -493,6 +494,91 @@ def test_exempted_payload_spills_when_over_delivery_bound(tmp_path):
     artifact_path = metadata["artifact_path"]
     assert Path(artifact_path).read_text() == original
     assert metadata["reason"] == "delivery_bound"
+
+
+def _delivery_starvation_payload(*, content_chars: int, suggestion_chars: int) -> dict:
+    suggestions = [
+        {
+            "rule": f"realistic-rule-{index}",
+            "severity": "warning",
+            "step": f"step_{index}",
+            "message": "s" * suggestion_chars,
+        }
+        for index in range(60)
+    ]
+    step_lines = "\n".join(
+        f"  step_{index}:\n    action: confirm\n    message: {'x' * 80}" for index in range(200)
+    )
+    content = "name: realistic-large-recipe\nsteps:\n" + step_lines + "\n"
+    content += "# filler\n" * max(0, content_chars - len(content))
+    return {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "ingredients_table": "| Name | Description | Default |",
+        "orchestration_rules": "Execute every routed step.",
+        "stop_step_semantics": "Stop steps are terminal.",
+        "errors": [],
+        "suggestions": suggestions,
+        "content": content[:content_chars],
+    }
+
+
+def test_delivery_bound_summary_content_starvation_by_suggestions(tmp_path):
+    payload = _delivery_starvation_payload(content_chars=100_000, suggestion_chars=750)
+    original = json.dumps(payload)
+
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=10_000,
+    )
+
+    assert isinstance(result, str)
+    assert len(result.encode("utf-8")) <= 40_000
+    data = json.loads(result)
+    assert len(data["content"]) > 0
+
+
+def test_delivery_bound_summary_budget_reallocation_after_projection(tmp_path):
+    payload = _delivery_starvation_payload(content_chars=30_000, suggestion_chars=850)
+    payload.pop("post_prune_step_names", None)
+    original = json.dumps(payload)
+
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=10_000,
+    )
+
+    assert isinstance(result, str)
+    data = json.loads(result)
+    assert len(data["content"]) > 0
+    assert len(result.encode("utf-8")) <= 40_000
+
+
+def test_zero_delivery_limit_uses_worst_case_bound(tmp_path):
+    payload = {"success": True, "content": "x" * 80_000}
+    original = json.dumps(payload)
+
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=0,
+    )
+
+    assert isinstance(result, str)
+    bound = resolve_worst_case_delivery_bound() * 4
+    assert len(result.encode("utf-8")) <= bound
+    data = json.loads(result)
+    assert data["delivery_bound_spill"] is True
+    assert data[RESPONSE_SPILL_METADATA_KEY]["reason"] == "delivery_bound"
 
 
 def test_delivery_bound_summary_preserves_operational_fields(tmp_path):

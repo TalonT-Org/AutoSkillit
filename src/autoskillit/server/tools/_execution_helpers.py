@@ -23,7 +23,11 @@ from autoskillit.core import (
     resolve_temp_dir,
     spill_output,
 )
-from autoskillit.execution import CaptureReadError, summarize_capture
+from autoskillit.execution import (
+    CaptureReadError,
+    resolve_worst_case_delivery_bound,
+    summarize_capture,
+)
 from autoskillit.server._misc import _hook_config_overlay_path
 from autoskillit.server._response_budget import shape_json_response
 
@@ -206,9 +210,21 @@ def shape_execution_response(
     effective_delivery_token_limit: int | None = None
     backend = getattr(tool_ctx, "backend", None)
     caps = getattr(backend, "capabilities", None) if backend is not None else None
+    backend_inspected = True
 
     if isinstance(caps, BackendCapabilities):
         effective_delivery_token_limit = resolve_effective_delivery_bound(caps)
+    if backend_inspected and (
+        effective_delivery_token_limit is None or effective_delivery_token_limit <= 0
+    ):
+        fallback_limit = resolve_worst_case_delivery_bound()
+        if fallback_limit > 0:
+            logger.warning(
+                "Delivery-bound enforcement using worst-case default "
+                "(%d tokens): backend capabilities unavailable",
+                fallback_limit,
+            )
+            effective_delivery_token_limit = fallback_limit
     return shape_json_response(
         payload,
         tool_name=tool_name,

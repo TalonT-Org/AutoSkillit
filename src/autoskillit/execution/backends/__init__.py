@@ -60,6 +60,23 @@ def get_backend(name: str) -> CodingAgentBackend:
     return cls()
 
 
+def resolve_worst_case_delivery_bound() -> int:
+    """Smallest ``effective_delivery_token_limit`` across all registered backends.
+
+    Acts as the canonical "worst-case default" used when backend capabilities
+    are unavailable or zero. Returns ``0`` only if every registered backend
+    reports zero; production callers normalize that case at the enforcement
+    boundary rather than here.
+    """
+    limits: list[int] = []
+    for backend_cls in BACKEND_REGISTRY.values():
+        caps = backend_cls().capabilities
+        limit = getattr(caps, "effective_delivery_token_limit", 0)
+        if limit > 0:
+            limits.append(limit)
+    return min(limits) if limits else 0
+
+
 __all__ = [
     "BACKEND_REGISTRY",
     "CODEX_EXEC_FLAGS",
@@ -95,4 +112,5 @@ __all__ = [
     "ensure_codex_mcp_registered",
     "get_backend",
     "make_codex_scenario_player",
+    "resolve_worst_case_delivery_bound",
 ]

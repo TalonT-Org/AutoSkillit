@@ -7,6 +7,7 @@ from autoskillit.execution.backends import (
     ClaudeCodeBackend,
     CodexBackend,
     get_backend,
+    resolve_worst_case_delivery_bound,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -34,6 +35,13 @@ class TestBackendRegistry:
     def test_get_backend_codex(self) -> None:
         result = get_backend("codex")
         assert isinstance(result, CodexBackend)
+
+    def test_worst_case_delivery_bound_uses_smallest_registered_limit(self) -> None:
+        assert resolve_worst_case_delivery_bound() == min(
+            backend_cls().capabilities.effective_delivery_token_limit
+            for backend_cls in BACKEND_REGISTRY.values()
+            if backend_cls().capabilities.effective_delivery_token_limit > 0
+        )
 
     def test_all_exports_complete(self) -> None:
         from autoskillit.execution.backends import __all__ as all_exports
@@ -72,6 +80,7 @@ class TestBackendRegistry:
             "generate_codex_hooks_config",
             "get_backend",
             "make_codex_scenario_player",
+            "resolve_worst_case_delivery_bound",
             "sync_hooks_to_codex_config",
         }
         assert set(all_exports) == expected

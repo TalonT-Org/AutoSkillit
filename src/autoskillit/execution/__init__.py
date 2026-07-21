@@ -35,6 +35,7 @@ from autoskillit.execution.backends import (
     ensure_codex_mcp_registered,
     generate_codex_hooks_config,
     get_backend,
+    resolve_worst_case_delivery_bound,
     sync_hooks_to_codex_config,
 )
 from autoskillit.execution.ci import DefaultCIWatcher
@@ -245,6 +246,7 @@ __all__ = [
     "ensure_codex_mcp_registered",
     "generate_codex_hooks_config",
     "sync_hooks_to_codex_config",
+    "resolve_worst_case_delivery_bound",
     # anomaly_detection
     "detect_anomalies",
     "AnomalyKind",

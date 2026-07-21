@@ -12,8 +12,11 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     atomic_write,
+    dump_yaml_str,
     get_logger,
+    load_yaml,
 )
+from autoskillit.execution import resolve_worst_case_delivery_bound
 
 if TYPE_CHECKING:
     from autoskillit.config import OutputBudgetConfig
@@ -371,6 +374,59 @@ _DELIVERY_BOUND_PRESERVED_KEYS: tuple[str, ...] = (
 _DELIVERY_BOUND_CONTENT_KEY = "content"
 _DELIVERY_BOUND_DROPPABLE_KEYS: tuple[str, ...] = ("diagram",)
 
+_STEP_ROUTING_FIELDS: tuple[str, ...] = (
+    "on_success",
+    "on_failure",
+    "on_result",
+    "on_context_limit",
+)
+
+
+def _extract_step_skeleton(content: str, step_names: list[str]) -> str:
+    """Build a minimal YAML skeleton containing only routing fields for the given steps.
+
+    Parses ``content`` as YAML; if it has a top-level ``steps`` mapping, extracts
+    for each surviving step name only its routing fields (``on_success``,
+    ``on_failure``, ``on_result``, ``on_context_limit``) when set. Falls back to
+    a substring-tagged plain-text skeleton when YAML parsing fails (e.g.,
+    synthetic test payloads with malformed or pseudo-YAML text). The resulting
+    skeleton carries every ``step_name`` as a substring so downstream consumers
+    can locate each step in the bounded payload.
+    """
+    if not step_names:
+        return ""
+    parsed_content: Any = None
+    skeleton_yaml: str | None = None
+    try:
+        parsed_content = load_yaml(content)
+    except Exception:
+        logger.warning("step_skeleton_yaml_parse_failed", exc_info=True)
+        parsed_content = None
+    if isinstance(parsed_content, dict):
+        steps = parsed_content.get("steps")
+        skeleton_steps: dict[str, dict[str, Any]] = {}
+        if isinstance(steps, dict):
+            for step_name in step_names:
+                step_obj = steps.get(step_name)
+                if not isinstance(step_obj, dict):
+                    skeleton_steps[step_name] = {}
+                    continue
+                routing = {
+                    field: step_obj[field] for field in _STEP_ROUTING_FIELDS if field in step_obj
+                }
+                skeleton_steps[step_name] = routing
+        else:
+            skeleton_steps = {name: {} for name in step_names}
+        if skeleton_steps:
+            try:
+                skeleton_yaml = dump_yaml_str({"steps": skeleton_steps}, default_flow_style=False)
+            except Exception:
+                logger.warning("step_skeleton_dump_failed", exc_info=True)
+                skeleton_yaml = None
+    if skeleton_yaml is not None:
+        return skeleton_yaml
+    return "\n".join(f"  {name}:" for name in step_names) + "\n"
+
 
 def _delivery_bound_summary(
     parsed: dict[str, Any],
@@ -434,7 +490,11 @@ def _delivery_bound_summary(
 
         if content_is_str:
             text = content_text or ""
-            truncated = text[:head_len]
+            skeleton_len = len(skeleton_text)
+            if skeleton_text:
+                truncated = text[: max(0, head_len - skeleton_len)] + skeleton_text
+            else:
+                truncated = text[:head_len]
             envelope[_DELIVERY_BOUND_CONTENT_KEY] = truncated
             base_chars += max(0, len(text) - head_len)
         elif _DELIVERY_BOUND_CONTENT_KEY in parsed:
@@ -469,44 +529,70 @@ def _delivery_bound_summary(
             return rendered
         return None
 
-    zero_envelope = _build(0, True)
-    base_rendered = _finalize_envelope(zero_envelope, max_bytes=bound)
-    base_bytes = len(base_rendered.encode("utf-8"))
-    head_limit = max(0, bound - base_bytes - 64) if content_is_str else 0
+    post_prune_step_names_raw = parsed.get("post_prune_step_names", [])
+    step_names_for_floor: list[str] = (
+        list(post_prune_step_names_raw) if isinstance(post_prune_step_names_raw, list) else []
+    )
+    if content_is_str and step_names_for_floor:
+        skeleton_text = _extract_step_skeleton(content_text or "", step_names_for_floor)
+        content_floor = len(skeleton_text.encode("utf-8"))
+    else:
+        skeleton_text = ""
+        content_floor = 0
 
-    while head_limit > 0 and content_is_str:
-        rendered = _fits(_build(head_limit, True))
-        if rendered is not None:
-            return rendered
-        head_limit //= 2
+    def _compute_head_limit(value_projector: Any = None) -> int:
+        probe_envelope = _build(0, True, value_projector=value_projector)
+        probe_rendered = _finalize_envelope(probe_envelope, max_bytes=bound)
+        probe_bytes = len(probe_rendered.encode("utf-8"))
+        if not content_is_str:
+            return 0
+        return max(content_floor, bound - probe_bytes - 64)
 
-    if content_is_str:
-        zero_head_envelope = _build(0, True)
-        rendered = _fits(zero_head_envelope)
-        if rendered is not None:
-            return rendered
+    def _attempt_with_projector(value_projector: Any) -> str | None:
+        if not content_is_str:
+            rendered = _fits(_build(0, False, value_projector=value_projector))
+            if rendered is not None:
+                return rendered
+            return None
+        head_limit = _compute_head_limit(value_projector)
+        if head_limit < content_floor:
+            return None
+        candidate = head_limit
+        while candidate >= content_floor:
+            rendered = _fits(_build(candidate, True, value_projector=value_projector))
+            if rendered is not None:
+                return rendered
+            rendered = _fits(_build(candidate, False, value_projector=value_projector))
+            if rendered is not None:
+                return rendered
+            if candidate == content_floor:
+                break
+            candidate = max(content_floor, candidate // 2)
+        return None
 
-    rendered = _fits(_build(0, False))
+    rendered = _attempt_with_projector(None)
     if rendered is not None:
         return rendered
 
-    if present_preserved:
-        value_limit = max(16, bound // (len(present_preserved) + 2))
-        while value_limit >= 16:
+    if not present_preserved:
+        return None
 
-            def _project_with_limit(value: Any, _limit: int = value_limit) -> Any:
-                projected, _chars, _items = _project_value(value, _limit)
-                return projected
+    value_limit = max(16, bound // (len(present_preserved) + 2))
+    while value_limit >= 16:
 
-            rendered = _fits(_build(0, False, value_projector=_project_with_limit))
-            if rendered is not None:
-                return rendered
-            value_limit //= 2
+        def _project_with_limit(value: Any, _limit: int = value_limit) -> Any:
+            projected, _chars, _items = _project_value(value, _limit)
+            return projected
 
-        minimal_envelope = _build(0, False, value_projector=_minimal_same_type)
-        rendered = _fits(minimal_envelope)
+        rendered = _attempt_with_projector(_project_with_limit)
         if rendered is not None:
             return rendered
+        value_limit //= 2
+
+    minimal_envelope = _build(0, False, value_projector=_minimal_same_type)
+    rendered = _fits(minimal_envelope)
+    if rendered is not None:
+        return rendered
 
     return None
 
@@ -656,6 +742,8 @@ def enforce_response_budget(
         )
     original_bytes = original.encode("utf-8")
     original_size = len(original_bytes)
+    if effective_delivery_token_limit == 0:
+        effective_delivery_token_limit = resolve_worst_case_delivery_bound() or None
     over_delivery_bound = (
         effective_delivery_token_limit is not None
         and effective_delivery_token_limit > 0

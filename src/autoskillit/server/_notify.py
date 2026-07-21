@@ -18,6 +18,7 @@ from autoskillit.core import (
     get_logger,
     resolve_effective_delivery_bound,
 )
+from autoskillit.execution import resolve_worst_case_delivery_bound
 from autoskillit.server._response_budget import (
     bounded_response_budget_failure,
     enforce_response_budget,
@@ -143,11 +144,24 @@ def track_response_size(
                 temp_dir / "responses" / tool_name if isinstance(temp_dir, Path) else None
             )
             effective_delivery_token_limit: int | None = None
+            backend_inspected = False
             if ctx is not None:
                 backend = getattr(ctx, "backend", None)
+                backend_inspected = True
                 caps = getattr(backend, "capabilities", None) if backend is not None else None
                 if isinstance(caps, BackendCapabilities):
                     effective_delivery_token_limit = resolve_effective_delivery_bound(caps)
+            if backend_inspected and (
+                effective_delivery_token_limit is None or effective_delivery_token_limit <= 0
+            ):
+                fallback_limit = resolve_worst_case_delivery_bound()
+                if fallback_limit > 0:
+                    logger.warning(
+                        "Delivery-bound enforcement using worst-case default "
+                        "(%d tokens): backend capabilities unavailable",
+                        fallback_limit,
+                    )
+                    effective_delivery_token_limit = fallback_limit
             try:
                 result = enforce_response_budget(
                     result,

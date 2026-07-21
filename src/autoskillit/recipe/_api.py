@@ -105,6 +105,55 @@ from autoskillit.recipe.validator import (
 
 logger = get_logger(__name__)
 
+_MAX_SUGGESTIONS_COUNT = 50
+_MAX_SUGGESTIONS_BYTES = 16_384
+
+
+def _json_utf8_bytes(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+def _bounded_append(
+    target: list[Any],
+    items: list[Any] | dict[str, Any],
+    max_count: int,
+    max_bytes: int,
+) -> None:
+    """Append findings while retaining a bounded prefix and one truncation sentinel."""
+    incoming = [items] if isinstance(items, dict) else list(items)
+    existing_sentinel = (
+        target[-1]
+        if target and isinstance(target[-1], dict) and target[-1].get("truncated") is True
+        else None
+    )
+    if existing_sentinel is not None:
+        previous_count = existing_sentinel.get("original_count", len(target) - 1)
+        original_count = (
+            previous_count if isinstance(previous_count, int) else len(target) - 1
+        ) + len(incoming)
+        candidates = target[:-1]
+    else:
+        original_count = len(target) + len(incoming)
+        candidates = [*target, *incoming]
+        if len(candidates) <= max_count and _json_utf8_bytes(candidates) <= max_bytes:
+            target[:] = candidates
+            return
+
+    kept = candidates[: max(0, max_count - 1)]
+    while True:
+        sentinel = {
+            "truncated": True,
+            "original_count": original_count,
+            "shown_count": len(kept),
+        }
+        bounded = [*kept, sentinel]
+        if len(bounded) <= max_count and _json_utf8_bytes(bounded) <= max_bytes:
+            target[:] = bounded
+            return
+        if not kept:
+            raise ValueError("finding bounds are too small for the truncation sentinel")
+        kept.pop()
+
 
 def _t(label: str, t0: float, name: str) -> float:
     """Log elapsed time for a pipeline stage and return current time.
@@ -367,11 +416,18 @@ def load_and_validate(
             )
 
             # Stage: structural validation on active recipe
-            errors = validate_recipe_structure(active_recipe)
+            raw_errors = validate_recipe_structure(active_recipe)
+            errors.clear()
+            _bounded_append(errors, raw_errors, _MAX_SUGGESTIONS_COUNT, _MAX_SUGGESTIONS_BYTES)
             if combined_recipe is not None:
                 # Dual validation: also validate the combined (merged) graph
                 combined_errors = validate_recipe_structure(combined_recipe)
-                errors.extend(f"[combined] {e}" for e in combined_errors)
+                _bounded_append(
+                    errors,
+                    [f"[combined] {e}" for e in combined_errors],
+                    _MAX_SUGGESTIONS_COUNT,
+                    _MAX_SUGGESTIONS_BYTES,
+                )
             t0 = _t("validate_recipe_structure", t0, name)
 
             # Stage: resolve skill_resolver (needed by both pre-prune and post-prune contexts)
@@ -419,14 +475,22 @@ def load_and_validate(
             # Must run inside try so active_recipe and errors are both in scope.
             _dangling_errors = _validate_no_dangling_routes(active_recipe)
             if _dangling_errors:
-                errors.extend(f"[post-prune] dangling route: {e}" for e in _dangling_errors)
+                _bounded_append(
+                    errors,
+                    [f"[post-prune] dangling route: {e}" for e in _dangling_errors],
+                    _MAX_SUGGESTIONS_COUNT,
+                    _MAX_SUGGESTIONS_BYTES,
+                )
                 raw = ""
             # Cross-check: raw YAML route refs must match the Python model exactly.
             # Catches any refs that the model repaired but the YAML repair pass missed.
             _route_consistency_errors = _validate_route_consistency(raw, active_recipe)
             if _route_consistency_errors:
-                errors.extend(
-                    f"[post-prune] route consistency: {e}" for e in _route_consistency_errors
+                _bounded_append(
+                    errors,
+                    [f"[post-prune] route consistency: {e}" for e in _route_consistency_errors],
+                    _MAX_SUGGESTIONS_COUNT,
+                    _MAX_SUGGESTIONS_BYTES,
                 )
                 raw = ""
             t0 = _t("prune_skipped_steps", t0, name)
@@ -521,7 +585,9 @@ def load_and_validate(
             _suppressed = suppressed or []
             if name in _suppressed:
                 semantic_suggestions = filter_version_rule(semantic_suggestions)
-            suggestions.extend(semantic_suggestions)
+            _bounded_append(
+                suggestions, semantic_suggestions, _MAX_SUGGESTIONS_COUNT, _MAX_SUGGESTIONS_BYTES
+            )
 
             # Stage: hidden ingredient interpolation
             raw = _resolve_hidden_inputs_in_content(raw, active_recipe, ingredient_overrides)
@@ -532,7 +598,12 @@ def load_and_validate(
             contract_findings: list[dict[str, Any]] = []
             if contract:
                 contract_findings = validate_recipe_cards(active_recipe, contract)
-                suggestions.extend(contract_findings)
+                _bounded_append(
+                    suggestions,
+                    contract_findings,
+                    _MAX_SUGGESTIONS_COUNT,
+                    _MAX_SUGGESTIONS_BYTES,
+                )
             t0 = _t("contract_card", t0, name)
 
             # Stage: staleness check
@@ -542,47 +613,66 @@ def load_and_validate(
                 stale = check_contract_staleness(
                     contract, recipe_path=match.path, cache_path=staleness_cache_path
                 )
-                suggestions.extend(stale_to_suggestions(stale))
+                _bounded_append(
+                    suggestions,
+                    stale_to_suggestions(stale),
+                    _MAX_SUGGESTIONS_COUNT,
+                    _MAX_SUGGESTIONS_BYTES,
+                )
             t0 = _t("staleness_check", t0, name)
 
             # Stage: diagram
             if check_diagram_staleness(name, recipes_dir, match.path):
-                suggestions.extend(diagram_stale_to_suggestions(name))
+                _bounded_append(
+                    suggestions,
+                    diagram_stale_to_suggestions(name),
+                    _MAX_SUGGESTIONS_COUNT,
+                    _MAX_SUGGESTIONS_BYTES,
+                )
             t0 = _t("diagram", t0, name)
 
             valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
 
     except YAMLError as exc:
         logger.warning("Recipe YAML parse error", name=name, exc_info=True)
-        suggestions.append(
+        _bounded_append(
+            suggestions,
             {
                 "rule": "validation-error",
                 "severity": "error",
                 "step": "(validation-pipeline)",
                 "message": f"YAML parse error: {exc}",
-            }
+            },
+            _MAX_SUGGESTIONS_COUNT,
+            _MAX_SUGGESTIONS_BYTES,
         )
         valid = False
     except ValueError as exc:
         logger.warning("Recipe structure invalid", name=name, exc_info=True)
-        suggestions.append(
+        _bounded_append(
+            suggestions,
             {
                 "rule": "validation-error",
                 "severity": "error",
                 "step": "(validation-pipeline)",
                 "message": f"Invalid recipe structure: {exc}",
-            }
+            },
+            _MAX_SUGGESTIONS_COUNT,
+            _MAX_SUGGESTIONS_BYTES,
         )
         valid = False
     except (FileNotFoundError, OSError) as exc:
         logger.warning("Recipe file not found or unreadable", name=name, exc_info=True)
-        suggestions.append(
+        _bounded_append(
+            suggestions,
             {
                 "rule": "validation-error",
                 "severity": "error",
                 "step": "(validation-pipeline)",
                 "message": f"File error: {exc}",
-            }
+            },
+            _MAX_SUGGESTIONS_COUNT,
+            _MAX_SUGGESTIONS_BYTES,
         )
         valid = False
 

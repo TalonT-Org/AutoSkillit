@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -172,6 +173,57 @@ def test_load_recipe_result_has_post_prune_step_names(tmp_path):
     assert "step_a" in post_prune
     assert "step_c" in post_prune
     assert "step_b" not in post_prune, "step_b should be pruned (enable_step_b=false)"
+
+
+def test_suggestions_and_errors_bounded_at_source(tmp_path, monkeypatch):
+    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
+
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
+    bounded_findings_yaml = _RECIPE_NO_RULES.replace(
+        "name: test-recipe-no-rules", "name: bounded-findings"
+    )
+    _setup_project_recipe(tmp_path, "bounded-findings", bounded_findings_yaml)
+
+    structural_errors = [f"structural-error-{index}: " + "e" * 900 for index in range(80)]
+    semantic_suggestions = [
+        {
+            "rule": f"semantic-rule-{index}",
+            "severity": "warning",
+            "step": f"step-{index}",
+            "message": "s" * 900,
+        }
+        for index in range(80)
+    ]
+    monkeypatch.setattr(
+        api_mod,
+        "validate_recipe_structure",
+        lambda _recipe: structural_errors,
+    )
+    monkeypatch.setattr(
+        api_mod,
+        "findings_to_dicts",
+        lambda _findings: semantic_suggestions,
+    )
+    monkeypatch.setattr(
+        api_mod,
+        "check_diagram_staleness",
+        lambda _name, _dir, _path: False,
+    )
+
+    result = api_mod.load_and_validate("bounded-findings", project_dir=tmp_path)
+
+    for key in ("suggestions", "errors"):
+        values = result[key]
+        assert len(values) <= api_mod._MAX_SUGGESTIONS_COUNT
+        assert len(json.dumps(values, ensure_ascii=False).encode("utf-8")) <= (
+            api_mod._MAX_SUGGESTIONS_BYTES
+        )
+        sentinel = next(
+            item for item in values if isinstance(item, dict) and item.get("truncated") is True
+        )
+        assert sentinel["original_count"] == 80
+        assert sentinel["shown_count"] == len(values) - 1
 
 
 # ---------------------------------------------------------------------------

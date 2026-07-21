@@ -244,3 +244,33 @@ class TestTrackResponseSize:
         )
         assert event.kwargs["cause"] == "internal_invariant_failed"
         assert event.kwargs["original_utf8_bytes"] == len(b"small")
+
+    @pytest.mark.anyio
+    async def test_capability_fail_closed_on_missing_backend(self, tmp_path):
+        from autoskillit.server._notify import track_response_size
+        from autoskillit.server._response_budget import RESPONSE_SPILL_METADATA_KEY
+
+        response_log = MagicMock(record=MagicMock(return_value=False))
+        ctx = MagicMock(
+            backend=None,
+            response_log=response_log,
+            temp_dir=tmp_path,
+            config=MagicMock(
+                mcp_response=MagicMock(alert_threshold_tokens=0),
+                output_budget=OutputBudgetConfig(),
+            ),
+        )
+        payload = json.dumps({"success": True, "content": "x" * 80_000})
+
+        @track_response_size("open_kitchen")
+        async def fake_handler():
+            return payload
+
+        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx):
+            result = await fake_handler()
+
+        assert isinstance(result, str)
+        assert len(result.encode("utf-8")) <= 40_000
+        data = json.loads(result)
+        assert data["delivery_bound_spill"] is True
+        assert data[RESPONSE_SPILL_METADATA_KEY]["reason"] == "delivery_bound"

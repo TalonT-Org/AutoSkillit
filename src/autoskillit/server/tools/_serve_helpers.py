@@ -19,10 +19,10 @@ from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     atomic_write,
     get_logger,
-    step_byte_ranges_from_yaml,
 )
 from autoskillit.recipe import (  # noqa: F401 — canonical extractor reused by build_routing_edges_by_step default
     _extract_routing_edges,
+    step_byte_ranges_from_yaml,
 )
 
 if TYPE_CHECKING:
@@ -227,7 +227,7 @@ def _compute_step_byte_ranges(content: str) -> dict[str, tuple[int, int]]:
     """Return ``{step_name: (start, end)}`` UTF-8 byte offsets within *content*.
 
     Thin wrapper over
-    :func:`autoskillit.core.step_byte_ranges_from_yaml` that keeps the
+    :func:`autoskillit.recipe.step_byte_ranges_from_yaml` that keeps the
     ``_serve_helpers``-local symbol stable for downstream callers and
     tests. The yaml-handling and ``isinstance(..., MappingNode)``
     fail-open logic lives in ``core.io`` so that yaml imports are

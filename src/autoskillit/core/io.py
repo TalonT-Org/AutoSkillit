@@ -44,13 +44,13 @@ __all__ = [
     "compose_yaml",
     "ensure_project_temp",
     "load_yaml",
+    "mapping_entry_byte_ranges_from_yaml",
     "dump_yaml_str",
     "read_versioned_json",
     "resolve_skill_temp_dir",
     "resolve_temp_dir",
     "safe_upsert_section",
     "spill_output",
-    "step_byte_ranges_from_yaml",
     "temp_dir_display_str",
     "write_versioned_json",
 ]
@@ -422,11 +422,13 @@ def compose_yaml(source: str) -> yaml.Node | None:
     return yaml.compose(source, Loader=_Loader)
 
 
-def step_byte_ranges_from_yaml(content: str) -> dict[str, tuple[int, int]]:
-    """Compute ``{step_name: (start_byte, end_byte)}`` for the ``steps:`` mapping.
+def mapping_entry_byte_ranges_from_yaml(
+    content: str, mapping_path: tuple[str, ...]
+) -> dict[str, tuple[int, int]]:
+    """Compute UTF-8 byte ranges for entries under a YAML mapping path.
 
     Walks the persisted YAML ``content`` field via :func:`compose_yaml` to read
-    each top-level step's key/value ``start_mark`` / ``end_mark`` character
+    each selected mapping entry's key/value ``start_mark`` / ``end_mark`` character
     offsets, then converts them to UTF-8 byte offsets so the result can be
     used directly to slice the payload back at the byte level.
 
@@ -443,7 +445,7 @@ def step_byte_ranges_from_yaml(content: str) -> dict[str, tuple[int, int]]:
     ``tests/core/test_io.py::test_only_yaml_imports_yaml_directly``).
     """
     out: dict[str, tuple[int, int]] = {}
-    if not content:
+    if not content or not mapping_path:
         return out
     try:
         root = compose_yaml(content)
@@ -451,19 +453,23 @@ def step_byte_ranges_from_yaml(content: str) -> dict[str, tuple[int, int]]:
         return out
     if not isinstance(root, yaml.MappingNode):
         return out
-    for key_node, value_node in root.value:
-        if getattr(key_node, "value", None) != "steps":
-            continue
-        if not isinstance(value_node, yaml.MappingNode):
+    current = root
+    for segment in mapping_path:
+        next_node = None
+        for key_node, value_node in current.value:
+            if getattr(key_node, "value", None) == segment:
+                next_node = value_node
+                break
+        if not isinstance(next_node, yaml.MappingNode):
             return out
-        for step_key, step_val in value_node.value:
-            start_idx = step_key.start_mark.index
-            end_idx = step_val.end_mark.index
-            out[step_key.value] = (
-                len(content[:start_idx].encode("utf-8")),
-                len(content[:end_idx].encode("utf-8")),
-            )
-        return out
+        current = next_node
+    for entry_key, entry_value in current.value:
+        start_idx = entry_key.start_mark.index
+        end_idx = entry_value.end_mark.index
+        out[str(entry_key.value)] = (
+            len(content[:start_idx].encode("utf-8")),
+            len(content[:end_idx].encode("utf-8")),
+        )
     return out
 
 

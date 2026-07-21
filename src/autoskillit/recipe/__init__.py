@@ -74,6 +74,7 @@ from autoskillit.recipe.io import (  # noqa: E402
     list_recipes,
     load_campaign_recipes_in_packs,
     load_recipe,
+    step_byte_ranges_from_yaml,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.methodology_disambiguation import (  # noqa: E402
@@ -309,6 +310,7 @@ __all__ = [
     "write_staleness_cache",
     "RuleFinding",
     "load_recipe",
+    "step_byte_ranges_from_yaml",
     "list_recipes",
     "find_recipe_by_name",
     "iter_steps_with_context",

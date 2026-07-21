@@ -376,7 +376,10 @@ def build_recipe_envelope(
         ).encode("utf-8")
     )
 
-    remaining = max(0, bound_bytes - skeleton_overhead - pull_overhead - envelope_bytes)
+    remaining = max(
+        0,
+        bound_bytes - skeleton_overhead - pull_overhead - envelope_bytes - 64,
+    )
 
     def _project_priority_strings(keys: tuple[str, ...]) -> None:
         nonlocal remaining
@@ -464,19 +467,7 @@ def build_recipe_envelope(
         "pull_tool": "get_recipe_section",
     }
     envelope["delivery_bound_spill"] = True
-    # Reserve a 64-byte structural-overhead budget for the envelope's
-    # outer-key braces, separator commas, and UTF-8 quoting that the
-    # naive difference (bound_bytes − overheads − envelope_bytes)
-    # doesn't capture. Without this reserve, ``json.dumps(envelope)``
-    # lands just within the bound but trips the fail-closed
-    # ``recipe_envelope_exceeds_delivery_bound`` envelope
-    # (commit 3fee3f9d3 originally added this reserve; commit d3652a3e6
-    # moved it inside the allocator and broke the tight-budget priority
-    # tests, then fully removed it — we restore it here as a
-    # finalize-only check so the priority-field allocator still sees
-    # the full content budget).
-    serialized_envelope = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
-    if len(serialized_envelope) <= bound_bytes - 64:
+    if len(json.dumps(envelope, ensure_ascii=False).encode("utf-8")) <= bound_bytes:
         return envelope
 
     fallback_candidates: tuple[dict[str, Any], ...] = (

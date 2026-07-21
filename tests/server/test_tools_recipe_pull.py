@@ -580,7 +580,11 @@ def test_envelope_priority_fields_share_floor_under_tight_budget(tmp_path: Path)
     sk, pl, env = _envelope_overheads(tmp_path, "test-recipe")
     # remaining ≈ 500 bytes (well above combined overhead ~54 bytes,
     # well below union of full field lengths) — forces a content split.
-    bound_bytes = sk + pl + env + 500
+    # The +64 compensates for the 64-byte envelope serialization
+    # structural-overhead reserve (``build_recipe_envelope`` reserves
+    # 64 bytes for outer-key braces / separators / UTF-8 quoting the
+    # per-field allocator cannot account for).
+    bound_bytes = sk + pl + env + 500 + 64
 
     envelope = build_recipe_envelope(
         payload,
@@ -688,7 +692,11 @@ def test_envelope_priority_field_truncation_handles_multibyte_utf8(tmp_path: Pat
     sk, pl, env = _envelope_overheads(tmp_path, "test-recipe")
     # remaining = 65 bytes → pool = 40 → take = 40 → byte 40 lands in
     # the middle of the 4-byte emoji (continuation byte at index 40).
-    bound_bytes = sk + pl + env + 65
+    # The +64 compensates for the 64-byte envelope serialization
+    # structural-overhead reserve (``build_recipe_envelope`` reserves
+    # 64 bytes for outer-key braces / separators / UTF-8 quoting the
+    # per-field allocator cannot account for).
+    bound_bytes = sk + pl + env + 65 + 64
 
     envelope = build_recipe_envelope(
         payload,

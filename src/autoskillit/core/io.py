@@ -41,6 +41,7 @@ __all__ = [
     "ReadResult",
     "YAMLError",
     "atomic_write",
+    "compose_yaml",
     "ensure_project_temp",
     "load_yaml",
     "dump_yaml_str",
@@ -406,6 +407,18 @@ def load_yaml(source: os.PathLike[str] | str) -> Any:
         with open(source, "rb") as fh:
             return yaml.load(fh, Loader=_Loader)
     return yaml.load(source, Loader=_Loader)
+
+
+def compose_yaml(source: str) -> yaml.Node | None:
+    """Parse *source* into a mark-annotated YAML node tree (not a data structure).
+
+    Unlike :func:`load_yaml`, retains ``start_mark`` / ``end_mark`` character
+    offsets on every node, which the byte-range tracker in
+    ``server/tools/_serve_helpers.py`` uses to compute per-step byte spans
+    of the original ``content`` text. Returns ``None`` when the source is
+    empty (matches :func:`yaml.compose` semantics).
+    """
+    return yaml.compose(source, Loader=_Loader)
 
 
 def dump_yaml_str(data: Any, **kwargs: Any) -> str:

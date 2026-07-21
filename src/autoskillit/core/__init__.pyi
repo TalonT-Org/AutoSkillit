@@ -56,6 +56,7 @@ from .io import _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN
 from .io import ReadResult as ReadResult
 from .io import YAMLError as YAMLError
 from .io import atomic_write as atomic_write
+from .io import compose_yaml as compose_yaml
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
 from .io import load_yaml as load_yaml

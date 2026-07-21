@@ -14,11 +14,17 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
+
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     atomic_write,
+    compose_yaml,
     get_logger,
+)
+from autoskillit.recipe import (  # noqa: F401 — canonical extractor reused by build_routing_edges_by_step default
+    _extract_routing_edges,
 )
 
 if TYPE_CHECKING:
@@ -219,98 +225,89 @@ def _step_one_line_summary(step: RecipeStep) -> str:
     return ""
 
 
-def _local_extract_routing_edges(step: Any) -> list[Any]:
-    """Extract (edge_type, target) routing edges from a step without
-    importing the recipe package at module level.
+def _compute_step_byte_ranges(content: str) -> dict[str, tuple[int, int]]:
+    """Return ``{step_name: (start, end)}`` UTF-8 byte offsets within *content*.
 
-    Mirrors the production ``_extract_routing_edges`` from
-    ``recipe/_analysis_graph.py`` for the fields the envelope skeleton
-    needs: ``on_success``, ``on_failure``, ``on_context_limit``,
-    ``on_rate_limit``, ``on_exhausted``, ``on_result.conditions[].route``,
-    and ``on_result.routes``. Kept local to avoid a cross-package
-    submodule import (REQ-ARCH-001). The recipe module is the canonical
-    source of truth; this helper exists to keep the import graph clean.
+    Composes the persisted ``content`` field into a mark-annotated YAML
+    node tree (via :func:`autoskillit.core.compose_yaml`) and walks the
+    top-level ``steps:`` mapping to read each step key/value pair's
+    ``start_mark`` / ``end_mark``. Offsets are returned as UTF-8 byte
+    counts (not codepoint counts) so they can be used directly to slice
+    the payload back at the byte level.
+
+    Fails open: a malformed or non-mapping document returns ``{}``
+    without raising. The guards (rather than a bare ``except
+    yaml.YAMLError``) handle the documented case where ``yaml.compose()``
+    succeeds but produces a non-mapping root — a bare sequence, or a
+    ``steps:`` key whose value is a scalar — which raises
+    ``TypeError`` / ``ValueError`` from tuple-unpacking under the naive
+    implementation.
     """
-    edges: list[Any] = []
-
-    for field_name, edge_type in (
-        ("on_success", "success"),
-        ("on_failure", "failure"),
-        ("on_context_limit", "context_limit"),
-        ("on_rate_limit", "rate_limit"),
-        ("on_exhausted", "exhausted"),
-    ):
-        target = getattr(step, field_name, None)
-        if target:
-            edges.append(_LocalRouteEdge(edge_type=edge_type, target=target))
-
-    on_result = getattr(step, "on_result", None)
-    if on_result is not None:
-        conditions = getattr(on_result, "conditions", None)
-        if conditions:
-            for cond in conditions:
-                route = getattr(cond, "route", None)
-                when = getattr(cond, "when", None)
-                if route:
-                    edges.append(
-                        _LocalRouteEdge(edge_type="result_condition", target=route, condition=when)
-                    )
-        routes = getattr(on_result, "routes", None)
-        if routes:
-            for key, target in routes.items():
-                if target:
-                    edges.append(
-                        _LocalRouteEdge(edge_type="result_condition", target=target, condition=key)
-                    )
-    return edges
-
-
-class _LocalRouteEdge:
-    """Lightweight substitute for ``RouteEdge`` from ``recipe/_analysis_graph.py``.
-
-    Defined locally to keep ``_serve_helpers.py`` free of recipe-package
-    imports (REQ-ARCH-001 cross-package submodule prohibition).
-    """
-
-    __slots__ = ("edge_type", "target", "condition")
-
-    def __init__(self, edge_type: str, target: str, condition: str | None = None) -> None:
-        self.edge_type = edge_type
-        self.target = target
-        self.condition = condition
+    if not content:
+        return {}
+    try:
+        root = compose_yaml(content)
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(root, yaml.MappingNode):
+        return {}
+    ranges: dict[str, tuple[int, int]] = {}
+    for key_node, value_node in root.value:
+        if getattr(key_node, "value", None) != "steps":
+            continue
+        if not isinstance(value_node, yaml.MappingNode):
+            continue
+        for step_key, step_val in value_node.value:
+            start_idx = step_key.start_mark.index
+            end_idx = step_val.end_mark.index
+            ranges[step_key.value] = (
+                len(content[:start_idx].encode("utf-8")),
+                len(content[:end_idx].encode("utf-8")),
+            )
+    return ranges
 
 
 def extract_step_skeleton(
     post_prune_step_names: list[str],
     routing_edges_by_step: dict[str, list[tuple[str, str]]],
     step_summaries: dict[str, str] | None = None,
+    byte_ranges: dict[str, tuple[int, int]] | None = None,
 ) -> dict[str, Any]:
     """Build a compact step-flow skeleton from parsed post-prune step data.
 
     The skeleton is a list of per-step dicts (name + one-line summary +
-    outgoing routing edges). Combined with the byte-range index in the
-    persisted artifact, the orchestrator can route without pulling a full
-    step body, and pull-on-demand only the step it is about to execute.
+    outgoing routing edges + optional byte range). Combined with the
+    byte-range index in the persisted artifact, the orchestrator can
+    route without pulling a full step body, and pull-on-demand only the
+    step it is about to execute.
 
     *post_prune_step_names* — order-preserving list of step names (from
         ``load_and_validate``'s ``post_prune_step_names`` result field).
     *routing_edges_by_step* — name → list of (edge_type, target) tuples
         derived from ``_extract_routing_edges`` for each step.
     *step_summaries* — optional name → one-line summary override.
+    *byte_ranges* — optional name → (start, end) UTF-8 byte offsets
+        within the persisted ``content`` field. When provided for a
+        given step, the skeleton's per-step entry gains a
+        ``byte_range`` field carrying ``[start, end]``; steps absent
+        from the map get no such key (fail-open, matching the
+        edges/summary fallback pattern above).
     """
     skeleton: list[dict[str, Any]] = []
     for name in post_prune_step_names:
         edges = routing_edges_by_step.get(name) or []
         summary = (step_summaries or {}).get(name) or ""
-        skeleton.append(
-            {
-                "name": name,
-                "summary": summary,
-                "edges": [
-                    {"type": edge_type, "target": target} for edge_type, target in edges if target
-                ],
-            }
-        )
+        entry: dict[str, Any] = {
+            "name": name,
+            "summary": summary,
+            "edges": [
+                {"type": edge_type, "target": target} for edge_type, target in edges if target
+            ],
+        }
+        span = (byte_ranges or {}).get(name)
+        if span is not None:
+            entry["byte_range"] = list(span)
+        skeleton.append(entry)
     return {
         "step_count": len(skeleton),
         "steps": skeleton,
@@ -557,7 +554,7 @@ def build_step_summaries(active_recipe_steps: Any) -> dict[str, str]:
 def build_routing_edges_by_step(
     active_recipe_steps: Any,
     *,
-    edge_extractor: Any,
+    edge_extractor: Any = _extract_routing_edges,
 ) -> dict[str, list[tuple[str, str]]]:
     """Build a {step_name: [(edge_type, target), ...]} dict via edge_extractor.
 
@@ -644,19 +641,16 @@ def maybe_envelope_recipe_response(
         return payload
 
     # existing skeleton/edges construction (post_prune_names, summaries,
-    # edges via build_routing_edges_by_step) is unchanged here and feeds
-    # extract_step_skeleton; a later part adds byte-range tracking to
-    # this block.
+    # edges via build_routing_edges_by_step) feeds extract_step_skeleton
+    # plus the new byte-range field computed from the persisted
+    # ``content`` payload field.
     post_prune_raw = payload.get("post_prune_step_names") or []
     if not isinstance(post_prune_raw, list):
         post_prune_raw = []
     post_prune_names = [n for n in post_prune_raw if isinstance(n, str)]
     summaries = build_step_summaries(tool_ctx.active_recipe_steps)
     try:
-        edges = build_routing_edges_by_step(
-            tool_ctx.active_recipe_steps,
-            edge_extractor=_local_extract_routing_edges,
-        )
+        edges = build_routing_edges_by_step(tool_ctx.active_recipe_steps)
     except Exception:
         get_logger(__name__).warning(
             "recipe_routing_edges_extraction_failed",
@@ -664,7 +658,8 @@ def maybe_envelope_recipe_response(
             exc_info=True,
         )
         edges = {}
-    skeleton = extract_step_skeleton(post_prune_names, edges, summaries)
+    byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
+    skeleton = extract_step_skeleton(post_prune_names, edges, summaries, byte_ranges=byte_ranges)
 
     bound_bytes = effective_delivery_token_limit * 4
     return build_recipe_envelope(

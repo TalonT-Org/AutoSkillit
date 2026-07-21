@@ -99,6 +99,7 @@ def test_envelope_fits_every_backend_by_construction(
     bound_bytes = _bound_bytes(bound_tokens)
     envelope = build_recipe_envelope(
         payload,
+        recipe_name=recipe_name,
         artifact_path=str(artifact_path),
         artifact_sha256=sha256,
         skeleton=skeleton,
@@ -135,6 +136,7 @@ def test_envelope_carries_priority_fields_verbatim(tmp_path: Path) -> None:
     }
     envelope = build_recipe_envelope(
         payload,
+        recipe_name="test-recipe",
         artifact_path=str(tmp_path / "x.log"),
         artifact_sha256="0" * 64,
         skeleton=extract_step_skeleton([], {}),
@@ -241,7 +243,8 @@ def test_maybe_envelope_returns_envelope_when_payload_oversized(
 
 def test_maybe_envelope_passthrough_when_payload_fits(tmp_path: Path) -> None:
     """When the payload fits the bound, maybe_envelope returns the
-    payload unchanged (Claude backend path: backward compatible)."""
+    payload unchanged AND unconditionally persists the artifact so the
+    pull tool always has a backing store (Part A REQ-B02)."""
     ctx = _make_minimal_ctx(tmp_path)
     ctx.recipe_name = "any_recipe"
 
@@ -254,8 +257,80 @@ def test_maybe_envelope_passthrough_when_payload_fits(tmp_path: Path) -> None:
         tool_ctx=ctx,
         effective_delivery_token_limit=bound_tokens,
     )
-    assert result == payload
-    assert not (tmp_path / "open_kitchen_any_recipe.log").exists()
+    assert result is payload
+    artifact_path = _recipe_artifact_path(ctx.temp_dir, "open_kitchen", "any_recipe")
+    assert Path(artifact_path).exists()
+    assert Path(artifact_path).read_text(encoding="utf-8") == json.dumps(
+        payload, ensure_ascii=False
+    )
+
+
+def test_maybe_envelope_persists_artifact_even_when_payload_fits(tmp_path: Path) -> None:
+    """When the payload fits, the returned value is the original payload
+    unchanged AND the artifact file is created at the deterministic path
+    with content matching ``json.dumps(payload, ensure_ascii=False)``.
+    Persistence is unconditional — gated only by ``temp_dir`` availability."""
+    ctx = _make_minimal_ctx(tmp_path)
+    ctx.recipe_name = "any_recipe"
+
+    payload = {"success": True, "content": "short"}
+    bound_tokens = 10_000  # 40KB — plenty for "short"
+    result = maybe_envelope_recipe_response(
+        payload,
+        tool_name="open_kitchen",
+        recipe_name="any_recipe",
+        tool_ctx=ctx,
+        effective_delivery_token_limit=bound_tokens,
+    )
+    assert result is payload
+    artifact_path = _recipe_artifact_path(ctx.temp_dir, "open_kitchen", "any_recipe")
+    assert artifact_path.exists(), (
+        "artifact file must exist at the deterministic path even when the "
+        "payload fits the bound (Part A REQ-B02 unconditional persistence)"
+    )
+    assert Path(artifact_path).read_text(encoding="utf-8") == json.dumps(
+        payload, ensure_ascii=False
+    )
+
+
+def test_maybe_envelope_persists_exactly_once_when_oversized(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the payload is oversized, ``persist_recipe_artifact`` is
+    invoked exactly once — guards against the regression where the
+    oversized branch contained a second persistence call alongside
+    the unconditional early-call (Part A REQ-B02 single-call invariant)."""
+    from autoskillit.server.tools import _serve_helpers
+
+    real_persist = _serve_helpers.persist_recipe_artifact
+    calls: list[tuple[str, str]] = []
+
+    def spy_persist(artifact_dir, *, tool_name, recipe_name, payload):
+        calls.append((tool_name, recipe_name))
+        return real_persist(
+            artifact_dir, tool_name=tool_name, recipe_name=recipe_name, payload=payload
+        )
+
+    monkeypatch.setattr(_serve_helpers, "persist_recipe_artifact", spy_persist)
+
+    ctx = _make_minimal_ctx(tmp_path)
+    ctx.recipe_name = "any_recipe"
+
+    payload = {"success": True, "content": "a" * 10_000}
+    # Force oversized: 1-token bound → envelope branch
+    bound_tokens = 1
+    result = maybe_envelope_recipe_response(
+        payload,
+        tool_name="open_kitchen",
+        recipe_name="any_recipe",
+        tool_ctx=ctx,
+        effective_delivery_token_limit=bound_tokens,
+    )
+    assert result.get("delivery_bound_spill") is True
+    assert len(calls) == 1, (
+        f"persist_recipe_artifact must be called exactly once; got {len(calls)} calls"
+    )
+    assert calls[0] == ("open_kitchen", "any_recipe")
 
 
 def test_maybe_envelope_passthrough_when_temp_dir_unset(tmp_path: Path) -> None:
@@ -371,3 +446,183 @@ def test_build_routing_edges_handles_missing_extractor() -> None:
     a list, never KeyError."""
     assert build_routing_edges_by_step({"a": object()}, edge_extractor=None) == {"a": []}
     assert build_routing_edges_by_step(None, edge_extractor=None) == {}
+
+
+# ---------------------------------------------------------------------------
+# Part A (REQ-B02 / REQ-B03) gap-closure regression guards
+# ---------------------------------------------------------------------------
+
+
+def test_build_recipe_envelope_requires_recipe_name(tmp_path: Path) -> None:
+    """build_recipe_envelope requires ``recipe_name`` as a keyword-only
+    argument (no positional default). Mirrors the sibling-function
+    convention used by ``persist_recipe_artifact`` and
+    ``maybe_envelope_recipe_response`` (Part A REQ-B03)."""
+    skeleton = extract_step_skeleton([], {})
+    with pytest.raises(TypeError, match="recipe_name"):
+        build_recipe_envelope(  # type: ignore[call-arg]
+            {"success": True},
+            artifact_path=str(tmp_path / "x.log"),
+            artifact_sha256="0" * 64,
+            skeleton=skeleton,
+            bound_bytes=1024,
+        )
+
+
+def _envelope_overheads(tmp_path: Path, recipe_name: str) -> tuple[int, int, int]:
+    """Compute (skeleton_overhead, pull_overhead, envelope_bytes) for an
+    empty-skeleton, success=True envelope with the given recipe_name, so
+    budget-tight envelope tests can derive exact bound_bytes values."""
+    skeleton = extract_step_skeleton([], {})
+    artifact_path = str(tmp_path / "x.log")
+    artifact_sha256 = "0" * 64
+    skeleton_overhead = len(
+        json.dumps({"step_flow_skeleton": skeleton}, ensure_ascii=False).encode("utf-8")
+    )
+    pull_overhead = len(
+        json.dumps(
+            {
+                "recipe_pull": {
+                    "artifact_path": artifact_path,
+                    "sha256": artifact_sha256,
+                    "pull_tool": "get_recipe_section",
+                    "recipe_name": recipe_name,
+                },
+                "delivery_bound_spill": True,
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+    )
+    envelope_bytes = len(json.dumps(True, ensure_ascii=False).encode("utf-8"))
+    return skeleton_overhead, pull_overhead, envelope_bytes
+
+
+def test_envelope_priority_fields_share_floor_under_tight_budget(tmp_path: Path) -> None:
+    """Both ``orchestration_rules`` and ``stop_step_semantics`` receive
+    a fair, non-zero share of the content budget under tight budgets.
+    The naive sequential allocator lets the first key exhaust the pool;
+    the two-phase water-filling allocator splits evenly."""
+    orch = "ORCH_RULES: " + ("X" * 600)
+    stop = "STOP_STEP_SEMANTICS: " + ("Y" * 600)
+    payload = {
+        "success": True,
+        "orchestration_rules": orch,
+        "stop_step_semantics": stop,
+    }
+    skeleton = extract_step_skeleton([], {})
+    artifact_path = str(tmp_path / "x.log")
+    artifact_sha256 = "0" * 64
+
+    sk, pl, env = _envelope_overheads(tmp_path, "test-recipe")
+    # remaining ≈ 500 bytes (well above combined overhead ~54 bytes,
+    # well below union of full field lengths) — forces a content split.
+    bound_bytes = sk + pl + env + 500
+
+    envelope = build_recipe_envelope(
+        payload,
+        recipe_name="test-recipe",
+        artifact_path=artifact_path,
+        artifact_sha256=artifact_sha256,
+        skeleton=skeleton,
+        bound_bytes=bound_bytes,
+    )
+
+    assert "orchestration_rules" in envelope
+    assert "stop_step_semantics" in envelope
+    orch_truncated = envelope["orchestration_rules"]
+    stop_truncated = envelope["stop_step_semantics"]
+    assert orch_truncated, "orchestration_rules must be non-empty under tight budget"
+    assert stop_truncated, "stop_step_semantics must be non-empty under tight budget"
+    # Roughly even split: neither is allowed to dominate (old bug: first
+    # key would claim ~all; new allocator splits ~half/half).
+    shorter, longer = sorted((len(orch_truncated), len(stop_truncated)))
+    assert longer - shorter <= max(1, shorter // 2), (
+        f"priority fields must share roughly evenly under tight budget; "
+        f"orch={len(orch_truncated)}, stop={len(stop_truncated)}"
+    )
+
+
+def test_envelope_priority_fields_omitted_not_emptied_under_extreme_budget(
+    tmp_path: Path,
+) -> None:
+    """When the content budget falls below both keys' combined
+    JSON-key overhead, at least one priority field must be OMITTED
+    from the envelope — never emitted as an empty string."""
+    payload = {
+        "success": True,
+        "orchestration_rules": "ORCH: " + ("X" * 500),
+        "stop_step_semantics": "STOP: " + ("Y" * 500),
+    }
+    skeleton = extract_step_skeleton([], {})
+    artifact_path = str(tmp_path / "x.log")
+    artifact_sha256 = "0" * 64
+
+    sk, pl, env = _envelope_overheads(tmp_path, "test-recipe")
+    # remaining = 30 bytes → well below combined overhead (~53 bytes)
+    bound_bytes = sk + pl + env + 30
+
+    envelope = build_recipe_envelope(
+        payload,
+        recipe_name="test-recipe",
+        artifact_path=artifact_path,
+        artifact_sha256=artifact_sha256,
+        skeleton=skeleton,
+        bound_bytes=bound_bytes,
+    )
+
+    # At least one priority key MUST be omitted (or absent); none may be "".
+    for key in ("orchestration_rules", "stop_step_semantics"):
+        value = envelope.get(key)
+        if key in envelope:
+            assert value != "", (
+                f"{key!r} must not be emitted as an empty string even under "
+                f"extreme budget pressure; either present-and-non-empty or omitted"
+            )
+    omitted = [k for k in ("orchestration_rules", "stop_step_semantics") if k not in envelope]
+    assert len(omitted) >= 1, (
+        f"at least one priority key must be omitted under extreme budget; "
+        f"present={set(envelope) & {'orchestration_rules', 'stop_step_semantics'}}"
+    )
+
+
+def test_envelope_priority_field_truncation_handles_multibyte_utf8(tmp_path: Path) -> None:
+    """Truncation of ``orchestration_rules`` does not split a multi-byte
+    UTF-8 codepoint mid-sequence. Constructs ``38 ASCII + 4-byte emoji``
+    (42 bytes total) with allocation landing at byte 40 (the third byte
+    of the emoji, a continuation byte) — the naive byte-trim would
+    raise ``UnicodeDecodeError``; the new path backs off to the 38-byte
+    ASCII prefix via ``_safe_utf8_truncate``."""
+    prefix = "a" * 38
+    emoji = "\U0001f600"  # 😀 — 4 UTF-8 bytes (0xF0 0x9F 0x98 0x80)
+    orchestration_rules = prefix + emoji
+    assert len(orchestration_rules.encode("utf-8")) == 42, "test invariant"
+
+    payload = {"success": True, "orchestration_rules": orchestration_rules}
+    skeleton = extract_step_skeleton([], {})
+    artifact_path = str(tmp_path / "x.log")
+    artifact_sha256 = "0" * 64
+
+    sk, pl, env = _envelope_overheads(tmp_path, "test-recipe")
+    # remaining = 65 bytes → pool = 40 → take = 40 → byte 40 lands in
+    # the middle of the 4-byte emoji (continuation byte at index 40).
+    bound_bytes = sk + pl + env + 65
+
+    envelope = build_recipe_envelope(
+        payload,
+        recipe_name="test-recipe",
+        artifact_path=artifact_path,
+        artifact_sha256=artifact_sha256,
+        skeleton=skeleton,
+        bound_bytes=bound_bytes,
+    )
+
+    # No UnicodeDecodeError raised means _safe_utf8_truncate backed off
+    # to the 38-byte ASCII prefix; the field must be present (take > 0)
+    # and a valid prefix of the original.
+    assert "orchestration_rules" in envelope
+    truncated = envelope["orchestration_rules"]
+    assert truncated.encode("utf-8") == prefix.encode("utf-8"), (
+        f"truncation must back off to 38-byte ASCII prefix; "
+        f"got {len(truncated.encode('utf-8'))} bytes"
+    )
+    assert orchestration_rules.startswith(truncated)

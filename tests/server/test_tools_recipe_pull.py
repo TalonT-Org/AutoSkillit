@@ -624,6 +624,25 @@ def test_envelope_priority_fields_omitted_not_emptied_under_extreme_budget(
     )
 
 
+def test_envelope_fails_closed_when_fixed_fields_exceed_bound(tmp_path: Path) -> None:
+    skeleton = {
+        "step_count": 1,
+        "steps": [{"name": "x", "summary": "\u96ea" * 2_000, "routing_edges": []}],
+    }
+    bound_bytes = 256
+    envelope = build_recipe_envelope(
+        {"success": True, "errors": ["x" * 2_000]},
+        recipe_name="test-recipe",
+        artifact_path=str(tmp_path / "x.log"),
+        artifact_sha256="0" * 64,
+        skeleton=skeleton,
+        bound_bytes=bound_bytes,
+    )
+    assert envelope["success"] is False
+    assert envelope["error"] == "recipe_envelope_exceeds_delivery_bound"
+    assert len(json.dumps(envelope, ensure_ascii=False).encode("utf-8")) <= bound_bytes
+
+
 def test_envelope_priority_field_truncation_handles_multibyte_utf8(tmp_path: Path) -> None:
     """Truncation of ``orchestration_rules`` does not split a multi-byte
     UTF-8 codepoint mid-sequence. Constructs ``38 ASCII + 4-byte emoji``

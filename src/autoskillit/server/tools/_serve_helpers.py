@@ -352,7 +352,9 @@ def build_recipe_envelope(
     ):
         if key in payload and payload[key] is not None:
             envelope[key] = payload[key]
-            envelope_bytes += len(json.dumps({key: payload[key]}, ensure_ascii=False))
+            envelope_bytes += len(
+                json.dumps({key: payload[key]}, ensure_ascii=False).encode("utf-8")
+            )
 
     # Fixed-size overhead: skeleton JSON + pull reference + delivery_bound_spill.
     skeleton_overhead = len(
@@ -462,7 +464,26 @@ def build_recipe_envelope(
         "pull_tool": "get_recipe_section",
     }
     envelope["delivery_bound_spill"] = True
-    return envelope
+    if len(json.dumps(envelope, ensure_ascii=False).encode("utf-8")) <= bound_bytes:
+        return envelope
+
+    fallback_candidates: tuple[dict[str, Any], ...] = (
+        {
+            "success": False,
+            "error": "recipe_envelope_exceeds_delivery_bound",
+            "recipe_pull": {
+                "recipe_name": recipe_name,
+                "producer_tool": producer_tool,
+                "pull_tool": "get_recipe_section",
+            },
+        },
+        {"success": False, "error": "recipe_envelope_exceeds_delivery_bound"},
+        {},
+    )
+    for fallback in fallback_candidates:
+        if len(json.dumps(fallback, ensure_ascii=False).encode("utf-8")) <= bound_bytes:
+            return fallback
+    raise ValueError("delivery bound is too small for a JSON object")
 
 
 def _safe_utf8_truncate(data: bytes) -> str:

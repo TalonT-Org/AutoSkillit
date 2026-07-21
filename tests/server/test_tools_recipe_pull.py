@@ -906,7 +906,7 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
     # *envelope-pulls-from-its-own-artifact* contract.
     _tight_backend = MagicMock()
     _tight_backend.capabilities = BackendCapabilities(
-        effective_delivery_token_limit=500,
+        effective_delivery_token_limit=1_000,
     )
     _tight_backend.name = "codex"
     tool_ctx_kitchen_open.backend = _tight_backend

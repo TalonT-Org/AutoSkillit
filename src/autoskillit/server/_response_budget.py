@@ -320,13 +320,17 @@ def _project_json_object(
         return None
 
     if delivery_bound_triggered and "result" in parsed:
+        priority_keys = tuple(
+            key for key in ("success", "kitchen", "version", "errors") if key in parsed
+        )
+        deprioritized_keys = tuple(key for key in parsed if key not in {*priority_keys, "result"})
         return _tiered_projection(
             parsed,
             metadata=metadata,
             bound=max_bytes,
             content_key="result",
-            deprioritized_keys=(),
-            priority_keys=(),
+            deprioritized_keys=deprioritized_keys,
+            priority_keys=priority_keys,
             droppable_keys=(),
             reason="delivery_bound",
             top_level_flag=None,

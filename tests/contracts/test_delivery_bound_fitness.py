@@ -404,3 +404,5 @@ def test_non_exempted_delivery_bound_preserves_result_field(tmp_path: Path) -> N
         f"result field starved to empty ({len(data['result'])} chars); "
         f"non-exempted projection must protect the content-equivalent key"
     )
+    for key in ("success", "kitchen", "version"):
+        assert key in data, f"structural field {key!r} was dropped from the projection"

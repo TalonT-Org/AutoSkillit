@@ -1073,8 +1073,9 @@ async def test_artifact_recreation_from_parsed_recipe(
 ) -> None:
     """When the persisted artifact is deleted, ``get_recipe_section``
     re-creates it via the same serve pipeline that built it originally
-    (REQ-B-T4). When the recreation pipeline returns an invalid
-    recipe, the pull tool surfaces a structured
+    (REQ-B-T4). Digest binding rejects a recreation that does not match
+    the exact original artifact. When the recreation pipeline returns
+    an invalid recipe, the pull tool surfaces a structured
     ``recipe_artifact_unavailable`` envelope (driven here via a
     ``serve_recipe`` monkeypatch, since the literal "no active recipe"
     condition is checked earlier and produces a different error)."""
@@ -1107,9 +1108,10 @@ async def test_artifact_recreation_from_parsed_recipe(
             artifact_sha256=artifact_sha256,
         )
     )
-    assert response.get("success") is True, (
-        f"get_recipe_section after artifact deletion should recreate; got {response}"
-    )
+    assert response == {
+        "success": False,
+        "error": "invalid_recipe_artifact_identity",
+    }
     assert artifact_path.exists(), "artifact must be rewritten by the recreation path on miss"
 
     # Now drive the invalid-recreation branch via a monkeypatched

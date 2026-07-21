@@ -472,6 +472,18 @@ def build_recipe_envelope(
 
     fallback_candidates: tuple[dict[str, Any], ...] = (
         {
+            "success": payload.get("success", True),
+            "step_flow_skeleton": skeleton,
+            "recipe_pull": {
+                "recipe_name": recipe_name,
+                "producer_tool": producer_tool,
+                "artifact_path": artifact_path,
+                "sha256": artifact_sha256,
+                "pull_tool": "get_recipe_section",
+            },
+            "delivery_bound_spill": True,
+        },
+        {
             "success": False,
             "error": "recipe_envelope_exceeds_delivery_bound",
             "recipe_pull": {

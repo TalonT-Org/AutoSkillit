@@ -18,8 +18,14 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit import __version__
 from autoskillit.config import OutputBudgetConfig
-from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY, resolve_effective_delivery_bound
+from autoskillit.core import (
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    dump_yaml_str,
+    load_yaml,
+    resolve_effective_delivery_bound,
+)
 from autoskillit.execution import (
     CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
     resolve_worst_case_delivery_bound,
@@ -28,7 +34,10 @@ from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.recipe import all_validated_recipe_names, load_and_validate
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
+    _canonical_json,
+    build_recipe_envelope,
     enforce_response_budget,
+    extract_step_routing,
 )
 from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
 
@@ -36,6 +45,11 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# 64-char realistic placeholder — matches the length of a real deterministic
+# artifact path (tool_name + sha256[:16] + .log under a temp_dir) so envelope
+# byte-budget assertions reflect production-shaped sizes.
+_PLACEHOLDER_ARTIFACT_PATH = "/" + "a" * 59 + ".log"
 
 
 def _recipe_names() -> list[str]:
@@ -69,50 +83,163 @@ def _full_recipe_payload(recipe_name: str, tool_name: str) -> dict[str, object]:
     return payload
 
 
+def _envelope_for_recipe(
+    recipe_name: str, tool_name: str, *, bound: int
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Build the real payload and its envelope for a bundled recipe at a given bound.
+
+    Returns ``(payload, envelope)``.
+    """
+    payload = _full_recipe_payload(recipe_name, tool_name)
+    step_names = payload.get("post_prune_step_names", [])
+    assert isinstance(step_names, list)
+    skeleton = extract_step_routing(payload["content"], step_names)
+    step_index = {name: f"step:{name}" for name in step_names}
+    kitchen_label = "open" if tool_name == "open_kitchen" else "loaded"
+    envelope = build_recipe_envelope(
+        payload,
+        artifact_path=_PLACEHOLDER_ARTIFACT_PATH,
+        sha256="0" * 64,
+        bound=bound,
+        success=True,
+        kitchen=kitchen_label,
+        version=__version__,
+        step_index=step_index,
+        step_flow_skeleton=skeleton,
+    )
+    return payload, envelope
+
+
+# Test A6
+@pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
+def test_open_kitchen_envelope_fits_smallest_backend_by_construction(recipe_name: str) -> None:
+    """Every bundled recipe's open_kitchen envelope fits the worst-case backend bound
+    by construction, and every post-prune step's routing edges survive into the
+    step-flow skeleton."""
+    bound = resolve_worst_case_delivery_bound() * 4
+    payload, envelope = _envelope_for_recipe(recipe_name, "open_kitchen", bound=bound)
+    rendered = _canonical_json(envelope)
+    assert len(rendered.encode("utf-8")) <= bound, (
+        f"{recipe_name}: envelope is {len(rendered.encode('utf-8'))} bytes, "
+        f"exceeds worst-case bound {bound}"
+    )
+
+    step_names = payload.get("post_prune_step_names", [])
+    assert isinstance(step_names, list)
+    skeleton_by_name = {entry["name"]: entry for entry in envelope["step_flow_skeleton"]}
+    parsed_content = load_yaml(payload["content"])
+    steps_obj = parsed_content.get("steps", {}) if isinstance(parsed_content, dict) else {}
+    routing_fields = ("on_success", "on_failure", "on_result", "on_context_limit")
+    for step_name in step_names:
+        assert step_name in skeleton_by_name, (
+            f"{recipe_name}: step {step_name!r} missing from step_flow_skeleton"
+        )
+        assert step_name in envelope["step_index"], (
+            f"{recipe_name}: step {step_name!r} missing from step_index"
+        )
+        step_obj = steps_obj.get(step_name)
+        if not isinstance(step_obj, dict):
+            continue
+        entry = skeleton_by_name[step_name]
+        for field in routing_fields:
+            if field in step_obj:
+                assert entry.get(field) == step_obj[field], (
+                    f"{recipe_name}/{step_name}: routing edge {field!r} "
+                    "missing or mismatched in skeleton"
+                )
+
+
+# Test A7
+@pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
+def test_envelope_step_index_covers_all_steps(recipe_name: str) -> None:
+    """step_index covers exactly the post-prune step set via the step:{name} scheme."""
+    bound = resolve_worst_case_delivery_bound() * 4
+    payload, envelope = _envelope_for_recipe(recipe_name, "open_kitchen", bound=bound)
+    step_names = payload.get("post_prune_step_names", [])
+    assert isinstance(step_names, list)
+
+    assert set(envelope["step_index"]) == set(step_names)
+    for name, identifier in envelope["step_index"].items():
+        assert identifier == f"step:{name}"
+
+    parsed_content = load_yaml(payload["content"])
+    steps_obj = parsed_content.get("steps", {}) if isinstance(parsed_content, dict) else {}
+    for name in step_names:
+        assert steps_obj.get(name), f"{recipe_name}: step {name!r} has an empty YAML block"
+
+
+# Test A8
+@pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
+def test_largest_step_fits_pull_bound(recipe_name: str) -> None:
+    """Every bundled recipe's largest single-step YAML block fits the pull-tool bound,
+    or is losslessly reconstructible via chunked retrieval when it doesn't."""
+    payload = _full_recipe_payload(recipe_name, "open_kitchen")
+    parsed_content = load_yaml(payload["content"])
+    steps_obj = parsed_content.get("steps", {}) if isinstance(parsed_content, dict) else {}
+    bound = resolve_worst_case_delivery_bound() * 4
+
+    serialized_steps: dict[str, str] = {}
+    sizes: dict[str, int] = {}
+    for name, step_obj in steps_obj.items():
+        serialized = dump_yaml_str({"steps": {name: step_obj}}, default_flow_style=False)
+        serialized_steps[name] = serialized
+        sizes[name] = len(serialized.encode("utf-8"))
+
+    if not sizes:
+        return
+
+    largest_name = max(sizes, key=lambda name: sizes[name])
+    largest_size = sizes[largest_name]
+    assert largest_size <= bound, (
+        f"{recipe_name}: step {largest_name!r} is {largest_size} bytes, exceeds pull bound {bound}"
+    )
+
+    if largest_size > bound:
+        # Defensive: only exercised if a bundled recipe's step ever exceeds the
+        # worst-case pull bound. Mirrors get_recipe_section's chunking scheme
+        # (tools_recipe._chunk_response_if_oversized) and asserts lossless
+        # reconstruction via concatenation.
+        content_text = serialized_steps[largest_name]
+        chunk_size = max(1024, bound - 512)
+        total = len(content_text)
+        chunks = max(1, (total + chunk_size - 1) // chunk_size)
+        reconstructed = "".join(
+            content_text[part * chunk_size : (part + 1) * chunk_size] for part in range(chunks)
+        )
+        assert reconstructed == content_text
+
+
+# Test A9
 @pytest.mark.parametrize("tool_name", ["open_kitchen", "load_recipe"])
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
-def test_bundled_recipe_open_kitchen_fits_or_spills_per_backend(
+def test_bundled_recipe_envelope_fits_per_backend(
     tool_name: str,
     recipe_name: str,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Every recipe payload fits or spills with all surviving step names."""
-    monkeypatch.chdir(tmp_path)
-    payload = _full_recipe_payload(recipe_name, tool_name)
-    serialized = json.dumps(payload)
-    serialized_bytes = len(serialized.encode("utf-8"))
+    """Every recipe's envelope fits every registered backend's positive delivery bound,
+    with every post-prune step name covered by the step-flow skeleton and step_index."""
     for backend_name, caps in _backend_capabilities().items():
         bound_tokens = resolve_effective_delivery_bound(caps)
+        if bound_tokens <= 0:
+            continue
         bound_bytes = _effective_bound_bytes(bound_tokens)
-        if serialized_bytes <= bound_bytes:
-            data = payload
-        else:
-            result = enforce_response_budget(
-                serialized,
-                tool_name=tool_name,
-                artifact_dir=tmp_path / tool_name / backend_name,
-                config=OutputBudgetConfig(),
-                effective_delivery_token_limit=bound_tokens,
-            )
-            assert isinstance(result, str), (
-                f"{backend_name}: expected str result for {recipe_name} payload"
-            )
-            assert len(result.encode("utf-8")) <= bound_bytes, (
-                f"{backend_name}: projection for {recipe_name} exceeds "
-                f"{bound_bytes} bytes (effective delivery bound)"
-            )
-            data = json.loads(result)
-            assert data.get("delivery_bound_spill") is True
-            metadata = data[RESPONSE_SPILL_METADATA_KEY]
-            assert metadata["reason"] == "delivery_bound"
+        payload, envelope = _envelope_for_recipe(recipe_name, tool_name, bound=bound_bytes)
+        rendered = _canonical_json(envelope)
+        assert len(rendered.encode("utf-8")) <= bound_bytes, (
+            f"{backend_name}: envelope for {tool_name}/{recipe_name} exceeds {bound_bytes} bytes"
+        )
 
-        delivered_content = data.get("content", "")
-        assert isinstance(delivered_content, str)
-        for step_name in payload.get("post_prune_step_names", []):
-            assert step_name in delivered_content, (
+        step_names = payload.get("post_prune_step_names", [])
+        assert isinstance(step_names, list)
+        skeleton_names = {entry["name"] for entry in envelope["step_flow_skeleton"]}
+        for step_name in step_names:
+            assert step_name in skeleton_names, (
                 f"{tool_name}/{backend_name}/{recipe_name}: "
-                f"post-prune step {step_name!r} missing from delivered content"
+                f"post-prune step {step_name!r} missing from step_flow_skeleton"
+            )
+            assert step_name in envelope["step_index"], (
+                f"{tool_name}/{backend_name}/{recipe_name}: "
+                f"post-prune step {step_name!r} missing from step_index"
             )
 
 

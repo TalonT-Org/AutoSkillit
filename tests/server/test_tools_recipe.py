@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 
@@ -271,6 +272,151 @@ class TestMigrationSuggestions:
         assert "outdated-recipe-version" in rules
 
 
+# ---------------------------------------------------------------------------
+# Part A remediation: get_recipe_section pull tool after an open_kitchen-only
+# session (Tests A3-A5).
+# ---------------------------------------------------------------------------
+
+_TEST_RECIPE_YAML = """\
+name: test
+description: A test recipe
+summary: a > b
+kitchen_rules:
+  - test
+steps:
+  do_thing:
+    tool: run_cmd
+    with:
+      cmd: echo hello
+      cwd: .
+    on_success: done
+    on_failure: escalate
+  done:
+    action: stop
+    message: "Done. Emit the L3 result sentinel JSON block now."
+  escalate:
+    action: stop
+    message: "Failed. Emit the L3 result sentinel JSON block now."
+"""
+
+
+class TestGetRecipeSection:
+    """Tests A3-A5: get_recipe_section after an open_kitchen-only session."""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
+
+    async def _open_kitchen_test_recipe(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ) -> dict:
+        """Serve the minimal 'test' recipe via a real in-process open_kitchen call."""
+        from unittest.mock import AsyncMock, patch
+
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "test.yaml").write_text(_TEST_RECIPE_YAML)
+
+        with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+            with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                with patch("autoskillit.server.tools.tools_kitchen.create_background_task"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen",
+                    ):
+                        return json.loads(
+                            await open_kitchen(name="test", ctx=tool_ctx_kitchen_open)
+                        )
+
+    # Test A3
+    @pytest.mark.anyio
+    async def test_get_recipe_section_returns_step_content(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        """Every post-prune step is resolvable via get_recipe_section after open_kitchen-only."""
+        from autoskillit.core import load_yaml
+        from autoskillit.execution import resolve_worst_case_delivery_bound
+        from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+        result = await self._open_kitchen_test_recipe(tool_ctx_kitchen_open, tmp_path, monkeypatch)
+        assert result["success"] is True
+        assert "content" not in result
+        assert result["pull_tool"] == "get_recipe_section"
+        assert {"step_flow_skeleton", "step_index", "artifact_path", "sha256"} <= result.keys()
+
+        bound = resolve_worst_case_delivery_bound() * 4
+        for step_name in result["step_index"]:
+            section_str = await get_recipe_section(section="step", step_name=step_name)
+            section_result = json.loads(section_str)
+            assert section_result["success"] is True
+            content = section_result["content"]
+            assert content
+            load_yaml(content)
+            assert len(section_str.encode("utf-8")) <= bound
+
+    # Test A4
+    @pytest.mark.anyio
+    async def test_get_recipe_section_sha256_verification(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        """A corrupted artifact fails sha256 verification with a structured error."""
+        from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+        result = await self._open_kitchen_test_recipe(tool_ctx_kitchen_open, tmp_path, monkeypatch)
+        artifact_path = Path(result["artifact_path"])
+        artifact_path.write_text("corrupted", encoding="utf-8")
+
+        section_result = json.loads(await get_recipe_section(section="content"))
+        assert section_result["error"] == "artifact_integrity_failed"
+        assert "content" not in section_result
+
+    # Test A5
+    @pytest.mark.anyio
+    async def test_get_recipe_section_missing_artifact_recreates(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        """A deleted artifact is recreated via serve_recipe() and served successfully."""
+        from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+        result = await self._open_kitchen_test_recipe(tool_ctx_kitchen_open, tmp_path, monkeypatch)
+        artifact_path = Path(result["artifact_path"])
+        artifact_path.unlink()
+
+        step_name = next(iter(result["step_index"]))
+        section_result = json.loads(await get_recipe_section(section="step", step_name=step_name))
+        assert section_result["success"] is True
+        assert section_result["content"]
+        assert artifact_path.exists()
+
+    # Test A5 (second scenario)
+    @pytest.mark.anyio
+    async def test_get_recipe_section_missing_artifact_recreation_failure_is_structured(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        """When recreation itself raises, the reply is a structured error, never empty content."""
+        from unittest.mock import patch
+
+        from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+        result = await self._open_kitchen_test_recipe(tool_ctx_kitchen_open, tmp_path, monkeypatch)
+        artifact_path = Path(result["artifact_path"])
+        artifact_path.unlink()
+
+        step_name = next(iter(result["step_index"]))
+        with patch(
+            "autoskillit.server.tools.tools_recipe.serve_recipe",
+            side_effect=RuntimeError("boom"),
+        ):
+            section_result = json.loads(
+                await get_recipe_section(section="step", step_name=step_name)
+            )
+        assert section_result["error"] == "artifact_unavailable"
+        assert "content" not in section_result
+
+
 class TestDocstringSemantics:
     """Section-aware semantic checks for tool descriptions.
 
@@ -470,7 +616,6 @@ async def test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled(
     tool_ctx, tmp_path, monkeypatch
 ):
     """list_recipes MCP tool must exclude campaign recipes when fleet feature is disabled."""
-    from pathlib import Path
 
     recipe_dir = tmp_path / ".autoskillit" / "recipes"
     recipe_dir.mkdir(parents=True)

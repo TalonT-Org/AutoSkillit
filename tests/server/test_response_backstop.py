@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -307,6 +308,73 @@ def test_projection_recursion_failure_fails_closed_with_artifact_path(tmp_path, 
     assert data["success"] is False
     assert data["error"] == "response_budget_irreducible_shape"
     assert open(data["artifact_path"], encoding="utf-8").read() == original
+
+
+def test_recipe_artifact_always_persisted(tmp_path):
+    payload = {"success": True, "kitchen": "open", "content": "name: demo\n"}
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=1_000_000,
+    )
+    artifacts = list(tmp_path.iterdir())
+    assert len(artifacts) == 1
+    assert artifacts[0].read_text(encoding="utf-8") == original
+    data = json.loads(result)
+    assert data["artifact_path"] == str(artifacts[0].resolve())
+    assert data["sha256"] == hashlib.sha256(original.encode("utf-8")).hexdigest()
+
+
+def test_recipe_artifact_deterministic_path(tmp_path):
+    payload = {"success": True, "kitchen": "open", "content": "name: demo\n"}
+    original = json.dumps(payload)
+    first = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=1_000_000,
+    )
+    second = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=1_000_000,
+    )
+    first_data = json.loads(first)
+    second_data = json.loads(second)
+    assert first_data["artifact_path"] == second_data["artifact_path"]
+    expected_sha256 = hashlib.sha256(original.encode("utf-8")).hexdigest()
+    assert Path(first_data["artifact_path"]).name == f"open_kitchen_{expected_sha256[:16]}.log"
+    assert len(list(tmp_path.iterdir())) == 1
+
+
+def test_recipe_artifact_pre_published_not_rewritten(tmp_path):
+    sentinel_path = tmp_path / "sentinel.log"
+    sentinel_path.write_text("pre-published content", encoding="utf-8")
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "artifact_path": str(sentinel_path),
+        "sha256": "f" * 64,
+    }
+    original = json.dumps(payload)
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=1_000_000,
+    )
+    data = json.loads(result)
+    assert data["artifact_path"] == str(sentinel_path)
+    assert data["sha256"] == "f" * 64
+    assert [p.name for p in tmp_path.iterdir()] == ["sentinel.log"]
+    assert sentinel_path.read_text(encoding="utf-8") == "pre-published content"
 
 
 def test_nonpositive_response_max_bytes_is_rejected():

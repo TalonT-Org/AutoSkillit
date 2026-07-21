@@ -917,7 +917,14 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
     assert pull["producer_tool"] == "load_recipe"
     assert tool_ctx_kitchen_open.recipe_name == _RECIPE_FOR_PULL
 
-    step_name = loaded["step_flow_skeleton"]["steps"][0]["name"]
+    skeleton = loaded.get("step_flow_skeleton")
+    if skeleton is not None:
+        step_name = skeleton["steps"][0]["name"]
+    else:
+        persisted = json.loads(Path(pull["artifact_path"]).read_text(encoding="utf-8"))
+        post_prune_raw = cast(list[object], persisted.get("post_prune_step_names") or [])
+        step_name = next(str(name) for name in post_prune_raw if isinstance(name, str))
+
     response = json.loads(
         await get_recipe_section(
             section=step_name,

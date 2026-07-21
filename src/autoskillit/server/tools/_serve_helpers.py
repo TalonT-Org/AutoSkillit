@@ -464,7 +464,19 @@ def build_recipe_envelope(
         "pull_tool": "get_recipe_section",
     }
     envelope["delivery_bound_spill"] = True
-    if len(json.dumps(envelope, ensure_ascii=False).encode("utf-8")) <= bound_bytes:
+    # Reserve a 64-byte structural-overhead budget for the envelope's
+    # outer-key braces, separator commas, and UTF-8 quoting that the
+    # naive difference (bound_bytes − overheads − envelope_bytes)
+    # doesn't capture. Without this reserve, ``json.dumps(envelope)``
+    # lands just within the bound but trips the fail-closed
+    # ``recipe_envelope_exceeds_delivery_bound`` envelope
+    # (commit 3fee3f9d3 originally added this reserve; commit d3652a3e6
+    # moved it inside the allocator and broke the tight-budget priority
+    # tests, then fully removed it — we restore it here as a
+    # finalize-only check so the priority-field allocator still sees
+    # the full content budget).
+    serialized_envelope = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
+    if len(serialized_envelope) <= bound_bytes - 64:
         return envelope
 
     fallback_candidates: tuple[dict[str, Any], ...] = (
@@ -635,8 +647,20 @@ def maybe_envelope_recipe_response(
     if not isinstance(post_prune_raw, list):
         post_prune_raw = []
     post_prune_names = [n for n in post_prune_raw if isinstance(n, str)]
-    summaries = build_step_summaries(tool_ctx.active_recipe_steps)
-    edges = build_routing_edges_by_step(tool_ctx.active_recipe_steps)
+    # ``active_recipe_steps`` is the kitchen's currently-open recipe — NOT
+    # necessarily the recipe being delivered here. When the caller
+    # (e.g. ``load_recipe``) targets a different recipe than the active
+    # one, mixing the other recipe's parsed step summary/edges into the
+    # skeleton bloats the envelope past the delivery bound even for a
+    # small payload. Use the active recipe's parsed steps only when it
+    # matches the payload's recipe_name; otherwise emit a name-only
+    # skeleton (orchestrator still has the artifact + pull reference).
+    active_recipe_steps: dict[str, Any] | None = None
+    active_recipe_name = getattr(tool_ctx, "recipe_name", "") or ""
+    if active_recipe_name and active_recipe_name == recipe_name:
+        active_recipe_steps = tool_ctx.active_recipe_steps
+    summaries = build_step_summaries(active_recipe_steps)
+    edges = build_routing_edges_by_step(active_recipe_steps)
     byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
     skeleton = extract_step_skeleton(post_prune_names, edges, summaries, byte_ranges=byte_ranges)
 

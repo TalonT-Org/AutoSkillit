@@ -123,6 +123,7 @@ def test_envelope_fits_every_backend_by_construction(
     )
 
     assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
+    assert envelope["recipe_pull"]["producer_tool"] == "open_kitchen"
     assert envelope["recipe_pull"]["artifact_path"] == str(artifact_path)
     assert envelope["recipe_pull"]["sha256"] == sha256
     assert envelope["step_flow_skeleton"]["step_count"] == len(step_names)

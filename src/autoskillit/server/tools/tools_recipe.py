@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -366,7 +367,14 @@ async def load_recipe(
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("get_recipe_section")
-async def get_recipe_section(section: str, part: int = 0) -> str:
+async def get_recipe_section(
+    section: str,
+    part: int = 0,
+    recipe_name: str | None = None,
+    producer_tool: str = "open_kitchen",
+    artifact_path: str | None = None,
+    artifact_sha256: str | None = None,
+) -> str:
     """Retrieve a recipe step or section from the persisted recipe artifact.
 
     Returns the body for the named step or section, bounded to the
@@ -403,22 +411,33 @@ async def get_recipe_section(section: str, part: int = 0) -> str:
             if tool_ctx is None or tool_ctx.recipes is None:
                 return json.dumps({"success": False, "error": "kitchen not open"})
 
-            recipe_name = tool_ctx.recipe_name
-            if not recipe_name:
+            requested_recipe_name = recipe_name or tool_ctx.recipe_name
+            if not requested_recipe_name:
                 return json.dumps(
                     {"success": False, "error": "no active recipe in kitchen context"}
                 )
 
-            tool_name = "open_kitchen"
+            if producer_tool not in {"open_kitchen", "load_recipe"}:
+                return json.dumps({"success": False, "error": "invalid_recipe_artifact_identity"})
+
             artifact_dir = getattr(tool_ctx, "temp_dir", None)
             if not isinstance(artifact_dir, Path):
                 return json.dumps({"success": False, "error": "kitchen temp_dir not available"})
 
             from autoskillit.server._response_budget import _recipe_artifact_path  # circular-break
 
-            artifact_path = _recipe_artifact_path(artifact_dir, tool_name, recipe_name)
+            resolved_artifact_path = _recipe_artifact_path(
+                artifact_dir, producer_tool, requested_recipe_name
+            )
+            if (
+                artifact_path is not None
+                and Path(artifact_path).resolve() != resolved_artifact_path.resolve()
+            ):
+                return json.dumps({"success": False, "error": "invalid_recipe_artifact_identity"})
 
-            if not artifact_path.exists():
+            if not resolved_artifact_path.exists():
+                if producer_tool != "open_kitchen":
+                    return json.dumps({"success": False, "error": "recipe_artifact_unavailable"})
                 # Recreation path: re-invoke the same serve pipeline that
                 # built the artifact originally. This handles the case
                 # where the artifact was pruned/garbage-collected between
@@ -444,7 +463,7 @@ async def get_recipe_section(section: str, part: int = 0) -> str:
                     )
                     _recreate = serve_recipe(
                         tool_ctx,
-                        recipe_name,
+                        requested_recipe_name,
                         caller_overrides=_caller_overrides,
                         config_default=_config_default,
                         session_overrides=_session_overrides,
@@ -465,8 +484,8 @@ async def get_recipe_section(section: str, part: int = 0) -> str:
                     try:
                         persist_recipe_artifact(
                             artifact_dir,
-                            tool_name=tool_name,
-                            recipe_name=recipe_name,
+                            tool_name=producer_tool,
+                            recipe_name=requested_recipe_name,
                             payload=_recreate,
                         )
                     except OSError:
@@ -480,7 +499,7 @@ async def get_recipe_section(section: str, part: int = 0) -> str:
                 except Exception as exc:
                     logger.warning(
                         "get_recipe_section_recreate_failed",
-                        recipe_name=recipe_name,
+                        recipe_name=requested_recipe_name,
                         exc_info=True,
                     )
                     _recreate_envelope_err = f"{type(exc).__name__}: {exc}"
@@ -496,7 +515,15 @@ async def get_recipe_section(section: str, part: int = 0) -> str:
             # Read the persisted full payload. The pull tool returns a
             # bounded chunk from the requested section of the recipe YAML.
             try:
-                persisted_raw = artifact_path.read_text(encoding="utf-8")
+                persisted_raw = resolved_artifact_path.read_text(encoding="utf-8")
+                if (
+                    artifact_sha256 is not None
+                    and hashlib.sha256(persisted_raw.encode("utf-8")).hexdigest()
+                    != artifact_sha256
+                ):
+                    return json.dumps(
+                        {"success": False, "error": "invalid_recipe_artifact_identity"}
+                    )
                 persisted = json.loads(persisted_raw)
             except (OSError, json.JSONDecodeError) as exc:
                 return json.dumps(

@@ -293,6 +293,7 @@ def build_recipe_envelope(
     artifact_sha256: str,
     skeleton: dict[str, Any],
     bound_bytes: int,
+    producer_tool: str = "open_kitchen",
 ) -> dict[str, Any]:
     """Build a bounded envelope that fits the smallest backend delivery bound.
 
@@ -362,6 +363,7 @@ def build_recipe_envelope(
             {
                 "recipe_pull": {
                     "recipe_name": recipe_name,
+                    "producer_tool": producer_tool,
                     "artifact_path": artifact_path,
                     "sha256": artifact_sha256,
                     "pull_tool": "get_recipe_section",
@@ -454,6 +456,7 @@ def build_recipe_envelope(
     envelope["step_flow_skeleton"] = skeleton
     envelope["recipe_pull"] = {
         "recipe_name": recipe_name,
+        "producer_tool": producer_tool,
         "artifact_path": artifact_path,
         "sha256": artifact_sha256,
         "pull_tool": "get_recipe_section",
@@ -624,4 +627,5 @@ def maybe_envelope_recipe_response(
         skeleton=skeleton,
         bound_bytes=bound_bytes,
         recipe_name=recipe_name,
+        producer_tool=tool_name,
     )

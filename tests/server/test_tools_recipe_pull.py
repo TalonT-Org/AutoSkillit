@@ -1139,6 +1139,38 @@ async def test_artifact_recreation_from_parsed_recipe(
 
 @pytest.mark.anyio
 @pytest.mark.medium
+async def test_pull_tool_rejects_non_mapping_artifact(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    """Valid JSON with the wrong top-level shape is artifact corruption."""
+    from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+    monkeypatch.chdir(tmp_path)
+    ok_result = await _open_kitchen_patched(_RECIPE_FOR_PULL, None, monkeypatch)
+    assert ok_result.get("success") is True
+
+    artifact_path = _recipe_artifact_path(
+        tool_ctx_kitchen_open.temp_dir, "open_kitchen", _RECIPE_FOR_PULL
+    )
+    artifact_path.write_text('["not", "a", "mapping"]', encoding="utf-8")
+    response = json.loads(
+        await get_recipe_section(
+            section="content",
+            recipe_name=_RECIPE_FOR_PULL,
+            producer_tool="open_kitchen",
+            artifact_sha256=_artifact_sha256(artifact_path),
+        )
+    )
+
+    assert response == {
+        "success": False,
+        "error": "recipe_artifact_unavailable",
+        "detail": "persisted recipe artifact is not a mapping",
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.medium
 async def test_large_step_chunked_via_continuation(
     tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
 ) -> None:

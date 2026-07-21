@@ -597,6 +597,14 @@ async def get_recipe_section(
                         "detail": f"{type(exc).__name__}: {exc}",
                     }
                 )
+            if not isinstance(persisted, dict):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "recipe_artifact_unavailable",
+                        "detail": "persisted recipe artifact is not a mapping",
+                    }
+                )
 
             content = ""
             if section == "content":

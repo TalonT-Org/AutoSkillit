@@ -55,7 +55,7 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 39 kitchen-tagged tools (including the 2 headless-tagged tools)
+   → hides 41 kitchen-tagged tools (including the 2 headless-tagged tools)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled

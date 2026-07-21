@@ -48,6 +48,7 @@ def test_gated_tools_contains_expected_names():
         "kitchen_status",
         "list_recipes",
         "load_recipe",
+        "get_recipe_section",
         "validate_recipe",
         "register_clone_status",
         "batch_cleanup_clones",

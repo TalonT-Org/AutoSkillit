@@ -991,7 +991,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
-        1610,
+        1660,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1030,7 +1030,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(+21 net lines); response artifact temp-root bridge (+2 net lines)"
         "; prune_stale_kitchen_state liveness-gated tracker pruning wired into both "
         "fresh-open and deferred-recall open_kitchen paths, plus overlay lock sidecar "
-        "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)",
+        "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)"
+        "; envelope integration on both deferred-recall and normal open_kitchen paths: "
+        "resolve_effective_delivery_bound + BackendCapabilities isinstance guard + "
+        "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)",
     ),
     "tools_execution.py": (
         1650,

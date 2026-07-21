@@ -121,6 +121,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "create_and_publish_branch",
         "record_pipeline_step",
         "reset_dispatch",
+        "get_recipe_section",
     }
 )
 
@@ -337,6 +338,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "merge_worktree": frozenset({"kitchen-core"}),
     "unlock_agent_pack": frozenset({"kitchen-core"}),
     "record_pipeline_step": frozenset({"kitchen-core"}),
+    "get_recipe_section": frozenset({"kitchen-core"}),
 }
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(

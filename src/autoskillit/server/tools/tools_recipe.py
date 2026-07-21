@@ -10,12 +10,20 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
+from autoskillit import __version__
 from autoskillit.config import (
     build_config_authoritative_layer,
     build_config_default_layer,
     resolve_ingredient_defaults,
 )
-from autoskillit.core import FLEET_DISPATCH_TOOLS, get_logger, temp_dir_display_str  # noqa: F401
+from autoskillit.core import (
+    BackendCapabilities,
+    fast_dumps,
+    get_logger,
+    load_yaml,
+    resolve_effective_delivery_bound,
+    temp_dir_display_str,
+)  # noqa: F401
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -35,6 +43,9 @@ from autoskillit.server.tools._auto_overrides import (
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
+    build_open_kitchen_recipe_payload,
+    maybe_envelope_recipe_response,
+    persist_recipe_artifact,
     render_served_response,
     response_backstop_tool_meta,
     serve_recipe,
@@ -324,10 +335,293 @@ async def load_recipe(
                     stage="validate_result",
                 )
                 return _validation_err
+            if not ingredients_only:
+                _lr_backend_caps = (
+                    tool_ctx.backend.capabilities
+                    if tool_ctx.backend is not None
+                    and isinstance(
+                        getattr(tool_ctx.backend, "capabilities", None),
+                        BackendCapabilities,
+                    )
+                    else None
+                )
+                _lr_edtl = (
+                    resolve_effective_delivery_bound(_lr_backend_caps)
+                    if _lr_backend_caps is not None
+                    else None
+                )
+                result = maybe_envelope_recipe_response(
+                    result,
+                    tool_name="load_recipe",
+                    recipe_name=name,
+                    tool_ctx=tool_ctx,
+                    effective_delivery_token_limit=_lr_edtl,
+                )
             return render_served_response(result)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
+@track_response_size("get_recipe_section")
+async def get_recipe_section(section: str, part: int = 0) -> str:
+    """Retrieve a recipe step or section from the persisted recipe artifact.
+
+    Returns the body for the named step or section, bounded to the
+    effective delivery limit. The body is the same YAML that
+    ``open_kitchen`` / ``load_recipe`` would have returned inline — the
+    envelope omits ``content`` and the pull tool serves it on demand.
+
+    For sections larger than the bound, use ``part=1``, ``part=2``,
+    etc. to retrieve continuation chunks. The response includes
+    ``has_more=True`` and ``next_part=N`` when more chunks remain.
+
+    Args:
+        section: The step or section name to retrieve. Must match a
+            ``post_prune_step_names`` entry from the envelope, or the
+            special values ``"content"`` (full raw recipe YAML),
+            ``"ingredients_table"``, or ``"orchestration_rules"``.
+        part: Continuation index (0-based). Default 0 returns the first
+            chunk; pass the value from the previous response's
+            ``next_part`` to retrieve the next chunk.
+
+    Returns:
+        JSON with ``success``, ``section``, ``content``, ``has_more``,
+        and (when more chunks remain) ``next_part``.
+
+    This tool requires the kitchen to be open (gated by open_kitchen).
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        with structlog.contextvars.bound_contextvars(tool="get_recipe_section"):
+            tool_ctx = _get_ctx_or_none()
+            if tool_ctx is None or tool_ctx.recipes is None:
+                return json.dumps({"success": False, "error": "kitchen not open"})
+
+            recipe_name = tool_ctx.recipe_name
+            if not recipe_name:
+                return json.dumps(
+                    {"success": False, "error": "no active recipe in kitchen context"}
+                )
+
+            tool_name = "open_kitchen"
+            artifact_dir = getattr(tool_ctx, "temp_dir", None)
+            if not isinstance(artifact_dir, Path):
+                return json.dumps({"success": False, "error": "kitchen temp_dir not available"})
+
+            from autoskillit.server._response_budget import _recipe_artifact_path  # circular-break
+
+            artifact_path = _recipe_artifact_path(artifact_dir, tool_name, recipe_name)
+
+            if not artifact_path.exists():
+                # Recreation path: re-invoke the same serve pipeline that
+                # built the artifact originally. This handles the case
+                # where the artifact was pruned/garbage-collected between
+                # open_kitchen and get_recipe_section calls. Use the
+                # session_serve_overrides snapshot to preserve idempotence
+                # — re-serving with the same overrides must produce the
+                # same content (issue #4208 hardening).
+                _recreate_envelope_err = None
+                try:
+                    _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
+                    _config_layer = build_config_authoritative_layer(_defaults)
+                    _config_default = build_config_default_layer(_defaults)
+                    _session_overrides: dict[str, str] = {
+                        "kitchen_id": tool_ctx.kitchen_id,
+                        "diagnostics_log_dir": str(
+                            resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)
+                        ),
+                    }
+                    _caller_overrides = (
+                        dict(tool_ctx.session_serve_overrides)
+                        if tool_ctx.session_serve_overrides is not None
+                        else None
+                    )
+                    _recreate = serve_recipe(
+                        tool_ctx,
+                        recipe_name,
+                        caller_overrides=_caller_overrides,
+                        config_default=_config_default,
+                        session_overrides=_session_overrides,
+                        config_layer=_config_layer,
+                        resolved_defaults=_defaults,
+                        ingredients_only=False,
+                    )
+                    if not _recreate.get("valid", False):
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "error": "recipe_artifact_unavailable",
+                                "detail": "recreation returned invalid recipe",
+                            }
+                        )
+                    _recreate = build_open_kitchen_recipe_payload(_recreate, version=__version__)
+
+                    try:
+                        persist_recipe_artifact(
+                            artifact_dir,
+                            tool_name=tool_name,
+                            recipe_name=recipe_name,
+                            payload=_recreate,
+                        )
+                    except OSError:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "error": "recipe_artifact_unavailable",
+                                "detail": "recreation write failed",
+                            }
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "get_recipe_section_recreate_failed",
+                        recipe_name=recipe_name,
+                        exc_info=True,
+                    )
+                    _recreate_envelope_err = f"{type(exc).__name__}: {exc}"
+                if _recreate_envelope_err is not None:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": "recipe_artifact_unavailable",
+                            "detail": _recreate_envelope_err,
+                        }
+                    )
+
+            # Read the persisted full payload. The pull tool returns a
+            # bounded chunk from the requested section of the recipe YAML.
+            try:
+                persisted_raw = artifact_path.read_text(encoding="utf-8")
+                persisted = json.loads(persisted_raw)
+            except (OSError, json.JSONDecodeError) as exc:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "recipe_artifact_unavailable",
+                        "detail": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+
+            content = ""
+            if section == "content":
+                content = persisted.get("content", "") or ""
+            elif section == "ingredients_table":
+                _it = persisted.get("ingredients_table")
+                content = json.dumps(_it) if _it is not None else ""
+            elif section == "orchestration_rules":
+                content = persisted.get("orchestration_rules", "") or ""
+            elif section == "stop_step_semantics":
+                content = persisted.get("stop_step_semantics", "") or ""
+            elif section == "errors":
+                content = json.dumps(persisted.get("errors", []) or [])
+            elif section == "warnings":
+                content = json.dumps(persisted.get("warnings", []) or [])
+            else:
+                # Treat as a step name; extract the step definition from
+                # the post-prune step slice of the YAML content. The
+                # full recipe YAML uses the step name as a key; we parse
+                # the YAML and pull out only the requested step's subtree.
+                content = _extract_step_body_from_persisted(persisted, section)
+
+            if not content:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "section_not_found",
+                        "section": section,
+                    }
+                )
+
+            # Bound the chunk size to the effective delivery limit
+            # (smallest backend bound by construction) so the response
+            # itself never re-enters the spill path. ``track_response_size``
+            # still enforces the response-side ceiling, but bounding
+            # here means a single response never accidentally exceeds
+            # even the Codex 40KB bound.
+            _backend_caps = (
+                tool_ctx.backend.capabilities
+                if tool_ctx.backend is not None
+                and isinstance(
+                    getattr(tool_ctx.backend, "capabilities", None),
+                    BackendCapabilities,
+                )
+                else None
+            )
+            bound_tokens = (
+                resolve_effective_delivery_bound(_backend_caps)
+                if _backend_caps is not None
+                else 10_000
+            )
+            bound_bytes = bound_tokens * 4
+
+            chunk_size = max(1024, bound_bytes - 4096)
+            if part < 0:
+                part = 0
+            start = part * chunk_size
+            end = start + chunk_size
+            chunk = content[start:end]
+            has_more = end < len(content)
+            response: dict[str, Any] = {
+                "success": True,
+                "section": section,
+                "content": chunk,
+                "has_more": has_more,
+            }
+            if has_more:
+                response["next_part"] = part + 1
+                response["total_size"] = len(content)
+            return json.dumps(response)
+    except Exception as exc:
+        logger.error("get_recipe_section unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+def _extract_step_body_from_persisted(persisted: dict[str, Any], step_name: str) -> str:
+    """Extract a single step's YAML subtree from the persisted full payload.
+
+    The persisted payload's ``content`` field is the full recipe YAML
+    rendered as a string (from ``load_and_validate``). We re-parse it
+    via ``load_yaml`` to access the structured steps dict, then return
+    only the requested step's sub-mapping serialized back to YAML.
+    Falls back to an empty string if the step is not present.
+    """
+    content = persisted.get("content", "") or ""
+    if not content or not step_name:
+        return ""
+    try:
+        parsed = load_yaml(content)
+    except Exception:
+        logger.warning(
+            "get_recipe_section_step_yaml_parse_failed",
+            step_name=step_name,
+            exc_info=True,
+        )
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    steps = parsed.get("steps")
+    if not isinstance(steps, dict):
+        return ""
+    step_obj = steps.get(step_name)
+    if step_obj is None:
+        return ""
+    if not isinstance(step_obj, dict):
+        return str(step_obj)
+    # Render just this step's subtree as compact YAML.
+    try:
+        return fast_dumps({step_name: step_obj})
+    except Exception:
+        logger.warning(
+            "get_recipe_section_step_yaml_serialize_failed",
+            step_name=step_name,
+            exc_info=True,
+        )
+        return ""
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})

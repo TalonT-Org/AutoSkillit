@@ -225,6 +225,23 @@ def _artifact_path(artifact_dir: Path, tool_name: str) -> Path:
     return artifact_dir / f"{safe_name or 'response'}_{uuid.uuid4().hex[:8]}.log"
 
 
+def _recipe_artifact_path(artifact_dir: Path, tool_name: str, recipe_name: str) -> Path:
+    """Deterministic artifact path for recipe-bearing tools.
+
+    Unlike ``_artifact_path`` (which uses UUID for uniqueness), the recipe
+    artifact path is deterministic so that the ``get_recipe_section`` pull
+    tool can reconstruct the same path without needing it passed back in
+    the envelope. Re-opening the same recipe overwrites the artifact
+    (idempotent) rather than scattering UUID-suffixed copies.
+
+    The path is namespaced by both tool and recipe so two recipes loaded
+    from different surfaces (open_kitchen vs load_recipe) do not collide.
+    """
+    safe_tool = "".join(c if c.isalnum() or c in "._-" else "_" for c in tool_name)
+    safe_recipe = "".join(c if c.isalnum() or c in "._-" else "_" for c in recipe_name)
+    return artifact_dir / f"{safe_tool or 'response'}_{safe_recipe or 'recipe'}.log"
+
+
 def _finalize_envelope(envelope: dict[str, Any], *, max_bytes: int) -> str:
     metadata = envelope.get(RESPONSE_SPILL_METADATA_KEY)
     if not isinstance(metadata, dict) or "projected_utf8_bytes" not in metadata:

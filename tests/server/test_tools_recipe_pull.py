@@ -139,31 +139,31 @@ def _full_open_kitchen_payload(recipe_name: str) -> dict[str, object]:
 def test_envelope_fits_every_backend_by_construction(
     recipe_name: str, backend_name: str, tmp_path: Path
 ) -> None:
-    """The bounded envelope (not the full payload) fits every backend's
-    effective delivery bound by construction. The pull reference is
-    present and the post-prune step names are preserved."""
+    """The production envelope path preserves its complete pull contract."""
     payload = _full_open_kitchen_payload(recipe_name)
     post_prune_raw = cast(list[object], payload.get("post_prune_step_names") or [])
     step_names = [str(n) for n in post_prune_raw if isinstance(n, str)]
 
-    skeleton = extract_step_skeleton(
-        step_names,
-        routing_edges_by_step={},
-        step_summaries={name: f"summary-{name}" for name in step_names},
-    )
-    artifact_path = tmp_path / f"{recipe_name}.log"
-    sha256 = "0" * 64
-
     caps = _backend_capabilities()[backend_name]
     bound_tokens = resolve_effective_delivery_bound(caps)
     bound_bytes = _bound_bytes(bound_tokens)
-    envelope = build_recipe_envelope(
+    content = cast(str, payload.get("content") or "")
+    padding = "delivery-fit-padding" * (bound_bytes // len("delivery-fit-padding") + 1)
+    payload["content"] = content + "\n# " + padding
+
+    info = find_recipe_by_name(recipe_name, _PROJECT_ROOT)
+    assert info is not None
+    recipe = load_recipe(info.path)
+    ctx = _make_minimal_ctx(tmp_path)
+    ctx.recipe_name = recipe_name
+    ctx.active_recipe_steps = recipe.steps
+
+    envelope = maybe_envelope_recipe_response(
         payload,
+        tool_name="open_kitchen",
         recipe_name=recipe_name,
-        artifact_path=str(artifact_path),
-        artifact_sha256=sha256,
-        skeleton=skeleton,
-        bound_bytes=bound_bytes,
+        tool_ctx=ctx,
+        effective_delivery_token_limit=bound_tokens,
     )
     serialized = json.dumps(envelope, ensure_ascii=False)
     assert len(serialized.encode("utf-8")) <= bound_bytes, (
@@ -171,16 +171,21 @@ def test_envelope_fits_every_backend_by_construction(
         f"{bound_bytes} bytes (effective delivery bound)"
     )
 
-    assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
-    assert envelope["recipe_pull"]["producer_tool"] == "open_kitchen"
-    assert envelope["recipe_pull"]["artifact_path"] == str(artifact_path)
-    assert envelope["recipe_pull"]["sha256"] == sha256
-    assert envelope["step_flow_skeleton"]["step_count"] == len(step_names)
-    for name in step_names:
-        names_in_skeleton = [step["name"] for step in envelope["step_flow_skeleton"]["steps"]]
-        assert name in names_in_skeleton, (
-            f"{recipe_name}: step {name!r} missing from envelope skeleton"
-        )
+    artifact_path = _recipe_artifact_path(ctx.temp_dir, "open_kitchen", recipe_name)
+    assert envelope["recipe_pull"] == {
+        "recipe_name": recipe_name,
+        "producer_tool": "open_kitchen",
+        "artifact_path": str(artifact_path),
+        "sha256": _artifact_sha256(artifact_path),
+        "pull_tool": "get_recipe_section",
+    }
+    expected_skeleton = extract_step_skeleton(
+        step_names,
+        build_routing_edges_by_step(recipe.steps),
+        build_step_summaries(recipe.steps),
+        byte_ranges=_compute_step_byte_ranges(cast(str, payload["content"])),
+    )
+    assert envelope["step_flow_skeleton"] == expected_skeleton
 
 
 def test_envelope_carries_priority_fields_verbatim(tmp_path: Path) -> None:

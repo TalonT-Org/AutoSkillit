@@ -105,46 +105,6 @@ from autoskillit.recipe.validator import (
 
 logger = get_logger(__name__)
 
-# Producer-side byte cap for the ``suggestions`` list. The downstream
-# ``_delivery_bound_summary`` projector honors a hard byte ceiling
-# (``effective_delivery_token_limit * 4``) and cannot deliver ``content``
-# when an unbounded producer emits more suggestions than the budget allows.
-# The remediation recipe accumulated 48KB+ of suggestions from semantic +
-# contract + staleness + diagram findings, starving ``content`` to ``""``
-# at the Codex delivery bound (issue #4304). The cap sizes ``suggestions``
-# to the byte share that leaves room for ``content`` after the priority
-# keys are preserved.
-_MAX_SUGGESTIONS_BYTES: int = 32_000
-
-
-def _cap_suggestions_bytes(suggestions: list[dict[str, Any]], cap: int) -> list[dict[str, Any]]:
-    """Truncate ``suggestions`` in-place to the largest prefix whose
-    ``json.dumps`` serialization fits within ``cap`` bytes. Returns the
-    truncated list (the input list is mutated).
-
-    Uses binary-search on the prefix length so the per-call cost stays at
-    O(log N) ``json.dumps`` invocations rather than O(N) ones. Items past
-    the truncation point are dropped silently — the upstream ``.extend()``
-    sites add findings in priority order (semantic → contract → staleness
-    → diagram), so truncation from the tail drops the least-severe entries
-    first.
-    """
-    if not suggestions:
-        return suggestions
-    current_bytes = len(json.dumps(suggestions).encode("utf-8"))
-    if current_bytes <= cap:
-        return suggestions
-    lo, hi = 0, len(suggestions)
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        projected_bytes = len(json.dumps(suggestions[:mid]).encode("utf-8"))
-        if projected_bytes <= cap:
-            lo = mid
-        else:
-            hi = mid - 1
-    del suggestions[lo:]
-    return suggestions
-
 
 def _t(label: str, t0: float, name: str) -> float:
     """Log elapsed time for a pipeline stage and return current time.
@@ -650,12 +610,6 @@ def load_and_validate(
         else None
     )
     _assert_no_raw_placeholders(raw, context=name, hidden_ingredient_names=_hidden_names)
-    # Cap suggestions at the source so the downstream delivery-bound summary
-    # always has room for content (issue #4304: unbounded producer starved
-    # content to "" at the Codex delivery bound). The cap covers all
-    # accumulation points (the 4 .extend() calls above plus the 3 .append()
-    # calls in the except handlers).
-    _cap_suggestions_bytes(suggestions, _MAX_SUGGESTIONS_BYTES)
     result: LoadRecipeResult = {
         "content": raw,
         "errors": errors,

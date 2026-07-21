@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -1602,22 +1603,11 @@ def test_load_and_validate_campaign_no_steps_returns_valid(tmp_path: Path) -> No
     )
 
 
-def test_suggestions_accumulation_bounded(tmp_path: Path) -> None:
-    """``load_and_validate`` accumulates suggestions from 4 ``.extend()`` calls
-    (semantic, contract, contract-staleness, diagram-staleness) plus 3
-    ``.append()`` calls in exception handlers. The accumulated list is consumed
-    verbatim by the hard-budgeted ``_delivery_bound_summary`` projector, so
-    the producer must cap itself before delivering a payload that is
-    structurally impossible to fit any Codex bound.
-
-    Regression guard for issue #4304: the remediation recipe accumulated
-    48KB+ of suggestions, which starved ``content`` to ``""`` in the
-    delivery-bound summary. The fix adds ``_MAX_SUGGESTIONS_BYTES`` to cap the
-    producer, so the consumer can always deliver non-empty content.
-    """
-    import json as _json
-
-    from autoskillit.recipe._api import _MAX_SUGGESTIONS_BYTES, load_and_validate
+def test_suggestions_accumulation_preserves_over_bound_tail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Domain validation preserves every finding before delivery projection."""
+    import autoskillit.recipe._api as api
 
     recipe_dir = tmp_path / ".autoskillit" / "recipes"
     recipe_dir.mkdir(parents=True, exist_ok=True)
@@ -1636,14 +1626,13 @@ steps:
 """
     recipe_path = recipe_dir / "test-suggestions-cap.yaml"
     recipe_path.write_text(recipe_yaml)
-    result = load_and_validate(
+    injected = [{"rule": f"injected-{index}", "message": "x" * 500} for index in range(100)]
+    monkeypatch.setattr(api, "run_semantic_rules", lambda _ctx: [])
+    monkeypatch.setattr(api, "findings_to_dicts", lambda _findings: list(injected))
+    result = api.load_and_validate(
         "test-suggestions-cap",
         project_dir=tmp_path,
     )
     suggestions = result.get("suggestions", [])
-    suggestions_bytes = len(_json.dumps(suggestions).encode("utf-8"))
-    assert suggestions_bytes <= _MAX_SUGGESTIONS_BYTES, (
-        f"suggestions payload {suggestions_bytes} bytes exceeds producer cap "
-        f"{_MAX_SUGGESTIONS_BYTES} bytes — unbounded producer will starve "
-        f"delivery-bound summary content"
-    )
+    assert len(json.dumps(suggestions).encode("utf-8")) > 32_000
+    assert injected[-1] in suggestions

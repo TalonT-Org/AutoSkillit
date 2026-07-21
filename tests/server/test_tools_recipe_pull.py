@@ -987,8 +987,19 @@ async def test_pull_tool_returns_bounded_step_content(
 
     bound_tokens = _smallest_bound_tokens()
     bound_bytes_for_response = bound_tokens * 4
+    missing_identity = json.loads(await get_recipe_section(section=step_names[0]))
+    assert missing_identity == {
+        "success": False,
+        "error": "recipe_artifact_identity_required",
+    }
     for step_name in step_names:
-        response = json.loads(await get_recipe_section(section=step_name))
+        response = json.loads(
+            await get_recipe_section(
+                section=step_name,
+                recipe_name=_RECIPE_FOR_PULL,
+                producer_tool="open_kitchen",
+            )
+        )
         assert response.get("success") is True, (
             f"get_recipe_section({step_name!r}) failed: {response}"
         )
@@ -1004,7 +1015,13 @@ async def test_pull_tool_returns_bounded_step_content(
             f"({bound_bytes_for_response} bytes); got {len(serialized.encode('utf-8'))}"
         )
 
-    unknown = json.loads(await get_recipe_section(section="not_a_real_step"))
+    unknown = json.loads(
+        await get_recipe_section(
+            section="not_a_real_step",
+            recipe_name=_RECIPE_FOR_PULL,
+            producer_tool="open_kitchen",
+        )
+    )
     assert unknown == {
         "success": False,
         "error": "section_not_found",
@@ -1044,7 +1061,13 @@ async def test_artifact_recreation_from_parsed_recipe(
     )
     assert step_name is not None, "recipe must expose at least one post-prune step"
 
-    response = json.loads(await get_recipe_section(section=step_name))
+    response = json.loads(
+        await get_recipe_section(
+            section=step_name,
+            recipe_name=_RECIPE_FOR_PULL,
+            producer_tool="open_kitchen",
+        )
+    )
     assert response.get("success") is True, (
         f"get_recipe_section after artifact deletion should recreate; got {response}"
     )
@@ -1067,7 +1090,13 @@ async def test_artifact_recreation_from_parsed_recipe(
         return {"valid": False, "content": "x"}
 
     monkeypatch.setattr(_tools_recipe_mod, "serve_recipe", _fake_serve_recipe)
-    failed = json.loads(await get_recipe_section(section=step_name))
+    failed = json.loads(
+        await get_recipe_section(
+            section=step_name,
+            recipe_name=_RECIPE_FOR_PULL,
+            producer_tool="open_kitchen",
+        )
+    )
     assert failed.get("success") is False
     assert failed["error"] == "recipe_artifact_unavailable"
     assert failed["detail"] == "recreation returned invalid recipe"
@@ -1123,7 +1152,14 @@ async def test_large_step_chunked_via_continuation(
     part = 0
     has_more = True
     while has_more:
-        response = json.loads(await get_recipe_section(section="giant_step", part=part))
+        response = json.loads(
+            await get_recipe_section(
+                section="giant_step",
+                part=part,
+                recipe_name=_RECIPE_FOR_PULL,
+                producer_tool="open_kitchen",
+            )
+        )
         assert response.get("success") is True, f"chunk {part} failed: {response}"
         assert response["section"] == "giant_step"
         chunks.append(response["content"])

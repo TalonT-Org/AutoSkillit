@@ -434,7 +434,7 @@ async def get_recipe_section(
     section: str,
     part: int = 0,
     recipe_name: str | None = None,
-    producer_tool: str = "open_kitchen",
+    producer_tool: str | None = None,
     artifact_path: str | None = None,
     artifact_sha256: str | None = None,
 ) -> str:
@@ -457,6 +457,10 @@ async def get_recipe_section(
         part: Continuation index (0-based). Default 0 returns the first
             chunk; pass the value from the previous response's
             ``next_part`` to retrieve the next chunk.
+        recipe_name: Recipe identity copied from the envelope's
+            ``recipe_pull.recipe_name`` field.
+        producer_tool: Producer identity copied from the envelope's
+            ``recipe_pull.producer_tool`` field.
 
     Returns:
         JSON with ``success``, ``section``, ``content``, ``has_more``,
@@ -474,11 +478,9 @@ async def get_recipe_section(
             if tool_ctx is None or tool_ctx.recipes is None:
                 return json.dumps({"success": False, "error": "kitchen not open"})
 
-            requested_recipe_name = recipe_name or tool_ctx.recipe_name
-            if not requested_recipe_name:
-                return json.dumps(
-                    {"success": False, "error": "no active recipe in kitchen context"}
-                )
+            if not recipe_name or producer_tool is None:
+                return json.dumps({"success": False, "error": "recipe_artifact_identity_required"})
+            requested_recipe_name = recipe_name
 
             if producer_tool not in {"open_kitchen", "load_recipe"}:
                 return json.dumps({"success": False, "error": "invalid_recipe_artifact_identity"})

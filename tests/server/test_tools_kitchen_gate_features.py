@@ -8,7 +8,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.server.conftest import _make_mock_ctx
+from tests.server.conftest import _make_mock_ctx, _make_track_response_ready_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -210,10 +210,13 @@ async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkey
 async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypatch):
     """ingredients_only=True with name=None should behave like regular no-name open."""
     monkeypatch.chdir(tmp_path)
-    mock_ctx = _make_mock_ctx()
+    mock_ctx = _make_track_response_ready_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server._notify._get_ctx_or_none", return_value=mock_ctx),
+    ):
         with patch("autoskillit.server.logger"):
             with patch(
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()

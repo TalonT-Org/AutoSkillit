@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tests.server._helpers import _PATCHED_DEFAULTS, _SERVER_ONLY_KEYS
-from tests.server.conftest import _make_mock_ctx
+from tests.server.conftest import _make_mock_ctx, _make_track_response_ready_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -43,10 +43,13 @@ async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
         lambda _: [],
     )
 
-    mock_ctx = _make_mock_ctx()
+    mock_ctx = _make_track_response_ready_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server._notify._get_ctx_or_none", return_value=mock_ctx),
+    ):
         with patch("autoskillit.server.logger"):
             with patch(
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
@@ -86,10 +89,13 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
         lambda _: HookDriftResult(missing=0, orphaned=0),
     )
 
-    mock_ctx = _make_mock_ctx()
+    mock_ctx = _make_track_response_ready_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server._notify._get_ctx_or_none", return_value=mock_ctx),
+    ):
         with patch("autoskillit.server.logger"):
             with patch(
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
@@ -198,10 +204,13 @@ async def test_prime_quota_cache_catches_typeerror(monkeypatch):
 async def test_open_kitchen_no_name_returns_json_envelope_with_success_true(tmp_path, monkeypatch):
     """No-recipe open_kitchen returns JSON envelope with success=True."""
     monkeypatch.chdir(tmp_path)
-    mock_ctx = _make_mock_ctx()
+    mock_ctx = _make_track_response_ready_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server._notify._get_ctx_or_none", return_value=mock_ctx),
+    ):
         with patch("autoskillit.server.logger"):
             with patch(
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()

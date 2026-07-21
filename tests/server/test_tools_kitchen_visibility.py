@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
-from tests.server.conftest import _make_mock_ctx
+from tests.server.conftest import _make_mock_ctx, _make_track_response_ready_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -156,10 +156,13 @@ async def test_open_kitchen_includes_categorized_tool_listing(tmp_path, monkeypa
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     monkeypatch.chdir(tmp_path)
-    mock_ctx = _make_mock_ctx()
+    mock_ctx = _make_track_response_ready_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server._notify._get_ctx_or_none", return_value=mock_ctx),
+    ):
         with patch("autoskillit.server.logger"):
             with patch(
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
@@ -262,10 +265,13 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
 async def test_open_kitchen_without_recipe_returns_json_envelope(tmp_path, monkeypatch):
     """open_kitchen() without name returns JSON envelope with success=True."""
     monkeypatch.chdir(tmp_path)
-    mock_ctx = _make_mock_ctx()
+    mock_ctx = _make_track_response_ready_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server._notify._get_ctx_or_none", return_value=mock_ctx),
+    ):
         with patch("autoskillit.server.logger"):
             with patch(
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
@@ -486,10 +492,13 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
 async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
     """Path B (no-name) must inject full sous-chef SKILL.md into response text."""
     monkeypatch.chdir(tmp_path)
-    mock_ctx = _make_mock_ctx()
+    mock_ctx = _make_track_response_ready_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server._notify._get_ctx_or_none", return_value=mock_ctx),
+    ):
         with patch("autoskillit.server.logger"):
             with patch(
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()

@@ -129,6 +129,27 @@ def _make_mock_ctx() -> MagicMock:
     return ctx
 
 
+def _make_track_response_ready_mock_ctx(*, delivery_token_limit: int = 1_000_000) -> MagicMock:
+    """Return a mock_ctx with backend.capabilities configured so track_response_size
+    resolves an effective delivery bound instead of falling back to the worst case.
+
+    Tests that route open_kitchen (or any @track_response_size-wrapped tool) through
+    track_response_size's decorator stack without a real kitchen context must patch
+    ``autoskillit.server._notify._get_ctx_or_none`` to return this ctx. This avoids
+    the bounded_response_budget_failure("context_unavailable") envelope that the Part A
+    remediation now produces for any ctx where caps is not a real BackendCapabilities.
+    """
+    from autoskillit.core import BackendCapabilities
+
+    ctx = _make_mock_ctx()
+    ctx.backend = MagicMock()
+    ctx.backend.capabilities = BackendCapabilities(
+        effective_delivery_token_limit=delivery_token_limit
+    )
+    ctx.temp_dir = Path("/tmp")
+    return ctx
+
+
 _SUCCESS_JSON = (
     '{"type": "result", "subtype": "success", "is_error": false,'
     ' "result": "done", "session_id": "s1"}'

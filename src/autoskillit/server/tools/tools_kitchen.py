@@ -83,6 +83,7 @@ from autoskillit.server.tools._preflight import (
     filter_steps_by_post_prune,
 )
 from autoskillit.server.tools._serve_helpers import (
+    build_and_record_recipe_envelope,
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
     render_served_response,
@@ -124,6 +125,33 @@ def _kitchen_failure_envelope(
             "stage": stage,
         }
     )
+
+
+def _render_open_kitchen_envelope(
+    tool_ctx: ToolContext,
+    result: dict[str, Any],
+    *,
+    overrides: dict[str, str] | None,
+    recipe_name: str,
+    ingredients_only: bool,
+) -> str:
+    """Persist the full recipe payload and render the compact open_kitchen envelope.
+
+    Single logic site for both open_kitchen recipe-bearing return paths
+    (deferred-recall and normal), mirroring load_recipe's envelope call shape.
+    """
+    envelope = build_and_record_recipe_envelope(
+        tool_ctx=tool_ctx,
+        tool_name="open_kitchen",
+        payload=result,
+        result=result,
+        kitchen_label="open",
+        version=__version__,
+        overrides=overrides,
+        recipe_name=recipe_name,
+        ingredients_only=ingredients_only,
+    )
+    return render_served_response(envelope)
 
 
 def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
@@ -1059,7 +1087,13 @@ async def open_kitchen(
                 if overrides is not None:
                     tool_ctx.session_serve_overrides = dict(overrides)
                     tool_ctx.session_serve_defer_unresolved = not bool(overrides)
-                return render_served_response(result)
+                return _render_open_kitchen_envelope(
+                    tool_ctx,
+                    result,
+                    overrides=overrides,
+                    recipe_name=name,
+                    ingredients_only=ingredients_only,
+                )
             try:
                 result = serve_recipe(
                     tool_ctx,
@@ -1211,7 +1245,13 @@ async def open_kitchen(
                 )
                 return _validation_err
 
-            return render_served_response(result)
+            return _render_open_kitchen_envelope(
+                tool_ctx,
+                result,
+                overrides=overrides,
+                recipe_name=name,
+                ingredients_only=ingredients_only,
+            )
 
         text = (
             f"Kitchen is open. AutoSkillit {__version__}. Tools are ready for service.\n\n"

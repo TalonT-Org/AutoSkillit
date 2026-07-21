@@ -49,6 +49,7 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
     build_and_record_recipe_envelope,
     build_backend_capabilities_map,
+    build_open_kitchen_recipe_payload,
     render_served_response,
     response_backstop_tool_meta,
     serve_recipe,
@@ -733,6 +734,9 @@ def _recreate_artifact(
             "error": "artifact_unavailable",
             "detail": f"Recreation failed: {type(exc).__name__}: {exc}",
         }
+
+    if artifact_state.get("tool_name") == "open_kitchen":
+        recreated = build_open_kitchen_recipe_payload(recreated, version=__version__)
 
     serialized = json.dumps(recreated, ensure_ascii=False, sort_keys=False)
     recreated_sha256 = hashlib.sha256(serialized.encode("utf-8")).hexdigest()

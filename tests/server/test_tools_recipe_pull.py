@@ -45,6 +45,7 @@ from autoskillit.server.tools._serve_helpers import (
     maybe_envelope_recipe_response,
     persist_recipe_artifact,
 )
+from autoskillit.server.tools.tools_recipe import _bounded_recipe_section_response
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -67,6 +68,25 @@ def _smallest_bound_tokens() -> int:
 
 def _bound_bytes(bound_tokens: int) -> int:
     return bound_tokens * 4
+
+
+def test_section_chunks_fit_serialized_utf8_bound() -> None:
+    content = ('\u96ea"\\\n\t' * 2_000) + "tail"
+    bound_bytes = 512
+    chunks: list[str] = []
+    part = 0
+    while True:
+        rendered = _bounded_recipe_section_response(
+            "step", content, part=part, bound_bytes=bound_bytes
+        )
+        assert len(rendered.encode("utf-8")) <= bound_bytes
+        response = json.loads(rendered)
+        assert response["success"] is True
+        chunks.append(response["content"])
+        if not response["has_more"]:
+            break
+        part = response["next_part"]
+    assert "".join(chunks) == content
 
 
 def _full_open_kitchen_payload(recipe_name: str) -> dict[str, object]:

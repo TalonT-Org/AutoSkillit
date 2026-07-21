@@ -56,6 +56,61 @@ from autoskillit.server.tools._types import _validate_result
 logger = get_logger(__name__)
 
 
+def _bounded_recipe_section_response(
+    section: str, content: str, *, part: int, bound_bytes: int
+) -> str:
+    """Render one continuation chunk whose serialized UTF-8 size fits the bound."""
+
+    def _render(start: int, end: int) -> str:
+        has_more = end < len(content)
+        response: dict[str, Any] = {
+            "success": True,
+            "section": section,
+            "content": content[start:end],
+            "has_more": has_more,
+        }
+        if has_more:
+            response["next_part"] = chunk_index + 1
+            response["total_size"] = len(content)
+        return json.dumps(response, ensure_ascii=False)
+
+    start = 0
+    for chunk_index in range(part + 1):
+        full = _render(start, len(content))
+        if len(full.encode("utf-8")) <= bound_bytes:
+            end = len(content)
+            rendered = full
+        else:
+            low = start + 1
+            high = len(content) - 1
+            end = start
+            rendered = ""
+            while low <= high:
+                candidate_end = (low + high) // 2
+                candidate = _render(start, candidate_end)
+                if len(candidate.encode("utf-8")) <= bound_bytes:
+                    end = candidate_end
+                    rendered = candidate
+                    low = candidate_end + 1
+                else:
+                    high = candidate_end - 1
+            if end == start:
+                return json.dumps({"success": False, "error": "recipe_section_bound_too_small"})
+        if chunk_index == part:
+            return rendered
+        start = end
+        if start >= len(content):
+            return json.dumps(
+                {
+                    "success": True,
+                    "section": section,
+                    "content": "",
+                    "has_more": False,
+                }
+            )
+    raise AssertionError("continuation loop must return")
+
+
 @mcp.tool(
     tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
     annotations={"readOnlyHint": True},
@@ -586,23 +641,11 @@ async def get_recipe_section(
             )
             bound_bytes = bound_tokens * 4
 
-            chunk_size = max(1024, bound_bytes - 4096)
             if part < 0:
                 part = 0
-            start = part * chunk_size
-            end = start + chunk_size
-            chunk = content[start:end]
-            has_more = end < len(content)
-            response: dict[str, Any] = {
-                "success": True,
-                "section": section,
-                "content": chunk,
-                "has_more": has_more,
-            }
-            if has_more:
-                response["next_part"] = part + 1
-                response["total_size"] = len(content)
-            return json.dumps(response)
+            return _bounded_recipe_section_response(
+                section, content, part=part, bound_bytes=bound_bytes
+            )
     except Exception as exc:
         logger.error("get_recipe_section unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

@@ -653,6 +653,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             "fleet",
             "infra/test_pretty_output_hook_infra.py",
+            # file-level: Part C envelope-fit test imports execution.backends.BACKEND_REGISTRY
+            "infra/test_pretty_output_recipe.py",
             "_llm_triage",
             "smoke_utils",
         }

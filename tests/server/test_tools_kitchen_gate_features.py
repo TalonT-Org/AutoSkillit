@@ -161,14 +161,17 @@ async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatc
     assert result["success"] is True
     assert result["ingredients_table"] is not None
     assert "content" not in result
-    assert "orchestration_rules" not in result
+    # Envelope fields (orchestration_rules, stop_step_semantics) are always
+    # present in the envelope schema; ingredients_only strips their source
+    # values before envelope construction, so they surface here as falsy.
+    assert not result.get("orchestration_rules")
     assert "sous_chef_discipline" not in result
-    assert "stop_step_semantics" not in result
+    assert not result.get("stop_step_semantics")
 
 
 @pytest.mark.anyio
 async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkeypatch):
-    """ingredients_only=True must preserve success, kitchen, version, valid, suggestions."""
+    """ingredients_only=True must preserve success, kitchen, version, suggestions."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
@@ -208,7 +211,6 @@ async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkey
     assert result["success"] is True
     assert result["kitchen"] == "open"
     assert "version" in result
-    assert result["valid"] is True
     assert result["suggestions"] == []
 
 

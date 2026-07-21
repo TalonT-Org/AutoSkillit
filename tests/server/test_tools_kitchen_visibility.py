@@ -429,6 +429,8 @@ async def test_sous_chef_discipline_not_in_open_kitchen_result(tmp_path, monkeyp
     }
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -466,6 +468,8 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
     }
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):

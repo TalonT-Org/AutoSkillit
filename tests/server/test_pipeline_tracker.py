@@ -172,6 +172,7 @@ def _configure_open_kitchen_mock(ctx, steps, tmp_path):
     from unittest.mock import MagicMock
 
     ctx.project_dir = tmp_path
+    ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
     ctx.recipes.load_and_validate.return_value = {
         "content": "name: remediation\nsteps: {}\n",
         "valid": True,

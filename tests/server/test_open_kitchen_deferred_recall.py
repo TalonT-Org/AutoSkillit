@@ -23,11 +23,14 @@ def _make_deferred_recall_ctx(name: str) -> MagicMock:
 
 
 @pytest.mark.anyio
-async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
+async def test_deferred_recall_sets_active_recipe_steps_from_recipe(tmp_path):
     """Deferred-recall path populates active_recipe_steps from the freshly loaded recipe."""
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
     mock_ctx.recipes.load_and_validate.return_value = {
         "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
         "valid": True,
@@ -60,11 +63,14 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
 
 
 @pytest.mark.anyio
-async def test_deferred_recall_sets_active_recipe_steps_none_when_find_raises():
+async def test_deferred_recall_sets_active_recipe_steps_none_when_find_raises(tmp_path):
     """When recipes.find raises, active_recipe_steps is set to None and the call still succeeds."""
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
     mock_ctx.recipes.load_and_validate.return_value = {
         "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
         "valid": True,
@@ -87,11 +93,14 @@ async def test_deferred_recall_sets_active_recipe_steps_none_when_find_raises():
 
 
 @pytest.mark.anyio
-async def test_deferred_recall_sets_active_recipe_steps_none_when_find_returns_none():
+async def test_deferred_recall_sets_active_recipe_steps_none_when_find_returns_none(tmp_path):
     """When recipes.find returns None (recipe not on disk), active_recipe_steps is None."""
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
     mock_ctx.recipes.load_and_validate.return_value = {
         "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
         "valid": True,
@@ -221,12 +230,15 @@ def _make_pre_revealed_ctx(name: str) -> MagicMock:
 
 
 @pytest.mark.anyio
-async def test_pre_reveal_then_open_does_not_re_execute_handler():
+async def test_pre_reveal_then_open_does_not_re_execute_handler(tmp_path):
     """Pre-revealed state (gate enabled, recipe_name empty, infrastructure ready)
     must skip _open_kitchen_handler and still load the recipe."""
     from autoskillit.server.tools import tools_kitchen
 
     mock_ctx = _make_pre_revealed_ctx("test-recipe")
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")
     mock_ctx.recipes.find.return_value = mock_recipe_info
@@ -406,6 +418,9 @@ async def test_deferred_recall_preserves_active_locks(tmp_path):
 
     ctx = _make_deferred_recall_ctx("test-recipe")
     ctx.project_dir = tmp_path
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    ctx.temp_dir = tmp_path
     ctx.active_recipe_steps = {"investigate": MagicMock(skip_when_false="inputs.investigate")}
     ctx.active_recipe_ingredients = frozenset(["investigate"])
     ctx.gate.enabled = True

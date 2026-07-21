@@ -393,6 +393,8 @@ class TestAuthorityFeedbackConsistency:
         mock_ctx.config.migration.suppressed = []
         mock_ctx.kitchen_id = "test-kitchen"
         mock_ctx.config.linux_tracing.log_dir = ""
+        # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+        mock_ctx.temp_dir = tmp_path
 
         with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
             with patch("autoskillit.server.logger"):
@@ -417,7 +419,12 @@ class TestAuthorityFeedbackConsistency:
                                         ctx=mock_ctx,
                                     )
                                     parsed = json.loads(result_str)
-                                    warnings = parsed.get("warnings") or []
+                                    # warnings is not a compact-envelope field — it
+                                    # survives on the persisted artifact payload.
+                                    artifact = json.loads(
+                                        Path(parsed["artifact_path"]).read_text(encoding="utf-8")
+                                    )
+                                    warnings = artifact.get("warnings") or []
                                     matching = [w for w in warnings if key in w]
                                     assert matching, (
                                         f"open_kitchen must emit a warning mentioning {key!r} "

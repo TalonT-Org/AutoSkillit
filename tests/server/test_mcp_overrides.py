@@ -91,6 +91,9 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
         }
     )
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_tool_ctx.temp_dir = tmp_path
 
     mock_mcp_ctx = AsyncMock()
     mock_mcp_ctx.enable_components = AsyncMock()
@@ -124,8 +127,11 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
             ctx=mock_mcp_ctx,
         )
         result = json.loads(result_str)
+        # New envelope shape: success=True + kitchen="open" confirm the recipe
+        # loaded and the gate opened; "valid" is not carried into the compact
+        # envelope (it's implied by success and surfaced via the artifact).
+        assert result.get("success") is True
         assert result.get("kitchen") == "open"
-        assert result.get("valid") is True
 
         # Verify user-supplied overrides were passed through to load_and_validate
         # (merged with auto-injected kitchen_id and pipeline_health)
@@ -164,6 +170,9 @@ async def test_unknown_override_key_warned(tmp_path: Path) -> None:
     mock_recipes.load.return_value = mock_recipe
 
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_tool_ctx.temp_dir = tmp_path
     mock_mcp_ctx = AsyncMock()
 
     with (
@@ -199,8 +208,11 @@ async def test_unknown_override_key_warned(tmp_path: Path) -> None:
         )
     result = json.loads(result_str)
     assert result.get("kitchen") == "open"
-    warnings = result.get("warnings", [])
-    assert warnings, f"Expected warnings for unknown override key, got result: {result}"
+    # New envelope shape: warnings are not carried into the compact envelope
+    # directly — read them from the persisted artifact via artifact_path.
+    artifact = json.loads(Path(result["artifact_path"]).read_text())
+    warnings = artifact.get("warnings", [])
+    assert warnings, f"Expected warnings for unknown override key, got artifact: {artifact}"
     assert any("audit_impl" in w for w in warnings)
 
 
@@ -230,6 +242,9 @@ async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
     mock_recipes.load.return_value = mock_recipe
 
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_tool_ctx.temp_dir = tmp_path
     mock_mcp_ctx = AsyncMock()
 
     with (
@@ -265,7 +280,10 @@ async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
         )
     result = json.loads(result_str)
     assert result.get("kitchen") == "open"
-    assert "warnings" not in result, f"Expected no warnings, got: {result.get('warnings')}"
+    # New envelope shape never carries "warnings" directly; verify via the
+    # persisted artifact that no override warnings were recorded either.
+    artifact = json.loads(Path(result["artifact_path"]).read_text())
+    assert "warnings" not in artifact, f"Expected no warnings, got: {artifact.get('warnings')}"
 
 
 async def test_unknown_override_key_warned_deferred_recall(tmp_path: Path) -> None:
@@ -294,6 +312,9 @@ async def test_unknown_override_key_warned_deferred_recall(tmp_path: Path) -> No
     mock_recipes.load.return_value = mock_recipe
 
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_tool_ctx.temp_dir = tmp_path
     # Simulate kitchen already open with recipe "test" loaded → deferred-recall path
     mock_tool_ctx.gate.enabled = True
     mock_tool_ctx.recipe_name = "test"
@@ -321,6 +342,9 @@ async def test_unknown_override_key_warned_deferred_recall(tmp_path: Path) -> No
         )
     result = json.loads(result_str)
     assert result.get("kitchen") == "open"
-    warnings = result.get("warnings", [])
-    assert warnings, f"Expected warnings on deferred-recall path, got result: {result}"
+    # New envelope shape: warnings are not carried into the compact envelope
+    # directly — read them from the persisted artifact via artifact_path.
+    artifact = json.loads(Path(result["artifact_path"]).read_text())
+    warnings = artifact.get("warnings", [])
+    assert warnings, f"Expected warnings on deferred-recall path, got artifact: {artifact}"
     assert any("audit_impl" in w for w in warnings)

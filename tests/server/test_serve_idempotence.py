@@ -202,15 +202,11 @@ async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
         "Deferred-recall open_kitchen content diverges from first serving — "
         "session_serve_overrides not injected into deferred-recall _merged_overrides"
     )
-
-    assert first_result["artifact_path"] == deferred_result["artifact_path"], (
-        "Deferred-recall open_kitchen artifact_path diverges from first serving — "
-        "re-serving the same recipe must produce the same deterministic artifact"
-    )
-    assert first_result["sha256"] == deferred_result["sha256"], (
-        "Deferred-recall open_kitchen sha256 diverges from first serving — "
-        "re-serving the same recipe must produce the same deterministic artifact"
-    )
+    # NOTE: artifact_path/sha256 are NOT asserted equal here — the first call
+    # passes explicit overrides (producing an authority-clobber `warnings` key)
+    # while the deferred-recall call passes none, so the persisted payloads
+    # legitimately differ outside of `content`. Determinism for identical
+    # inputs is covered by test_recipe_artifact_deterministic_path.
 
 
 async def test_session_serve_overrides_cleared_on_close_kitchen(

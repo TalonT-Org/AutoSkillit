@@ -219,6 +219,11 @@ _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
         "post_prune_step_names",  # internal preflight field; not displayed to agent
         "dispatch_feasible",  # internal admission control signal; surfaced via refusal envelopes
         "infeasible_steps",  # internal admission control detail; surfaced via refusal envelopes
+        "step_flow_skeleton",  # compact envelope routing graph; dedicated formatter is Part B
+        "step_index",  # compact envelope step identifier map; dedicated formatter is Part B
+        "artifact_path",  # compact envelope pull-tool metadata; dedicated formatter is Part B
+        "sha256",  # compact envelope pull-tool metadata; dedicated formatter is Part B
+        "pull_tool",  # compact envelope pull-tool metadata; dedicated formatter is Part B
     }
 )
 

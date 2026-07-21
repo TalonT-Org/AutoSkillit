@@ -390,7 +390,7 @@ async def test_open_kitchen_codex_with_provider_overrides_feasible(tmp_path: Pat
     parsed = json.loads(result)
     assert parsed["success"] is True
     assert parsed["kitchen"] == "open"
-    assert "implement" in parsed.get("post_prune_step_names", [])
+    assert "implement" in parsed.get("step_index", {})
 
 
 @pytest.mark.anyio

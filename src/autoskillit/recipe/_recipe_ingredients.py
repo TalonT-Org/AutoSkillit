@@ -136,7 +136,9 @@ class LoadRecipeResult(TypedDict, total=False):
 class OpenKitchenResult(TypedDict, total=False):
     """Typed schema for the open_kitchen named-recipe handler → formatter boundary.
 
-    Extends LoadRecipeResult with four post-return keys injected by the handler.
+    Extends LoadRecipeResult with four post-return keys injected by the handler,
+    plus the compact envelope fields (Part B) that replace inline content on the
+    wire response.
     """
 
     # Inherited from LoadRecipeResult (20 keys)
@@ -166,6 +168,12 @@ class OpenKitchenResult(TypedDict, total=False):
     kitchen: str
     version: str
     hook_warning: str
+    # Compact envelope fields (build_recipe_envelope) — replace content on the wire
+    step_flow_skeleton: list[dict[str, Any]]
+    step_index: dict[str, str]
+    artifact_path: str
+    sha256: str
+    pull_tool: str
 
 
 class RecipeListItem(TypedDict):

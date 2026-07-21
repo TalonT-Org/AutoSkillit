@@ -429,7 +429,15 @@ def _tiered_projection(
        floor (``_DEPRIORITIZED_KEY_FLOOR_BYTES``) so they remain *present*
        in the envelope even after projection.
     3. ``content_key`` is allocated a guaranteed floor from the remaining
-       budget (at least half the post-floor remainder).
+       budget (at least half the post-floor remainder); Tier 1 then
+       binary-searches upward from that floor for the largest
+       ``content_head`` that still fits alongside the un-projected
+       deprioritized/droppable keys — reallocating any budget left unused
+       because those keys serialize smaller than their assumed share.
+       This binary search is the sole reallocation mechanism: no separate
+       "measure freed bytes, then rebuild with a computed head length"
+       pass exists, because the search already finds the true maximum
+       against the exact rendered size.
     4. Any remaining budget flows to the deprioritized keys (which are
        projected to fit).
     5. ``droppable_keys`` are included verbatim if they fit within the
@@ -572,9 +580,41 @@ def _tiered_projection(
             return rendered
         return None
 
-    # Tier 1: priority verbatim + content floor + deprioritized verbatim + droppable.
+    def _maximize_content_head(
+        *, deprioritized_projector: Any = None, include_droppable: bool = True
+    ) -> str | None:
+        """Binary-search the largest ``content_head`` (in ``[content_floor, len(text)]``)
+        whose rendered envelope still fits ``bound``.
+
+        Used by Tier 1 and Tier 2 to reallocate any budget left unused because
+        deprioritized/droppable keys serialize smaller than their allotted
+        share — the search finds the true maximum against the exact rendered
+        size, with no separate measure-then-reallocate pass required.
+        """
+        low, high = content_floor, len(text)
+        best_rendered: str | None = None
+        while low <= high:
+            mid = (low + high) // 2
+            candidate = _fits(
+                _build_with_lengths(
+                    content_head=mid,
+                    deprioritized_projector=deprioritized_projector,
+                    include_droppable=include_droppable,
+                )
+            )
+            if candidate is not None:
+                best_rendered = candidate
+                low = mid + 1
+            else:
+                high = mid - 1
+        return best_rendered
+
+    # Tier 1: priority verbatim + deprioritized verbatim + droppable; binary-search the
+    # largest content_head (from content_floor up to the full text) that still fits, so
+    # any budget left unused because deprioritized/droppable keys serialize smaller than
+    # their allotted share is reallocated back to content rather than stranded at the floor.
     if content_is_str:
-        rendered = _fits(_build_with_lengths(content_head=content_floor))
+        rendered = _maximize_content_head()
         if rendered is not None:
             return rendered
 
@@ -589,24 +629,11 @@ def _tiered_projection(
                 projected = _project_value(value, _limit)[0]
                 return projected
 
-            low, high = content_floor, len(text)
-            best_rendered: str | None = None
-            while low <= high:
-                mid = (low + high) // 2
-                candidate = _fits(
-                    _build_with_lengths(
-                        content_head=mid,
-                        deprioritized_projector=_project_with_limit,
-                        include_droppable=False,
-                    )
-                )
-                if candidate is not None:
-                    best_rendered = candidate
-                    low = mid + 1
-                else:
-                    high = mid - 1
-            if best_rendered is not None:
-                return best_rendered
+            rendered = _maximize_content_head(
+                deprioritized_projector=_project_with_limit, include_droppable=False
+            )
+            if rendered is not None:
+                return rendered
             value_limit //= 2
 
         # Fallback: deprioritized at minimum (still present, projected to floor).
@@ -675,9 +702,10 @@ def _delivery_bound_summary(
     preserved-key envelope, found ``base_bytes > bound`` when ``suggestions``
     was at the real-world 48KB+ size regime, and starved ``content`` to
     ``""``. This implementation allocates the budget in priority order:
-    priority keys verbatim → deprioritized floor → content floor → any
-    remaining to deprioritized keys. Droppable keys (diagram) are included
-    only if budget allows.
+    priority keys verbatim → deprioritized floor → content floor, maximized
+    via binary search so freed budget flows back to content → any remaining
+    to deprioritized keys. Droppable keys (diagram) are included only if
+    budget allows.
     """
     return _tiered_projection(
         parsed,

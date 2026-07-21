@@ -747,3 +747,45 @@ def test_delivery_bound_summary_with_realistic_suggestions_preserves_content(tmp
     )
     metadata = data[RESPONSE_SPILL_METADATA_KEY]
     assert metadata["reason"] == "delivery_bound"
+
+
+def test_delivery_bound_summary_reallocates_freed_budget_to_content(tmp_path):
+    """Tier 1 regression guard: when suggestions/ingredients_table are naturally
+    small (well under their allotted share of the budget), the bytes left over
+    must flow to ``content`` rather than being stranded at ``content_floor``.
+    Today, Tier 1 tries exactly one ``content_head`` value (the floor) and
+    returns immediately if it fits, leaving the rest of the bound unused."""
+    payload = {
+        "success": True,
+        "kitchen": "open",
+        "version": "1.2.3",
+        "content": "z" * 60_000,
+        "suggestions": [{"rule": "x"}],
+        "ingredients_table": "| a | b |",
+    }
+    original = json.dumps(payload)
+    bound_tokens = 10_000
+    bound_bytes = bound_tokens * 4
+    assert len(original.encode("utf-8")) > bound_bytes
+    result = enforce_response_budget(
+        original,
+        tool_name="open_kitchen",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=bound_tokens,
+    )
+    assert isinstance(result, str)
+    rendered_bytes = len(result.encode("utf-8"))
+    assert rendered_bytes <= bound_bytes
+    data = json.loads(result)
+    assert len(data.get("content", "")) > 0
+    # The freed budget from the small suggestions/ingredients_table values must
+    # flow to content: the projection should consume nearly the full bound, not
+    # stop at the (much smaller) guaranteed content floor. A ratio (rather than
+    # a fixed byte margin) tolerates artifact_path-length variance in the spill
+    # metadata across different tmp_path values.
+    assert rendered_bytes >= bound_bytes * 0.95, (
+        f"projection only used {rendered_bytes} of {bound_bytes} available "
+        f"bytes; freed budget from small deprioritized keys was not "
+        f"reallocated to content"
+    )

@@ -175,6 +175,47 @@ def test_load_recipe_result_has_post_prune_step_names(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# T-POSTPRUNE-2: post_prune_routing_edges field in LoadRecipeResult
+# ---------------------------------------------------------------------------
+
+
+_RECIPE_WITH_ROUTING_EDGES: Any = """\
+name: test-recipe-routing
+description: Recipe with routing edges for post_prune_routing_edges coverage
+autoskillit_version: "0.3.0"
+steps:
+  step_a:
+    tool: run_cmd
+    with:
+      step_name: step_a
+      cmd: "echo test"
+    on_success: step_b
+    on_failure: step_c
+  step_b:
+    action: stop
+    message: B
+  step_c:
+    action: stop
+    message: C
+"""
+
+
+def test_load_recipe_result_has_post_prune_routing_edges(tmp_path):
+    """LoadRecipeResult includes post_prune_routing_edges with real step-to-step
+    targets only. step_a also carries the default on_exhausted="escalate" edge,
+    which must be filtered out as a terminal sentinel rather than a step name.
+    """
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(tmp_path, "test-recipe-routing", _RECIPE_WITH_ROUTING_EDGES)
+    result = load_and_validate(name="test-recipe-routing", project_dir=tmp_path)
+    assert "post_prune_routing_edges" in result, (
+        "post_prune_routing_edges must be in LoadRecipeResult"
+    )
+    assert set(result["post_prune_routing_edges"]) == {"step_b", "step_c"}
+
+
+# ---------------------------------------------------------------------------
 # Minimal recipe fixture for cache tests
 # ---------------------------------------------------------------------------
 

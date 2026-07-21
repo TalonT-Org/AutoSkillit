@@ -208,20 +208,30 @@ def test_delivery_bound_summary_carries_all_step_names(
             # step-name coverage assertion — the content > 0 invariant is
             # the primary regression gate for issue #4304.
             continue
+        assert "post_prune_routing_edges" in payload, (
+            f"post_prune_routing_edges missing from open_kitchen payload for "
+            f"{recipe_name} — routing-edge coverage cannot be verified"
+        )
+        routing_edges_raw = payload.get("post_prune_routing_edges")
+        routing_targets = [
+            str(t) for t in cast(list[object], routing_edges_raw or []) if isinstance(t, str)
+        ]
         envelope_text = json.dumps(data)
         # Step names live inside ``content`` (the recipe body). When the bound
         # is small relative to the recipe body, head-truncation inherently
         # drops some step names — assert coverage proportional to how much of
-        # the body fits within the bound.
+        # the body fits within the bound. This tolerance is NOT a flat
+        # percentage: it scales with (1 - coverage_ratio), so at small bounds
+        # against large recipe bodies the tolerated miss count can be a large
+        # fraction of all step names. The ``content > 0`` assertion above is
+        # the primary regression gate for issue #4304; this is a softer,
+        # best-effort coverage check.
         full_body_chars = len(payload.get("content", "") or "")  # type: ignore[arg-type]  # TypedDict access
         body_chars_in_envelope = len(content)
         if full_body_chars <= body_chars_in_envelope:
             coverage_ratio = 1.0
         else:
             coverage_ratio = body_chars_in_envelope / full_body_chars
-        # Tolerate up to 5% missed step names due to substring overlap near
-        # the head-truncation boundary; the primary regression gate is
-        # ``content > 0``.
         max_missing = max(1, int(round(len(step_names) * (1.0 - coverage_ratio) + 1)))
         missing = [sn for sn in step_names if sn not in envelope_text]
         assert len(missing) <= max_missing, (
@@ -230,6 +240,20 @@ def test_delivery_bound_summary_carries_all_step_names(
             f"{coverage_ratio:.1%}, tolerated misses {max_missing}); first "
             f"missing: {missing[:5]}"
         )
+        if routing_targets:
+            # Routing-edge targets live inside the same truncatable ``content``
+            # field as step names, so they are subject to the identical
+            # proportional body-fit tolerance derived above.
+            max_missing_edges = max(
+                1, int(round(len(routing_targets) * (1.0 - coverage_ratio) + 1))
+            )
+            missing_edges = [t for t in routing_targets if t not in envelope_text]
+            assert len(missing_edges) <= max_missing_edges, (
+                f"{backend_name}: {len(missing_edges)} of {len(routing_targets)} "
+                f"routing edge targets missing from spilled envelope for "
+                f"{recipe_name} (body fit {coverage_ratio:.1%}, tolerated misses "
+                f"{max_missing_edges}); first missing: {missing_edges[:5]}"
+            )
 
 
 def test_codex_configured_limit_not_less_than_effective_delivery_bound() -> None:

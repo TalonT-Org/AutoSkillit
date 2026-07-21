@@ -150,6 +150,9 @@ async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatc
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
+                        # New envelope: open_kitchen persists the full payload to
+                        # temp_dir/responses/.
+                        mock_ctx.temp_dir = tmp_path
                         result_json = await open_kitchen(
                             name="test", ingredients_only=True, ctx=mock_ctx
                         )
@@ -194,6 +197,9 @@ async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkey
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
+                        # New envelope: open_kitchen persists the full payload to
+                        # temp_dir/responses/.
+                        mock_ctx.temp_dir = tmp_path
                         result_json = await open_kitchen(
                             name="test", ingredients_only=True, ctx=mock_ctx
                         )
@@ -297,6 +303,8 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
     mock_ctx.active_recipe_packs = frozenset()
     mock_ctx.active_recipe_features = frozenset()
     mock_ctx.quota_refresh_task = None
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    mock_ctx.temp_dir = ctx.temp_dir
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):

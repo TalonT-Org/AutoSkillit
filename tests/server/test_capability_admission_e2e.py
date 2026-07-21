@@ -108,7 +108,7 @@ def test_capability_override_parity() -> None:
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_refuses_doa_codex_pipeline() -> None:
+async def test_open_kitchen_refuses_doa_codex_pipeline(tmp_path: Path) -> None:
     """open_kitchen must return success=False with kitchen='dispatch_infeasible'
     when load_and_validate reports dispatch_feasible=False."""
     import json
@@ -122,6 +122,8 @@ async def test_open_kitchen_refuses_doa_codex_pipeline() -> None:
     tool_ctx.gate_infrastructure_ready = True
     tool_ctx.recipe_name = "implementation"
     tool_ctx.kitchen_id = "test-kitchen"
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    tool_ctx.temp_dir = tmp_path
     tool_ctx.backend.name = "codex"
     tool_ctx.recipes.load_and_validate.return_value = {
         "content": "name: implementation\nsteps:\n  build:\n    cmd: task build\n",
@@ -355,7 +357,7 @@ def test_provider_aware_capability_override_claude_backend_no_op() -> None:
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_codex_with_provider_overrides_feasible() -> None:
+async def test_open_kitchen_codex_with_provider_overrides_feasible(tmp_path: Path) -> None:
     """open_kitchen must return success=True with kitchen='open' when Codex
     backend has provider-overridden guarded steps (provider-aware path)."""
     import json
@@ -369,6 +371,8 @@ async def test_open_kitchen_codex_with_provider_overrides_feasible() -> None:
     tool_ctx.gate_infrastructure_ready = True
     tool_ctx.recipe_name = "implementation"
     tool_ctx.kitchen_id = "test-kitchen"
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    tool_ctx.temp_dir = tmp_path
     _setup_provider_override_ctx(tool_ctx)
     tool_ctx.recipes.load_and_validate.return_value = _make_feasible_load_result()
 
@@ -631,7 +635,9 @@ def test_provider_aware_override_returns_resolution_detail() -> None:
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_no_override_infeasible_includes_provider_guidance() -> None:
+async def test_open_kitchen_no_override_infeasible_includes_provider_guidance(
+    tmp_path: Path,
+) -> None:
     """Test 1B: open_kitchen with Codex + NO provider overrides (none_pass) produces
     dispatch_infeasible envelope with missing_provider_steps and escape_hatch."""
     import json
@@ -645,6 +651,8 @@ async def test_open_kitchen_no_override_infeasible_includes_provider_guidance() 
     tool_ctx.gate_infrastructure_ready = True
     tool_ctx.recipe_name = "implementation"
     tool_ctx.kitchen_id = "test-kitchen"
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    tool_ctx.temp_dir = tmp_path
     tool_ctx.backend.name = "codex"
 
     from types import SimpleNamespace
@@ -1155,6 +1163,7 @@ def _make_git_write_resolver() -> MagicMock:
 @pytest.mark.anyio
 async def test_open_kitchen_capability_route_reaches_admission_with_true_override(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Step 5d sibling of Test 1B: open_kitchen with Codex + NO provider overrides
     but capability route active (git_metadata_write skills + binary present) must
@@ -1176,6 +1185,8 @@ async def test_open_kitchen_capability_route_reaches_admission_with_true_overrid
     tool_ctx.gate_infrastructure_ready = True
     tool_ctx.recipe_name = "implementation"
     tool_ctx.kitchen_id = "test-kitchen"
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    tool_ctx.temp_dir = tmp_path
 
     from types import SimpleNamespace
 

@@ -245,6 +245,9 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
     }
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -281,6 +284,9 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -333,6 +339,9 @@ async def test_config_layer_keys_match_server_authoritative_ingredients(tmp_path
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -370,7 +379,7 @@ async def test_config_layer_keys_match_server_authoritative_ingredients(tmp_path
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch):
+async def test_open_kitchen_smoke_test_renders_resolved_base_branch(tmp_path, monkeypatch):
     """T7: open_kitchen smoke-test renders the config-resolved base_branch value."""
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
@@ -392,6 +401,9 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
     mock_ctx.backend = None
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -438,6 +450,9 @@ async def test_open_kitchen_config_authority_overrides_caller(tmp_path, monkeypa
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
     mock_ctx.config.linux_tracing.log_dir = ""
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -495,6 +510,9 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
     mock_ctx.config.linux_tracing.log_dir = ""
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -523,7 +541,11 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
                             )
 
     parsed = json.loads(result_str)
-    warnings = parsed.get("warnings") or []
+    assert "content" not in parsed
+    # The compact envelope does not carry "warnings" — verify it in the persisted
+    # artifact instead (the full payload passed to persist_recipe_artifact).
+    artifact = json.loads(Path(parsed["artifact_path"]).read_text())
+    warnings = artifact.get("warnings") or []
     matching = [w for w in warnings if "base_branch" in w]
     assert matching, f"Expected a warning naming base_branch; got warnings={warnings}"
     assert any("branching.default_base_branch" in w for w in warnings), (
@@ -533,7 +555,7 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
+async def test_open_kitchen_with_config_authority_ingredient(tmp_path, monkeypatch):
     """Full open_kitchen path: config value wins over caller override in rendered output."""
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
@@ -560,6 +582,9 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
     mock_ctx.backend = None
     mock_ctx.recipes = DefaultRecipeRepository()
     mock_ctx.config.migration.suppressed = []
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -1133,6 +1158,9 @@ async def test_pipeline_health_override_wins_over_config(tmp_path, monkeypatch):
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
     mock_ctx.config.linux_tracing.log_dir = ""
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -1193,6 +1221,9 @@ async def test_pipeline_health_config_default_applied(tmp_path, monkeypatch):
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
     mock_ctx.config.linux_tracing.log_dir = ""
+    # New envelope: open_kitchen persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):

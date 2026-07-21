@@ -42,6 +42,21 @@ def _load_recipe_content(envelope: dict[str, object]) -> str:
     return str(payload["content"])
 
 
+def _open_kitchen_content(envelope: dict[str, object]) -> str:
+    """Read the full recipe payload referenced by a compact open_kitchen envelope."""
+    assert "content" not in envelope
+    assert envelope["pull_tool"] == "get_recipe_section"
+    assert {
+        "step_flow_skeleton",
+        "step_index",
+        "artifact_path",
+        "sha256",
+        "pull_tool",
+    } <= envelope.keys()
+    payload = json.loads(Path(str(envelope["artifact_path"])).read_text(encoding="utf-8"))
+    return str(payload["content"])
+
+
 def test_re_serve_surfaces_in_sync_with_serve_surfaces() -> None:
     """Content-serving surfaces exclude the section-oriented artifact pull tool."""
     assert set(_RE_SERVE_SURFACES) == SERVE_SURFACES - {
@@ -104,7 +119,7 @@ async def test_load_recipe_after_open_kitchen_with_overrides_serves_identical_co
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = _open_kitchen_content(ok_result)
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
     lr_content = _load_recipe_content(lr_result)
@@ -134,7 +149,7 @@ async def test_load_recipe_after_open_kitchen_without_overrides_serves_identical
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = _open_kitchen_content(ok_result)
 
     assert tool_ctx_kitchen_open.session_serve_overrides == {}, (
         "session_serve_overrides must be empty dict (not None) when no overrides passed"
@@ -171,7 +186,7 @@ async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
         monkeypatch,
     )
     assert first_result.get("success") is True, f"first open_kitchen failed: {first_result}"
-    first_content = first_result["content"]
+    first_content = _open_kitchen_content(first_result)
 
     deferred_result = await _open_kitchen_patched(
         _RECIPE,
@@ -181,11 +196,20 @@ async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
     assert deferred_result.get("success") is True, (
         f"deferred-recall open_kitchen failed: {deferred_result}"
     )
-    deferred_content = deferred_result["content"]
+    deferred_content = _open_kitchen_content(deferred_result)
 
     assert first_content == deferred_content, (
         "Deferred-recall open_kitchen content diverges from first serving — "
         "session_serve_overrides not injected into deferred-recall _merged_overrides"
+    )
+
+    assert first_result["artifact_path"] == deferred_result["artifact_path"], (
+        "Deferred-recall open_kitchen artifact_path diverges from first serving — "
+        "re-serving the same recipe must produce the same deterministic artifact"
+    )
+    assert first_result["sha256"] == deferred_result["sha256"], (
+        "Deferred-recall open_kitchen sha256 diverges from first serving — "
+        "re-serving the same recipe must produce the same deterministic artifact"
     )
 
 
@@ -289,7 +313,7 @@ async def test_get_recipe_content_matches_open_kitchen_with_overrides(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = _open_kitchen_content(ok_result)
 
     gr_content = get_recipe(_RECIPE)
     try:
@@ -341,7 +365,7 @@ async def _call_re_serve_surface(
     elif surface == "open_kitchen_deferred_recall":
         result = await _open_kitchen_patched(recipe_name, None, monkeypatch)
         assert result.get("success") is True, f"deferred-recall failed: {result}"
-        return result["content"]
+        return _open_kitchen_content(result)
     else:
         raise ValueError(f"Unknown surface: {surface!r}")
 
@@ -371,7 +395,7 @@ async def test_serve_surfaces_parametric_content_identity(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = _open_kitchen_content(ok_result)
 
     re_served_content = await _call_re_serve_surface(surface, _RECIPE, monkeypatch)
 
@@ -401,7 +425,7 @@ async def test_get_recipe_snapshot_lifecycle(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = _open_kitchen_content(ok_result)
 
     gr_content = get_recipe(_RECIPE)
     try:
@@ -485,7 +509,7 @@ async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
     if not lr_result.get("success"):
         assume(False)  # discard: load_recipe failed
 
-    assert _load_recipe_content(lr_result) == ok_result["content"], (
+    assert _load_recipe_content(lr_result) == _open_kitchen_content(ok_result), (
         f"Routing divergence for overrides={overrides!r}: "
         "load_recipe content must match open_kitchen content"
     )

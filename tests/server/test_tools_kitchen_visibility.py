@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -208,6 +209,7 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
     }
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
+    mock_ctx.temp_dir = tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -223,8 +225,9 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
     assert result["success"] is True
     assert result["kitchen"] == "open"
     assert "version" in result
-    assert "content" in result
-    assert "test-recipe" in result["content"]
+    assert "content" not in result
+    payload = json.loads(Path(result["artifact_path"]).read_text(encoding="utf-8"))
+    assert "test-recipe" in payload["content"]
     mock_ctx.gate.enable.assert_called_once()
     mock_ctx.enable_components.assert_called_once_with(tags={"kitchen"})
 

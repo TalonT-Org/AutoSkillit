@@ -837,12 +837,6 @@ def build_recipe_envelope(
         "sha256": sha256,
         "pull_tool": pull_tool,
     }
-    # Forward diagram field when explicitly present and not None, so callers that
-    # rely on it (e.g. open_kitchen "diagram" key) still get the diagram — but the
-    # canonical path for diagram retrieval is get_recipe_section(section="diagram").
-    diagram_value = payload.get("diagram")
-    if diagram_value is not None:
-        envelope["diagram"] = diagram_value
 
     rendered = _canonical_json(envelope)
     if len(rendered.encode("utf-8")) > bound:
@@ -908,12 +902,46 @@ def enforce_response_budget(
                 max_bytes=config.response_max_bytes,
                 original_utf8_bytes=original_size,
             )
-        # Part B Step 2.1: recipe exempted tools (open_kitchen / load_recipe)
-        # persist the full artifact at the tool layer BEFORE returning, so the
-        # envelope already carries artifact_path + sha256. This layer does NOT
-        # add unconditional persistence here — that broke tests where ctx has
-        # no temp_dir. Only the spill path persists the artifact, matching
-        # Part A's pre-remediation behavior.
+        # Exempted tools (open_kitchen / load_recipe) reach this branch with an
+        # envelope that may already carry a tool-layer-published artifact_path
+        # + sha256 (persist_recipe_artifact / build_and_record_recipe_envelope).
+        # Reuse that pre-published pair when present — persisting again here
+        # would write a second, orphaned artifact over the envelope bytes with
+        # a different sha256. Otherwise persist the payload itself here so
+        # every exempted response is recoverable from disk, skipping
+        # gracefully when no artifact directory is available (e.g. a mock
+        # ToolContext in tests with no real temp_dir).
+        pre_published_path: str | None = None
+        pre_published_sha: str | None = None
+        newly_persisted = False
+        try:
+            parsed_for_artifact = json.loads(original)
+        except (TypeError, ValueError, RecursionError):
+            parsed_for_artifact = None
+        if not isinstance(parsed_for_artifact, dict):
+            parsed_for_artifact = None
+        if (
+            parsed_for_artifact is not None
+            and isinstance(parsed_for_artifact.get("artifact_path"), str)
+            and parsed_for_artifact["artifact_path"]
+            and isinstance(parsed_for_artifact.get("sha256"), str)
+            and parsed_for_artifact["sha256"]
+        ):
+            pre_published_path = parsed_for_artifact["artifact_path"]
+            pre_published_sha = parsed_for_artifact["sha256"]
+        elif artifact_dir is not None:
+            content_sha256 = hashlib.sha256(original_bytes).hexdigest()
+            artifact_path_obj = _artifact_path(artifact_dir, tool_name, content_sha256)
+            try:
+                artifact_path_obj.parent.mkdir(parents=True, exist_ok=True)
+                atomic_write(artifact_path_obj, original)
+            except OSError:
+                logger.warning("recipe_backstop_artifact_write_failed", exc_info=True)
+            else:
+                pre_published_path = str(artifact_path_obj.resolve())
+                pre_published_sha = content_sha256
+                newly_persisted = True
+
         if over_delivery_bound:
             assert effective_delivery_token_limit is not None  # narrowed by over_delivery_bound
             return _spill_for_delivery_bound(
@@ -924,6 +952,8 @@ def enforce_response_budget(
                 original=original,
                 original_size=original_size,
                 effective_delivery_token_limit=effective_delivery_token_limit,
+                pre_published_artifact_path=pre_published_path,
+                pre_published_sha256=pre_published_sha,
             )
         _emit_response_budget_event(
             "response_budget_exemption",
@@ -934,6 +964,12 @@ def enforce_response_budget(
             max_chars=exemption.max_chars,
             max_utf8_bytes=exemption.max_utf8_bytes,
         )
+        if newly_persisted and parsed_for_artifact is not None:
+            parsed_for_artifact.setdefault("artifact_path", pre_published_path)
+            parsed_for_artifact.setdefault("sha256", pre_published_sha)
+            if isinstance(result, str):
+                return json.dumps(parsed_for_artifact)
+            return parsed_for_artifact
         return result
     if (
         not force_spill

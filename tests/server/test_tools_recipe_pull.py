@@ -898,23 +898,26 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
     tool_ctx_kitchen_open.backend = BACKEND_REGISTRY["codex"]()
 
     # Override the Codex backend's effective delivery bound to a tight
-    # value (1000 tokens / 4000 bytes) so that ``load_recipe``'s payload
-    # for ``_RECIPE_FOR_PULL`` exceeds the bound and the envelope /
+    # value (500 tokens / 2000 bytes) so that ``load_recipe``'s payload
+    # — even for the smallest bundled recipe (``implementation``, ~285
+    # tokens serialized) — exceeds the bound and the envelope /
     # pull-reference path is actually exercised. At the production
-    # 10,000-token bound, ``load_recipe`` for even the bundled
-    # ``remediation`` recipe fits within the bound, and
-    # ``maybe_envelope_recipe_response`` short-circuits straight to the
-    # raw payload (no ``recipe_pull`` key) — defeating the
-    # *envelope-pulls-from-its-own-artifact* contract this test exists
-    # to verify.
+    # 10,000-token (40,000-byte) Codex bound, every bundled recipe's
+    # ``load_recipe`` payload fits and ``maybe_envelope_recipe_response``
+    # short-circuits to the raw payload (no ``recipe_pull`` key) —
+    # defeating the *envelope-pulls-from-its-own-artifact* contract this
+    # test exists to verify. Load ``implementation`` here so the
+    # envelope's step-flow skeleton is small enough to fit at the tight
+    # bound (large recipes like ``remediation`` have enough post-prune
+    # steps to overflow even a tightened bound).
     tool_ctx_kitchen_open.backend = MagicMock(
-        capabilities=BackendCapabilities(effective_delivery_token_limit=1_000),
+        capabilities=BackendCapabilities(effective_delivery_token_limit=500),
         name="codex",
     )
 
-    loaded = json.loads(await load_recipe_tool(name=_RECIPE_FOR_PULL))
+    loaded = json.loads(await load_recipe_tool(name="implementation"))
     pull = loaded["recipe_pull"]
-    assert pull["recipe_name"] == _RECIPE_FOR_PULL
+    assert pull["recipe_name"] == "implementation"
     assert pull["producer_tool"] == "load_recipe"
     assert tool_ctx_kitchen_open.recipe_name == _RECIPE_FOR_PULL
 

@@ -406,3 +406,24 @@ def test_non_exempted_delivery_bound_preserves_result_field(tmp_path: Path) -> N
     )
     for key in ("success", "kitchen", "version"):
         assert key in data, f"structural field {key!r} was dropped from the projection"
+
+
+def test_non_exempted_delivery_bound_preserves_non_string_result(tmp_path: Path) -> None:
+    payload = {
+        "success": True,
+        "result": {"records": [{"value": "\u2603" * 500} for _ in range(80)]},
+    }
+    serialized = json.dumps(payload)
+    bound_tokens = 500
+    result = enforce_response_budget(
+        serialized,
+        tool_name="run_skill",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        effective_delivery_token_limit=bound_tokens,
+    )
+    assert isinstance(result, str)
+    assert len(result.encode("utf-8")) <= bound_tokens * 4
+    projected = json.loads(result)
+    assert projected["success"] is True
+    assert isinstance(projected["result"], dict)

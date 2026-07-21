@@ -531,6 +531,7 @@ def _tiered_projection(
     def _build_with_lengths(
         content_head: int,
         deprioritized_projector: Any = None,
+        content_projector: Any = None,
         include_content: bool = True,
         include_deprioritized: bool = True,
         include_droppable: bool = True,
@@ -578,7 +579,13 @@ def _tiered_projection(
             env[content_key] = text[:content_head]
             base_chars += max(0, len(text) - content_head)
         elif content_key in parsed and include_content:
-            env[content_key] = parsed[content_key]
+            if content_projector is None:
+                env[content_key] = parsed[content_key]
+            else:
+                projected, chars, items = content_projector(parsed[content_key])
+                env[content_key] = projected
+                base_chars += chars
+                base_items += items
         elif content_key in parsed and not include_content:
             chars, items = _total_omissions(parsed[content_key])
             base_chars += chars
@@ -629,6 +636,53 @@ def _tiered_projection(
             else:
                 high = mid - 1
         return best_rendered
+
+    if content_key in parsed and not content_is_str:
+        rendered = _fits(_build_with_lengths(content_head=0))
+        if rendered is not None:
+            return rendered
+
+        value_limit = max(16, content_budget)
+        while value_limit >= 16:
+
+            def _project_content(value: Any, _limit: int = value_limit) -> tuple[Any, int, int]:
+                return _project_value(value, _limit)
+
+            rendered = _fits(
+                _build_with_lengths(
+                    content_head=0,
+                    content_projector=_project_content,
+                    include_droppable=False,
+                )
+            )
+            if rendered is not None:
+                return rendered
+            if present_deprioritized:
+                rendered = _fits(
+                    _build_with_lengths(
+                        content_head=0,
+                        content_projector=_project_content,
+                        deprioritized_projector=lambda value: _minimal_same_type(value),
+                        include_droppable=False,
+                    )
+                )
+                if rendered is not None:
+                    return rendered
+            value_limit //= 2
+
+        rendered = _fits(
+            _build_with_lengths(
+                content_head=0,
+                content_projector=lambda value: (
+                    _minimal_same_type(value),
+                    *_total_omissions(value),
+                ),
+                deprioritized_projector=lambda value: _minimal_same_type(value),
+                include_droppable=False,
+            )
+        )
+        if rendered is not None:
+            return rendered
 
     # Tier 1: priority verbatim + deprioritized verbatim + droppable; binary-search the
     # largest content_head (from content_floor up to the full text) that still fits, so

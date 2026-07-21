@@ -956,8 +956,8 @@ async def test_pull_tool_returns_bounded_step_content(
             f"fast_dumps({{step: parsed['steps'][step_name]}})"
         )
         serialized = json.dumps(response, ensure_ascii=False)
-        assert len(serialized.encode("utf-8")) <= bound_bytes_for_response * 4, (
-            f"step {step_name!r}: response exceeds 4× the backend bound "
+        assert len(serialized.encode("utf-8")) <= bound_bytes_for_response, (
+            f"step {step_name!r}: response exceeds the backend bound "
             f"({bound_bytes_for_response} bytes); got {len(serialized.encode('utf-8'))}"
         )
 

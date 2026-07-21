@@ -320,6 +320,7 @@ def extract_step_skeleton(
 def build_recipe_envelope(
     payload: dict[str, Any],
     *,
+    recipe_name: str,
     artifact_path: str,
     artifact_sha256: str,
     skeleton: dict[str, Any],
@@ -352,8 +353,15 @@ def build_recipe_envelope(
 
     ``bound_bytes`` is the effective delivery byte ceiling (smallest
     backend bound × 4). Large string fields like ``orchestration_rules``
-    are projected to fit alongside the skeleton + pull reference; the
-    full content lives only in the persisted artifact.
+    are projected to fit alongside the skeleton + pull reference via a
+    two-phase allocator: phase 1 drops (omits, never emits as ``""``)
+    any key that can't even afford its JSON-key overhead under the
+    current ``remaining`` budget; phase 2 water-fills the leftover
+    content budget across survivors so neither priority field can
+    monopolize the pool. Truncation goes through ``_safe_utf8_truncate``
+    so a multi-byte UTF-8 codepoint is never split into an
+    undecodable byte sequence. ``recipe_name`` is required (keyword-only)
+    to match the sibling-function convention in this module.
     """
     envelope: dict[str, Any] = {}
     envelope_bytes = 0
@@ -385,6 +393,7 @@ def build_recipe_envelope(
         json.dumps(
             {
                 "recipe_pull": {
+                    "recipe_name": recipe_name,
                     "artifact_path": artifact_path,
                     "sha256": artifact_sha256,
                     "pull_tool": "get_recipe_section",
@@ -397,22 +406,70 @@ def build_recipe_envelope(
 
     remaining = max(0, bound_bytes - skeleton_overhead - pull_overhead - envelope_bytes)
 
-    def _project_string(key: str) -> None:
+    def _project_priority_strings(keys: tuple[str, ...]) -> None:
         nonlocal remaining
-        value = payload.get(key)
-        if not isinstance(value, str) or not value:
+        candidates = [k for k in keys if isinstance(payload.get(k), str) and payload.get(k)]
+        if not candidates:
             return
-        key_overhead = len(json.dumps({key: ""}, ensure_ascii=False).encode("utf-8"))
-        alloc = max(0, remaining - key_overhead)
-        if len(value.encode("utf-8")) <= alloc:
-            envelope[key] = value
-            remaining -= len(value.encode("utf-8"))
-        else:
-            envelope[key] = value[:alloc]
-            remaining = 0
 
-    for key in ("orchestration_rules", "stop_step_semantics"):
-        _project_string(key)
+        overhead = {
+            k: len(json.dumps({k: ""}, ensure_ascii=False).encode("utf-8")) for k in candidates
+        }
+        # Phase 1: a key survives only if its JSON-key overhead plus at least
+        # one content byte fits what's left, checked in priority (declaration)
+        # order. Keys that don't clear this bar are omitted entirely — never
+        # emitted as "".
+        present: list[str] = []
+        budget = remaining
+        for k in candidates:
+            if overhead[k] < budget:
+                present.append(k)
+                budget -= overhead[k]
+        if not present:
+            return
+
+        # Phase 2: water-fill the leftover content budget evenly across
+        # survivors, round by round. A key whose value is shorter than its
+        # share drops out and its unused share carries over to the *other*
+        # survivors in the next round — no single key can monopolize the
+        # pool the way a sequential first-come-first-served allocator can.
+        content_budget = remaining - sum(overhead[k] for k in present)
+        lengths = {k: len(payload[k].encode("utf-8")) for k in present}
+        alloc: dict[str, int] = dict.fromkeys(present, 0)
+        active = list(present)
+        pool = content_budget
+        while active and pool > 0:
+            share, extra = divmod(pool, len(active))
+            still_active: list[str] = []
+            for index, key in enumerate(active):
+                give = share + (1 if index < extra else 0)
+                need = lengths[key] - alloc[key]
+                take = min(give, need, pool)
+                alloc[key] += take
+                pool -= take
+                if alloc[key] < lengths[key]:
+                    still_active.append(key)
+            active = still_active
+
+        for key in present:
+            take = alloc[key]
+            if take <= 0:
+                continue  # no content budget survives for this field; omit it
+            value_bytes = payload[key].encode("utf-8")
+            if len(value_bytes) <= take:
+                envelope[key] = payload[key]
+                remaining -= len(value_bytes) + overhead[key]
+            else:
+                envelope[key] = _safe_utf8_truncate(value_bytes[:take])
+                remaining -= take + overhead[key]
+                get_logger(__name__).warning(
+                    "recipe_envelope_priority_field_truncated",
+                    recipe_name=recipe_name,
+                    field=key,
+                    alloc_bytes=take,
+                )
+
+    _project_priority_strings(("orchestration_rules", "stop_step_semantics"))
 
     # ingredients_table and suggestions are deprioritized — serialize them
     # only if budget allows; otherwise omit. The orchestrator can pull the
@@ -428,12 +485,29 @@ def build_recipe_envelope(
 
     envelope["step_flow_skeleton"] = skeleton
     envelope["recipe_pull"] = {
+        "recipe_name": recipe_name,
         "artifact_path": artifact_path,
         "sha256": artifact_sha256,
         "pull_tool": "get_recipe_section",
     }
     envelope["delivery_bound_spill"] = True
     return envelope
+
+
+def _safe_utf8_truncate(data: bytes) -> str:
+    """Decode *data* as UTF-8, backing off byte-by-byte from the end on failure.
+
+    Handles both a dangling continuation byte and a dangling multi-byte lead
+    byte — the two ways a naive byte-index slice can land mid-codepoint.
+    Used by the envelope priority-field allocator to guarantee that a
+    multi-byte codepoint is never split into an undecodable byte sequence.
+    """
+    while data:
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            data = data[: exc.start]
+    return ""
 
 
 def persist_recipe_artifact(
@@ -526,59 +600,33 @@ def maybe_envelope_recipe_response(
 ) -> dict[str, Any]:
     """Conditionally replace a recipe payload with a bounded envelope.
 
-    If the payload's estimated token count exceeds
-    ``effective_delivery_token_limit``, persists the full payload to the
-    deterministic artifact path and returns ``build_recipe_envelope(...)``
+    Persists the full payload to the deterministic artifact path
+    UNCONDITIONALLY (gated only by ``temp_dir`` being a ``Path``), so the
+    ``get_recipe_section`` pull tool always has a backing store. If the
+    payload's estimated token count exceeds
+    ``effective_delivery_token_limit``, returns ``build_recipe_envelope(...)``
     so the orchestrator can pull each step's body on demand.
 
     Otherwise returns the payload unchanged (Claude backend path: the
-    full payload fits inline; backward compatible).
+    full payload fits inline; backward compatible) — with the artifact
+    already on disk for the pull tool.
 
     On persistence failure: returns the original payload unchanged —
     the caller is then subject to ``track_response_size``'s spill path
     (which is more permissive but loses the pull guarantee). This is
     a fail-open at the persistence layer; the spill path itself remains
     fail-closed for shape violations.
+
+    Persistence happens exactly once per call: the single early call's
+    return value is reused by ``build_recipe_envelope`` via its
+    ``artifact_path`` / ``artifact_sha256`` keyword args.
     """
-    if effective_delivery_token_limit is None or effective_delivery_token_limit <= 0:
-        return payload
-
-    serialized = json.dumps(payload, ensure_ascii=False)
-    estimated_tokens = (len(serialized.encode("utf-8")) + 3) // 4
-    if estimated_tokens <= effective_delivery_token_limit:
-        return payload
-
-    artifact_dir = getattr(tool_ctx, "temp_dir", None)
+    artifact_dir = tool_ctx.temp_dir
     if not isinstance(artifact_dir, Path):
         return payload
 
-    post_prune = payload.get("post_prune_step_names") or []
-    if not isinstance(post_prune, list):
-        post_prune = []
-
-    active_recipe_steps = getattr(tool_ctx, "active_recipe_steps", None)
-    summaries = build_step_summaries(active_recipe_steps)
-
     try:
-        edges = build_routing_edges_by_step(
-            active_recipe_steps, edge_extractor=_local_extract_routing_edges
-        )
-    except Exception:
-        get_logger(__name__).warning(
-            "maybe_envelope_routing_edges_failed",
-            recipe_name=recipe_name,
-            exc_info=True,
-        )
-        edges = {}
-
-    skeleton = extract_step_skeleton(
-        [str(n) for n in post_prune if isinstance(n, str)],
-        edges,
-        summaries,
-    )
-
-    try:
-        artifact_path, sha256 = persist_recipe_artifact(
+        artifact_path, artifact_sha256 = persist_recipe_artifact(
             artifact_dir,
             tool_name=tool_name,
             recipe_name=recipe_name,
@@ -587,11 +635,43 @@ def maybe_envelope_recipe_response(
     except OSError:
         return payload
 
+    if effective_delivery_token_limit is None or effective_delivery_token_limit <= 0:
+        return payload
+
+    serialized = json.dumps(payload, ensure_ascii=False)
+    estimated_tokens = (len(serialized.encode("utf-8")) + 3) // 4
+    if estimated_tokens <= effective_delivery_token_limit:
+        return payload
+
+    # existing skeleton/edges construction (post_prune_names, summaries,
+    # edges via build_routing_edges_by_step) is unchanged here and feeds
+    # extract_step_skeleton; a later part adds byte-range tracking to
+    # this block.
+    post_prune_raw = payload.get("post_prune_step_names") or []
+    if not isinstance(post_prune_raw, list):
+        post_prune_raw = []
+    post_prune_names = [n for n in post_prune_raw if isinstance(n, str)]
+    summaries = build_step_summaries(tool_ctx.active_recipe_steps)
+    try:
+        edges = build_routing_edges_by_step(
+            tool_ctx.active_recipe_steps,
+            edge_extractor=_local_extract_routing_edges,
+        )
+    except Exception:
+        get_logger(__name__).warning(
+            "recipe_routing_edges_extraction_failed",
+            recipe_name=recipe_name,
+            exc_info=True,
+        )
+        edges = {}
+    skeleton = extract_step_skeleton(post_prune_names, edges, summaries)
+
     bound_bytes = effective_delivery_token_limit * 4
     return build_recipe_envelope(
         payload,
         artifact_path=artifact_path,
-        artifact_sha256=sha256,
+        artifact_sha256=artifact_sha256,
         skeleton=skeleton,
         bound_bytes=bound_bytes,
+        recipe_name=recipe_name,
     )

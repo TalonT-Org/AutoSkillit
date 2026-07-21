@@ -614,10 +614,7 @@ async def get_recipe_section(
             elif section == "warnings":
                 content = json.dumps(persisted.get("warnings", []) or [])
             else:
-                post_prune_step_names = persisted.get("post_prune_step_names")
-                if not isinstance(post_prune_step_names, list) or section not in {
-                    name for name in post_prune_step_names if isinstance(name, str)
-                }:
+                if not _is_post_prune_step(persisted, section):
                     return json.dumps(
                         {
                             "success": False,
@@ -679,6 +676,14 @@ async def get_recipe_section(
     except Exception as exc:
         logger.error("get_recipe_section unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+def _is_post_prune_step(persisted: dict[str, Any], section: str) -> bool:
+    """Return whether ``section`` is an executable step in the persisted payload."""
+    post_prune_step_names = persisted.get("post_prune_step_names")
+    if not isinstance(post_prune_step_names, list):
+        return False
+    return any(name == section for name in post_prune_step_names if isinstance(name, str))
 
 
 def _extract_step_body_from_persisted(persisted: dict[str, Any], step_name: str) -> str:

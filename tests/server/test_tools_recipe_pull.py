@@ -904,10 +904,12 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
     # fits, ``maybe_envelope_recipe_response`` short-circuits to raw
     # JSON and ``loaded["recipe_pull"]`` never exists — defeating the
     # *envelope-pulls-from-its-own-artifact* contract.
-    tool_ctx_kitchen_open.backend = MagicMock(
-        capabilities=BackendCapabilities(effective_delivery_token_limit=200),
-        name="codex",
+    _tight_backend = MagicMock()
+    _tight_backend.capabilities = BackendCapabilities(
+        effective_delivery_token_limit=200,
     )
+    _tight_backend.name = "codex"
+    tool_ctx_kitchen_open.backend = _tight_backend
 
     loaded = json.loads(await load_recipe_tool(name="implementation"))
     pull = loaded["recipe_pull"]

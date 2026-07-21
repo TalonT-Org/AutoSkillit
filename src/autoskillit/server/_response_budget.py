@@ -784,6 +784,46 @@ def _spill_for_delivery_bound(
         return {"success": False, "error": "response_budget_projection_invalid"}
 
 
+_ENVELOPE_ADVISORY_KEYS: tuple[str, ...] = (
+    "suggestions",
+    "errors",
+    "orchestration_rules",
+    "stop_step_semantics",
+    "ingredients_table",
+)
+
+
+def _envelope_fits(envelope: dict[str, Any], *, bound: int) -> bool:
+    return len(_canonical_json(envelope).encode("utf-8")) <= bound
+
+
+def _degrade_envelope_advisory_fields(envelope: dict[str, Any], *, bound: int) -> bool:
+    """Shrink advisory fields in place until ``envelope`` fits ``bound``.
+
+    ``step_flow_skeleton`` and ``step_index`` are the structural core of the
+    pull architecture — every post-prune step must stay locatable via
+    ``get_recipe_section`` — so they are never touched here. Degrades the
+    remaining (advisory, non-structural) preserved fields in priority order
+    using the same ``_project_value``/``_minimal_same_type`` primitives the
+    delivery-bound backstop uses, largest first. Returns whether the envelope
+    fits after degradation.
+    """
+    for key in _ENVELOPE_ADVISORY_KEYS:
+        value = envelope.get(key)
+        if not value:
+            continue
+        limit = len(_canonical_json(value).encode("utf-8"))
+        while limit >= 16:
+            limit //= 2
+            envelope[key], _, _ = _project_value(value, limit)
+            if _envelope_fits(envelope, bound=bound):
+                return True
+        envelope[key] = _minimal_same_type(value)
+        if _envelope_fits(envelope, bound=bound):
+            return True
+    return False
+
+
 def build_recipe_envelope(
     payload: dict[str, Any],
     *,
@@ -838,11 +878,12 @@ def build_recipe_envelope(
         "pull_tool": pull_tool,
     }
 
-    rendered = _canonical_json(envelope)
-    if len(rendered.encode("utf-8")) > bound:
+    if not _envelope_fits(envelope, bound=bound) and not _degrade_envelope_advisory_fields(
+        envelope, bound=bound
+    ):
         raise _ProjectionNonconvergentError(
             f"envelope exceeds delivery bound: "
-            f"bytes={len(rendered.encode('utf-8'))} bound={bound}. "
+            f"bytes={len(_canonical_json(envelope).encode('utf-8'))} bound={bound}. "
             "Envelope construction must keep the step_flow_skeleton small enough "
             "to fit by construction — extend the CI fitness guard, not this assert."
         )

@@ -31,7 +31,11 @@ from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     enforce_response_budget,
 )
-from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
+from autoskillit.server.tools._serve_helpers import (
+    build_open_kitchen_recipe_payload,
+    build_recipe_envelope,
+    extract_step_skeleton,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -75,11 +79,73 @@ def _full_open_kitchen_payload(recipe_name: str) -> dict[str, object]:
 
 
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
-def test_bundled_recipe_open_kitchen_fits_or_spills_per_backend(
+@pytest.mark.parametrize("backend_name", sorted(_backend_capabilities().keys()), ids=lambda n: n)
+def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
+    recipe_name: str, backend_name: str, tmp_path: Path
+) -> None:
+    """System-level fitness contract (issue #4304 Part B REQ-B-T7): the bounded
+    envelope built unconditionally for every bundled recipe via
+    ``build_recipe_envelope`` must fit every registered backend's effective
+    delivery bound by construction — independent of whether the raw
+    ``open_kitchen`` payload itself happens to fit today.
+
+    This test mirrors the unit-level invariant already exercised by
+    ``test_envelope_fits_every_backend_by_construction`` in
+    ``tests/server/test_tools_recipe_pull.py`` at the contracts layer: the
+    two layers overlap in scope by design (test-pyramid convention) and the
+    envelope-fit-by-construction guarantee is the post-#4304-Part-B invariant
+    that this file exists to defend.
+    """
+    payload = _full_open_kitchen_payload(recipe_name)
+    step_names = [
+        str(n)
+        for n in cast(list[object], payload.get("post_prune_step_names") or [])
+        if isinstance(n, str)
+    ]
+    skeleton = extract_step_skeleton(
+        step_names,
+        routing_edges_by_step={},
+        step_summaries={name: f"summary-{name}" for name in step_names},
+    )
+    artifact_path = tmp_path / f"{recipe_name}.log"
+    sha256 = "0" * 64
+
+    caps = _backend_capabilities()[backend_name]
+    bound_tokens = resolve_effective_delivery_bound(caps)
+    bound_bytes = _effective_bound_bytes(bound_tokens)
+    envelope = build_recipe_envelope(
+        payload,
+        recipe_name=recipe_name,
+        artifact_path=str(artifact_path),
+        artifact_sha256=sha256,
+        skeleton=skeleton,
+        bound_bytes=bound_bytes,
+    )
+    serialized = json.dumps(envelope, ensure_ascii=False)
+    assert len(serialized.encode("utf-8")) <= bound_bytes, (
+        f"{backend_name}: envelope for {recipe_name} exceeds "
+        f"{bound_bytes} bytes (effective delivery bound)"
+    )
+    assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
+
+
+@pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
+def test_bundled_recipe_open_kitchen_raw_spill_projection_fits_per_backend(
     recipe_name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """For each backend, the ``open_kitchen`` payload either fits the
-    effective delivery bound or spills to a projection that fits."""
+    """Standalone regression guard for ``enforce_response_budget``'s generic spill
+    path. Independent of whether ``open_kitchen``/``load_recipe`` still reach it
+    in production for recipe payloads (Part B routes oversized recipes through
+    ``build_recipe_envelope`` instead), ``enforce_response_budget``'s projection
+    path remains valid coverage for the non-recipe response types that still
+    flow through the backstop.
+
+    For every bundled recipe × registered backend: if the raw serialized
+    ``open_kitchen`` payload outgrows a backend's effective delivery bound,
+    ``enforce_response_budget`` must spill it to a projection that fits. When
+    the raw payload already fits, nothing more to verify here — envelope-fit
+    coverage lives in ``test_bundled_recipe_open_kitchen_envelope_fits_per_backend``.
+    """
     monkeypatch.chdir(tmp_path)
     payload = _full_open_kitchen_payload(recipe_name)
     serialized = json.dumps(payload)

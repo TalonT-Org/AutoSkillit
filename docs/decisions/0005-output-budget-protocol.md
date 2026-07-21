@@ -50,14 +50,27 @@ The raw-text `open_kitchen` and `load_recipe` responses are measured exemptions 
 universal backstop. `RESPONSE_BACKSTOP_EXEMPTION_REGISTRY` is the closed authority for
 their independent character ceiling, UTF-8 byte ceiling, and measurement identity. Its
 canonical digest is carried in tool metadata and probe-cache identity. Adding or relaxing
-an exemption requires re-measurement and a deliberate registry-digest change.
+an exemption requires re-measurement and a deliberate registry-digest change. The raw-text
+exemption now applies only to the fits-within-bound fast path; when a recipe payload exceeds
+the delivery bound, `maybe_envelope_recipe_response` replaces it with a bounded envelope
+(via `build_recipe_envelope`) that fits every backend by construction, with full step
+content available on demand via `get_recipe_section`.
 
 ## Numeric Limits and Rationale
 
 | Limit | Decision and rationale |
 |---|---|
-| `load_recipe`: `max_chars = 185_000`, `max_utf8_bytes = 185_000` | The 2026-07-16 independent all-recipe/all-mode pre-backstop measurement reached 183,103 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,897-unit margin makes serving growth explicit. Measurement identity: `bundled-recipes-all-modes-2026-07-16/load-recipe`. |
-| `open_kitchen`: `max_chars = 186_000`, `max_utf8_bytes = 186_000` | The matching current-version pre-backstop measurement reached 183,103 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 2,897-unit margin covers the open-kitchen routing fields without conflating this handler ceiling with the smaller formatted presentation. Measurement identity: `bundled-recipes-all-modes-2026-07-16/open-kitchen`. |
+| `load_recipe`: `max_chars = 185_000`, `max_utf8_bytes = 185_000` | The 2026-07-16 independent all-recipe/all-mode pre-backstop measurement reached 183,103 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,897-unit margin makes serving growth explicit. Measurement identity: `bundled-recipes-all-modes-2026-07-16/load-recipe`. For payloads that exceed the delivery bound, see envelope note below. |
+| `open_kitchen`: `max_chars = 186_000`, `max_utf8_bytes = 186_000` | The matching current-version pre-backstop measurement reached 183,103 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 2,897-unit margin covers the open-kitchen routing fields without conflating this handler ceiling with the smaller formatted presentation. Measurement identity: `bundled-recipes-all-modes-2026-07-16/open-kitchen`. For payloads that exceed the delivery bound, see envelope note below. |
+
+> **Envelope note (oversized recipes, issue #4304 Part B):** When a recipe's serialized payload
+> exceeds a backend's effective delivery bound, `maybe_envelope_recipe_response` replaces the
+> raw text with a bounded envelope built via `build_recipe_envelope`. The envelope carries a
+> step-flow skeleton plus a `recipe_pull` reference (`pull_tool: get_recipe_section`,
+> `artifact_path`, `artifact_sha256`) so the agent re-acquires each step body on demand via
+> `get_recipe_section(section=<step_name>)` (chunked via `part` / `has_more` / `next_part`
+> for oversized sections). The raw-text ceilings above continue to govern the fits-within-bound
+> fast path; the envelope introduces a separate, fit-by-construction delivery channel.
 | `CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 54_500` | Derive it from the largest registered exemption as `((186_000 + 3) // 4) + 8_000`: 46,500 tokens under the current client's four-byte heuristic, plus 8,000 tokens for serialized-payload headroom. It is a blast-radius damage bound, not the mechanism that makes evidence lossless. |
 | `CODEX_AUTO_COMPACT_LIMIT = 999_999_999` | Retain the unreachable sentinel and the recovery obligation accepted in [ADR-0004](0004-recipe-redelivery.md). This protocol does not relax recipe-preservation policy. |
 | `inline_max_chars = 5_000` | Preserve the previous truncation threshold while changing the representation from destructive clipping to an artifact-backed preview. The configured 2,500-character head and 2,500-character tail retain both diagnostic setup and terminal status; a spill marker is added outside those source slices. |
@@ -181,8 +194,12 @@ reserve-trigger metrics, so instrumentation must not claim those mechanisms exis
   addition, or output-discipline policy-version change invalidates the applicable cached
   capability probe.
 - Run and pass the live large-output probe before making any of those changes effective.
-- Preserve ADR-0004's end-to-end `load_recipe` re-delivery obligation if the
-  999,999,999 auto-compaction sentinel is ever relaxed.
+- Preserve ADR-0004's end-to-end recipe re-delivery obligation if the
+  999,999,999 auto-compaction sentinel is ever relaxed. Re-delivery is implemented
+  as re-sending the envelope (when the original response was an envelope) and
+  pulling each step body via `get_recipe_section(section=<step_name>)`, chunked via
+  `part` / `has_more` / `next_part` for oversized sections — not as a replay of
+  the full raw payload. Reconciles with the ADR-0004 cross-reference amendment.
 - After each codex-cli upgrade, re-verify the truncation heuristic
   (`CODEX_TOOL_OUTPUT_TOKEN_LIMIT`) and auto-compact sentinel
   (`CODEX_AUTO_COMPACT_LIMIT`) against the upstream registry AND observed session

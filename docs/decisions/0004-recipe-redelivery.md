@@ -29,20 +29,34 @@ knowledge without reading raw files.
 
 ## Decision
 
-> **`load_recipe` (the MCP tool exposed by `server/tools/tools_recipe.py`) is the
-> sanctioned channel for recipe knowledge re-delivery after context compaction.**
+> **`load_recipe` / `open_kitchen` (the MCP tools exposed by `server/tools/tools_recipe.py`)
+> remain the sanctioned entry points for recipe knowledge re-delivery after context
+> compaction. When the response is a bounded envelope (oversized recipes exceeding the
+> delivery bound — see ADR-0005), full re-delivery is completed by pulling each step via
+> `get_recipe_section` (chunked via `part` / `has_more` / `next_part` for oversized
+> sections). Both remain the only channels not blocked by `recipe_read_guard`'s
+> deny-list on raw `run_cmd`/`Bash`/`run_python` recipe access — `recipe_read_guard.py`
+> has no allow-list keyed on tool name; it blocks the raw-access alternatives rather
+> than allow-listing `load_recipe`/`open_kitchen`/`get_recipe_section` by name.**
 
-If recipe content is lost, the agent must call `load_recipe` to re-acquire it. The
-`recipe_read_guard` enforces that only this path is allowed — raw file access is denied.
+If recipe content is lost, the agent must call `load_recipe` (or `open_kitchen`) to
+re-acquire it; if the response is a bounded envelope, follow up by calling
+`get_recipe_section(section=<step_name>)` to pull each step body. The `recipe_read_guard`
+deny-list on raw `run_cmd`/`Bash`/`run_python` recipe access remains the operative
+constraint — raw file access is denied; the MCP tools above are the unblocked paths.
 
 This is a forward obligation: when the primary defense (unreachable auto-compact limit)
-is relaxed, `load_recipe` re-delivery must be tested end-to-end as the recovery path.
+is relaxed, the `load_recipe` / `open_kitchen` / `get_recipe_section` end-to-end
+recovery path — including envelope re-delivery plus per-step pulls — must be tested as
+the recovery path.
 
 ## Consequences
 
-- `recipe_read_guard.py` error messages direct the agent to call `load_recipe`.
+- `recipe_read_guard.py` error messages direct the agent to call `load_recipe` (and,
+  for envelope responses, `get_recipe_section`).
 - No production code changes are needed today — the channel already exists and works.
 - Future work relaxing `CODEX_AUTO_COMPACT_LIMIT` must add integration tests verifying
-  `load_recipe` re-delivery restores full pipeline execution capability.
+  `load_recipe` / `open_kitchen` / `get_recipe_section` re-delivery restores full
+  pipeline execution capability, including envelope re-delivery plus per-step pulls.
 - `test_copied_config_has_auto_compact_limit` validates the primary defense path:
   `setup_session_dir` preserves the override in the copied `config.toml`.

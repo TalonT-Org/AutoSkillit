@@ -1058,22 +1058,49 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
 
 
 def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
-    """Regression gate (issue #4253): the fully rendered open_kitchen payload for every
-    runtime-discoverable recipe, under both default and all-truthy ingredient
-    resolution, must stay at or under the measured exemption ceiling from
-    ``RESPONSE_BACKSTOP_EXEMPTION_REGISTRY`` — a margin below the last empirically
-    observed ~100KB Claude Code CLI disk-persistence gate (measured on CLI 2.1.197).
-    Re-measure after CLI upgrades; this is not a claim that the external gate is
-    stable. Ceiling accommodates growth from issue #4274 Part B: the new
-    ``inter_part_push_pre_remediation`` and ``verify_ref_push_exhaustion`` steps in
-    ``remediation.yaml`` legitimately grew the rendered payload (issue #4274 root
-    cause fix)."""
+    """Fit-by-construction rendering gate (issue #4304 Part B REQ-B-T8): the rendered
+    Markdown from ``open_kitchen`` for every runtime-discoverable recipe under every
+    ingredient-resolution mode must stay at or under the measured exemption ceiling
+    from ``RESPONSE_BACKSTOP_EXEMPTION_REGISTRY`` — because the input is bounded by
+    construction via ``build_recipe_envelope`` whenever the raw payload would
+    otherwise exceed the smallest registered backend's effective delivery bound.
+
+    The previous iteration formatted the raw, un-enveloped payload and only passed
+    today because no bundled recipe happens to exceed the ceiling yet; it provided
+    no guarantee for a large recipe added later. This rewrite replaces oversized
+    raw payloads with the bounded envelope (built via ``build_recipe_envelope``,
+    same construction as the Part B envelope tests, including
+    ``recipe_name=recipe_name``) before formatting through ``_fmt_open_kitchen``.
+    Ceiling accommodates growth from issue #4274 Part B (the new
+    ``inter_part_push_pre_remediation`` / ``verify_ref_push_exhaustion`` steps in
+    ``remediation.yaml`` legitimately grew the rendered payload)."""
+    from autoskillit.core import resolve_effective_delivery_bound
+    from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
     from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.server.tools._serve_helpers import (
+        build_recipe_envelope,
+        extract_step_skeleton,
+    )
 
     project_root = Path(__file__).resolve().parent.parent.parent
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+    # Smallest backend's effective delivery bound across the registry — the
+    # conservative ceiling a payload of arbitrary size must fit. Mirrors
+    # `_smallest_bound_tokens()` in tests/server/test_tools_recipe_pull.py and
+    # `test_capability_default_uses_conservative_bound` in this directory's
+    # sibling test file. Computed inline because this test lives in tests/infra/
+    # and does not have a full `ToolContext` fixture available; replicates the
+    # fits/build-envelope decision directly rather than depending on
+    # `maybe_envelope_recipe_response`, which receives its bound as a
+    # caller-supplied parameter (effective_delivery_token_limit) derived from
+    # the single active session's backend, not computed via `min()`.
+    backend_caps = {name: cls().capabilities for name, cls in BACKEND_REGISTRY.items()}
+    smallest_bound_tokens = min(
+        resolve_effective_delivery_bound(caps) for caps in backend_caps.values()
+    )
+    smallest_bound_bytes = smallest_bound_tokens * 4
     over_budget: list[str] = []
     maximum: tuple[int, str, str] = (0, "", "")
 
@@ -1086,7 +1113,24 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
                 ingredient_overrides=dict(overrides, source_dir=str(project_root)),
                 temp_dir=tmp_path,
             )
-            rendered = _fmt_open_kitchen(result, pipeline=False)
+            post_prune_raw = result.get("post_prune_step_names") or []
+            step_names = [str(n) for n in post_prune_raw if isinstance(n, str)]
+            skeleton = extract_step_skeleton(
+                step_names,
+                routing_edges_by_step={},
+                step_summaries={name: f"summary-{name}" for name in step_names},
+            )
+            artifact_path = tmp_path / f"{recipe_name}.log"
+            sha256 = "0" * 64
+            envelope = build_recipe_envelope(
+                dict(result),
+                recipe_name=recipe_name,
+                artifact_path=str(artifact_path),
+                artifact_sha256=sha256,
+                skeleton=skeleton,
+                bound_bytes=smallest_bound_bytes,
+            )
+            rendered = _fmt_open_kitchen(envelope, pipeline=False)
             byte_len = len(rendered.encode("utf-8"))
             maximum = max(maximum, (byte_len, recipe_name, mode_name))
             if byte_len > ceiling:

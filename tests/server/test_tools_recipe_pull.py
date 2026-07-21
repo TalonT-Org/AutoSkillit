@@ -917,11 +917,22 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
     assert pull["producer_tool"] == "load_recipe"
     assert tool_ctx_kitchen_open.recipe_name == _RECIPE_FOR_PULL
 
+    # When the bound is tight enough to trigger delivery-bound spill, the
+    # envelope may drop ``step_flow_skeleton`` / ``artifact_path`` from
+    # ``recipe_pull`` to fit. Reconstruct the artifact path the same way
+    # the pull tool does (deterministic from temp_dir + producer_tool +
+    # recipe_name) and look up the post-prune step list from the
+    # persisted payload.
+    artifact_path_str = pull.get("artifact_path") or str(
+        _recipe_artifact_path(
+            tool_ctx_kitchen_open.temp_dir, pull["producer_tool"], pull["recipe_name"]
+        )
+    )
     skeleton = loaded.get("step_flow_skeleton")
     if skeleton is not None:
         step_name = skeleton["steps"][0]["name"]
     else:
-        persisted = json.loads(Path(pull["artifact_path"]).read_text(encoding="utf-8"))
+        persisted = json.loads(Path(artifact_path_str).read_text(encoding="utf-8"))
         post_prune_raw = cast(list[object], persisted.get("post_prune_step_names") or [])
         step_name = next(str(name) for name in post_prune_raw if isinstance(name, str))
 
@@ -930,8 +941,8 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
             section=step_name,
             recipe_name=pull["recipe_name"],
             producer_tool=pull["producer_tool"],
-            artifact_path=pull["artifact_path"],
-            artifact_sha256=pull["sha256"],
+            artifact_path=artifact_path_str,
+            artifact_sha256=pull.get("sha256"),
         )
     )
     assert response.get("success") is True, response

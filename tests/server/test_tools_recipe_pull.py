@@ -886,6 +886,10 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
     assert opened.get("success") is True
     assert tool_ctx_kitchen_open.recipe_name == _RECIPE_FOR_PULL
 
+    backend = MagicMock()
+    backend.capabilities = BackendCapabilities(effective_delivery_token_limit=10_000)
+    tool_ctx_kitchen_open.backend = backend
+
     loaded = json.loads(await load_recipe_tool(name="implementation"))
     pull = loaded["recipe_pull"]
     assert pull["recipe_name"] == "implementation"

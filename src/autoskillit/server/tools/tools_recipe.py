@@ -614,6 +614,17 @@ async def get_recipe_section(
             elif section == "warnings":
                 content = json.dumps(persisted.get("warnings", []) or [])
             else:
+                post_prune_step_names = persisted.get("post_prune_step_names")
+                if not isinstance(post_prune_step_names, list) or section not in {
+                    name for name in post_prune_step_names if isinstance(name, str)
+                }:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": "section_not_found",
+                            "section": section,
+                        }
+                    )
                 # Treat as a step name; extract the step definition from
                 # the post-prune step slice of the YAML content. The
                 # full recipe YAML uses the step name as a key; we parse

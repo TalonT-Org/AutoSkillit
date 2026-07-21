@@ -1028,6 +1028,26 @@ async def test_pull_tool_returns_bounded_step_content(
         "section": "not_a_real_step",
     }
 
+    persisted["post_prune_step_names"] = []
+    persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        tool_name="open_kitchen",
+        recipe_name=_RECIPE_FOR_PULL,
+        payload=persisted,
+    )
+    pruned = json.loads(
+        await get_recipe_section(
+            section=step_names[0],
+            recipe_name=_RECIPE_FOR_PULL,
+            producer_tool="open_kitchen",
+        )
+    )
+    assert pruned == {
+        "success": False,
+        "error": "section_not_found",
+        "section": step_names[0],
+    }
+
 
 @pytest.mark.anyio
 @pytest.mark.medium
@@ -1131,6 +1151,7 @@ async def test_large_step_chunked_via_continuation(
     persisted_payload = {
         "success": True,
         "content": (f'version: "1"\nsteps:\n  giant_step:\n    note: {oversized_field}\n'),
+        "post_prune_step_names": ["giant_step"],
     }
     persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,

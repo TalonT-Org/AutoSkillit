@@ -714,12 +714,18 @@ def test_delivery_bound_summary_preserves_operational_fields(tmp_path):
         ],
         "step_index": {"step-one": "step:step-one", "step-two": "step:step-two"},
         "pull_tool": "get_recipe_section",
-        "artifact_path": "/artifacts/envelope-sentinel.log",
+        "artifact_path": str(tmp_path / "envelope-sentinel.log"),
         "sha256": "deadbeef" * 8,
         "diagram": "graph TD; A-->B",
         "content": "x" * 150_000,
     }
     original = json.dumps(payload)
+    # tool_name="open_kitchen" is an exempted tool, so enforce_response_budget
+    # treats a payload-supplied artifact_path/sha256 pair as already published
+    # by the tool layer (test_recipe_artifact_pre_published_not_rewritten) and
+    # reuses it verbatim instead of persisting `original` fresh. The sentinel
+    # file must therefore actually exist with the expected content.
+    Path(payload["artifact_path"]).write_text(original, encoding="utf-8")
     result = enforce_response_budget(
         original,
         tool_name="open_kitchen",

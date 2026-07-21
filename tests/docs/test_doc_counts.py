@@ -297,8 +297,8 @@ def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_59_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 59)
+def test_docs_state_60_mcp_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "MCP tools", 60)
 
 
 @pytest.mark.parametrize(

@@ -52,11 +52,11 @@ def test_decision_names_all_four_layers(decision_text: str, required: str) -> No
         "max_chars = 188_000",
         "max_utf8_bytes = 188_000",
         "186,621 characters and UTF-8 bytes",
-        "max_chars = 186_000",
-        "max_utf8_bytes = 186_000",
-        "183,103 characters and UTF-8 bytes",
-        "((186_000 + 3) // 4) + 8_000",
-        "CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 54_500",
+        "max_chars = 188_000",
+        "max_utf8_bytes = 188_000",
+        "186,680 characters and UTF-8 bytes",
+        "((188_000 + 3) // 4) + 8_000",
+        "CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 55_000",
         "CODEX_AUTO_COMPACT_LIMIT = 999_999_999",
         "inline_max_chars = 5_000",
         "response_max_bytes = 90_000",
@@ -79,7 +79,7 @@ def test_decision_pins_ceiling_backstop_pair(decision_text: str) -> None:
     assert "RESPONSE_BACKSTOP_EXEMPTION_REGISTRY" in decision_text
     assert "canonical digest" in decision_text
     assert "bundled-recipes-all-modes-2026-07-21/load-recipe" in decision_text
-    assert "bundled-recipes-all-modes-2026-07-16/open-kitchen" in decision_text
+    assert "bundled-recipes-all-modes-2026-07-21/open-kitchen" in decision_text
 
 
 def test_decision_records_both_corrections(decision_text: str) -> None:

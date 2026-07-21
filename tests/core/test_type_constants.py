@@ -37,9 +37,9 @@ def test_response_backstop_exemption_registry_is_closed_and_pinned() -> None:
             measurement_id="bundled-recipes-all-modes-2026-07-21/load-recipe",
         ),
         "open_kitchen": ResponseBackstopExemptionDef(
-            max_chars=186_000,
-            max_utf8_bytes=186_000,
-            measurement_id="bundled-recipes-all-modes-2026-07-16/open-kitchen",
+            max_chars=188_000,
+            max_utf8_bytes=188_000,
+            measurement_id="bundled-recipes-all-modes-2026-07-21/open-kitchen",
         ),
     }
 
@@ -60,7 +60,7 @@ def test_response_backstop_exemption_registry_digest_is_canonical() -> None:
     )
     assert (
         RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST
-        == "b6daac385aedeb8122ff8489dcf20621667f055f3a8e66a8181d18b1e4e638e7"
+        == "5acb77e003aa6cb54242ccf8dc6af2776f6a03fd5bcc993552ca71f8285d4842"
     )
 
 

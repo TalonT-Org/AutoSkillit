@@ -196,9 +196,9 @@ RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: dict[str, ResponseBackstopExemptionDef] = 
         measurement_id="bundled-recipes-all-modes-2026-07-21/load-recipe",
     ),
     "open_kitchen": ResponseBackstopExemptionDef(
-        max_chars=186_000,
-        max_utf8_bytes=186_000,
-        measurement_id="bundled-recipes-all-modes-2026-07-16/open-kitchen",
+        max_chars=188_000,
+        max_utf8_bytes=188_000,
+        measurement_id="bundled-recipes-all-modes-2026-07-21/open-kitchen",
     ),
 }
 

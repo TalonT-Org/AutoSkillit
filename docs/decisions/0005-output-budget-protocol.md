@@ -61,7 +61,7 @@ content available on demand via `get_recipe_section`.
 | Limit | Decision and rationale |
 |---|---|
 | `load_recipe`: `max_chars = 188_000`, `max_utf8_bytes = 188_000` | The 2026-07-21 independent all-recipe/all-mode pre-backstop measurement reached 186,621 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,379-unit margin makes serving growth explicit. Measurement identity: `bundled-recipes-all-modes-2026-07-21/load-recipe`. For payloads that exceed the delivery bound, see envelope note below. |
-| `open_kitchen`: `max_chars = 186_000`, `max_utf8_bytes = 186_000` | The matching current-version pre-backstop measurement reached 183,103 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 2,897-unit margin covers the open-kitchen routing fields without conflating this handler ceiling with the smaller formatted presentation. Measurement identity: `bundled-recipes-all-modes-2026-07-16/open-kitchen`. For payloads that exceed the delivery bound, see envelope note below. |
+| `open_kitchen`: `max_chars = 188_000`, `max_utf8_bytes = 188_000` | The 2026-07-21 independent all-recipe/all-mode pre-backstop measurement reached 186,680 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,320-unit margin covers the open-kitchen routing fields without conflating this handler ceiling with the smaller formatted presentation. Measurement identity: `bundled-recipes-all-modes-2026-07-21/open-kitchen`. For payloads that exceed the delivery bound, see envelope note below. |
 
 > **Envelope note (oversized recipes, issue #4304 Part B):** When a recipe's serialized payload
 > exceeds a backend's effective delivery bound, `maybe_envelope_recipe_response` replaces the
@@ -71,7 +71,7 @@ content available on demand via `get_recipe_section`.
 > `get_recipe_section(section=<step_name>)` (chunked via `part` / `has_more` / `next_part`
 > for oversized sections). The raw-text ceilings above continue to govern the fits-within-bound
 > fast path; the envelope introduces a separate, fit-by-construction delivery channel.
-| `CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 54_500` | Derive it from the largest registered exemption as `((186_000 + 3) // 4) + 8_000`: 46,500 tokens under the current client's four-byte heuristic, plus 8,000 tokens for serialized-payload headroom. It is a blast-radius damage bound, not the mechanism that makes evidence lossless. |
+| `CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 55_000` | Derive it from the largest registered exemption as `((188_000 + 3) // 4) + 8_000`: 47,000 tokens under the current client's four-byte heuristic, plus 8,000 tokens for serialized-payload headroom. It is a blast-radius damage bound, not the mechanism that makes evidence lossless. |
 | `CODEX_AUTO_COMPACT_LIMIT = 999_999_999` | Retain the unreachable sentinel and the recovery obligation accepted in [ADR-0004](0004-recipe-redelivery.md). This protocol does not relax recipe-preservation policy. |
 | `inline_max_chars = 5_000` | Preserve the previous truncation threshold while changing the representation from destructive clipping to an artifact-backed preview. The configured 2,500-character head and 2,500-character tail retain both diagnostic setup and terminal status; a spill marker is added outside those source slices. |
 | `response_max_bytes = 90_000` | Bound the exact compact serialized handler payload before a coarser transport can clip it. Bytes are authoritative here; this is not a token or full JSON-RPC-envelope estimate. |

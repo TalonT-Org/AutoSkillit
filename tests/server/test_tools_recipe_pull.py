@@ -16,17 +16,28 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from autoskillit.core import (
     BackendCapabilities,
+    fast_dumps,
+    load_yaml,
     resolve_effective_delivery_bound,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_TOOL_OUTPUT_TOKEN_LIMIT
-from autoskillit.recipe import all_validated_recipe_names, load_and_validate
+from autoskillit.recipe import (
+    _extract_routing_edges,
+    all_validated_recipe_names,
+    find_recipe_by_name,
+    load_and_validate,
+    load_recipe,
+)
 from autoskillit.server._response_budget import _recipe_artifact_path
+from autoskillit.server.tools import _serve_helpers
 from autoskillit.server.tools._serve_helpers import (
+    _compute_step_byte_ranges,
     build_recipe_envelope,
     build_routing_edges_by_step,
     build_step_summaries,
@@ -300,7 +311,6 @@ def test_maybe_envelope_persists_exactly_once_when_oversized(
     invoked exactly once — guards against the regression where the
     oversized branch contained a second persistence call alongside
     the unconditional early-call (Part A REQ-B02 single-call invariant)."""
-    from autoskillit.server.tools import _serve_helpers
 
     real_persist = _serve_helpers.persist_recipe_artifact
     calls: list[tuple[str, str]] = []
@@ -626,3 +636,358 @@ def test_envelope_priority_field_truncation_handles_multibyte_utf8(tmp_path: Pat
         f"got {len(truncated.encode('utf-8'))} bytes"
     )
     assert orchestration_rules.startswith(truncated)
+
+
+# ---------------------------------------------------------------------------
+# Part B gap-closure regression guards (REQ-B04, REQ-B-T2/-T4/-T5)
+# ---------------------------------------------------------------------------
+
+
+def test_build_routing_edges_by_step_uses_canonical_extractor() -> None:
+    """The envelope's edge extraction must reuse the canonical
+    ``_extract_routing_edges`` from ``recipe/_analysis_graph.py`` rather
+    than the now-deleted local duplicate. Asserted independently:
+    ``build_routing_edges_by_step`` (which defaults to the canonical
+    extractor after the Step 1 change) and a direct call to
+    ``autoskillit.recipe._extract_routing_edges`` on each RecipeStep
+    must produce identical ``(edge_type, target)`` tuples.
+
+    The previous local copy had two silent behavioral divergences
+    (a spurious falsy-target guard, and independent-vs-elif handling of
+    ``on_result.conditions``/``on_result.routes``); this test would
+    have caught both."""
+    recipe_names = _recipe_names()
+    assert recipe_names, "no bundled recipes available for the equivalence test"
+
+    for recipe_name in recipe_names:
+        info = find_recipe_by_name(recipe_name, _PROJECT_ROOT)
+        assert info is not None
+        recipe = load_recipe(info.path)
+        active_recipe_steps = recipe.steps
+
+        default_edges = build_routing_edges_by_step(
+            active_recipe_steps,
+            edge_extractor=_extract_routing_edges,
+        )
+
+        for step_name, step in active_recipe_steps.items():
+            canonical = [
+                (edge.edge_type, edge.target)
+                for edge in _extract_routing_edges(step)
+                if edge.target
+            ]
+            assert default_edges.get(step_name) == canonical, (
+                f"{recipe_name}.{step_name}: build_routing_edges_by_step "
+                f"default={default_edges.get(step_name)!r} "
+                f"differs from canonical _extract_routing_edges={canonical!r}"
+            )
+
+
+def test_extract_step_skeleton_includes_byte_ranges() -> None:
+    """``extract_step_skeleton`` gains an optional ``byte_ranges`` keyword;
+    a step present in the map gets a ``byte_range`` field carrying the
+    ``[start, end]`` pair, while a step absent from the map gets no
+    such key (fail-open, matching the existing edges/summary fallback)."""
+    byte_ranges = {"step_a": (10, 42)}
+    skeleton = extract_step_skeleton(
+        ["step_a", "step_b"],
+        routing_edges_by_step={},
+        step_summaries={},
+        byte_ranges=byte_ranges,
+    )
+    by_name = {step["name"]: step for step in skeleton["steps"]}
+    assert by_name["step_a"].get("byte_range") == [10, 42], (
+        "step present in byte_ranges must carry the byte_range field as a JSON list"
+    )
+    assert "byte_range" not in by_name["step_b"], (
+        "step absent from byte_ranges must get no byte_range key (fail-open)"
+    )
+
+
+def test_compute_step_byte_ranges_matches_step_boundaries() -> None:
+    """Each returned ``(start, end)`` slice covers the original step's
+    key + body in the source text. We assert substring containment
+    (rather than exact-equality) because YAML mark ranges commonly
+    include trailing whitespace up to the next sibling key."""
+    content = (
+        'version: "1"\n'
+        "steps:\n"
+        "  alpha:\n"
+        "    tool: run_cmd\n"
+        "    with_args:\n"
+        '      cmd: "echo alpha-body-marker"\n'
+        "  beta:\n"
+        "    tool: run_cmd\n"
+        "    with_args:\n"
+        '      cmd: "echo beta-body-marker"\n'
+    )
+    ranges = _compute_step_byte_ranges(content)
+    assert set(ranges.keys()) == {"alpha", "beta"}, (
+        f"expected exactly the two top-level steps; got {sorted(ranges.keys())}"
+    )
+    encoded = content.encode("utf-8")
+    for step_name, expected_marker in (
+        ("alpha", "alpha-body-marker"),
+        ("beta", "beta-body-marker"),
+    ):
+        start, end = ranges[step_name]
+        slice_text = encoded[start:end].decode("utf-8", errors="replace")
+        assert expected_marker in slice_text, (
+            f"{step_name}: marker {expected_marker!r} not in utf-8 decode of "
+            f"content[{start}:{end}] = {slice_text!r}"
+        )
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "- a\n- b\n",  # bare YAML sequence at root
+        "steps: oops\n",  # steps: whose value is a scalar, not a mapping
+    ],
+    ids=["bare-sequence", "scalar-steps-value"],
+)
+def test_compute_step_byte_ranges_returns_empty_on_non_mapping_document(
+    malformed: str,
+) -> None:
+    """``_compute_step_byte_ranges`` must fail open on any malformed or
+    non-mapping YAML document, returning ``{}`` without raising. The
+    guard is ``isinstance(..., yaml.MappingNode)`` rather than a bare
+    ``except yaml.YAMLError`` because a document that parses
+    successfully but isn't a mapping raises ``TypeError`` /
+    ``ValueError`` from tuple-unpacking (not ``YAMLError``)."""
+    assert _compute_step_byte_ranges(malformed) == {}
+
+
+# ---------------------------------------------------------------------------
+# Part B pull-tool end-to-end tests (REQ-B-T2, REQ-B-T4, REQ-B-T5)
+# ---------------------------------------------------------------------------
+
+
+_RECIPE_FOR_PULL = "remediation"
+
+
+def _mock_fmcp_ctx() -> MagicMock:
+    """Return a minimal FastMCP ``Context`` mock with async component methods."""
+    ctx = MagicMock()
+    ctx.enable_components = AsyncMock()
+    ctx.disable_components = AsyncMock()
+    return ctx
+
+
+async def _open_kitchen_patched(name: str, overrides: dict | None, monkeypatch) -> dict:
+    """Call ``open_kitchen`` with all infrastructure side-effects patched out.
+
+    Mirrors the helper in ``tests/server/test_serve_idempotence.py``:
+    patches ``_prime_quota_cache`` / ``_write_hook_config`` /
+    ``create_background_task`` / ``resolve_kitchen_id`` (open_kitchen's
+    background + identity side effects) and resets the recipe
+    ``_LOAD_CACHE`` so a fresh load + validate runs for every test.
+    """
+    from autoskillit.recipe import _api_cache
+    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+    fmcp_ctx = _mock_fmcp_ctx()
+    with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server.tools.tools_kitchen.create_background_task"):
+                with patch(
+                    "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                    return_value="test-kitchen",
+                ):
+                    return json.loads(
+                        await open_kitchen(name=name, overrides=overrides, ctx=fmcp_ctx)
+                    )
+
+
+@pytest.mark.anyio
+@pytest.mark.medium
+async def test_pull_tool_returns_bounded_step_content(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    """Live ``get_recipe_section`` end-to-end against the persisted
+    artifact (REQ-B-T2): every post-prune step name returns the bounded
+    step body matching the canonical serializer, the response itself
+    fits the smallest backend bound, and an unknown section name
+    produces ``{"success": False, "error": "section_not_found"}``."""
+    from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+    monkeypatch.chdir(tmp_path)
+
+    ok_result = await _open_kitchen_patched(
+        _RECIPE_FOR_PULL,
+        None,
+        monkeypatch,
+    )
+    assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
+
+    persisted = json.loads(
+        _recipe_artifact_path(
+            tool_ctx_kitchen_open.temp_dir, "open_kitchen", _RECIPE_FOR_PULL
+        ).read_text(encoding="utf-8")
+    )
+    persisted_yaml = persisted.get("content", "") or ""
+    parsed = load_yaml(persisted_yaml)
+    assert isinstance(parsed, dict), "persisted content must parse as a mapping"
+    parsed_steps = parsed.get("steps", {})
+    assert isinstance(parsed_steps, dict)
+
+    post_prune_raw = cast(list[object], persisted.get("post_prune_step_names") or [])
+    step_names = [str(n) for n in post_prune_raw if isinstance(n, str)]
+    assert step_names, "recipe must expose at least one post-prune step"
+
+    bound_tokens = _smallest_bound_tokens()
+    bound_bytes_for_response = bound_tokens * 4
+    for step_name in step_names:
+        response = json.loads(await get_recipe_section(section=step_name))
+        assert response.get("success") is True, (
+            f"get_recipe_section({step_name!r}) failed: {response}"
+        )
+        expected = fast_dumps({step_name: parsed_steps[step_name]})
+        assert response["section"] == step_name
+        assert response["content"] == expected, (
+            f"step {step_name!r}: pull content diverges from "
+            f"fast_dumps({{step: parsed['steps'][step_name]}})"
+        )
+        serialized = json.dumps(response, ensure_ascii=False)
+        assert len(serialized.encode("utf-8")) <= bound_bytes_for_response * 4, (
+            f"step {step_name!r}: response exceeds 4× the backend bound "
+            f"({bound_bytes_for_response} bytes); got {len(serialized.encode('utf-8'))}"
+        )
+
+    unknown = json.loads(await get_recipe_section(section="not_a_real_step"))
+    assert unknown == {
+        "success": False,
+        "error": "section_not_found",
+        "section": "not_a_real_step",
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.medium
+async def test_artifact_recreation_from_parsed_recipe(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    """When the persisted artifact is deleted, ``get_recipe_section``
+    re-creates it via the same serve pipeline that built it originally
+    (REQ-B-T4). When the recreation pipeline returns an invalid
+    recipe, the pull tool surfaces a structured
+    ``recipe_artifact_unavailable`` envelope (driven here via a
+    ``serve_recipe`` monkeypatch, since the literal "no active recipe"
+    condition is checked earlier and produces a different error)."""
+    from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+    monkeypatch.chdir(tmp_path)
+
+    ok_result = await _open_kitchen_patched(_RECIPE_FOR_PULL, None, monkeypatch)
+    assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
+
+    artifact_path = _recipe_artifact_path(
+        tool_ctx_kitchen_open.temp_dir, "open_kitchen", _RECIPE_FOR_PULL
+    )
+    artifact_path.unlink()
+    assert not artifact_path.exists(), "precondition: artifact file deleted"
+
+    post_prune_raw = cast(list[object], ok_result.get("post_prune_step_names") or [])
+    step_name = next(
+        (str(n) for n in post_prune_raw if isinstance(n, str)),
+        None,
+    )
+    assert step_name is not None, "recipe must expose at least one post-prune step"
+
+    response = json.loads(await get_recipe_section(section=step_name))
+    assert response.get("success") is True, (
+        f"get_recipe_section after artifact deletion should recreate; got {response}"
+    )
+    assert artifact_path.exists(), "artifact must be rewritten by the recreation path on miss"
+
+    # Now drive the invalid-recreation branch via a monkeypatched
+    # ``serve_recipe`` — get_recipe_section imports it into its own
+    # module namespace, so we must override the attribute on the
+    # importing module (``tools_recipe``) for the patch to take
+    # effect. The pulled result must be a structured
+    # ``recipe_artifact_unavailable`` envelope rather than a generic
+    # error.
+    artifact_path.unlink()
+    import autoskillit.server.tools.tools_recipe as _tools_recipe_mod  # noqa: PLC0415
+
+    def _fake_serve_recipe(*args, **kwargs) -> dict:
+        # Reference args/kwargs so linters see them as "used" — the patch
+        # accepts any signature, we just need to return invalid-recipe.
+        del args, kwargs
+        return {"valid": False, "content": "x"}
+
+    monkeypatch.setattr(_tools_recipe_mod, "serve_recipe", _fake_serve_recipe)
+    failed = json.loads(await get_recipe_section(section=step_name))
+    assert failed.get("success") is False
+    assert failed["error"] == "recipe_artifact_unavailable"
+    assert failed["detail"] == "recreation returned invalid recipe"
+
+
+@pytest.mark.anyio
+@pytest.mark.medium
+async def test_large_step_chunked_via_continuation(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    """Persist a synthetic oversized artifact whose single ``giant_step``
+    body exceeds the smallest backend's bound; driving
+    ``get_recipe_section`` against ``backend = None`` (which forces
+    the 10,000-token / 40,000-byte fallback) produces a chunked
+    response with ``has_more=True`` and a ``next_part`` cursor;
+    following that cursor concatenates the chunks back into the
+    canonical serializer's output (REQ-B-T5)."""
+    from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+    monkeypatch.chdir(tmp_path)
+
+    # Open the kitchen first so the tool_ctx has recipes wired and
+    # ``recipe_name`` is set — the giant-step payload is written
+    # directly to the artifact path to bypass the size guard.
+    ok_result = await _open_kitchen_patched(_RECIPE_FOR_PULL, None, monkeypatch)
+    assert ok_result.get("success") is True
+
+    artifact_path = _recipe_artifact_path(
+        tool_ctx_kitchen_open.temp_dir, "open_kitchen", _RECIPE_FOR_PULL
+    )
+    oversized_field = "X" * 80_000  # ~80KB >> 40KB Codex bound
+    persisted_payload = {
+        "success": True,
+        "content": (f'version: "1"\nsteps:\n  giant_step:\n    note: {oversized_field}\n'),
+    }
+    persist_recipe_artifact(
+        tmp_path,
+        tool_name="open_kitchen",
+        recipe_name=_RECIPE_FOR_PULL,
+        payload=persisted_payload,
+    )
+    assert artifact_path.exists()
+
+    # Force the 40KB fallback bound (no backend → bound_tokens=10_000).
+    tool_ctx_kitchen_open.backend = None  # type: ignore[assignment]
+    tool_ctx_kitchen_open.recipe_name = _RECIPE_FOR_PULL
+
+    expected = fast_dumps(
+        {"giant_step": load_yaml(persisted_payload["content"])["steps"]["giant_step"]}
+    )
+
+    chunks: list[str] = []
+    part = 0
+    has_more = True
+    while has_more:
+        response = json.loads(await get_recipe_section(section="giant_step", part=part))
+        assert response.get("success") is True, f"chunk {part} failed: {response}"
+        assert response["section"] == "giant_step"
+        chunks.append(response["content"])
+        has_more = bool(response.get("has_more"))
+        if has_more:
+            assert "next_part" in response, (
+                f"chunk {part} reports has_more=True without next_part cursor"
+            )
+            part = int(response["next_part"])
+        else:
+            assert "next_part" not in response
+
+    assert "".join(chunks) == expected, (
+        "chunked pull content does not round-trip to the canonical serializer's output"
+    )

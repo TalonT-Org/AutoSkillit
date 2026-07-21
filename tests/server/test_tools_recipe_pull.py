@@ -897,14 +897,21 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
 
     tool_ctx_kitchen_open.backend = BACKEND_REGISTRY["codex"]()
 
-    # Load a recipe whose serialized payload exceeds the Codex backend's
-    # 10,000-token (40,000-byte) delivery bound. The Codex bound sits
-    # well above ``implementation``'s payload (~1KB), so loading it would
-    # short-circuit ``maybe_envelope_recipe_response`` and return raw —
-    # no envelope, no ``recipe_pull`` key. The point of this test is the
-    # *envelope-pulls-from-its-own-artifact* contract, so we load a
-    # recipe that actually overflows the bound (the same recipe the
-    # kitchen was opened with — its active_recipe_steps already match).
+    # Override the Codex backend's effective delivery bound to a tight
+    # value (1000 tokens / 4000 bytes) so that ``load_recipe``'s payload
+    # for ``_RECIPE_FOR_PULL`` exceeds the bound and the envelope /
+    # pull-reference path is actually exercised. At the production
+    # 10,000-token bound, ``load_recipe`` for even the bundled
+    # ``remediation`` recipe fits within the bound, and
+    # ``maybe_envelope_recipe_response`` short-circuits straight to the
+    # raw payload (no ``recipe_pull`` key) — defeating the
+    # *envelope-pulls-from-its-own-artifact* contract this test exists
+    # to verify.
+    tool_ctx_kitchen_open.backend = MagicMock(
+        capabilities=BackendCapabilities(effective_delivery_token_limit=1_000),
+        name="codex",
+    )
+
     loaded = json.loads(await load_recipe_tool(name=_RECIPE_FOR_PULL))
     pull = loaded["recipe_pull"]
     assert pull["recipe_name"] == _RECIPE_FOR_PULL

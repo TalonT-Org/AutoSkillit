@@ -381,7 +381,7 @@ def test_maybe_envelope_persists_exactly_once_when_oversized(
         tool_ctx=ctx,
         effective_delivery_token_limit=bound_tokens,
     )
-    assert result.get("delivery_bound_spill") is True
+    assert len(json.dumps(result).encode("utf-8")) <= bound_tokens * 4
     assert len(calls) == 1, (
         f"persist_recipe_artifact must be called exactly once; got {len(calls)} calls"
     )
@@ -547,6 +547,7 @@ def _envelope_overheads(tmp_path: Path, recipe_name: str) -> tuple[int, int, int
             {
                 "recipe_pull": {
                     "artifact_path": artifact_path,
+                    "producer_tool": "open_kitchen",
                     "sha256": artifact_sha256,
                     "pull_tool": "get_recipe_section",
                     "recipe_name": recipe_name,
@@ -886,9 +887,7 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
     assert opened.get("success") is True
     assert tool_ctx_kitchen_open.recipe_name == _RECIPE_FOR_PULL
 
-    backend = MagicMock()
-    backend.capabilities = BackendCapabilities(effective_delivery_token_limit=10_000)
-    tool_ctx_kitchen_open.backend = backend
+    tool_ctx_kitchen_open.backend = BACKEND_REGISTRY["codex"]()
 
     loaded = json.loads(await load_recipe_tool(name="implementation"))
     pull = loaded["recipe_pull"]

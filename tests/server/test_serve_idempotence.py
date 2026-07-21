@@ -7,6 +7,7 @@ open_kitchen and subsequent load_recipe / deferred-recall open_kitchen calls.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,12 +27,32 @@ _TASK_DESC = "test task"
 _RECIPE = "remediation"
 
 
+def _load_recipe_content(envelope: dict[str, object]) -> str:
+    """Read the full recipe payload referenced by a compact load_recipe envelope."""
+    assert "content" not in envelope
+    assert envelope["pull_tool"] == "get_recipe_section"
+    assert {
+        "step_flow_skeleton",
+        "step_index",
+        "artifact_path",
+        "sha256",
+        "pull_tool",
+    } <= envelope.keys()
+    payload = json.loads(Path(str(envelope["artifact_path"])).read_text(encoding="utf-8"))
+    return str(payload["content"])
+
+
 def test_re_serve_surfaces_in_sync_with_serve_surfaces() -> None:
-    """_RE_SERVE_SURFACES must exactly match SERVE_SURFACES - {"open_kitchen"}."""
-    assert set(_RE_SERVE_SURFACES) == SERVE_SURFACES - {"open_kitchen"}, (
+    """Content-serving surfaces exclude the section-oriented artifact pull tool."""
+    assert set(_RE_SERVE_SURFACES) == SERVE_SURFACES - {
+        "open_kitchen",
+        "get_recipe_section",
+    }, (
         f"_RE_SERVE_SURFACES out of sync with SERVE_SURFACES. "
-        f"Missing: {(SERVE_SURFACES - {'open_kitchen'}) - set(_RE_SERVE_SURFACES)}. "
-        f"Extra: {set(_RE_SERVE_SURFACES) - (SERVE_SURFACES - {'open_kitchen'})}."
+        f"Missing: "
+        f"{(SERVE_SURFACES - {'open_kitchen', 'get_recipe_section'}) - set(_RE_SERVE_SURFACES)}. "
+        f"Extra: "
+        f"{set(_RE_SERVE_SURFACES) - (SERVE_SURFACES - {'open_kitchen', 'get_recipe_section'})}."
     )
 
 
@@ -86,8 +107,7 @@ async def test_load_recipe_after_open_kitchen_with_overrides_serves_identical_co
     ok_content = ok_result["content"]
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-    assert "content" in lr_result, f"load_recipe missing content: {lr_result}"
-    lr_content = lr_result["content"]
+    lr_content = _load_recipe_content(lr_result)
 
     assert ok_content == lr_content, (
         "load_recipe content diverges from open_kitchen content — "
@@ -124,8 +144,7 @@ async def test_load_recipe_after_open_kitchen_without_overrides_serves_identical
     )
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-    assert "content" in lr_result, f"load_recipe missing content: {lr_result}"
-    lr_content = lr_result["content"]
+    lr_content = _load_recipe_content(lr_result)
 
     assert ok_content == lr_content, (
         "load_recipe content diverges from open_kitchen content (no-override path) — "
@@ -234,11 +253,11 @@ async def test_explicit_load_recipe_overrides_layer_on_top_of_session_baseline(
     lr_result = json.loads(
         await load_recipe(name=_RECIPE, overrides={"extra_ingredient": "extra_value"})
     )
-    assert "content" in lr_result, f"load_recipe missing content: {lr_result}"
+    lr_content = _load_recipe_content(lr_result)
 
     from autoskillit.core.io import load_yaml
 
-    parsed = load_yaml(lr_result["content"])
+    parsed = load_yaml(lr_content)
     assert parsed["steps"]["clone"]["on_success"] == "claim_and_resolve", (
         "issue_url session baseline must still be active when load_recipe passes extra_ingredient"
     )
@@ -308,8 +327,7 @@ async def _call_re_serve_surface(
         from autoskillit.server.tools.tools_recipe import load_recipe
 
         result = json.loads(await load_recipe(name=recipe_name))
-        assert "content" in result, f"load_recipe returned no content: {result}"
-        return result["content"]
+        return _load_recipe_content(result)
     elif surface == "get_recipe":
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
@@ -464,10 +482,10 @@ async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
         assume(False)  # discard: open_kitchen failed (e.g. invalid combos)
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-    if "content" not in lr_result:
+    if not lr_result.get("success"):
         assume(False)  # discard: load_recipe failed
 
-    assert lr_result["content"] == ok_result["content"], (
+    assert _load_recipe_content(lr_result) == ok_result["content"], (
         f"Routing divergence for overrides={overrides!r}: "
         "load_recipe content must match open_kitchen content"
     )

@@ -126,6 +126,12 @@ class ToolContext:
     active_recipe_ingredients: frozenset[str] | None — ingredient keys declared by the loaded
                           recipe (frozenset() when kitchen open but no recipe loaded; None when
                           closed)
+    recipe_artifact_state: dict[str, Any] | None — server-side cache of the most recently
+                          persisted recipe artifact (artifact_path, sha256, and the recipe-load
+                          parameters needed to recreate it via load_and_validate). Set by
+                          open_kitchen / load_recipe after the artifact is written; read by
+                          get_recipe_section for sha256-verified retrieval. None when no
+                          recipe has been loaded in this session.
     temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
                           TypeError if not supplied explicitly. Use make_context() or pass
                           temp_dir=<path>.
@@ -181,6 +187,7 @@ class ToolContext:
     active_recipe_ingredients: frozenset[str] | None = field(default_factory=lambda: None)
     session_serve_overrides: ServeOverridesSnapshot | None = field(default_factory=lambda: None)
     session_serve_defer_unresolved: bool = field(default=False)
+    recipe_artifact_state: dict[str, Any] | None = field(default_factory=lambda: None)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
     fleet_lock: FleetLock | None = field(default=None)

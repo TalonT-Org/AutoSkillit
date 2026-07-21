@@ -223,9 +223,19 @@ def bounded_response_budget_failure(
         return {"success": False, "error": "response_budget_failure"}
 
 
-def _artifact_path(artifact_dir: Path, tool_name: str) -> Path:
+def _artifact_path(artifact_dir: Path, tool_name: str, content_sha256: str) -> Path:
+    """Compute a deterministic artifact path keyed by tool_name + content hash.
+
+    The deterministic scheme makes the artifact path stable across calls with the
+    same content, so the pull tool (`get_recipe_section`) and the response
+    envelope agree on a single path. Falls back to a UUID-derived slug only when
+    ``content_sha256`` is empty (kept narrow on purpose).
+    """
     safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in tool_name)
-    return artifact_dir / f"{safe_name or 'response'}_{uuid.uuid4().hex[:8]}.log"
+    digest = (content_sha256 or "")[:16]
+    if not digest:
+        digest = uuid.uuid4().hex[:16]
+    return artifact_dir / f"{safe_name or 'response'}_{digest}.log"
 
 
 def _finalize_envelope(envelope: dict[str, Any], *, max_bytes: int) -> str:
@@ -370,6 +380,13 @@ _DELIVERY_BOUND_PRESERVED_KEYS: tuple[str, ...] = (
     "stop_step_semantics",
     "errors",
     "suggestions",
+    # Part B envelope fields — must survive any second-pass delivery-bound
+    # projection so the pull tool can still resolve the persisted artifact.
+    "step_flow_skeleton",
+    "step_index",
+    "pull_tool",
+    "artifact_path",
+    "sha256",
 )
 _DELIVERY_BOUND_CONTENT_KEY = "content"
 _DELIVERY_BOUND_DROPPABLE_KEYS: tuple[str, ...] = ("diagram",)
@@ -382,16 +399,62 @@ _STEP_ROUTING_FIELDS: tuple[str, ...] = (
 )
 
 
+def extract_step_routing(content: str, step_names: list[str]) -> list[dict[str, Any]]:
+    """Return per-step routing/summary metadata as a list of dicts.
+
+    Each dict contains the step ``name``, ``summary`` (if present), and the
+    routing fields (``on_success``, ``on_failure``, ``on_result``,
+    ``on_context_limit``) when set. Used by both ``build_recipe_envelope``
+    (Part B primary delivery shape) and ``_extract_step_skeleton`` (Part A
+    backstop / byte-floor sizing) so the two paths agree on the routing set.
+
+    Falls back to one minimal entry per step when YAML parsing fails — no
+    summary, no routing fields, just the name so consumers can still locate
+    each step in the bounded payload.
+    """
+    if not step_names:
+        return []
+    parsed_content: Any = None
+    try:
+        parsed_content = load_yaml(content)
+    except Exception:
+        logger.warning("step_routing_yaml_parse_failed", exc_info=True)
+        parsed_content = None
+
+    out: list[dict[str, Any]] = []
+    if isinstance(parsed_content, dict):
+        steps_obj = parsed_content.get("steps")
+        for step_name in step_names:
+            entry: dict[str, Any] = {"name": step_name}
+            step_obj = steps_obj.get(step_name) if isinstance(steps_obj, dict) else None
+            if isinstance(step_obj, dict):
+                summary_value = step_obj.get("summary")
+                if isinstance(summary_value, str):
+                    entry["summary"] = summary_value
+                for field in _STEP_ROUTING_FIELDS:
+                    if field in step_obj:
+                        entry[field] = step_obj[field]
+            out.append(entry)
+        return out
+
+    # Fallback: synthetic / unparseable content. Emit one minimal entry per
+    # step name so consumers can still enumerate the step set.
+    return [{"name": name} for name in step_names]
+
+
 def _extract_step_skeleton(content: str, step_names: list[str]) -> str:
     """Build a minimal YAML skeleton containing only routing fields for the given steps.
 
-    Parses ``content`` as YAML; if it has a top-level ``steps`` mapping, extracts
-    for each surviving step name only its routing fields (``on_success``,
-    ``on_failure``, ``on_result``, ``on_context_limit``) when set. Falls back to
-    a substring-tagged plain-text skeleton when YAML parsing fails (e.g.,
-    synthetic test payloads with malformed or pseudo-YAML text). The resulting
-    skeleton carries every ``step_name`` as a substring so downstream consumers
-    can locate each step in the bounded payload.
+    Thin Part-A wrapper around ``extract_step_routing``: serializes only the
+    routing-field subset (dropping ``summary``) via ``dump_yaml_str`` for the
+    byte-floor sizing use case in ``_delivery_bound_summary``. Both Part A
+    and Part B call the shared routing extractor to keep the routing-field
+    set in lock-step.
+
+    Falls back to a substring-tagged plain-text skeleton when YAML parsing
+    fails (e.g., synthetic test payloads with malformed or pseudo-YAML text).
+    The resulting skeleton carries every ``step_name`` as a substring so
+    downstream consumers can locate each step in the bounded payload.
     """
     if not step_names:
         return ""
@@ -606,6 +669,8 @@ def _spill_for_delivery_bound(
     original: str,
     original_size: int,
     effective_delivery_token_limit: int,
+    pre_published_artifact_path: str | None = None,
+    pre_published_sha256: str | None = None,
 ) -> Any:
     """Persist ``original`` and return a bounded projection honoring the delivery bound.
 
@@ -614,30 +679,40 @@ def _spill_for_delivery_bound(
     non-exempted spill machinery (atomic_write, _artifact_path,
     _project_json_object) so the caller sees the same envelope shape, with
     ``reason="delivery_bound"`` so downstream formatters distinguish it.
+
+    When ``pre_published_artifact_path`` and ``pre_published_sha256`` are
+    provided (recipe tool envelope path), the artifact is already on disk
+    from the tool layer's pre-return persistence and this function only
+    needs to build the projection.
     """
-    if artifact_dir is None:
-        return bounded_response_budget_failure(
-            result,
-            cause="context_unavailable",
-            tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
-            original_utf8_bytes=original_size,
-        )
-    path = _artifact_path(artifact_dir, tool_name)
-    try:
-        atomic_write(path, original)
-    except OSError:
-        return bounded_response_budget_failure(
-            result,
-            cause="artifact_publication_failed",
-            tool_name=tool_name,
-            max_bytes=config.response_max_bytes,
-            original_utf8_bytes=original_size,
-        )
-    published = str(path.resolve())
+    if pre_published_artifact_path is not None and pre_published_sha256 is not None:
+        published = pre_published_artifact_path
+        content_sha256 = pre_published_sha256
+    else:
+        if artifact_dir is None:
+            return bounded_response_budget_failure(
+                result,
+                cause="context_unavailable",
+                tool_name=tool_name,
+                max_bytes=config.response_max_bytes,
+                original_utf8_bytes=original_size,
+            )
+        content_sha256 = hashlib.sha256(original.encode("utf-8")).hexdigest()
+        path = _artifact_path(artifact_dir, tool_name, content_sha256)
+        try:
+            atomic_write(path, original)
+        except OSError:
+            return bounded_response_budget_failure(
+                result,
+                cause="artifact_publication_failed",
+                tool_name=tool_name,
+                max_bytes=config.response_max_bytes,
+                original_utf8_bytes=original_size,
+            )
+        published = str(path.resolve())
     metadata: dict[str, Any] = {
         "artifact_path": published,
-        "sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
+        "sha256": content_sha256,
         "original_utf8_bytes": original_size,
         "reason": "delivery_bound",
     }
@@ -709,6 +784,77 @@ def _spill_for_delivery_bound(
         return {"success": False, "error": "response_budget_projection_invalid"}
 
 
+def build_recipe_envelope(
+    payload: dict[str, Any],
+    *,
+    artifact_path: str,
+    sha256: str,
+    bound: int,
+    success: bool,
+    kitchen: str,
+    version: str,
+    pull_tool: str = "get_recipe_section",
+    step_index: dict[str, str] | None = None,
+    step_flow_skeleton: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the compact recipe envelope returned by open_kitchen / load_recipe.
+
+    The envelope is designed to fit the smallest registered backend delivery
+    bound by construction (verified by CI fitness test). It carries:
+
+    - Routing metadata (success, kitchen, version)
+    - Orchestrator-required control-plane fields (ingredients_table,
+      orchestration_rules, stop_step_semantics, errors, suggestions)
+    - A step-flow skeleton with every post-prune step's routing edges
+      (on_success, on_failure, on_result, on_context_limit) — the recipe's
+      execution graph with no step body content
+    - A step_index mapping each step name to its pull-tool identifier
+    - artifact_path + sha256 for the pull tool to verify integrity
+    - The pull_tool name documenting the retrieval surface
+
+    The full recipe content and diagram are NOT in the envelope — they are
+    retrieved on demand via ``get_recipe_section``. This is the structural
+    fix that makes the smallest backend delivery bound a non-issue for
+    recipe delivery.
+
+    ``success``, ``kitchen``, ``version`` are caller-supplied because the
+    upstream payload differs: ``open_kitchen`` uses ``build_open_kitchen_recipe_payload``
+    to inject these; ``load_recipe`` returns the raw serve_recipe() result
+    without them.
+    """
+    envelope: dict[str, Any] = {
+        "success": success,
+        "kitchen": kitchen,
+        "version": version,
+        "ingredients_table": payload.get("ingredients_table"),
+        "orchestration_rules": payload.get("orchestration_rules"),
+        "stop_step_semantics": payload.get("stop_step_semantics"),
+        "errors": payload.get("errors", []),
+        "suggestions": payload.get("suggestions", []),
+        "step_flow_skeleton": step_flow_skeleton if step_flow_skeleton is not None else [],
+        "step_index": step_index if step_index is not None else {},
+        "artifact_path": artifact_path,
+        "sha256": sha256,
+        "pull_tool": pull_tool,
+    }
+    # Forward diagram field when explicitly present and not None, so callers that
+    # rely on it (e.g. open_kitchen "diagram" key) still get the diagram — but the
+    # canonical path for diagram retrieval is get_recipe_section(section="diagram").
+    diagram_value = payload.get("diagram")
+    if diagram_value is not None:
+        envelope["diagram"] = diagram_value
+
+    rendered = _canonical_json(envelope)
+    if len(rendered.encode("utf-8")) > bound:
+        raise _ProjectionNonconvergentError(
+            f"envelope exceeds delivery bound: "
+            f"bytes={len(rendered.encode('utf-8'))} bound={bound}. "
+            "Envelope construction must keep the step_flow_skeleton small enough "
+            "to fit by construction — extend the CI fitness guard, not this assert."
+        )
+    return envelope
+
+
 def enforce_response_budget(
     result: Any,
     *,
@@ -762,6 +908,12 @@ def enforce_response_budget(
                 max_bytes=config.response_max_bytes,
                 original_utf8_bytes=original_size,
             )
+        # Part B Step 2.1: recipe exempted tools (open_kitchen / load_recipe)
+        # persist the full artifact at the tool layer BEFORE returning, so the
+        # envelope already carries artifact_path + sha256. This layer does NOT
+        # add unconditional persistence here — that broke tests where ctx has
+        # no temp_dir. Only the spill path persists the artifact, matching
+        # Part A's pre-remediation behavior.
         if over_delivery_bound:
             assert effective_delivery_token_limit is not None  # narrowed by over_delivery_bound
             return _spill_for_delivery_bound(
@@ -798,7 +950,8 @@ def enforce_response_budget(
             original_utf8_bytes=original_size,
         )
 
-    path = _artifact_path(artifact_dir, tool_name)
+    content_sha256 = hashlib.sha256(original_bytes).hexdigest()
+    path = _artifact_path(artifact_dir, tool_name, content_sha256)
     try:
         atomic_write(path, original)
     except OSError:
@@ -811,9 +964,9 @@ def enforce_response_budget(
         )
 
     published = str(path.resolve())
-    metadata = {
+    metadata: dict[str, Any] = {
         "artifact_path": published,
-        "sha256": hashlib.sha256(original_bytes).hexdigest(),
+        "sha256": content_sha256,
         "original_utf8_bytes": len(original_bytes),
     }
 
@@ -935,7 +1088,9 @@ __all__ = [
     "RESPONSE_SPILL_SCHEMA_DIGEST",
     "RESPONSE_SPILL_SCHEMA_VERSION",
     "bounded_response_budget_failure",
+    "build_recipe_envelope",
     "emit_response_budget_failure",
     "enforce_response_budget",
+    "extract_step_routing",
     "shape_json_response",
 ]

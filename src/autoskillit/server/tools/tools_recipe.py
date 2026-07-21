@@ -1,7 +1,8 @@
-"""MCP tool handlers: load_recipe, list_recipes, validate_recipe, migrate_recipe."""
+"""MCP recipe tool handlers, including compact artifact retrieval."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -10,12 +11,23 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
+from autoskillit import __version__
 from autoskillit.config import (
     build_config_authoritative_layer,
     build_config_default_layer,
     resolve_ingredient_defaults,
 )
-from autoskillit.core import FLEET_DISPATCH_TOOLS, get_logger, temp_dir_display_str  # noqa: F401
+from autoskillit.core import (
+    FLEET_DISPATCH_TOOLS,  # noqa: F401 — re-exported for downstream visibility
+    ProcessStaleError,
+    atomic_write,
+    dump_yaml_str,
+    get_logger,
+    load_yaml,
+    resolve_effective_delivery_bound,
+    temp_dir_display_str,
+)
+from autoskillit.execution import resolve_worst_case_delivery_bound
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -25,6 +37,7 @@ from autoskillit.server._misc import (
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._response_budget import _artifact_path
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import (
@@ -34,6 +47,7 @@ from autoskillit.server.tools._auto_overrides import (
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
+    build_and_record_recipe_envelope,
     build_backend_capabilities_map,
     render_served_response,
     response_backstop_tool_meta,
@@ -42,6 +56,39 @@ from autoskillit.server.tools._serve_helpers import (
 from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
+
+
+def _resolve_envelope_delivery_bound(tool_ctx: Any) -> int:
+    """Resolve the envelope construction-time bound in bytes.
+
+    Mirrors the resolution in ``track_response_size.wrapper`` so the envelope
+    is constructed against the same gate that enforcement applies. Backend
+    capabilities are preferred; falls back to the smallest registered backend
+    bound (worst case) when capabilities are unavailable.
+    """
+    backend = getattr(tool_ctx, "backend", None)
+    caps = getattr(backend, "capabilities", None) if backend is not None else None
+    token_limit: int | None = None
+    if caps is not None:
+        try:
+            token_limit = resolve_effective_delivery_bound(caps)
+        except Exception:  # noqa: BLE001
+            logger.warning("resolve_effective_delivery_bound_failed", exc_info=True)
+            token_limit = None
+    # Coerce to int; MagicMock or non-numeric values fall through to the
+    # conservative default so envelope construction never crashes on a
+    # misconfigured backend (e.g., a test mock with a MagicMock capabilities).
+    if not isinstance(token_limit, int) or token_limit <= 0:
+        try:
+            fallback = resolve_worst_case_delivery_bound()
+        except Exception:  # noqa: BLE001
+            logger.warning("resolve_worst_case_delivery_bound_failed", exc_info=True)
+            fallback = 0
+        if isinstance(fallback, int) and fallback > 0:
+            token_limit = fallback
+        else:
+            token_limit = 10_000
+    return token_limit * 4
 
 
 @mcp.tool(
@@ -324,7 +371,23 @@ async def load_recipe(
                     stage="validate_result",
                 )
                 return _validation_err
-            return render_served_response(result)
+            # Part B Step 2.4: persist the full recipe artifact and return a
+            # compact envelope. The artifact is the authoritative source of
+            # full recipe content; the envelope carries routing metadata,
+            # the step-flow skeleton, and pull instructions. ``get_recipe_section``
+            # reads ``ctx.recipe_artifact_state`` to retrieve any section on demand.
+            envelope = build_and_record_recipe_envelope(
+                tool_ctx=tool_ctx,
+                tool_name="load_recipe",
+                payload=result,
+                result=result,
+                kitchen_label="loaded",
+                version=__version__,
+                overrides=overrides,
+                recipe_name=name,
+                ingredients_only=ingredients_only,
+            )
+            return render_served_response(envelope)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
@@ -472,3 +535,393 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     except Exception as exc:
         logger.error("migrate_recipe unhandled exception", exc_info=True)
         return json.dumps({"error": f"{type(exc).__name__}: {exc}", "name": name})
+
+
+# Part B Step 2.3: bounded pull tool for step / section content. Reads from
+# the always-persisted artifact written by open_kitchen / load_recipe and
+# verifies sha256 before serving. Falls back to load_and_validate recreation
+# if the artifact file is missing from disk (e.g. after a session restart).
+#
+# Decorated WITHOUT ``meta=response_backstop_tool_meta(...)``: this tool is
+# not in ``RESPONSE_BACKSTOP_EXEMPTION_REGISTRY``, so the universal response
+# backstop applies directly. Per ``server/AGENTS.md`` all MCP tools MUST have
+# ``readOnlyHint: True``.
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
+@track_response_size("get_recipe_section")
+async def get_recipe_section(
+    section: str,
+    step_name: str | None = None,
+    part: int = 0,
+) -> str:
+    """Pull a bounded slice of recipe content from the persisted artifact.
+
+    The companion tool to ``open_kitchen`` and ``load_recipe``: those tools
+    return a compact step-skeleton envelope; this tool returns the full
+    content for a single step (or other section) on demand. The orchestrator
+    calls ``get_recipe_section(section="step", step_name=<name>)`` just
+    before executing each step to keep context lean.
+
+    Sections:
+      - "step": full YAML for one step (requires ``step_name``)
+      - "content": the full recipe content string (chunked if oversized)
+      - "diagram": the pre-rendered diagram string
+      - "suggestions": the full suggestions list
+
+    Args:
+        section: Which slice to retrieve — "step", "content", "diagram", or
+            "suggestions".
+        step_name: Required when ``section == "step"``; must be a valid
+            post-prune step name from the most recent envelope's
+            ``step_index``.
+        part: 0-indexed chunk number for sections that exceed the delivery
+            bound. Default 0 (first/only chunk). When the response is
+            chunked, ``has_more`` and ``next_part`` fields describe how to
+            retrieve the remainder.
+
+    Never raises.
+    """
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        with structlog.contextvars.bound_contextvars(tool="get_recipe_section", section=section):
+            tool_ctx = _get_ctx_or_none()
+            if tool_ctx is None:
+                return json.dumps({"success": False, "error": "Server not initialized"})
+
+            artifact_state = getattr(tool_ctx, "recipe_artifact_state", None)
+            if not artifact_state:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "no_recipe_loaded",
+                        "detail": (
+                            "Call open_kitchen or load_recipe first so a "
+                            "recipe artifact is persisted on this session."
+                        ),
+                    }
+                )
+
+            artifact_path = artifact_state.get("artifact_path")
+            expected_sha256 = artifact_state.get("sha256")
+            if not artifact_path or not expected_sha256:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "artifact_state_invalid",
+                        "detail": "recipe_artifact_state is missing artifact_path or sha256",
+                    }
+                )
+
+            payload = _read_or_recreate_artifact(tool_ctx, artifact_state)
+            if isinstance(payload, dict) and payload.get("error"):
+                return json.dumps(payload)
+
+            assert isinstance(payload, dict)  # narrowed by _read_or_recreate_artifact
+            return _build_section_response(
+                payload=payload,
+                section=section,
+                step_name=step_name,
+                part=part,
+                artifact_path=artifact_path,
+                expected_sha256=expected_sha256,
+                tool_ctx=tool_ctx,
+            )
+    except Exception as exc:
+        logger.error("get_recipe_section unhandled exception", exc_info=True)
+        return json.dumps(
+            {"success": False, "error": f"{type(exc).__name__}: {exc}", "section": section}
+        )
+
+
+def _read_or_recreate_artifact(
+    tool_ctx: Any,
+    artifact_state: dict[str, Any],
+) -> dict[str, Any]:
+    """Read the persisted recipe artifact; recreate via load_and_validate if missing.
+
+    Returns a dict payload on success (the recipe serve result) or an error
+    dict (with an ``error`` key) on integrity / recreation failure. Never
+    raises — exceptions inside ``load_and_validate`` are caught and reported
+    as structured errors so the pull tool never silently returns empty.
+    """
+    artifact_path = artifact_state.get("artifact_path", "")
+    expected_sha256 = artifact_state.get("sha256", "")
+    try:
+        path_obj = Path(artifact_path)
+        serialized = path_obj.read_text(encoding="utf-8")
+        actual_sha256 = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        if actual_sha256 != expected_sha256:
+            return {
+                "success": False,
+                "error": "artifact_integrity_failed",
+                "detail": (
+                    f"sha256 mismatch: recorded={expected_sha256[:16]}... "
+                    f"on_disk={actual_sha256[:16]}..."
+                ),
+            }
+        try:
+            return json.loads(serialized)
+        except (TypeError, ValueError):
+            return {
+                "success": False,
+                "error": "artifact_corrupt",
+                "detail": "Persisted artifact is not valid JSON.",
+            }
+    except FileNotFoundError:
+        return _recreate_artifact(tool_ctx, artifact_state)
+    except OSError as exc:
+        return {
+            "success": False,
+            "error": "artifact_unavailable",
+            "detail": f"Could not read artifact: {type(exc).__name__}: {exc}",
+        }
+
+
+def _recreate_artifact(
+    tool_ctx: Any,
+    artifact_state: dict[str, Any],
+) -> dict[str, Any]:
+    """Recreate a missing artifact by re-serving the recipe via serve_recipe().
+
+    Routes through ``serve_recipe()`` (in ``_serve_helpers.py``) — the single
+    legal call site for ``load_and_validate`` in ``server/tools/``. This
+    preserves the SERVE_SURFACES contract enforced by
+    ``tests/arch/test_serve_surface_registry.py``.
+
+    Returns the recreated payload (on success) or an error dict (on failure).
+    The recreated sha256 must match the recorded sha256 — divergent content
+    is reported as an error rather than served.
+    """
+
+    recipe_name = artifact_state.get("recipe_name")
+    if not recipe_name:
+        return {
+            "success": False,
+            "error": "artifact_unavailable",
+            "detail": "Cannot recreate artifact: recipe_name missing from artifact state.",
+        }
+    if tool_ctx.recipes is None:
+        return {
+            "success": False,
+            "error": "artifact_unavailable",
+            "detail": "Cannot recreate artifact: recipe repository not configured.",
+        }
+
+    ingredient_overrides = dict(artifact_state.get("ingredient_overrides") or {})
+    backend_name = artifact_state.get("backend_name")
+    try:
+        recreated = serve_recipe(
+            tool_ctx,
+            recipe_name,
+            caller_overrides=ingredient_overrides or None,
+            config_default={},
+            session_overrides={},
+            config_layer={},
+            backend_name=backend_name,
+        )
+    except ProcessStaleError as exc:
+        return {
+            "success": False,
+            "error": "artifact_unavailable",
+            "detail": f"Server package state is stale; restart required. ({exc})",
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("artifact_recreation_failed", exc_info=True)
+        return {
+            "success": False,
+            "error": "artifact_unavailable",
+            "detail": f"Recreation failed: {type(exc).__name__}: {exc}",
+        }
+
+    serialized = json.dumps(recreated, ensure_ascii=False, sort_keys=False)
+    recreated_sha256 = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    expected_sha256 = artifact_state.get("sha256", "")
+    if recreated_sha256 != expected_sha256:
+        return {
+            "success": False,
+            "error": "artifact_recreation_mismatch",
+            "detail": (
+                f"Recreated content diverges from original artifact "
+                f"(sha256={recreated_sha256[:16]}... vs recorded={expected_sha256[:16]}...)"
+            ),
+        }
+
+    artifact_dir = tool_ctx.temp_dir / "responses" / artifact_state.get("tool_name", "load_recipe")
+    try:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        path = _artifact_path(
+            artifact_dir, artifact_state.get("tool_name", "load_recipe"), recreated_sha256
+        )
+        atomic_write(path, serialized)
+    except OSError as exc:
+        return {
+            "success": False,
+            "error": "artifact_unavailable",
+            "detail": f"Recreated artifact could not be written: {type(exc).__name__}: {exc}",
+        }
+    return recreated
+
+
+def _build_section_response(
+    *,
+    payload: dict[str, Any],
+    section: str,
+    step_name: str | None,
+    part: int,
+    artifact_path: str,
+    expected_sha256: str,
+    tool_ctx: Any,
+) -> str:
+    """Build the JSON response for a section pull, with optional chunking."""
+    if section == "step":
+        if not step_name:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "step_name_required",
+                    "detail": "section='step' requires step_name=<post_prune step name>",
+                }
+            )
+        step_yaml = _extract_step_yaml(payload, step_name)
+        if step_yaml is None:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "step_not_found",
+                    "detail": (
+                        f"Step '{step_name}' is not in the loaded recipe's post-prune step set."
+                    ),
+                    "step_index": payload.get("post_prune_step_names", []),
+                }
+            )
+        body: dict[str, Any] = {
+            "success": True,
+            "section": "step",
+            "step_name": step_name,
+            "content": step_yaml,
+            "artifact_path": artifact_path,
+            "sha256": expected_sha256,
+        }
+        return _chunk_response_if_oversized(body, tool_ctx, part=part)
+
+    if section == "content":
+        body = {
+            "success": True,
+            "section": "content",
+            "content": payload.get("content", ""),
+            "artifact_path": artifact_path,
+            "sha256": expected_sha256,
+        }
+        return _chunk_response_if_oversized(body, tool_ctx, part=part)
+
+    if section == "diagram":
+        body = {
+            "success": True,
+            "section": "diagram",
+            "content": payload.get("diagram"),
+            "artifact_path": artifact_path,
+            "sha256": expected_sha256,
+        }
+        return _chunk_response_if_oversized(body, tool_ctx, part=part)
+
+    if section == "suggestions":
+        body = {
+            "success": True,
+            "section": "suggestions",
+            "content": payload.get("suggestions", []),
+            "artifact_path": artifact_path,
+            "sha256": expected_sha256,
+        }
+        return _chunk_response_if_oversized(body, tool_ctx, part=part)
+
+    return json.dumps(
+        {
+            "success": False,
+            "error": "unknown_section",
+            "detail": (
+                f"Unknown section {section!r}. Valid sections: 'step', 'content', "
+                "'diagram', 'suggestions'."
+            ),
+        }
+    )
+
+
+def _extract_step_yaml(payload: dict[str, Any], step_name: str) -> str | None:
+    """Extract the YAML block for a single step from the recipe content.
+
+    Returns the full ``name: <step>\n  ...`` block (with ``steps:`` wrapper
+    so downstream ``compact_recipe_display`` style transforms still apply),
+    or ``None`` if the step is not in the post-prune step set.
+    """
+    content = payload.get("content")
+    if not isinstance(content, str) or not content:
+        return None
+    try:
+        parsed = load_yaml(content)
+    except Exception:
+        logger.warning("step_yaml_load_failed", step_name=step_name, exc_info=True)
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    steps_obj = parsed.get("steps")
+    if not isinstance(steps_obj, dict) or step_name not in steps_obj:
+        return None
+    step_value = steps_obj[step_name]
+    try:
+        return dump_yaml_str({"steps": {step_name: step_value}}, default_flow_style=False)
+    except Exception:
+        logger.warning("step_yaml_dump_failed", step_name=step_name, exc_info=True)
+        return None
+
+
+def _chunk_response_if_oversized(body: dict[str, Any], tool_ctx: Any, *, part: int = 0) -> str:
+    """Split response by ``part`` if it exceeds the envelope delivery bound.
+
+    The bound is the same one ``build_recipe_envelope`` uses (smallest
+    registered backend delivery bound). Sections that fit return directly;
+    oversized sections are chunked and carry ``has_more`` + ``next_part``.
+    """
+    bound = _resolve_envelope_delivery_bound(tool_ctx)
+    serialized = json.dumps(body, ensure_ascii=False)
+    body_bytes = len(serialized.encode("utf-8"))
+    if body_bytes <= bound:
+        return serialized
+    chunk_size = max(1024, bound - 512)
+    content_text = body.get("content")
+    if not isinstance(content_text, (str, list)):
+        return serialized
+    total = len(content_text) if isinstance(content_text, str) else len(json.dumps(content_text))
+    chunks = max(1, (total + chunk_size - 1) // chunk_size)
+    if part < 0 or part >= chunks:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "part_out_of_range",
+                "detail": f"part={part} is out of range [0, {chunks}).",
+                "total_parts": chunks,
+            }
+        )
+    sliced: Any
+    if isinstance(content_text, str):
+        sliced = content_text[part * chunk_size : (part + 1) * chunk_size]
+    else:
+        text_repr = json.dumps(content_text)
+        sliced_text = text_repr[part * chunk_size : (part + 1) * chunk_size]
+        try:
+            sliced = json.loads(sliced_text)
+        except (TypeError, ValueError):
+            sliced = []
+    chunked = {
+        "success": True,
+        "section": body.get("section"),
+        "step_name": body.get("step_name"),
+        "content": sliced,
+        "artifact_path": body.get("artifact_path"),
+        "sha256": body.get("sha256"),
+        "part": part,
+        "total_parts": chunks,
+        "has_more": part < chunks - 1,
+        "next_part": part + 1 if part < chunks - 1 else None,
+    }
+    return json.dumps(chunked, ensure_ascii=False)

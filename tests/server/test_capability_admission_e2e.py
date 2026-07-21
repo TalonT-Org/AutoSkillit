@@ -390,7 +390,9 @@ async def test_open_kitchen_codex_with_provider_overrides_feasible() -> None:
 
 
 @pytest.mark.anyio
-async def test_load_recipe_codex_with_provider_overrides_no_infeasible() -> None:
+async def test_load_recipe_codex_with_provider_overrides_no_infeasible(
+    tmp_path: Path,
+) -> None:
     """load_recipe must NOT return dispatch_infeasible when Codex backend has
     provider-overridden guarded steps."""
     import json
@@ -402,6 +404,10 @@ async def test_load_recipe_codex_with_provider_overrides_no_infeasible() -> None
     tool_ctx = _make_mock_ctx()
     tool_ctx.gate.enabled = True
     tool_ctx.kitchen_id = "test-kitchen"
+    # New envelope: load_recipe persists the full recipe payload to
+    # tool_ctx.temp_dir/responses/load_recipe/. Provide a real temp_dir
+    # so artifact_dir.mkdir succeeds under the mock.
+    tool_ctx.temp_dir = tmp_path
     _setup_provider_override_ctx(tool_ctx)
     tool_ctx.recipes.load_and_validate.return_value = _make_feasible_load_result()
 

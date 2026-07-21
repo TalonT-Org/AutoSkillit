@@ -38,6 +38,9 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         }
     )
     mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    # New envelope: load_recipe persists the full payload to temp_dir/responses/.
+    # Provide a real temp_dir so artifact_dir.mkdir succeeds under the mock.
+    mock_tool_ctx.temp_dir = tmp_path
 
     with (
         patch("autoskillit.server.tools.tools_recipe._require_enabled", return_value=None),
@@ -61,7 +64,11 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         )
         result = json.loads(result_str)
         assert "error" not in result
-        assert result.get("valid") is True
+        # New envelope shape: success=True confirms recipe load succeeded;
+        # artifact_path carries the full recipe payload for on-demand pull.
+        assert result.get("success") is True
+        assert result.get("kitchen") == "loaded"
+        assert "artifact_path" in result
 
         # Verify user-supplied overrides were passed through to load_and_validate
         # (merged with auto-injected kitchen_id and pipeline_health)

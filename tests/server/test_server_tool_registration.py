@@ -61,6 +61,7 @@ class TestToolRegistration:
             "read_db",
             "list_recipes",
             "load_recipe",
+            "get_recipe_section",
             "migrate_recipe",
             "kitchen_status",
             "validate_recipe",

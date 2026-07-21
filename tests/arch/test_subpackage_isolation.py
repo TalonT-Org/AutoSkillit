@@ -976,6 +976,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_compute_retry, and ClaudeSessionResult.normalize_subtype; "
         "lifespan_started heuristic added",
     ),
+    "server/_response_budget.py": (
+        1200,
+        "REQ-CNST-010-E12: canonical response-budget machinery (lossless spill, "
+        "exact canonical projection finalization, measured exemptions, and Part B "
+        "envelope/skeleton extraction for recipe delivery) — wide surface required "
+        "to keep the spill + projection + envelope math co-located for invariant "
+        "correctness. Part B added ~150 lines for build_recipe_envelope, "
+        "extract_step_routing, and deterministic artifact pathing.",
+    ),
     "_doctor.py": (
         1300,
         "REQ-CNST-010-E4: doctor check registry — 28 sequential checks require inline logic; "
@@ -1310,6 +1319,12 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "temp_dir",
         "project_dir",
         "ephemeral_root",
+        # Part B Step 2.4: recipe_artifact_state is a server-side cache of
+        # the most recently loaded recipe's artifact metadata (path, sha256,
+        # ingredient_overrides). It is a value-type state field, not a service
+        # interface — get_recipe_section reads it to recreate the artifact
+        # on demand. Same exemption rationale as active_recipe_steps.
+        "recipe_artifact_state",
     }
     violations: list[str] = []
 

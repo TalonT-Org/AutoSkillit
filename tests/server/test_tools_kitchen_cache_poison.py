@@ -5,6 +5,7 @@ subsequent load_recipe calls for the same recipe.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -45,9 +46,15 @@ async def test_open_kitchen_ingredients_only_does_not_poison_load_recipe(
     )
 
     lr_result = json.loads(await load_recipe(name="implementation"))
-    assert "content" in lr_result, (
-        "load_recipe must return 'content' after open_kitchen(ingredients_only=True); "
-        "cache was poisoned by the ingredients_only pop"
-    )
-    assert isinstance(lr_result["content"], str)
-    assert len(lr_result["content"]) > 0
+    assert "content" not in lr_result
+    assert lr_result["pull_tool"] == "get_recipe_section"
+    assert {
+        "step_flow_skeleton",
+        "step_index",
+        "artifact_path",
+        "sha256",
+        "pull_tool",
+    } <= lr_result.keys()
+    payload = json.loads(Path(lr_result["artifact_path"]).read_text(encoding="utf-8"))
+    assert isinstance(payload["content"], str)
+    assert payload["content"]

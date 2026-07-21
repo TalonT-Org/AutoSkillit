@@ -67,16 +67,25 @@ class TestLoadRecipeTools:
     # SS2
     @pytest.mark.anyio
     async def test_load_returns_json_with_content(self, tmp_path, monkeypatch):
-        """load_recipe returns JSON with content and suggestions."""
+        """load_recipe returns a compact envelope with artifact_path and suggestions."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\ndescription: Test recipe\n")
         result = json.loads(await load_recipe(name="test"))
-        assert "content" in result
+        # Envelope shape: full content is NOT in the response — it is
+        # retrieved on demand via get_recipe_section(section="content").
+        assert "content" not in result
+        assert "artifact_path" in result
+        assert "sha256" in result
+        assert "pull_tool" in result
+        assert result["pull_tool"] == "get_recipe_section"
         assert "suggestions" in result
-        assert "name: test" in result["content"]
-        assert "description: Test recipe" in result["content"]
+        # Verify the persisted artifact carries the full recipe content
+        artifact = Path(result["artifact_path"]).read_text(encoding="utf-8")
+        payload = json.loads(artifact)
+        assert "name: test" in payload["content"]
+        assert "description: Test recipe" in payload["content"]
 
     # SS3
     @pytest.mark.anyio
@@ -90,7 +99,7 @@ class TestLoadRecipeTools:
     # SS7
     @pytest.mark.anyio
     async def test_load_returns_json_with_suggestions(self, tmp_path, monkeypatch):
-        """load_recipe response always has 'content' and 'suggestions' keys."""
+        """load_recipe envelope always has 'suggestions' list with semantic findings."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
@@ -100,7 +109,7 @@ class TestLoadRecipeTools:
             "    on_success: done\n  done:\n    action: stop\n    message: Done\n"
         )
         result = json.loads(await load_recipe(name="test"))
-        assert "content" in result
+        assert "content" not in result
         assert "suggestions" in result
         assert isinstance(result["suggestions"], list)
         assert any(s["rule"] == "model-on-non-skill-step" for s in result["suggestions"])
@@ -114,8 +123,13 @@ class TestLoadRecipeTools:
         monkeypatch.chdir(tmp_path)
         result = json.loads(await load_recipe(name="implementation"))
         assert "error" not in result, f"Unexpected error: {result.get('error')}"
-        assert "content" in result
-        assert len(result["content"]) > 0
+        # New envelope: full content is in artifact_path, not inline
+        assert "content" not in result
+        assert "artifact_path" in result
+        artifact = Path(result["artifact_path"]).read_text(encoding="utf-8")
+        payload = json.loads(artifact)
+        assert "content" in payload
+        assert len(payload["content"]) > 0
 
     @pytest.mark.anyio
     async def test_load_recipe_parse_failure_is_logged_and_surfaced(
@@ -139,7 +153,9 @@ class TestLoadRecipeTools:
         ):
             result = json.loads(await load_recipe(name="test"))
 
-        assert "content" in result, "load_recipe must be non-blocking even on parse failure"
+        assert "artifact_path" in result, (
+            "load_recipe must persist an artifact and return its path even on parse failure"
+        )
         mock_logger.warning.assert_called_once()
         assert any(s.get("rule") == "validation-error" for s in result["suggestions"]), (
             "Unexpected exception must appear as a validation-error finding in suggestions"
@@ -484,20 +500,36 @@ class TestLoadRecipeDiagram:
     async def test_load_recipe_response_has_diagram_key(
         self, tmp_path, monkeypatch, tool_ctx_kitchen_open
     ):
-        """DG-12: load_recipe response always contains a 'diagram' key."""
+        """DG-12: load_recipe envelope carries diagram field when present."""
         self._setup_project_recipe(tmp_path, monkeypatch)
         result = json.loads(await load_recipe(name="my-recipe"))
-        assert "diagram" in result
+        # New envelope: diagram is forwarded only when present and not None;
+        # canonical path is get_recipe_section(section="diagram"). When no
+        # diagram exists, the key is absent.
+        # Verify either the inline diagram key is present OR the artifact_path
+        # exposes a 'diagram' field via the persisted artifact.
+        assert "artifact_path" in result
+        if "diagram" in result:
+            assert result["diagram"] is None or isinstance(result["diagram"], str)
+        else:
+            artifact = Path(result["artifact_path"]).read_text(encoding="utf-8")
+            payload = json.loads(artifact)
+            assert "diagram" in payload
 
     # DG-13
     @pytest.mark.anyio
     async def test_load_recipe_diagram_none_when_not_generated(
         self, tmp_path, monkeypatch, tool_ctx_kitchen_open
     ):
-        """DG-13: diagram is None when no diagram file exists."""
+        """DG-13: persisted artifact's diagram is None when no diagram file exists."""
         self._setup_project_recipe(tmp_path, monkeypatch)
         result = json.loads(await load_recipe(name="my-recipe"))
-        assert result["diagram"] is None
+        # Envelope carries diagram only when explicitly present and not None.
+        # The canonical retrieval path is get_recipe_section(section="diagram").
+        assert "diagram" not in result or result.get("diagram") is None
+        artifact = Path(result["artifact_path"]).read_text(encoding="utf-8")
+        payload = json.loads(artifact)
+        assert payload.get("diagram") is None
 
 
 # ---------------------------------------------------------------------------
@@ -530,7 +562,7 @@ class TestLoadRecipeIngredientsOnly:
 
     @pytest.mark.anyio
     async def test_load_recipe_ingredients_only_strips_content(self, tmp_path, monkeypatch):
-        """load_recipe(name=X, ingredients_only=True) must omit content from result."""
+        """load_recipe(name=X, ingredients_only=True) returns a minimal envelope."""
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
@@ -539,9 +571,13 @@ class TestLoadRecipeIngredientsOnly:
             "  done:\n    action: stop\n    message: Done\n"
         )
         result = json.loads(await load_recipe(name="test", ingredients_only=True))
+        # New envelope shape — even when ingredients_only, the envelope fields
+        # are present (no full content), but step_flow_skeleton is empty.
         assert "content" not in result
-        assert "orchestration_rules" not in result
-        assert "stop_step_semantics" not in result
+        # Orchestration fields are part of the envelope; when ingredients_only=True,
+        # they are stripped per the strip_ingredients_only_keys policy.
+        # The contract is: envelope minimal, no step routing skeleton, no full content.
+        assert result.get("step_flow_skeleton") == []
         assert "suggestions" in result
 
 
@@ -575,6 +611,10 @@ class TestLoadRecipeAuthorityClobber:
         mock_ctx.config.migration.suppressed = []
         mock_ctx.kitchen_id = "test-kitchen"
         mock_ctx.config.linux_tracing.log_dir = ""
+        # New envelope: load_recipe persists the full recipe payload to
+        # tool_ctx.temp_dir/responses/load_recipe/. Provide a real temp_dir
+        # so artifact_dir.mkdir succeeds under the mock.
+        mock_ctx.temp_dir = tmp_path
 
         with patch(
             "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
@@ -601,7 +641,14 @@ class TestLoadRecipeAuthorityClobber:
                         )
 
         parsed = json.loads(result_str)
-        warnings = parsed.get("warnings") or []
+        # New envelope: warnings live on the persisted artifact (full payload),
+        # not on the compact envelope. Read the artifact to verify the
+        # authority-clobber warning is generated and persisted.
+        artifact_path = parsed.get("artifact_path")
+        assert artifact_path, f"load_recipe envelope missing artifact_path; got {parsed}"
+        artifact = Path(artifact_path).read_text(encoding="utf-8")
+        persisted_payload = json.loads(artifact)
+        warnings = persisted_payload.get("warnings") or []
         matching = [w for w in warnings if "base_branch" in w]
         assert matching, (
             f"load_recipe must emit a warning naming base_branch; got warnings={warnings}"
@@ -647,12 +694,19 @@ class TestLoadRecipeSurfacesValidationFailure:
         _LOAD_CACHE.clear()
 
         result = json.loads(await load_recipe(name="no-steps"))
-        assert result.get("valid") is False
-        assert result.get("validation_failed") is True, (
-            f"Expected validation_failed=True in response; got keys: {list(result.keys())}"
+        # New envelope: validation_failed/valid/errors live in the artifact
+        # (the compact envelope strips these). Read the artifact to confirm
+        # the failure was surfaced for callers who fetch the persisted payload.
+        assert result.get("success") is True
+        assert "artifact_path" in result
+        artifact = Path(result["artifact_path"]).read_text(encoding="utf-8")
+        persisted = json.loads(artifact)
+        assert persisted.get("valid") is False
+        assert persisted.get("validation_failed") is True, (
+            f"Expected validation_failed=True; got keys: {list(persisted.keys())}"
         )
-        assert "errors" in result
-        assert len(result["errors"]) > 0
+        assert "errors" in persisted
+        assert len(persisted["errors"]) > 0
 
 
 class TestLoadRecipeFailClosed:

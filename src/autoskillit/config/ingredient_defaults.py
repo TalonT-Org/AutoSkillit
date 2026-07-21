@@ -33,7 +33,16 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "commit_files",
         ),
     ),
-    ("Recipes", ("migrate_recipe", "list_recipes", "load_recipe", "validate_recipe")),
+    (
+        "Recipes",
+        (
+            "migrate_recipe",
+            "list_recipes",
+            "load_recipe",
+            "validate_recipe",
+            "get_recipe_section",
+        ),
+    ),
     ("Agents", ("unlock_agent_pack",)),
     (
         "Clone & Remote",

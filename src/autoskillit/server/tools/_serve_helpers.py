@@ -1,14 +1,15 @@
 """Unified serve-pipeline helpers.
 
 The only legal call site for load_and_validate in server/tools/.
-All four serve surfaces (open_kitchen normal, open_kitchen deferred-recall,
-load_recipe, get_recipe) must call serve_recipe() instead of calling
-ctx.recipes.load_and_validate() directly. This structural invariant is
-enforced by tests/arch/test_serve_surface_registry.py.
+All five serve surfaces (open_kitchen normal, open_kitchen deferred-recall,
+load_recipe, get_recipe, get_recipe_section) must call serve_recipe() instead
+of calling ctx.recipes.load_and_validate() directly. This structural invariant
+is enforced by tests/arch/test_serve_surface_registry.py.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,11 +17,22 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    atomic_write,
+    get_logger,
+    resolve_effective_delivery_bound,
+)
+from autoskillit.execution import resolve_worst_case_delivery_bound
+from autoskillit.server._response_budget import (
+    _artifact_path,
+    build_recipe_envelope,
+    extract_step_routing,
 )
 
 if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, CodingAgentBackend
     from autoskillit.pipeline.context import ToolContext
+
+logger = get_logger(__name__)
 
 
 def build_backend_capabilities_map(
@@ -81,6 +93,132 @@ def build_open_kitchen_recipe_payload(result: dict[str, Any], *, version: str) -
     if not payload.get("ingredients_table"):
         payload["ingredients_table"] = None
     return payload
+
+
+def _safe_backend_name(tool_ctx: Any) -> str | None:
+    """Return ``tool_ctx.backend.name`` if a backend is set, else ``None``.
+
+    Helper factored out of the recipe_artifact_state builder so pyright can
+    resolve ``backend.name`` against the typed ``CodingAgentBackend`` rather
+    than the Optional ``Any`` returned by ``getattr(..., None)``.
+    """
+    backend = getattr(tool_ctx, "backend", None)
+    if backend is None:
+        return None
+    name_attr = getattr(backend, "name", None)
+    return name_attr if isinstance(name_attr, str) else None
+
+
+def resolve_envelope_delivery_bound(tool_ctx: Any) -> int:
+    """Resolve the envelope construction-time bound in bytes.
+
+    Mirrors ``track_response_size.wrapper``'s resolution so the envelope is
+    constructed against the same gate that enforcement applies. Backend
+    capabilities are preferred; falls back to the smallest registered backend
+    bound (worst case) when capabilities are unavailable or non-positive.
+    """
+    backend = getattr(tool_ctx, "backend", None)
+    caps = getattr(backend, "capabilities", None) if backend is not None else None
+    token_limit: int | None = None
+    if caps is not None:
+        try:
+            token_limit = resolve_effective_delivery_bound(caps)
+        except Exception:  # noqa: BLE001
+            logger.warning("resolve_effective_delivery_bound_failed", exc_info=True)
+            token_limit = None
+    # Coerce to int; MagicMock or non-numeric values fall through to the
+    # conservative default so envelope construction never crashes on a
+    # misconfigured backend (e.g., a test mock with a MagicMock capabilities).
+    if not isinstance(token_limit, int) or token_limit <= 0:
+        try:
+            fallback = resolve_worst_case_delivery_bound()
+        except Exception:  # noqa: BLE001
+            logger.warning("resolve_worst_case_delivery_bound_failed", exc_info=True)
+            fallback = 0
+        if isinstance(fallback, int) and fallback > 0:
+            token_limit = fallback
+        else:
+            token_limit = 10_000
+    return token_limit * 4
+
+
+def persist_recipe_artifact(
+    *,
+    tool_ctx: Any,
+    tool_name: str,
+    payload: dict[str, Any],
+) -> tuple[str, str]:
+    """Persist the full recipe payload and return (artifact_path, sha256).
+
+    Uses the deterministic path scheme from ``_response_budget._artifact_path``
+    so the persisted file is stable across calls with the same content.
+    """
+    artifact_dir = tool_ctx.temp_dir / "responses" / tool_name
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=False)
+    payload_bytes = serialized.encode("utf-8")
+    content_sha256 = hashlib.sha256(payload_bytes).hexdigest()
+    path = _artifact_path(artifact_dir, tool_name, content_sha256)
+    atomic_write(path, serialized)
+    return str(path.resolve()), content_sha256
+
+
+def build_and_record_recipe_envelope(
+    *,
+    tool_ctx: Any,
+    tool_name: str,
+    payload: dict[str, Any],
+    result: dict[str, Any],
+    kitchen_label: str,
+    version: str,
+    overrides: dict[str, str] | None,
+    recipe_name: str,
+    ingredients_only: bool,
+) -> dict[str, Any]:
+    """Persist the full artifact and build the compact envelope in one call.
+
+    Populates ``ctx.recipe_artifact_state`` with the artifact_path, sha256,
+    and the recipe-load parameters ``get_recipe_section`` needs to recreate
+    the artifact if it is later missing from disk. Returns the envelope dict
+    so the caller can serialize via ``render_served_response``.
+    """
+    artifact_path, content_sha256 = persist_recipe_artifact(
+        tool_ctx=tool_ctx,
+        tool_name=tool_name,
+        payload=payload,
+    )
+    post_prune_step_names_raw = result.get("post_prune_step_names", [])
+    post_prune_step_names: list[str] = (
+        list(post_prune_step_names_raw) if isinstance(post_prune_step_names_raw, list) else []
+    )
+    content_text = result.get("content", "")
+    step_flow_skeleton = (
+        extract_step_routing(content_text or "", post_prune_step_names)
+        if not ingredients_only and isinstance(content_text, str)
+        else []
+    )
+    step_index = {step_name: f"step:{step_name}" for step_name in post_prune_step_names}
+    tool_ctx.recipe_artifact_state = {
+        "artifact_path": artifact_path,
+        "sha256": content_sha256,
+        "tool_name": tool_name,
+        "recipe_name": recipe_name,
+        "ingredient_overrides": dict(overrides) if overrides else {},
+        "backend_name": _safe_backend_name(tool_ctx),
+        "kitchen_id": getattr(tool_ctx, "kitchen_id", ""),
+    }
+    envelope_bound = resolve_envelope_delivery_bound(tool_ctx)
+    return build_recipe_envelope(
+        result,
+        artifact_path=artifact_path,
+        sha256=content_sha256,
+        bound=envelope_bound,
+        success=True,
+        kitchen=kitchen_label,
+        version=version,
+        step_flow_skeleton=step_flow_skeleton,
+        step_index=step_index,
+    )
 
 
 def _build_serve_override_stack(

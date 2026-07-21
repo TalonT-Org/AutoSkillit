@@ -154,6 +154,7 @@ _FORMATTERS: dict[str, Callable[..., str]] = {
 # When adding a new tool, it MUST appear either in _FORMATTERS or here.
 _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
     {
+        "get_recipe_section",  # recipe artifact pull envelope, generic renders correctly
         "run_python",  # structured result dict, generic renders correctly
         "read_db",  # tabular rows, generic renders correctly
         "reset_test_dir",  # simple ack

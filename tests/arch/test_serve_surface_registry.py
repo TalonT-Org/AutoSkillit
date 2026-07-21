@@ -72,6 +72,7 @@ def test_serve_surfaces_contains_expected_members() -> None:
         "open_kitchen_deferred_recall",
         "load_recipe",
         "get_recipe",
+        "get_recipe_section",
     }
     assert expected == SERVE_SURFACES, (
         f"SERVE_SURFACES mismatch. "

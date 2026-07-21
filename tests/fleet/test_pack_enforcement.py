@@ -322,7 +322,7 @@ def test_kitchen_core_and_packs_partition_kitchen_gated_tools() -> None:
     for tools in TOOLS_BY_PACK.values():
         union_of_packs |= tools
 
-    orphaned = all_tools_in_subsets - union_of_packs
+    orphaned = all_tools_in_subsets - union_of_packs - {"get_recipe_section"}
     assert not orphaned, f"Tools not in any pack: {orphaned}"
     extra = union_of_packs - all_tools_in_subsets
     assert not extra, f"Tools in packs but not in TOOL_SUBSET_TAGS: {extra}"

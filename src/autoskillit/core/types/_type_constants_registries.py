@@ -121,6 +121,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "create_and_publish_branch",
         "record_pipeline_step",
         "reset_dispatch",
+        "get_recipe_section",  # Part B Step 2.3 — bounded pull tool
     }
 )
 
@@ -176,6 +177,7 @@ SERVE_SURFACES: frozenset[str] = frozenset(
         "open_kitchen_deferred_recall",  # S2 — deferred-recall re-serve
         "load_recipe",  # S3 — re-serve tool
         "get_recipe",  # S4 — MCP resource handler
+        "get_recipe_section",  # S5 — bounded pull tool for step/section content
     }
 )
 
@@ -337,6 +339,10 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "merge_worktree": frozenset({"kitchen-core"}),
     "unlock_agent_pack": frozenset({"kitchen-core"}),
     "record_pipeline_step": frozenset({"kitchen-core"}),
+    # Part B Step 2.3: get_recipe_section is a kitchen-core-tagged tool.
+    # It pulls recipe content on demand; food trucks don't need it (they
+    # receive the full recipe via dispatch) so no fleet tag is required.
+    "get_recipe_section": frozenset({"kitchen-core"}),
 }
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(

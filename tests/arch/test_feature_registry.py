@@ -293,7 +293,7 @@ def test_no_unregistered_feature_tag_on_tools():
     )
 
     # Known structural (non-feature, non-pack) tags that are always valid
-    STRUCTURAL_TAGS: frozenset[str] = frozenset({"kitchen-core", "fleet-dispatch"})
+    STRUCTURAL_TAGS: frozenset[str] = frozenset({"kitchen", "kitchen-core", "fleet-dispatch"})
 
     known = frozenset(FEATURE_REGISTRY.keys()) | frozenset(PACK_REGISTRY.keys()) | STRUCTURAL_TAGS
     violations = [

@@ -119,7 +119,7 @@ def test_projected_utf8_bytes_is_exact_with_multibyte_digit_boundaries(
     monkeypatch.setattr(
         _response_budget,
         "_artifact_path",
-        lambda _artifact_dir, _tool_name: artifact,
+        lambda _artifact_dir, _tool_name, _content_hash=None: artifact,
     )
     original = (
         json.dumps({"success": True, "result": "界" * 10_000}, ensure_ascii=False)
@@ -159,7 +159,7 @@ def test_minimal_projection_has_exact_bytes_and_omission_aggregates(tmp_path, mo
     monkeypatch.setattr(
         _response_budget,
         "_artifact_path",
-        lambda _artifact_dir, _tool_name: tmp_path / "fixed.log",
+        lambda _artifact_dir, _tool_name, _content_hash=None: tmp_path / "fixed.log",
     )
     original_data = {f"route_{index}": "界" * 120 for index in range(8)}
     original = json.dumps(original_data, ensure_ascii=False)

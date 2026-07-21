@@ -45,7 +45,11 @@ from autoskillit.server.tools._serve_helpers import (
     maybe_envelope_recipe_response,
     persist_recipe_artifact,
 )
-from autoskillit.server.tools.tools_recipe import _bounded_recipe_section_response
+from autoskillit.server.tools.tools_recipe import (
+    _bounded_recipe_section_response,
+    _extract_step_body_from_persisted,
+    _RecipeSectionError,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -87,6 +91,26 @@ def test_section_chunks_fit_serialized_utf8_bound() -> None:
             break
         part = response["next_part"]
     assert "".join(chunks) == content
+
+
+def test_step_extraction_distinguishes_artifact_and_serialization_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(_RecipeSectionError) as parse_error:
+        _extract_step_body_from_persisted({"content": "steps: ["}, "step")
+    assert parse_error.value.code == "recipe_artifact_parse_failed"
+
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    def _broken_dumps(_value: object) -> str:
+        raise TypeError("cannot serialize")
+
+    monkeypatch.setattr(tools_recipe, "fast_dumps", _broken_dumps)
+    with pytest.raises(_RecipeSectionError) as serialization_error:
+        _extract_step_body_from_persisted(
+            {"content": "steps:\n  step:\n    action: stop\n"}, "step"
+        )
+    assert serialization_error.value.code == "recipe_section_serialization_failed"
 
 
 def _full_open_kitchen_payload(recipe_name: str) -> dict[str, object]:

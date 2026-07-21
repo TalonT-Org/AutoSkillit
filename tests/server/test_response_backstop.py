@@ -681,9 +681,10 @@ def test_zero_delivery_limit_uses_worst_case_bound(tmp_path):
 
 def test_delivery_bound_summary_preserves_operational_fields(tmp_path):
     """Bounded summary must preserve success/kitchen/version/ingredients_table/
-    orchestration_rules/stop_step_semantics/errors/suggestions verbatim,
-    truncate content to fit, and nest spill metadata with reason='delivery_bound'
-    and top-level delivery_bound_spill=True."""
+    orchestration_rules/stop_step_semantics/errors/suggestions and the Part B
+    envelope keys (step_flow_skeleton/step_index/pull_tool/artifact_path/sha256)
+    verbatim, truncate content to fit, and nest spill metadata with
+    reason='delivery_bound' and top-level delivery_bound_spill=True."""
     payload = {
         "success": True,
         "kitchen": "open",
@@ -693,6 +694,28 @@ def test_delivery_bound_summary_preserves_operational_fields(tmp_path):
         "stop_step_semantics": {"on_success": "stop"},
         "errors": [],
         "suggestions": [{"rule": "x"}],
+        "step_flow_skeleton": [
+            {
+                "name": "step-one",
+                "summary": "first",
+                "on_success": "step-two",
+                "on_failure": None,
+                "on_result": None,
+                "on_context_limit": None,
+            },
+            {
+                "name": "step-two",
+                "summary": "second",
+                "on_success": None,
+                "on_failure": "step-one",
+                "on_result": None,
+                "on_context_limit": None,
+            },
+        ],
+        "step_index": {"step-one": "step:step-one", "step-two": "step:step-two"},
+        "pull_tool": "get_recipe_section",
+        "artifact_path": "/artifacts/envelope-sentinel.log",
+        "sha256": "deadbeef" * 8,
         "diagram": "graph TD; A-->B",
         "content": "x" * 150_000,
     }
@@ -717,6 +740,11 @@ def test_delivery_bound_summary_preserves_operational_fields(tmp_path):
     assert data["stop_step_semantics"] == payload["stop_step_semantics"]
     assert data["errors"] == payload["errors"]
     assert data["suggestions"] == payload["suggestions"]
+    assert data["step_flow_skeleton"] == payload["step_flow_skeleton"]
+    assert data["step_index"] == payload["step_index"]
+    assert data["pull_tool"] == payload["pull_tool"]
+    assert data["artifact_path"] == payload["artifact_path"]
+    assert data["sha256"] == payload["sha256"]
     assert data["diagram"] == payload["diagram"]
     assert data["content"].startswith("x")
     assert payload["content"].startswith(data["content"])

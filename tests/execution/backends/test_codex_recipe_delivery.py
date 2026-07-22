@@ -29,6 +29,7 @@ from autoskillit.execution.backends._codex_recipe_delivery import (
     NullProtectedHostAttestationProvider,
     ProtectedStoreAuthority,
     RecipeDeliveryReceiptLedger,
+    _fresh_marker_session_id,
     enumerate_fresh_codex_marker_ids,
     read_rollout_thread_id,
     resolve_unique_codex_host_correlation,
@@ -183,21 +184,28 @@ def _write_marker_and_rollout(project_dir: Path, thread_id: str) -> Path:
     return rollout
 
 
-def test_marker_validation_uses_one_bounded_file_descriptor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_marker_validation_uses_one_bounded_file_descriptor(tmp_path: Path) -> None:
     _write_marker_and_rollout(tmp_path, "thread-single-descriptor")
+    marker = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "thread-single-descriptor.json"
 
-    def _separate_path_operation_forbidden(*_args, **_kwargs):
-        raise AssertionError("marker validation performed a separate path operation")
+    class _GuardedMarkerPath(type(marker)):
+        def stat(self, *_args: Any, **_kwargs: Any) -> Any:
+            raise AssertionError("marker validation performed a separate stat")
 
-    monkeypatch.setattr(Path, "stat", _separate_path_operation_forbidden)
-    monkeypatch.setattr(Path, "is_file", _separate_path_operation_forbidden)
-    monkeypatch.setattr(Path, "read_text", _separate_path_operation_forbidden)
+        def is_file(self) -> bool:
+            raise AssertionError("marker validation performed a separate file check")
 
-    markers = enumerate_fresh_codex_marker_ids(tmp_path, now_unix=_NOW)
+        def read_text(self, *args: Any, **kwargs: Any) -> str:
+            raise AssertionError("marker validation performed an unbounded path read")
 
-    assert [session_id for session_id, _path in markers] == ["thread-single-descriptor"]
+    assert (
+        _fresh_marker_session_id(
+            _GuardedMarkerPath(marker),
+            now_unix=_NOW,
+            ttl_seconds=24 * 60 * 60,
+        )
+        == "thread-single-descriptor"
+    )
 
 
 def test_oversized_marker_fails_closed_without_unbounded_read(tmp_path: Path) -> None:

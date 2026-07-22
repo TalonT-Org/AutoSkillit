@@ -747,7 +747,9 @@ class TestSynthesizeFromWriteArtifacts:
                 {
                     "name": "Write",
                     "id": "t1",
-                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection.md",
+                    "file_path": (
+                        "/cwd/.autoskillit/temp/make-plan/task_plan_draft_2026-01-01.md"
+                    ),
                 },
                 {
                     "name": "Write",
@@ -763,7 +765,7 @@ class TestSynthesizeFromWriteArtifacts:
         assert (
             "plan_path = /cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md" in result.result
         )
-        assert "arch_lens_selection" not in result.result
+        assert "task_plan_draft_2026-01-01.md" not in result.result
 
     def test_synthesizes_path_from_backslash_s_plus_pattern(self, make_headless_session):
         """Synthesis must work for \\S+-terminated patterns, not only /.+-terminated ones."""

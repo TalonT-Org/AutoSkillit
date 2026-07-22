@@ -135,12 +135,13 @@ class TestDepSkillsNotGatedAfterActivation:
     """After activating a target with activate_deps, dependency skills are also ungated."""
 
     def test_dep_skills_not_gated_after_activation(self, tmp_path: Path) -> None:
-        """After activating make-plan, arch-lens-* and mermaid skills are ungated."""
+        """Activating make-plan delivers and ungates only its retained dependency."""
         config = load_config()
         provider = SkillsDirectoryProvider()
         mgr = DefaultSessionSkillManager(provider, tmp_path)
         session_id = "test-dep-activation"
         closure = mgr.compute_skill_closure("make-plan")
+        assert closure == frozenset({"make-plan", "write-recipe"})
         mgr.init_session(
             session_id,
             cook_session=False,
@@ -150,25 +151,11 @@ class TestDepSkillsNotGatedAfterActivation:
         mgr.activate_skill_deps(session_id, "make-plan")
 
         skills_base = tmp_path / session_id / ".claude" / "skills"
-        # Check arch-lens skills are ungated
-        for skill_dir in sorted(skills_base.iterdir()):
-            if not skill_dir.is_dir():
-                continue
-            name = skill_dir.name
-            if not name.startswith("arch-lens-"):
-                continue
-            content = (skill_dir / "SKILL.md").read_text()
-            assert "disable-model-invocation: true" not in content, (
-                f"arch-lens skill '{name}' should be ungated after activating make-plan"
-            )
-
-        # Check mermaid is ungated
-        mermaid_md = skills_base / "mermaid" / "SKILL.md"
-        assert mermaid_md.exists(), "mermaid skill dir should exist after init_session"
-        content = mermaid_md.read_text()
-        assert "disable-model-invocation: true" not in content, (
-            "mermaid should be ungated via transitive dependency from make-plan"
-        )
+        delivered = {path.parent.name for path in skills_base.glob("*/SKILL.md")}
+        assert delivered == set(closure)
+        for name in closure:
+            content = (skills_base / name / "SKILL.md").read_text()
+            assert "disable-model-invocation: true" not in content
 
 
 class TestAllRecipeSkillCommandsInvocable:

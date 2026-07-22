@@ -409,8 +409,7 @@ def _real_skill_resolver():
 
 
 def test_make_plan_reroutes_on_codex() -> None:
-    """make-plan declares [agent_model, agent_subagent, cross_skill_ref] —
-    all worker_routable post-fix — so it must reroute to claude-code on Codex."""
+    """make-plan's agent capabilities require Claude Code routing from Codex."""
     from unittest.mock import MagicMock
 
     from autoskillit.config._config_dataclasses import ProvidersConfig
@@ -421,7 +420,7 @@ def test_make_plan_reroutes_on_codex() -> None:
     skill_info = resolver.resolve("make-plan")
     assert skill_info is not None, "make-plan must be resolvable from bundled SKILL.md"
     assert _has_routing_capability(skill_info.uses_capabilities) is True, (
-        "make-plan declares agent_model, agent_subagent, cross_skill_ref — all worker_routable"
+        "make-plan declares agent_model and agent_subagent — both worker_routable"
     )
 
     step = MagicMock()

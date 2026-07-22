@@ -211,10 +211,10 @@ async def test_run_skill_no_target_skill_passes_none_allow_only(
 
 
 @pytest.mark.anyio
-async def test_run_skill_make_plan_closure_includes_arch_lens_pack(
+async def test_run_skill_make_plan_passes_exact_retained_closure(
     tool_ctx_kitchen_open, monkeypatch
 ) -> None:
-    """End-to-end: /make-plan resolves a closure containing the entire arch-lens pack."""
+    """End-to-end: /make-plan forwards its exact retained activation closure."""
     from unittest.mock import MagicMock
 
     from autoskillit.core import ValidatedAddDir
@@ -262,11 +262,7 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(
     await run_skill("/autoskillit:make-plan refactor", "/tmp")
 
     closure = captured["allow_only"]
-    assert closure is not None
-    assert "make-plan" in closure
-    assert "mermaid" in closure
-    arch_members = {n for n in closure if n.startswith("arch-lens-")}
-    assert len(arch_members) >= 1
+    assert closure == frozenset({"make-plan", "write-recipe"})
 
 
 @pytest.mark.anyio

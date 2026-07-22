@@ -407,15 +407,12 @@ class TestComputeSkillClosure:
         provider = _make_synthetic_provider(tmp_path, {"lone": {}})
         assert compute_skill_closure("lone", provider) == frozenset({"lone"})
 
-    def test_closure_pack_dep_expands_to_pack_members(self) -> None:
+    def test_make_plan_production_closure_is_exact(self) -> None:
         from autoskillit.workspace.session_skills import compute_skill_closure
 
         provider = SkillsDirectoryProvider()
         closure = compute_skill_closure("make-plan", provider)
-        assert "make-plan" in closure
-        assert "mermaid" in closure  # transitive via arch-lens-* deps
-        arch_members = {n for n in closure if n.startswith("arch-lens-")}
-        assert len(arch_members) >= 1
+        assert closure == frozenset({"make-plan", "write-recipe"})
 
     def test_closure_individual_skill_dep(self, tmp_path: Path) -> None:
         from autoskillit.workspace.session_skills import compute_skill_closure

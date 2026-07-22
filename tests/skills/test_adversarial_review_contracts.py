@@ -6,6 +6,20 @@ from autoskillit.core.paths import pkg_root
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
+_REMOVED_DIAGRAM_MARKERS = (
+    "Visualize with Architecture Lens",
+    "arch_lens_selection_",
+    "/autoskillit:arch-lens-",
+    "/autoskillit:mermaid",
+    "## Proposed Architecture",
+    "Lens Used",
+    "## Skill Loading Checklist",
+)
+_CONNECTED_CALL_CHAIN_INVARIANT = (
+    "Every new component, class, or function is wired into the call chain — "
+    "nothing is created but left unconnected"
+)
+
 
 @pytest.fixture(scope="module")
 def make_plan_text() -> str:
@@ -66,15 +80,12 @@ def test_make_plan_step9_plan_revision_exists(make_plan_text: str) -> None:
     ), "Step 9 must reference reading the three adversarial reports"
 
 
-def test_make_plan_checklist_includes_adversarial_review(make_plan_text: str) -> None:
-    checklist_idx = make_plan_text.find("## Skill Loading Checklist")
-    assert checklist_idx != -1
-    next_heading = make_plan_text.find("\n## ", checklist_idx + 1)
-    end = next_heading if next_heading != -1 else len(make_plan_text)
-    checklist_section = make_plan_text[checklist_idx:end].lower()
-    assert "adversarial" in checklist_section, (
-        "Skill Loading Checklist must include an adversarial review checklist item"
-    )
+def test_make_plan_omits_diagram_workflow_and_retains_call_chain_invariant(
+    make_plan_text: str,
+) -> None:
+    for marker in _REMOVED_DIAGRAM_MARKERS:
+        assert marker not in make_plan_text, f"make-plan must omit obsolete marker: {marker}"
+    assert _CONNECTED_CALL_CHAIN_INVARIANT in make_plan_text
 
 
 def test_make_plan_steps_6_through_9_ordered(make_plan_text: str) -> None:
@@ -135,24 +146,22 @@ def test_plan_registry_tracer_turn_budget_instruction() -> None:
     )
 
 
-def test_make_plan_steps_5e_through_9_ordered(make_plan_text: str) -> None:
-    """Verify Steps 5e and 6-9 appear in order in the document."""
+def test_make_plan_steps_5_through_9_ordered(make_plan_text: str) -> None:
+    """Verify the promoted Step 5 and Steps 6-9 appear in order."""
     planning_idx = make_plan_text.find("## Planning Steps")
     assert planning_idx != -1
-    step5e_idx = make_plan_text.find(
-        "**5e. Complexity-Gated Adversarial Review Decision", planning_idx
+    step5_idx = make_plan_text.find(
+        "5. **Complexity-Gated Adversarial Review Decision**", planning_idx
     )
     step6_idx = make_plan_text.find("**Foundation Audit", planning_idx)
     step7_idx = make_plan_text.find("**Interface Mapping", planning_idx)
     step8_idx = make_plan_text.find("**Registry Trace", planning_idx)
     step9_idx = make_plan_text.find("**Plan Revision", planning_idx)
-    assert step5e_idx != -1, (
-        "Step 5e must exist with 'Complexity-Gated Adversarial Review Decision' heading"
+    assert step5_idx != -1, (
+        "Step 5 must exist with 'Complexity-Gated Adversarial Review Decision' heading"
     )
     assert all(i != -1 for i in (step6_idx, step7_idx, step8_idx, step9_idx))
-    assert step5e_idx < step6_idx < step7_idx < step8_idx < step9_idx, (
-        "Steps 5e-9 must appear in order in the document"
-    )
+    assert step5_idx < step6_idx < step7_idx < step8_idx < step9_idx
 
 
 def test_make_plan_interface_mapping_and_registry_trace_responsibilities(
@@ -254,18 +263,17 @@ def test_rectify_adversarial_steps_ordered(rectify_text: str) -> None:
         "Adversarial steps must appear in order: "
         "Foundation Audit < Interface Mapping < Registry Trace"
     )
+    assert "### Step 4: Foundation Audit" in rectify_text
+    assert "### Step 5: Interface Mapping" in rectify_text
+    assert "### Step 6: Registry Trace" in rectify_text
 
 
-def test_rectify_checklist_includes_adversarial_review(rectify_text: str) -> None:
-    """Rectify Skill Loading Checklist must include adversarial review item."""
-    checklist_idx = rectify_text.find("## Skill Loading Checklist")
-    assert checklist_idx != -1
-    next_heading = rectify_text.find("\n## ", checklist_idx + 1)
-    end = next_heading if next_heading != -1 else len(rectify_text)
-    section = rectify_text[checklist_idx:end].lower()
-    assert "adversarial" in section, (
-        "Skill Loading Checklist must include an adversarial review checklist item"
-    )
+def test_rectify_omits_diagram_workflow_and_retains_call_chain_invariant(
+    rectify_text: str,
+) -> None:
+    for marker in _REMOVED_DIAGRAM_MARKERS:
+        assert marker not in rectify_text, f"rectify must omit obsolete marker: {marker}"
+    assert _CONNECTED_CALL_CHAIN_INVARIANT in rectify_text
 
 
 def test_rectify_interface_mapping_rules(rectify_text: str) -> None:
@@ -340,9 +348,9 @@ def test_rectify_adversarial_steps_contain_continuation_protocol(rectify_text: s
     rt_end = next_heading if next_heading != -1 else len(rectify_text)
 
     for label, start, end in [
-        ("Step 5 (Foundation Audit)", fa_idx, im_idx),
-        ("Step 6 (Interface Mapping)", im_idx, rt_idx),
-        ("Step 7 (Registry Trace)", rt_idx, rt_end),
+        ("Step 4 (Foundation Audit)", fa_idx, im_idx),
+        ("Step 5 (Interface Mapping)", im_idx, rt_idx),
+        ("Step 6 (Registry Trace)", rt_idx, rt_end),
     ]:
         section = rectify_text[start:end].lower()
         assert "sendmessage" in section, f"{label} must mention SendMessage"

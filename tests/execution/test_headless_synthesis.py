@@ -1011,7 +1011,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
                 "id": "t1",
                 "name": "Write",
                 "input": {
-                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"  # noqa: E501
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/task_plan_draft_2026-01-01.md"  # noqa: E501
                 },
             }
         )
@@ -1045,7 +1045,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
                 "id": "t1",
                 "name": "Write",
                 "input": {
-                    "file_path": "/cwd/.autoskillit/temp/make-plan/arch_lens_selection_2026-01-01.md"  # noqa: E501
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/task_plan_draft_2026-01-01.md"  # noqa: E501
                 },
             }
         )
@@ -1075,7 +1075,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
             backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
-        assert "arch_lens_selection" not in sr.result
+        assert "task_plan_draft_2026-01-01.md" not in sr.result
 
     def test_synthesis_skipped_for_channel_b_session_complete(self) -> None:
         """CHANNEL_B + SUCCESS + write evidence but no pattern in assistant_messages.

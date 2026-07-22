@@ -1,4 +1,4 @@
-"""Semantic guard: make-plan must not declare git_metadata_write capability."""
+"""Semantic guard for make-plan's exact worker-routable capabilities."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from autoskillit.workspace.skills import _read_skill_frontmatter
 pytestmark = [pytest.mark.small]
 
 
-def test_make_plan_does_not_declare_git_metadata_write():
+def test_make_plan_declares_exact_worker_capabilities() -> None:
     fm = _read_skill_frontmatter(pkg_root() / "skills_extended" / "make-plan" / "SKILL.md")
     caps = set(fm.get("uses_capabilities", []))
-    assert "git_metadata_write" not in caps
+    assert caps == {"agent_model", "agent_subagent"}

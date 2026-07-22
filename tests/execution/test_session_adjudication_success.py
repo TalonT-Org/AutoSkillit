@@ -374,7 +374,9 @@ class TestComputeSuccessChannelBPatterns:
         session = ClaudeSessionResult(
             subtype=CliSubtype.UNPARSEABLE,
             is_error=True,
-            result="plan_path = /cwd/.autoskillit/temp/make-plan/arch_lens_2026.md\n<raw JSONL>",
+            result=(
+                "plan_path = /cwd/.autoskillit/temp/make-plan/task_plan_2026-01-01.md\n<raw JSONL>"
+            ),
             session_id="s1",
         )
         success = _compute_success(

@@ -197,7 +197,14 @@ def build_and_record_recipe_envelope(
         if not ingredients_only and isinstance(content_text, str)
         else []
     )
-    step_index = {step_name: f"step:{step_name}" for step_name in post_prune_step_names}
+    # ingredients_only strips "content" from the persisted payload, so no
+    # step is actually pullable via get_recipe_section(section="step", ...)
+    # in that mode — advertising them in step_index would be a broken promise.
+    step_index = (
+        {}
+        if ingredients_only
+        else {step_name: f"step:{step_name}" for step_name in post_prune_step_names}
+    )
     tool_ctx.recipe_artifact_state = {
         "artifact_path": artifact_path,
         "sha256": content_sha256,

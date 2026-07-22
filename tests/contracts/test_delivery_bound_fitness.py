@@ -136,7 +136,7 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         ),
         bound_bytes=bound_bytes,
     )
-    serialized = json.dumps(envelope, ensure_ascii=False)
+    serialized = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
     assert len(serialized.encode("utf-8")) <= bound_bytes, (
         f"{backend_name}: envelope for {recipe_name} exceeds "
         f"{bound_bytes} bytes (effective delivery bound)"

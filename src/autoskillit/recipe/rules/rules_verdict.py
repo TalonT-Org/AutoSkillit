@@ -212,7 +212,7 @@ _VALUE_FROM_WHEN_RE = re.compile(
     r"result\.(?P<output>[\w]+)"  # result.<output_name>
     r"\s*\}?\}?"  # optional closing braces from template form
     r"\s*==\s*"  # equality operator
-    r"(?P<value>'\w+'|\w+)"  # balanced single-quoted or bare value
+    r"(?P<value>'[^']+'|\w+(?:\s\w+)*)"  # single-quoted or bare value (may contain spaces)
 )
 
 

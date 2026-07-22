@@ -800,6 +800,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_zero_write_detection.py",
             "execution/test_smoke_codex.py",
             "execution/test_outcome_invariants.py",
+            "execution/test_headless_enum_recovery.py",
             # Fleet file-level entries (9 of N import autoskillit.recipe):
             "fleet/test_fleet_e2e.py",
             "fleet/test_fleet_e2e_codex.py",

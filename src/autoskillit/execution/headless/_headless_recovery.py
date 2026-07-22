@@ -283,7 +283,7 @@ def _infer_enum_token_from_write_contract(
 
     logger.info(
         "enum_inference_applied",
-        token=token_name,
+        field_name=token_name,
         value=literal_value,
         companion_path=companion_path,
     )
@@ -408,7 +408,7 @@ async def _attempt_contract_nudge(
             if isinstance(hint, _EnumHint):
                 logger.info(
                     "nudge_enum_hint",
-                    token=hint.token,
+                    field_name=hint.token,
                     allowed_values=list(hint.allowed_values),
                 )
                 hint_lines.append(

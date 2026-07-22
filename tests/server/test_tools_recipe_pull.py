@@ -309,21 +309,40 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     tool_ctx_kitchen_open,
 ) -> None:
     tool_ctx_kitchen_open.kitchen_id = "pull-kitchen"
+    expected_content = "héllo\n" * 12_000
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
-        payload=_payload("héllo\n" * 2_000),
+        payload=_payload(expected_content),
     )
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
-    response = json.loads(await get_recipe_section(section="content", part=0, **kwargs))
-    assert response["success"] is True
-    assert response["byte_start"] == 0
-    assert response["byte_end"] <= response["byte_total"]
-    assert response["payload_sha256"] == generation.payload_sha256
-    assert response["body_sha256"] == generation.body_sha256
+    chunks: list[str] = []
+    expected_byte_start = 0
+    part = 0
+    while True:
+        response = json.loads(await get_recipe_section(section="content", part=part, **kwargs))
+        assert response["success"] is True
+        assert response["byte_start"] == expected_byte_start
+        assert response["byte_end"] == response["byte_start"] + len(
+            response["content"].encode("utf-8")
+        )
+        assert response["byte_end"] <= response["byte_total"]
+        assert response["payload_sha256"] == generation.payload_sha256
+        assert response["body_sha256"] == generation.body_sha256
+        chunks.append(response["content"])
+        expected_byte_start = response["byte_end"]
+        if not response["has_more"]:
+            assert "next_part" not in response
+            break
+        assert response["next_part"] == part + 1
+        part = response["next_part"]
+
+    assert part > 0
+    assert expected_byte_start == response["byte_total"]
+    assert "".join(chunks) == expected_content
 
 
 async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open) -> None:

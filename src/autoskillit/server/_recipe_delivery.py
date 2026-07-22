@@ -23,6 +23,7 @@ from autoskillit.core import (
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
     atomic_write,
+    get_logger,
     resolve_general_output_token_limit,
     resolve_recipe_delivery_decision,
 )
@@ -32,6 +33,7 @@ from autoskillit.execution import (
     RecipeReceiptHandle,
     codex_recipe_delivery_calling_contract,
 )
+from autoskillit.recipe import _extract_routing_edges, step_byte_ranges_from_yaml
 from autoskillit.server._response_budget import enforce_response_budget
 
 if TYPE_CHECKING:
@@ -323,6 +325,279 @@ def recipe_pull_producers() -> frozenset[str]:
     )
 
 
+def _step_one_line_summary(step: Any) -> str:
+    """Return a compact single-line summary for one recipe step."""
+    description = getattr(step, "description", "") or ""
+    if description.strip():
+        return description.strip().splitlines()[0][:160]
+    message = getattr(step, "message", None)
+    if isinstance(message, str) and message.strip():
+        return message.strip().splitlines()[0][:160]
+    tool = getattr(step, "tool", None)
+    action = getattr(step, "action", None)
+    if tool:
+        return f"tool={tool}"
+    if action:
+        return f"action={action}"
+    return ""
+
+
+def _compute_step_byte_ranges(content: str) -> dict[str, tuple[int, int]]:
+    """Return UTF-8 step-body offsets from the canonical YAML helper."""
+    return step_byte_ranges_from_yaml(content)
+
+
+def extract_step_skeleton(
+    post_prune_step_names: list[str],
+    routing_edges_by_step: dict[str, list[tuple[str, str]]],
+    step_summaries: dict[str, str] | None = None,
+    byte_ranges: dict[str, tuple[int, int]] | None = None,
+) -> dict[str, Any]:
+    """Build the compact routing and byte-range index carried by an envelope."""
+    skeleton: list[dict[str, Any]] = []
+    for name in post_prune_step_names:
+        entry: dict[str, Any] = {
+            "name": name,
+            "edges": [
+                {"type": edge_type, "target": target}
+                for edge_type, target in routing_edges_by_step.get(name) or []
+                if target
+            ],
+        }
+        summary = (step_summaries or {}).get(name) or ""
+        if summary:
+            entry["summary"] = summary
+        span = (byte_ranges or {}).get(name)
+        if span is not None:
+            entry["byte_range"] = list(span)
+        skeleton.append(entry)
+    return {"step_count": len(skeleton), "steps": skeleton}
+
+
+def _safe_utf8_truncate(data: bytes) -> str:
+    """Decode a byte prefix without retaining a partial UTF-8 codepoint."""
+    while data:
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            data = data[: exc.start]
+    return ""
+
+
+def build_step_summaries(active_recipe_steps: Any) -> dict[str, str]:
+    """Build step-name to one-line-summary metadata from parsed recipe steps."""
+    if not isinstance(active_recipe_steps, dict) or not active_recipe_steps:
+        return {}
+    return {
+        name: _step_one_line_summary(step)
+        for name, step in active_recipe_steps.items()
+        if isinstance(name, str) and name
+    }
+
+
+def build_routing_edges_by_step(
+    active_recipe_steps: Any,
+    *,
+    edge_extractor: Any = _extract_routing_edges,
+) -> dict[str, list[tuple[str, str]]]:
+    """Build outgoing routing-edge metadata from parsed recipe steps."""
+    if not isinstance(active_recipe_steps, dict) or not active_recipe_steps:
+        return {}
+    edges_by_step: dict[str, list[tuple[str, str]]] = {}
+    for name, step in active_recipe_steps.items():
+        if not isinstance(name, str) or not name:
+            continue
+        extracted = edge_extractor(step) if edge_extractor is not None else []
+        edges_by_step[name] = [
+            (edge.edge_type, edge.target)
+            for edge in (extracted or [])
+            if getattr(edge, "target", None)
+        ]
+    return edges_by_step
+
+
+def build_recipe_envelope(
+    payload: dict[str, Any],
+    *,
+    recipe_name: str,
+    generation: RecipeArtifactGeneration,
+    skeleton_source: ToolContext,
+    bound_bytes: int,
+) -> dict[str, Any]:
+    """Build the bounded pull envelope used by every recipe delivery surface."""
+    post_prune_raw = payload.get("post_prune_step_names") or []
+    if not isinstance(post_prune_raw, list):
+        post_prune_raw = []
+    post_prune_names = [name for name in post_prune_raw if isinstance(name, str)]
+    active_recipe_steps: dict[str, Any] | None = None
+    if getattr(skeleton_source, "recipe_name", "") == recipe_name:
+        active_recipe_steps = skeleton_source.active_recipe_steps
+    summaries = build_step_summaries(active_recipe_steps)
+    edges = build_routing_edges_by_step(active_recipe_steps)
+    byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
+    skeleton = extract_step_skeleton(
+        post_prune_names,
+        edges,
+        summaries,
+        byte_ranges=byte_ranges,
+    )
+    pull_identity = generation.pull_identity()
+
+    def _pullable_skeleton_size(candidate: dict[str, Any]) -> int:
+        pullable = {
+            "success": payload.get("success", True),
+            "step_flow_skeleton": candidate,
+            "recipe_pull": pull_identity,
+            "delivery_bound_spill": True,
+        }
+        return len(json.dumps(pullable, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    if _pullable_skeleton_size(skeleton) > bound_bytes:
+        for summary_limit in (120, 80, 64, 48, 32, 24, 16, 8, 0):
+            bounded_summaries = (
+                {name: summary[:summary_limit] for name, summary in summaries.items()}
+                if summary_limit
+                else {}
+            )
+            skeleton = extract_step_skeleton(
+                post_prune_names,
+                edges,
+                bounded_summaries,
+                byte_ranges=byte_ranges,
+            )
+            if _pullable_skeleton_size(skeleton) <= bound_bytes:
+                break
+
+    envelope: dict[str, Any] = {"success": payload.get("success", True)}
+    envelope_bytes = len(json.dumps(envelope["success"]).encode("utf-8"))
+    for key in (
+        "kitchen",
+        "version",
+        "valid",
+        "dispatch_feasible",
+        "errors",
+        "warnings",
+        "hooks",
+        "post_prune_step_names",
+        "post_prune_routing_edges",
+        "requires_packs",
+        "requires_features",
+    ):
+        if key in payload and payload[key] is not None:
+            envelope[key] = payload[key]
+            envelope_bytes += len(
+                json.dumps({key: payload[key]}, ensure_ascii=False).encode("utf-8")
+            )
+
+    skeleton_overhead = len(
+        json.dumps({"step_flow_skeleton": skeleton}, ensure_ascii=False).encode("utf-8")
+    )
+    pull_overhead = len(
+        json.dumps(
+            {"recipe_pull": pull_identity, "delivery_bound_spill": True},
+            ensure_ascii=False,
+        ).encode("utf-8")
+    )
+    remaining = max(
+        0,
+        bound_bytes - skeleton_overhead - pull_overhead - envelope_bytes - 64,
+    )
+
+    def _project_priority_strings(keys: tuple[str, ...]) -> None:
+        nonlocal remaining
+        candidates = [
+            key for key in keys if isinstance(payload.get(key), str) and payload.get(key)
+        ]
+        overhead = {
+            key: len(json.dumps({key: ""}, ensure_ascii=False).encode("utf-8"))
+            for key in candidates
+        }
+        present: list[str] = []
+        budget = remaining
+        for key in candidates:
+            if overhead[key] < budget:
+                present.append(key)
+                budget -= overhead[key]
+        if not present:
+            return
+
+        lengths = {key: len(payload[key].encode("utf-8")) for key in present}
+        allocation: dict[str, int] = dict.fromkeys(present, 0)
+        active = list(present)
+        pool = remaining - sum(overhead[key] for key in present)
+        while active and pool > 0:
+            share, extra = divmod(pool, len(active))
+            still_active: list[str] = []
+            for index, key in enumerate(active):
+                give = share + (1 if index < extra else 0)
+                take = min(give, lengths[key] - allocation[key], pool)
+                allocation[key] += take
+                pool -= take
+                if allocation[key] < lengths[key]:
+                    still_active.append(key)
+            active = still_active
+
+        for key in present:
+            take = allocation[key]
+            if take <= 0:
+                continue
+            value_bytes = payload[key].encode("utf-8")
+            if len(value_bytes) <= take:
+                envelope[key] = payload[key]
+                remaining -= len(value_bytes) + overhead[key]
+            else:
+                envelope[key] = _safe_utf8_truncate(value_bytes[:take])
+                remaining -= take + overhead[key]
+                get_logger(__name__).warning(
+                    "recipe_envelope_priority_field_truncated",
+                    recipe_name=recipe_name,
+                    field=key,
+                    alloc_bytes=take,
+                )
+
+    _project_priority_strings(("orchestration_rules", "stop_step_semantics"))
+    for key in ("ingredients_table", "suggestions"):
+        value = payload.get(key)
+        if value is None:
+            continue
+        serialized_value = json.dumps(value, ensure_ascii=False).encode("utf-8")
+        if len(serialized_value) + 32 <= remaining:
+            envelope[key] = value
+            remaining -= len(serialized_value) + 32
+
+    envelope["step_flow_skeleton"] = skeleton
+    envelope["recipe_pull"] = pull_identity
+    envelope["delivery_bound_spill"] = True
+    if (
+        len(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        <= bound_bytes
+    ):
+        return envelope
+
+    fallback_candidates: tuple[dict[str, Any], ...] = (
+        {
+            "success": payload.get("success", True),
+            "step_flow_skeleton": skeleton,
+            "recipe_pull": pull_identity,
+            "delivery_bound_spill": True,
+        },
+        {
+            "success": False,
+            "error": "recipe_envelope_exceeds_delivery_bound",
+            "recipe_pull": pull_identity,
+        },
+        {"success": False, "error": "recipe_envelope_exceeds_delivery_bound"},
+        {},
+    )
+    for fallback in fallback_candidates:
+        if (
+            len(json.dumps(fallback, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            <= bound_bytes
+        ):
+            return fallback
+    raise ValueError("delivery bound is too small for a JSON object")
+
+
 def _conservative_token_upper_bound(rendered: str) -> int:
     """Bound tokenizer output without assuming four UTF-8 bytes per token.
 
@@ -509,10 +784,6 @@ def finalize_recipe_delivery(
     elif decision.mode is RecipeDeliveryMode.ATTESTED_INLINE:
         rendered = high_rendered
     else:
-        from autoskillit.server.tools._serve_helpers import (  # circular-break
-            build_recipe_envelope,
-        )
-
         envelope_bound_bytes = ordinary_limit * 4
         if (
             surface_definition.response_exemption_tool is None

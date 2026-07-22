@@ -1098,10 +1098,7 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
     from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server._recipe_delivery import persist_recipe_artifact
-    from autoskillit.server.tools._serve_helpers import (
-        build_recipe_envelope,
-    )
+    from autoskillit.server._recipe_delivery import build_recipe_envelope, persist_recipe_artifact
 
     project_root = Path(__file__).resolve().parent.parent.parent
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes

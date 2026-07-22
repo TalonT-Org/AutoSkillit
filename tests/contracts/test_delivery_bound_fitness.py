@@ -36,14 +36,13 @@ from autoskillit.recipe import (
     load_and_validate,
     load_recipe,
 )
-from autoskillit.server._recipe_delivery import persist_recipe_artifact
+from autoskillit.server._recipe_delivery import build_recipe_envelope, persist_recipe_artifact
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     enforce_response_budget,
 )
 from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
-    build_recipe_envelope,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]

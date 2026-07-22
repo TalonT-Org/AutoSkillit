@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
+
+import regex as re
 
 from autoskillit.core import atomic_write, get_logger, is_generated_path, run_git
 

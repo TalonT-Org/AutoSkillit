@@ -390,6 +390,12 @@ def test_skill_contracts_allowed_values_covers_recipe_routes() -> None:
     merge-prs.yaml for result.verdict routing conditions. Any value routed in a recipe
     but absent from skill_contracts.yaml allowed_values will trigger the
     unrouted-verdict-value semantic rule at recipe-load time.
+
+    Checks both the ``skills:`` section (LLM-emitted verdicts, e.g. review-pr's
+    approved/changes_requested) and the ``callable_contracts:`` section
+    (deterministic run_python verdicts, e.g. verify_plan_artifacts's
+    salvaged/unsalvageable) — both are valid sources of a ``result.verdict``
+    routed in recipe on_result blocks.
     """
     recipes_dir = Path(__file__).parents[2] / "src/autoskillit/recipes"
     target_files = [
@@ -402,6 +408,10 @@ def test_skill_contracts_allowed_values_covers_recipe_routes() -> None:
     allowed: set[str] = set()
     for skill_data in contracts.get("skills", {}).values():
         for o in skill_data.get("outputs", []):
+            if o.get("name") == "verdict":
+                allowed.update(o.get("allowed_values", []))
+    for callable_data in contracts.get("callable_contracts", {}).values():
+        for o in callable_data.get("outputs", []):
             if o.get("name") == "verdict":
                 allowed.update(o.get("allowed_values", []))
     assert allowed, "No verdict output found in skill_contracts.yaml"

@@ -78,6 +78,19 @@ Do not change any code.
 - The solution must solve more than just the immediate issue
 - The plan must cover every remediation item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan
 
+## Context Limit Behavior
+
+When context is exhausted mid-execution, the plan file may already be written to disk
+even though the `plan_path`/`plan_parts` token was never emitted. The recipe routes to
+`on_context_limit` (a deterministic salvage step), which checks whether the captured
+`plan_parts` paths exist as non-empty files on disk. If they do, the pipeline continues
+as though this skill had succeeded; if not, it falls through to this skill's original
+`on_failure` destination.
+
+This skill writes only new plan files under `{{AUTOSKILLIT_TEMP}}/rectify/` (never
+modifies source code), so a context-limit stumble has no blast radius beyond an
+unclaimed plan file.
+
 ## Rectify Workflow
 
 ### Step 1: Identify the Investigation Context

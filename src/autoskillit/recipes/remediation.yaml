@@ -373,7 +373,8 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:dry-walkthrough ${{ context.plan_path }}
+      skill_command: /autoskillit:dry-walkthrough ${{ context.plan_path }} remediation_path=${{
+        context.remediation_path }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}'
       review_path: ${{ context.review_path }}
@@ -384,6 +385,7 @@ steps:
     on_success: create_impl_worktree
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
+    on_rate_limit: release_issue_failure
     optional_context_refs:
     - remediation_path
     note: Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble

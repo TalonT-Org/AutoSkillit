@@ -8,6 +8,8 @@ from datetime import date
 from enum import StrEnum
 from pathlib import Path
 
+import regex as re
+
 from autoskillit.core import atomic_write, get_logger, is_generated_path, run_git
 
 logger = get_logger(__name__)
@@ -175,6 +177,55 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
         remaining = ", ".join(ln.strip() for ln in verify.stdout.splitlines() if ln.strip())[:200]
         return {"cleaned": "failed", "remaining": remaining}
     return {"cleaned": "true"}
+
+
+def _normalize_plan_parts(plan_parts: str) -> list[str] | None:
+    """Parse a capture-sourced plan_parts rendering into a list of absolute paths.
+
+    Accepts every plausible capture-substitution rendering: bracket-wrapped list
+    literals, newline- or comma-delimited path lists, with optional per-item
+    quoting. Returns None if any non-empty item is not an absolute path.
+    """
+    s = plan_parts.strip()
+    if len(s) >= 2 and s[0] == "[" and s[-1] == "]":
+        s = s[1:-1]
+    items: list[str] = []
+    for raw in re.split(r"[\n,]", s):
+        item = raw.strip()
+        if len(item) >= 2 and item[0] == item[-1] and item[0] in "\"'":
+            item = item[1:-1].strip()
+        if not item:
+            continue
+        if not item.startswith("/"):
+            return None
+        items.append(item)
+    return items
+
+
+def verify_plan_artifacts(plan_parts: str) -> dict[str, str]:
+    """Deterministically verify captured plan_parts artifacts for context-limit salvage.
+
+    Verdict is 'salvaged' iff the normalized plan_parts list is non-empty and
+    every listed path exists as a non-empty regular file; 'unsalvageable'
+    otherwise. On salvage, echoes the normalized plan_parts (newline-joined) and
+    the derived plan_path (first part) so downstream context is populated
+    identically to the plan step's success path.
+    """
+    items = _normalize_plan_parts(plan_parts)
+    if not items:
+        return {"verdict": "unsalvageable"}
+    for item in items:
+        path = Path(item)
+        try:
+            if not path.is_file() or path.stat().st_size == 0:
+                return {"verdict": "unsalvageable"}
+        except OSError:
+            return {"verdict": "unsalvageable"}
+    return {
+        "verdict": "salvaged",
+        "plan_parts": "\n".join(items),
+        "plan_path": items[0],
+    }
 
 
 def _count_numstat_net(numstat_output: str) -> int:

@@ -17,6 +17,7 @@ from autoskillit.recipe.contracts import (
 from autoskillit.recipe.io import all_validated_recipe_names, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import RecipeKind
 from autoskillit.recipe.validator import run_semantic_rules
+from tests.recipe.test_bundled_recipes_behavioral_properties import _SALVAGE_ROUTE_SITES
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -43,6 +44,41 @@ def _part_a_dispatch_gate_params() -> list:
 
 def _part_a_recipe_params() -> list:
     return [pytest.param(n) for n in _RECIPE_STEMS]
+
+
+@pytest.mark.parametrize(
+    "recipe_name,step_name",
+    _SALVAGE_ROUTE_SITES,
+    ids=[f"{r}:{s}" for r, s in _SALVAGE_ROUTE_SITES],
+)
+def test_audited_salvage_sites_have_zero_contract_recovery_findings(
+    recipe_name: str, step_name: str
+) -> None:
+    """Incident-shaped structural regression test (issue #4305).
+
+    Every one of the nine audited contract-recovery-capable call sites must have zero
+    contract-recovery-requires-salvage-route findings. Reverting any of the salvage
+    routes wired for these sites turns this red — and
+    test_contract_recovery_capable_steps_have_salvage_route (behavioral-properties)
+    turns red too, providing dual coverage.
+
+    Scoped to the audited nine sites rather than every bundled recipe: the rule's
+    contract-derived eligibility predicate also matches steps outside this audited set
+    that have not yet been given salvage routes (tracked separately, not yet promoted
+    to ERROR — see rules_contract_recovery.py's module docstring).
+    """
+    result = load_and_validate(recipe_name, project_dir=_PROJECT_ROOT)
+    assert "error" not in result, f"Recipe '{recipe_name}' failed to load"
+    findings = [
+        s
+        for s in result.get("suggestions", [])
+        if s.get("rule") == "contract-recovery-requires-salvage-route"
+        and s.get("step") == step_name
+    ]
+    assert not findings, (
+        f"Recipe '{recipe_name}' step '{step_name}' has contract-recovery-requires-salvage-route "
+        "findings: " + "; ".join(f"{s.get('message', '')[:150]}" for s in findings)
+    )
 
 
 @pytest.mark.parametrize("recipe_name", _part_a_dispatch_gate_params(), ids=lambda n: n)

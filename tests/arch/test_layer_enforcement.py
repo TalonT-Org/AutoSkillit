@@ -1629,6 +1629,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_outcome_invariants.py": frozenset({"autoskillit.recipe"}),
     # smoke composition tests validate recipe validity under codex backend — needs recipe API
     "tests/execution/test_smoke_codex.py": frozenset({"autoskillit.recipe"}),
+    # enum-token recovery tests build SkillContract instances inline to verify
+    # contract-aware inference — needs recipe API
+    "tests/execution/test_headless_enum_recovery.py": frozenset({"autoskillit.recipe"}),
     # quota tests cross into config to validate the contract between vocab constants
     # (execution layer) and config defaults — intentional, documented cross-ref
     "tests/execution/test_quota_binding.py": frozenset({"autoskillit.config"}),

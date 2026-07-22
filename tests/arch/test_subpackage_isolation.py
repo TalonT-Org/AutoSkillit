@@ -749,6 +749,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             rules_gitignored_deliverable.py adds the gitignored-deliverable-in-plan
             rule flagging plan steps writing to gitignored paths that feed audit-impl,
             bringing the rules/ count to 37.
+            rules_contract_recovery.py adds the contract-recovery-requires-salvage-route
+            ERROR rule deriving on_context_limit salvage-route requirements from skill
+            contract capability (#4305 part C), bringing the rules/ count to 38.
             Exempt at 51 files.
           execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
             focused single-concern modules (_process_io, _process_kill, _process_race,
@@ -890,7 +893,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_cleanup.py  # noqa: E501
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
-        "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501
+        "recipe/rules": 55,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery  # noqa: E501
         "server/tools": 32,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate

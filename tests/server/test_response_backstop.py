@@ -616,7 +616,7 @@ def test_delivery_bound_summary_drops_diagram_when_needed(tmp_path):
 def test_over_ceiling_payload_fails_even_when_over_delivery_bound(tmp_path):
     """Pin restored ordering: an over-ceiling exempted payload must fail with
     exemption_ceiling_exceeded, not route to delivery-bound spill."""
-    payload = {"success": True, "content": "x" * 190_000}
+    payload = {"success": True, "content": "x" * 200_000}
     original = json.dumps(payload)
     result = enforce_response_budget(
         original,

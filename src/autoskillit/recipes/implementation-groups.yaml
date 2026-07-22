@@ -231,6 +231,7 @@ steps:
       route: push
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
+    on_context_limit: salvage_plan
     note: >
       Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file.
       plan_parts context key contains the full ordered list of part files (sorted alphabetically).
@@ -256,6 +257,29 @@ steps:
       "/autoskillit:make-plan {group_path}\n\nadversarial_review_level={inputs.adversarial_review_level}"
       VERDICT: The skill emits verdict=plan (normal) or verdict=false_positive
       (remediation finding is a false positive). false_positive routes to push.
+
+  salvage_plan:
+    tool: run_python
+    with:
+      callable: "autoskillit.recipe._cmd_rpc.verify_plan_artifacts"
+      plan_parts: "${{ context.plan_parts }}"
+    capture:
+      plan_path: "${{ result.plan_path }}"
+    capture_list:
+      plan_parts: "${{ result.plan_parts }}"
+    retries: 0
+    on_result:
+    - when: "${{ result.verdict }} == salvaged"
+      route: review_approach
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+    note: >
+      Deterministic salvage for plan context-limit stumbles: verifies captured
+      plan_parts artifacts exist on disk. salvaged routes onward as if plan
+      succeeded; unsalvageable falls through to plan's original on_failure destination.
+      Substitute the captured ${{ context.plan_parts }} value into the plan_parts
+      argument verbatim, unmodified — do not reformat, quote, or re-derive it; the
+      callable's input grammar absorbs rendering variance.
 
   review_approach:
     tool: run_skill
@@ -860,6 +884,8 @@ steps:
       route: push
     - when: "result.error"
       route: register_clone_failure
+    - when: "${{ result.verdict }} == NO GO"
+      route: check_audit_remediation_loop
     - route: check_audit_remediation_loop
     on_failure: register_clone_failure
     on_context_limit: register_clone_failure

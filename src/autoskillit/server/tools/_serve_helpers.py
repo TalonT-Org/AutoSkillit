@@ -256,7 +256,10 @@ def extract_step_skeleton(
         ``load_and_validate``'s ``post_prune_step_names`` result field).
     *routing_edges_by_step* — name → list of (edge_type, target) tuples
         derived from ``_extract_routing_edges`` for each step.
-    *step_summaries* — optional name → one-line summary override.
+    *step_summaries* — optional name → one-line summary override. A step
+        with no summary (or an empty one) omits the ``summary`` key
+        entirely rather than emitting it as ``""`` — saves bytes at scale
+        and matches the byte_range fail-open/omit convention below.
     *byte_ranges* — optional name → (start, end) UTF-8 byte offsets
         within the persisted ``content`` field. When provided for a
         given step, the skeleton's per-step entry gains a
@@ -270,11 +273,12 @@ def extract_step_skeleton(
         summary = (step_summaries or {}).get(name) or ""
         entry: dict[str, Any] = {
             "name": name,
-            "summary": summary,
             "edges": [
                 {"type": edge_type, "target": target} for edge_type, target in edges if target
             ],
         }
+        if summary:
+            entry["summary"] = summary
         span = (byte_ranges or {}).get(name)
         if span is not None:
             entry["byte_range"] = list(span)

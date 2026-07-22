@@ -467,6 +467,7 @@ async def _execute_claude_headless(
                 provider_extras=provider_extras,
                 retry_reason=skill_result.retry_reason,
                 pty_override=pty_override,
+                skill_contract=skill_contract,
             )
             if nudge_success is not None:
                 skill_result = nudge_success

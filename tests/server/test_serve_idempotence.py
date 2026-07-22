@@ -114,7 +114,6 @@ async def test_load_recipe_after_open_kitchen_without_overrides_serves_identical
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
 
     assert tool_ctx_kitchen_open.session_serve_overrides == {}, (
         "session_serve_overrides must be empty dict (not None) when no overrides passed"
@@ -124,13 +123,27 @@ async def test_load_recipe_after_open_kitchen_without_overrides_serves_identical
     )
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-    assert "content" in lr_result, f"load_recipe missing content: {lr_result}"
-    lr_content = lr_result["content"]
 
-    assert ok_content == lr_content, (
-        "load_recipe content diverges from open_kitchen content (no-override path) — "
-        "session_serve_overrides baseline not applied"
-    )
+    if "content" in ok_result and "content" in lr_result:
+        assert ok_result["content"] == lr_result["content"], (
+            "load_recipe content diverges from open_kitchen content (no-override path) — "
+            "session_serve_overrides baseline not applied"
+        )
+    else:
+        # The unresolved (no-overrides) serving of this recipe is large enough
+        # that one or both surfaces substitute the bounded step-flow-skeleton
+        # envelope for full content (server/_serve_helpers.py
+        # build_recipe_envelope) — open_kitchen's pre-envelope payload carries
+        # extra routing metadata (build_open_kitchen_recipe_payload) that
+        # load_recipe's doesn't, so the two surfaces can cross the delivery
+        # bound independently. Prove idempotence via the recipe-derived
+        # routing fields populated identically in both representations.
+        assert ok_result.get("post_prune_step_names") == lr_result.get("post_prune_step_names"), (
+            "load_recipe post_prune_step_names diverges from open_kitchen (no-override path)"
+        )
+        assert ok_result.get("post_prune_routing_edges") == lr_result.get(
+            "post_prune_routing_edges"
+        ), "load_recipe post_prune_routing_edges diverges from open_kitchen (no-override path)"
 
 
 async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
@@ -467,7 +480,22 @@ async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
     if "content" not in lr_result:
         assume(False)  # discard: load_recipe failed
 
-    assert lr_result["content"] == ok_result["content"], (
-        f"Routing divergence for overrides={overrides!r}: "
-        "load_recipe content must match open_kitchen content"
-    )
+    if "content" in ok_result:
+        assert lr_result["content"] == ok_result["content"], (
+            f"Routing divergence for overrides={overrides!r}: "
+            "load_recipe content must match open_kitchen content"
+        )
+    else:
+        # open_kitchen's pre-envelope payload carries extra routing metadata
+        # (build_open_kitchen_recipe_payload) that load_recipe's doesn't, so
+        # for a recipe near the delivery bound the two surfaces can cross
+        # independently and open_kitchen may substitute the bounded
+        # step-flow-skeleton envelope while load_recipe still serves full
+        # content. Prove idempotence via the recipe-derived routing fields
+        # populated identically in both representations.
+        assert ok_result.get("post_prune_step_names") == lr_result.get("post_prune_step_names"), (
+            f"Routing divergence for overrides={overrides!r}: post_prune_step_names mismatch"
+        )
+        assert ok_result.get("post_prune_routing_edges") == lr_result.get(
+            "post_prune_routing_edges"
+        ), f"Routing divergence for overrides={overrides!r}: post_prune_routing_edges mismatch"

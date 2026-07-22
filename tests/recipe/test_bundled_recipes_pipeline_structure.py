@@ -244,6 +244,13 @@ class TestPipelineVariantInvariants:
 
     def test_audit_impl_has_on_context_limit(self, recipe) -> None:
         step = recipe.steps["audit_impl"]
+        if recipe.name == "remediation":
+            assert step.on_context_limit == "check_audit_remediation_loop", (
+                "remediation audit_impl on_context_limit must route through the existing "
+                "loop-governing step (mirrors on_rate_limit) rather than the decorative "
+                "register_clone_failure alias of on_failure (issue #4305)"
+            )
+            return
         assert step.on_context_limit == "register_clone_failure", (
             "audit_impl on context limit must register the clone before escalating — "
             "clone-terminal-requires-registration requires all terminal paths go through "
@@ -871,6 +878,10 @@ class TestInvestigateFirstStructure:
         assert len(plan_routes) == 1
         assert plan_routes[0].route == "dry_walkthrough"
         assert step.on_failure == "release_issue_failure"
+        assert step.on_context_limit == "salvage_plan", (
+            "make_plan on_context_limit must route through the deterministic salvage "
+            "step, not fall straight to release_issue_failure (issue #4305)"
+        )
 
     def test_if3_test_step_uses_implementation_ref(self, recipe) -> None:
         """T_IF3: test step worktree_path must reference context.implementation_ref."""

@@ -390,6 +390,12 @@ def test_skill_contracts_allowed_values_covers_recipe_routes() -> None:
     merge-prs.yaml for result.verdict routing conditions. Any value routed in a recipe
     but absent from skill_contracts.yaml allowed_values will trigger the
     unrouted-verdict-value semantic rule at recipe-load time.
+
+    Checks both the ``skills:`` section (LLM-emitted verdicts, e.g. review-pr's
+    approved/changes_requested) and the ``callable_contracts:`` section
+    (deterministic run_python verdicts, e.g. verify_plan_artifacts's
+    salvaged/unsalvageable) — both are valid sources of a ``result.verdict``
+    routed in recipe on_result blocks.
     """
     recipes_dir = Path(__file__).parents[2] / "src/autoskillit/recipes"
     target_files = [
@@ -402,6 +408,10 @@ def test_skill_contracts_allowed_values_covers_recipe_routes() -> None:
     allowed: set[str] = set()
     for skill_data in contracts.get("skills", {}).values():
         for o in skill_data.get("outputs", []):
+            if o.get("name") == "verdict":
+                allowed.update(o.get("allowed_values", []))
+    for callable_data in contracts.get("callable_contracts", {}).values():
+        for o in callable_data.get("outputs", []):
             if o.get("name") == "verdict":
                 allowed.update(o.get("allowed_values", []))
     assert allowed, "No verdict output found in skill_contracts.yaml"
@@ -657,6 +667,24 @@ def test_make_plan_conditional_write_behavior(skills):
     mp = skills["make-plan"]
     assert mp["write_behavior"] == "conditional"
     assert mp["write_expected_when"] == ["verdict[ \\t]*=[ \\t]*plan"]
+
+
+def test_validate_audit_verdict_allowed_values(skills):
+    outputs = [o for o in skills["validate-audit"]["outputs"] if o["name"] == "verdict"]
+    assert len(outputs) == 1
+    assert outputs[0]["allowed_values"] == ["validated"]
+
+
+def test_validate_test_audit_verdict_allowed_values(skills):
+    outputs = [o for o in skills["validate-test-audit"]["outputs"] if o["name"] == "verdict"]
+    assert len(outputs) == 1
+    assert outputs[0]["allowed_values"] == ["validated"]
+
+
+def test_audit_impl_verdict_allowed_values(skills):
+    outputs = [o for o in skills["audit-impl"]["outputs"] if o["name"] == "verdict"]
+    assert len(outputs) == 1
+    assert outputs[0]["allowed_values"] == ["GO", "NO GO"]
 
 
 def test_make_plan_examples_cover_verdicts(skills):

@@ -47,6 +47,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_headless_dispatch.py` | Tests for headless.py dispatch flow: food truck dispatch, pack injection, executor protocol |
 | `test_headless_execute.py` | Tests for assert_headless_cmd CmdSpec validation gate |
 | `test_headless_env_injection.py` | Phase 2 tests: AUTOSKILLIT_HEADLESS=1 env var injection in headless.py |
+| `test_headless_enum_recovery.py` | Tests for contract-aware enum-token recovery: deterministic enum inference and generalized enum nudge hints |
 | `test_headless_env_scrub.py` | Launch-site env-scrub contract test for run_headless_core |
 | `test_headless_ordering.py` | AST-based structural test for post-session operation ordering in headless.py |
 | `test_headless_path_validation.py` | Tests for headless.py: _build_skill_result, path validation, synthesis, and contract gates |

@@ -194,7 +194,7 @@ def test_envelope_fits_every_backend_by_construction(
         assert actual_step["edges"] == expected_step["edges"]
         assert actual_step.get("byte_range") == expected_step.get("byte_range")
         if expected_step.get("summary"):
-            assert expected_step["summary"].startswith(actual_step["summary"])
+            assert expected_step["summary"].startswith(actual_step.get("summary", ""))
 
 
 def test_envelope_carries_priority_fields_verbatim(tmp_path: Path) -> None:

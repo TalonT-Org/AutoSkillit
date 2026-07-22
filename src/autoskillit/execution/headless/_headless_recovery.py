@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import regex as re
 
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
         SubprocessResult,
         SubprocessRunner,
     )
+    from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
 
@@ -36,6 +37,11 @@ _CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
 
 _TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 
+# Matches "token = value" (or "token[ \t]*=[ \t]*value") write_expected_when patterns
+# whose value segment is a bare literal — no alternation/character-class, i.e. not
+# "(a|b)". This is the structural soundness gate for deterministic enum inference.
+_ENUM_BINDING_RE: re.Pattern[str] = re.compile(r"^(\w+)(?:\[[^\]]*\]\*)?=(?:\[[^\]]*\]\*)?(\w+)$")
+
 _NUDGE_TIMEOUT: float = 60.0
 
 _CANONICAL_TO_LEGACY: dict[str, str | None] = {
@@ -44,6 +50,20 @@ _CANONICAL_TO_LEGACY: dict[str, str | None] = {
     "cache_write_tokens": "cache_creation_input_tokens",
     "cache_read_tokens": "cache_read_input_tokens",
 }
+
+
+class _PathHint(NamedTuple):
+    """Missing path-capture token: dictate the exact observed write path."""
+
+    token: str
+    path: str
+
+
+class _EnumHint(NamedTuple):
+    """Missing enum-typed token: ask the session to choose from allowed_values."""
+
+    token: str
+    allowed_values: tuple[str, ...]
 
 
 def _is_path_capture_pattern(pattern: str) -> str | None:
@@ -165,42 +185,169 @@ def _synthesize_from_write_artifacts(
     return dataclasses.replace(session, result=injected)
 
 
+def _parse_single_enum_binding(
+    skill_contract: SkillContract | None,
+) -> tuple[str, str] | None:
+    """Return (token_name, literal_value) iff write_expected_when soundly binds one enum value.
+
+    Structural soundness gate — fires only when ALL hold:
+    - ``write_behavior == "conditional"``
+    - exactly one ``write_expected_when`` pattern
+    - that pattern parses as ``token = literal`` with no alternation/character-class
+      in the value segment (rejects e.g. ``verdict[ \\t]*=[ \\t]*(a|b)``)
+    - the literal is a declared ``allowed_values`` member of the same-named output
+
+    Encodes the SOUND class from the contract soundness audit structurally — no
+    skill-name allowlist — so any future contract with this shape is covered for free.
+    """
+    if skill_contract is None:
+        return None
+    if skill_contract.write_behavior != "conditional":
+        return None
+    if len(skill_contract.write_expected_when) != 1:
+        return None
+    match = _ENUM_BINDING_RE.match(skill_contract.write_expected_when[0])
+    if not match:
+        return None
+    token_name, literal_value = match.group(1), match.group(2)
+    for output in skill_contract.outputs:
+        if output.name == token_name:
+            if output.allowed_values and literal_value in output.allowed_values:
+                return (token_name, literal_value)
+            return None
+    return None
+
+
+def _infer_enum_token_from_write_contract(
+    session: ClaudeSessionResult,
+    expected_output_patterns: Sequence[str],
+    skill_contract: SkillContract | None,
+    write_call_count: int,
+    file_changes: Sequence[str] = (),
+) -> ClaudeSessionResult | None:
+    """Deterministically synthesize an enum-typed output token from write-contract evidence.
+
+    Unlike ``_synthesize_from_write_artifacts`` (which fabricates a token the agent never
+    produced and is therefore gated to UNMONITORED-only), this derives the token from
+    evidence the agent DID observably produce: an emitted companion path-token line
+    (in a confirmed channel) whose extracted path exists on disk, combined with the
+    contract's own declared write-expected-when implication. Runs for all channels.
+
+    Fires only when: (1) ``_parse_single_enum_binding`` finds a sound single binding;
+    (2) an expected pattern for that same token remains unsatisfied; (3) write evidence
+    exists; (4) a companion output typed ``file_path*``/``directory_path`` has a token
+    line present in ``session.result`` whose path(s) exist on disk.
+    """
+    binding = _parse_single_enum_binding(skill_contract)
+    if binding is None:
+        return None
+    token_name, literal_value = binding
+
+    if write_call_count == 0 and not file_changes:
+        return None
+
+    normalized_result = _normalize_model_output(session.result)
+    target_unsatisfied = False
+    for pattern in expected_output_patterns:
+        m = _TOKEN_NAME_RE.match(pattern)
+        if not m or m.group(1) != token_name:
+            continue
+        if re.search(pattern, normalized_result):
+            return None  # already satisfied — nothing to infer
+        target_unsatisfied = True
+    if not target_unsatisfied:
+        return None
+
+    assert skill_contract is not None  # narrowed by _parse_single_enum_binding above
+    companion_path = None
+    for output in skill_contract.outputs:
+        if output.name == token_name:
+            continue
+        if not (output.type.startswith("file_path") or output.type == "directory_path"):
+            continue
+        companion_match = re.search(
+            rf"^{re.escape(output.name)}\s*=\s*(.+)$", normalized_result, re.MULTILINE
+        )
+        if not companion_match:
+            continue
+        value_str = companion_match.group(1).strip()
+        if output.type == "file_path_list":
+            candidate_paths = [p.strip() for p in value_str.split(",") if p.strip()]
+        else:
+            candidate_paths = [value_str] if value_str else []
+        if candidate_paths and all(Path(p).is_file() or Path(p).is_dir() for p in candidate_paths):
+            companion_path = candidate_paths[-1]
+            break
+    if companion_path is None:
+        return None
+
+    logger.info(
+        "enum_inference_applied",
+        field_name=token_name,
+        value=literal_value,
+        companion_path=companion_path,
+    )
+    injected = f"{token_name} = {literal_value}\n" + session.result
+    return dataclasses.replace(session, result=injected)
+
+
 def _extract_missing_token_hints(
     stdout: str,
     expected_output_patterns: Sequence[str],
     result_parser: ResultParser,
     write_tool_names: frozenset[str],
-) -> list[tuple[str, str]]:
-    """Extract (token_name, write_path) pairs for patterns missing from the result.
+    skill_contract: SkillContract | None = None,
+) -> list[_PathHint | _EnumHint]:
+    """Extract missing-token hints for patterns missing from the result.
 
-    Parses raw NDJSON stdout to find write tool_use file_path entries,
-    then matches them against path-capture patterns that are NOT satisfied in
-    the result text. Returns the hints needed to build the nudge prompt.
+    Parses raw NDJSON stdout to find write tool_use file_path entries, then matches
+    them against path-capture patterns that are NOT satisfied in the result text
+    (producing ``_PathHint``). When ``skill_contract`` is provided, unsatisfied
+    patterns whose leading token names an enum-typed output (non-empty
+    ``allowed_values``) produce an ``_EnumHint`` instead. Returns the hints needed
+    to build the nudge prompt.
     """
     try:
         session = result_parser.parse_stdout(stdout)
     except Exception:
         logger.warning("nudge_parse_stdout_failed", exc_info=True)
         return []
-    hints: list[tuple[str, str]] = []
+    hints: list[_PathHint | _EnumHint] = []
+    contract_outputs_by_name = (
+        {output.name: output for output in skill_contract.outputs}
+        if skill_contract is not None
+        else {}
+    )
+    normalized_output = _normalize_model_output(session.output)
 
     for pattern in expected_output_patterns:
         token_name = _is_path_capture_pattern(pattern)
-        if not token_name:
+        if token_name:
+            # Skip if already satisfied
+            if re.search(pattern, normalized_output):
+                continue
+            # Collect absolute Write/Edit paths; use the LAST one (final deliverable).
+            # tool_uses and token_usage live in .raw (not promoted to typed attrs) because
+            # they vary by backend and are absent from non-Claude AgentSessionResult payloads.
+            candidate_paths = [
+                t.get("file_path", "")
+                for t in session.raw.get("tool_uses", [])
+                if t.get("name") in write_tool_names and t.get("file_path", "").startswith("/")
+            ]
+            if candidate_paths:
+                hints.append(_PathHint(token_name, candidate_paths[-1]))
             continue
-        # Skip if already satisfied
-        if re.search(pattern, _normalize_model_output(session.output)):
+
+        m = _TOKEN_NAME_RE.match(pattern)
+        if not m:
             continue
-        # Collect absolute Write/Edit paths; use the LAST one (final deliverable).
-        # tool_uses and token_usage live in .raw (not promoted to typed attrs) because
-        # they vary by backend and are absent from non-Claude AgentSessionResult payloads.
-        candidate_paths = [
-            t.get("file_path", "")
-            for t in session.raw.get("tool_uses", [])
-            if t.get("name") in write_tool_names and t.get("file_path", "").startswith("/")
-        ]
-        if candidate_paths:
-            hints.append((token_name, candidate_paths[-1]))
+        enum_token = m.group(1)
+        output = contract_outputs_by_name.get(enum_token)
+        if output is None or not output.allowed_values:
+            continue
+        if re.search(pattern, normalized_output):
+            continue
+        hints.append(_EnumHint(enum_token, tuple(output.allowed_values)))
 
     return hints
 
@@ -218,6 +365,7 @@ async def _attempt_contract_nudge(
     provider_extras: Mapping[str, str] | None = None,
     retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
     pty_override: bool | None = None,
+    skill_contract: SkillContract | None = None,
 ) -> SkillResult | None:
     """Attempt a lightweight resume nudge to recover missing structured output tokens.
 
@@ -246,12 +394,31 @@ async def _attempt_contract_nudge(
     else:
         _write_tool_names = backend.write_tool_names()
         hints = _extract_missing_token_hints(
-            subprocess_result.stdout, expected_output_patterns, result_parser, _write_tool_names
+            subprocess_result.stdout,
+            expected_output_patterns,
+            result_parser,
+            _write_tool_names,
+            skill_contract=skill_contract,
         )
         if not hints:
             logger.debug("nudge_skip_no_hints")
             return None
-        token_lines = "\n".join(f"{name} = {path}" for name, path in hints)
+        hint_lines: list[str] = []
+        for hint in hints:
+            if isinstance(hint, _EnumHint):
+                logger.info(
+                    "nudge_enum_hint",
+                    field_name=hint.token,
+                    allowed_values=list(hint.allowed_values),
+                )
+                hint_lines.append(
+                    f"Emit `{hint.token} = <value>` where <value> is one of: "
+                    f"{' | '.join(hint.allowed_values)} — choose the value matching "
+                    "what you actually did."
+                )
+            else:
+                hint_lines.append(f"{hint.token} = {hint.path}")
+        token_lines = "\n".join(hint_lines)
         prompt = (
             "You completed your task and wrote the output file, but you omitted the "
             "required structured output token in your final text response.\n\n"

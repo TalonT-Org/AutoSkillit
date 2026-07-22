@@ -72,12 +72,15 @@ from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
 )
 from autoskillit.execution.headless._headless_recovery import (
     _CHANNEL_B_RECOVERABLE_SUBTYPES,  # noqa: F401
+    _ENUM_BINDING_RE,  # noqa: F401
     _NUDGE_TIMEOUT,  # noqa: F401
     _TOKEN_NAME_RE,  # noqa: F401
     _attempt_contract_nudge,  # noqa: F401
     _extract_missing_token_hints,  # noqa: F401
+    _infer_enum_token_from_write_contract,  # noqa: F401
     _is_path_capture_pattern,  # noqa: F401
     _merge_token_usage,  # noqa: F401
+    _parse_single_enum_binding,  # noqa: F401
     _recover_block_from_assistant_messages,  # noqa: F401
     _recover_from_separate_marker,  # noqa: F401
     _synthesize_from_write_artifacts,  # noqa: F401

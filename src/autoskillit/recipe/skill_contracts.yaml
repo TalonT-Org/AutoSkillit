@@ -1560,7 +1560,6 @@ skills:
     outputs:
     - name: verdict
       type: string
-      allowed_values: [PASS, WARN, FAIL]
     - name: resource_report
       type: file_path
     expected_output_patterns:
@@ -1578,7 +1577,6 @@ skills:
     outputs:
     - name: verdict
       type: string
-      allowed_values: [PASS, WARN, FAIL]
     - name: download_report
       type: file_path
     expected_output_patterns:
@@ -1605,7 +1603,6 @@ skills:
       type: file_path
     - name: verdict
       type: string
-      allowed_values: [PASS, WARN, FAIL]
     expected_output_patterns:
     - "env_mode[ \\t]*=[ \\t]*(none|docker|micromamba-host|unavailable)"
     - "env_report[ \\t]*=[ \\t]*/.+"

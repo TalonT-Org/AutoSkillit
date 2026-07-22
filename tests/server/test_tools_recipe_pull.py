@@ -97,6 +97,33 @@ def test_concurrent_writers_publish_one_exact_generation(tmp_path: Path) -> None
 
 
 @pytest.mark.parametrize(
+    ("filename", "error"),
+    [
+        ("payload.json", "content-addressed payload collision"),
+        ("descriptor.json", "content-addressed descriptor collision"),
+    ],
+)
+def test_persistence_collision_checks_use_bounded_descriptor_reads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+    error: str,
+) -> None:
+    _persist(tmp_path)
+    target = next((tmp_path / "recipe-delivery").rglob(filename))
+    target.write_bytes(target.read_bytes() + b"x")
+
+    def _unbounded_read_forbidden(*_args, **_kwargs):
+        raise AssertionError("unbounded pathlib read used during collision check")
+
+    monkeypatch.setattr(Path, "read_bytes", _unbounded_read_forbidden)
+    monkeypatch.setattr(Path, "read_text", _unbounded_read_forbidden)
+
+    with pytest.raises(RecipeArtifactError, match=error):
+        _persist(tmp_path)
+
+
+@pytest.mark.parametrize(
     ("field", "value"),
     [
         ("producer_tool", "invalid"),

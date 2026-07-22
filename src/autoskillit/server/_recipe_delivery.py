@@ -112,6 +112,18 @@ def _canonical_payload(payload: dict[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
+def _read_bounded_bytes(path: Path, *, max_bytes: int, error: str) -> bytes:
+    """Read through one descriptor with an explicit allocation ceiling."""
+    try:
+        with path.open("rb") as source:
+            data = source.read(max_bytes + 1)
+    except OSError as exc:
+        raise RecipeArtifactError(error) from exc
+    if len(data) > max_bytes:
+        raise RecipeArtifactError(error)
+    return data
+
+
 def _safe_component(value: str) -> str:
     safe = "".join(
         character if character.isalnum() or character in "._-" else "_" for character in value
@@ -195,19 +207,31 @@ def persist_recipe_artifact(
         recipe_name=recipe_name,
         payload_sha256=generation.payload_sha256,
     )
-    descriptor = _canonical_payload(generation.pull_identity()).decode("utf-8")
+    descriptor = _canonical_payload(generation.pull_identity())
     with _generation_lock(temp_dir, exclusive=True):
         directory.mkdir(parents=True, exist_ok=True)
         blob_path = directory / "payload.json"
         descriptor_path = directory / "descriptor.json"
-        if blob_path.exists() and blob_path.read_bytes() != blob:
-            raise RecipeArtifactError("content-addressed payload collision")
-        if descriptor_path.exists() and descriptor_path.read_text(encoding="utf-8") != descriptor:
-            raise RecipeArtifactError("content-addressed descriptor collision")
+        if blob_path.exists():
+            existing_blob = _read_bounded_bytes(
+                blob_path,
+                max_bytes=len(blob),
+                error="content-addressed payload collision",
+            )
+            if existing_blob != blob:
+                raise RecipeArtifactError("content-addressed payload collision")
+        if descriptor_path.exists():
+            existing_descriptor = _read_bounded_bytes(
+                descriptor_path,
+                max_bytes=len(descriptor),
+                error="content-addressed descriptor collision",
+            )
+            if existing_descriptor != descriptor:
+                raise RecipeArtifactError("content-addressed descriptor collision")
         if not blob_path.exists():
             atomic_write(blob_path, blob.decode("utf-8"))
         if not descriptor_path.exists():
-            atomic_write(descriptor_path, descriptor)
+            atomic_write(descriptor_path, descriptor.decode("utf-8"))
     return generation
 
 

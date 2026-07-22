@@ -23,10 +23,12 @@ _TESTS_ROOT = Path(__file__).resolve().parent.parent
 _XFAIL_POLICY_EXEMPT_FILES: frozenset[str] = frozenset(
     {
         "arch/test_recipe_diagram_freshness.py",  # permanent: shrink meta-test
+        "arch/test_capability_consistency.py",  # permanent: bounded known-violations set
+        "skills/test_skill_body_cleanliness.py",  # permanent: bounded known-violators set
     }
 )
 
-_EXEMPT_CAP = 2
+_EXEMPT_CAP = 3
 
 
 def _is_xfail_strict_true(node: ast.AST) -> bool:
@@ -120,6 +122,114 @@ def test_strict_xfail_reasons_cite_tracking_issue() -> None:
     assert not violations, "xfail(strict=True) without tracking issue reference:\n" + "\n".join(
         f"  {v}" for v in violations
     )
+
+
+def _collect_imperative_xfail_nodes(tree: ast.Module) -> list[ast.Call]:
+    """Find imperative ``pytest.xfail(...)``/``xfail(...)`` calls used as bare statements.
+
+    Distinct AST shape from ``_collect_xfail_strict_true_nodes``: that collector visits
+    decorator and ``pytest.param(marks=...)`` sites, which carry a ``strict=`` keyword.
+    The imperative form raises immediately at call time, has no ``strict=`` keyword, and
+    was previously invisible to this policy — exactly the blind spot that hid an
+    untracked context-limit-compliance exemption (issue #4305).
+    """
+    results: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Expr):
+            continue
+        call = node.value
+        if not isinstance(call, ast.Call):
+            continue
+        func = call.func
+        is_xfail = (isinstance(func, ast.Name) and func.id == "xfail") or (
+            isinstance(func, ast.Attribute) and func.attr == "xfail"
+        )
+        if is_xfail:
+            results.append(call)
+    return results
+
+
+def _extract_imperative_reason(call: ast.Call) -> str | None:
+    """Extract the reason string from an imperative xfail call (positional or keyword)."""
+    arg = call.args[0] if call.args else None
+    if arg is None:
+        for kw in call.keywords:
+            if kw.arg == "reason":
+                arg = kw.value
+                break
+    if arg is None:
+        return None
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        return arg.value
+    if isinstance(arg, ast.JoinedStr):
+        parts = [
+            v.value for v in arg.values if isinstance(v, ast.Constant) and isinstance(v.value, str)
+        ]
+        return "".join(parts) if parts else None
+    return None
+
+
+def test_imperative_xfail_reasons_cite_tracking_issue() -> None:
+    """Every imperative pytest.xfail(...) call must contain a #NNNN issue reference."""
+    violations: list[str] = []
+    for py_file in sorted(_TESTS_ROOT.rglob("test_*.py")):
+        rel = py_file.relative_to(_TESTS_ROOT).as_posix()
+        if rel in _XFAIL_POLICY_EXEMPT_FILES:
+            continue
+        try:
+            tree = ast.parse(py_file.read_text())
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        for call in _collect_imperative_xfail_nodes(tree):
+            reason = _extract_imperative_reason(call)
+            if reason is None:
+                violations.append(
+                    f"{rel}:{call.lineno} — reason must be a string literal so policy "
+                    "can be checked"
+                )
+            elif not re.search(r"#\d+", reason):
+                violations.append(
+                    f"{rel}:{call.lineno} — reason={reason!r} does not cite "
+                    "a tracking issue; add #NNNN or resolve the defect and remove the xfail"
+                )
+    assert not violations, "pytest.xfail(...) without tracking issue reference:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_imperative_xfail_collector_flags_missing_citation() -> None:
+    """Synthetic AST: an imperative pytest.xfail() with no #NNNN citation is detected."""
+    tree = ast.parse(
+        "import pytest\n\ndef test_something():\n    pytest.xfail('no citation here')\n"
+    )
+    nodes = _collect_imperative_xfail_nodes(tree)
+    assert len(nodes) == 1
+    reason = _extract_imperative_reason(nodes[0])
+    assert reason == "no citation here"
+    assert not re.search(r"#\d+", reason)
+
+
+def test_imperative_xfail_collector_passes_with_citation() -> None:
+    """Synthetic AST: an imperative pytest.xfail() citing #NNNN passes the policy."""
+    tree = ast.parse(
+        "import pytest\n\ndef test_something():\n    pytest.xfail('known gap, tracking: #1234')\n"
+    )
+    nodes = _collect_imperative_xfail_nodes(tree)
+    assert len(nodes) == 1
+    reason = _extract_imperative_reason(nodes[0])
+    assert reason is not None
+    assert re.search(r"#\d+", reason)
+
+
+def test_imperative_xfail_collector_ignores_decorator_and_param_forms() -> None:
+    """The imperative collector must not double-count decorator/pytest.param(marks=...) xfails."""
+    tree = ast.parse(
+        "import pytest\n\n"
+        "@pytest.mark.xfail(strict=True, reason='tracked #99')\n"
+        "def test_decorated():\n"
+        "    pass\n"
+    )
+    assert _collect_imperative_xfail_nodes(tree) == []
 
 
 def test_exemption_entries_have_rationale_comments() -> None:

@@ -40,6 +40,8 @@ if TYPE_CHECKING:
 
 RECIPE_ARTIFACT_DESCRIPTOR_VERSION = 1
 RECIPE_ARTIFACT_SCHEMA_VERSION = 1
+RECIPE_ARTIFACT_MAX_BLOB_BYTES = 1_000_000
+RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES = 16_384
 RECIPE_BODY_START = "--- AUTOSKILLIT RECIPE BODY START ---"
 RECIPE_BODY_END = "--- AUTOSKILLIT RECIPE BODY END ---"
 RECIPE_COMPLETION_SENTINEL = "AUTOSKILLIT_RECIPE_DELIVERY_COMPLETE"
@@ -69,6 +71,15 @@ class RecipeArtifactGeneration:
     artifact_blob_size_bytes: int
     body_sha256: str
     body_size_bytes: int
+
+    def has_valid_read_bounds(self) -> bool:
+        """Return whether caller-provided sizes stay within server ceilings."""
+        return (
+            self.descriptor_version > 0
+            and self.schema_version > 0
+            and 0 < self.artifact_blob_size_bytes <= RECIPE_ARTIFACT_MAX_BLOB_BYTES
+            and 0 <= self.body_size_bytes <= self.artifact_blob_size_bytes
+        )
 
     def pull_identity(self) -> dict[str, str | int]:
         return {
@@ -242,6 +253,8 @@ def load_recipe_artifact(
     identity: RecipeArtifactGeneration,
 ) -> dict[str, Any]:
     """Read and independently verify an exact immutable payload generation."""
+    if not identity.has_valid_read_bounds():
+        raise RecipeArtifactError("invalid recipe artifact identity bounds")
     directory = _generation_dir(
         temp_dir,
         kitchen_id=kitchen_id,
@@ -252,12 +265,17 @@ def load_recipe_artifact(
     with _generation_lock(temp_dir, exclusive=False):
         blob_path = directory / "payload.json"
         descriptor_path = directory / "descriptor.json"
-        try:
-            with blob_path.open("rb") as blob_file:
-                blob = blob_file.read(identity.artifact_blob_size_bytes + 1)
-            descriptor_raw = descriptor_path.read_text(encoding="utf-8")
-        except OSError as exc:
-            raise RecipeArtifactError("recipe generation unavailable") from exc
+        blob = _read_bounded_bytes(
+            blob_path,
+            max_bytes=identity.artifact_blob_size_bytes,
+            error="artifact blob size mismatch",
+        )
+        descriptor_bytes = _read_bounded_bytes(
+            descriptor_path,
+            max_bytes=RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES,
+            error="recipe generation descriptor exceeds read limit",
+        )
+        descriptor_raw = descriptor_bytes.decode("utf-8")
     if len(blob) != identity.artifact_blob_size_bytes:
         raise RecipeArtifactError("artifact blob size mismatch")
     if _qualified_sha256(blob) != identity.artifact_blob_sha256:

@@ -146,6 +146,15 @@ def test_generation_identity_domains_are_independently_verified(
         )
 
 
+def test_generation_descriptor_read_has_server_owned_ceiling(tmp_path: Path) -> None:
+    generation = _persist(tmp_path)
+    descriptor_path = next((tmp_path / "recipe-delivery").rglob("descriptor.json"))
+    descriptor_path.write_bytes(b"x" * 20_000)
+
+    with pytest.raises(RecipeArtifactError, match="descriptor exceeds read limit"):
+        load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=generation)
+
+
 def test_generation_descriptor_has_no_caller_selected_path(tmp_path: Path) -> None:
     pull = _persist(tmp_path).pull_identity()
     assert set(pull) == {
@@ -399,6 +408,27 @@ async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open
     kwargs.pop("pull_tool")
     kwargs["artifact_blob_sha256"] = "sha256:" + ("0" * 64)
     response = json.loads(await get_recipe_section(section="content", **kwargs))
+    assert response == {"success": False, "error": "invalid_recipe_artifact_identity"}
+
+
+@pytest.mark.parametrize("field", ["artifact_blob_size_bytes", "body_size_bytes"])
+async def test_pull_tool_rejects_forged_unbounded_identity_sizes(
+    tool_ctx_kitchen_open, field: str
+) -> None:
+    tool_ctx_kitchen_open.kitchen_id = "pull-unbounded-identity"
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+    kwargs[field] = 1_000_000_000
+
+    response = json.loads(await get_recipe_section(section="content", **kwargs))
+
     assert response == {"success": False, "error": "invalid_recipe_artifact_identity"}
 
 

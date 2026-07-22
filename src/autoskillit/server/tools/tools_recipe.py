@@ -512,7 +512,7 @@ async def get_recipe_section(
                 body_sha256=body_sha256,
                 body_size_bytes=body_size_bytes,
             )
-            if descriptor_version <= 0 or schema_version <= 0:
+            if not identity.has_valid_read_bounds():
                 return json.dumps({"success": False, "error": "invalid_recipe_artifact_identity"})
 
             try:

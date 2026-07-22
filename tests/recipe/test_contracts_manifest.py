@@ -40,6 +40,17 @@ def test_get_callable_contract_promotes_allowed_values_for_main_repo_guard() -> 
     assert cleaned.allowed_values == ["false", "true", "force", "failed"]
 
 
+def test_get_callable_contract_promotes_allowed_values_for_verify_plan_artifacts() -> None:
+    """get_callable_contract must parse `allowed_values` for verify_plan_artifacts."""
+    contract = get_callable_contract("autoskillit.recipe._cmd_rpc.verify_plan_artifacts")
+    assert contract is not None, (
+        "verify_plan_artifacts must be declared under callable_contracts in skill_contracts.yaml"
+    )
+    verdict = next((o for o in contract.outputs if o.name == "verdict"), None)
+    assert verdict is not None, "verify_plan_artifacts contract must declare a 'verdict' output"
+    assert verdict.allowed_values == ["salvaged", "unsalvageable"]
+
+
 def test_get_callable_contract_defaults_allowed_values_to_empty_list() -> None:
     """When a callable contract output has no `allowed_values` in YAML, defaults to []."""
     contract = get_callable_contract("autoskillit.recipe._cmd_rpc.review_path_rebase")

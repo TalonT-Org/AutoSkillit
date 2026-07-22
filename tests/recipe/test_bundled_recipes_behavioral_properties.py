@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_paths, builtin_recipes_dir, load_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -208,3 +208,108 @@ def test_context_intensive_steps_declare_explicit_model(recipe_name: str) -> Non
             f"{recipe_name}.{step_name}: context-intensive step must declare an explicit "
             f"model (not empty string), got model={step.model!r}"
         )
+
+
+# The nine (recipe, step) pairs whose skill contracts can trigger
+# retry_reason=contract_recovery — audited risk table, issue #4305.
+_SALVAGE_ROUTE_SITES: list[tuple[str, str]] = [
+    ("remediation", "make_plan"),
+    ("implementation", "plan"),
+    ("implementation-groups", "plan"),
+    ("research-implement", "plan_phase"),
+    ("research", "plan_phase"),
+    ("merge-prs", "plan"),
+    ("remediation", "rectify"),
+    ("remediation", "dry_walkthrough"),
+    ("remediation", "audit_impl"),
+]
+
+# Destinations that abandon a salvageable artifact instead of attempting salvage.
+_DESTRUCTIVE_SALVAGE_ROUTES: frozenset[str] = frozenset(
+    {"release_issue_failure", "register_clone_failure", "escalate_stop"}
+)
+
+
+@pytest.mark.parametrize(
+    "recipe_name,step_name",
+    _SALVAGE_ROUTE_SITES,
+    ids=[f"{r}:{s}" for r, s in _SALVAGE_ROUTE_SITES],
+)
+def test_contract_recovery_capable_steps_have_salvage_route(
+    recipe_name: str, step_name: str
+) -> None:
+    """Steps whose skill contracts can trigger contract_recovery must declare a
+    non-destructive, non-decorative on_context_limit salvage route (issue #4305)."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    step = recipe.steps[step_name]
+    assert step.on_context_limit is not None, (
+        f"{recipe_name}.{step_name}: on_context_limit must be set — for capture_list "
+        f"steps (retries: 0 forced), on_context_limit is the only in-recipe salvage lever"
+    )
+    assert step.on_context_limit != step.on_failure, (
+        f"{recipe_name}.{step_name}: on_context_limit={step.on_context_limit!r} is a "
+        f"decorative alias of on_failure — it must attempt salvage before falling back"
+    )
+    assert step.on_context_limit not in _DESTRUCTIVE_SALVAGE_ROUTES, (
+        f"{recipe_name}.{step_name}: on_context_limit={step.on_context_limit!r} routes "
+        f"straight to a destructive terminal step, abandoning any salvageable artifact"
+    )
+    assert step.on_context_limit in recipe.steps, (
+        f"{recipe_name}.{step_name}: on_context_limit target "
+        f"{step.on_context_limit!r} does not exist as a step in this recipe"
+    )
+
+
+# Class-1 (plan-producing) sites and the salvage step that verifies their artifacts.
+_CLASS1_SALVAGE_SITES: list[tuple[str, str, str]] = [
+    ("remediation", "make_plan", "salvage_plan"),
+    ("implementation", "plan", "salvage_plan"),
+    ("implementation-groups", "plan", "salvage_plan"),
+    ("research-implement", "plan_phase", "salvage_plan_phase"),
+    ("research", "plan_phase", "salvage_plan_phase"),
+    ("merge-prs", "plan", "salvage_plan"),
+    ("remediation", "rectify", "salvage_rectify_plan"),
+]
+
+
+@pytest.mark.parametrize(
+    "recipe_name,step_name,salvage_step_name",
+    _CLASS1_SALVAGE_SITES,
+    ids=[f"{r}:{s}" for r, s, _ in _CLASS1_SALVAGE_SITES],
+)
+def test_salvage_step_routes_match_plan_step_destinations(
+    recipe_name: str, step_name: str, salvage_step_name: str
+) -> None:
+    """Class-1 salvage steps must route verdict==salvaged to the plan step's own
+    success destination and verdict==unsalvageable to its own on_failure destination —
+    read from the loaded recipe so the assertion survives future retargeting."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    plan_step = recipe.steps[step_name]
+    salvage_step = recipe.steps[salvage_step_name]
+
+    assert plan_step.on_context_limit == salvage_step_name
+
+    assert plan_step.on_result is not None
+    plan_success_route = next(
+        c.route
+        for c in plan_step.on_result.conditions
+        if c.when and "== plan" in c.when and "false_positive" not in c.when
+    )
+
+    assert salvage_step.on_result is not None
+    salvaged_route = next(
+        c.route for c in salvage_step.on_result.conditions if c.when and "salvaged" in c.when
+    )
+    assert salvaged_route == plan_success_route, (
+        f"{recipe_name}.{salvage_step_name}: verdict==salvaged must route to "
+        f"{plan_success_route!r} (the plan step's own success destination)"
+    )
+
+    unsalvageable_route = next(
+        (c.route for c in salvage_step.on_result.conditions if c.when is None),
+        salvage_step.on_failure,
+    )
+    assert unsalvageable_route == plan_step.on_failure, (
+        f"{recipe_name}.{salvage_step_name}: verdict==unsalvageable must route to "
+        f"{plan_step.on_failure!r} (the plan step's own on_failure destination)"
+    )

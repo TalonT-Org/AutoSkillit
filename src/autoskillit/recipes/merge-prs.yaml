@@ -923,7 +923,10 @@ steps:
     on_failure: register_clone_failure
     note: 'Deterministic salvage for plan context-limit stumbles: verifies captured
       plan_parts artifacts exist on disk. salvaged routes onward as if plan succeeded;
-      unsalvageable falls through to plan''s original on_failure destination.'
+      unsalvageable falls through to plan''s original on_failure destination. Substitute
+      the captured ${{ context.plan_parts }} value into the plan_parts argument verbatim,
+      unmodified — do not reformat, quote, or re-derive it; the callable''s input grammar
+      absorbs rendering variance.'
   verify:
     tool: run_skill
     model: ''

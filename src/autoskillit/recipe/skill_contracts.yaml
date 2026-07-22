@@ -419,6 +419,7 @@ skills:
     outputs:
     - name: verdict
       type: string
+      allowed_values: [GO, "NO GO"]
     - name: remediation_path
       type: file_path
     - name: verified_verdict
@@ -2465,6 +2466,7 @@ skills:
         type: file_path
       - name: verdict
         type: string
+        allowed_values: [validated]
     expected_output_patterns:
       - "validated_report_path[ \\t]*=[ \\t]*\\S+"
       - "verdict[ \\t]*=[ \\t]*\\S+"
@@ -2483,6 +2485,7 @@ skills:
         type: file_path
       - name: verdict
         type: str
+        allowed_values: [validated]
     expected_output_patterns:
       - "validated_report_path[ \\t]*=[ \\t]*\\S+"
       - "verdict[ \\t]*=[ \\t]*\\S+"

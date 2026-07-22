@@ -278,7 +278,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Deterministic salvage for plan context-limit stumbles: verifies captured plan_parts artifacts exist on disk. salvaged routes onward as if plan succeeded; unsalvageable falls through to plan's original on_failure destination.\n"
+      "note": "Deterministic salvage for plan context-limit stumbles: verifies captured plan_parts artifacts exist on disk. salvaged routes onward as if plan succeeded; unsalvageable falls through to plan's original on_failure destination. Substitute the captured ${{ context.plan_parts }} value into the plan_parts argument verbatim, unmodified — do not reformat, quote, or re-derive it; the callable's input grammar absorbs rendering variance.\n"
     },
     "review_approach": {
       "tool": "run_skill",
@@ -989,6 +989,10 @@
         {
           "when": "result.error",
           "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.verdict }} == NO GO",
+          "route": "check_audit_remediation_loop"
         },
         {
           "route": "check_audit_remediation_loop"

@@ -236,7 +236,10 @@ steps:
       Deterministic salvage for plan_phase context-limit stumbles: verifies
       captured plan_parts artifacts exist on disk. salvaged routes onward as
       if plan_phase succeeded; unsalvageable falls through to plan_phase's
-      original on_failure destination.
+      original on_failure destination. Substitute the captured
+      ${{ context.plan_parts }} value into the plan_parts argument verbatim,
+      unmodified — do not reformat, quote, or re-derive it; the callable's
+      input grammar absorbs rendering variance.
 
   implement_phase:
     tool: run_skill
@@ -392,6 +395,8 @@ steps:
       route: run_experiment
     - when: "result.error"
       route: escalate_stop
+    - when: "${{ result.verdict }} == NO GO"
+      route: remediate
     - route: remediate
     on_failure: escalate_stop
     on_context_limit: escalate_stop

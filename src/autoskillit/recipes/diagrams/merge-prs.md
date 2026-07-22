@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:2b550118cf1a2f29a3c5f3a7274531de73787e2331ce54512281cd5ad75941d4 -->
+<!-- autoskillit-recipe-hash: sha256:89e0d85e9c8369161766566b51ec2adaf5a192b49e90312bcb8b14a1b1eb1ec6 -->
 <!-- autoskillit-diagram-format: v7 -->
 ## merge-prs
 Merge multiple PRs into an integration branch with conflict resolution and CI gates.

@@ -24,10 +24,8 @@ from autoskillit.core import (
     dump_yaml_str,
     get_logger,
     load_yaml,
-    resolve_effective_delivery_bound,
     temp_dir_display_str,
 )
-from autoskillit.execution import resolve_worst_case_delivery_bound
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -51,45 +49,13 @@ from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
     render_served_response,
+    resolve_envelope_delivery_bound,
     response_backstop_tool_meta,
     serve_recipe,
 )
 from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
-
-
-def _resolve_envelope_delivery_bound(tool_ctx: Any) -> int:
-    """Resolve the envelope construction-time bound in bytes.
-
-    Mirrors the resolution in ``track_response_size.wrapper`` so the envelope
-    is constructed against the same gate that enforcement applies. Backend
-    capabilities are preferred; falls back to the smallest registered backend
-    bound (worst case) when capabilities are unavailable.
-    """
-    backend = getattr(tool_ctx, "backend", None)
-    caps = getattr(backend, "capabilities", None) if backend is not None else None
-    token_limit: int | None = None
-    if caps is not None:
-        try:
-            token_limit = resolve_effective_delivery_bound(caps)
-        except Exception:  # noqa: BLE001
-            logger.warning("resolve_effective_delivery_bound_failed", exc_info=True)
-            token_limit = None
-    # Coerce to int; MagicMock or non-numeric values fall through to the
-    # conservative default so envelope construction never crashes on a
-    # misconfigured backend (e.g., a test mock with a MagicMock capabilities).
-    if not isinstance(token_limit, int) or token_limit <= 0:
-        try:
-            fallback = resolve_worst_case_delivery_bound()
-        except Exception:  # noqa: BLE001
-            logger.warning("resolve_worst_case_delivery_bound_failed", exc_info=True)
-            fallback = 0
-        if isinstance(fallback, int) and fallback > 0:
-            token_limit = fallback
-        else:
-            token_limit = 10_000
-    return token_limit * 4
 
 
 @mcp.tool(
@@ -926,7 +892,7 @@ def _chunk_response_if_oversized(body: dict[str, Any], tool_ctx: Any, *, part: i
     serialized list text would produce an invalid JSON substring on almost
     every boundary.
     """
-    bound = _resolve_envelope_delivery_bound(tool_ctx)
+    bound = resolve_envelope_delivery_bound(tool_ctx)
     serialized = json.dumps(body, ensure_ascii=False)
     body_bytes = len(serialized.encode("utf-8"))
     if body_bytes <= bound:

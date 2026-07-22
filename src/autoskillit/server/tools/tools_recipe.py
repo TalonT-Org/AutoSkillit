@@ -703,6 +703,8 @@ def _recreate_artifact(
 
     if artifact_state.get("tool_name") == "open_kitchen":
         recreated = build_open_kitchen_recipe_payload(recreated, version=__version__)
+    if artifact_state.get("ingredients_only"):
+        recreated = strip_ingredients_only_keys(recreated)
 
     serialized = json.dumps(recreated, ensure_ascii=False, sort_keys=False)
     recreated_sha256 = hashlib.sha256(serialized.encode("utf-8")).hexdigest()

@@ -213,6 +213,7 @@ def build_and_record_recipe_envelope(
         "ingredient_overrides": dict(overrides) if overrides else {},
         "backend_name": _safe_backend_name(tool_ctx),
         "kitchen_id": getattr(tool_ctx, "kitchen_id", ""),
+        "ingredients_only": ingredients_only,
     }
     envelope_bound = resolve_envelope_delivery_bound(tool_ctx)
     return build_recipe_envelope(

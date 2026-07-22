@@ -37,6 +37,7 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._recipe_delivery import (
     RecipeArtifactError,
     RecipeArtifactGeneration,
+    document_recipe_delivery_contract,
     finalize_recipe_delivery,
     load_recipe_artifact,
     persist_recipe_artifact,
@@ -172,6 +173,7 @@ async def list_recipes() -> str:
     annotations={"readOnlyHint": True},
     meta=response_backstop_tool_meta("load_recipe"),
 )
+@document_recipe_delivery_contract
 @_cancellation_shield()
 @track_response_size("load_recipe")
 async def load_recipe(

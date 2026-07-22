@@ -12,6 +12,8 @@ import regex as _re
 from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     HEADLESS_AUTO_GATE_ENV_VAR,
+    RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
+    RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     CodexRecipeDeliveryBudgetDef,
@@ -53,6 +55,7 @@ _CODEX_RECIPE_DELIVERY_CONTRACT_DIGEST = (
                 "ordinary_result_tokens": 10_000,
                 "parser_version": 1,
                 "response_exemption_registry": RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+                "surface_registry": RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST,
             },
             ensure_ascii=True,
             separators=(",", ":"),
@@ -79,6 +82,54 @@ CODEX_HISTORY_RETENTION_TOKEN_LIMIT: int = (
 # A protected evidence identity is enabled only with its passing conformance
 # report. Writable rollout and trace formats are intentionally absent.
 SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY: dict[str, CodexRecipeDeliveryEvidenceDef] = {}
+
+
+def codex_recipe_delivery_calling_contract(*, mcp_prefix: str = "") -> str:
+    """Generate the only permitted Codex high-budget recipe calling contract."""
+    budget = CODEX_RECIPE_DELIVERY_BUDGET
+    full_recipe_tools = ", ".join(
+        f"{mcp_prefix}{name}" for name in ("open_kitchen", "load_recipe")
+    )
+    return "\n".join(
+        (
+            f"Codex recipe delivery calling contract v{budget.contract_version}:",
+            (
+                "- Ordinary functions.exec results must not request more than "
+                f"{budget.ordinary_omitted_result_token_limit} tokens."
+            ),
+            (
+                "- The sole exception is a full recipe call to "
+                f"{full_recipe_tools} with a protected host-provided delivery request."
+            ),
+            (
+                "- The functions.exec cell must start with exactly: // @exec: "
+                f'{{"max_output_tokens": '
+                f"{budget.authoritative_attested_recipe_result_token_limit}" + "}"
+            ),
+            "- Pass delivery_request unchanged with exactly these fields:",
+            f"  audience={RECIPE_DELIVERY_ATTESTATION_AUDIENCE}",
+            "  delivery_call_id=<protected-host value>",
+            f"  contract_version={budget.contract_version}",
+            f"  contract_digest={budget.contract_digest}",
+            (
+                "  caller_requested_outer_tokens="
+                f"{budget.authoritative_attested_recipe_result_token_limit}"
+            ),
+            "  code_digest=<protected-host value>",
+            (
+                "- Never synthesize, infer, alter, or replay delivery_request fields. "
+                "If protected host values are unavailable, omit delivery_request and use "
+                "the bounded recipe_pull path."
+            ),
+            ("- ingredients_only calls and recipe resources are not eligible for the exception."),
+        )
+    )
+
+
+CODEX_RECIPE_DELIVERY_CALLING_CONTRACT: str = codex_recipe_delivery_calling_contract()
+CODEX_RECIPE_DELIVERY_CALLING_CONTRACT_DIGEST: str = hashlib.sha256(
+    CODEX_RECIPE_DELIVERY_CALLING_CONTRACT.encode("utf-8")
+).hexdigest()
 
 # Disable Codex auto-compaction by setting the limit to an unreachable value.
 # Auto-compaction at 90% of 258K context window can destroy recipe content

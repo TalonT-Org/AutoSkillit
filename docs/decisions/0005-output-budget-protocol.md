@@ -39,43 +39,33 @@ containment; downstream layers are independent backstops rather than substitutes
    classifier and its `output_budget_guard` are deleted. Codex native shell is now
    bounded by a PreToolUse input-rewrite hook (`shell_capture_hook`) that captures
    complete output to a mechanism-owned artifact and emits only a bounded inline
-   slice. The transport ceiling (CODEX_TOOL_OUTPUT_TOKEN_LIMIT) remains as the
-   backstop for hook-failure paths.*
+   slice. The ordinary outer-result limit remains the backstop for hook-failure paths.*
 4. **Producer-aware discipline and derived transport ceiling:** one evidence-output
    policy is delivered on backend surfaces that support it, while Codex's stored
    tool/function output receives a derived damage ceiling. The policy is advisory;
    the ceiling is downstream containment. Neither is cumulative-context accounting.
 
-The raw-text `open_kitchen` and `load_recipe` responses are measured exemptions from the
-universal backstop. `RESPONSE_BACKSTOP_EXEMPTION_REGISTRY` is the closed authority for
-their independent character ceiling, UTF-8 byte ceiling, and measurement identity. Its
-canonical digest is carried in tool metadata and probe-cache identity. Adding or relaxing
-an exemption requires re-measurement and a deliberate registry-digest change. The raw-text
-exemption now applies only to the fits-within-bound fast path; when a recipe payload exceeds
-the delivery bound, `maybe_envelope_recipe_response` replaces it with a bounded envelope
-(via `build_recipe_envelope`) that fits every backend by construction, with full step
-content available on demand via `get_recipe_section`.
+The four recipe-bearing routes are owned by `RECIPE_DELIVERY_SURFACE_REGISTRY`. Its
+canonical digest, together with `RESPONSE_BACKSTOP_EXEMPTION_REGISTRY`, participates in
+the delivery contract and probe-cache identity. `finalize_recipe_delivery` persists every
+canonical payload as an immutable content-addressed generation, then selects one explicit
+mode: ordinary inline, host-attested inline, or a bounded `recipe_pull` envelope. The
+registered FastMCP handlers still return exact strings, and the response decorator consumes
+the selected decision without applying a second static shaping pass.
 
 ## Numeric Limits and Rationale
 
 | Limit | Decision and rationale |
 |---|---|
-| `load_recipe`: `max_chars = 188_000`, `max_utf8_bytes = 188_000` | The 2026-07-21 independent all-recipe/all-mode pre-backstop measurement reached 186,621 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,379-unit margin makes serving growth explicit. Measurement identity: `bundled-recipes-all-modes-2026-07-21/load-recipe`. For payloads that exceed the delivery bound, see envelope note below. |
-| `open_kitchen`: `max_chars = 188_000`, `max_utf8_bytes = 188_000` | The 2026-07-21 independent all-recipe/all-mode pre-backstop measurement reached 186,680 characters and UTF-8 bytes for `remediation` with all truthy ingredients. The 1,320-unit margin covers the open-kitchen routing fields without conflating this handler ceiling with the smaller formatted presentation. Measurement identity: `bundled-recipes-all-modes-2026-07-21/open-kitchen`. For payloads that exceed the delivery bound, see envelope note below. |
-
-> **Envelope note (oversized recipes, issue #4304 Part B):** When a recipe's serialized payload
-> exceeds a backend's effective delivery bound, `maybe_envelope_recipe_response` replaces the
-> raw text with a bounded envelope built via `build_recipe_envelope`. The envelope carries a
-> step-flow skeleton plus a `recipe_pull` reference (`pull_tool: get_recipe_section`,
-> `artifact_path`, `artifact_sha256`) so the agent re-acquires each step body on demand via
-> `get_recipe_section(section=<step_name>)` (chunked via `part` / `has_more` / `next_part`
-> for oversized sections). The raw-text ceilings above continue to govern the fits-within-bound
-> fast path; the envelope introduces a separate, fit-by-construction delivery channel.
-| `CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 55_000` | Derive it from the largest registered exemption as `((188_000 + 3) // 4) + 8_000`: 47,000 tokens under the current client's four-byte heuristic, plus 8,000 tokens for serialized-payload headroom. It is a blast-radius damage bound, not the mechanism that makes evidence lossless. |
+| `load_recipe`: `max_chars = 195_000`, `max_utf8_bytes = 195_000` | The registered 2026-07-22 all-recipe/all-mode measurement identity is `bundled-recipes-all-modes-2026-07-22/load-recipe`. Growth beyond the measured ceiling fails closed to an immutable pull generation. |
+| `open_kitchen`: `max_chars = 195_000`, `max_utf8_bytes = 195_000` | The independent registered identity is `bundled-recipes-all-modes-2026-07-22/open-kitchen`; the deferred branch shares the producer but remains a separate delivery surface. |
+| `ordinary_omitted_result_token_limit = 10_000` | Conservative outer result for ordinary Codex calls and every untrusted or unsupported recipe request. |
+| `authoritative_attested_recipe_result_token_limit = 56_750` | Derived as `((195_000 + 3) // 4) + 8_000`. It is selectable only from protected host evidence for the current call, never from nested arguments or rollout files. |
+| `CODEX_HISTORY_RETENTION_TOKEN_LIMIT = 56_750` | Written to upstream `tool_output_token_limit`; controls later stored history and does not select the current outer result. Equality with the attested result limit is intentional but does not merge the authority domains. |
 | `CODEX_AUTO_COMPACT_LIMIT = 999_999_999` | Retain the unreachable sentinel and the recovery obligation accepted in [ADR-0004](0004-recipe-redelivery.md). This protocol does not relax recipe-preservation policy. |
 | `inline_max_chars = 5_000` | Preserve the previous truncation threshold while changing the representation from destructive clipping to an artifact-backed preview. The configured 2,500-character head and 2,500-character tail retain both diagnostic setup and terminal status; a spill marker is added outside those source slices. |
 | `response_max_bytes = 90_000` | Bound the exact compact serialized handler payload before a coarser transport can clip it. Bytes are authoritative here; this is not a token or full JSON-RPC-envelope estimate. |
-| `MAX_MCP_OUTPUT_TOKENS = 50_000` | Keep Claude's independently defined setting separate. It has no shared source of truth with `CODEX_TOOL_OUTPUT_TOKEN_LIMIT` and does not control Claude Code's observed disk-persistence gate. Claude's native Bash spill behavior covers shell output on that backend. |
+| `MAX_MCP_OUTPUT_TOKENS = 50_000` | Keep Claude's independently defined setting separate. It has no shared source of truth with Codex result or history limits and does not control Claude Code's observed disk-persistence gate. Claude's native Bash spill behavior covers shell output on that backend. |
 
 The shell capture hook uses `shell_max_inline_bytes = 12_000` as the inline threshold:
 commands whose combined output fits within that budget are inlined in full (artifact
@@ -94,47 +84,33 @@ tokenization and provides neither a tokenizer guarantee nor a cumulative-context
 estimate.
 
 The project therefore requires the stricter relationship
-`response_max_bytes // 3 < CODEX_TOOL_OUTPUT_TOKEN_LIMIT`. The three-byte divisor is
-deliberate margin: the 90,000-byte response backstop must fire before Codex's 54,500-token
-transport ceiling can clip a producer-blind response. A static test pins the relationship,
-and the live large-output probe must pass before either side is retuned.
+`response_max_bytes // 3 < ordinary_omitted_result_token_limit`. The three-byte divisor is
+deliberate margin: the 90,000-byte response backstop must fire before an ordinary 10,000-token
+outer result can clip a producer-blind response. A static test pins the relationship, and the
+live large-output probe must pass before either side is retuned.
 
-The measured raw-text exemptions, `open_kitchen` and `load_recipe`, must each remain below
-their own registered character and UTF-8 byte ceilings, which in turn remain below the
-218,000-byte budget implied by the current 54,500-token, four-byte heuristic. Their
-measurements are independent release gates; the heuristic is not permission to omit those
-tests or reuse one surface's observed maximum as the other's authority.
+The measured recipe surfaces must each remain below their registered character and UTF-8
+byte ceilings. Their measurements are independent release gates; the heuristic is not
+permission to omit those tests or reuse one surface's observed maximum as another domain's
+authority.
 
-### Per-Repo Ceiling Guidance
+### Codex Authority Domains
 
-The global `~/.codex/config.toml` `tool_output_token_limit` (54,500, written by
-`autoskillit init` via `ensure_codex_mcp_registered`) is intentionally sized for
-autoskillit kitchen sessions (the `open_kitchen` exemption ceiling above). For
-non-autoskillit repos, two lower-ceiling launch paths cap casual reads at ~40 KB
-(10,000 tokens × 4 bytes/token):
-
-1. **Per-invocation**: `codex -c tool_output_token_limit=10000`
-2. **Per-project `CODEX_HOME`**: `export CODEX_HOME=<project>/.codex` with its own
-   `config.toml` containing `tool_output_token_limit = 10000`
-
-The ceiling clamps regular-path exec/tool output via
-`min(model request, tool_output_token_limit)`, but code-mode models (gpt-5.6-sol)
-honor model-declared `max_output_tokens` unclamped — for those sessions the ceiling
-is not a hard cap and the operative bound is enforced server-side by
-`BackendCapabilities.effective_delivery_token_limit` (Codex: 10,000 tokens). The
-response backstop reads that capability at spill time and spills any payload whose
-estimated token count exceeds it, with the artifact path surfaced via the existing
-`_autoskillit_response_spill` envelope (`reason="delivery_bound"`). The intake
-discipline digest's numeric rule (`max_output_tokens` <= 10000) remains as the
-prompt-level reinforcement.
+The generated calling contract keeps five values distinct: caller-requested outer tokens,
+host-observed requested tokens, derived selected result tokens, required serialized tokens,
+and history-retained tokens. Ordinary calls retain the 10,000-token rule. A full recipe call
+may use the exact 56,750-token pragma only when a protected host channel supplies the
+immutable `RecipeDeliveryRequest`; otherwise the request is omitted and the response uses
+the bounded pull path. The `recipe://{name}` resource is never negotiation-eligible.
 
 ## Corrections of Record
 
 Commit `6b421e38e` introduced the `_codex_config.py` comment framing
 `tool_output_token_limit` as a per-MCP-tool response budget sized for `open_kitchen`.
-That framing was incorrect. The Codex setting governs tool/function output stored in
-context, including native shell, `unified_exec`, and MCP output. It is a global damage
-ceiling and does not make `open_kitchen` lossless.
+That framing was incorrect. The Codex setting governs tool/function output retained in
+later context, including native shell, `unified_exec`, and MCP output. It is a history
+damage bound, not the current call's outer result selector, and does not make
+`open_kitchen` lossless.
 
 [PR #4259](https://github.com/TalonT-Org/AutoSkillit/pull/4259) included
 `Closes #4253`, but GitHub did not auto-close the issue because the PR merged into
@@ -158,21 +134,19 @@ recorded explicitly in the issue body.
 6. Routing- and shape-preserving projections retain control-plane keys and value types
    and place complete domain data in the artifact. A caller needing pruned collection
    members must retrieve bounded slices from that artifact.
-7. Repeated individually bounded calls can still exhaust cumulative context. No pre-call
-   component owns current context usage, so reserve instructions remain advisory.
+7. A durable per-thread receipt limits cumulative context insertion by preventing more than
+   one oversized attested insertion across normal, deferred, load, and resource routes.
+   Repeated or changed recipes use pull.
 8. Closed for the `run_cmd` channel by #4286 (capture files promoted in place; only
    bounded slices enter worker memory). Still open for `run_skill` and `test_check`,
    whose adjudication requires the full text.
 
 ## Resolved
 
-- **Code-mode bypass (`gpt-5.6-sol` honoring `max_output_tokens` unclamped)**: prior to
-  this revision, the `tool_output_token_limit` ceiling did not constrain code-mode
-  responses and the intake discipline digest's numeric rule was the only operative
-  bound — prompt-level and unenforced. The server-side response backstop now reads
-  `BackendCapabilities.effective_delivery_token_limit` (Codex: 10,000 tokens;
-  Claude Code: 46,500 tokens) and spills payloads that exceed it. This makes the
-  delivery bound authoritative on every backend, not advisory.
+- **Scalar budget coupling:** general responses now use
+  `BackendCapabilities.unnegotiated_tool_result_token_limit`; recipe responses carry an
+  explicit decision through final enforcement. History retention is never read as the
+  selected outer result.
 
 ## Operational Signals
 
@@ -181,11 +155,14 @@ Output-budget instrumentation uses low-cardinality structured counters or events
 - spill count by producer/tool class;
 - original and artifact UTF-8 byte totals;
 - measured exemption use; and
-- spill failures grouped by bounded cause code.
+- spill failures grouped by bounded cause code;
+- recipe delivery decision mode and bounded reason; and
+- receipt reservation outcomes without thread, call, path, or payload identities.
 
 Signals must never contain artifact paths, hashes, or output content. This decision does
-not introduce artifact quota, artifact cleanup, cumulative reserve accounting, or
-reserve-trigger metrics, so instrumentation must not claim those mechanisms exist.
+not introduce an artifact quota or current-context token accounting, so instrumentation
+must not claim those mechanisms exist. The one-high-insertion receipt is cumulative
+insertion control, not a measurement of remaining context.
 
 ## Forward Obligations
 
@@ -200,8 +177,8 @@ reserve-trigger metrics, so instrumentation must not claim those mechanisms exis
   pulling each step body via `get_recipe_section(section=<step_name>)`, chunked via
   `part` / `has_more` / `next_part` for oversized sections — not as a replay of
   the full raw payload. Reconciles with the ADR-0004 cross-reference amendment.
-- After each codex-cli upgrade, re-verify the truncation heuristic
-  (`CODEX_TOOL_OUTPUT_TOKEN_LIMIT`) and auto-compact sentinel
+- After each codex-cli upgrade, re-verify the result-limit parser, history-retention setting
+  (`CODEX_HISTORY_RETENTION_TOKEN_LIMIT`), and auto-compact sentinel
   (`CODEX_AUTO_COMPACT_LIMIT`) against the upstream registry AND observed session
   windows, then bump `CODEX_LIMITS_LAST_VERIFIED_VERSION`. Doctor Check 39
   (`codex_limits_verified`) mechanizes the reminder. Issue #4280's investigation
@@ -225,7 +202,6 @@ reserve-trigger metrics, so instrumentation must not claim those mechanisms exis
 
 - Ordinary large responses become lossless artifacts with bounded inline evidence.
 - High-confidence unbounded shell calls are refused before their output is produced.
-- Transport limits are derived from a measured control-plane payload instead of an
-  unrelated generous constant.
+- Recipe and ordinary result decisions are explicit and independent from history retention.
 - Artifact/invariant failures become explicit bounded errors instead of context floods.
 - The accepted gaps above remain visible work rather than implicit guarantees.

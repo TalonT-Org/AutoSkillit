@@ -17,6 +17,7 @@ from autoskillit.core import (
     ROUTING_AUTHORITY_CLAUSE,
     get_logger,
 )
+from autoskillit.execution import codex_recipe_delivery_calling_contract
 
 logger = get_logger(__name__)
 
@@ -106,7 +107,8 @@ def _build_orchestrator_prompt(
         "(between --- INGREDIENTS TABLE --- and --- END TABLE --- markers)"
     )
 
-    return f"""\
+    return (
+        f"""\
 You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step.
 
 {_ing_section}FIRST ACTION — before prompting for any inputs:
@@ -375,4 +377,8 @@ NULL/NONE CONTEXT VARIABLES — MANDATORY:
 - The string "None" is NOT the same as null. If the captured value is the Python
   None object, do not pass the literal string "None".
 {sous_chef_content}
-""" + _backend_supplement(has_unguarded_filesystem_access)
+"""
+        + _backend_supplement(has_unguarded_filesystem_access)
+        + "\n\n"
+        + codex_recipe_delivery_calling_contract(mcp_prefix=mcp_prefix)
+    )

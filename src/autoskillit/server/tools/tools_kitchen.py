@@ -69,6 +69,7 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._recipe_delivery import (
+    document_recipe_delivery_contract,
     enforce_recipe_resource_response,
     finalize_recipe_delivery,
     retire_recipe_artifacts,
@@ -786,6 +787,7 @@ def _check_override_keys(
     annotations={"readOnlyHint": True},
     meta=response_backstop_tool_meta("open_kitchen", always_load=True),
 )
+@document_recipe_delivery_contract
 @_cancellation_shield()
 @track_response_size("open_kitchen")
 async def open_kitchen(

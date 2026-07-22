@@ -125,3 +125,51 @@ def test_intake_digest_numeric_rule_matches_codex_unnegotiated_result_limit() ->
         f"({codex_unnegotiated_limit}); update "
         "the digest if the bound changed."
     )
+
+
+def test_codex_recipe_delivery_contract_is_generated_from_static_budget() -> None:
+    from autoskillit.execution import (
+        CODEX_RECIPE_DELIVERY_BUDGET,
+        CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
+    )
+
+    budget = CODEX_RECIPE_DELIVERY_BUDGET
+    contract = CODEX_RECIPE_DELIVERY_CALLING_CONTRACT
+    assert (
+        f'// @exec: {{"max_output_tokens": '
+        f"{budget.authoritative_attested_recipe_result_token_limit}" + "}"
+    ) in contract
+    assert f"contract_version={budget.contract_version}" in contract
+    assert f"contract_digest={budget.contract_digest}" in contract
+    assert (
+        f"caller_requested_outer_tokens={budget.authoritative_attested_recipe_result_token_limit}"
+    ) in contract
+    for field in (
+        "audience",
+        "delivery_call_id",
+        "contract_version",
+        "contract_digest",
+        "caller_requested_outer_tokens",
+        "code_digest",
+    ):
+        assert field in contract
+    assert "Never synthesize, infer, alter, or replay" in contract
+    assert "bounded recipe_pull path" in contract
+
+
+def test_codex_recipe_delivery_contract_reaches_all_prompt_families() -> None:
+    from autoskillit.cli._prompts import (
+        _build_open_kitchen_prompt,
+        _build_orchestrator_prompt,
+    )
+    from autoskillit.execution import (
+        CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
+        codex_recipe_delivery_calling_contract,
+    )
+    from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
+
+    assert CODEX_RECIPE_DELIVERY_CALLING_CONTRACT in codex_discipline_suffix()
+    prefix = "mcp__autoskillit__"
+    expected = codex_recipe_delivery_calling_contract(mcp_prefix=prefix)
+    assert expected in _build_orchestrator_prompt("remediation", prefix)
+    assert expected in _build_open_kitchen_prompt(prefix)

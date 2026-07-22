@@ -28,8 +28,8 @@ output-boundary bounding on measured bytes:
 3. **Codex native shell** — PreToolUse input-rewrite hook wraps every shell
    command in a capture harness: complete output to a mechanism-owned artifact,
    bounded inline slice with provenance marker, exit code preserved. The
-   transport ceiling (CODEX_TOOL_OUTPUT_TOKEN_LIMIT) remains as the backstop for
-   hook-failure paths.
+   ordinary outer-result limit remains the backstop for hook-failure paths. The
+   separately configured `CODEX_HISTORY_RETENTION_TOKEN_LIMIT` governs later history.
 
 ### Sequencing Rule
 

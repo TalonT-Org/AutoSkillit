@@ -46,6 +46,7 @@ __all__ = [
     "ALL_VISIBILITY_TAGS",
     "RecipeDeliverySurfaceDef",
     "RECIPE_DELIVERY_SURFACE_REGISTRY",
+    "RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST",
     "SkillCapabilityDef",
     "HardCapabilityMismatch",
     "SKILL_CAPABILITY_REGISTRY",
@@ -236,6 +237,25 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: dict[str, RecipeDeliverySurfaceDef] = {
         response_exemption=None,
     ),
 }
+
+
+def _recipe_delivery_surface_registry_digest() -> str:
+    canonical = {
+        surface: {
+            **definition._asdict(),
+            "response_exemption": (
+                definition.response_exemption._asdict()
+                if definition.response_exemption is not None
+                else None
+            ),
+        }
+        for surface, definition in sorted(RECIPE_DELIVERY_SURFACE_REGISTRY.items())
+    }
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("ascii")).hexdigest()
+
+
+RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST: str = _recipe_delivery_surface_registry_digest()
 
 RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: dict[str, ResponseBackstopExemptionDef] = {
     definition.response_exemption_tool: definition.response_exemption

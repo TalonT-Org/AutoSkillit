@@ -30,6 +30,7 @@ from autoskillit.execution import (
     CODEX_RECIPE_DELIVERY_BUDGET,
     RecipeDeliveryReceiptLedger,
     RecipeReceiptHandle,
+    codex_recipe_delivery_calling_contract,
 )
 from autoskillit.server._response_budget import enforce_response_budget
 
@@ -42,6 +43,13 @@ RECIPE_ARTIFACT_SCHEMA_VERSION = 1
 RECIPE_BODY_START = "--- AUTOSKILLIT RECIPE BODY START ---"
 RECIPE_BODY_END = "--- AUTOSKILLIT RECIPE BODY END ---"
 RECIPE_COMPLETION_SENTINEL = "AUTOSKILLIT_RECIPE_DELIVERY_COMPLETE"
+
+
+def document_recipe_delivery_contract(function: Any) -> Any:
+    """Append the generated Codex contract before FastMCP reads a tool docstring."""
+    description = function.__doc__ or ""
+    function.__doc__ = f"{description.rstrip()}\n\n{codex_recipe_delivery_calling_contract()}\n"
+    return function
 
 
 class RecipeArtifactError(RuntimeError):

@@ -253,6 +253,13 @@ def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
 
 def _fmt_open_kitchen_plain_text(text: str, _pipeline: bool) -> str:
     """Format open_kitchen plain-text response (no recipe attached)."""
+    if (
+        text.startswith('{"recipe_delivery":')
+        and "--- AUTOSKILLIT RECIPE BODY START ---" in text
+        and "--- AUTOSKILLIT RECIPE BODY END ---" in text
+        and "AUTOSKILLIT_RECIPE_DELIVERY_COMPLETE" in text
+    ):
+        return text
     return f"## open_kitchen\n\n{text}"
 
 

@@ -214,6 +214,7 @@ from .types import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER as QUOTA_POST_BUDGET_EXCEE
 from .types import QUOTA_POST_WARNING_TRIGGER as QUOTA_POST_WARNING_TRIGGER
 from .types import READING_TOKEN_PATTERN as READING_TOKEN_PATTERN
 from .types import RECIPE_DELIVERY_ATTESTATION_AUDIENCE as RECIPE_DELIVERY_ATTESTATION_AUDIENCE
+from .types import RECIPE_DELIVERY_SURFACE_REGISTRY as RECIPE_DELIVERY_SURFACE_REGISTRY
 from .types import RECIPE_PACK_REGISTRY as RECIPE_PACK_REGISTRY
 from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS
 from .types import REQUIRED_CONSUMER_FIELDS as REQUIRED_CONSUMER_FIELDS
@@ -231,7 +232,6 @@ from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import RUN_PYTHON_SENTINEL_KEYS as RUN_PYTHON_SENTINEL_KEYS
 from .types import SCOPE_DIRECTION_SOURCE_TYPES as SCOPE_DIRECTION_SOURCE_TYPES
-from .types import SERVE_SURFACES as SERVE_SURFACES
 from .types import SESSION_TYPE_ENV_VAR as SESSION_TYPE_ENV_VAR
 from .types import SESSION_TYPE_FLEET as SESSION_TYPE_FLEET
 from .types import SESSION_TYPE_ORCHESTRATOR as SESSION_TYPE_ORCHESTRATOR
@@ -358,6 +358,7 @@ from .types import RecipeDeliveryAttestation as RecipeDeliveryAttestation
 from .types import RecipeDeliveryDecision as RecipeDeliveryDecision
 from .types import RecipeDeliveryMode as RecipeDeliveryMode
 from .types import RecipeDeliveryRequest as RecipeDeliveryRequest
+from .types import RecipeDeliverySurfaceDef as RecipeDeliverySurfaceDef
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError
 from .types import RecipeNotFoundError as RecipeNotFoundError

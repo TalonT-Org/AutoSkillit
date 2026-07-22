@@ -44,7 +44,8 @@ __all__ = [
     "CORE_PACKS",
     "TOOL_SUBSET_TAGS",
     "ALL_VISIBILITY_TAGS",
-    "SERVE_SURFACES",
+    "RecipeDeliverySurfaceDef",
+    "RECIPE_DELIVERY_SURFACE_REGISTRY",
     "SkillCapabilityDef",
     "HardCapabilityMismatch",
     "SKILL_CAPABILITY_REGISTRY",
@@ -171,15 +172,6 @@ FREE_RANGE_TOOLS: frozenset[str] = frozenset(
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
 
-SERVE_SURFACES: frozenset[str] = frozenset(
-    {
-        "open_kitchen",  # S1 — initial serve, sets session snapshot
-        "open_kitchen_deferred_recall",  # S2 — deferred-recall re-serve
-        "load_recipe",  # S3 — re-serve tool
-        "get_recipe",  # S4 — MCP resource handler
-    }
-)
-
 
 class ResponseBackstopExemptionDef(NamedTuple):
     """Measured ceiling for a tool that bypasses universal response shaping."""
@@ -189,17 +181,66 @@ class ResponseBackstopExemptionDef(NamedTuple):
     measurement_id: str
 
 
+class RecipeDeliverySurfaceDef(NamedTuple):
+    """Static definition of one recipe-bearing public delivery route."""
+
+    producer_tool: str
+    route_kind: Literal["tool", "deferred_tool", "resource"]
+    negotiation_eligible: bool
+    pull_eligible: bool
+    response_exemption_tool: str | None
+    response_exemption: ResponseBackstopExemptionDef | None
+
+
+_RECIPE_RESPONSE_MAX_UTF8_BYTES = 195_000
+
+RECIPE_DELIVERY_SURFACE_REGISTRY: dict[str, RecipeDeliverySurfaceDef] = {
+    "open_kitchen": RecipeDeliverySurfaceDef(
+        producer_tool="open_kitchen",
+        route_kind="tool",
+        negotiation_eligible=True,
+        pull_eligible=True,
+        response_exemption_tool="open_kitchen",
+        response_exemption=ResponseBackstopExemptionDef(
+            max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+            max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+            measurement_id="bundled-recipes-all-modes-2026-07-22/open-kitchen",
+        ),
+    ),
+    "open_kitchen_deferred_recall": RecipeDeliverySurfaceDef(
+        producer_tool="open_kitchen",
+        route_kind="deferred_tool",
+        negotiation_eligible=True,
+        pull_eligible=True,
+        response_exemption_tool="open_kitchen",
+        response_exemption=None,
+    ),
+    "load_recipe": RecipeDeliverySurfaceDef(
+        producer_tool="load_recipe",
+        route_kind="tool",
+        negotiation_eligible=True,
+        pull_eligible=True,
+        response_exemption_tool="load_recipe",
+        response_exemption=ResponseBackstopExemptionDef(
+            max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+            max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+            measurement_id="bundled-recipes-all-modes-2026-07-22/load-recipe",
+        ),
+    ),
+    "get_recipe": RecipeDeliverySurfaceDef(
+        producer_tool="get_recipe",
+        route_kind="resource",
+        negotiation_eligible=False,
+        pull_eligible=True,
+        response_exemption_tool=None,
+        response_exemption=None,
+    ),
+}
+
 RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: dict[str, ResponseBackstopExemptionDef] = {
-    "load_recipe": ResponseBackstopExemptionDef(
-        max_chars=195_000,
-        max_utf8_bytes=195_000,
-        measurement_id="bundled-recipes-all-modes-2026-07-22/load-recipe",
-    ),
-    "open_kitchen": ResponseBackstopExemptionDef(
-        max_chars=195_000,
-        max_utf8_bytes=195_000,
-        measurement_id="bundled-recipes-all-modes-2026-07-22/open-kitchen",
-    ),
+    definition.response_exemption_tool: definition.response_exemption
+    for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
+    if definition.response_exemption_tool is not None and definition.response_exemption is not None
 }
 
 

@@ -884,7 +884,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
             logic on DispatchRecord.from_dict. Exempt at 15 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 14,
+        "server": 15,  # +_recipe_delivery unified finalizer and immutable generation store
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 25,  # +_delivery_bounds (resolve_general_output_token_limit)

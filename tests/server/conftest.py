@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 import structlog.contextvars
@@ -122,6 +123,10 @@ def _make_mock_ctx() -> MagicMock:
     ctx = MagicMock()
     ctx.gate = gate
     ctx.project_dir = Path("/fake/project")
+    ctx.temp_dir = (
+        Path(__file__).resolve().parents[2] / ".autoskillit" / "temp" / "tests" / uuid4().hex
+    )
+    ctx.kitchen_id = f"test-{uuid4().hex}"
     ctx.config.output_budget = OutputBudgetConfig()
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
     ctx.active_recipe_ingredients = None

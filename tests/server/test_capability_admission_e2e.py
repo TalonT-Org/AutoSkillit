@@ -6,9 +6,11 @@ load_and_validate to the dispatch_feasible signal.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 
@@ -218,6 +220,8 @@ def _setup_provider_override_ctx(tool_ctx: MagicMock) -> MagicMock:
         git_metadata_writable=False,
         anthropic_provider_capable=False,
     )
+    tool_ctx.temp_dir = _PROJECT_ROOT / ".autoskillit" / "temp" / "tests" / uuid4().hex
+    tool_ctx.kitchen_id = f"capability-admission-{uuid4().hex}"
 
     recipe_info = MagicMock()
     recipe_info.path = Path("/fake/recipe.yaml")
@@ -453,8 +457,9 @@ def test_get_recipe_codex_with_provider_overrides_no_infeasible() -> None:
         result = get_recipe("implementation")
 
     assert isinstance(result, str)
-    assert "error" not in result.lower()
-    assert '"dispatch_feasible": false' not in result
+    parsed = json.loads(result)
+    assert "error" not in parsed
+    assert parsed["dispatch_feasible"] is True
 
 
 @pytest.mark.anyio

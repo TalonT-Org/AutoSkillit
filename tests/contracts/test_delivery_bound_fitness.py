@@ -15,9 +15,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import cast
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
@@ -27,6 +31,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 from autoskillit.recipe import all_validated_recipe_names, load_and_validate
+from autoskillit.server._recipe_delivery import persist_recipe_artifact
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     enforce_response_budget,
@@ -34,7 +39,6 @@ from autoskillit.server._response_budget import (
 from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
     build_recipe_envelope,
-    extract_step_skeleton,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
@@ -97,18 +101,13 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     that this file exists to defend.
     """
     payload = _full_open_kitchen_payload(recipe_name)
-    step_names = [
-        str(n)
-        for n in cast(list[object], payload.get("post_prune_step_names") or [])
-        if isinstance(n, str)
-    ]
-    skeleton = extract_step_skeleton(
-        step_names,
-        routing_edges_by_step={},
-        step_summaries={name: f"summary-{name}" for name in step_names},
+    generation = persist_recipe_artifact(
+        tmp_path,
+        kitchen_id="fitness-kitchen",
+        producer_tool="open_kitchen",
+        recipe_name=recipe_name,
+        payload=payload,
     )
-    artifact_path = tmp_path / f"{recipe_name}.log"
-    sha256 = "0" * 64
 
     caps = _backend_capabilities()[backend_name]
     bound_tokens = resolve_general_output_token_limit(caps)
@@ -116,9 +115,10 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     envelope = build_recipe_envelope(
         payload,
         recipe_name=recipe_name,
-        artifact_path=str(artifact_path),
-        artifact_sha256=sha256,
-        skeleton=skeleton,
+        generation=generation,
+        skeleton_source=cast(
+            "ToolContext", SimpleNamespace(recipe_name="", active_recipe_steps=None)
+        ),
         bound_bytes=bound_bytes,
     )
     serialized = json.dumps(envelope, ensure_ascii=False)

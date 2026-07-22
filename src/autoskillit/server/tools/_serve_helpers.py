@@ -9,7 +9,6 @@ enforced by tests/arch/test_serve_surface_registry.py.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -17,7 +16,6 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
-    atomic_write,
     get_logger,
 )
 from autoskillit.recipe import (  # noqa: F401 — canonical extractor reused by build_routing_edges_by_step default
@@ -29,6 +27,7 @@ if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, CodingAgentBackend
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.recipe.schema import RecipeStep
+    from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
 
 
 def build_backend_capabilities_map(
@@ -293,11 +292,9 @@ def build_recipe_envelope(
     payload: dict[str, Any],
     *,
     recipe_name: str,
-    artifact_path: str,
-    artifact_sha256: str,
-    skeleton: dict[str, Any],
+    generation: RecipeArtifactGeneration,
+    skeleton_source: ToolContext,
     bound_bytes: int,
-    producer_tool: str = "open_kitchen",
 ) -> dict[str, Any]:
     """Build a bounded envelope that fits the smallest backend delivery bound.
 
@@ -336,6 +333,49 @@ def build_recipe_envelope(
     undecodable byte sequence. ``recipe_name`` is required (keyword-only)
     to match the sibling-function convention in this module.
     """
+    post_prune_raw = payload.get("post_prune_step_names") or []
+    if not isinstance(post_prune_raw, list):
+        post_prune_raw = []
+    post_prune_names = [name for name in post_prune_raw if isinstance(name, str)]
+    active_recipe_steps: dict[str, Any] | None = None
+    if getattr(skeleton_source, "recipe_name", "") == recipe_name:
+        active_recipe_steps = skeleton_source.active_recipe_steps
+    summaries = build_step_summaries(active_recipe_steps)
+    edges = build_routing_edges_by_step(active_recipe_steps)
+    byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
+    skeleton = extract_step_skeleton(
+        post_prune_names,
+        edges,
+        summaries,
+        byte_ranges=byte_ranges,
+    )
+    pull_identity = generation.pull_identity()
+
+    def _pullable_skeleton_size(candidate: dict[str, Any]) -> int:
+        pullable = {
+            "success": payload.get("success", True),
+            "step_flow_skeleton": candidate,
+            "recipe_pull": pull_identity,
+            "delivery_bound_spill": True,
+        }
+        return len(json.dumps(pullable, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    if _pullable_skeleton_size(skeleton) > bound_bytes:
+        for summary_limit in (120, 80, 64, 48, 32, 24, 16, 8, 0):
+            bounded_summaries = (
+                {name: summary[:summary_limit] for name, summary in summaries.items()}
+                if summary_limit
+                else {}
+            )
+            skeleton = extract_step_skeleton(
+                post_prune_names,
+                edges,
+                bounded_summaries,
+                byte_ranges=byte_ranges,
+            )
+            if _pullable_skeleton_size(skeleton) <= bound_bytes:
+                break
+
     envelope: dict[str, Any] = {}
     envelope_bytes = 0
     serialized = json.dumps(payload.get("success", True)).encode("utf-8")
@@ -367,13 +407,7 @@ def build_recipe_envelope(
     pull_overhead = len(
         json.dumps(
             {
-                "recipe_pull": {
-                    "recipe_name": recipe_name,
-                    "producer_tool": producer_tool,
-                    "artifact_path": artifact_path,
-                    "sha256": artifact_sha256,
-                    "pull_tool": "get_recipe_section",
-                },
+                "recipe_pull": pull_identity,
                 "delivery_bound_spill": True,
             },
             ensure_ascii=False,
@@ -463,13 +497,7 @@ def build_recipe_envelope(
             remaining -= len(serialized_value) + 32
 
     envelope["step_flow_skeleton"] = skeleton
-    envelope["recipe_pull"] = {
-        "recipe_name": recipe_name,
-        "producer_tool": producer_tool,
-        "artifact_path": artifact_path,
-        "sha256": artifact_sha256,
-        "pull_tool": "get_recipe_section",
-    }
+    envelope["recipe_pull"] = pull_identity
     envelope["delivery_bound_spill"] = True
     if (
         len(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
@@ -481,25 +509,13 @@ def build_recipe_envelope(
         {
             "success": payload.get("success", True),
             "step_flow_skeleton": skeleton,
-            "recipe_pull": {
-                "recipe_name": recipe_name,
-                "producer_tool": producer_tool,
-                "artifact_path": artifact_path,
-                "sha256": artifact_sha256,
-                "pull_tool": "get_recipe_section",
-            },
+            "recipe_pull": pull_identity,
             "delivery_bound_spill": True,
         },
         {
             "success": False,
             "error": "recipe_envelope_exceeds_delivery_bound",
-            "recipe_pull": {
-                "recipe_name": recipe_name,
-                "producer_tool": producer_tool,
-                "artifact_path": artifact_path,
-                "sha256": artifact_sha256,
-                "pull_tool": "get_recipe_section",
-            },
+            "recipe_pull": pull_identity,
         },
         {"success": False, "error": "recipe_envelope_exceeds_delivery_bound"},
         {},
@@ -527,33 +543,6 @@ def _safe_utf8_truncate(data: bytes) -> str:
         except UnicodeDecodeError as exc:
             data = data[: exc.start]
     return ""
-
-
-def persist_recipe_artifact(
-    artifact_dir: Path,
-    *,
-    tool_name: str,
-    recipe_name: str,
-    payload: dict[str, Any],
-) -> tuple[str, str]:
-    """Atomically persist the full recipe payload to the deterministic path.
-
-    Returns (artifact_path, sha256) for inclusion in the envelope's
-    ``recipe_pull`` block. Uses ``atomic_write`` so concurrent open_kitchen
-    / load_recipe calls do not see a half-written file.
-
-    The path is deterministic per (tool, recipe_name) so the pull tool
-    can reconstruct it from ``tool_ctx.recipe_name`` without the caller
-    having to thread it through every surface. Re-opening the same recipe
-    overwrites the artifact (idempotent).
-    """
-    from autoskillit.server._response_budget import _recipe_artifact_path  # circular-break
-
-    path = _recipe_artifact_path(artifact_dir, tool_name, recipe_name)
-    serialized = json.dumps(payload, ensure_ascii=False)
-    atomic_write(path, serialized)
-    sha256 = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-    return str(path.resolve()), sha256
 
 
 def build_step_summaries(active_recipe_steps: Any) -> dict[str, str]:
@@ -599,124 +588,3 @@ def build_routing_edges_by_step(
             if getattr(edge, "target", None)
         ]
     return edges_by_step
-
-
-def maybe_envelope_recipe_response(
-    payload: dict[str, Any],
-    *,
-    tool_name: str,
-    recipe_name: str,
-    tool_ctx: ToolContext,
-    unnegotiated_tool_result_token_limit: int | None,
-) -> dict[str, Any]:
-    """Conditionally replace a recipe payload with a bounded envelope.
-
-    Persists the full payload to the deterministic artifact path
-    UNCONDITIONALLY (gated only by ``temp_dir`` being a ``Path``), so the
-    ``get_recipe_section`` pull tool always has a backing store. If the
-    payload's estimated token count exceeds
-    ``unnegotiated_tool_result_token_limit``, returns ``build_recipe_envelope(...)``
-    so the orchestrator can pull each step's body on demand.
-
-    Otherwise returns the payload unchanged (Claude backend path: the
-    full payload fits inline; backward compatible) — with the artifact
-    already on disk for the pull tool.
-
-    On persistence failure: returns the original payload unchanged —
-    the caller is then subject to ``track_response_size``'s spill path
-    (which is more permissive but loses the pull guarantee). This is
-    a fail-open at the persistence layer; the spill path itself remains
-    fail-closed for shape violations.
-
-    Persistence happens exactly once per call: the single early call's
-    return value is reused by ``build_recipe_envelope`` via its
-    ``artifact_path`` / ``artifact_sha256`` keyword args.
-    """
-    artifact_dir = tool_ctx.temp_dir
-    if not isinstance(artifact_dir, Path):
-        return payload
-
-    try:
-        artifact_path, artifact_sha256 = persist_recipe_artifact(
-            artifact_dir,
-            tool_name=tool_name,
-            recipe_name=recipe_name,
-            payload=payload,
-        )
-    except OSError:
-        return payload
-
-    if unnegotiated_tool_result_token_limit is None or unnegotiated_tool_result_token_limit <= 0:
-        return payload
-
-    serialized = json.dumps(payload, ensure_ascii=False)
-    estimated_tokens = (len(serialized.encode("utf-8")) + 3) // 4
-    if estimated_tokens <= unnegotiated_tool_result_token_limit:
-        return payload
-
-    # existing skeleton/edges construction (post_prune_names, summaries,
-    # edges via build_routing_edges_by_step) feeds extract_step_skeleton
-    # plus the new byte-range field computed from the persisted
-    # ``content`` payload field.
-    post_prune_raw = payload.get("post_prune_step_names") or []
-    if not isinstance(post_prune_raw, list):
-        post_prune_raw = []
-    post_prune_names = [n for n in post_prune_raw if isinstance(n, str)]
-    # ``active_recipe_steps`` is the kitchen's currently-open recipe — NOT
-    # necessarily the recipe being delivered here. When the caller
-    # (e.g. ``load_recipe``) targets a different recipe than the active
-    # one, mixing the other recipe's parsed step summary/edges into the
-    # skeleton bloats the envelope past the delivery bound even for a
-    # small payload. Use the active recipe's parsed steps only when it
-    # matches the payload's recipe_name; otherwise emit a name-only
-    # skeleton (orchestrator still has the artifact + pull reference).
-    active_recipe_steps: dict[str, Any] | None = None
-    active_recipe_name = getattr(tool_ctx, "recipe_name", "") or ""
-    if active_recipe_name and active_recipe_name == recipe_name:
-        active_recipe_steps = tool_ctx.active_recipe_steps
-    summaries = build_step_summaries(active_recipe_steps)
-    edges = build_routing_edges_by_step(active_recipe_steps)
-    byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
-    bound_bytes = unnegotiated_tool_result_token_limit * 4
-    skeleton = extract_step_skeleton(post_prune_names, edges, summaries, byte_ranges=byte_ranges)
-
-    def _pullable_skeleton_size(candidate: dict[str, Any]) -> int:
-        pullable = {
-            "success": payload.get("success", True),
-            "step_flow_skeleton": candidate,
-            "recipe_pull": {
-                "recipe_name": recipe_name,
-                "producer_tool": tool_name,
-                "artifact_path": artifact_path,
-                "sha256": artifact_sha256,
-                "pull_tool": "get_recipe_section",
-            },
-            "delivery_bound_spill": True,
-        }
-        return len(json.dumps(pullable, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-
-    if _pullable_skeleton_size(skeleton) > bound_bytes:
-        for summary_limit in (120, 80, 64, 48, 32, 24, 16, 8, 0):
-            bounded_summaries = (
-                {name: summary[:summary_limit] for name, summary in summaries.items()}
-                if summary_limit
-                else {}
-            )
-            skeleton = extract_step_skeleton(
-                post_prune_names,
-                edges,
-                bounded_summaries,
-                byte_ranges=byte_ranges,
-            )
-            if _pullable_skeleton_size(skeleton) <= bound_bytes:
-                break
-
-    return build_recipe_envelope(
-        payload,
-        artifact_path=artifact_path,
-        artifact_sha256=artifact_sha256,
-        skeleton=skeleton,
-        bound_bytes=bound_bytes,
-        recipe_name=recipe_name,
-        producer_tool=tool_name,
-    )

@@ -66,7 +66,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
     # --- Recipe tools ---
     "validate_recipe": frozenset({"script_path"}),
     "migrate_recipe": frozenset({"name"}),
-    "load_recipe": frozenset({"name", "overrides", "ingredients_only"}),
+    "load_recipe": frozenset({"name", "overrides", "ingredients_only", "delivery_request"}),
     "list_recipes": frozenset(),
     # --- Clone tools ---
     "clone_repo": frozenset(

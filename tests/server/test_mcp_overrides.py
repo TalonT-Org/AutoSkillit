@@ -20,9 +20,11 @@ def _make_mock_recipes(load_result: dict) -> MagicMock:
     return mock
 
 
-def _make_mock_ctx(recipes: MagicMock) -> MagicMock:
+def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     mock_ctx = MagicMock()
     mock_ctx.recipes = recipes
+    mock_ctx.temp_dir = temp_dir
+    mock_ctx.kitchen_id = "test-mcp-overrides"
     mock_ctx.config.migration.suppressed = []
     mock_ctx.gate.is_enabled.return_value = True
     return mock_ctx
@@ -37,7 +39,7 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
             "suggestions": [],
         }
     )
-    mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    mock_tool_ctx = _make_mock_ctx(mock_recipes, tmp_path)
 
     with (
         patch("autoskillit.server.tools.tools_recipe._require_enabled", return_value=None),
@@ -83,7 +85,7 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
             "suggestions": [],
         }
     )
-    mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    mock_tool_ctx = _make_mock_ctx(mock_recipes, tmp_path)
 
     mock_mcp_ctx = AsyncMock()
     mock_mcp_ctx.enable_components = AsyncMock()
@@ -156,7 +158,7 @@ async def test_unknown_override_key_warned(tmp_path: Path) -> None:
     mock_recipes.find.return_value = mock_recipe_info
     mock_recipes.load.return_value = mock_recipe
 
-    mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    mock_tool_ctx = _make_mock_ctx(mock_recipes, tmp_path)
     mock_mcp_ctx = AsyncMock()
 
     with (
@@ -222,7 +224,7 @@ async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
     mock_recipes.find.return_value = mock_recipe_info
     mock_recipes.load.return_value = mock_recipe
 
-    mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    mock_tool_ctx = _make_mock_ctx(mock_recipes, tmp_path)
     mock_mcp_ctx = AsyncMock()
 
     with (
@@ -286,7 +288,7 @@ async def test_unknown_override_key_warned_deferred_recall(tmp_path: Path) -> No
     mock_recipes.find.return_value = mock_recipe_info
     mock_recipes.load.return_value = mock_recipe
 
-    mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    mock_tool_ctx = _make_mock_ctx(mock_recipes, tmp_path)
     # Simulate kitchen already open with recipe "test" loaded → deferred-recall path
     mock_tool_ctx.gate.enabled = True
     mock_tool_ctx.recipe_name = "test"

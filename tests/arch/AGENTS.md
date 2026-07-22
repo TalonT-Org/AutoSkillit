@@ -111,7 +111,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_helpers_exports.py` | Asserts shared test helpers export required symbols (strip_markdown_code_regions) |
 | `test_hook_efficacy_contract.py` | Arch contracts: HookDef mechanism presence, enforcement_strength backend coverage, codex hard-claim consistency, codex_status/strength coherence |
 | `test_hook_env_var_authority.py` | AST guard: every hook script that reads `AUTOSKILLIT_PROVIDER_PROFILE` must also read `AUTOSKILLIT_AGENT_BACKEND` so backend identity is checked independently of provider routing |
-| `test_serve_surface_registry.py` | Structural tests for `SERVE_SURFACES` frozenset: membership completeness, AST guard that `load_and_validate` is only called from `_serve_helpers.py` |
+| `test_serve_surface_registry.py` | Structural tests for the typed recipe-delivery surface registry and the `load_and_validate` call boundary |
 | `test_session_type_exhaustive.py` | AST guard: _apply_session_type_visibility must use exhaustive match/assert_never dispatch |
 | `test_input_spec_type_exhaustive.py` | AST guard: InputSpec type dispatch (match/assert_never) and YAML coverage of VALID_INPUT_SPEC_TYPES |
 | `test_notification_fallback_coverage.py` | AST guard: every ctx.enable_components call in server/tools/ must have a non-notification fallback or be in an exempt session-scoped unlock function |

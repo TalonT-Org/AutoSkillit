@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
 
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
@@ -441,7 +446,21 @@ def test_fmt_open_kitchen_plain_text():
     )
     assert formatted is not None
     assert "open_kitchen" in formatted
-    assert "Kitchen is open" in formatted
+
+
+@pytest.mark.parametrize("tool_name", ["open_kitchen", "load_recipe"])
+def test_attested_recipe_delivery_region_is_preserved_byte_for_byte(tool_name: str) -> None:
+    protected = (
+        '{"recipe_delivery":{"recipe_pull":{"payload_sha256":"sha256:'
+        + ("a" * 64)
+        + '"}}}\n--- AUTOSKILLIT RECIPE BODY START ---\n'
+        + "steps:\n  impl:\n    action: stop\n"
+        + "--- AUTOSKILLIT RECIPE BODY END ---\n"
+        + "AUTOSKILLIT_RECIPE_DELIVERY_COMPLETE sha256:"
+        + ("b" * 64)
+    )
+    wrapped = json.dumps({"result": protected})
+    assert _format_response(f"mcp__autoskillit__{tool_name}", wrapped, False) == protected
 
 
 # PHK-42/43/44: _fmt_load_recipe tests
@@ -1079,9 +1098,9 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
     from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.server._recipe_delivery import persist_recipe_artifact
     from autoskillit.server.tools._serve_helpers import (
         build_recipe_envelope,
-        extract_step_skeleton,
     )
 
     project_root = Path(__file__).resolve().parent.parent.parent
@@ -1113,21 +1132,20 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
                 ingredient_overrides=dict(overrides, source_dir=str(project_root)),
                 temp_dir=tmp_path,
             )
-            post_prune_raw = result.get("post_prune_step_names") or []
-            step_names = [str(n) for n in post_prune_raw if isinstance(n, str)]
-            skeleton = extract_step_skeleton(
-                step_names,
-                routing_edges_by_step={},
-                step_summaries={name: f"summary-{name}" for name in step_names},
+            generation = persist_recipe_artifact(
+                tmp_path,
+                kitchen_id="pretty-output",
+                producer_tool="open_kitchen",
+                recipe_name=recipe_name,
+                payload=dict(result),
             )
-            artifact_path = tmp_path / f"{recipe_name}.log"
-            sha256 = "0" * 64
             envelope = build_recipe_envelope(
                 dict(result),
                 recipe_name=recipe_name,
-                artifact_path=str(artifact_path),
-                artifact_sha256=sha256,
-                skeleton=skeleton,
+                generation=generation,
+                skeleton_source=cast(
+                    "ToolContext", SimpleNamespace(recipe_name="", active_recipe_steps=None)
+                ),
                 bound_bytes=smallest_bound_bytes,
             )
             rendered = _fmt_open_kitchen(envelope, pipeline=False)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import stat
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -127,10 +128,18 @@ def _marker_state_dir(project_dir: Path) -> Path:
 
 def _fresh_marker_session_id(path: Path, *, now_unix: int, ttl_seconds: int) -> str | None:
     try:
-        stat = path.stat()
-        if not path.is_file() or stat.st_size <= 0 or stat.st_size > _MARKER_MAX_BYTES:
+        with path.open("rb") as stream:
+            descriptor = os.fstat(stream.fileno())
+            if (
+                not stat.S_ISREG(descriptor.st_mode)
+                or descriptor.st_size <= 0
+                or descriptor.st_size > _MARKER_MAX_BYTES
+            ):
+                return None
+            raw = stream.read(_MARKER_MAX_BYTES + 1)
+        if len(raw) != descriptor.st_size:
             return None
-        record = json.loads(path.read_text(encoding="utf-8"))
+        record = json.loads(raw.decode("utf-8"))
         session_id = record["session_id"]
         opened_at = datetime.fromisoformat(record["opened_at"])
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):

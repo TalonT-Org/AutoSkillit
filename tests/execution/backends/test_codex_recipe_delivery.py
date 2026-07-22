@@ -180,6 +180,31 @@ def _write_marker_and_rollout(project_dir: Path, thread_id: str) -> Path:
     return rollout
 
 
+def test_marker_validation_uses_one_bounded_file_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_marker_and_rollout(tmp_path, "thread-single-descriptor")
+
+    def _separate_path_operation_forbidden(*_args, **_kwargs):
+        raise AssertionError("marker validation performed a separate path operation")
+
+    monkeypatch.setattr(Path, "stat", _separate_path_operation_forbidden)
+    monkeypatch.setattr(Path, "is_file", _separate_path_operation_forbidden)
+    monkeypatch.setattr(Path, "read_text", _separate_path_operation_forbidden)
+
+    markers = enumerate_fresh_codex_marker_ids(tmp_path, now_unix=_NOW)
+
+    assert [session_id for session_id, _path in markers] == ["thread-single-descriptor"]
+
+
+def test_oversized_marker_fails_closed_without_unbounded_read(tmp_path: Path) -> None:
+    _write_marker_and_rollout(tmp_path, "thread-oversized-marker")
+    marker = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "thread-oversized-marker.json"
+    marker.write_bytes(b"x" * ((64 * 1024) + 1))
+
+    assert enumerate_fresh_codex_marker_ids(tmp_path, now_unix=_NOW) == ()
+
+
 def _attestor(
     project_dir: Path,
     provider: _FixtureProtectedProvider | NullProtectedHostAttestationProvider,

@@ -13,6 +13,7 @@ from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     HEADLESS_AUTO_GATE_ENV_VAR,
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
+    RECIPE_DELIVERY_SURFACE_REGISTRY,
     RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
@@ -88,7 +89,14 @@ def codex_recipe_delivery_calling_contract(*, mcp_prefix: str = "") -> str:
     """Generate the only permitted Codex high-budget recipe calling contract."""
     budget = CODEX_RECIPE_DELIVERY_BUDGET
     full_recipe_tools = ", ".join(
-        f"{mcp_prefix}{name}" for name in ("open_kitchen", "load_recipe")
+        f"{mcp_prefix}{name}"
+        for name in sorted(
+            {
+                definition.producer_tool
+                for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
+                if definition.negotiation_eligible
+            }
+        )
     )
     return "\n".join(
         (

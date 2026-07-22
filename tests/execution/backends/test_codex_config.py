@@ -9,11 +9,13 @@ from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     HEADLESS_AUTO_GATE_ENV_VAR,
+    RECIPE_DELIVERY_SURFACE_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
 )
 from autoskillit.execution.backends import (
     CODEX_RECIPE_DELIVERY_BUDGET,
     SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY,
+    codex_recipe_delivery_calling_contract,
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_config import (
@@ -52,6 +54,24 @@ def test_codex_recipe_delivery_authorities_start_fail_closed() -> None:
     assert budget.history_retention_token_limit == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
     assert budget.contract_digest.startswith("sha256:")
     assert SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY == {}
+
+
+def test_codex_recipe_calling_contract_derives_eligible_producers_from_registry() -> None:
+    expected = sorted(
+        {
+            definition.producer_tool
+            for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
+            if definition.negotiation_eligible
+        }
+    )
+
+    contract = codex_recipe_delivery_calling_contract(mcp_prefix="mcp__autoskillit__")
+
+    assert (
+        "- The sole exception is a full recipe call to "
+        + ", ".join(f"mcp__autoskillit__{producer}" for producer in expected)
+        + " with a protected host-provided delivery request."
+    ) in contract
 
 
 def test_response_backstop_fires_below_codex_history_retention_limit() -> None:

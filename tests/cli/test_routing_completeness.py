@@ -93,3 +93,32 @@ def test_expected_routes_covers_all_orchestrator_visible_reasons() -> None:
         r.name for r in RetryReason if r not in _ROUTING_EXCLUDED and r not in _EXPECTED_ROUTES
     ]
     assert not missing, f"Add routing expectation for: {missing}"
+
+
+def test_run_skill_docstring_matches_contract_recovery_routing_vocabulary() -> None:
+    """run_skill's docstring routing table must use the same contract_recovery vocabulary
+    as the orchestrator prompt (issue #4305).
+
+    Pins the two prose copies (prompt, docstring — the third copy, SKILL.md, is covered
+    by tests/contracts/test_sous_chef_routing.py) to the same routing terms so silent
+    drift in either copy fails a test instead of surfacing as a live routing mismatch.
+    """
+    from autoskillit.server.tools.tools_execution import run_skill
+
+    doc = run_skill.__doc__
+    assert doc is not None, "run_skill must have a docstring"
+
+    idx = doc.find(RetryReason.CONTRACT_RECOVERY.value)
+    assert idx != -1, f"{RetryReason.CONTRACT_RECOVERY.value} not found in run_skill docstring"
+
+    route_keyword, evidence_keyword = _EXPECTED_ROUTES[RetryReason.CONTRACT_RECOVERY]
+    window = doc[idx : idx + 600]
+    assert route_keyword in window, (
+        f"run_skill docstring: {RetryReason.CONTRACT_RECOVERY.value} must reference "
+        f"'{route_keyword}' within 600 chars"
+    )
+    assert evidence_keyword, "CONTRACT_RECOVERY must have a non-None evidence keyword"
+    assert evidence_keyword in window, (
+        f"run_skill docstring: {RetryReason.CONTRACT_RECOVERY.value} routing must "
+        f"reference evidence signal '{evidence_keyword}'"
+    )

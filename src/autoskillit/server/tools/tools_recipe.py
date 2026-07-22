@@ -879,12 +879,52 @@ def _extract_step_yaml(payload: dict[str, Any], step_name: str) -> str | None:
         return None
 
 
+def _paginate_list_by_bytes(items: list[Any], chunk_size: int) -> list[list[Any]]:
+    """Group list elements into byte-bounded pages for chunked delivery.
+
+    Packs elements greedily so each page's JSON-serialized size stays within
+    ``chunk_size``; a single oversized element still gets its own page rather
+    than being dropped, so every page round-trips through ``json.loads``.
+    """
+    pages: list[list[Any]] = []
+    current: list[Any] = []
+    current_bytes = 2  # "[]"
+    for item in items:
+        item_bytes = len(json.dumps(item, ensure_ascii=False).encode("utf-8"))
+        separator_bytes = 1 if current else 0
+        if current and current_bytes + separator_bytes + item_bytes > chunk_size:
+            pages.append(current)
+            current = []
+            current_bytes = 2
+            separator_bytes = 0
+        current.append(item)
+        current_bytes += separator_bytes + item_bytes
+    if current or not pages:
+        pages.append(current)
+    return pages
+
+
+def _part_out_of_range_response(part: int, chunks: int) -> str:
+    return json.dumps(
+        {
+            "success": False,
+            "error": "part_out_of_range",
+            "detail": f"part={part} is out of range [0, {chunks}).",
+            "total_parts": chunks,
+        }
+    )
+
+
 def _chunk_response_if_oversized(body: dict[str, Any], tool_ctx: Any, *, part: int = 0) -> str:
     """Split response by ``part`` if it exceeds the envelope delivery bound.
 
     The bound is the same one ``build_recipe_envelope`` uses (smallest
     registered backend delivery bound). Sections that fit return directly;
     oversized sections are chunked and carry ``has_more`` + ``next_part``.
+    List-typed sections (e.g. ``suggestions``) are paginated at the element
+    level so each chunk is valid JSON on its own — character-slicing the
+    serialized list text would produce an invalid JSON substring on almost
+    every boundary.
     """
     bound = _resolve_envelope_delivery_bound(tool_ctx)
     serialized = json.dumps(body, ensure_ascii=False)
@@ -895,27 +935,19 @@ def _chunk_response_if_oversized(body: dict[str, Any], tool_ctx: Any, *, part: i
     content_text = body.get("content")
     if not isinstance(content_text, (str, list)):
         return serialized
-    total = len(content_text) if isinstance(content_text, str) else len(json.dumps(content_text))
-    chunks = max(1, (total + chunk_size - 1) // chunk_size)
-    if part < 0 or part >= chunks:
-        return json.dumps(
-            {
-                "success": False,
-                "error": "part_out_of_range",
-                "detail": f"part={part} is out of range [0, {chunks}).",
-                "total_parts": chunks,
-            }
-        )
     sliced: Any
     if isinstance(content_text, str):
+        total = len(content_text)
+        chunks = max(1, (total + chunk_size - 1) // chunk_size)
+        if part < 0 or part >= chunks:
+            return _part_out_of_range_response(part, chunks)
         sliced = content_text[part * chunk_size : (part + 1) * chunk_size]
     else:
-        text_repr = json.dumps(content_text)
-        sliced_text = text_repr[part * chunk_size : (part + 1) * chunk_size]
-        try:
-            sliced = json.loads(sliced_text)
-        except (TypeError, ValueError):
-            sliced = []
+        pages = _paginate_list_by_bytes(content_text, chunk_size)
+        chunks = max(1, len(pages))
+        if part < 0 or part >= chunks:
+            return _part_out_of_range_response(part, chunks)
+        sliced = pages[part] if pages else []
     chunked = {
         "success": True,
         "section": body.get("section"),

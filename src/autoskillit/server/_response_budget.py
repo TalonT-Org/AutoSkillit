@@ -11,10 +11,12 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    BackendCapabilities,
     atomic_write,
     dump_yaml_str,
     get_logger,
     load_yaml,
+    resolve_effective_delivery_bound,
 )
 from autoskillit.execution import resolve_worst_case_delivery_bound
 
@@ -888,6 +890,30 @@ def build_recipe_envelope(
             "to fit by construction — extend the CI fitness guard, not this assert."
         )
     return envelope
+
+
+def resolve_effective_or_fallback_delivery_bound(tool_ctx: Any) -> int | None:
+    """Resolve the effective delivery token limit, falling back to the worst case.
+
+    Shared by ``track_response_size`` and ``shape_execution_response`` so the
+    backend-capability lookup and worst-case fallback are implemented once.
+    Safe to call with ``tool_ctx=None`` — falls straight to the worst-case bound.
+    """
+    backend = getattr(tool_ctx, "backend", None)
+    caps = getattr(backend, "capabilities", None) if backend is not None else None
+    effective_delivery_token_limit: int | None = None
+    if isinstance(caps, BackendCapabilities):
+        effective_delivery_token_limit = resolve_effective_delivery_bound(caps)
+    if effective_delivery_token_limit is None or effective_delivery_token_limit <= 0:
+        fallback_limit = resolve_worst_case_delivery_bound()
+        if fallback_limit > 0:
+            logger.warning(
+                "Delivery-bound enforcement using worst-case default "
+                "(%d tokens): backend capabilities unavailable",
+                fallback_limit,
+            )
+            effective_delivery_token_limit = fallback_limit
+    return effective_delivery_token_limit
 
 
 def enforce_response_budget(

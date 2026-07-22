@@ -191,14 +191,14 @@ class ResponseBackstopExemptionDef(NamedTuple):
 
 RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: dict[str, ResponseBackstopExemptionDef] = {
     "load_recipe": ResponseBackstopExemptionDef(
-        max_chars=188_000,
-        max_utf8_bytes=188_000,
-        measurement_id="bundled-recipes-all-modes-2026-07-21/load-recipe",
+        max_chars=195_000,
+        max_utf8_bytes=195_000,
+        measurement_id="bundled-recipes-all-modes-2026-07-22/load-recipe",
     ),
     "open_kitchen": ResponseBackstopExemptionDef(
-        max_chars=188_000,
-        max_utf8_bytes=188_000,
-        measurement_id="bundled-recipes-all-modes-2026-07-21/open-kitchen",
+        max_chars=195_000,
+        max_utf8_bytes=195_000,
+        measurement_id="bundled-recipes-all-modes-2026-07-22/open-kitchen",
     ),
 }
 

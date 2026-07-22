@@ -47,14 +47,14 @@ _RESPONSE_SPILL_NUMERIC_KEYS = (
 )
 _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY = {
     "load_recipe": {
-        "max_chars": 188_000,
-        "max_utf8_bytes": 188_000,
-        "measurement_id": "bundled-recipes-all-modes-2026-07-21/load-recipe",
+        "max_chars": 195_000,
+        "max_utf8_bytes": 195_000,
+        "measurement_id": "bundled-recipes-all-modes-2026-07-22/load-recipe",
     },
     "open_kitchen": {
-        "max_chars": 188_000,
-        "max_utf8_bytes": 188_000,
-        "measurement_id": "bundled-recipes-all-modes-2026-07-21/open-kitchen",
+        "max_chars": 195_000,
+        "max_utf8_bytes": 195_000,
+        "measurement_id": "bundled-recipes-all-modes-2026-07-22/open-kitchen",
     },
 }
 _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST = hashlib.sha256(

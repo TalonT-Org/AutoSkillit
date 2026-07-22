@@ -364,7 +364,7 @@ SKILL_FILE_ADVISORY_MAP: dict[str, str] = {
 # Pipeline skills that must declare specific activate_deps. Contract test
 # test_required_activate_deps_present enforces this invariant at CI time.
 SKILL_ACTIVATE_DEPS_REQUIRED: dict[str, frozenset[str]] = {
-    "make-plan": frozenset({"arch-lens", "write-recipe"}),
+    "make-plan": frozenset({"write-recipe"}),
     "implement-worktree": frozenset({"write-recipe"}),
     "implement-worktree-no-merge": frozenset({"write-recipe"}),
 }

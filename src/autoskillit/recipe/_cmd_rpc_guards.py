@@ -216,7 +216,10 @@ def verify_plan_artifacts(plan_parts: str) -> dict[str, str]:
         return {"verdict": "unsalvageable"}
     for item in items:
         path = Path(item)
-        if not path.is_file() or path.stat().st_size == 0:
+        try:
+            if not path.is_file() or path.stat().st_size == 0:
+                return {"verdict": "unsalvageable"}
+        except OSError:
             return {"verdict": "unsalvageable"}
     return {
         "verdict": "salvaged",

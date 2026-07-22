@@ -16,7 +16,7 @@ from autoskillit.core import (
     RESERVED_LOG_RECORD_KEYS,
     BackendCapabilities,
     get_logger,
-    resolve_effective_delivery_bound,
+    resolve_general_output_token_limit,
 )
 from autoskillit.server._response_budget import (
     bounded_response_budget_failure,
@@ -142,19 +142,19 @@ def track_response_size(
             artifact_dir = (
                 temp_dir / "responses" / tool_name if isinstance(temp_dir, Path) else None
             )
-            effective_delivery_token_limit: int | None = None
+            unnegotiated_tool_result_token_limit: int | None = None
             if ctx is not None:
                 backend = getattr(ctx, "backend", None)
                 caps = getattr(backend, "capabilities", None) if backend is not None else None
                 if isinstance(caps, BackendCapabilities):
-                    effective_delivery_token_limit = resolve_effective_delivery_bound(caps)
+                    unnegotiated_tool_result_token_limit = resolve_general_output_token_limit(caps)
             try:
                 result = enforce_response_budget(
                     result,
                     tool_name=tool_name,
                     artifact_dir=artifact_dir,
                     config=budget,
-                    effective_delivery_token_limit=effective_delivery_token_limit,
+                    unnegotiated_tool_result_token_limit=unnegotiated_tool_result_token_limit,
                 )
             except Exception:
                 logger.error("track_response_size_enforcement_failed", tool_name=tool_name)

@@ -1074,7 +1074,7 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     Ceiling accommodates growth from issue #4274 Part B (the new
     ``inter_part_push_pre_remediation`` / ``verify_ref_push_exhaustion`` steps in
     ``remediation.yaml`` legitimately grew the rendered payload)."""
-    from autoskillit.core import resolve_effective_delivery_bound
+    from autoskillit.core import resolve_general_output_token_limit
     from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
     from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
@@ -1094,11 +1094,11 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     # and does not have a full `ToolContext` fixture available; replicates the
     # fits/build-envelope decision directly rather than depending on
     # `maybe_envelope_recipe_response`, which receives its bound as a
-    # caller-supplied parameter (effective_delivery_token_limit) derived from
+    # caller-supplied parameter (unnegotiated_tool_result_token_limit) derived from
     # the single active session's backend, not computed via `min()`.
     backend_caps = {name: cls().capabilities for name, cls in BACKEND_REGISTRY.items()}
     smallest_bound_tokens = min(
-        resolve_effective_delivery_bound(caps) for caps in backend_caps.values()
+        resolve_general_output_token_limit(caps) for caps in backend_caps.values()
     )
     smallest_bound_bytes = smallest_bound_tokens * 4
     over_budget: list[str] = []

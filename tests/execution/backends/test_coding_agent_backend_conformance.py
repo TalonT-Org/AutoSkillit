@@ -45,7 +45,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "channel_b_capable": "OPTIONAL",
     "completion_record_types": "REQUIRED",
     "default_skill_sandbox_mode": "REQUIRED",
-    "effective_delivery_token_limit": "REQUIRED",
+    "unnegotiated_tool_result_token_limit": "REQUIRED",
     "env_denylist_prefixes": "REQUIRED",
     "exit_code_is_terminal": "REQUIRED",
     "food_truck_capable": "OPTIONAL",
@@ -59,6 +59,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "min_version": "OPTIONAL",
     "patch_format": "OPTIONAL",
     "plugin_install_capable": "OPTIONAL",
+    "protected_recipe_delivery_capable": "OPTIONAL",
     "process_name": "REQUIRED",
     "process_name_aliases": "REQUIRED",
     "project_local_skills_capable": "OPTIONAL",
@@ -114,7 +115,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """BackendCapabilities contract — exercises multiple fields.
 
         Fields cited: applicable_guards, default_skill_sandbox_mode,
-        effective_delivery_token_limit, git_metadata_writable,
+        unnegotiated_tool_result_token_limit, git_metadata_writable,
         has_unguarded_filesystem_access, process_name_aliases,
         project_local_skills_capable, record_capable, replay_capable,
         session_dir_persistent, supports_context_window_suffix,
@@ -360,6 +361,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
     def test_supports_context_exhaustion_detection_is_bool(self) -> None:
         """BackendCapabilities.supports_context_exhaustion_detection — capability is bool-typed."""
         assert isinstance(self.backend.capabilities.supports_context_exhaustion_detection, bool)
+
+    def test_protected_recipe_delivery_capable_is_bool(self) -> None:
+        """BackendCapabilities.protected_recipe_delivery_capable — protected host gate is bool."""
+        assert isinstance(self.backend.capabilities.protected_recipe_delivery_capable, bool)
 
 
 def test_every_capability_field_exercised_or_not_yet_live() -> None:

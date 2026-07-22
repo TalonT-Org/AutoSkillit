@@ -43,7 +43,7 @@ from autoskillit.core import (
     read_active_kitchens_registry,
     read_marker,
     register_active_kitchen,
-    resolve_effective_delivery_bound,
+    resolve_general_output_token_limit,
     resolve_kitchen_id,
     sweep_stale_markers,
     unregister_active_kitchen,
@@ -1073,7 +1073,7 @@ async def open_kitchen(
                         else None
                     )
                     _edtl = (
-                        resolve_effective_delivery_bound(_backend_caps)
+                        resolve_general_output_token_limit(_backend_caps)
                         if _backend_caps is not None
                         else None
                     )
@@ -1082,7 +1082,7 @@ async def open_kitchen(
                         tool_name="open_kitchen",
                         recipe_name=name,
                         tool_ctx=tool_ctx,
-                        effective_delivery_token_limit=_edtl,
+                        unnegotiated_tool_result_token_limit=_edtl,
                     )
                 return render_served_response(result)
             try:
@@ -1247,7 +1247,7 @@ async def open_kitchen(
                     else None
                 )
                 _edtl_normal = (
-                    resolve_effective_delivery_bound(_backend_caps_normal)
+                    resolve_general_output_token_limit(_backend_caps_normal)
                     if _backend_caps_normal is not None
                     else None
                 )
@@ -1256,7 +1256,7 @@ async def open_kitchen(
                     tool_name="open_kitchen",
                     recipe_name=name,
                     tool_ctx=tool_ctx,
-                    effective_delivery_token_limit=_edtl_normal,
+                    unnegotiated_tool_result_token_limit=_edtl_normal,
                 )
 
             return render_served_response(result)

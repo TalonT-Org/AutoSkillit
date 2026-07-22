@@ -75,9 +75,9 @@ def _canonical_json(value: Any) -> str:
 def _estimated_tokens(original_size: int) -> int:
     """Estimate tokens via the four-UTF-8-byte ceiling-division heuristic.
 
-    Matches the ``CODEX_TOOL_OUTPUT_TOKEN_LIMIT`` derivation: a coarse
+    Uses the general output token limit as a coarse
     transport-layer estimate, not a tokenizer count. Used to compare
-    payload size against ``effective_delivery_token_limit``.
+    payload size against ``unnegotiated_tool_result_token_limit``.
     """
     return (original_size + 3) // 4
 
@@ -826,7 +826,7 @@ def _spill_for_delivery_bound(
     artifact_dir: Path | None,
     original: str,
     original_size: int,
-    effective_delivery_token_limit: int,
+    unnegotiated_tool_result_token_limit: int,
 ) -> Any:
     """Persist ``original`` and return a bounded projection honoring the delivery bound.
 
@@ -870,7 +870,7 @@ def _spill_for_delivery_bound(
             parsed = None
     else:
         parsed = result
-    bound = effective_delivery_token_limit * 4
+    bound = unnegotiated_tool_result_token_limit * 4
     floor_bytes = min(bound, config.response_max_bytes)
     rendered: str | None
     try:
@@ -937,7 +937,7 @@ def enforce_response_budget(
     artifact_dir: Path | None,
     config: OutputBudgetConfig,
     force_spill: bool = False,
-    effective_delivery_token_limit: int | None = None,
+    unnegotiated_tool_result_token_limit: int | None = None,
 ) -> Any:
     """Return a bounded response of the same handler type.
 
@@ -945,7 +945,7 @@ def enforce_response_budget(
     Artifact failure and missing-context cases fail closed without echoing the
     original payload.
 
-    ``effective_delivery_token_limit`` is the worst-case operative bound on the
+    ``unnegotiated_tool_result_token_limit`` is the conservative bound on the
     downstream transport (e.g. Codex code-mode default ~10K). When set, payloads
     whose estimated token count exceeds it are spilled even if they pass the
     server-side exemption or response-byte ceilings, because the transport
@@ -964,9 +964,9 @@ def enforce_response_budget(
     original_bytes = original.encode("utf-8")
     original_size = len(original_bytes)
     over_delivery_bound = (
-        effective_delivery_token_limit is not None
-        and effective_delivery_token_limit > 0
-        and _estimated_tokens(original_size) > effective_delivery_token_limit
+        unnegotiated_tool_result_token_limit is not None
+        and unnegotiated_tool_result_token_limit > 0
+        and _estimated_tokens(original_size) > unnegotiated_tool_result_token_limit
     )
     exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(tool_name)
     if exemption is not None:
@@ -982,7 +982,7 @@ def enforce_response_budget(
                 original_utf8_bytes=original_size,
             )
         if over_delivery_bound:
-            assert effective_delivery_token_limit is not None  # narrowed by over_delivery_bound
+            assert unnegotiated_tool_result_token_limit is not None
             return _spill_for_delivery_bound(
                 result,
                 tool_name=tool_name,
@@ -990,7 +990,7 @@ def enforce_response_budget(
                 artifact_dir=artifact_dir,
                 original=original,
                 original_size=original_size,
-                effective_delivery_token_limit=effective_delivery_token_limit,
+                unnegotiated_tool_result_token_limit=unnegotiated_tool_result_token_limit,
             )
         _emit_response_budget_event(
             "response_budget_exemption",
@@ -1037,8 +1037,9 @@ def enforce_response_budget(
     }
 
     delivery_bound_bytes = (
-        effective_delivery_token_limit * 4
-        if effective_delivery_token_limit is not None and effective_delivery_token_limit > 0
+        unnegotiated_tool_result_token_limit * 4
+        if unnegotiated_tool_result_token_limit is not None
+        and unnegotiated_tool_result_token_limit > 0
         else None
     )
     projection_max_bytes = (
@@ -1130,7 +1131,7 @@ def shape_json_response(
     tool_name: str,
     artifact_dir: Path,
     config: OutputBudgetConfig,
-    effective_delivery_token_limit: int | None = None,
+    unnegotiated_tool_result_token_limit: int | None = None,
 ) -> str:
     """Serialize a tool dict, spilling once it crosses the source threshold."""
     rendered = json.dumps(payload)
@@ -1142,7 +1143,7 @@ def shape_json_response(
         artifact_dir=artifact_dir,
         config=config,
         force_spill=True,
-        effective_delivery_token_limit=effective_delivery_token_limit,
+        unnegotiated_tool_result_token_limit=unnegotiated_tool_result_token_limit,
     )
     return shaped if isinstance(shaped, str) else json.dumps(shaped)
 

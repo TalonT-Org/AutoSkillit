@@ -1,19 +1,198 @@
-"""Per-backend effective delivery-bound resolution.
-
-The configured ``tool_output_token_limit`` written to Codex ``config.toml``
-is a config-file ceiling. Code-mode models may bypass that ceiling when
-they emit ``max_output_tokens`` without an upper bound, so the operative
-bound for those paths is the harness default (~10K tokens). The
-``BackendCapabilities.effective_delivery_token_limit`` field encodes this
-worst-case operative bound; ``resolve_effective_delivery_bound`` is the
-canonical accessor.
-"""
+"""Static general-output and recipe-delivery decision resolution."""
 
 from __future__ import annotations
 
+import hashlib
+import json
+import time
+
 from .types._type_backend import BackendCapabilities
+from .types._type_recipe_delivery import (
+    RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
+    CodexRecipeDeliveryBudgetDef,
+    CodexRecipeDeliveryEvidenceDef,
+    RecipeDeliveryAttestation,
+    RecipeDeliveryDecision,
+    RecipeDeliveryMode,
+    RecipeDeliveryRequest,
+)
 
 
-def resolve_effective_delivery_bound(caps: BackendCapabilities) -> int:
-    """Return the worst-case operative token bound for ``caps``'s backend transport."""
-    return caps.effective_delivery_token_limit
+def _is_sha256_identity(value: str) -> bool:
+    prefix = "sha256:"
+    if not value.startswith(prefix) or len(value) != len(prefix) + 64:
+        return False
+    return all(character in "0123456789abcdef" for character in value[len(prefix) :])
+
+
+def recipe_delivery_request_digest(request: RecipeDeliveryRequest) -> str:
+    """Return the domain-labelled digest of the exact nested delivery request."""
+    canonical = json.dumps(
+        {
+            "audience": request.audience,
+            "caller_requested_outer_tokens": request.caller_requested_outer_tokens,
+            "code_digest": request.code_digest,
+            "contract_digest": request.contract_digest,
+            "contract_version": request.contract_version,
+            "delivery_call_id": request.delivery_call_id,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    return f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+
+
+def resolve_general_output_token_limit(caps: BackendCapabilities) -> int:
+    """Return the backend's conservative limit for an unnegotiated tool result."""
+    return caps.unnegotiated_tool_result_token_limit
+
+
+def resolve_recipe_delivery_decision(
+    *,
+    capabilities: BackendCapabilities,
+    required_serialized_tokens: int,
+    budget: CodexRecipeDeliveryBudgetDef,
+    producer: str,
+    payload_sha256: str,
+    request: RecipeDeliveryRequest | None = None,
+    attestation: RecipeDeliveryAttestation | None = None,
+    supported_evidence: CodexRecipeDeliveryEvidenceDef | None = None,
+    now_unix: int | None = None,
+) -> RecipeDeliveryDecision:
+    """Resolve one recipe response without treating caller claims as authority."""
+    ordinary_limit = resolve_general_output_token_limit(capabilities)
+    requested = request.caller_requested_outer_tokens if request is not None else None
+    observed = (
+        attestation.host_observed_requested_outer_tokens if attestation is not None else None
+    )
+
+    def _decision(
+        mode: RecipeDeliveryMode,
+        *,
+        selected_limit: int,
+        reason: str,
+        receipt_status: str,
+    ) -> RecipeDeliveryDecision:
+        return RecipeDeliveryDecision(
+            mode=mode,
+            caller_requested_outer_tokens=requested,
+            host_observed_requested_outer_tokens=observed,
+            required_outer_tokens=required_serialized_tokens,
+            unnegotiated_tool_result_token_limit=ordinary_limit,
+            selected_result_token_limit=selected_limit,
+            contract_digest=budget.contract_digest,
+            evidence_identity=(attestation.evidence_identity if attestation is not None else None),
+            reason=reason,
+            producer=producer,
+            payload_sha256=payload_sha256,
+            receipt_status=receipt_status,
+        )
+
+    def _envelope(reason: str) -> RecipeDeliveryDecision:
+        return _decision(
+            RecipeDeliveryMode.ENVELOPE,
+            selected_limit=ordinary_limit,
+            reason=reason,
+            receipt_status="not_reserved",
+        )
+
+    if required_serialized_tokens < 0:
+        return _envelope("invalid_required_token_count")
+    if not producer or not _is_sha256_identity(payload_sha256):
+        return _envelope("invalid_payload_identity")
+    if not _is_sha256_identity(budget.contract_digest):
+        return _envelope("invalid_contract_digest")
+    if required_serialized_tokens <= ordinary_limit:
+        return _decision(
+            RecipeDeliveryMode.ORDINARY_INLINE,
+            selected_limit=ordinary_limit,
+            reason="fits_unnegotiated_result_limit",
+            receipt_status="not_required",
+        )
+    if not capabilities.protected_recipe_delivery_capable:
+        return _envelope("protected_host_delivery_unavailable")
+    if required_serialized_tokens > budget.authoritative_attested_recipe_result_token_limit:
+        return _envelope("authoritative_result_limit_exceeded")
+    if request is None:
+        return _envelope("delivery_request_missing")
+    if attestation is None:
+        return _envelope("host_attestation_missing")
+    if supported_evidence is None:
+        return _envelope("supported_evidence_missing")
+    if request.contract_version != budget.contract_version:
+        return _envelope("request_contract_version_mismatch")
+    if not request.delivery_call_id or not _is_sha256_identity(request.code_digest):
+        return _envelope("request_identity_invalid")
+    if request.audience != RECIPE_DELIVERY_ATTESTATION_AUDIENCE:
+        return _envelope("request_audience_mismatch")
+    if request.contract_digest != budget.contract_digest:
+        return _envelope("request_contract_digest_mismatch")
+    if request.caller_requested_outer_tokens != (
+        budget.authoritative_attested_recipe_result_token_limit
+    ):
+        return _envelope("requested_result_limit_mismatch")
+    if attestation.delivery_call_id != request.delivery_call_id:
+        return _envelope("delivery_call_id_mismatch")
+    if attestation.audience != request.audience:
+        return _envelope("attestation_audience_mismatch")
+    if not all(
+        (
+            attestation.thread_id,
+            attestation.turn_id,
+            attestation.outer_call_id,
+            attestation.code_mode_cell_id,
+            attestation.delivery_call_id,
+            attestation.nonce,
+        )
+    ):
+        return _envelope("attestation_identity_incomplete")
+    if attestation.contract_version != request.contract_version:
+        return _envelope("attestation_contract_version_mismatch")
+    if attestation.contract_digest != request.contract_digest:
+        return _envelope("attestation_contract_digest_mismatch")
+    if attestation.host_observed_requested_outer_tokens != (request.caller_requested_outer_tokens):
+        return _envelope("host_observation_mismatch")
+    if attestation.selected_result_token_limit != (
+        budget.authoritative_attested_recipe_result_token_limit
+    ):
+        return _envelope("host_selected_limit_mismatch")
+    if attestation.code_digest != request.code_digest:
+        return _envelope("code_digest_mismatch")
+    if attestation.request_digest != recipe_delivery_request_digest(request):
+        return _envelope("request_digest_mismatch")
+    effective_now = int(time.time()) if now_unix is None else now_unix
+    if attestation.expires_at_unix <= effective_now:
+        return _envelope("attestation_expired")
+    if attestation.parser_version != budget.parser_version:
+        return _envelope("attestation_parser_version_mismatch")
+    if attestation.evidence_version != budget.evidence_version:
+        return _envelope("attestation_evidence_version_mismatch")
+    if attestation.evidence_identity != supported_evidence.identity:
+        return _envelope("unsupported_evidence_identity")
+    if not all(
+        (
+            supported_evidence.identity,
+            supported_evidence.host_channel,
+            supported_evidence.cli_identity,
+            supported_evidence.selected_limit_derivation,
+        )
+    ):
+        return _envelope("supported_evidence_incomplete")
+    if supported_evidence.contract_digest != budget.contract_digest:
+        return _envelope("evidence_contract_digest_mismatch")
+    if supported_evidence.parser_version != budget.parser_version:
+        return _envelope("evidence_parser_version_mismatch")
+    if supported_evidence.evidence_schema_version != budget.evidence_version:
+        return _envelope("evidence_schema_version_mismatch")
+    if supported_evidence.selected_result_token_limit != (
+        budget.authoritative_attested_recipe_result_token_limit
+    ):
+        return _envelope("evidence_selected_limit_mismatch")
+
+    return _decision(
+        RecipeDeliveryMode.ATTESTED_INLINE,
+        selected_limit=supported_evidence.selected_result_token_limit,
+        reason="supported_host_evidence",
+        receipt_status="reservation_required",
+    )

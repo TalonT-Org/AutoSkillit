@@ -98,6 +98,7 @@ class TestModuleCascadeCore:
             "_type_results",
             "_type_results_execution",
             "_type_backend",
+            "_type_recipe_delivery",
             "_type_dispatch_identity",
             "_type_figure_spec",
             "_type_session_env",
@@ -168,6 +169,11 @@ class TestModuleCascadeCore:
     def test_type_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_backend"] == frozenset(
             {"core", "execution", "cli", "recipe", "server", "workspace"}
+        )
+
+    def test_type_recipe_delivery_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_recipe_delivery"] == frozenset(
+            {"core", "execution", "server"}
         )
 
     def test_type_dispatch_identity_cascade(self) -> None:

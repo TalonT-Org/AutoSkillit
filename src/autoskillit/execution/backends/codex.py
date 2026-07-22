@@ -639,7 +639,8 @@ class CodexBackend(BackendCmdBuilderBase):
             skill_sigil="$",
             session_dir_persistent=True,
             supports_model_invocation_gating=False,
-            effective_delivery_token_limit=10_000,
+            unnegotiated_tool_result_token_limit=10_000,
+            protected_recipe_delivery_capable=False,
         )
 
     @property

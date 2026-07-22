@@ -107,6 +107,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_cross_skill_handoff_paths.py` | Architectural test: cross-skill artifact read paths (e.g., resolve-review reading review-pr outputs) must be compatible with the producer skill's recipe output_dir |
 | `test_skill_family_parity.py` | Parametrized parity tests: every GITHUB_API_SKILL_FAMILIES member must satisfy its family's required API pattern contracts |
 | `test_model_identity_contract.py` | AST guard: detect_model_drift must use normalize_model_id and _models_match, and must have a profile_name suppression guard with normalize_model_id — prevents raw-string false positives and profile-routed false MODEL_DRIFT |
+| `test_recipe_delivery_provenance.py` | AST guard: caller-requested, host-observed, selected-result, history-retention, and measured-byte authorities remain independent |
 | `test_helpers_exports.py` | Asserts shared test helpers export required symbols (strip_markdown_code_regions) |
 | `test_hook_efficacy_contract.py` | Arch contracts: HookDef mechanism presence, enforcement_strength backend coverage, codex hard-claim consistency, codex_status/strength coherence |
 | `test_hook_env_var_authority.py` | AST guard: every hook script that reads `AUTOSKILLIT_PROVIDER_PROFILE` must also read `AUTOSKILLIT_AGENT_BACKEND` so backend identity is checked independently of provider routing |

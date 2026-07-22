@@ -22,7 +22,7 @@ from autoskillit.core import (
     fast_dumps,
     get_logger,
     load_yaml,
-    resolve_effective_delivery_bound,
+    resolve_general_output_token_limit,
     temp_dir_display_str,
 )  # noqa: F401
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
@@ -410,7 +410,7 @@ async def load_recipe(
                     else None
                 )
                 _lr_edtl = (
-                    resolve_effective_delivery_bound(_lr_backend_caps)
+                    resolve_general_output_token_limit(_lr_backend_caps)
                     if _lr_backend_caps is not None
                     else None
                 )
@@ -419,7 +419,7 @@ async def load_recipe(
                     tool_name="load_recipe",
                     recipe_name=name,
                     tool_ctx=tool_ctx,
-                    effective_delivery_token_limit=_lr_edtl,
+                    unnegotiated_tool_result_token_limit=_lr_edtl,
                 )
             return render_served_response(result)
     except Exception as exc:
@@ -669,7 +669,7 @@ async def get_recipe_section(
                 else None
             )
             bound_tokens = (
-                resolve_effective_delivery_bound(_backend_caps)
+                resolve_general_output_token_limit(_backend_caps)
                 if _backend_caps is not None
                 else 10_000
             )

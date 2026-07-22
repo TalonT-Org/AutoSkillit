@@ -97,7 +97,7 @@ class TestCheckCodexLimitsVerified:
         )
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.WARNING
-        assert "CODEX_TOOL_OUTPUT_TOKEN_LIMIT" in result.message
+        assert "CODEX_HISTORY_RETENTION_TOKEN_LIMIT" in result.message
         assert "CODEX_AUTO_COMPACT_LIMIT" in result.message
 
     def test_codex_limits_verified_ok_at_pinned_version(

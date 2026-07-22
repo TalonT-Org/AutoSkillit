@@ -607,7 +607,7 @@ def maybe_envelope_recipe_response(
     tool_name: str,
     recipe_name: str,
     tool_ctx: ToolContext,
-    effective_delivery_token_limit: int | None,
+    unnegotiated_tool_result_token_limit: int | None,
 ) -> dict[str, Any]:
     """Conditionally replace a recipe payload with a bounded envelope.
 
@@ -615,7 +615,7 @@ def maybe_envelope_recipe_response(
     UNCONDITIONALLY (gated only by ``temp_dir`` being a ``Path``), so the
     ``get_recipe_section`` pull tool always has a backing store. If the
     payload's estimated token count exceeds
-    ``effective_delivery_token_limit``, returns ``build_recipe_envelope(...)``
+    ``unnegotiated_tool_result_token_limit``, returns ``build_recipe_envelope(...)``
     so the orchestrator can pull each step's body on demand.
 
     Otherwise returns the payload unchanged (Claude backend path: the
@@ -646,12 +646,12 @@ def maybe_envelope_recipe_response(
     except OSError:
         return payload
 
-    if effective_delivery_token_limit is None or effective_delivery_token_limit <= 0:
+    if unnegotiated_tool_result_token_limit is None or unnegotiated_tool_result_token_limit <= 0:
         return payload
 
     serialized = json.dumps(payload, ensure_ascii=False)
     estimated_tokens = (len(serialized.encode("utf-8")) + 3) // 4
-    if estimated_tokens <= effective_delivery_token_limit:
+    if estimated_tokens <= unnegotiated_tool_result_token_limit:
         return payload
 
     # existing skeleton/edges construction (post_prune_names, summaries,
@@ -677,7 +677,7 @@ def maybe_envelope_recipe_response(
     summaries = build_step_summaries(active_recipe_steps)
     edges = build_routing_edges_by_step(active_recipe_steps)
     byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
-    bound_bytes = effective_delivery_token_limit * 4
+    bound_bytes = unnegotiated_tool_result_token_limit * 4
     skeleton = extract_step_skeleton(post_prune_names, edges, summaries, byte_ranges=byte_ranges)
 
     def _pullable_skeleton_size(candidate: dict[str, Any]) -> int:

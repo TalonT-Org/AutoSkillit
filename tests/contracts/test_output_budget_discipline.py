@@ -106,18 +106,22 @@ def test_intake_digest_is_safe_for_agent_toml_multiline_literal() -> None:
     assert "'''" not in CODEX_INTAKE_DISCIPLINE_DIGEST
 
 
-def test_intake_digest_numeric_rule_matches_codex_effective_delivery_bound() -> None:
-    """The intake digest's ``max_output_tokens`` numeric rule must be at least
-    the Codex backend's effective delivery bound — the operative bound the
-    server-side response backstop applies. If the bound changes, the digest
-    text must be updated to reflect it (this is the regression guard)."""
+def test_intake_digest_numeric_rule_matches_codex_unnegotiated_result_limit() -> None:
+    """The ordinary intake rule must name Codex's omitted outer-result limit.
+
+    History retention is deliberately a separate domain and must not select
+    the outer result delivered by Code Mode.
+    """
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     codex_caps = BACKEND_REGISTRY["codex"]().capabilities
-    codex_effective_bound = codex_caps.effective_delivery_token_limit
-    assert codex_effective_bound > 0
-    assert f"max_output_tokens above {codex_effective_bound}" in CODEX_INTAKE_DISCIPLINE_DIGEST, (
+    codex_unnegotiated_limit = codex_caps.unnegotiated_tool_result_token_limit
+    assert codex_unnegotiated_limit > 0
+    assert (
+        f"max_output_tokens above {codex_unnegotiated_limit}" in CODEX_INTAKE_DISCIPLINE_DIGEST
+    ), (
         "CODEX_INTAKE_DISCIPLINE_DIGEST numeric rule must reference the Codex "
-        f"effective_delivery_token_limit ({codex_effective_bound}); update "
+        "unnegotiated_tool_result_token_limit "
+        f"({codex_unnegotiated_limit}); update "
         "the digest if the bound changed."
     )

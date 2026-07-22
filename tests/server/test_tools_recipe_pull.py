@@ -25,9 +25,9 @@ from autoskillit.core import (
     BackendCapabilities,
     fast_dumps,
     load_yaml,
-    resolve_effective_delivery_bound,
+    resolve_general_output_token_limit,
 )
-from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 from autoskillit.recipe import (
     _extract_routing_edges,
     all_validated_recipe_names,
@@ -68,7 +68,9 @@ def _backend_capabilities() -> dict[str, BackendCapabilities]:
 
 def _smallest_bound_tokens() -> int:
     """Smallest backend delivery token bound across the registry."""
-    return min(resolve_effective_delivery_bound(caps) for caps in _backend_capabilities().values())
+    return min(
+        resolve_general_output_token_limit(caps) for caps in _backend_capabilities().values()
+    )
 
 
 def _bound_bytes(bound_tokens: int) -> int:
@@ -145,7 +147,7 @@ def test_envelope_fits_every_backend_by_construction(
     step_names = [str(n) for n in post_prune_raw if isinstance(n, str)]
 
     caps = _backend_capabilities()[backend_name]
-    bound_tokens = resolve_effective_delivery_bound(caps)
+    bound_tokens = resolve_general_output_token_limit(caps)
     bound_bytes = _bound_bytes(bound_tokens)
     content = cast(str, payload.get("content") or "")
     padding = "delivery-fit-padding" * (bound_bytes // len("delivery-fit-padding") + 1)
@@ -163,7 +165,7 @@ def test_envelope_fits_every_backend_by_construction(
         tool_name="open_kitchen",
         recipe_name=recipe_name,
         tool_ctx=ctx,
-        effective_delivery_token_limit=bound_tokens,
+        unnegotiated_tool_result_token_limit=bound_tokens,
     )
     serialized = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
     assert len(serialized.encode("utf-8")) <= bound_bytes, (
@@ -288,7 +290,7 @@ def test_maybe_envelope_returns_envelope_when_payload_oversized(
     recipe_name: str, tmp_path: Path
 ) -> None:
     """When the payload's estimated token count exceeds
-    effective_delivery_token_limit, maybe_envelope_recipe_response
+    unnegotiated_tool_result_token_limit, maybe_envelope_recipe_response
     returns the bounded envelope (not the full payload)."""
     ctx = _make_minimal_ctx(tmp_path)
     ctx.recipe_name = recipe_name
@@ -301,7 +303,7 @@ def test_maybe_envelope_returns_envelope_when_payload_oversized(
         tool_name="open_kitchen",
         recipe_name=recipe_name,
         tool_ctx=ctx,
-        effective_delivery_token_limit=bound_tokens,
+        unnegotiated_tool_result_token_limit=bound_tokens,
     )
     serialized = json.dumps(result, ensure_ascii=False)
     assert len(serialized.encode("utf-8")) <= _bound_bytes(bound_tokens), (
@@ -330,7 +332,7 @@ def test_maybe_envelope_passthrough_when_payload_fits(tmp_path: Path) -> None:
         tool_name="open_kitchen",
         recipe_name="any_recipe",
         tool_ctx=ctx,
-        effective_delivery_token_limit=bound_tokens,
+        unnegotiated_tool_result_token_limit=bound_tokens,
     )
     assert result is payload
     artifact_path = _recipe_artifact_path(ctx.temp_dir, "open_kitchen", "any_recipe")
@@ -355,7 +357,7 @@ def test_maybe_envelope_persists_artifact_even_when_payload_fits(tmp_path: Path)
         tool_name="open_kitchen",
         recipe_name="any_recipe",
         tool_ctx=ctx,
-        effective_delivery_token_limit=bound_tokens,
+        unnegotiated_tool_result_token_limit=bound_tokens,
     )
     assert result is payload
     artifact_path = _recipe_artifact_path(ctx.temp_dir, "open_kitchen", "any_recipe")
@@ -398,7 +400,7 @@ def test_maybe_envelope_persists_exactly_once_when_oversized(
         tool_name="open_kitchen",
         recipe_name="any_recipe",
         tool_ctx=ctx,
-        effective_delivery_token_limit=bound_tokens,
+        unnegotiated_tool_result_token_limit=bound_tokens,
     )
     assert len(json.dumps(result).encode("utf-8")) <= bound_tokens * 4
     assert len(calls) == 1, (
@@ -423,7 +425,7 @@ def test_maybe_envelope_passthrough_when_temp_dir_unset(tmp_path: Path) -> None:
         tool_name="open_kitchen",
         recipe_name="any_recipe",
         tool_ctx=ctx,
-        effective_delivery_token_limit=100,
+        unnegotiated_tool_result_token_limit=100,
     )
     assert result is payload
 
@@ -500,11 +502,11 @@ def test_pull_tool_in_unformatted_or_formatters() -> None:
 
 def test_codex_token_limit_unchanged_part_b() -> None:
     """Part B does not change the exemption ceilings — it adds the pull
-    pathway. The CODEX_TOOL_OUTPUT_TOKEN_LIMIT remains driven by the
+    pathway. The CODEX_HISTORY_RETENTION_TOKEN_LIMIT remains driven by the
     registry's max, with the envelope fitting within that bound by
     construction. This test pins the current value so future changes
     requiring ADR-0005 amendment trip this guard."""
-    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT >= 10_000
+    assert CODEX_HISTORY_RETENTION_TOKEN_LIMIT >= 10_000
 
 
 def test_build_step_summaries_handles_missing_or_malformed() -> None:
@@ -926,7 +928,7 @@ async def test_load_recipe_envelope_pulls_from_its_own_artifact(
     # *envelope-pulls-from-its-own-artifact* contract.
     _tight_backend = MagicMock()
     _tight_backend.capabilities = BackendCapabilities(
-        effective_delivery_token_limit=1_000,
+        unnegotiated_tool_result_token_limit=1_000,
     )
     _tight_backend.name = "codex"
     tool_ctx_kitchen_open.backend = _tight_backend

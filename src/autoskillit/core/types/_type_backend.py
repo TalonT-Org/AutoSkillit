@@ -162,11 +162,10 @@ class BackendCapabilities:
     # directory rather than written with gating frontmatter that the backend
     # would ignore.
     supports_model_invocation_gating: bool = True
-    # Worst-case delivery bound in tokens: the lowest operative bound that
-    # could apply to this backend's tool-output transport. Distinct from any
-    # config-file ceiling (e.g. `tool_output_token_limit`), which code-mode
-    # models may bypass. Used by `enforce_response_budget` to spill payloads
-    # the downstream transport cannot deliver at full size.
+    # Unnegotiated tool-result bound in tokens: the lowest operative bound
+    # when a caller has not supplied protected host evidence for a larger
+    # result. Distinct from history-retention configuration and negotiated
+    # recipe delivery decisions.
     #
     # Default of 10,000 matches the smallest registered backend bound
     # (Codex code-mode). Any new backend that omits this field inherits
@@ -174,7 +173,11 @@ class BackendCapabilities:
     # bounding" behavior — preventing a silent opt-out where a future
     # backend without an explicit capability setting would be delivered
     # without any delivery-bound enforcement.
-    effective_delivery_token_limit: int = 10_000
+    unnegotiated_tool_result_token_limit: int = 10_000
+    # True only when a protected host channel can attest the selected outer
+    # result limit before nested MCP execution. Current backends remain False
+    # until a version-pinned conformance report enables an evidence identity.
+    protected_recipe_delivery_capable: bool = False
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
@@ -304,7 +307,8 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     skill_sigil="/",
     session_dir_persistent=False,
     supports_model_invocation_gating=True,
-    effective_delivery_token_limit=46_500,
+    unnegotiated_tool_result_token_limit=46_500,
+    protected_recipe_delivery_capable=False,
 )
 
 

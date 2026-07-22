@@ -11,13 +11,17 @@ from autoskillit.core import (
     HEADLESS_AUTO_GATE_ENV_VAR,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
 )
-from autoskillit.execution.backends import ensure_codex_mcp_registered
+from autoskillit.execution.backends import (
+    CODEX_RECIPE_DELIVERY_BUDGET,
+    SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY,
+    ensure_codex_mcp_registered,
+)
 from autoskillit.execution.backends._codex_config import (
     CODEX_AUTO_COMPACT_LIMIT,
+    CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_MCP_REQUIRED_KEYS,
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
-    CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
     _is_autoskillit_registered,
     _read_codex_config,
     _serialize_toml,
@@ -27,7 +31,7 @@ from autoskillit.execution.backends._codex_config import (
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
-def test_codex_tool_output_limit_is_derived_from_largest_measured_exemption() -> None:
+def test_codex_history_retention_limit_is_derived_from_largest_measured_exemption() -> None:
     """The four-byte relation is Codex's coarse truncation heuristic, not tokenization.
 
     This ceiling is a blast-radius damage bound; producer guards and output
@@ -37,16 +41,25 @@ def test_codex_tool_output_limit_is_derived_from_largest_measured_exemption() ->
         definition.max_utf8_bytes for definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.values()
     )
     assert max_bytes == 195_000
-    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == ((max_bytes + 3) // 4) + 8_000
-    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT == 56_750
+    assert CODEX_HISTORY_RETENTION_TOKEN_LIMIT == ((max_bytes + 3) // 4) + 8_000
+    assert CODEX_HISTORY_RETENTION_TOKEN_LIMIT == 56_750
 
 
-def test_response_backstop_fires_below_codex_transport_ceiling() -> None:
-    assert OutputBudgetConfig().response_max_bytes // 3 < CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+def test_codex_recipe_delivery_authorities_start_fail_closed() -> None:
+    budget = CODEX_RECIPE_DELIVERY_BUDGET
+    assert budget.ordinary_omitted_result_token_limit == 10_000
+    assert budget.authoritative_attested_recipe_result_token_limit == 56_750
+    assert budget.history_retention_token_limit == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
+    assert budget.contract_digest.startswith("sha256:")
+    assert SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY == {}
 
 
-def test_resolve_effective_delivery_bound_per_backend() -> None:
-    from autoskillit.core import BackendCapabilities, resolve_effective_delivery_bound
+def test_response_backstop_fires_below_codex_history_retention_limit() -> None:
+    assert OutputBudgetConfig().response_max_bytes // 3 < CODEX_HISTORY_RETENTION_TOKEN_LIMIT
+
+
+def test_resolve_general_output_token_limit_per_backend() -> None:
+    from autoskillit.core import BackendCapabilities, resolve_general_output_token_limit
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     expected = {"codex": 10_000, "claude-code": 46_500}
@@ -54,7 +67,7 @@ def test_resolve_effective_delivery_bound_per_backend() -> None:
     for name, cls in BACKEND_REGISTRY.items():
         caps = cls().capabilities
         assert isinstance(caps, BackendCapabilities)
-        observed[name] = resolve_effective_delivery_bound(caps)
+        observed[name] = resolve_general_output_token_limit(caps)
     assert observed == expected
 
 
@@ -266,7 +279,7 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
@@ -281,7 +294,7 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
@@ -297,7 +310,7 @@ class TestIsAutoskillitRegistered:
                     "extra_field": 42,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
@@ -369,7 +382,7 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT - 1,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT - 1,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
 
@@ -384,7 +397,7 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT + 1,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT + 1,
             "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
@@ -400,7 +413,7 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
 
@@ -415,7 +428,7 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             "model_auto_compact_token_limit": 100_000,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
@@ -431,7 +444,7 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
@@ -455,7 +468,7 @@ class TestEnsureCodexMcpRegistered:
         ensure_codex_mcp_registered(config_path=p)
         config = _read_codex_config(p).data
         assert "tool_output_token_limit" in config
-        assert config["tool_output_token_limit"] == CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+        assert config["tool_output_token_limit"] == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
         assert "tool_output_token_limit" not in config["mcp_servers"]["autoskillit"], (
             "tool_output_token_limit is a Codex global key, not a server-entry key"
         )
@@ -486,13 +499,13 @@ class TestEnsureCodexMcpRegistered:
         ensure_codex_mcp_registered(config_path=p)
         higher_compact_limit = CODEX_AUTO_COMPACT_LIMIT + 1
         text = p.read_text(encoding="utf-8")
-        text = text.replace(str(CODEX_TOOL_OUTPUT_TOKEN_LIMIT), "50000")
+        text = text.replace(str(CODEX_HISTORY_RETENTION_TOKEN_LIMIT), "50000")
         text = text.replace(str(CODEX_AUTO_COMPACT_LIMIT), str(higher_compact_limit))
         p.write_text(text, encoding="utf-8")
 
         assert ensure_codex_mcp_registered(config_path=p) is True
         config = _read_codex_config(p).data
-        assert config["tool_output_token_limit"] == CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+        assert config["tool_output_token_limit"] == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
         assert config["model_auto_compact_token_limit"] == higher_compact_limit
 
     def test_headless_auto_gate_true_includes_auto_gate_env(self, tmp_path):
@@ -657,7 +670,7 @@ class TestDestructiveOverwritePrevention:
         p.write_text("not valid toml = =", encoding="utf-8")
         ensure_codex_mcp_registered(config_path=p)
         content = p.read_text(encoding="utf-8")
-        assert f"tool_output_token_limit = {CODEX_TOOL_OUTPUT_TOKEN_LIMIT}" in content
+        assert f"tool_output_token_limit = {CODEX_HISTORY_RETENTION_TOKEN_LIMIT}" in content
         assert "[mcp_servers.autoskillit]" in content
 
     def test_corrupt_file_rewrites_existing_tool_output_limit_exactly(self, tmp_path):
@@ -670,7 +683,7 @@ class TestDestructiveOverwritePrevention:
         ensure_codex_mcp_registered(config_path=p)
 
         content = p.read_text(encoding="utf-8")
-        assert f"tool_output_token_limit = {CODEX_TOOL_OUTPUT_TOKEN_LIMIT}" in content
+        assert f"tool_output_token_limit = {CODEX_HISTORY_RETENTION_TOKEN_LIMIT}" in content
         assert "tool_output_token_limit = 50_000" not in content
         assert content.count("tool_output_token_limit =") == 1
 
@@ -802,7 +815,7 @@ class TestConfigEnvBoundary:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
@@ -955,7 +968,7 @@ class TestIsRegisteredRequiresAllForwardVars:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             },
-            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
 

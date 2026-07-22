@@ -103,6 +103,7 @@ def test_backend_capabilities_field_count():
         "session_dir_persistent",
         "supports_model_invocation_gating",
         "github_api_callable",
+        "protected_recipe_delivery_capable",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -177,7 +178,8 @@ def test_backend_capabilities_field_names_locked():
         "session_dir_persistent",
         "supports_model_invocation_gating",
         "github_api_callable",
-        "effective_delivery_token_limit",
+        "unnegotiated_tool_result_token_limit",
+        "protected_recipe_delivery_capable",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,9 @@ from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     HEADLESS_AUTO_GATE_ENV_VAR,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    CodexRecipeDeliveryBudgetDef,
+    CodexRecipeDeliveryEvidenceDef,
     ReadResult,
     atomic_write,
     get_logger,
@@ -24,14 +29,56 @@ CODEX_MCP_TOOL_TIMEOUT_FLOOR: float = 14364.0
 
 CODEX_MCP_STARTUP_TIMEOUT_SEC: float = 30.0
 
-# Damage bound for all tool/function output stored in Codex context, including
-# native shell and MCP output. Codex currently applies a coarse four-UTF-8-byte
-# truncation heuristic; the extra 8,000 tokens provide serialized-payload
-# headroom. Guard and spill layers remain the load-bearing mechanisms.
+# The configured history-retention requirement is derived from the largest
+# measured recipe exemption plus explicit serialized-response headroom.
 _MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES: int = max(
     definition.max_utf8_bytes for definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.values()
 )
-CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = ((_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES + 3) // 4) + 8_000
+_CODEX_RECIPE_DELIVERY_HEADROOM_TOKENS: int = 8_000
+_CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT: int = (
+    (_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES + 3) // 4
+) + _CODEX_RECIPE_DELIVERY_HEADROOM_TOKENS
+
+_CODEX_RECIPE_DELIVERY_CONTRACT_DIGEST = (
+    "sha256:"
+    + hashlib.sha256(
+        json.dumps(
+            {
+                "attested_result_tokens": _CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT,
+                "contract_version": 1,
+                "evidence_version": 1,
+                "headroom_tokens": _CODEX_RECIPE_DELIVERY_HEADROOM_TOKENS,
+                "history_retention_tokens": _CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT,
+                "measured_recipe_bytes": _MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES,
+                "ordinary_result_tokens": 10_000,
+                "parser_version": 1,
+                "response_exemption_registry": RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+    ).hexdigest()
+)
+
+CODEX_RECIPE_DELIVERY_BUDGET: CodexRecipeDeliveryBudgetDef = CodexRecipeDeliveryBudgetDef(
+    ordinary_omitted_result_token_limit=10_000,
+    authoritative_attested_recipe_result_token_limit=(_CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT),
+    history_retention_token_limit=_CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT,
+    measured_recipe_exemption_max_utf8_bytes=_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES,
+    headroom_tokens=_CODEX_RECIPE_DELIVERY_HEADROOM_TOKENS,
+    contract_version=1,
+    parser_version=1,
+    evidence_version=1,
+    contract_digest=_CODEX_RECIPE_DELIVERY_CONTRACT_DIGEST,
+)
+CODEX_HISTORY_RETENTION_TOKEN_LIMIT: int = (
+    CODEX_RECIPE_DELIVERY_BUDGET.history_retention_token_limit
+)
+
+# A protected evidence identity is enabled only with its passing conformance
+# report. Writable rollout and trace formats are intentionally absent.
+SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY: dict[str, CodexRecipeDeliveryEvidenceDef] = {}
 
 # Disable Codex auto-compaction by setting the limit to an unreachable value.
 # Auto-compaction at 90% of 258K context window can destroy recipe content
@@ -42,7 +89,7 @@ CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = ((_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES + 
 CODEX_AUTO_COMPACT_LIMIT: int = 999_999_999
 
 # Codex CLI version against which the numeric limits above were last verified:
-# the 4-bytes-per-token truncation heuristic behind CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+# the history-retention requirement behind CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 # and the context-window assumption behind CODEX_AUTO_COMPACT_LIMIT. The doctor
 # check `codex_limits_verified` warns when the installed CLI is newer.
 CODEX_LIMITS_LAST_VERIFIED_VERSION: tuple[int, int, int] = (0, 144, 1)
@@ -251,7 +298,7 @@ def _is_autoskillit_registered(
         return False
     if entry.get("startup_timeout_sec") != CODEX_MCP_STARTUP_TIMEOUT_SEC:
         return False
-    if config.get("tool_output_token_limit") != CODEX_TOOL_OUTPUT_TOKEN_LIMIT:
+    if config.get("tool_output_token_limit") != CODEX_HISTORY_RETENTION_TOKEN_LIMIT:
         return False
     if config.get("model_auto_compact_token_limit", 0) < CODEX_AUTO_COMPACT_LIMIT:
         return False
@@ -343,7 +390,7 @@ def ensure_codex_mcp_registered(
         _upsert_top_level_key_exact(
             config_path,
             key="tool_output_token_limit",
-            value=CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            value=CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
         )
         _ensure_top_level_key(
             config_path,
@@ -360,7 +407,7 @@ def ensure_codex_mcp_registered(
         ):
             return False
         config.setdefault("mcp_servers", {})["autoskillit"] = entry
-        config["tool_output_token_limit"] = CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+        config["tool_output_token_limit"] = CODEX_HISTORY_RETENTION_TOKEN_LIMIT
         existing_compact_limit = config.get("model_auto_compact_token_limit", 0)
         if not isinstance(existing_compact_limit, int):
             existing_compact_limit = 0

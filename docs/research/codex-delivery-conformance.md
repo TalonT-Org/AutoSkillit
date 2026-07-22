@@ -2,8 +2,8 @@
 
 Status: blocked
 
-**Probe contract:** `codex-recipe-delivery-v1`  
-**Decision date:** 2026-07-22  
+**Probe contract:** `codex-recipe-delivery-v1`
+**Decision date:** 2026-07-22
 **Model identity:** `gpt-5.6-sol`
 
 ## Decision

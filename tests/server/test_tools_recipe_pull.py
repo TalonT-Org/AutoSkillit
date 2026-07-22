@@ -359,3 +359,109 @@ async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open
     kwargs["artifact_blob_sha256"] = "sha256:" + ("0" * 64)
     response = json.loads(await get_recipe_section(section="content", **kwargs))
     assert response == {"success": False, "error": "invalid_recipe_artifact_identity"}
+
+
+async def test_pull_tool_recreates_missing_exact_generation(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.kitchen_id = "pull-recreate"
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+    assert retire_recipe_artifacts(
+        tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
+    )
+    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: _payload())
+    monkeypatch.setattr(
+        tools_recipe,
+        "build_open_kitchen_recipe_payload",
+        lambda data, *, version: data,
+    )
+
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+    response = json.loads(await get_recipe_section(section="content", **kwargs))
+
+    assert response["success"] is True
+    assert response["content"] == _payload()["content"]
+    assert (
+        load_recipe_artifact(
+            tool_ctx_kitchen_open.temp_dir,
+            kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+            identity=generation,
+        )
+        == _payload()
+    )
+
+
+async def test_pull_tool_reports_invalid_missing_generation_recreation(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-invalid"
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+    assert retire_recipe_artifacts(
+        tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "serve_recipe",
+        lambda *_args, **_kwargs: {"valid": False, "content": "invalid"},
+    )
+
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+    response = json.loads(await get_recipe_section(section="content", **kwargs))
+
+    assert response == {
+        "success": False,
+        "error": "recipe_artifact_unavailable",
+        "detail": "recreation returned invalid recipe",
+    }
+
+
+async def test_pull_tool_rejects_changed_recreated_generation(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-changed"
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+    assert retire_recipe_artifacts(
+        tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "serve_recipe",
+        lambda *_args, **_kwargs: _payload("name: remediation\nsteps: {}\n"),
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "build_open_kitchen_recipe_payload",
+        lambda data, *, version: data,
+    )
+
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+    response = json.loads(await get_recipe_section(section="content", **kwargs))
+
+    assert response == {"success": False, "error": "invalid_recipe_artifact_identity"}

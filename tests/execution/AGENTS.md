@@ -161,6 +161,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_config.py` | Tests for TOML read/write primitives, _is_autoskillit_registered, and ensure_codex_mcp_registered |
 | `test_codex_recipe_delivery.py` | Protected Codex recipe-delivery attestation and durable receipt-ledger tests |
 | `test_codex_recipe_delivery_fixtures.py` | Protected and diagnostic Codex recipe-delivery fixture ratchets |
+| `test_codex_recipe_delivery_conformance.py` | Dedicated recipe-delivery conformance matrix plus credentialed Code Mode envelope/pull retention probe |
 | `test_codex_deterministic_conformance.py` | Sealed-enum vocabulary, hook event format, and config.toml schema template conformance tests with --update-fixtures review gate |
 | `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |
 | `test_coding_agent_backend_conformance.py` | Parametrized conformance tests for all CodingAgentBackend implementations via BackendContractBase |

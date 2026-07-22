@@ -128,6 +128,9 @@ from autoskillit.recipe.rules import rules_cmd as _rules_cmd  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_commit_guard_regression_route as _rules_commit_guard_regression_route,
 )
+from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_contract_recovery as _rules_contract_recovery,
+)
 from autoskillit.recipe.rules import rules_contracts as _rules_contracts  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_criterion_schema_drift as _rules_criterion_schema_drift,  # noqa: F401

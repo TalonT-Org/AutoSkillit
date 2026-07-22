@@ -147,6 +147,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_cmd.py` | Tests for cmd semantic validation rule |
 | `test_rules_commit_guard_regression_route.py` | Tests for `commit-guard-regression-route-missing` semantic validation rule |
 | `test_rules_conditional_push.py` | Tests for conditional_push semantic validation rule |
+| `test_rules_contract_recovery.py` | Tests for contract-recovery-requires-salvage-route semantic validation rule |
 | `test_rules_contracts.py` | Tests for contracts semantic validation rule |
 | `test_rules_context_param_forwarding.py` | Tests for context-param-not-forwarded semantic validation rule — guards `_TOOL_CONTEXT_PARAMS` registry forwarding invariant for `auto_merge_available` and other upstream-captured context variables consumed by tool steps (PR #3901 regression guard) |
 | `test_rules_dataflow_capture.py` | Tests for dataflow capture semantic validation rule |

@@ -89,10 +89,14 @@ class TestFlockLockTarget:
 
         violations: list[tuple[str, str, int]] = []
 
-        def _is_open_call(call: ast.Call) -> bool:
-            return (isinstance(call.func, ast.Attribute) and call.func.attr == "open") or (
-                isinstance(call.func, ast.Name) and call.func.id == "open"
-            )
+        def _open_target(call: ast.Call) -> ast.expr | None:
+            if isinstance(call.func, ast.Name) and call.func.id == "open":
+                return call.args[0] if call.args else None
+            if not isinstance(call.func, ast.Attribute) or call.func.attr != "open":
+                return None
+            if isinstance(call.func.value, ast.Name) and call.func.value.id == "os":
+                return call.args[0] if call.args else None
+            return call.func.value
 
         py_files: set[Path] = set()
         for r in scan_roots:
@@ -117,8 +121,9 @@ class TestFlockLockTarget:
                 for child in ast.walk(node):
                     if not isinstance(child, ast.Call):
                         continue
-                    if _is_open_call(child) and child.args:
-                        open_calls.append((ast.unparse(child.args[0]), child.lineno))
+                    target = _open_target(child)
+                    if target is not None:
+                        open_calls.append((ast.unparse(target), child.lineno))
 
                 for arg_src, lineno in open_calls:
                     if (

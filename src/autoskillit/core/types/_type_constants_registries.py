@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, fields
+from types import MappingProxyType
 from typing import Literal, NamedTuple
 
 # _type_backend.py itself imports several other core/types siblings, but all
@@ -195,48 +197,50 @@ class RecipeDeliverySurfaceDef(NamedTuple):
 
 _RECIPE_RESPONSE_MAX_UTF8_BYTES = 195_000
 
-RECIPE_DELIVERY_SURFACE_REGISTRY: dict[str, RecipeDeliverySurfaceDef] = {
-    "open_kitchen": RecipeDeliverySurfaceDef(
-        producer_tool="open_kitchen",
-        route_kind="tool",
-        negotiation_eligible=True,
-        pull_eligible=True,
-        response_exemption_tool="open_kitchen",
-        response_exemption=ResponseBackstopExemptionDef(
-            max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-            max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-            measurement_id="bundled-recipes-all-modes-2026-07-22/open-kitchen",
+RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = MappingProxyType(
+    {
+        "open_kitchen": RecipeDeliverySurfaceDef(
+            producer_tool="open_kitchen",
+            route_kind="tool",
+            negotiation_eligible=True,
+            pull_eligible=True,
+            response_exemption_tool="open_kitchen",
+            response_exemption=ResponseBackstopExemptionDef(
+                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                measurement_id="bundled-recipes-all-modes-2026-07-22/open-kitchen",
+            ),
         ),
-    ),
-    "open_kitchen_deferred_recall": RecipeDeliverySurfaceDef(
-        producer_tool="open_kitchen",
-        route_kind="deferred_tool",
-        negotiation_eligible=True,
-        pull_eligible=True,
-        response_exemption_tool="open_kitchen",
-        response_exemption=None,
-    ),
-    "load_recipe": RecipeDeliverySurfaceDef(
-        producer_tool="load_recipe",
-        route_kind="tool",
-        negotiation_eligible=True,
-        pull_eligible=True,
-        response_exemption_tool="load_recipe",
-        response_exemption=ResponseBackstopExemptionDef(
-            max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-            max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
-            measurement_id="bundled-recipes-all-modes-2026-07-22/load-recipe",
+        "open_kitchen_deferred_recall": RecipeDeliverySurfaceDef(
+            producer_tool="open_kitchen",
+            route_kind="deferred_tool",
+            negotiation_eligible=True,
+            pull_eligible=True,
+            response_exemption_tool="open_kitchen",
+            response_exemption=None,
         ),
-    ),
-    "get_recipe": RecipeDeliverySurfaceDef(
-        producer_tool="get_recipe",
-        route_kind="resource",
-        negotiation_eligible=False,
-        pull_eligible=True,
-        response_exemption_tool=None,
-        response_exemption=None,
-    ),
-}
+        "load_recipe": RecipeDeliverySurfaceDef(
+            producer_tool="load_recipe",
+            route_kind="tool",
+            negotiation_eligible=True,
+            pull_eligible=True,
+            response_exemption_tool="load_recipe",
+            response_exemption=ResponseBackstopExemptionDef(
+                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                measurement_id="bundled-recipes-all-modes-2026-07-22/load-recipe",
+            ),
+        ),
+        "get_recipe": RecipeDeliverySurfaceDef(
+            producer_tool="get_recipe",
+            route_kind="resource",
+            negotiation_eligible=False,
+            pull_eligible=True,
+            response_exemption_tool=None,
+            response_exemption=None,
+        ),
+    }
+)
 
 
 def _recipe_delivery_surface_registry_digest() -> str:
@@ -257,11 +261,16 @@ def _recipe_delivery_surface_registry_digest() -> str:
 
 RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST: str = _recipe_delivery_surface_registry_digest()
 
-RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: dict[str, ResponseBackstopExemptionDef] = {
-    definition.response_exemption_tool: definition.response_exemption
-    for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
-    if definition.response_exemption_tool is not None and definition.response_exemption is not None
-}
+RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: Mapping[str, ResponseBackstopExemptionDef] = (
+    MappingProxyType(
+        {
+            definition.response_exemption_tool: definition.response_exemption
+            for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
+            if definition.response_exemption_tool is not None
+            and definition.response_exemption is not None
+        }
+    )
+)
 
 
 def _response_backstop_exemption_registry_digest() -> str:

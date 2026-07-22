@@ -7,6 +7,8 @@ Registry membership: all four surfaces registered, no phantom entries.
 from __future__ import annotations
 
 import ast
+import operator
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -61,11 +63,17 @@ def test_recipe_delivery_surface_registry_is_typed() -> None:
         RecipeDeliverySurfaceDef,
     )
 
-    assert isinstance(RECIPE_DELIVERY_SURFACE_REGISTRY, dict)
+    assert isinstance(RECIPE_DELIVERY_SURFACE_REGISTRY, Mapping)
     assert all(
         isinstance(definition, RecipeDeliverySurfaceDef)
         for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
     )
+    with pytest.raises(TypeError):
+        operator.setitem(
+            RECIPE_DELIVERY_SURFACE_REGISTRY,
+            "mutated",
+            next(iter(RECIPE_DELIVERY_SURFACE_REGISTRY.values())),
+        )
 
 
 def test_serve_surfaces_contains_expected_members() -> None:

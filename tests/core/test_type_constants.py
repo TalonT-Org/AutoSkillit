@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import operator
 
 import pytest
 
@@ -42,6 +43,12 @@ def test_response_backstop_exemption_registry_is_closed_and_pinned() -> None:
             measurement_id="bundled-recipes-all-modes-2026-07-22/open-kitchen",
         ),
     }
+    with pytest.raises(TypeError):
+        operator.setitem(
+            RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+            "mutated",
+            RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["load_recipe"],
+        )
 
 
 def test_response_backstop_exemption_registry_digest_is_canonical() -> None:

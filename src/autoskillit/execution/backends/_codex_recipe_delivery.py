@@ -24,6 +24,7 @@ from autoskillit.core import (
 )
 
 _MARKER_MAX_BYTES = 64 * 1024
+_MARKER_MAX_CANDIDATES = 256
 _ROLLOUT_RECORD_MAX_BYTES = 256 * 1024
 _LEDGER_SCHEMA_VERSION = 1
 _DATABASE_NAME = "codex-recipe-delivery.sqlite3"
@@ -160,21 +161,22 @@ def enumerate_fresh_codex_marker_ids(
     now_unix: int,
     ttl_seconds: int = 24 * 60 * 60,
 ) -> tuple[tuple[str, Path], ...]:
-    """Return every fresh marker; ordering never grants authority."""
+    """Return fresh markers within a strict diagnostic-work ceiling."""
     state_dir = _marker_state_dir(project_dir)
     try:
-        candidates = tuple(state_dir.glob("*.json"))
+        fresh: list[tuple[str, Path]] = []
+        for candidate_count, path in enumerate(state_dir.glob("*.json"), start=1):
+            if candidate_count > _MARKER_MAX_CANDIDATES:
+                return ()
+            session_id = _fresh_marker_session_id(
+                path,
+                now_unix=now_unix,
+                ttl_seconds=ttl_seconds,
+            )
+            if session_id is not None:
+                fresh.append((session_id, path))
     except OSError:
         return ()
-    fresh: list[tuple[str, Path]] = []
-    for path in candidates:
-        session_id = _fresh_marker_session_id(
-            path,
-            now_unix=now_unix,
-            ttl_seconds=ttl_seconds,
-        )
-        if session_id is not None:
-            fresh.append((session_id, path))
     return tuple(sorted(fresh, key=lambda item: (item[0], str(item[1]))))
 
 

@@ -21,6 +21,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.execution.backends._codex_recipe_delivery import (
+    _MARKER_MAX_CANDIDATES,
     CodexHostCorrelation,
     CodexOuterBudgetAttestor,
     NullProtectedHostAttestationProvider,
@@ -201,6 +202,20 @@ def test_oversized_marker_fails_closed_without_unbounded_read(tmp_path: Path) ->
     _write_marker_and_rollout(tmp_path, "thread-oversized-marker")
     marker = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "thread-oversized-marker.json"
     marker.write_bytes(b"x" * ((64 * 1024) + 1))
+
+    assert enumerate_fresh_codex_marker_ids(tmp_path, now_unix=_NOW) == ()
+
+
+def test_marker_enumeration_fails_closed_above_candidate_ceiling(tmp_path: Path) -> None:
+    state_dir = tmp_path / ".autoskillit" / "temp" / "kitchen_state"
+    state_dir.mkdir(parents=True)
+    opened_at = datetime.fromtimestamp(_NOW - 10, tz=UTC).isoformat()
+    for index in range(_MARKER_MAX_CANDIDATES + 1):
+        session_id = f"thread-candidate-{index:04d}"
+        (state_dir / f"{session_id}.json").write_text(
+            json.dumps({"session_id": session_id, "opened_at": opened_at}),
+            encoding="utf-8",
+        )
 
     assert enumerate_fresh_codex_marker_ids(tmp_path, now_unix=_NOW) == ()
 

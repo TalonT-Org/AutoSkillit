@@ -669,6 +669,24 @@ def test_make_plan_conditional_write_behavior(skills):
     assert mp["write_expected_when"] == ["verdict[ \\t]*=[ \\t]*plan"]
 
 
+def test_validate_audit_verdict_allowed_values(skills):
+    outputs = [o for o in skills["validate-audit"]["outputs"] if o["name"] == "verdict"]
+    assert len(outputs) == 1
+    assert outputs[0]["allowed_values"] == ["validated"]
+
+
+def test_validate_test_audit_verdict_allowed_values(skills):
+    outputs = [o for o in skills["validate-test-audit"]["outputs"] if o["name"] == "verdict"]
+    assert len(outputs) == 1
+    assert outputs[0]["allowed_values"] == ["validated"]
+
+
+def test_audit_impl_verdict_allowed_values(skills):
+    outputs = [o for o in skills["audit-impl"]["outputs"] if o["name"] == "verdict"]
+    assert len(outputs) == 1
+    assert outputs[0]["allowed_values"] == ["GO", "NO GO"]
+
+
 def test_make_plan_examples_cover_verdicts(skills):
     """pattern_examples must include examples for both verdict values."""
     mp = skills["make-plan"]

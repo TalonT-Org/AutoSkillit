@@ -21,6 +21,7 @@ from autoskillit.execution.headless import (
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.recipe._contracts_types import SkillContract, SkillOutput
+from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
 from tests.conftest import _make_result
 from tests.execution.conftest import _mock_backend, _success_session_json
 
@@ -378,3 +379,40 @@ class TestEnumNudgeIntegration:
             skill_contract=contract,
         )
         assert rejected is None
+
+
+class TestBundledContractActivation:
+    """Real-bundled-manifest activation proofs for #4305 Part A metadata (skill_contracts.yaml)."""
+
+    def test_validate_audit_contract_enables_enum_inference(self):
+        manifest = load_bundled_manifest()
+        contract = get_skill_contract("validate-audit", manifest)
+        assert _parse_single_enum_binding(contract) == ("verdict", "validated")
+
+    def test_validate_test_audit_contract_enables_enum_inference(self):
+        manifest = load_bundled_manifest()
+        contract = get_skill_contract("validate-test-audit", manifest)
+        assert _parse_single_enum_binding(contract) == ("verdict", "validated")
+
+    def test_audit_impl_contract_enables_enum_nudge_hint(self):
+        manifest = load_bundled_manifest()
+        contract = get_skill_contract("audit-impl", manifest)
+        assert contract is not None
+
+        assert _parse_single_enum_binding(contract) is None
+
+        stdout = _write_ndjson("no verdict token here\n%%ORDER_UP%%", "/tmp/remediation.md")
+        hints = _extract_missing_token_hints(
+            stdout,
+            contract.expected_output_patterns,
+            ClaudeResultParser(),
+            frozenset({"Write", "Edit"}),
+            skill_contract=contract,
+        )
+        assert len(hints) == 1
+        hint = hints[0]
+        from autoskillit.execution.headless._headless_recovery import _EnumHint
+
+        assert isinstance(hint, _EnumHint)
+        assert hint.token == "verdict"
+        assert set(hint.allowed_values) == {"GO", "NO GO"}

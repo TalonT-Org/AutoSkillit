@@ -277,7 +277,6 @@ def load_recipe_artifact(
             max_bytes=RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES,
             error="recipe generation descriptor exceeds read limit",
         )
-        descriptor_raw = descriptor_bytes.decode("utf-8")
     if len(blob) != identity.artifact_blob_size_bytes:
         raise RecipeArtifactError("artifact blob size mismatch")
     if _qualified_sha256(blob) != identity.artifact_blob_sha256:
@@ -285,9 +284,10 @@ def load_recipe_artifact(
     if _domain_sha256("autoskillit.recipe-payload.v1", blob) != identity.payload_sha256:
         raise RecipeArtifactError("semantic payload digest mismatch")
     try:
+        descriptor_raw = descriptor_bytes.decode("utf-8")
         descriptor = json.loads(descriptor_raw)
         payload = json.loads(blob)
-    except json.JSONDecodeError as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RecipeArtifactError("recipe generation is not valid JSON") from exc
     if descriptor != identity.pull_identity():
         raise RecipeArtifactError("generation descriptor mismatch")

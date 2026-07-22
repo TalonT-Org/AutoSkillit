@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -152,6 +153,41 @@ def test_generation_descriptor_read_has_server_owned_ceiling(tmp_path: Path) -> 
     descriptor_path.write_bytes(b"x" * 20_000)
 
     with pytest.raises(RecipeArtifactError, match="descriptor exceeds read limit"):
+        load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=generation)
+
+
+def test_non_utf8_payload_is_normalized_to_recipe_artifact_error(tmp_path: Path) -> None:
+    blob = b"\xff"
+    qualified_blob_sha = f"sha256:{hashlib.sha256(blob).hexdigest()}"
+    payload_sha = "sha256:" + hashlib.sha256(b"autoskillit.recipe-payload.v1\0" + blob).hexdigest()
+    empty_body_sha = f"sha256:{hashlib.sha256(b'').hexdigest()}"
+    generation = RecipeArtifactGeneration(
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        descriptor_version=1,
+        schema_version=1,
+        payload_sha256=payload_sha,
+        artifact_blob_sha256=qualified_blob_sha,
+        artifact_blob_size_bytes=len(blob),
+        body_sha256=empty_body_sha,
+        body_size_bytes=0,
+    )
+    directory = (
+        tmp_path
+        / "recipe-delivery"
+        / "kitchen-test"
+        / "open_kitchen"
+        / "remediation"
+        / payload_sha.replace(":", "_")
+    )
+    directory.mkdir(parents=True)
+    (directory / "payload.json").write_bytes(blob)
+    (directory / "descriptor.json").write_text(
+        json.dumps(generation.pull_identity(), sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecipeArtifactError, match="not valid JSON"):
         load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=generation)
 
 

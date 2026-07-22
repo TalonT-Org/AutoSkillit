@@ -10,6 +10,7 @@ from autoskillit.recipe._cmd_rpc_guards import (  # noqa: F401
     commit_guard,
     compute_branch,
     main_repo_guard,
+    verify_plan_artifacts,
 )
 from autoskillit.recipe._cmd_rpc_issues import (  # noqa: F401
     batch_create_issues,

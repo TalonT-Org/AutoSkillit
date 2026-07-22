@@ -3016,6 +3016,19 @@ callable_contracts:
     - name: cleaned
       type: str
       allowed_values: ["false", "true", "force", "failed"]
+  autoskillit.recipe._cmd_rpc.verify_plan_artifacts:
+    inputs:
+    - name: plan_parts
+      type: str
+      required: true
+    outputs:
+    - name: verdict
+      type: str
+      allowed_values: ["salvaged", "unsalvageable"]
+    - name: plan_parts
+      type: str
+    - name: plan_path
+      type: str
   autoskillit.recipe._cmd_rpc.review_path_rebase:
     inputs:
     - name: work_dir

@@ -8,9 +8,11 @@ import sqlite3
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+import autoskillit.execution.backends._codex_recipe_delivery as recipe_delivery
 from autoskillit.core import (
     CodexRecipeDeliveryEvidenceDef,
     RecipeDeliveryAttestation,
@@ -449,6 +451,40 @@ def test_reservation_atomically_consumes_call_and_creates_pending(tmp_path: Path
     with sqlite3.connect(ledger.path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM consumed_calls").fetchone() == (1,)
         assert connection.execute("SELECT COUNT(*) FROM receipts").fetchone() == (1,)
+
+
+def test_interrupted_first_initialization_does_not_publish_invalid_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    authority = _authority(tmp_path)
+    real_connect = sqlite3.connect
+
+    class _InterruptedConnection:
+        def __init__(self, path: str | Path, **kwargs: Any) -> None:
+            self._connection = real_connect(path, **kwargs)
+
+        def execute(self, *args: Any, **kwargs: Any) -> Any:
+            return self._connection.execute(*args, **kwargs)
+
+        def executescript(self, _script: str) -> None:
+            raise sqlite3.OperationalError("simulated interrupted initialization")
+
+        def close(self) -> None:
+            self._connection.close()
+
+    monkeypatch.setattr(recipe_delivery.sqlite3, "connect", _InterruptedConnection)
+    with pytest.raises(sqlite3.OperationalError, match="interrupted initialization"):
+        RecipeDeliveryReceiptLedger.initialize_protected(authority)
+
+    final_path = authority.root / "codex-recipe-delivery.sqlite3"
+    assert not final_path.exists()
+    assert list(authority.root.glob("*.tmp")) == []
+
+    monkeypatch.setattr(recipe_delivery.sqlite3, "connect", real_connect)
+    ledger = RecipeDeliveryReceiptLedger.initialize_protected(authority)
+    reopened = RecipeDeliveryReceiptLedger.open_existing(authority)
+    assert reopened is not None
+    assert reopened.path == ledger.path
 
 
 def test_owner_checked_commit_and_abort(tmp_path: Path) -> None:

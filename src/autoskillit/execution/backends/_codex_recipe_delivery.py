@@ -316,58 +316,72 @@ class RecipeDeliveryReceiptLedger:
             if existing is None:
                 raise RuntimeError("existing protected receipt store is invalid")
             return existing
-        connection = sqlite3.connect(ledger._path, timeout=0, isolation_level=None)
+        temporary_path = authority.root / f".{_DATABASE_NAME}.{uuid4().hex}.tmp"
         try:
-            connection.execute("PRAGMA journal_mode=DELETE")
-            connection.execute("PRAGMA synchronous=FULL")
-            connection.execute("PRAGMA busy_timeout=0")
-            connection.executescript(
-                """
-                BEGIN IMMEDIATE;
-                CREATE TABLE IF NOT EXISTS metadata (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS consumed_calls (
-                    thread_id TEXT NOT NULL,
-                    turn_id TEXT NOT NULL,
-                    outer_call_id TEXT NOT NULL,
-                    code_digest TEXT NOT NULL,
-                    delivery_call_id TEXT NOT NULL,
-                    consumed_at_unix INTEGER NOT NULL,
-                    PRIMARY KEY (thread_id, turn_id, outer_call_id, code_digest)
-                );
-                CREATE TABLE IF NOT EXISTS receipts (
-                    thread_id TEXT PRIMARY KEY,
-                    status TEXT NOT NULL CHECK (status IN ('pending', 'committed')),
-                    reservation_id TEXT NOT NULL UNIQUE,
-                    owner_token TEXT NOT NULL,
-                    producer TEXT NOT NULL,
-                    payload_sha256 TEXT NOT NULL,
-                    evidence_identity TEXT NOT NULL,
-                    caller_requested_outer_tokens INTEGER NOT NULL,
-                    host_observed_requested_outer_tokens INTEGER NOT NULL,
-                    selected_result_token_limit INTEGER NOT NULL,
-                    updated_at_unix INTEGER NOT NULL
-                );
-                COMMIT;
-                """
-            )
-            connection.execute(
-                "INSERT OR REPLACE INTO metadata(key, value) VALUES('schema_version', ?)",
-                (str(_LEDGER_SCHEMA_VERSION),),
-            )
-            connection.execute(
-                "INSERT OR REPLACE INTO metadata(key, value) VALUES('security_identity', ?)",
-                (authority.security_identity,),
-            )
+            connection = sqlite3.connect(temporary_path, timeout=0, isolation_level=None)
+            try:
+                connection.execute("PRAGMA journal_mode=DELETE")
+                connection.execute("PRAGMA synchronous=FULL")
+                connection.execute("PRAGMA busy_timeout=0")
+                connection.executescript(
+                    """
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE IF NOT EXISTS metadata (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS consumed_calls (
+                        thread_id TEXT NOT NULL,
+                        turn_id TEXT NOT NULL,
+                        outer_call_id TEXT NOT NULL,
+                        code_digest TEXT NOT NULL,
+                        delivery_call_id TEXT NOT NULL,
+                        consumed_at_unix INTEGER NOT NULL,
+                        PRIMARY KEY (thread_id, turn_id, outer_call_id, code_digest)
+                    );
+                    CREATE TABLE IF NOT EXISTS receipts (
+                        thread_id TEXT PRIMARY KEY,
+                        status TEXT NOT NULL CHECK (status IN ('pending', 'committed')),
+                        reservation_id TEXT NOT NULL UNIQUE,
+                        owner_token TEXT NOT NULL,
+                        producer TEXT NOT NULL,
+                        payload_sha256 TEXT NOT NULL,
+                        evidence_identity TEXT NOT NULL,
+                        caller_requested_outer_tokens INTEGER NOT NULL,
+                        host_observed_requested_outer_tokens INTEGER NOT NULL,
+                        selected_result_token_limit INTEGER NOT NULL,
+                        updated_at_unix INTEGER NOT NULL
+                    );
+                    COMMIT;
+                    """
+                )
+                connection.execute(
+                    "INSERT OR REPLACE INTO metadata(key, value) VALUES('schema_version', ?)",
+                    (str(_LEDGER_SCHEMA_VERSION),),
+                )
+                connection.execute(
+                    "INSERT OR REPLACE INTO metadata(key, value) VALUES('security_identity', ?)",
+                    (authority.security_identity,),
+                )
+            finally:
+                connection.close()
+            try:
+                os.chmod(temporary_path, 0o600)
+            except OSError:
+                pass
+            try:
+                os.link(temporary_path, ledger._path)
+            except FileExistsError:
+                existing = cls.open_existing(authority)
+                if existing is None:
+                    raise RuntimeError("existing protected receipt store is invalid")
+                return existing
+            return ledger
         finally:
-            connection.close()
-        try:
-            os.chmod(ledger._path, 0o600)
-        except OSError:
-            pass
-        return ledger
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     @classmethod
     def open_existing(

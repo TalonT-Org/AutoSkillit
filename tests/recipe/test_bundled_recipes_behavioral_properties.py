@@ -289,12 +289,19 @@ def test_salvage_step_routes_match_plan_step_destinations(
 
     assert plan_step.on_context_limit == salvage_step_name
 
-    assert plan_step.on_result is not None
-    plan_success_route = next(
-        c.route
-        for c in plan_step.on_result.conditions
-        if c.when and "== plan" in c.when and "false_positive" not in c.when
-    )
+    if plan_step.on_result is not None:
+        plan_success_route = next(
+            c.route
+            for c in plan_step.on_result.conditions
+            if c.when and "== plan" in c.when and "false_positive" not in c.when
+        )
+    else:
+        assert plan_step.on_success is not None, (
+            f"{recipe_name}.{step_name}: must declare either on_result (verdict "
+            f"routing) or on_success — the salvage step's success destination is "
+            f"read from whichever is present"
+        )
+        plan_success_route = plan_step.on_success
 
     assert salvage_step.on_result is not None
     salvaged_route = next(

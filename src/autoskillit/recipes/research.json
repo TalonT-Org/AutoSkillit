@@ -519,7 +519,33 @@
         }
       ],
       "on_failure": "escalate_stop",
+      "on_context_limit": "salvage_plan_phase",
       "note": "Plans the current setup phase. Replace ${{ context.group_files }} in the skill_command with the FIRST REMAINING phase file path from the list — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob plan_dir for *_part_*.md or single plan file. ITERATION: After each implement_phase cycle, advance to the next entry in context.group_files for the following plan_phase iteration.\n"
+    },
+    "salvage_plan_phase": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.verify_plan_artifacts",
+        "plan_parts": "${{ context.plan_parts }}"
+      },
+      "capture": {
+        "phase_plan_path": "${{ result.plan_path }}"
+      },
+      "capture_list": {
+        "plan_parts": "${{ result.plan_parts }}"
+      },
+      "retries": 0,
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == salvaged",
+          "route": "implement_phase"
+        },
+        {
+          "route": "escalate_stop"
+        }
+      ],
+      "on_failure": "escalate_stop",
+      "note": "Deterministic salvage for plan_phase context-limit stumbles: verifies captured plan_parts artifacts exist on disk. salvaged routes onward as if plan_phase succeeded; unsalvageable falls through to plan_phase's original on_failure destination.\n"
     },
     "implement_phase": {
       "tool": "run_skill",

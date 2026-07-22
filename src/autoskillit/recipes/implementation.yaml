@@ -252,6 +252,7 @@ steps:
       route: check_has_commits
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
+    on_context_limit: salvage_plan
     note: 'Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md
       or single plan file. plan_parts context key contains the full ordered list of
       part files (sorted alphabetically). For a single-part plan, plan_parts has one
@@ -273,6 +274,24 @@ steps:
       finding is a false positive). false_positive skips implement and routes to check_has_commits.
 
       '
+  salvage_plan:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_plan_artifacts
+      plan_parts: ${{ context.plan_parts }}
+    capture:
+      plan_path: ${{ result.plan_path }}
+    capture_list:
+      plan_parts: ${{ result.plan_parts }}
+    retries: 0
+    on_result:
+    - when: ${{ result.verdict }} == salvaged
+      route: review_approach
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+    note: 'Deterministic salvage for plan context-limit stumbles: verifies captured
+      plan_parts artifacts exist on disk. salvaged routes onward as if plan succeeded;
+      unsalvageable falls through to plan''s original on_failure destination.'
   review_approach:
     tool: run_skill
     model: ''

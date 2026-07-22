@@ -898,6 +898,7 @@ steps:
       route: verify
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
+    on_context_limit: salvage_plan
     note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
       into plan_parts[]. For a single-part plan, plan_parts has one entry equal to
       plan_path. PRIMARY PATH: context.task = conflict_report_path from merge_pr.
@@ -905,6 +906,24 @@ steps:
       remediate step; pass it inline in the skill_command instead of context.task.
 
       '
+  salvage_plan:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_plan_artifacts
+      plan_parts: ${{ context.plan_parts }}
+    capture:
+      pr_plan_path: ${{ result.plan_path }}
+    capture_list:
+      plan_parts: ${{ result.plan_parts }}
+    retries: 0
+    on_result:
+    - when: ${{ result.verdict }} == salvaged
+      route: verify
+    - route: register_clone_failure
+    on_failure: register_clone_failure
+    note: 'Deterministic salvage for plan context-limit stumbles: verifies captured
+      plan_parts artifacts exist on disk. salvaged routes onward as if plan succeeded;
+      unsalvageable falls through to plan''s original on_failure destination.'
   verify:
     tool: run_skill
     model: ''

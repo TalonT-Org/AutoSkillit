@@ -575,8 +575,10 @@ class TestLoadRecipeIngredientsOnly:
         # are present (no full content), but step_flow_skeleton is empty.
         assert "content" not in result
         # Orchestration fields are part of the envelope; when ingredients_only=True,
-        # they are stripped per the strip_ingredients_only_keys policy.
-        # The contract is: envelope minimal, no step routing skeleton, no full content.
+        # they are stripped per the strip_ingredients_only_keys policy before the
+        # envelope is built, so they surface here as falsy (present but None).
+        assert not result.get("orchestration_rules")
+        assert not result.get("stop_step_semantics")
         assert result.get("step_flow_skeleton") == []
         assert "suggestions" in result
 

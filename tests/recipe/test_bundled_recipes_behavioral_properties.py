@@ -28,16 +28,74 @@ _RECIPE_NAMES = [p.name for p in _BUNDLED_ONLY]
 CONTEXT_LIMIT_EXEMPT_STEPS: dict[str, set[str]] = {
     "planner": set(),
     "remediation": set(),
-    "research": set(),
+    "research": {
+        "scope",
+        "select_directions",
+        "plan_experiment",
+        "vis_dial",
+        "vis_apply",
+        "vis_synthesize",
+        "stage_data",
+        "download_data",
+        "setup_environment",
+        "decompose_phases",
+        "troubleshoot_implement_failure",
+        "run_experiment",
+        "troubleshoot_run_failure",
+        "prepare_research_pr",
+        "run_experiment_lenses",
+        "compose_research_pr",
+        "finalize_bundle_render",
+    },
     "implementation": set(),
-    "implementation-groups": set(),
-    "merge-prs": set(),
-    "full-audit": set(),
-    "bem-wrapper": set(),
-    "research-design": set(),
-    "research-implement": set(),
-    "research-review": set(),
+    "implementation-groups": {"group"},
+    "merge-prs": {
+        "analyze_prs",
+        "diagnose_queue_ci",
+        "open_integration_pr",
+        "review_pr_integration",
+        "diagnose_ci",
+    },
+    "full-audit": {"run_audits", "validate_audits", "create_issues"},
+    "bem-wrapper": {"run_bem"},
+    "research-design": {
+        "scope",
+        "select_directions",
+        "plan_experiment",
+        "vis_dial",
+        "vis_apply",
+        "vis_synthesize",
+    },
+    "research-implement": {
+        "stage_data",
+        "download_data",
+        "decompose_phases",
+        "troubleshoot_implement_failure",
+        "troubleshoot_run_failure",
+    },
+    "research-review": {
+        "prepare_research_pr",
+        "run_experiment_lenses",
+        "compose_research_pr",
+        "finalize_bundle_render",
+    },
 }
+
+# Every recipe key above with a non-empty exemption set must be cited here.
+# tracking: #4305 — pre-existing gaps surfaced by dismantling the recipe-level
+# allowlist this dict replaced; not yet given salvage routes.
+CONTEXT_LIMIT_EXEMPT_STEPS_TRACKING: dict[str, str] = {
+    "research": "#4305",
+    "implementation-groups": "#4305",
+    "merge-prs": "#4305",
+    "full-audit": "#4305",
+    "bem-wrapper": "#4305",
+    "research-design": "#4305",
+    "research-implement": "#4305",
+    "research-review": "#4305",
+}
+
+_CONTEXT_LIMIT_EXEMPT_STEPS_CAP = 42
 
 PARALLEL_ELIGIBLE_DISPATCH_STEPS: dict[str, set[str]] = {
     "planner": {
@@ -58,47 +116,179 @@ def _recipe_base_name(filename: str) -> str:
     return filename.removesuffix(".yaml")
 
 
-_CONTEXT_LIMIT_COMPLIANT_RECIPES: set[str] = {
-    "consolidate-health-reports",
-    "implement-findings",
-    "planner",
-    "promote-to-main",
-    "promote-to-main-wrapper",
-    "research-archive",
-    "research-campaign",
-}
-
-
 RATE_LIMIT_EXEMPT_STEPS: dict[str, set[str]] = {
     "planner": set(),
     "remediation": set(),
-    "research": set(),
+    "research": {
+        "scope",
+        "select_directions",
+        "plan_experiment",
+        "dial",
+        "apply",
+        "vis_dial",
+        "vis_apply",
+        "vis_synthesize",
+        "resolve_design_review",
+        "stage_data",
+        "download_data",
+        "setup_environment",
+        "decompose_phases",
+        "plan_phase",
+        "implement_phase",
+        "troubleshoot_implement_failure",
+        "audit_impl",
+        "run_experiment",
+        "troubleshoot_run_failure",
+        "adjust_experiment",
+        "generate_report",
+        "generate_report_inconclusive",
+        "fix_tests",
+        "prepare_research_pr",
+        "run_experiment_lenses",
+        "compose_research_pr",
+        "review_research_pr",
+        "audit_claims",
+        "resolve_research_review",
+        "resolve_claims_review",
+        "re_run_experiment",
+        "re_generate_report",
+        "finalize_bundle_render",
+    },
     "implementation": set(),
     "implementation-groups": set(),
     "merge-prs": set(),
-    "full-audit": set(),
-    "bem-wrapper": set(),
-    "research-design": set(),
-    "research-implement": set(),
-    "research-review": set(),
+    "full-audit": {"run_audits", "validate_audits", "create_issues"},
+    "bem-wrapper": {"run_bem"},
+    "implement-findings": {"run_bem_internally"},
+    "research-design": {
+        "scope",
+        "select_directions",
+        "plan_experiment",
+        "dial",
+        "apply",
+        "vis_dial",
+        "vis_apply",
+        "vis_synthesize",
+        "resolve_design_review",
+    },
+    "research-implement": {
+        "stage_data",
+        "download_data",
+        "decompose_phases",
+        "plan_phase",
+        "implement_phase",
+        "troubleshoot_implement_failure",
+        "audit_impl",
+        "run_experiment",
+        "troubleshoot_run_failure",
+        "adjust_experiment",
+        "generate_report",
+        "generate_report_inconclusive",
+        "fix_tests",
+    },
+    "research-review": {
+        "prepare_research_pr",
+        "run_experiment_lenses",
+        "compose_research_pr",
+        "review_research_pr",
+        "audit_claims",
+        "resolve_research_review",
+        "resolve_claims_review",
+        "re_run_experiment",
+        "re_generate_report",
+        "finalize_bundle_render",
+    },
 }
 
-
-_RATE_LIMIT_COMPLIANT_RECIPES: set[str] = {
-    "remediation",
-    "implementation",
-    "implementation-groups",
-    "merge-prs",
-    "promote-to-main-wrapper",
-    "planner",
+# Every recipe key above with a non-empty exemption set must be cited here.
+# tracking: #4305 — pre-existing gaps surfaced by dismantling the recipe-level
+# allowlist this dict replaced; not yet given salvage routes.
+RATE_LIMIT_EXEMPT_STEPS_TRACKING: dict[str, str] = {
+    "research": "#4305",
+    "full-audit": "#4305",
+    "bem-wrapper": "#4305",
+    "implement-findings": "#4305",
+    "research-design": "#4305",
+    "research-implement": "#4305",
+    "research-review": "#4305",
 }
+
+_RATE_LIMIT_EXEMPT_STEPS_CAP = 70
+
+
+def test_context_limit_exempt_steps_size_cap() -> None:
+    """CONTEXT_LIMIT_EXEMPT_STEPS must not grow beyond current size.
+
+    If this test fails, a new exemption was added. Fix the recipe (add a real
+    on_context_limit salvage route) instead of silently growing this registry.
+    """
+    total = sum(len(v) for v in CONTEXT_LIMIT_EXEMPT_STEPS.values())
+    assert total <= _CONTEXT_LIMIT_EXEMPT_STEPS_CAP, (
+        f"CONTEXT_LIMIT_EXEMPT_STEPS has {total} entries (cap: "
+        f"{_CONTEXT_LIMIT_EXEMPT_STEPS_CAP}). Fix the recipe instead of adding exemptions."
+    )
+
+
+def test_context_limit_exempt_steps_have_tracking_comments() -> None:
+    """Every non-empty CONTEXT_LIMIT_EXEMPT_STEPS entry must cite a tracking issue."""
+    missing = [
+        recipe
+        for recipe, steps in CONTEXT_LIMIT_EXEMPT_STEPS.items()
+        if steps and recipe not in CONTEXT_LIMIT_EXEMPT_STEPS_TRACKING
+    ]
+    assert not missing, (
+        f"CONTEXT_LIMIT_EXEMPT_STEPS entries missing a tracking citation: {missing}. "
+        "Add an entry to CONTEXT_LIMIT_EXEMPT_STEPS_TRACKING with the relevant issue number."
+    )
+    stale = [
+        recipe
+        for recipe in CONTEXT_LIMIT_EXEMPT_STEPS_TRACKING
+        if not CONTEXT_LIMIT_EXEMPT_STEPS.get(recipe)
+    ]
+    assert not stale, (
+        f"CONTEXT_LIMIT_EXEMPT_STEPS_TRACKING has stale entries with no matching "
+        f"non-empty exemption: {stale}. Remove them."
+    )
+
+
+def test_rate_limit_exempt_steps_size_cap() -> None:
+    """RATE_LIMIT_EXEMPT_STEPS must not grow beyond current size.
+
+    If this test fails, a new exemption was added. Fix the recipe (add a real
+    on_rate_limit route) instead of silently growing this registry.
+    """
+    total = sum(len(v) for v in RATE_LIMIT_EXEMPT_STEPS.values())
+    assert total <= _RATE_LIMIT_EXEMPT_STEPS_CAP, (
+        f"RATE_LIMIT_EXEMPT_STEPS has {total} entries (cap: "
+        f"{_RATE_LIMIT_EXEMPT_STEPS_CAP}). Fix the recipe instead of adding exemptions."
+    )
+
+
+def test_rate_limit_exempt_steps_have_tracking_comments() -> None:
+    """Every non-empty RATE_LIMIT_EXEMPT_STEPS entry must cite a tracking issue."""
+    missing = [
+        recipe
+        for recipe, steps in RATE_LIMIT_EXEMPT_STEPS.items()
+        if steps and recipe not in RATE_LIMIT_EXEMPT_STEPS_TRACKING
+    ]
+    assert not missing, (
+        f"RATE_LIMIT_EXEMPT_STEPS entries missing a tracking citation: {missing}. "
+        "Add an entry to RATE_LIMIT_EXEMPT_STEPS_TRACKING with the relevant issue number."
+    )
+    stale = [
+        recipe
+        for recipe in RATE_LIMIT_EXEMPT_STEPS_TRACKING
+        if not RATE_LIMIT_EXEMPT_STEPS.get(recipe)
+    ]
+    assert not stale, (
+        f"RATE_LIMIT_EXEMPT_STEPS_TRACKING has stale entries with no matching "
+        f"non-empty exemption: {stale}. Remove them."
+    )
 
 
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
 def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:
     """Every run_skill step must declare on_context_limit (or be exempt)."""
-    if _recipe_base_name(recipe_name) not in _CONTEXT_LIMIT_COMPLIANT_RECIPES:
-        pytest.xfail("on_context_limit handlers not yet added to all bundled recipes")
     recipe_path = next(p for p in _BUNDLED_ONLY if p.name == recipe_name)
     recipe = load_recipe(recipe_path)
     exempt = CONTEXT_LIMIT_EXEMPT_STEPS.get(_recipe_base_name(recipe_name), set())
@@ -134,8 +324,6 @@ def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
 def test_run_skill_steps_declare_on_rate_limit(recipe_name: str) -> None:
     """Every run_skill step must declare on_rate_limit (or be exempt)."""
-    if _recipe_base_name(recipe_name) not in _RATE_LIMIT_COMPLIANT_RECIPES:
-        pytest.xfail("on_rate_limit handlers not yet added to all bundled recipes")
     recipe_path = next(p for p in _BUNDLED_ONLY if p.name == recipe_name)
     recipe = load_recipe(recipe_path)
     exempt = RATE_LIMIT_EXEMPT_STEPS.get(_recipe_base_name(recipe_name), set())

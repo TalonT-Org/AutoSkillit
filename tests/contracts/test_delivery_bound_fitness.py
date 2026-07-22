@@ -89,7 +89,10 @@ def _full_open_kitchen_payload(recipe_name: str) -> dict[str, object]:
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
 @pytest.mark.parametrize("backend_name", sorted(_backend_capabilities().keys()), ids=lambda n: n)
 def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
-    recipe_name: str, backend_name: str, tmp_path: Path
+    recipe_name: str,
+    backend_name: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """System-level fitness contract (issue #4304 Part B REQ-B-T7): the bounded
     envelope built unconditionally for every bundled recipe via
@@ -104,6 +107,10 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     envelope-fit-by-construction guarantee is the post-#4304-Part-B invariant
     that this file exists to defend.
     """
+    from autoskillit.recipe import _api_cache
+    from autoskillit.recipe._api_cache import LoadCache
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     payload = _full_open_kitchen_payload(recipe_name)
     generation = persist_recipe_artifact(
         tmp_path,
@@ -136,9 +143,12 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     )
     assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
     skeleton_steps = envelope["step_flow_skeleton"]["steps"]
-    assert skeleton_steps
-    assert {step["name"] for step in skeleton_steps} == set(payload["post_prune_step_names"])
-    assert any(step.get("summary") or step["edges"] for step in skeleton_steps)
+    expected_step_names = set(payload.get("post_prune_step_names") or [])
+    assert {step["name"] for step in skeleton_steps} == expected_step_names
+    if expected_step_names:
+        assert any(step.get("summary") or step["edges"] for step in skeleton_steps)
+    else:
+        assert not recipe.steps, "step-bearing recipes must expose production skeleton metadata"
 
 
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)

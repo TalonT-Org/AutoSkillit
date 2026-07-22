@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from tests.server._helpers import _resolve_recipe_content
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 
@@ -45,9 +47,5 @@ async def test_open_kitchen_ingredients_only_does_not_poison_load_recipe(
     )
 
     lr_result = json.loads(await load_recipe(name="implementation"))
-    assert "content" in lr_result, (
-        "load_recipe must return 'content' after open_kitchen(ingredients_only=True); "
-        "cache was poisoned by the ingredients_only pop"
-    )
-    assert isinstance(lr_result["content"], str)
-    assert len(lr_result["content"]) > 0
+    content = await _resolve_recipe_content(lr_result)
+    assert content, "load_recipe must provide pullable content after ingredients-only serving"

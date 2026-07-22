@@ -389,6 +389,7 @@ from .types import TimingLog as TimingLog
 from .types import TokenFactory as TokenFactory
 from .types import TokenLog as TokenLog
 from .types import TraditionManifest as TraditionManifest
+from .types import TruncationBoundsError as TruncationBoundsError
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath
 from .types import WorkspaceManager as WorkspaceManager

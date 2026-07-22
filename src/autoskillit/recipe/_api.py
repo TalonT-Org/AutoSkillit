@@ -20,6 +20,7 @@ from autoskillit.core import (
     RecipeNotFoundError,
     RecipeSource,
     SkillLister,
+    TruncationBoundsError,
     YAMLError,
     get_logger,
     pkg_root,
@@ -151,7 +152,7 @@ def _bounded_append(
             target[:] = bounded
             return
         if not kept:
-            raise ValueError("finding bounds are too small for the truncation sentinel")
+            raise TruncationBoundsError("finding bounds are too small for the truncation sentinel")
         kept.pop()
 
 

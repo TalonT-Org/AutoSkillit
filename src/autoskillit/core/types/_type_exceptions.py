@@ -7,6 +7,7 @@ __all__ = [
     "RecipeLoadError",
     "ProcessStaleError",
     "RecipeNotFoundError",
+    "TruncationBoundsError",
 ]
 
 
@@ -29,3 +30,13 @@ class CapabilityNotSupportedError(Exception):
         self.capability = capability
         self.backend_name = backend_name
         super().__init__(f"{backend_name!r} does not support capability {capability!r}")
+
+
+class TruncationBoundsError(Exception):
+    """Internal sizing invariant violated: bounds too small for the truncation sentinel.
+
+    Deliberately not a ``RecipeLoadError``/``ValueError`` subclass so it is not
+    conflated with recipe-authoring errors by ``load_and_validate``'s
+    ``except ValueError`` handler — it signals a misconfigured internal
+    constant, not a problem with the recipe being loaded.
+    """

@@ -281,8 +281,14 @@ def recipe_pull_producers() -> frozenset[str]:
     )
 
 
-def _estimated_tokens(rendered: str) -> int:
-    return (len(rendered.encode("utf-8")) + 3) // 4
+def _conservative_token_upper_bound(rendered: str) -> int:
+    """Bound tokenizer output without assuming four UTF-8 bytes per token.
+
+    Codex tokenization can merge bytes into one token, but it cannot require
+    more tokens than the number of input bytes. Using the exact byte count is
+    intentionally conservative for delivery-mode admission.
+    """
+    return len(rendered.encode("utf-8"))
 
 
 def _attested_render(
@@ -390,10 +396,11 @@ def finalize_recipe_delivery(
             candidate_evidence.identity if candidate_evidence is not None else "unsupported"
         ),
     )
+    ordinary_required_tokens = _conservative_token_upper_bound(ordinary_rendered)
     required_tokens = (
-        _estimated_tokens(ordinary_rendered)
-        if _estimated_tokens(ordinary_rendered) <= ordinary_limit
-        else _estimated_tokens(high_rendered)
+        ordinary_required_tokens
+        if ordinary_required_tokens <= ordinary_limit
+        else _conservative_token_upper_bound(high_rendered)
     )
     decision = resolve_recipe_delivery_decision(
         capabilities=capabilities,

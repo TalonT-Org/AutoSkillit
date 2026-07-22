@@ -173,6 +173,20 @@ def test_codex_without_supported_host_evidence_uses_bounded_envelope(tool_ctx) -
     assert len(finalized.rendered.encode("utf-8")) <= 40_000
 
 
+def test_token_dense_payload_does_not_use_four_byte_ordinary_estimate(tool_ctx) -> None:
+    tool_ctx.backend = CodexBackend()
+    tool_ctx.kitchen_id = "codex-token-dense"
+
+    finalized = finalize_recipe_delivery(
+        _payload("!" * 20_000),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+
+
 def _request() -> RecipeDeliveryRequest:
     budget = CODEX_RECIPE_DELIVERY_BUDGET
     return RecipeDeliveryRequest(

@@ -1,7 +1,6 @@
 ---
 name: rectify
-uses_capabilities: [agent_model, agent_subagent, cross_skill_ref]
-activate_deps: [arch-lens]
+uses_capabilities: [agent_model, agent_subagent]
 description: Deep investigation of test gaps and architectural weaknesses following an investigation, then devise a plan for architectural immunity rather than direct fixes. Use when user says "rectify", "rectify this", or wants to address root architectural causes after an investigation.
 hooks:
   PreToolUse:
@@ -77,6 +76,7 @@ Do not change any code.
   This token is MANDATORY — the pipeline cannot capture the output without it.
 - The solution must solve more than just the immediate issue
 - The plan must cover every remediation item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan
+- Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
 
 ## Context Limit Behavior
 
@@ -143,62 +143,9 @@ Design an approach that provides **immunity** rather than a fix:
 
 **Test-Driven Approach:** The plan must lead with tests. Before any implementation step, define a test that reproduces the issue or captures the gap. Each subsequent implementation step should make that test pass. This applies to the initial fix and to any broader architectural changes—write the failing test first, then the code that makes it green.
 
-### Step 4: Visualize with Architecture Lens
+Draft the complete immunity plan from Step 3's selected approach using the Output template before spawning adversarial reviewers.
 
-After finalizing the plan, determine which architecture lens best illustrates the proposed changes, then create a mermaid diagram.
-
-**4a. Select the lens based on what the plan primarily affects:**
-
-| If the plan primarily involves... | Use Lens |
-|-----------------------------------|----------|
-| Adding/modifying containers, services, or integrations | C4 Container |
-| Changing workflow logic, state machines, or decision flow | Process Flow |
-| Altering data storage, transformations, or information flow | Data Lineage |
-| Restructuring modules, changing dependencies, or layering | Module Dependency |
-| Adding/modifying parallel execution or thread handling | Concurrency |
-| Changing error handling, retry logic, or recovery paths | Error/Resilience |
-| Modifying repository patterns or data access | Repository Access |
-| Changing CLI commands, config, or monitoring | Operational |
-| Adding/modifying validation, trust boundaries, or isolation | Security |
-| Changing build tools, test framework, or quality gates | Development |
-| Affecting multiple user journeys or cross-component flows | Scenarios |
-| Modifying state contracts, field lifecycles, or resume logic | State Lifecycle |
-| Changing deployment topology or infrastructure | Deployment |
-
-**4b. Write your lens selection rationale to a file using the Write tool:**
-
-- **Path:** `{{AUTOSKILLIT_TEMP}}/rectify/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
-- **Content:** Which lens was selected and why (1-2 sentences of rationale).
-
-**4c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
-
-| Lens | Skill to LOAD |
-|------|---------------|
-| C4 Container | `/autoskillit:arch-lens-c4-container` |
-| Process Flow | `/autoskillit:arch-lens-process-flow` |
-| Data Lineage | `/autoskillit:arch-lens-data-lineage` |
-| Module Dependency | `/autoskillit:arch-lens-module-dependency` |
-| Concurrency | `/autoskillit:arch-lens-concurrency` |
-| Error/Resilience | `/autoskillit:arch-lens-error-resilience` |
-| Repository Access | `/autoskillit:arch-lens-repository-access` |
-| Operational | `/autoskillit:arch-lens-operational` |
-| Security | `/autoskillit:arch-lens-security` |
-| Development | `/autoskillit:arch-lens-development` |
-| Scenarios | `/autoskillit:arch-lens-scenarios` |
-| State Lifecycle | `/autoskillit:arch-lens-state-lifecycle` |
-| Deployment | `/autoskillit:arch-lens-deployment` |
-
-If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, omit the diagram and proceed without the architectural diagram.
-
-**4d. Create the diagram following the loaded skill's instructions:**
-- Focus on the PROPOSED changes (use `newComponent` class for new elements)
-- Show how new components integrate with existing architecture
-- Use `●` prefix for modified existing components
-- Use `★` prefix for new components
-
-Include the diagram in the plan document under a "## Proposed Architecture" section.
-
-### Step 5: Foundation Audit
+### Step 4: Foundation Audit
 
 Spawn 1 Foundation Auditor via `Agent(subagent_type="autoskillit:plan-foundation-auditor")`. Pass the full draft immunity plan text and the codebase root. Prepend the contrastive frame to the prompt:
 
@@ -213,11 +160,11 @@ The Foundation Auditor performs step-by-step control-flow analysis: enumerates f
 
 The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 
-After reading the agent's findings, revise the draft plan by incorporating all valid findings (real gaps, not hypotheticals) before proceeding to Step 6.
+After reading the agent's findings, revise the draft plan by incorporating all valid findings (real gaps, not hypotheticals) before proceeding to Step 5.
 
-### Step 6: Interface Mapping
+### Step 5: Interface Mapping
 
-Spawn 1 Interface Mapper via `Agent(subagent_type="autoskillit:plan-interface-mapper")`. Pass the **revised** draft plan text (from Step 5) and the codebase root. Prepend the contrastive frame to the prompt:
+Spawn 1 Interface Mapper via `Agent(subagent_type="autoskillit:plan-interface-mapper")`. Pass the **revised** draft plan text (from Step 4) and the codebase root. Prepend the contrastive frame to the prompt:
 
 > "A junior engineer reviewed this plan's variable usage and found it correct. What did they miss?"
 
@@ -232,11 +179,11 @@ The Interface Mapper traces variable SET/READ points with full hop-by-hop proven
 
 The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 
-After reading the agent's findings, revise the draft plan by incorporating all valid findings before proceeding to Step 7.
+After reading the agent's findings, revise the draft plan by incorporating all valid findings before proceeding to Step 6.
 
-### Step 7: Registry Trace
+### Step 6: Registry Trace
 
-Spawn 1 Registry Tracer via `Agent(subagent_type="autoskillit:plan-registry-tracer")`. Pass the **revised** draft plan text (from Step 6) and the codebase root. Prepend the contrastive frame to the prompt:
+Spawn 1 Registry Tracer via `Agent(subagent_type="autoskillit:plan-registry-tracer")`. Pass the **revised** draft plan text (from Step 5) and the codebase root. Prepend the contrastive frame to the prompt:
 
 > "A junior engineer reviewed this plan's registry coverage and found it complete. What did they miss?"
 
@@ -254,18 +201,6 @@ The `summary` field is **required** when `message` is a string — omitting it c
 After reading the agent's findings, apply all valid findings. The plan is now fully reviewed and ready for file write.
 
 ---
-
-## Skill Loading Checklist
-
-Before writing the final plan, verify:
-
-- [ ] Determined which architecture lens best fits the proposed changes
-- [ ] LOADED the corresponding `/autoskillit:arch-lens-*` skill using the Skill tool
-- [ ] The arch-lens skill LOADED the `/autoskillit:mermaid` skill for styling
-- [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
-- [ ] Diagram includes a color legend table
-- [ ] Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
-- [ ] Adversarial review pass completed (Steps 5-7) — all 3 agents spawned and findings applied
 
 ## Output
 
@@ -320,11 +255,6 @@ plan_parts = {path_to_part_a}
 
 ## Architectural Analysis
 {Map of affected components and their connections}
-
-## Proposed Architecture
-{Mermaid diagram showing the proposed changes using the selected lens}
-
-**Lens Used:** {lens name} - {why this lens was chosen}
 
 ## Immunity Plan
 

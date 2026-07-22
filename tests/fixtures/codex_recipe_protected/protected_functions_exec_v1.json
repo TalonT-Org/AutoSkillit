@@ -1,0 +1,33 @@
+{
+  "authenticated": true,
+  "caller_writable": false,
+  "complete": true,
+  "event": {
+    "audience": "autoskillit.recipe-delivery",
+    "code_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "code_mode_cell_id": "cell-001",
+    "contract_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "contract_version": 1,
+    "delivery_call_id": "delivery-001",
+    "evidence_identity": "protected-test-host-v1",
+    "evidence_version": 1,
+    "expires_at_unix": 2000000000,
+    "host_observed_requested_outer_tokens": 56750,
+    "nested_call_id": "delivery-001",
+    "nonce": "nonce-protected-001",
+    "outer_call_id": "functions-exec-001",
+    "parser_version": 1,
+    "pragma": "// @exec: {\"max_output_tokens\": 56750}",
+    "request_digest": "sha256:f22a40b809e97910f877aeffd34b8fdf31a4a2a42025acfbd6e706edfbf08a1a",
+    "selected_result_token_limit": 56750,
+    "thread_id": "thread-protected-001",
+    "tool_name": "functions.exec",
+    "turn_id": "turn-001"
+  },
+  "event_sequence": [
+    "outer_call_selected",
+    "nested_call_started"
+  ],
+  "provider_identity": "protected-test-host-v1",
+  "schema_version": 1
+}

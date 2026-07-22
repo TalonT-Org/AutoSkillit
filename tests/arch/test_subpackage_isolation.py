@@ -899,7 +899,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
         "hooks/guards": 32,  # -output_budget_guard (#4286)
-        "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
+        "execution/backends": 13,  # +_codex_recipe_delivery protected attestation broker
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

@@ -23,6 +23,20 @@ from ._codex_hooks import (
     sync_hooks_to_codex_config,
 )
 from ._codex_parse import CodexResultParser, CodexStreamParser
+from ._codex_recipe_delivery import (
+    CodexAttestationResult,
+    CodexHostCorrelation,
+    CodexOuterBudgetAttestor,
+    NullProtectedHostAttestationProvider,
+    ProtectedHostAttestationProvider,
+    ProtectedStoreAuthority,
+    RecipeDeliveryReceiptLedger,
+    RecipeReceiptHandle,
+    RecipeReservationResult,
+    enumerate_fresh_codex_marker_ids,
+    read_rollout_thread_id,
+    resolve_unique_codex_host_correlation,
+)
 from ._composite_locator import CompositeSessionLocator
 from .claude import (
     ClaudeCodeBackend,
@@ -79,6 +93,9 @@ __all__ = [
     "CodexEnvPolicy",
     "CodexFlags",
     "CodexResultParser",
+    "CodexAttestationResult",
+    "CodexHostCorrelation",
+    "CodexOuterBudgetAttestor",
     "CodexScenarioPlayer",
     "CodexSessionLocator",
     "CodexStreamParser",
@@ -91,12 +108,21 @@ __all__ = [
     "CODEX_LIMITS_LAST_VERIFIED_VERSION",
     "CODEX_AUTO_COMPACT_LIMIT",
     "NON_VARIADIC_CODEX_FLAGS",
+    "NullProtectedHostAttestationProvider",
+    "ProtectedHostAttestationProvider",
+    "ProtectedStoreAuthority",
+    "RecipeDeliveryReceiptLedger",
+    "RecipeReceiptHandle",
+    "RecipeReservationResult",
     "VARIADIC_CODEX_FLAGS",
     "_is_autoskillit_registered",
     "_read_codex_config",
     "_serialize_toml",
     "_write_codex_config",
     "ensure_codex_mcp_registered",
+    "enumerate_fresh_codex_marker_ids",
     "get_backend",
     "make_codex_scenario_player",
+    "read_rollout_thread_id",
+    "resolve_unique_codex_host_correlation",
 ]

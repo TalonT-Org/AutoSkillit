@@ -4,11 +4,6 @@
 
 Mandatory instructions for AI-assisted development in this repository.
 
-## Skill Invocations Are Orders
-
-  * When a message includes a `/skill-name`, execute it via the Skill tool **BEFORE** any other action. No exceptions.
-  * Never skip or substitute a skill invocation based on your own judgment.
-
 ## CLAUDE.md Modifications
 
   * **Correcting existing content is permitted**: If you discover that CLAUDE.md contains inaccurate information (wrong file paths, stale names, incorrect tool attributions), you may correct it without being asked.

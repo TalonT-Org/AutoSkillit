@@ -101,7 +101,6 @@ def test_claude_md_has_lsp_section() -> None:
 def test_claude_md_keeps_claude_only_overlay() -> None:
     content = CLAUDE_MD.read_text()
     for marker in [
-        "Skill Invocations Are Orders",
         "CLAUDE.md Modifications",
         "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
     ]:
@@ -109,6 +108,11 @@ def test_claude_md_keeps_claude_only_overlay() -> None:
             f"CLAUDE.md must retain Claude-only overlay marker {marker!r} "
             "— this is project-internal Claude Code behavior, not a universal rule"
         )
+
+
+def test_claude_md_does_not_override_native_skill_invocation() -> None:
+    content = CLAUDE_MD.read_text()
+    assert "Skill Invocations Are Orders" not in content
 
 
 def test_claude_md_no_precommit_install_line() -> None:

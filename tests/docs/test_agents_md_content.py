@@ -133,6 +133,9 @@ class TestAgentsMdUniversalProjectRules:
 
 
 class TestAgentsMdContentQuality:
+    def test_agents_md_does_not_require_tests_after_every_task(self, agents_md: str) -> None:
+        assert "Always run tests at end of task" not in agents_md
+
     def test_agents_md_github_api_has_sleep_rule(self, agents_md: str) -> None:
         assert "sleep 1" in agents_md or "asyncio.sleep(1)" in agents_md
 

@@ -132,7 +132,7 @@ def _bounded_append(
         original_count = (
             previous_count if isinstance(previous_count, int) else len(target) - 1
         ) + len(incoming)
-        candidates = target[:-1]
+        candidates = [*target[:-1], *incoming]
     else:
         original_count = len(target) + len(incoming)
         candidates = [*target, *incoming]

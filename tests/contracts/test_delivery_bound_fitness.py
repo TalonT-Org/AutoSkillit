@@ -30,7 +30,12 @@ from autoskillit.core import (
     resolve_general_output_token_limit,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
-from autoskillit.recipe import all_validated_recipe_names, load_and_validate
+from autoskillit.recipe import (
+    all_validated_recipe_names,
+    find_recipe_by_name,
+    load_and_validate,
+    load_recipe,
+)
 from autoskillit.server._recipe_delivery import persist_recipe_artifact
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
@@ -112,12 +117,16 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     caps = _backend_capabilities()[backend_name]
     bound_tokens = resolve_general_output_token_limit(caps)
     bound_bytes = _effective_bound_bytes(bound_tokens)
+    recipe_info = find_recipe_by_name(recipe_name, _PROJECT_ROOT)
+    assert recipe_info is not None
+    recipe = load_recipe(recipe_info.path)
     envelope = build_recipe_envelope(
         payload,
         recipe_name=recipe_name,
         generation=generation,
         skeleton_source=cast(
-            "ToolContext", SimpleNamespace(recipe_name="", active_recipe_steps=None)
+            "ToolContext",
+            SimpleNamespace(recipe_name=recipe_name, active_recipe_steps=recipe.steps),
         ),
         bound_bytes=bound_bytes,
     )
@@ -127,6 +136,10 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         f"{bound_bytes} bytes (effective delivery bound)"
     )
     assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
+    skeleton_steps = envelope["step_flow_skeleton"]["steps"]
+    assert skeleton_steps
+    assert {step["name"] for step in skeleton_steps} == set(payload["post_prune_step_names"])
+    assert any(step.get("summary") or step["edges"] for step in skeleton_steps)
 
 
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)

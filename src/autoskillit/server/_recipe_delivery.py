@@ -139,7 +139,9 @@ def _read_bounded_bytes(path: Path, *, max_bytes: int, error: str) -> bytes:
 
 
 def _safe_component(value: str) -> str:
-    if not value or value in {".", ".."}:
+    if not value:
+        return "~"
+    if value in {".", ".."}:
         raise RecipeArtifactError("unsafe recipe artifact path component")
     encoded: list[str] = []
     for byte in value.encode("utf-8"):

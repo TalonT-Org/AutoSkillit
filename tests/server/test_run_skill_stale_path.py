@@ -48,14 +48,6 @@ async def test_valid_session_path_proceeds_to_executor(tool_ctx_kitchen_open, tm
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
 
-    session_dir = tmp_path / "session"
-    session_dir.mkdir()
-
-    mock_mgr = MagicMock()
-    mock_mgr.init_session.return_value = ValidatedAddDir(path=str(session_dir))
-    mock_mgr.compute_skill_closure.return_value = frozenset()
-    tool_ctx_kitchen_open.session_skill_manager = mock_mgr
-
     await run_skill("/autoskillit:investigate foo", str(tmp_path))
 
     assert len(executor.calls) == 1

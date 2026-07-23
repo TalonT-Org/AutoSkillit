@@ -122,7 +122,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/tools_kitchen.py", 283),
     ("src/autoskillit/server/tools/tools_kitchen.py", 302),
     ("src/autoskillit/server/tools/tools_kitchen.py", 336),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 1436),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 1441),
     # tools_pipeline_tracker.py — tracker_data dict (init) and mark_step_complete write
     # (same tracker file schema as init — not a new format, grandfathered alongside it)
     ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 256),
@@ -130,7 +130,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 536),
     # tools_github.py — bug report dict (non-blocking report-bug status file)
-    ("src/autoskillit/server/tools/tools_github.py", 317),
+    ("src/autoskillit/server/tools/tools_github.py", 340),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 24),
     # _init_helpers.py — ~/.claude.json (co-owned)
@@ -140,9 +140,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/_installed_plugins.py", 81),
     # _marketplace.py — marketplace.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 96),
+    ("src/autoskillit/cli/_marketplace.py", 101),
     # _marketplace.py — hooks.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 192),
+    ("src/autoskillit/cli/_marketplace.py", 113),
     # tools_config.py — hook config overlay dict (session-scoped, not schema-versioned)
     ("src/autoskillit/server/tools/tools_config.py", 50),
     # _update_checks.py — dismissal state file

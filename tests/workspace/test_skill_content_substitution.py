@@ -10,14 +10,9 @@ from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
+from autoskillit.workspace.skills import SkillInfo, SkillSource, _skill_info_from_frontmatter
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
-
-
-class _StubInfo:
-    def __init__(self, path: Path, name: str) -> None:
-        self.path = path
-        self.name = name
 
 
 def _make_synth_skill_md(tmp_path: Path, name: str, body: str) -> Path:
@@ -39,11 +34,15 @@ def _provider_with_synth(
     *,
     temp_dir_relpath: str = ".autoskillit/temp",
     default_base_branch: str = "main",
-) -> tuple[SkillsDirectoryProvider, _StubInfo]:
+) -> tuple[SkillsDirectoryProvider, SkillInfo]:
     provider = SkillsDirectoryProvider(
         temp_dir_relpath=temp_dir_relpath, default_base_branch=default_base_branch
     )
-    info = _StubInfo(_make_synth_skill_md(tmp_path, name, body), name)
+    info = _skill_info_from_frontmatter(
+        name,
+        SkillSource.BUNDLED_EXTENDED,
+        _make_synth_skill_md(tmp_path, name, body),
+    )
     monkeypatch.setattr(provider._resolver, "resolve", lambda n: info if n == name else None)
     return provider, info
 

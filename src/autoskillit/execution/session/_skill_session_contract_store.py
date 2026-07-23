@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import secrets
 import shutil
 import tempfile
@@ -15,6 +14,8 @@ from pathlib import Path, PurePosixPath
 from threading import RLock
 from typing import Any
 
+import regex as re
+
 from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SkillContractError,
@@ -23,7 +24,9 @@ from autoskillit.core import (
     SkillSourceRef,
     atomic_write,
     default_log_dir,
+    read_versioned_json,
     validate_skill_capability_roles,
+    write_versioned_json,
 )
 
 __all__ = [
@@ -122,9 +125,10 @@ class DefaultSkillSessionContractStore:
                 candidate_session_ids=(),
                 snapshot_paths=snapshot_paths,
             )
-            atomic_write(
+            write_versioned_json(
                 temp_path / _MANIFEST_FILENAME,
-                json.dumps(manifest, sort_keys=True, separators=(",", ":")),
+                manifest,
+                schema_version=_STORE_MANIFEST_SCHEMA_VERSION,
             )
             with self._lock:
                 os.replace(temp_path, destination)
@@ -215,21 +219,19 @@ class DefaultSkillSessionContractStore:
     def _read_manifest(self, entry: Path) -> dict[str, Any]:
         self._ensure_contained(entry)
         manifest_path = entry / _MANIFEST_FILENAME
-        try:
-            loaded: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
+        if not manifest_path.exists():
             raise FileNotFoundError(f"Skill session contract not found: {entry.name}") from None
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ValueError(f"Invalid skill session contract manifest: {exc}") from exc
-        if not isinstance(loaded, dict):
-            raise ValueError("Invalid skill session contract manifest: expected object")
+        loaded = read_versioned_json(manifest_path, _STORE_MANIFEST_SCHEMA_VERSION)
+        if loaded is None:
+            raise ValueError("Invalid or unsupported skill session contract manifest")
         return loaded
 
     def _write_manifest(self, entry: Path, manifest: Mapping[str, Any]) -> None:
         self._ensure_contained(entry)
-        atomic_write(
+        write_versioned_json(
             entry / _MANIFEST_FILENAME,
-            json.dumps(dict(manifest), sort_keys=True, separators=(",", ":")),
+            dict(manifest),
+            schema_version=_STORE_MANIFEST_SCHEMA_VERSION,
         )
 
     def _validate_entry(

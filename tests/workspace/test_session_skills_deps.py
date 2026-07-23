@@ -374,7 +374,7 @@ class TestCopyOnActivate:
             "backend_requirements",
         }.isdisjoint(frontmatter)
         assert frontmatter["name"] == "make-arch-diag"
-        assert "# Architecture Diagram Generator" in dependency
+        assert "# Make-Arch-Diag: Architecture Diagram Generation" in dependency
 
     def test_copy_on_activate_single_absent_skill(self, tmp_path: Path) -> None:
         """Absence of SKILL.md triggers provider fetch;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -10,8 +11,20 @@ from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
+from autoskillit.workspace.skills import SkillSource, _skill_info_from_frontmatter
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
+
+
+def _provider_for_skill(skill_md: Path) -> SkillsDirectoryProvider:
+    name = skill_md.parent.name
+    info = _skill_info_from_frontmatter(name, SkillSource.BUNDLED_EXTENDED, skill_md)
+    resolver = MagicMock()
+    resolver.list_all.return_value = [info]
+    resolver.resolve.side_effect = lambda requested: info if requested == name else None
+    provider = SkillsDirectoryProvider()
+    provider._resolver = resolver
+    return provider
 
 
 def test_init_session_unknown_skill_logs_warning(tmp_path: Path) -> None:
@@ -40,25 +53,14 @@ def test_init_session_unknown_skill_logs_warning(tmp_path: Path) -> None:
 # T-VIS-006
 def test_init_session_skips_disabled_builtin_category(tmp_path: Path) -> None:
     """Skills whose SKILL.md categories overlap disabled built-in tags are excluded."""
-    from unittest.mock import MagicMock
-
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
-    from autoskillit.workspace.skills import SkillInfo, SkillSource
     from tests._helpers import make_subsetsconfig, make_test_config
 
     skill_dir = tmp_path / "skills" / "fake-github-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\ncategories:\n  - github\n---\n# Fake GitHub Skill\n")
 
-    provider = MagicMock()
-    provider.list_skills.return_value = [
-        SkillInfo(
-            name="fake-github-skill",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=skill_dir / "SKILL.md",
-            categories=frozenset({"github"}),
-        )
-    ]
+    provider = _provider_for_skill(skill_dir / "SKILL.md")
 
     config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     root = tmp_path / "sessions"
@@ -74,26 +76,14 @@ def test_init_session_skips_disabled_builtin_category(tmp_path: Path) -> None:
 # T-VIS-007
 def test_init_session_skips_disabled_custom_tag(tmp_path: Path) -> None:
     """Skills listed under a custom_tag that is disabled are excluded."""
-    from unittest.mock import MagicMock
-
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
-    from autoskillit.workspace.skills import SkillInfo, SkillSource
     from tests._helpers import make_subsetsconfig, make_test_config
 
     skill_dir = tmp_path / "skills" / "my-custom-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\ncategories: []\n---\n# My Custom Skill\n")
 
-    provider = MagicMock()
-    provider.list_skills.return_value = [
-        SkillInfo(
-            name="my-custom-skill",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=skill_dir / "SKILL.md",
-            categories=frozenset(),
-        )
-    ]
-    provider.get_skill_content.return_value = "---\ncategories: []\n---\n# My Custom Skill\n"
+    provider = _provider_for_skill(skill_dir / "SKILL.md")
 
     config = make_test_config(
         subsets=make_subsetsconfig(
@@ -114,10 +104,7 @@ def test_init_session_skips_disabled_custom_tag(tmp_path: Path) -> None:
 # T-VIS-008
 def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
     """Skills not in any disabled category are still copied to ephemeral dir."""
-    from unittest.mock import MagicMock
-
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
-    from autoskillit.workspace.skills import SkillInfo, SkillSource
     from tests._helpers import make_subsetsconfig, make_test_config
 
     skill_dir = tmp_path / "skills" / "safe-skill"
@@ -128,20 +115,7 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
         "categories:\n  - audit\n---\n# Safe Skill\n"
     )
 
-    provider = MagicMock()
-    provider.list_skills.return_value = [
-        SkillInfo(
-            name="safe-skill",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=skill_dir / "SKILL.md",
-            categories=frozenset({"audit"}),
-        )
-    ]
-    provider.get_skill_content.return_value = (
-        "---\nname: safe-skill\n"
-        "description: Safe skill for testing.\n"
-        "categories:\n  - audit\n---\n# Safe Skill\n"
-    )
+    provider = _provider_for_skill(skill_dir / "SKILL.md")
 
     config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     root = tmp_path / "sessions"
@@ -264,27 +238,13 @@ def test_resolve_effective_disabled_includes_feature_tags() -> None:
 # REQ-PACK-006: Cook sessions skip default-disabled packs
 def test_cook_session_skips_default_disabled_packs(tmp_path: Path) -> None:
     """Cook session excludes default-disabled pack skills when packs.enabled=[]."""
-    from unittest.mock import MagicMock
-
-    from autoskillit.workspace.skills import SkillInfo, SkillSource
     from tests._helpers import make_test_config
 
     skill_dir = tmp_path / "skills" / "research-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\ncategories:\n  - research\n---\n# Research Skill\n")
 
-    provider = MagicMock()
-    provider.list_skills.return_value = [
-        SkillInfo(
-            name="research-skill",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=skill_dir / "SKILL.md",
-            categories=frozenset({"research"}),
-        )
-    ]
-    provider.get_skill_content.return_value = (
-        "---\ncategories:\n  - research\n---\n# Research Skill\n"
-    )
+    provider = _provider_for_skill(skill_dir / "SKILL.md")
 
     root = tmp_path / "sessions"
     root.mkdir()
@@ -300,9 +260,6 @@ def test_cook_session_skips_default_disabled_packs(tmp_path: Path) -> None:
 # REQ-PACK-005: headless sessions exclude default-disabled packs
 def test_headless_session_excludes_default_disabled_pack_skills(tmp_path: Path) -> None:
     """Skills in 'exp-lens' pack are excluded from headless session when packs.enabled=[]."""
-    from unittest.mock import MagicMock
-
-    from autoskillit.workspace.skills import SkillInfo, SkillSource
     from tests._helpers import make_test_config
 
     skill_dir = tmp_path / "skills" / "exp-skill"
@@ -311,15 +268,7 @@ def test_headless_session_excludes_default_disabled_pack_skills(tmp_path: Path) 
         "---\ncategories:\n  - exp-lens\n---\n# Experimental Skill\n"
     )
 
-    provider = MagicMock()
-    provider.list_skills.return_value = [
-        SkillInfo(
-            name="exp-skill",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=skill_dir / "SKILL.md",
-            categories=frozenset({"exp-lens"}),
-        )
-    ]
+    provider = _provider_for_skill(skill_dir / "SKILL.md")
 
     root = tmp_path / "sessions"
     root.mkdir()
@@ -334,9 +283,6 @@ def test_headless_session_excludes_default_disabled_pack_skills(tmp_path: Path) 
 
 def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> None:
     """recipe_packs param enables default-disabled pack skills for this session."""
-    from unittest.mock import MagicMock
-
-    from autoskillit.workspace.skills import SkillInfo, SkillSource
     from tests._helpers import make_test_config
 
     skill_dir = tmp_path / "skills" / "research-skill"
@@ -347,20 +293,7 @@ def test_init_session_recipe_packs_enables_default_disabled(tmp_path: Path) -> N
         "categories:\n  - research\n---\n# Research Skill\n"
     )
 
-    provider = MagicMock()
-    provider.list_skills.return_value = [
-        SkillInfo(
-            name="research-skill",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=skill_dir / "SKILL.md",
-            categories=frozenset({"research"}),
-        )
-    ]
-    provider.get_skill_content.return_value = (
-        "---\nname: research-skill\n"
-        "description: Research skill for testing.\n"
-        "categories:\n  - research\n---\n# Research Skill\n"
-    )
+    provider = _provider_for_skill(skill_dir / "SKILL.md")
 
     root = tmp_path / "sessions"
     root.mkdir()

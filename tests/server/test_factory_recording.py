@@ -284,14 +284,14 @@ def test_build_replay_runner_scans_skill_snapshots(tmp_path, monkeypatch):
     assert runner.skill_snapshots["investigate"] == replay_dir / "skill-snapshots" / "investigate"
 
 
-# --- T-RUN-SKILL-REPLAY: snapshot present → init_session NOT called ---
+# --- T-RUN-SKILL-REPLAY: snapshot present → materialization NOT called ---
 
 
 @pytest.mark.anyio
 async def test_run_skill_replay_uses_snapshot_over_init_session(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ):
-    """With a skill snapshot for the step, run_skill skips init_session."""
+    """With a replay snapshot for the step, run_skill skips live materialization."""
     from unittest.mock import MagicMock
 
     from autoskillit.execution.recording import ReplayingSubprocessRunner
@@ -318,23 +318,22 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(
 
     await run_skill("/investigate foo", str(tmp_path), step_name="investigate")
 
-    mock_ssm.init_session.assert_not_called()
+    mock_ssm.materialize_invocation.assert_not_called()
     assert len(executor.calls) == 1
     add_dir_paths = [d.path for d in executor.calls[0].add_dirs]
     assert any(p.startswith(str(ephemeral_root)) for p in add_dir_paths)
 
 
-# --- T-RUN-SKILL-REPLAY-FALLBACK: no snapshot → init_session IS called ---
+# --- T-RUN-SKILL-REPLAY-FALLBACK: no snapshot → materialization IS called ---
 
 
 @pytest.mark.anyio
-async def test_run_skill_replay_fallback_to_init_session(
+async def test_run_skill_replay_fallback_to_materialization(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ):
-    """With no snapshot for the step, run_skill falls back to init_session."""
+    """With no replay snapshot, run_skill materializes the exact invocation."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
     from autoskillit.execution.recording import ReplayingSubprocessRunner
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
@@ -342,9 +341,8 @@ async def test_run_skill_replay_fallback_to_init_session(
     replay_runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={})
     tool_ctx_kitchen_open.runner = replay_runner
 
-    fake_validated = ValidatedAddDir(path="/fake/session")
-    mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = fake_validated
+    real_ssm = tool_ctx_kitchen_open.session_skill_manager
+    mock_ssm = MagicMock(wraps=real_ssm)
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     executor = InMemoryHeadlessExecutor()
@@ -354,4 +352,4 @@ async def test_run_skill_replay_fallback_to_init_session(
 
     await run_skill("/investigate foo", str(tmp_path), step_name="investigate")
 
-    mock_ssm.init_session.assert_called_once()
+    mock_ssm.materialize_invocation.assert_called_once()

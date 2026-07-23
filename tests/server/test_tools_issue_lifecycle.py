@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,6 +12,7 @@ from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     BackendCapabilities,
     RetryReason,
+    SkillExecutionRole,
     SkillResult,
     SkillSource,
 )
@@ -436,13 +436,25 @@ async def test_issue_headless_handlers_reject_incompatible_backend_before_execut
     args,
 ) -> None:
     """Direct lifecycle handlers must fail closed before executor dispatch."""
-    skill_info = SimpleNamespace(
+    from autoskillit.workspace.skills import EffectiveSkillInvocation, SkillInfo
+
+    skill_name = "prepare-issue" if args else "enrich-issues"
+    skill_info = SkillInfo(
+        name=skill_name,
         source=SkillSource.BUNDLED_EXTENDED,
-        backend_requirements=frozenset({"required-backend"}),
-        uses_capabilities=frozenset(),
+        path=Path(f"/fake/{skill_name}/SKILL.md"),
+        uses_capabilities=frozenset({"open_kitchen"}),
+        canonical_content="# test",
+    )
+    invocation = EffectiveSkillInvocation(
+        root=skill_info,
+        closure=(skill_info,),
+        capability_union=frozenset({"open_kitchen"}),
+        project_root=Path(tool_ctx_kitchen_open.project_dir),
+        execution_role=SkillExecutionRole.SESSION,
     )
     resolver = MagicMock()
-    resolver.resolve.return_value = skill_info
+    resolver.resolve_invocation.return_value = invocation
     backend = MagicMock()
     backend.name = "incompatible-backend"
     backend.capabilities = BackendCapabilities(
@@ -456,7 +468,7 @@ async def test_issue_headless_handlers_reject_incompatible_backend_before_execut
 
     assert result["success"] is False
     assert result["subtype"] == "crashed"
-    assert "required-backend" in result["result"]
+    assert "claude-code" in result["result"]
     tool_ctx_kitchen_open.executor.run.assert_not_awaited()
 
 
@@ -475,8 +487,8 @@ async def test_issue_headless_handlers_fail_closed_without_skill_resolver(
     args,
 ) -> None:
     """Missing resolution metadata must stop lifecycle dispatch before executor.run."""
-    tool_ctx_kitchen_open.skill_resolver = None
     tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.skill_resolver = None
 
     result = json.loads(await handler(*args))
 
@@ -784,28 +796,10 @@ async def test_release_issue_empty_string_target_branch_falls_to_bare_removal(
     tool_ctx_kitchen_open.github_client.ensure_label.assert_not_called()
 
 
-def _make_mock_tool_ctx_for_project_dir(project_dir):
-    """Build a minimal mock ToolContext for project_dir tests."""
-    mock_ctx = MagicMock()
-    mock_ctx.project_dir = project_dir
-    mock_ctx.executor = MagicMock()
-    mock_ctx.executor.run = AsyncMock()
-    mock_ctx.config.github.check_labels_allowed = MagicMock(return_value=None)
-    mock_ctx.output_pattern_resolver = MagicMock(return_value=[])
-    mock_ctx.write_expected_resolver = MagicMock(return_value=None)
-    skill_info = SimpleNamespace(
-        source=SkillSource.BUNDLED_EXTENDED,
-        backend_requirements=frozenset(),
-        uses_capabilities=frozenset(),
-    )
-    mock_ctx.skill_resolver.resolve.return_value = skill_info
-    mock_ctx.backend.name = "claude-code"
-    mock_ctx.backend.capabilities = CLAUDE_CODE_CAPABILITIES
-    return mock_ctx
-
-
 @pytest.mark.anyio
-async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(tmp_path, monkeypatch):
+async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+):
     """executor.run must be called with tool_ctx.project_dir as cwd, not Path.cwd().
 
     Regression test: when project_dir differs from cwd, the headless skill subprocess
@@ -815,7 +809,10 @@ async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
     different_dir = tmp_path / "project_root"
     different_dir.mkdir()
 
-    mock_ctx = _make_mock_tool_ctx_for_project_dir(project_dir=different_dir)
+    mock_ctx = tool_ctx_kitchen_open
+    mock_ctx.project_dir = different_dir
+    mock_ctx.executor = MagicMock()
+    mock_ctx.executor.run = AsyncMock()
     mock_ctx.executor.run.return_value = _make_skill_result(
         success=True,
         result="---prepare-issue-result---\n{}\n---/prepare-issue-result---",
@@ -847,7 +844,9 @@ async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
 
 
 @pytest.mark.anyio
-async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(tmp_path, monkeypatch):
+async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+):
     """executor.run must be called with tool_ctx.project_dir as cwd, not Path.cwd().
 
     Regression test: when project_dir differs from cwd, the headless skill subprocess
@@ -857,7 +856,10 @@ async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
     different_dir = tmp_path / "project_root"
     different_dir.mkdir()
 
-    mock_ctx = _make_mock_tool_ctx_for_project_dir(project_dir=different_dir)
+    mock_ctx = tool_ctx_kitchen_open
+    mock_ctx.project_dir = different_dir
+    mock_ctx.executor = MagicMock()
+    mock_ctx.executor.run = AsyncMock()
     mock_ctx.executor.run.return_value = _make_skill_result(
         success=True,
         result="---enrich-issues-result---\n[]\n---/enrich-issues-result---",

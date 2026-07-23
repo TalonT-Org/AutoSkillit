@@ -148,7 +148,7 @@ def test_provider_string_api_returns_unified_agent_safe_projection() -> None:
 
     _assert_agent_safe(content)
     assert _frontmatter(content)["name"] == "make-arch-diag"
-    assert "# Architecture Diagram Generator" in content
+    assert "# Make-Arch-Diag: Architecture Diagram Generation" in content
 
 
 @pytest.mark.parametrize(

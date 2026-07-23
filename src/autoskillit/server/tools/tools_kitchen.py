@@ -30,7 +30,6 @@ from autoskillit.core import (
     CapabilityResolutionDetail,
     ProcessStaleError,
     RecipeDeliveryRequest,
-    SkillExecutionRole,
     _collect_disabled_feature_tags,
     atomic_write,
     clear_kitchens_for_pid,
@@ -92,12 +91,12 @@ from autoskillit.server.tools._preflight import (
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
+    project_orchestrator_guidance,
     render_served_response,
     response_backstop_tool_meta,
     serve_recipe,
 )
 from autoskillit.server.tools._types import _validate_result
-from autoskillit.workspace import SkillProjectionContext, project_agent_skill_document
 
 logger = get_logger(__name__)
 
@@ -1280,27 +1279,7 @@ async def open_kitchen(
         # Anonymous opens receive the projected orchestrator discipline. Named opens
         # returned above and preserve their attested recipe-delivery bytes unchanged.
         try:
-            if _ctx.skill_resolver is not None:
-                _catalog = _ctx.skill_resolver.list_effective(
-                    _ctx.project_dir,
-                    SkillExecutionRole.ORCHESTRATOR,
-                )
-                _sous_chef = next(
-                    (skill for skill in _catalog.skills if skill.name == "sous-chef"),
-                    None,
-                )
-                if _sous_chef is not None:
-                    _backend = _ctx.backend
-                    _document = project_agent_skill_document(
-                        _sous_chef,
-                        SkillProjectionContext(
-                            execution_cwd=_ctx.project_dir,
-                            backend=_backend,
-                            conventions=(_backend.conventions if _backend is not None else None),
-                            gating=False,
-                        ),
-                    )
-                    text += "\n\n" + _document.content
+            text += project_orchestrator_guidance(_ctx)
         except Exception as exc:
             logger.warning("open_kitchen_failure", stage="project_sous_chef", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="project_sous_chef")

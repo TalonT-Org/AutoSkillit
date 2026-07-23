@@ -160,7 +160,7 @@ class TestCLIInstall:
     def test_install_idempotent_marketplace(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Running install twice recreates the symlink without error."""
+        """Running install twice recreates the sanitized projection without error."""
         import importlib as _importlib
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
@@ -177,7 +177,10 @@ class TestCLIInstall:
         install()
         install()  # second run should not fail
 
-        assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()
+        published = tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
+        assert published.is_dir()
+        assert not published.is_symlink()
+        assert (published / ".claude-plugin" / "plugin.json").is_file()
 
     def test_install_backend_guard_returns_false_for_non_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture

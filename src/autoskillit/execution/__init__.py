@@ -136,7 +136,9 @@ from autoskillit.execution.remote_resolver import (
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
+    DefaultSkillSessionContractStore,
     SessionState,
+    SkillSessionContract,
     _collapse_hr_split_delimiters,  # noqa: F401 — re-exported for fleet.result_parser
     classify_infra_exit,
     clear_session_state,
@@ -194,7 +196,9 @@ __all__ = [
     # session
     "ClaudeSessionResult",
     "ContentState",
+    "DefaultSkillSessionContractStore",
     "SessionState",
+    "SkillSessionContract",
     "SkillResult",
     "classify_infra_exit",
     "clear_session_state",

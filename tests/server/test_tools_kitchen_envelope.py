@@ -895,16 +895,14 @@ async def test_open_kitchen_sous_chef_projection_raises_returns_failure_envelope
     monkeypatch,
 ):
     """Projection failure returns the project_sous_chef failure envelope."""
-    from autoskillit.workspace import DefaultSkillResolver
+    from autoskillit.workspace import SkillsDirectoryProvider
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.project_dir = tmp_path
     mock_ctx.backend = None
-    mock_ctx.skill_resolver = DefaultSkillResolver()
-
-    import autoskillit.server.tools.tools_kitchen as tk_mod
+    mock_ctx.skill_resolver = SkillsDirectoryProvider().resolver
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -912,9 +910,8 @@ async def test_open_kitchen_sous_chef_projection_raises_returns_failure_envelope
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
             ):
                 with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch.object(
-                        tk_mod,
-                        "project_agent_skill_document",
+                    with patch(
+                        "autoskillit.server.tools._serve_helpers.project_agent_skill_document",
                         side_effect=OSError("projection failed"),
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen

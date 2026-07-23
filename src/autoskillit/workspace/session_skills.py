@@ -485,18 +485,19 @@ def collect_closure_write_paths(
 
 
 def resolve_closure_write_dirs(
-    closure: frozenset[str],
-    resolver: SkillResolver,
+    closure: tuple[SkillInfo, ...],
     cwd: str,
     existing: list[Path] | None = None,
 ) -> list[Path]:
-    """Collect and resolve write_paths from closure skills into absolute Paths.
+    """Resolve write_paths from an exact effective closure into absolute Paths.
 
     Substitutes ``{{AUTOSKILLIT_TEMP}}`` with ``cwd/.autoskillit/temp`` and
     returns deduplicated resolved Paths ready to extend ``write_watch_dirs``.
     Paths already present in ``existing`` are excluded from the result.
     """
-    raw_paths = collect_closure_write_paths(closure, resolver)
+    raw_paths = tuple(
+        write_path for info in closure for write_path in _parse_write_paths(info.canonical_content)
+    )
     if not raw_paths:
         return []
     temp_prefix = os.path.join(cwd, ".autoskillit", "temp")
@@ -805,7 +806,7 @@ class DefaultSessionSkillManager:
 
         if backend is not None:
             backend.setup_session_dir(session_skills_dir)
-            if backend.name == "codex":
+            if backend.capabilities.session_dir_persistent:
                 profile_infos = _materialize_codex_profile_skill_infos(
                     session_skills_dir,
                     backend,

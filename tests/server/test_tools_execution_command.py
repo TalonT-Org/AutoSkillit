@@ -307,7 +307,11 @@ class TestRunSkillExecutionMarker:
         assert captured["marker_dir"] == controlled_path
 
     @pytest.mark.anyio
-    async def test_marker_dir_none_when_backend_is_none(self, tool_ctx_kitchen_open, monkeypatch):
+    async def test_missing_backend_fails_before_execution_marker(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        import json
+
         tool_ctx_kitchen_open.backend = None
 
         captured = {}
@@ -324,9 +328,11 @@ class TestRunSkillExecutionMarker:
 
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
         tool_ctx_kitchen_open.runner.push(_make_result(0, _SUCCESS_JSON, ""))
-        await run_skill("/investigate test", "/tmp")
+        result = json.loads(await run_skill("/investigate test", "/tmp"))
 
-        assert captured["marker_dir"] is None
+        assert result["success"] is False
+        assert "backend" in result["result"].lower()
+        assert captured == {}
 
 
 class TestRunSkillMcpTimeout:

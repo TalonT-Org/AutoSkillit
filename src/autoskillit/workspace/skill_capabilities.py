@@ -7,9 +7,10 @@ whether the source is executable instruction or merely documentary artifact.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
+
+import regex as re
 
 from autoskillit.core import SKILL_CAPABILITY_REGISTRY
 

@@ -123,8 +123,7 @@ async def _execute_claude_headless(
 
     Accepts an already-built CmdSpec and handles runner invocation,
     exception handling, _build_skill_result, and session log flushing.
-    Used by both run_headless_core (leaf path) and
-    DefaultHeadlessExecutor.dispatch_food_truck (food truck path).
+    Used by both leaf and food-truck execution paths.
     """
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")

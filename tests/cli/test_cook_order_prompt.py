@@ -359,6 +359,7 @@ class TestOrderMcpPrefixSelection:
             mcp_prefix: str,
             ingredients_table: object = None,
             has_unguarded_filesystem_access: bool = False,
+            **_projection_context: object,
         ) -> str:
             captured.append({"ingredients_table": ingredients_table})
             return "ROUTING RULES\nFIRST ACTION\nopenKitchen\nDuring pipeline execution"

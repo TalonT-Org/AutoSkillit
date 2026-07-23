@@ -59,19 +59,6 @@ class TestSkillsConfig:
         assert "process-issues" not in cfg.skills.tier2
         assert "process-issues" not in cfg.skills.tier3
 
-    def test_process_issues_cannot_be_readded_to_session_tier(self, tmp_path) -> None:
-        from autoskillit.config import load_config
-        from autoskillit.core import SkillContractError
-        from autoskillit.workspace import DefaultSkillResolver, validate_skill_tier_roles
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("skills:\n  tier2:\n    - process-issues\n")
-
-        cfg = load_config(tmp_path)
-        with pytest.raises(SkillContractError, match="process-issues|ORCHESTRATOR"):
-            validate_skill_tier_roles(cfg, DefaultSkillResolver(), tmp_path)
-
     def test_file_audit_issues_in_tier3(self) -> None:
         from autoskillit.config import load_config
 

@@ -436,7 +436,11 @@ def test_direct_executor_callers_check_backend_compat() -> None:
     silently escape the invariant.
     """
     target_files = sorted((SRC_ROOT / "server" / "tools").glob("*.py"))
-    compat_calls = {"_check_backend_compat", "_resolve_and_check_backend_compat"}
+    compat_calls = {
+        "_check_backend_compat",
+        "_prepare_direct_skill_dispatch",
+        "_resolve_and_check_backend_compat",
+    }
 
     violations: list[str] = []
 
@@ -1502,9 +1506,21 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
             "DefaultWorkspaceManager",  # signal guard cleanup
         },
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
+        Path("cli/_marketplace.py"): {"DefaultSkillResolver"},  # CLI marketplace skill resolution
+        Path("cli/_prompts.py"): {"DefaultSkillResolver"},  # interactive CLI skill selection
         Path("cli/doctor/_doctor_config.py"): {
             "DefaultSkillResolver"
         },  # standing backend pin feasibility check
+        Path("cli/doctor/_doctor_skills.py"): {
+            "DefaultSkillResolver"
+        },  # CLI skill capability diagnostics
+        Path("cli/session/_session_order.py"): {
+            "DefaultSkillResolver"
+        },  # interactive order launch composition
+        Path("cli/session/_session_cook.py"): {
+            "DefaultSessionSkillManager",
+            "DefaultSkillResolver",
+        },  # interactive cook composition
         Path("execution/recording.py"): {"DefaultSubprocessRunner"},  # lazy fallback
         Path("pipeline/context.py"): {  # __post_init__ +
             "DefaultBackgroundSupervisor",  # field default_factory

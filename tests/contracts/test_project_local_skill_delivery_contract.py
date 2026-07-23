@@ -11,6 +11,10 @@ from autoskillit.execution.backends.claude import ClaudeCodeBackend
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
+def _project_skill_document(name: str, body: str) -> str:
+    return f"---\nname: {name}\ndescription: Project-local {name} fixture.\n---\n{body}\n"
+
+
 @pytest.mark.parametrize(
     "search_dir", ClaudeCodeBackend().conventions.project_local_skill_search_dirs
 )
@@ -27,7 +31,9 @@ def test_project_local_skill_delivered_from_each_search_dir(
     project_root = tmp_path / "project"
     skill_dir = project_root / search_dir / "investigate"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(f"# PROJECT LOCAL from {search_dir}")
+    (skill_dir / "SKILL.md").write_text(
+        _project_skill_document("investigate", f"# PROJECT LOCAL from {search_dir}")
+    )
 
     backend = get_backend("claude-code")
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root=tmp_path / "eph")
@@ -53,11 +59,11 @@ def test_no_channel_collision_when_both_dirs_have_same_skill(tmp_path: Path) -> 
     project_root = tmp_path / "project"
     claude_skill = project_root / ".claude" / "skills" / "foo"
     claude_skill.mkdir(parents=True)
-    (claude_skill / "SKILL.md").write_text("# FROM CLAUDE")
+    (claude_skill / "SKILL.md").write_text(_project_skill_document("foo", "# FROM CLAUDE"))
 
     as_skill = project_root / ".autoskillit" / "skills" / "foo"
     as_skill.mkdir(parents=True)
-    (as_skill / "SKILL.md").write_text("# FROM AUTOSKILLIT")
+    (as_skill / "SKILL.md").write_text(_project_skill_document("foo", "# FROM AUTOSKILLIT"))
 
     backend = get_backend("claude-code")
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root=tmp_path / "eph")
@@ -82,7 +88,7 @@ def test_project_dir_not_cwd_detects_overrides(tmp_path: Path) -> None:
     kitchen_root = tmp_path / "kitchen"
     skill_dir = kitchen_root / ".autoskillit" / "skills" / "foo"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text("# KITCHEN LOCAL")
+    (skill_dir / "SKILL.md").write_text(_project_skill_document("foo", "# KITCHEN LOCAL"))
 
     worktree_dir = tmp_path / "worktree"
     worktree_dir.mkdir()
@@ -111,7 +117,9 @@ def test_backend_scoped_delivery_excludes_foreign_search_dir(tmp_path: Path) -> 
     project_root = tmp_path / "project"
     foreign_skill_dir = project_root / ".codex" / "skills" / "foreign-skill"
     foreign_skill_dir.mkdir(parents=True)
-    (foreign_skill_dir / "SKILL.md").write_text("# FOREIGN SKILL")
+    (foreign_skill_dir / "SKILL.md").write_text(
+        _project_skill_document("foreign-skill", "# FOREIGN SKILL")
+    )
 
     backend = get_backend("claude-code")
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root=tmp_path / "eph")
@@ -138,10 +146,12 @@ def test_backend_scoped_delivery_includes_convention_dirs(tmp_path: Path, search
     )
 
     project_root = tmp_path / "project"
-    skill_name = f"conv-skill-{search_dir.replace('/', '-').replace('.', '_')}"
+    skill_name = f"conv-skill-{search_dir.replace('/', '-').replace('.', '-')}"
     skill_dir = project_root / search_dir / skill_name
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(f"# CONVENTION SKILL from {search_dir}")
+    (skill_dir / "SKILL.md").write_text(
+        _project_skill_document(skill_name, f"# CONVENTION SKILL from {search_dir}")
+    )
 
     backend = get_backend("claude-code")
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root=tmp_path / "eph")

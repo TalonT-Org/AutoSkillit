@@ -21,8 +21,8 @@ from autoskillit.core import (
     SKILL_TOOLS,
     CapabilityResolutionDetail,
     SkillExecutionRole,
-    extract_skill_name,
     get_logger,
+    resolve_skill_name,
 )
 
 if TYPE_CHECKING:
@@ -122,7 +122,7 @@ def _provider_aware_capability_overrides(
                 continue
             _wa = getattr(step, "with_args", None)
             skill_cmd = _wa.get("skill_command", "") if isinstance(_wa, dict) else ""
-            skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
+            skill_name = resolve_skill_name(skill_cmd) if skill_cmd else None
             if not skill_name:
                 continue
 
@@ -325,7 +325,7 @@ def _compute_effective_backend_map(
         if skill_resolver is not None:
             _wa2 = getattr(step, "with_args", None)
             skill_cmd = _wa2.get("skill_command", "") if isinstance(_wa2, dict) else ""
-            skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
+            skill_name = resolve_skill_name(skill_cmd) if skill_cmd else None
             if skill_name:
                 capabilities = _resolve_capability_union(
                     skill_resolver,

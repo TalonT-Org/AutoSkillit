@@ -383,7 +383,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
 
         result = json.loads(
             await run_skill(
-                "/autoskillit:unknown-skill target",
+                "/autoskillit:resolve-failures target",
                 str(tmp_path),
                 step_name="",
                 order_id="",

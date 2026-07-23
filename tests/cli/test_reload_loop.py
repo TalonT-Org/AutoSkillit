@@ -125,7 +125,7 @@ def test_cook_session_sentinel_consumed_after_reload(
 def test_cook_reload_loop_uses_named_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from autoskillit.core import CmdSpec
+    from autoskillit.core import BackendConventions, CmdSpec
 
     run_count = [0]
     captured_resume_specs: list = []
@@ -137,6 +137,9 @@ def test_cook_reload_loop_uses_named_resume(
         return None
 
     class _MockBackend:
+        name = "claude-code"
+        conventions = BackendConventions()
+
         def binary_name(self) -> str:
             return "claude"
 
@@ -157,12 +160,23 @@ def test_cook_reload_loop_uses_named_resume(
 
     fake_skills_dir = tmp_path / "fake-skills"
     fake_skills_dir.mkdir()
+
+    def fake_init_session(
+        self,
+        sid,
+        *,
+        cook_session=False,
+        config=None,
+        project_dir=None,
+        backend=None,
+        allow_only=None,
+    ):
+        return fake_skills_dir
+
     monkeypatch.setattr(
         DefaultSessionSkillManager,
         "init_session",
-        lambda self, sid, *, cook_session=False, config=None, project_dir=None, backend=None: (
-            fake_skills_dir
-        ),
+        fake_init_session,
     )
 
     from autoskillit import cli

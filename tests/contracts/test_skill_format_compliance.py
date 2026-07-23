@@ -29,6 +29,9 @@ class TestSkillFormatCompliance:
 
     @pytest.mark.parametrize("skill_name,content", _SKILL_MDS, ids=[n for n, _ in _SKILL_MDS])
     def test_skill_md_has_valid_frontmatter(self, skill_name: str, content: str) -> None:
-        fm = parse_frontmatter_content(content)
-        errors = validate_skill_frontmatter(fm, skill_name)
+        parsed = parse_frontmatter_content(content)
+        assert parsed.is_valid and parsed.data is not None, (
+            f"SKILL.md for {skill_name!r} has invalid frontmatter: {parsed.error}"
+        )
+        errors = validate_skill_frontmatter(parsed.data, skill_name)
         assert errors == [], f"SKILL.md for {skill_name!r} has frontmatter errors: {errors}"

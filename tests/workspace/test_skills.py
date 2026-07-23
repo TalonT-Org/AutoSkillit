@@ -635,16 +635,36 @@ def test_research_skills_have_research_category():
         )
 
 
-def test_all_extended_skills_have_tier_assignment():
-    """Every skill in skills_extended/ must be assigned to tier2 or tier3 in defaults.yaml."""
+def test_all_session_extended_skills_have_tier_assignment():
+    """Every agent-facing extended skill must have a session injection tier."""
     from autoskillit.config import load_config
 
     config = load_config()
     all_tiers = set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
     resolver = DefaultSkillResolver()
-    extended = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED_EXTENDED}
+    extended = {
+        s.name
+        for s in resolver.list_all()
+        if s.source == SkillSource.BUNDLED_EXTENDED
+        and s.execution_role is SkillExecutionRole.SESSION
+    }
     unassigned = extended - all_tiers
     assert not unassigned, f"Skills missing tier assignment: {sorted(unassigned)}"
+
+
+def test_orchestrator_skill_cannot_be_readded_to_session_tier(tmp_path: Path) -> None:
+    """Tier validation rejects role-derived orchestrators in session injection tiers."""
+    from autoskillit.config import load_config
+    from autoskillit.core import SkillContractError
+    from autoskillit.workspace import validate_skill_tier_roles
+
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text("skills:\n  tier2:\n    - process-issues\n")
+
+    config = load_config(tmp_path)
+    with pytest.raises(SkillContractError, match="process-issues|ORCHESTRATOR"):
+        validate_skill_tier_roles(config, DefaultSkillResolver(), tmp_path)
 
 
 def test_activate_deps_are_resolvable():
@@ -947,7 +967,7 @@ class TestSkillInfoSchemaExhaustiveness:
 
         dc_fields = {f.name for f in dataclasses.fields(SkillInfo)}
         constructor_only = {"name", "source", "path", "source_ref"}
-        derived_fields = {"backend_requirements", "invalid_reason"}
+        derived_fields = {"backend_requirements", "frontmatter", "invalid_reason"}
         parseable_fields = dc_fields - constructor_only - derived_fields
 
         source = inspect.getsource(_skill_info_from_frontmatter)

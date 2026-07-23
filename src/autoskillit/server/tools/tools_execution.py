@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import shutil
@@ -24,7 +23,6 @@ from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
-    SKILL_CAPABILITY_REGISTRY,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     ClosureAuthoritySpec,
@@ -32,7 +30,6 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
-    SkillSourceRef,
     TerminationReason,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -42,7 +39,6 @@ from autoskillit.core import (
     find_caller_session_id,
     get_logger,
     is_feature_enabled,
-    is_git_worktree,
     parse_plan_paths,
     render_target_skill_command,
 )
@@ -52,7 +48,6 @@ from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution import (
     CaptureSetupError,
 )
-from autoskillit.execution.session import SkillSessionContract
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
@@ -68,6 +63,7 @@ from autoskillit.server._guards import (
 )
 from autoskillit.server._misc import (
     SCENARIO_STEP_NAME_ENV,
+    SkillProjectionContext,
     _hook_config_overlay_path,
     resolve_closure_write_dirs,
 )
@@ -95,14 +91,37 @@ from autoskillit.server.tools._execution_helpers import (
     spill_run_cmd_result,
     validate_path_arg_anchoring,
 )
+from autoskillit.server.tools._execution_helpers import (
+    aggregate_sandbox_overrides as _aggregate_sandbox_overrides,
+)
+from autoskillit.server.tools._execution_helpers import (
+    build_skill_session_contract as _build_skill_session_contract,
+)
+from autoskillit.server.tools._execution_helpers import (
+    check_review_approach_plan_path as _check_review_approach_plan_path,
+)
+from autoskillit.server.tools._execution_helpers import (
+    compute_write_prefixes as _compute_write_prefixes,
+)
+from autoskillit.server.tools._execution_helpers import (
+    derive_run_cmd_write_prefixes as _derive_run_cmd_write_prefixes,
+)
+from autoskillit.server.tools._execution_helpers import (
+    get_routing_caps as _get_routing_caps,
+)
+from autoskillit.server.tools._execution_helpers import (
+    has_routing_capability as _has_routing_capability,
+)
+from autoskillit.server.tools._execution_helpers import (
+    scope_covers_cwd as _scope_covers_cwd,
+)
+from autoskillit.server.tools._execution_helpers import (
+    validate_resumed_skill_contract as _validate_resumed_skill_contract,
+)
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
 )
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
-from autoskillit.workspace import (
-    DefaultSkillResolver,
-    SkillProjectionContext,
-)
 
 logger = get_logger(__name__)
 
@@ -289,51 +308,6 @@ def _has_active_deps() -> bool:
     except (json.JSONDecodeError, OSError):
         return False
     return bool(tracker.get("dependencies"))
-
-
-def _check_review_approach_plan_path(step_name: str, skill_command: str) -> str | None:
-    """Return a deny JSON if review_approach is invoked without a plan-path argument.
-
-    review_approach requires a plan file path produced by rectify/make_plan.
-    Heuristic: the first argument after the skill name must not be a bare
-    issue URL, which would otherwise fall back to ambiguous "conversation
-    context" inference instead of failing loudly.
-    """
-    if _canonical_step_name(step_name) != "review_approach":
-        return None
-    parts = skill_command.split()
-    if len(parts) < 2:
-        return None
-    first_arg = parts[1]
-    if first_arg.startswith("https://") or first_arg.startswith("http://"):
-        return json.dumps(
-            deny_envelope(
-                (
-                    "review_approach requires a plan file path argument (a path "
-                    "under the project's temp directory produced by "
-                    "rectify/make_plan), not an issue URL."
-                ),
-                stage="preflight:plan_path",
-                retriable=False,
-            )
-        )
-    return None
-
-
-def _derive_run_cmd_write_prefixes() -> tuple[str, ...]:
-    """Read allowed write prefixes from environment.
-
-    Mirrors the env-var resolution logic in hooks/guards/write_guard.py:
-    AUTOSKILLIT_ALLOWED_WRITE_PREFIXES (colon-separated) takes precedence over
-    AUTOSKILLIT_ALLOWED_WRITE_PREFIX (single value).
-    """
-    multi = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
-    if multi:
-        return tuple(p for p in multi.split(":") if p)
-    single = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
-    if single:
-        return (single,)
-    return ()
 
 
 def _mark_step_complete_server_side(
@@ -614,150 +588,6 @@ async def run_python(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-def _compute_write_prefixes(
-    write_watch_dirs: list[Path],
-    cwd: str,
-    skill_command: str,
-) -> tuple[str, tuple[str, ...]]:
-
-    worktree_write_prefixes: list[str] = []
-    extracted = extract_skill_name(skill_command)
-    if write_watch_dirs and extracted and extracted in WORKTREE_SKILLS:
-        resolved_cwd = Path(cwd).resolve()
-        if is_git_worktree(resolved_cwd):
-            # cwd IS the worktree — include cwd itself and its parent (the worktrees/ dir)
-            worktree_write_prefixes.append(str(resolved_cwd) + "/")
-            worktree_write_prefixes.append(str(resolved_cwd.parent) + "/")
-        else:
-            nested_wt = resolved_cwd / "worktrees"
-            sibling_wt = resolved_cwd.parent / "worktrees"
-            if nested_wt.is_dir():
-                worktree_write_prefixes.append(str(nested_wt) + "/")
-            if sibling_wt.is_dir():
-                worktree_write_prefixes.append(str(sibling_wt) + "/")
-            if not nested_wt.is_dir() and not sibling_wt.is_dir():
-                worktree_write_prefixes.append(str(sibling_wt) + "/")
-
-    base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
-    all_prefixes = base_prefixes + worktree_write_prefixes
-    return base_prefixes[0] if base_prefixes else "", tuple(all_prefixes)
-
-
-def _scope_covers_cwd(allowed_write_prefixes: tuple[str, ...], cwd: str) -> bool:
-    """Return True if any allowed_write_prefix covers cwd (lexical prefix match)."""
-    if not allowed_write_prefixes or not cwd:
-        return False
-    resolved_cwd_str = str(Path(cwd).resolve()).rstrip("/") + "/"
-    for pfx in allowed_write_prefixes:
-        if resolved_cwd_str.startswith(pfx):
-            return True
-    return False
-
-
-def _aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
-    """Aggregate required_sandbox_overrides from all declared capabilities."""
-    return frozenset().union(
-        *(
-            SKILL_CAPABILITY_REGISTRY[cap].required_sandbox_overrides
-            for cap in skill_caps
-            if cap in SKILL_CAPABILITY_REGISTRY
-        )
-    )
-
-
-def _has_routing_capability(skill_caps: frozenset[str]) -> bool:
-    """Return True if any declared capability is worker_routable (triggers backend reroute)."""
-    return any(
-        SKILL_CAPABILITY_REGISTRY.get(cap) is not None
-        and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
-        for cap in skill_caps
-    )
-
-
-def _get_routing_caps(skill_caps: frozenset[str]) -> list[str]:
-    """Return sorted list of worker_routable capabilities that trigger backend reroute."""
-    return sorted(
-        cap
-        for cap in skill_caps
-        if SKILL_CAPABILITY_REGISTRY.get(cap) and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
-    )
-
-
-def _build_skill_session_contract(
-    *,
-    session_root: ValidatedAddDir,
-    invocation: object,
-    projection_context: SkillProjectionContext,
-    resolved_command: str,
-) -> tuple[SkillSessionContract, dict[str, str]]:
-    """Capture the exact projected invocation bytes before executor launch."""
-    closure = tuple(getattr(invocation, "closure"))
-    root = getattr(invocation, "root")
-    backend = projection_context.backend
-    conventions = projection_context.conventions
-    if backend is None or conventions is None:
-        raise SkillContractError("Projected invocation requires an effective backend")
-
-    snapshot: dict[str, str] = {}
-    projected_digests: dict[str, str] = {}
-    canonical_digests: dict[str, str] = {}
-    source_refs: dict[str, str | SkillSourceRef] = {}
-    session_path = Path(session_root.path)
-    for member in closure:
-        relative_path = Path(conventions.skills_subdir) / member.name / "SKILL.md"
-        content = (session_path / relative_path).read_text(encoding="utf-8")
-        snapshot[relative_path.as_posix()] = content
-        projected_digests[member.name] = hashlib.sha256(content.encode()).hexdigest()
-        canonical_digests[member.name] = member.canonical_digest
-        source_refs[member.name] = member.source_ref or str(member.path)
-
-    project_root = getattr(invocation, "project_root")
-    if project_root is None:
-        raise SkillContractError("Effective invocation requires a project root")
-    contract = SkillSessionContract(
-        root_name=root.name,
-        execution_role=getattr(invocation, "execution_role"),
-        source_refs=source_refs,
-        closure=tuple(member.name for member in closure),
-        capability_union=getattr(invocation, "capability_union"),
-        canonical_digests=canonical_digests,
-        projected_digests=projected_digests,
-        projection_version=projection_context.projection_version,
-        project_root=str(project_root.resolve()),
-        execution_cwd=str(projection_context.execution_cwd.resolve()),
-        backend=backend.name,
-        resolved_command=resolved_command,
-    )
-    return contract, snapshot
-
-
-def _validate_resumed_skill_contract(
-    contract: SkillSessionContract,
-    *,
-    cwd: str,
-    backend: CodingAgentBackend | None,
-) -> None:
-    """Validate resume invariants that depend on the current dispatch context."""
-    if contract.execution_role is not SkillExecutionRole.SESSION:
-        raise SkillContractError(
-            f"Resume contract role must be session, got {contract.execution_role.value!r}"
-        )
-    resolved_cwd = str(Path(cwd).resolve())
-    if contract.execution_cwd != resolved_cwd or contract.project_root != resolved_cwd:
-        raise SkillContractError(
-            "Resume contract cwd/project_root does not match the requested execution cwd"
-        )
-    if backend is None or contract.backend != backend.name:
-        actual = backend.name if backend is not None else "unconfigured"
-        raise SkillContractError(
-            f"Resume contract backend {contract.backend!r} does not match {actual!r}"
-        )
-    # Loading validates schema, capability ownership, closure/digest maps, and
-    # every retained projected file digest. Accessing this property also
-    # re-derives backend constraints solely from the persisted capability union.
-    contract.backend_requirements
-
-
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("run_skill")
@@ -918,6 +748,7 @@ async def run_skill(
                 _validate_resumed_skill_contract(
                     _stored_contract_entry.contract,
                     cwd=cwd,
+                    project_root=tool_ctx.project_dir,
                     backend=_resume_backend_obj,
                 )
             except (OSError, ValueError, SkillContractError) as exc:
@@ -933,7 +764,11 @@ async def run_skill(
         else:
             _effective_skill_resolver = tool_ctx.skill_resolver
             if _effective_skill_resolver is None:
-                _effective_skill_resolver = DefaultSkillResolver()
+                return SkillResult.crashed(
+                    exception=SkillContractError("Skill resolver is not configured"),
+                    skill_command=skill_command,
+                    order_id=order_id,
+                ).to_json()
             target_name = extract_skill_name(skill_command)
             if target_name is None:
                 return SkillResult.crashed(
@@ -946,7 +781,7 @@ async def run_skill(
             try:
                 invocation = _effective_skill_resolver.resolve_invocation(
                     target_name,
-                    Path(cwd).resolve(),
+                    tool_ctx.project_dir,
                     SkillExecutionRole.SESSION,
                 )
             except SkillContractError as exc:
@@ -1110,9 +945,7 @@ async def run_skill(
             _stored_contract = (
                 _stored_contract_entry.contract if _stored_contract_entry is not None else None
             )
-            _effective_skill_contract = (
-                invocation.root if invocation is not None else _stored_contract
-            )
+            _effective_skill_contract = invocation if invocation is not None else _stored_contract
 
             _provider_override = (
                 provider_extras
@@ -1473,14 +1306,10 @@ async def run_skill(
                 skill_add_dirs.append(session_root)
 
                 # Fresh invocations extend scope from their validated closure.
-                # Restored replay snapshots bypass this branch and retain their
-                # original scope. This helper still re-reads write_paths until the
-                # persisted invocation contract includes them.
                 if invocation is not None and _effective_skill_resolver is not None:
                     write_watch_dirs.extend(
                         resolve_closure_write_dirs(
-                            frozenset(member.name for member in invocation.closure),
-                            _effective_skill_resolver,
+                            invocation.closure,
                             cwd,
                             write_watch_dirs,
                         )

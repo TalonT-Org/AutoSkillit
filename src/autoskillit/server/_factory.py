@@ -43,13 +43,13 @@ from autoskillit.execution import (
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
     DefaultMergeQueueWatcher,
+    DefaultSkillSessionContractStore,
     DefaultSubprocessRunner,
     DefaultTestRunner,
     RecordingSubprocessRunner,
     build_replay_runner,
     get_backend,
 )
-from autoskillit.execution.session import DefaultSkillSessionContractStore
 from autoskillit.fleet import FleetSemaphore, build_protected_campaign_ids
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (

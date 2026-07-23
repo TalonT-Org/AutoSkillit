@@ -50,7 +50,12 @@ from autoskillit.fleet import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
-from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
+from autoskillit.server._misc import (
+    SkillProjectionContext,
+    project_agent_skill_document,
+    resolve_backend_override,
+    resolve_log_dir,
+)
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
@@ -62,7 +67,6 @@ from autoskillit.server.tools._preflight import (
     filter_steps_by_post_prune,
 )
 from autoskillit.server.tools._serve_helpers import build_backend_capabilities_map
-from autoskillit.workspace import SkillProjectionContext, project_agent_skill_document
 
 logger = get_logger(__name__)
 

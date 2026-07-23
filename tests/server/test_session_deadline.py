@@ -62,8 +62,6 @@ class TestRunSkillSessionDeadlinePropagation:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
         tool_ctx_kitchen_open.project_dir = tmp_path
-        # skill_resolver=None makes target_name=None, bypassing the resolver gates.
-        tool_ctx_kitchen_open.skill_resolver = None
 
         from autoskillit.server.tools.tools_execution import run_skill
 
@@ -104,7 +102,6 @@ class TestRunSkillSessionDeadlinePropagation:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.skill_resolver = None
 
         from autoskillit.server.tools.tools_execution import run_skill
 
@@ -142,7 +139,6 @@ class TestRunSkillSessionDeadlinePropagation:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.skill_resolver = None
 
         from autoskillit.server.tools.tools_execution import run_skill
 
@@ -174,7 +170,6 @@ class TestRunSkillSessionDeadlinePropagation:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.skill_resolver = None
 
         from autoskillit.server.tools.tools_execution import run_skill
 
@@ -210,7 +205,6 @@ class TestRunSkillSessionDeadlinePropagation:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.skill_resolver = None
 
         from autoskillit.server.tools.tools_execution import run_skill
 
@@ -238,7 +232,6 @@ class TestRunSkillSessionDeadlinePropagation:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.skill_resolver = None
 
         from autoskillit.server.tools.tools_execution import run_skill
 
@@ -271,7 +264,6 @@ class TestRunSkillSessionDeadlinePropagation:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.skill_resolver = None
 
         from autoskillit.server.tools.tools_execution import run_skill
 

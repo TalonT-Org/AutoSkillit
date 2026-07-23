@@ -16,19 +16,19 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 def _make_skill(
     name: str = "test-skill",
     source: SkillSource = SkillSource.BUNDLED_EXTENDED,
-    backend_requirements: frozenset[str] = frozenset(),
+    uses_capabilities: frozenset[str] = frozenset(),
 ) -> SkillInfo:
     return SkillInfo(
         name=name,
         source=source,
         path=Path("/fake/path"),
-        backend_requirements=backend_requirements,
+        uses_capabilities=uses_capabilities,
     )
 
 
 class TestShouldInjectSkillBackendFilter:
     def test_incompatible_backend_returns_false(self):
-        skill = _make_skill(backend_requirements=frozenset({"claude-code"}))
+        skill = _make_skill(uses_capabilities=frozenset({"open_kitchen"}))
         result = _should_inject_skill(
             skill,
             overrides=frozenset(),
@@ -40,7 +40,7 @@ class TestShouldInjectSkillBackendFilter:
         assert result is False
 
     def test_compatible_backend_returns_true(self):
-        skill = _make_skill(backend_requirements=frozenset({"claude-code"}))
+        skill = _make_skill(uses_capabilities=frozenset({"open_kitchen"}))
         result = _should_inject_skill(
             skill,
             overrides=frozenset(),
@@ -52,7 +52,7 @@ class TestShouldInjectSkillBackendFilter:
         assert result is True
 
     def test_empty_requirements_compatible_with_any_backend(self):
-        skill = _make_skill(backend_requirements=frozenset())
+        skill = _make_skill()
         result = _should_inject_skill(
             skill,
             overrides=frozenset(),
@@ -64,7 +64,7 @@ class TestShouldInjectSkillBackendFilter:
         assert result is True
 
     def test_none_backend_skips_check(self):
-        skill = _make_skill(backend_requirements=frozenset({"claude-code"}))
+        skill = _make_skill(uses_capabilities=frozenset({"open_kitchen"}))
         result = _should_inject_skill(
             skill,
             overrides=frozenset(),

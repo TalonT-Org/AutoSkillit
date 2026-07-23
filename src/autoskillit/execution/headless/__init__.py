@@ -3,7 +3,6 @@
 IL-1 module (execution/). Owns the full lifecycle of a headless claude CLI session:
 command preparation, subprocess invocation via the injected runner, and
 SkillResult construction.
-
 Public API: run_headless_core(skill_command, cwd, ctx, *, ...) -> SkillResult
 """
 

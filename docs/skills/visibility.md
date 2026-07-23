@@ -24,7 +24,7 @@ simultaneously or reclassify session-role skills between tiers. See
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (105 total):
+- **Default members** (106 total):
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
   `make-experiment-diag`, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan`, `phoropter-null-synthesis`, `phoropter-priority-synthesis`,
@@ -46,7 +46,7 @@ simultaneously or reclassify session-role skills between tiers. See
 ### Tier 3 — Pipeline-Only (Automation Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (same directory as Tier 2)
-- **Default members** (31 total):
+- **Default members** (32 total):
   `prepare-pr`, `compose-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`,
   `review-pr`, `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
   `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,

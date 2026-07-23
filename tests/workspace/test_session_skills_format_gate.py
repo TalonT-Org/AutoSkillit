@@ -12,25 +12,40 @@ from unittest.mock import MagicMock
 import pytest
 import structlog.testing
 
-from autoskillit.core import SkillSource
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
+from autoskillit.workspace.skills import SkillSource, _skill_info_from_frontmatter
 from tests._helpers import make_skills_config, make_subsetsconfig, make_test_config
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
+def _provider_for_content(
+    tmp_path: Path,
+    name: str,
+    content: str,
+) -> SkillsDirectoryProvider:
+    skill_md = tmp_path / "fixtures" / name / "SKILL.md"
+    skill_md.parent.mkdir(parents=True, exist_ok=True)
+    skill_md.write_text(content)
+    info = _skill_info_from_frontmatter(name, SkillSource.BUNDLED_EXTENDED, skill_md)
+    resolver = MagicMock()
+    resolver.list_all.return_value = [info]
+    resolver.resolve.side_effect = lambda requested: info if requested == name else None
+    provider = SkillsDirectoryProvider()
+    provider._resolver = resolver
+    return provider
+
+
 class TestInitSessionFormatGate:
     def test_init_session_skips_skill_with_missing_description(self, tmp_path: Path) -> None:
-        provider = MagicMock(spec=SkillsDirectoryProvider)
-        skill_info = MagicMock()
-        skill_info.name = "bad-skill"
-        skill_info.source = SkillSource.BUNDLED_EXTENDED
-        skill_info.categories = []
-        provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
+        provider = _provider_for_content(
+            tmp_path,
+            "bad-skill",
+            "---\nname: bad-skill\n---\nBody",
+        )
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
         config = make_test_config(
@@ -42,18 +57,16 @@ class TestInitSessionFormatGate:
 
         skill_dir = Path(result.path) / ".claude" / "skills" / "bad-skill"
         assert not skill_dir.exists()
-        assert provider.list_skills.called
+        assert provider.resolver.list_all.called
         format_events = [e for e in captured if e.get("event") == "skill_format_validation"]
         assert any(e.get("skill") == "bad-skill" for e in format_events)
 
     def test_init_session_logs_warning_on_invalid_frontmatter(self, tmp_path: Path) -> None:
-        provider = MagicMock(spec=SkillsDirectoryProvider)
-        skill_info = MagicMock()
-        skill_info.name = "bad-skill"
-        skill_info.source = SkillSource.BUNDLED_EXTENDED
-        skill_info.categories = []
-        provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
+        provider = _provider_for_content(
+            tmp_path,
+            "bad-skill",
+            "---\nname: bad-skill\n---\nBody",
+        )
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
         config = make_test_config(
@@ -68,14 +81,10 @@ class TestInitSessionFormatGate:
         assert any(e.get("skill") == "bad-skill" for e in format_events)
 
     def test_init_session_writes_skill_with_valid_frontmatter(self, tmp_path: Path) -> None:
-        provider = MagicMock(spec=SkillsDirectoryProvider)
-        skill_info = MagicMock()
-        skill_info.name = "good-skill"
-        skill_info.source = SkillSource.BUNDLED_EXTENDED
-        skill_info.categories = []
-        provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = (
-            "---\nname: good-skill\ndescription: A good skill\n---\nBody"
+        provider = _provider_for_content(
+            tmp_path,
+            "good-skill",
+            "---\nname: good-skill\ndescription: A good skill\n---\nBody",
         )
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
@@ -91,13 +100,11 @@ class TestInitSessionFormatGate:
     def test_init_session_format_rejected_does_not_trigger_allow_only_error(
         self, tmp_path: Path
     ) -> None:
-        provider = MagicMock(spec=SkillsDirectoryProvider)
-        skill_info = MagicMock()
-        skill_info.name = "bad-skill"
-        skill_info.source = SkillSource.BUNDLED_EXTENDED
-        skill_info.categories = []
-        provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
+        provider = _provider_for_content(
+            tmp_path,
+            "bad-skill",
+            "---\nname: bad-skill\n---\nBody",
+        )
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
         config = make_test_config(
@@ -114,14 +121,11 @@ class TestInitSessionFormatGate:
 
 class TestActivateWithDepsFormatGate:
     def test_activate_with_deps_skips_format_invalid_skill(self, tmp_path: Path) -> None:
-        provider = MagicMock(spec=SkillsDirectoryProvider)
-        skill_info = MagicMock()
-        skill_info.name = "bad-skill"
-        skill_info.source = SkillSource.BUNDLED_EXTENDED
-        skill_info.categories = []
-        provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
-        provider.resolver.resolve.return_value = skill_info
+        provider = _provider_for_content(
+            tmp_path,
+            "bad-skill",
+            "---\nname: bad-skill\n---\nBody",
+        )
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
         # Pre-create the session dir with no skills
@@ -132,14 +136,11 @@ class TestActivateWithDepsFormatGate:
         assert result is False
 
     def test_activate_with_deps_logs_warning_on_invalid_frontmatter(self, tmp_path: Path) -> None:
-        provider = MagicMock(spec=SkillsDirectoryProvider)
-        skill_info = MagicMock()
-        skill_info.name = "bad-skill"
-        skill_info.source = SkillSource.BUNDLED_EXTENDED
-        skill_info.categories = []
-        provider.list_skills.return_value = [skill_info]
-        provider.get_skill_content.return_value = "---\nname: bad-skill\n---\nBody"
-        provider.resolver.resolve.return_value = skill_info
+        provider = _provider_for_content(
+            tmp_path,
+            "bad-skill",
+            "---\nname: bad-skill\n---\nBody",
+        )
 
         manager = DefaultSessionSkillManager(provider, tmp_path)
         sess_dir = tmp_path / "sess1" / ".claude" / "skills"

@@ -1148,6 +1148,12 @@ def _make_git_write_resolver() -> MagicMock:
     info.backend_requirements = frozenset({"claude-code"})
     resolver = MagicMock()
     resolver.resolve.return_value = info
+    resolver.resolve_invocation.return_value = MagicMock(
+        root=info,
+        closure=(info,),
+        capability_union=info.uses_capabilities,
+        backend_requirements=info.backend_requirements,
+    )
     return resolver
 
 

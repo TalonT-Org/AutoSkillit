@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import Severity, SkillSource
+from autoskillit.core import Severity, SkillContractError, SkillSource
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe._rule_helpers import filter_pruning_false_positives
 from autoskillit.recipe.registry import run_semantic_rules
@@ -40,6 +40,7 @@ def _make_skill_info(
         path=Path("/nonexistent/SKILL.md"),
         categories=frozenset(),
         backend_requirements=backend_requirements,
+        uses_capabilities=frozenset(),
     )
 
 
@@ -57,6 +58,15 @@ def _mock_resolver(skill_info: SimpleNamespace | None) -> MagicMock:
     resolver = MagicMock()
     resolver.resolve.return_value = skill_info
     resolver.list_all.return_value = [skill_info] if skill_info else []
+    if skill_info is not None:
+        resolver.resolve_invocation.return_value = SimpleNamespace(
+            root=skill_info,
+            closure=(skill_info,),
+            capability_union=skill_info.uses_capabilities,
+            backend_requirements=skill_info.backend_requirements,
+        )
+    else:
+        resolver.resolve_invocation.side_effect = SkillContractError("skill not found")
     return resolver
 
 

@@ -116,10 +116,7 @@ async def test_fail_fast_when_scope_excludes_cwd(
 ) -> None:
     """When write scope does NOT cover cwd for a WORKTREE_SKILLS dispatch, return gate_error."""
     import json
-    from unittest.mock import MagicMock
 
-    from autoskillit.core.types import SkillSource
-    from autoskillit.workspace.skills import SkillInfo
     from tests.fakes import InMemoryHeadlessExecutor
 
     clone_root, worktree = _make_worktree_layout(tmp_path)
@@ -127,20 +124,7 @@ async def test_fail_fast_when_scope_excludes_cwd(
     plan_path.write_text("# plan")
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    skill_info = SkillInfo(
-        name="implement-worktree-no-merge",
-        source=SkillSource.BUNDLED,
-        path=Path("/fake/SKILL.md"),
-        backend_requirements=frozenset({"claude-code"}),
-    )
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = skill_info
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.resolve_target_skill",
-        lambda cmd, resolver: (cmd, "implement-worktree-no-merge"),
-    )
 
     # write scope is temp-only — does NOT cover cwd.
     # cwd is a location outside the worktree/worktree-parent scope, so the
@@ -188,10 +172,7 @@ async def test_preflight_fires_for_conditional_contract_worktree_skills(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """Preflight fires for worktree skills regardless of write-behavior mode."""
-    from unittest.mock import MagicMock
 
-    from autoskillit.core.types import SkillSource
-    from autoskillit.workspace.skills import SkillInfo
     from tests.fakes import InMemoryHeadlessExecutor
 
     clone_root, worktree = _make_worktree_layout(tmp_path)
@@ -199,20 +180,7 @@ async def test_preflight_fires_for_conditional_contract_worktree_skills(
     plan_path.write_text("# plan")
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    skill_info = SkillInfo(
-        name="implement-worktree-no-merge",
-        source=SkillSource.BUNDLED,
-        path=Path("/fake/SKILL.md"),
-        backend_requirements=frozenset({"claude-code"}),
-    )
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = skill_info
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.resolve_target_skill",
-        lambda cmd, resolver: (cmd, "implement-worktree-no-merge"),
-    )
 
     # Scope covers cwd — preflight evaluates and passes (dispatch proceeds)
     await run_skill(

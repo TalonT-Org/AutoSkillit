@@ -72,7 +72,11 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
     assert "Step 0" in text, f"{family}-{slug} must have Step 0"
     assert "diagram_path" in text, f"{family}-{slug} must mention diagram_path"
 
-    fm = parse_frontmatter_content(text)
+    parsed = parse_frontmatter_content(text)
+    assert parsed.is_valid and parsed.data is not None, (
+        f"{family}-{slug} frontmatter must parse, got {parsed.error}"
+    )
+    fm = parsed.data
     assert fm.get("categories") == [family], (
         f"{family}-{slug} frontmatter categories must be [{family}], got {fm.get('categories')}"
     )

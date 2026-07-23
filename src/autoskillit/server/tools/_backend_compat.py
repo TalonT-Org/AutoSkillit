@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DirectSkillDispatch:
     """Projected materialization retained for one direct headless dispatch."""
 

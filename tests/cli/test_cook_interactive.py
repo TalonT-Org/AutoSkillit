@@ -9,9 +9,17 @@ from pathlib import Path
 import pytest
 
 from autoskillit import cli
+from autoskillit.core import BackendConventions
 from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+
+class _ProjectionBackendStub:
+    """Minimum projection-facing contract shared by local backend doubles."""
+
+    name = "claude-code"
+    conventions = BackendConventions()
 
 
 class TestCookInteractive:
@@ -35,6 +43,7 @@ class TestCookInteractive:
             config=None,
             project_dir=None,
             backend=None,
+            allow_only=None,
         ) -> Path:
             captured["cook_session"] = cook_session
             return fake_skills_dir
@@ -63,6 +72,7 @@ class TestCookInteractive:
             config=None,
             project_dir=None,
             backend=None,
+            allow_only=None,
         ) -> Path:
             return fake_skills_dir
 
@@ -95,6 +105,7 @@ class TestCookInteractive:
             config=None,
             project_dir=None,
             backend=None,
+            allow_only=None,
         ) -> Path:
             return fake_skills_dir
 
@@ -125,10 +136,8 @@ class TestCookInteractive:
 
     # CH-6
     def test_cook_passes_plugin_dir(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """cook subprocess call includes --plugin-dir <pkg_root()> (REQ-TIER-011)."""
+        """cook passes a sanitized plugin projection instead of the package root."""
         from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import pkg_root
 
         fake_skills_dir = tmp_path / "skills"
         fake_skills_dir.mkdir()
@@ -149,7 +158,10 @@ class TestCookInteractive:
         args = mock_run.call_args[0][0]
         assert "--plugin-dir" in args
         idx = args.index("--plugin-dir")
-        assert args[idx + 1] == str(pkg_root())
+        projected_plugin = Path(args[idx + 1])
+        assert projected_plugin.is_dir()
+        assert projected_plugin.parent.name == "plugin-projections"
+        assert (projected_plugin / ".claude-plugin" / "plugin.json").is_file()
 
     # CH-7
     def test_cook_includes_dangerously_skip_permissions(
@@ -592,7 +604,7 @@ class TestCookInteractive:
         mock_mgr.init_session.return_value = fake_skills_dir
         captured_env_extras: list = []
 
-        class _MockBackend:
+        class _MockBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "claude"
 
@@ -632,7 +644,7 @@ class TestCookInteractive:
         mock_mgr.init_session.return_value = fake_skills_dir
         captured_env_extras: list = []
 
-        class _MockBackend:
+        class _MockBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "claude"
 
@@ -671,7 +683,7 @@ class TestCookInteractive:
         mock_mgr.init_session.return_value = fake_skills_dir
         captured_which: list = []
 
-        class _CustomBackend:
+        class _CustomBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "my-test-claude"
 
@@ -712,7 +724,7 @@ class TestCookInteractive:
         mock_mgr.init_session.return_value = fake_skills_dir
         captured_kwargs: list = []
 
-        class _CapturingBackend:
+        class _CapturingBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "claude"
 
@@ -756,7 +768,7 @@ class TestCookInteractive:
         mock_mgr.init_session.return_value = fake_skills_dir
         build_called: list[dict] = []
 
-        class _InjectedBackend:
+        class _InjectedBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "claude"
 
@@ -801,7 +813,7 @@ class TestCookInteractive:
         mock_mgr.init_session.return_value = fake_skills_dir
         get_backend_called: list = []
 
-        class _FakeBackend:
+        class _FakeBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "claude"
 
@@ -851,7 +863,7 @@ class TestCookInteractive:
         mock_mgr.init_session.return_value = fake_skills_dir
         get_backend_calls: list = []
 
-        class _StubBackend:
+        class _StubBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "claude"
 
@@ -901,7 +913,7 @@ class TestCookInteractive:
         mock_mgr.init_session.return_value = fake_skills_dir
         hardcoded_calls: list = []
 
-        class _StubBackend:
+        class _StubBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "claude"
 
@@ -958,11 +970,12 @@ class TestCookInteractive:
             config=None,
             project_dir=None,
             backend=None,
+            allow_only=None,
         ) -> Path:
             captured["backend"] = backend
             return fake_skills_dir
 
-        class _FakeBackend:
+        class _FakeBackend(_ProjectionBackendStub):
             def binary_name(self) -> str:
                 return "claude"
 

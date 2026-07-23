@@ -411,6 +411,25 @@ def tool_ctx(monkeypatch, tmp_path):
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
     ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
+    test_skills_root = tmp_path / ".claude" / "skills"
+    for skill_name in (
+        "do-a",
+        "do-b",
+        "eval-agent",
+        "idle-scope",
+        "implement",
+        "probe",
+        "some-skill",
+        "target-skill",
+        "test",
+        "test-skill",
+    ):
+        skill_dir = test_skills_root / skill_name
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {skill_name}\ndescription: Test fixture skill\n---\n"
+            "# Test fixture skill\n"
+        )
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx
@@ -453,19 +472,60 @@ def tool_ctx_kitchen_open(tool_ctx):
     the test is not testing gate-boot behavior itself. This fixture
     mirrors the post-lifespan-boot state for interactive sessions.
 
-    Sets skill_resolver=None so run_skill skips all skill-name resolution
-    gates (existence gate, empty-closure gate, _is_known_skill check).
-    target_name stays None and the session runs unrestricted — matching
-    pre-gate behavior for tests that don't exercise skill resolution.
-
-    Tests that verify rejection behavior or specific skill resolution
-    must explicitly set tool_ctx.skill_resolver to their own mock.
+    The production resolver remains installed so every run_skill call exercises
+    the same fail-closed effective-contract path as a real session.  The parent
+    fixture provides small project-local skills for generic routing tests.
     """
     from autoskillit.pipeline.gate import DefaultGateState
 
     tool_ctx.gate = DefaultGateState(enabled=True)
-    tool_ctx.skill_resolver = None
     return tool_ctx
+
+
+def bind_test_skill_resume_contract(
+    tool_ctx,
+    *,
+    session_id: str,
+    cwd,
+    skill_name: str = "implement",
+    resolved_command: str | None = None,
+) -> None:
+    """Bind a minimal valid projected contract for resume-path tests."""
+    import hashlib
+    from pathlib import Path
+
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.execution import (
+        DefaultSkillSessionContractStore,
+        SkillSessionContract,
+    )
+
+    text = f"---\nname: {skill_name}\n---\n# Test resume snapshot\n"
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    relative_path = (
+        Path(tool_ctx.backend.conventions.skills_subdir) / skill_name / "SKILL.md"
+    ).as_posix()
+    contract = SkillSessionContract(
+        root_name=skill_name,
+        execution_role=SkillExecutionRole.SESSION,
+        source_refs={skill_name: f"project_local:{relative_path}"},
+        closure=(skill_name,),
+        capability_union=frozenset(),
+        canonical_digests={skill_name: digest},
+        projected_digests={skill_name: digest},
+        projection_version=1,
+        project_root=str(Path(tool_ctx.project_dir).resolve()),
+        execution_cwd=str(Path(cwd).resolve()),
+        backend=tool_ctx.backend.name,
+        resolved_command=resolved_command or f"/{skill_name}",
+    )
+    store = DefaultSkillSessionContractStore(root=Path(tool_ctx.temp_dir) / "test-skill-contracts")
+    correlation_key = store.create_provisional(
+        contract=contract,
+        snapshot={relative_path: text},
+    )
+    store.finalize(correlation_key, session_id)
+    tool_ctx.skill_session_contract_store = store
 
 
 # ---------------------------------------------------------------------------

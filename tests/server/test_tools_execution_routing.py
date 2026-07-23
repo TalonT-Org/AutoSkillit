@@ -47,20 +47,14 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx_kitchen_open, monkey
 
 
 @pytest.mark.anyio
-async def test_run_skill_calls_session_skill_manager_init_session(
+async def test_run_skill_materializes_exact_invocation(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """run_skill routes through session_skill_manager.init_session() for add_dirs."""
+    """run_skill routes the resolved invocation through session materialization."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
-
-    # Create a spy on init_session — use a real directory so the stale-path guard passes
-    session_dir = tmp_path / "session"
-    session_dir.mkdir()
-    fake_validated = ValidatedAddDir(path=str(session_dir))
-    mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = fake_validated
+    real_ssm = tool_ctx_kitchen_open.session_skill_manager
+    mock_ssm = MagicMock(wraps=real_ssm)
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     from tests.fakes import InMemoryHeadlessExecutor
@@ -71,49 +65,34 @@ async def test_run_skill_calls_session_skill_manager_init_session(
 
     await run_skill("/test skill", "/tmp")
 
-    # init_session was called with cook_session=False (headless, not cook)
-    mock_ssm.init_session.assert_called_once()
-    call_kwargs = mock_ssm.init_session.call_args
-    assert call_kwargs.kwargs.get("cook_session") is False
-
-    # The returned ValidatedAddDir is in add_dirs
-    assert fake_validated in executor.calls[0].add_dirs
+    mock_ssm.materialize_invocation.assert_called_once()
+    invocation = mock_ssm.materialize_invocation.call_args.args[1]
+    assert invocation.root.name == "test"
+    assert executor.calls[0].add_dirs
 
 
 @pytest.mark.anyio
-async def test_run_skill_activates_deps_for_tier3_target(
+async def test_run_skill_materializes_resolved_dependency_closure(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """run_skill calls activate_skill_deps even when target is tier3 (not in tier2 list)."""
+    """The materialized invocation carries the resolver's exact dependency closure."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
-
-    # Use a real directory so the stale-path guard passes
-    session_dir = tmp_path / "session"
-    session_dir.mkdir()
-    fake_validated = ValidatedAddDir(path=str(session_dir))
-    mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = fake_validated
+    real_ssm = tool_ctx_kitchen_open.session_skill_manager
+    mock_ssm = MagicMock(wraps=real_ssm)
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
-
-    # Set up skill_resolver to produce a resolved name
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(
-        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
-    )
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     from tests.fakes import InMemoryHeadlessExecutor
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
-    # Use a tier3 skill name
-    await run_skill("/open-pr", "/tmp")
+    await run_skill("/autoskillit:investigate issue", "/tmp")
 
-    # activate_skill_deps must have been called regardless of tier
-    mock_ssm.activate_skill_deps.assert_called_once()
+    mock_ssm.materialize_invocation.assert_called_once()
+    invocation = mock_ssm.materialize_invocation.call_args.args[1]
+    assert invocation.root.name == "investigate"
+    assert {member.name for member in invocation.closure}
 
 
 @pytest.mark.anyio
@@ -151,118 +130,73 @@ async def test_run_skill_result_order_id_empty_string_when_not_passed(
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_allow_only_to_init_session(
+async def test_run_skill_materializes_exact_resolver_closure(
     tool_ctx_kitchen_open, monkeypatch
 ) -> None:
-    """run_skill computes the closure for the resolved target and forwards it as allow_only."""
+    """run_skill forwards the resolver's immutable invocation to materialization."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
     from tests.fakes import InMemoryHeadlessExecutor
 
-    fake_validated = ValidatedAddDir(path="/fake/session/dir")
-    expected_closure = frozenset({"investigate", "mermaid"})
-
-    mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = fake_validated
-    mock_ssm.compute_skill_closure.return_value = expected_closure
+    real_ssm = tool_ctx_kitchen_open.session_skill_manager
+    mock_ssm = MagicMock(wraps=real_ssm)
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
-
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(
-        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
-    )
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:investigate the bug", "/tmp")
 
-    mock_ssm.compute_skill_closure.assert_called_once_with("investigate")
-    mock_ssm.init_session.assert_called_once()
-    assert mock_ssm.init_session.call_args.kwargs.get("allow_only") == expected_closure
+    mock_ssm.materialize_invocation.assert_called_once()
+    invocation = mock_ssm.materialize_invocation.call_args.args[1]
+    assert invocation.root.name == "investigate"
+    assert invocation.closure
 
 
 @pytest.mark.anyio
-async def test_run_skill_no_target_skill_passes_none_allow_only(
-    tool_ctx_kitchen_open, monkeypatch
-) -> None:
-    """When skill_resolver is unset, target_name is None and allow_only stays None."""
+async def test_run_skill_without_resolver_fails_closed(tool_ctx_kitchen_open, monkeypatch) -> None:
+    """A missing resolver cannot become an unrestricted session launch."""
+    import json
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
     from tests.fakes import InMemoryHeadlessExecutor
 
-    fake_validated = ValidatedAddDir(path="/fake/session/dir")
     mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = fake_validated
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
-    tool_ctx_kitchen_open.skill_resolver = None  # disables resolve_target_skill
+    tool_ctx_kitchen_open.skill_resolver = None
 
-    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
-    await run_skill("/test skill", "/tmp")
+    result = json.loads(await run_skill("/test skill", "/tmp"))
 
-    mock_ssm.init_session.assert_called_once()
-    assert mock_ssm.init_session.call_args.kwargs.get("allow_only") is None
-    mock_ssm.compute_skill_closure.assert_not_called()
+    assert result["success"] is False
+    assert "resolver is not configured" in result["result"]
+    mock_ssm.materialize_invocation.assert_not_called()
+    assert executor.calls == []
 
 
 @pytest.mark.anyio
 async def test_run_skill_make_plan_passes_exact_retained_closure(
     tool_ctx_kitchen_open, monkeypatch
 ) -> None:
-    """End-to-end: /make-plan forwards its exact retained activation closure."""
+    """End-to-end: /make-plan materializes its exact retained activation closure."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
     from tests.fakes import InMemoryHeadlessExecutor
 
-    real_provider = SkillsDirectoryProvider()
-    real_mgr = DefaultSessionSkillManager(
-        provider=real_provider, ephemeral_root=tool_ctx_kitchen_open.temp_dir
-    )
-
-    captured: dict = {}
-
-    class _RecordingManager:
-        def __init__(self, real: DefaultSessionSkillManager) -> None:
-            self._real = real
-
-        def init_session(self, session_id, **kwargs):
-            captured["allow_only"] = kwargs.get("allow_only")
-            return ValidatedAddDir(path="/fake/session/dir")
-
-        def compute_skill_closure(self, target_name):
-            return self._real.compute_skill_closure(target_name)
-
-        def activate_skill_deps(self, session_id, skill_name):
-            return True
-
-        def cleanup_stale(self, max_age_seconds=86400):
-            return 0
-
-    tool_ctx_kitchen_open.session_skill_manager = _RecordingManager(real_mgr)
-
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(
-        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
-    )
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+    real_ssm = tool_ctx_kitchen_open.session_skill_manager
+    mock_ssm = MagicMock(wraps=real_ssm)
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:make-plan refactor", "/tmp")
 
-    closure = captured["allow_only"]
-    assert closure == frozenset({"make-plan", "write-recipe"})
+    invocation = mock_ssm.materialize_invocation.call_args.args[1]
+    assert {member.name for member in invocation.closure} == {"make-plan", "write-recipe"}
 
 
 @pytest.mark.anyio
@@ -294,23 +228,20 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_backend_to_init_session(
+async def test_run_skill_passes_backend_to_projection_context(
     tool_ctx_kitchen_open, monkeypatch
 ) -> None:
-    """run_skill forwards tool_ctx.backend to init_session()."""
+    """run_skill forwards tool_ctx.backend to invocation materialization."""
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.execution.backends import get_backend
     from tests.fakes import InMemoryHeadlessExecutor
 
-    fake_validated = ValidatedAddDir(path="/fake/session/dir")
-    mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = fake_validated
+    real_ssm = tool_ctx_kitchen_open.session_skill_manager
+    mock_ssm = MagicMock(wraps=real_ssm)
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
-    # Set a non-None backend on the context
-    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend = get_backend("claude-code")
     tool_ctx_kitchen_open.backend = fake_backend
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
@@ -318,8 +249,9 @@ async def test_run_skill_passes_backend_to_init_session(
 
     await run_skill("/test skill", "/tmp")
 
-    mock_ssm.init_session.assert_called_once()
-    assert mock_ssm.init_session.call_args.kwargs.get("backend") is fake_backend
+    mock_ssm.materialize_invocation.assert_called_once()
+    projection_context = mock_ssm.materialize_invocation.call_args.args[2]
+    assert projection_context.backend is fake_backend
 
 
 @pytest.mark.anyio
@@ -344,18 +276,26 @@ async def test_run_skill_incompatible_backend_rejects_before_init_session(
 
     from pathlib import Path
 
+    from autoskillit.core import SkillExecutionRole
     from autoskillit.core.types import SkillSource
-    from autoskillit.workspace.skills import SkillInfo
+    from autoskillit.workspace.skills import EffectiveSkillInvocation, SkillInfo
 
     skill_info = SkillInfo(
         name="test-skill",
         source=SkillSource.BUNDLED,
         path=Path("/fake/SKILL.md"),
-        backend_requirements=frozenset({"claude-code"}),
         uses_capabilities=frozenset({"open_kitchen"}),
+        canonical_content="# test",
+    )
+    invocation = EffectiveSkillInvocation(
+        root=skill_info,
+        closure=(skill_info,),
+        capability_union=frozenset({"open_kitchen"}),
+        project_root=tmp_path,
+        execution_role=SkillExecutionRole.SESSION,
     )
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = skill_info
+    mock_resolver.resolve_invocation.return_value = invocation
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
@@ -364,16 +304,11 @@ async def test_run_skill_incompatible_backend_rejects_before_init_session(
         "autoskillit.server._guards._resolve_provider_profile",
         lambda *a, **kw: ("default", {}),
     )
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.resolve_target_skill",
-        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
-    )
-
     result = await run_skill("/autoskillit:test-skill", str(tmp_path))
     data = json.loads(result)
     assert data.get("subtype") == "crashed"
     assert "requires backend" in data.get("result", "")
-    mock_ssm.init_session.assert_not_called()
+    mock_ssm.materialize_invocation.assert_not_called()
 
 
 class TestOutputDirParameter:
@@ -513,18 +448,12 @@ async def test_run_skill_cleans_up_on_skill_md_not_found(
     from autoskillit.core import ValidatedAddDir
 
     cleanup_calls: list[str] = []
+    session_dir = tmp_path / "empty-session"
+    session_dir.mkdir()
     mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
-    mock_ssm.compute_skill_closure.return_value = frozenset({"target-skill"})
+    mock_ssm.materialize_invocation.return_value = ValidatedAddDir(path=str(session_dir))
     mock_ssm.cleanup_session.side_effect = lambda sid: cleanup_calls.append(sid) or True
-    # Return a valid skill_info so the pre-init existence gate passes; the test
-    # exercises the SKILL.md-not-found crash path after init_session succeeds.
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(
-        source=MagicMock(value="bundled"), backend_requirements=frozenset()
-    )
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     result = json.loads(await run_skill("/autoskillit:target-skill", str(tmp_path)))
@@ -593,57 +522,17 @@ async def test_run_skill_empty_closure_not_expanded_to_unrestricted(
 
 
 @pytest.mark.anyio
-async def test_run_skill_is_known_skill_else_branch_rejects_unknown_after_init(
-    tool_ctx_kitchen_open, monkeypatch, tmp_path
-) -> None:
-    """Defense-in-depth: resolver returning None after init crashes, not silently proceeds."""
-    import json
-    from unittest.mock import MagicMock
-
-    from autoskillit.core import ValidatedAddDir
-    from tests.fakes import InMemoryHeadlessExecutor
-
-    mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
-    mock_ssm.compute_skill_closure.return_value = frozenset({"some-skill"})
-    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
-
-    # Call 1 (resolve_target_skill): returns valid info for namespace resolution.
-    # Call 2 (_skill_info gate 3a): returns valid info to pass existence gate.
-    # Call 3 (_is_known_skill after init): returns None — simulates resolver
-    # cache invalidation between pre-init and post-init checks.
-    _valid_info = MagicMock(source=MagicMock(value="bundled"), backend_requirements=frozenset())
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.side_effect = [
-        _valid_info,
-        _valid_info,
-        None,
-    ]
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
-    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-
-    result = json.loads(await run_skill("/autoskillit:some-skill", str(tmp_path)))
-
-    assert result.get("subtype") == "crashed"
-    assert not result.get("success", True)
-    mock_ssm.init_session.assert_called_once()
-    assert mock_resolver.resolve.call_count == 3
-
-
-@pytest.mark.anyio
-async def test_run_skill_cleans_up_on_init_session_failure(
+async def test_run_skill_cleans_up_on_materialization_failure(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
-    """Partial init_session failure still triggers cleanup for the session_id."""
+    """Partial materialization failure still triggers cleanup for the session_id."""
     from unittest.mock import MagicMock
 
     from tests.fakes import InMemoryHeadlessExecutor
 
     cleanup_calls: list[str] = []
     mock_ssm = MagicMock()
-    mock_ssm.init_session.side_effect = OSError("disk full")
-    mock_ssm.compute_skill_closure.return_value = None
+    mock_ssm.materialize_invocation.side_effect = OSError("disk full")
     mock_ssm.cleanup_session.side_effect = lambda sid: cleanup_calls.append(sid) or True
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
     executor = InMemoryHeadlessExecutor()
@@ -664,12 +553,10 @@ async def test_run_skill_succeeds_when_cleanup_session_raises(
     import json
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
     from tests.fakes import InMemoryHeadlessExecutor
 
-    mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
-    mock_ssm.compute_skill_closure.return_value = None
+    real_ssm = tool_ctx_kitchen_open.session_skill_manager
+    mock_ssm = MagicMock(wraps=real_ssm)
     mock_ssm.cleanup_session.side_effect = PermissionError("locked")
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
     executor = InMemoryHeadlessExecutor()
@@ -759,22 +646,14 @@ async def test_run_skill_exact_role_denial_precedes_all_downstream_work(
 
 
 @pytest.mark.anyio
-async def test_fresh_dispatch_constructs_default_project_aware_resolver_before_writes(
+async def test_fresh_dispatch_without_injected_resolver_fails_before_writes(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """A missing injected resolver is not an authorization bypass or unrestricted launch."""
-    from autoskillit.workspace.skills import DefaultSkillResolver
+    """A missing injected resolver is not an authorization bypass."""
     from tests.fakes import InMemoryHeadlessExecutor
 
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    calls: list[tuple[str, object, object]] = []
-
-    def unresolved(self, name, project_root, execution_role):
-        calls.append((name, project_root, execution_role))
-        return None
-
-    monkeypatch.setattr(DefaultSkillResolver, "resolve_invocation", unresolved)
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.skill_resolver = None
     tool_ctx_kitchen_open.executor = executor
@@ -782,7 +661,7 @@ async def test_fresh_dispatch_constructs_default_project_aware_resolver_before_w
 
     result = await run_skill("/autoskillit:not-installed work", str(tmp_path))
 
-    assert calls and calls[0][0] == "not-installed"
-    assert calls[0][1] == tmp_path
-    assert __import__("json").loads(result)["success"] is False
+    payload = __import__("json").loads(result)
+    assert payload["success"] is False
+    assert "resolver is not configured" in payload["result"]
     assert executor.calls == []

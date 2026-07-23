@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
 import tempfile
@@ -21,6 +20,9 @@ from autoskillit.core import (
     SkillSourceRef,
     atomic_write,
     dump_yaml_str,
+    read_versioned_json,
+    temp_dir_display_str,
+    write_versioned_json,
 )
 from autoskillit.workspace.skill_format import parse_frontmatter_content
 from autoskillit.workspace.skills import (
@@ -281,7 +283,7 @@ def materialize_sanitized_plugin_root(
             for name, document in documents.items()
         },
     }
-    atomic_write(manifest_path, json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    write_versioned_json(manifest_path, manifest, schema_version=1)
     return manifest_path
 
 
@@ -313,12 +315,9 @@ def validate_sanitized_plugin_artifact(
         except ValueError:
             errors.append(f"skill source is outside plugin source root: {info.name}")
 
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        return tuple([*errors, f"projection manifest is unreadable: {exc}"])
-    if not isinstance(manifest, dict):
-        return tuple([*errors, "projection manifest must be a JSON object"])
+    manifest = read_versioned_json(manifest_path, 1)
+    if manifest is None:
+        return tuple([*errors, "projection manifest is unreadable or has an unsupported schema"])
     if manifest.get("schema_version") != 1:
         errors.append("projection manifest schema_version must be 1")
     if not isinstance(manifest.get("projection_version"), int):
@@ -460,7 +459,7 @@ def project_direct_install(
         backend=backend,
         conventions=backend.conventions,
         substitutions={
-            "{{AUTOSKILLIT_TEMP}}": ".autoskillit/temp",
+            "{{AUTOSKILLIT_TEMP}}": temp_dir_display_str(None),
             "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
             "{{DEFAULT_BASE_BRANCH}}": "main",
         },

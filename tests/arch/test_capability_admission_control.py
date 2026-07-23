@@ -320,7 +320,9 @@ def test_dispatch_food_truck_calls_compute_effective_backend_map() -> None:
 def test_run_skill_references_git_metadata_write_capability() -> None:
     """run_skill must use registry-driven capability routing (REQ-ROUTE-001)."""
     execution_path = SRC_ROOT / "server" / "tools" / "tools_execution.py"
+    helper_path = SRC_ROOT / "server" / "tools" / "_execution_helpers.py"
     src = execution_path.read_text(encoding="utf-8")
+    helper_src = helper_path.read_text(encoding="utf-8")
 
     func_src = ""
     tree = ast.parse(src)
@@ -335,8 +337,8 @@ def test_run_skill_references_git_metadata_write_capability() -> None:
         "removing this breaks the capability-driven auto-route path that dispatches "
         "codex orchestrator skills requiring claude-code (REQ-ROUTE-001)."
     )
-    assert "worker_routable" in src, (
-        "tools_execution.py must reference 'worker_routable' in the routing helper — "
+    assert "worker_routable" in helper_src, (
+        "_execution_helpers.py must reference 'worker_routable' in the routing helper — "
         "this field drives the registry-based routing gate (REQ-ROUTE-001)."
     )
 

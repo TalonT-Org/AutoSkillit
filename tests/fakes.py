@@ -106,6 +106,7 @@ class ExecutorCall:
     closure_spec: ClosureAuthoritySpec | None = None
     closure_report_root: Path | None = None
     skill_contract: Any | None = None
+    on_session_id_resolved: Callable[[str], None] | None = None
 
 
 @dataclasses.dataclass
@@ -217,6 +218,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
         skill_contract: Any | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -260,13 +262,20 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,
                 skill_contract=skill_contract,
+                on_session_id_resolved=on_session_id_resolved,
             )
         )
         if self._queue:
-            return dataclasses.replace(self._queue.popleft())
+            result = dataclasses.replace(self._queue.popleft())
+            if on_session_id_resolved is not None and result.session_id:
+                on_session_id_resolved(result.session_id)
+            return result
         # Return a defensive copy so callers mutating fields (e.g. run_skill
         # setting order_id) don't pollute the shared default across tests.
-        return dataclasses.replace(self._default)
+        result = dataclasses.replace(self._default)
+        if on_session_id_resolved is not None and result.session_id:
+            on_session_id_resolved(result.session_id)
+        return result
 
     async def dispatch_food_truck(
         self,

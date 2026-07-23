@@ -1,21 +1,11 @@
-"""Domain model for Claude Code headless session results.
+"""Typed headless-session result facade.
 
-IL-1 module: imports only from IL-0 (types, _logging). No server side-effects.
-Centralizes all session-parsing concerns so callers can work with typed
-objects instead of raw JSON strings.
-
-Facade: re-exports from _session_model, _session_content, _retry_fsm, and
-_session_outcome sub-modules.
+IL-1 module with no server side effects.
 """
 
 from __future__ import annotations
 
-from autoskillit.core import (
-    CliSubtype,
-    SkillResult,
-    get_logger,
-    truncate_text,
-)
+from autoskillit.core import CliSubtype, SkillResult, get_logger, truncate_text
 from autoskillit.execution.session._exit_classification import (
     classify_infra_exit,  # noqa: F401 — re-export for callers
     has_rate_limit_signal,  # noqa: F401 — re-export for callers

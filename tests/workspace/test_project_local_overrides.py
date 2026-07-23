@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core.types import PACK_REGISTRY
+from autoskillit.core.types import PACK_REGISTRY, SkillExecutionRole
 from autoskillit.workspace.skills import override_names
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -14,6 +14,11 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 _DEFAULT_DISABLED_TAGS: frozenset[str] = frozenset(
     tag for tag, pack_def in PACK_REGISTRY.items() if not pack_def.default_enabled
 )
+
+
+def _project_skill_document(name: str, body: str) -> str:
+    return f"---\nname: {name}\ndescription: Project-local {name} fixture.\n---\n{body}\n"
+
 
 # ---------------------------------------------------------------------------
 # T-OVR-001..006,019..021: detect_project_local_overrides() — pure detection function
@@ -327,7 +332,9 @@ def test_init_session_delivers_project_local_override(tmp_path):
     project_dir.mkdir()
     override = project_dir / ".claude" / "skills" / "investigate"
     override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom investigate")
+    (override / "SKILL.md").write_text(
+        _project_skill_document("investigate", "# custom investigate")
+    )
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-002", project_dir=project_dir)
     delivered = skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
@@ -347,7 +354,7 @@ def test_init_session_includes_non_overridden_skills(tmp_path):
     # Override "investigate" only
     override = project_dir / ".claude" / "skills" / "investigate"
     override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom")
+    (override / "SKILL.md").write_text(_project_skill_document("investigate", "# custom"))
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-003", project_dir=project_dir)
     # "make-plan" must still be present
@@ -367,7 +374,7 @@ def test_init_session_subset_and_override_compose(tmp_path):
     # Project-local override for "review-pr"
     override = project_dir / ".claude" / "skills" / "review-pr"
     override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom")
+    (override / "SKILL.md").write_text(_project_skill_document("review-pr", "# custom"))
     # Config disables "github" subset (which covers open-pr)
     config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
@@ -392,7 +399,7 @@ def test_init_session_logs_override_skip(tmp_path):
     project_dir.mkdir()
     override = project_dir / ".claude" / "skills" / "investigate"
     override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom")
+    (override / "SKILL.md").write_text(_project_skill_document("investigate", "# custom"))
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     with structlog.testing.capture_logs() as logs:
         mgr.init_session("sess-005", project_dir=project_dir)
@@ -415,7 +422,9 @@ def test_init_session_cook_session_delivers_project_local_overrides(tmp_path):
     project_dir.mkdir()
     override = project_dir / ".claude" / "skills" / "investigate"
     override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom investigate")
+    (override / "SKILL.md").write_text(
+        _project_skill_document("investigate", "# custom investigate")
+    )
 
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-cook", cook_session=True, project_dir=project_dir)
@@ -463,7 +472,7 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
     project_dir.mkdir()
     override = project_dir / ".claude" / "skills" / "investigate"
     override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# override")
+    (override / "SKILL.md").write_text(_project_skill_document("investigate", "# override"))
 
     # Config disables all known categories — cook should bypass this
     config = make_test_config(
@@ -483,7 +492,9 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
     expected_names = {
         s.name
         for s in all_skills
-        if s.source != SkillSource.BUNDLED and not (s.categories & _DEFAULT_DISABLED_TAGS)
+        if s.source != SkillSource.BUNDLED
+        and s.execution_role is SkillExecutionRole.SESSION
+        and not (s.categories & _DEFAULT_DISABLED_TAGS)
     }
     skills_base = skills_dir / ".claude" / "skills"
     actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
@@ -540,7 +551,7 @@ def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
     project_dir.mkdir()
     override = project_dir / ".claude" / "skills" / "investigate"
     override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom")
+    (override / "SKILL.md").write_text(_project_skill_document("investigate", "# custom"))
 
     config = make_test_config(features={"fleet": True})
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
@@ -552,7 +563,9 @@ def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
     expected = {
         s.name
         for s in resolver.list_all()
-        if s.source != SkillSource.BUNDLED and not (s.categories & _DEFAULT_DISABLED_TAGS)
+        if s.source != SkillSource.BUNDLED
+        and s.execution_role is SkillExecutionRole.SESSION
+        and not (s.categories & _DEFAULT_DISABLED_TAGS)
     }
     skills_base = skills_dir / ".claude" / "skills"
     actual = {d.name for d in skills_base.iterdir() if d.is_dir()}

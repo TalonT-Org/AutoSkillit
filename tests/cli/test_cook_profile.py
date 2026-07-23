@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import autoskillit.cli.session._session_cook as cook_module
-from autoskillit.core import CmdSpec
+from autoskillit.core import BackendConventions, CmdSpec
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -16,12 +16,18 @@ def _make_mock_backend_class():
     captured = []
 
     class _MockBackend:
+        name = "claude-code"
+        conventions = BackendConventions()
+
         def binary_name(self) -> str:
             return "claude"
 
         def build_interactive_cmd(self, **kwargs):
             captured.append(kwargs.get("env_extras", {}))
             return CmdSpec(cmd=("claude",), env={})
+
+        def ensure_pre_launch(self) -> list[str]:
+            return []
 
     return _MockBackend, captured
 

@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    SkillExecutionRole,
 )
+from autoskillit.server._misc import SkillProjectionContext, project_agent_skill_document
 
 if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, CodingAgentBackend
@@ -49,6 +51,39 @@ def build_backend_capabilities_map(
         if backend_name not in out:
             out[backend_name] = get_backend(backend_name).capabilities
     return out
+
+
+def project_orchestrator_guidance(tool_ctx: Any) -> str:
+    """Project the sous-chef document for an anonymous kitchen open."""
+    if tool_ctx.skill_resolver is None:
+        return ""
+    catalog = tool_ctx.skill_resolver.list_effective(
+        tool_ctx.project_dir,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
+    if sous_chef is None:
+        sous_chef = tool_ctx.skill_resolver.resolve_effective(
+            "sous-chef",
+            tool_ctx.project_dir,
+        )
+    if (
+        sous_chef is None
+        or sous_chef.invalid_reason is not None
+        or sous_chef.execution_role is not SkillExecutionRole.ORCHESTRATOR
+    ):
+        return ""
+    backend = tool_ctx.backend
+    document = project_agent_skill_document(
+        sous_chef,
+        SkillProjectionContext(
+            execution_cwd=tool_ctx.project_dir,
+            backend=backend,
+            conventions=backend.conventions if backend is not None else None,
+            gating=False,
+        ),
+    )
+    return "\n\n" + document.content
 
 
 def response_backstop_tool_meta(

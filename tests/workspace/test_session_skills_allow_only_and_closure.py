@@ -37,7 +37,7 @@ def _make_synthetic_provider(
     """
     from unittest.mock import MagicMock
 
-    from autoskillit.workspace.skills import SkillInfo, SkillSource
+    from autoskillit.workspace.skills import SkillInfo, SkillSource, _skill_info_from_frontmatter
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     skill_infos: list[SkillInfo] = []
@@ -58,27 +58,20 @@ def _make_synthetic_provider(
         content = "---\n" + "\n".join(fm_lines) + "\n---\nbody\n"
         (skill_dir / "SKILL.md").write_text(content)
         skill_infos.append(
-            SkillInfo(
-                name=name,
-                source=SkillSource.BUNDLED_EXTENDED,
-                path=skill_dir / "SKILL.md",
-                categories=frozenset(categories),
+            _skill_info_from_frontmatter(
+                name,
+                SkillSource.BUNDLED_EXTENDED,
+                skill_dir / "SKILL.md",
             )
         )
 
     by_name = {info.name: info for info in skill_infos}
 
-    provider = MagicMock()
-    provider.list_skills.return_value = skill_infos
-    provider.resolver = MagicMock()
-    provider.resolver.resolve.side_effect = lambda n: by_name.get(n)
-
-    def _get_content(name: str, *, gated: bool = True) -> str:
-        if name not in by_name:
-            raise FileNotFoundError(name)
-        return by_name[name].path.read_text()
-
-    provider.get_skill_content.side_effect = _get_content
+    provider = SkillsDirectoryProvider()
+    resolver = MagicMock()
+    resolver.list_all.return_value = skill_infos
+    resolver.resolve.side_effect = lambda n: by_name.get(n)
+    provider._resolver = resolver
     return provider
 
 
@@ -156,7 +149,9 @@ class TestInitSessionAllowOnly:
         project_dir = tmp_path / "project"
         local_skill = project_dir / ".claude" / "skills" / "alpha"
         local_skill.mkdir(parents=True)
-        (local_skill / "SKILL.md").write_text("---\nname: alpha\n---\nlocal\n")
+        (local_skill / "SKILL.md").write_text(
+            "---\nname: alpha\ndescription: Local alpha override.\n---\nlocal\n"
+        )
 
         root = tmp_path / "sessions"
         root.mkdir()

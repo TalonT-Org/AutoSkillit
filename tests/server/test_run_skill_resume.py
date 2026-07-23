@@ -14,10 +14,17 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 @pytest.mark.anyio
 async def test_resume_session_id_threaded_to_executor(tool_ctx_kitchen_open, monkeypatch) -> None:
     """resume_session_id flows from run_skill → executor.run()."""
+    from tests.conftest import bind_test_skill_resume_contract
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id="sess-123",
+        cwd="/tmp",
+        resolved_command="/implement foo",
+    )
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/implement foo", "/tmp", resume_session_id="sess-123")
@@ -29,10 +36,17 @@ async def test_resume_session_id_threaded_to_executor(tool_ctx_kitchen_open, mon
 @pytest.mark.anyio
 async def test_resume_skips_skill_command_validation(tool_ctx_kitchen_open, monkeypatch) -> None:
     """When resume_session_id is set, non-slash skill_command is allowed."""
+    from tests.conftest import bind_test_skill_resume_contract
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id="sess-123",
+        cwd="/tmp",
+        resolved_command="/implement foo",
+    )
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     result = await run_skill(

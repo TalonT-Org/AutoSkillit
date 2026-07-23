@@ -45,6 +45,7 @@ class TestCoreSubpackages:
             "_type_recipe_sections",
             "_type_resume",
             "_type_session_env",
+            "_type_skill_contract",
             "_type_subprocess",
             "_type_token",
             "_type_tradition_manifest",
@@ -63,8 +64,8 @@ class TestCoreSubpackages:
         assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
             "Duplicate symbols across split modules"
         )
-        assert len(combined) == 124, (
-            f"Expected 124 symbols total, got {len(combined)} "
+        assert len(combined) == 125, (
+            f"Expected 125 symbols total, got {len(combined)} "
             f"(remaining={len(remaining)}, env={len(env)}, "
             f"features={len(features)}, registries={len(registries)})"
         )
@@ -138,6 +139,7 @@ class TestExecutionSubpackages:
             "_session_content",
             "_session_outcome",
             "_session_state",
+            "_skill_session_contract_store",
             "_retry_fsm",
             "_exit_classification",
         }

@@ -330,6 +330,26 @@ def create_capture_artifact(root: CaptureRoot, capture_id: str) -> CaptureArtifa
         raise
 
 
+def _duplicate_artifact_writer(artifact: CaptureArtifact) -> int:
+    """Duplicate the artifact fd for the drain stage without transferring it to Bash."""
+
+    writer_fd = -1
+    try:
+        writer_fd = os.dup(artifact.fd)
+        if not _same_identity(writer_fd, artifact.identity):
+            raise CaptureSetupError("duplicated capture artifact identity changed")
+        return writer_fd
+    except (CaptureSetupError, OSError) as exc:
+        if writer_fd >= 0:
+            try:
+                os.close(writer_fd)
+            except OSError:
+                pass
+        if isinstance(exc, CaptureSetupError):
+            raise
+        raise CaptureSetupError("cannot duplicate capture artifact fd") from exc
+
+
 def _read_bounded_file_at(directory_fd: int, name: str) -> dict:
     try:
         fd = os.open(name, _READ_FLAGS, dir_fd=directory_fd)
@@ -369,16 +389,15 @@ def read_capture_policy(anchor: ProjectAnchor) -> CapturePolicy:
     autoskillit_fd = -1
     temp_fd = -1
     try:
-        autoskillit_fd = _open_directory_component(
-            anchor.fd, CAPTURE_PATH_COMPONENTS[0], create=False
-        )
-        temp_fd = _open_directory_component(
-            autoskillit_fd, CAPTURE_PATH_COMPONENTS[1], create=False
-        )
-    except CaptureSetupError:
-        return CapturePolicy()
-
-    try:
+        try:
+            autoskillit_fd = _open_directory_component(
+                anchor.fd, CAPTURE_PATH_COMPONENTS[0], create=False
+            )
+            temp_fd = _open_directory_component(
+                autoskillit_fd, CAPTURE_PATH_COMPONENTS[1], create=False
+            )
+        except CaptureSetupError:
+            return CapturePolicy()
         base = _read_bounded_file_at(temp_fd, HOOK_CONFIG_FILENAME)
         overlay = _read_bounded_file_at(temp_fd, HOOK_CONFIG_OVERLAY_FILENAME)
         merged = merge_hook_configs(base, overlay)
@@ -390,8 +409,12 @@ def read_capture_policy(anchor: ProjectAnchor) -> CapturePolicy:
             inline_bytes=_policy_inline_bytes(section.get("shell_max_inline_bytes")),
         )
     finally:
-        os.close(temp_fd)
-        os.close(autoskillit_fd)
+        try:
+            if temp_fd >= 0:
+                os.close(temp_fd)
+        finally:
+            if autoskillit_fd >= 0:
+                os.close(autoskillit_fd)
 
 
 def _open_and_match_directory(parent_fd: int, name: str, expected: FileIdentity) -> int:
@@ -399,7 +422,12 @@ def _open_and_match_directory(parent_fd: int, name: str, expected: FileIdentity)
         fd = _open_directory_component(parent_fd, name, create=False)
     except CaptureSetupError:
         return -1
-    if not _same_identity(fd, expected):
+    try:
+        matches = _same_identity(fd, expected)
+    except BaseException:
+        os.close(fd)
+        raise
+    if not matches:
         os.close(fd)
         return -1
     return fd
@@ -520,9 +548,11 @@ def _write_all(fd: int, data: bytes) -> None:
 
 def _drain_capture(
     process: subprocess.Popen[bytes],
-    artifact: CaptureArtifact,
+    artifact_writer_fd: int,
     inline_bytes: int,
 ) -> _DrainResult:
+    """Read the combined subprocess pipe and persist bounded replay metadata."""
+
     stream = process.stdout
     if stream is None:
         raise CaptureSetupError("capture pipe unavailable")
@@ -544,7 +574,7 @@ def _drain_capture(
         digest.update(chunk)
         if write_error is None:
             try:
-                _write_all(artifact.fd, chunk)
+                _write_all(artifact_writer_fd, chunk)
             except OSError as exc:
                 write_error = exc
         if len(inline) <= inline_bytes:
@@ -679,6 +709,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
     anchor = open_project_anchor(cwd)
     root: CaptureRoot | None = None
     artifact: CaptureArtifact | None = None
+    artifact_writer_fd = -1
     process: subprocess.Popen[bytes] | None = None
     try:
         policy = read_capture_policy(anchor)
@@ -689,11 +720,12 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
 
         root = open_capture_root(anchor, create=True)
         artifact = create_capture_artifact(root, capture_id)
+        artifact_writer_fd = _duplicate_artifact_writer(artifact)
         process = _spawn_bash(anchor, bash_path, command, capture_output=True)
         returncode: int | None = None
-        failure_stage = "capture pipe drain"
+        failure_stage = "capture readback"
         try:
-            result = _drain_capture(process, artifact, policy.inline_bytes)
+            result = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
             failure_stage = "capture process wait"
             returncode = _normalized_returncode(process.wait())
             if result.write_error is not None:
@@ -711,6 +743,11 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         if process is not None and process.stdout is not None:
             try:
                 process.stdout.close()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
+        if artifact_writer_fd >= 0:
+            try:
+                os.close(artifact_writer_fd)
             except _CAPTURE_RUNTIME_ERRORS:
                 pass
         if artifact is not None:
@@ -800,10 +837,13 @@ def sweep_stale_captures(
         except OSError:
             return 0
         for name in names:
-            candidate = _open_stale_candidate(root, name, mtime_threshold=threshold)
-            if candidate is not None:
-                # Both probed stdlib modes retain: neither can bind unlink to this fd identity.
-                candidate.close()
+            try:
+                candidate = _open_stale_candidate(root, name, mtime_threshold=threshold)
+                if candidate is not None:
+                    # Neither probed stdlib mode can bind unlink to this fd identity.
+                    candidate.close()
+            except (CaptureSetupError, OSError):
+                continue
         return 0
     except (CaptureSetupError, OSError):
         return 0

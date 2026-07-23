@@ -93,6 +93,46 @@ def _record_artifact_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     return observed_fds
 
 
+def _record_runtime_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    observed_fds = _record_owned_capture_fds(monkeypatch)
+    real_duplicate = capture_artifacts._duplicate_artifact_writer
+
+    def record_duplicate(artifact):
+        writer_fd = real_duplicate(artifact)
+        observed_fds.append(writer_fd)
+        return writer_fd
+
+    monkeypatch.setattr(capture_artifacts, "_duplicate_artifact_writer", record_duplicate)
+    return observed_fds
+
+
+def _record_owned_capture_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    observed_fds: list[int] = []
+    real_open_anchor = capture_artifacts.open_project_anchor
+    real_open_root = capture_artifacts.open_capture_root
+    real_create = capture_artifacts.create_capture_artifact
+
+    def record_anchor(cwd):
+        anchor = real_open_anchor(cwd)
+        observed_fds.append(anchor.fd)
+        return anchor
+
+    def record_root(anchor, *, create):
+        root = real_open_root(anchor, create=create)
+        observed_fds.extend((root.autoskillit_fd, root.temp_fd, root.fd))
+        return root
+
+    def record_artifact(root, capture_id):
+        artifact = real_create(root, capture_id)
+        observed_fds.append(artifact.fd)
+        return artifact
+
+    monkeypatch.setattr(capture_artifacts, "open_project_anchor", record_anchor)
+    monkeypatch.setattr(capture_artifacts, "open_capture_root", record_root)
+    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
+    return observed_fds
+
+
 def test_project_anchor_accepts_symlink_cwd(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
@@ -315,6 +355,38 @@ def test_verified_policy_merges_overlay_and_bounds_inline_bytes(tmp_path: Path) 
         anchor.close()
 
 
+def test_policy_partial_open_failure_closes_autoskillit_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    autoskillit_dir = project / CAPTURE_PATH_COMPONENTS[0]
+    autoskillit_dir.mkdir(parents=True)
+    anchor = open_project_anchor(str(project))
+    opened_fds: list[int] = []
+    real_open_component = capture_artifacts._open_directory_component
+
+    def record_open_component(parent_fd, name, *, create):
+        fd = real_open_component(parent_fd, name, create=create)
+        if name == CAPTURE_PATH_COMPONENTS[0]:
+            opened_fds.append(fd)
+        return fd
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_open_directory_component",
+        record_open_component,
+    )
+
+    try:
+        assert read_capture_policy(anchor) == CapturePolicy()
+        assert len(opened_fds) == 1
+        with pytest.raises(OSError):
+            os.fstat(opened_fds[0])
+    finally:
+        anchor.close()
+
+
 @pytest.mark.parametrize("collision", ["symlink", "hardlink", "regular"])
 def test_artifact_creation_rejects_existing_entries(collision: str, tmp_path: Path) -> None:
     project = tmp_path / "project"
@@ -379,6 +451,46 @@ def test_marker_path_rederives_symlinked_project_path(tmp_path: Path) -> None:
     finally:
         artifact.close()
         root.close()
+        anchor.close()
+
+
+def test_marker_directory_identity_failure_closes_partial_open_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    autoskillit_dir = project / CAPTURE_PATH_COMPONENTS[0]
+    autoskillit_dir.mkdir(parents=True)
+    anchor = open_project_anchor(str(project))
+    opened_fds: list[int] = []
+    real_open_component = capture_artifacts._open_directory_component
+
+    def record_open_component(parent_fd, name, *, create):
+        fd = real_open_component(parent_fd, name, create=create)
+        opened_fds.append(fd)
+        return fd
+
+    def fail_identity(_fd, _expected):
+        raise OSError("fault injection")
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_open_directory_component",
+        record_open_component,
+    )
+    monkeypatch.setattr(capture_artifacts, "_same_identity", fail_identity)
+
+    try:
+        with pytest.raises(OSError, match="fault injection"):
+            capture_artifacts._open_and_match_directory(
+                anchor.fd,
+                CAPTURE_PATH_COMPONENTS[0],
+                anchor.identity,
+            )
+        assert len(opened_fds) == 1
+        with pytest.raises(OSError):
+            os.fstat(opened_fds[0])
+    finally:
         anchor.close()
 
 
@@ -532,6 +644,41 @@ def test_cleanup_retains_replacement_raced_after_validation(
     assert displaced.read_bytes() == b"validated"
 
 
+def test_cleanup_failure_for_one_entry_does_not_skip_later_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    capture_dir = _capture_dir(project)
+    capture_dir.mkdir(parents=True)
+    stale_paths = [
+        capture_dir / "shell_1111111111111111.log",
+        capture_dir / "shell_2222222222222222.log",
+    ]
+    for path in stale_paths:
+        path.write_text(path.name)
+        os.utime(path, (0, 0))
+    calls: list[str] = []
+    real_open = capture_artifacts._open_stale_candidate
+
+    def fail_first_entry(root, name, *, mtime_threshold):
+        calls.append(name)
+        if len(calls) == 1:
+            raise OSError("fault injection")
+        return real_open(root, name, mtime_threshold=mtime_threshold)
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_open_stale_candidate",
+        fail_first_entry,
+    )
+
+    assert sweep_stale_captures(project, max_age_seconds=0) == 0
+    assert len(calls) == 2
+    assert {path.name for path in stale_paths} == set(calls)
+    assert all(path.exists() for path in stale_paths)
+
+
 def test_setup_failure_prevents_user_command_and_emits_failure_marker(
     tmp_path: Path,
     capfd: pytest.CaptureFixture[str],
@@ -583,32 +730,11 @@ def test_spawn_failure_closes_created_artifact_fd(
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
-    observed_fds: list[int] = []
-    real_open_anchor = capture_artifacts.open_project_anchor
-    real_open_root = capture_artifacts.open_capture_root
-    real_create = capture_artifacts.create_capture_artifact
-
-    def record_anchor(cwd):
-        anchor = real_open_anchor(cwd)
-        observed_fds.append(anchor.fd)
-        return anchor
-
-    def record_root(anchor, *, create):
-        root = real_open_root(anchor, create=create)
-        observed_fds.extend((root.autoskillit_fd, root.temp_fd, root.fd))
-        return root
-
-    def record_artifact(root, capture_id):
-        artifact = real_create(root, capture_id)
-        observed_fds.append(artifact.fd)
-        return artifact
+    observed_fds = _record_owned_capture_fds(monkeypatch)
 
     def fail_spawn(*args, **kwargs):
         raise OSError("fault injection")
 
-    monkeypatch.setattr(capture_artifacts, "open_project_anchor", record_anchor)
-    monkeypatch.setattr(capture_artifacts, "open_capture_root", record_root)
-    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
     monkeypatch.setattr(subprocess, "Popen", fail_spawn)
     encoded = base64.b64encode(b"printf ran > command_ran").decode()
 
@@ -620,6 +746,48 @@ def test_spawn_failure_closes_created_artifact_fd(
     assert not (project / "command_ran").exists()
     assert len(observed_fds) == 5
     for fd in observed_fds:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
+def test_post_duplication_failure_closes_all_fds_and_prevents_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    observed_fds = _record_owned_capture_fds(monkeypatch)
+    duplicated_fds: list[int] = []
+    real_dup = capture_artifacts.os.dup
+
+    def record_dup(fd):
+        duplicated_fd = real_dup(fd)
+        duplicated_fds.append(duplicated_fd)
+        return duplicated_fd
+
+    def fail_duplicated_identity(_fd, _expected):
+        raise OSError("fault injection after fd duplication")
+
+    def unexpected_spawn(*_args, **_kwargs):
+        raise AssertionError("command must not spawn after fd duplication failure")
+
+    monkeypatch.setattr(capture_artifacts.os, "dup", record_dup)
+    monkeypatch.setattr(capture_artifacts, "_same_identity", fail_duplicated_identity)
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", unexpected_spawn)
+    encoded = base64.b64encode(b"printf ran > command_ran").decode()
+
+    assert capture_artifacts._main(["run", encoded, str(project), _CAPTURE_ID]) == 1
+
+    captured = capfd.readouterr()
+    artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert not (project / "command_ran").exists()
+    assert artifact_path.read_bytes() == b""
+    assert len(observed_fds) == 5
+    assert len(duplicated_fds) == 1
+    for fd in [*observed_fds, *duplicated_fds]:
         with pytest.raises(OSError):
             os.fstat(fd)
 
@@ -829,6 +997,49 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
             os.fstat(fd)
 
 
+def test_capture_readback_failure_after_partial_output_closes_runtime_fds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    observed_fds = _record_runtime_fds(monkeypatch)
+
+    class PartialReadbackStream:
+        def __init__(self) -> None:
+            self.read_calls = 0
+            self.closed = False
+
+        def read(self, _size):
+            self.read_calls += 1
+            if self.read_calls == 1:
+                return b"partial-output"
+            raise OSError("fault injection during readback")
+
+        def close(self):
+            self.closed = True
+
+    process = _FakeCaptureProcess(b"")
+    process.stdout = PartialReadbackStream()
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+
+    captured = capfd.readouterr()
+    artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert artifact_path.read_bytes() == b"partial-output"
+    assert process.terminated
+    assert process.stdout.closed
+    assert process.wait_calls == 1
+    assert len(observed_fds) == 6
+    for fd in observed_fds:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
 def test_digest_failure_emits_failure_and_closes_runtime_resources(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -939,6 +1150,7 @@ def test_marker_verification_failure_emits_failure_marker(
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
+    observed_fds = _record_runtime_fds(monkeypatch)
 
     def fail_verification(anchor, root, artifact):
         raise OSError("fault injection")
@@ -953,3 +1165,7 @@ def test_marker_verification_failure_emits_failure_marker(
     captured = capfd.readouterr()
     assert "CAPTURE_FAILED" in captured.err
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert len(observed_fds) == 6
+    for fd in observed_fds:
+        with pytest.raises(OSError):
+            os.fstat(fd)

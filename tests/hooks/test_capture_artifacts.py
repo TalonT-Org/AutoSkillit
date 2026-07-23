@@ -408,7 +408,24 @@ def test_symlinked_policy_leaf_is_not_trusted(tmp_path: Path) -> None:
         anchor.close()
 
 
-def test_verified_policy_merges_overlay_and_bounds_inline_bytes(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [
+        pytest.param(1, 1, id="minimum-valid"),
+        pytest.param(31, 31, id="ordinary-valid"),
+        pytest.param(1_000_000, 1_000_000, id="maximum-valid"),
+        pytest.param(1_000_001, 1_000_000, id="clamped-above-maximum"),
+        pytest.param(0, CapturePolicy().inline_bytes, id="zero-defaults"),
+        pytest.param(-1, CapturePolicy().inline_bytes, id="negative-defaults"),
+        pytest.param(True, CapturePolicy().inline_bytes, id="boolean-defaults"),
+        pytest.param("31", CapturePolicy().inline_bytes, id="non-integer-defaults"),
+    ],
+)
+def test_verified_policy_merges_overlay_and_bounds_inline_bytes(
+    configured: object,
+    expected: int,
+    tmp_path: Path,
+) -> None:
     project = tmp_path / "project"
     temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
     temp_dir.mkdir(parents=True)
@@ -417,7 +434,7 @@ def test_verified_policy_merges_overlay_and_bounds_inline_bytes(tmp_path: Path) 
             {
                 "output_budget_policy": {
                     "disabled": False,
-                    "shell_max_inline_bytes": 31,
+                    "shell_max_inline_bytes": configured,
                 }
             }
         )
@@ -428,7 +445,7 @@ def test_verified_policy_merges_overlay_and_bounds_inline_bytes(tmp_path: Path) 
 
     anchor = open_project_anchor(str(project))
     try:
-        assert read_capture_policy(anchor) == CapturePolicy(disabled=True, inline_bytes=31)
+        assert read_capture_policy(anchor) == CapturePolicy(disabled=True, inline_bytes=expected)
     finally:
         anchor.close()
 

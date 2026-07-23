@@ -7,11 +7,11 @@ from enum import StrEnum
 from typing import NamedTuple
 
 __all__ = [
-    "CodexRecipeDeliveryBudgetDef",
-    "CodexRecipeDeliveryEvidenceDef",
     "RECIPE_DELIVERY_ATTESTATION_AUDIENCE",
     "RecipeDeliveryAttestation",
+    "RecipeDeliveryBudgetDef",
     "RecipeDeliveryDecision",
+    "RecipeDeliveryEvidenceDef",
     "RecipeDeliveryMode",
     "RecipeDeliveryRequest",
 ]
@@ -27,8 +27,8 @@ class RecipeDeliveryMode(StrEnum):
     ENVELOPE = "envelope"
 
 
-class CodexRecipeDeliveryBudgetDef(NamedTuple):
-    """Static Codex limits whose byte and token domains must remain distinct."""
+class RecipeDeliveryBudgetDef(NamedTuple):
+    """Backend-selected limits whose byte and token domains remain distinct."""
 
     ordinary_omitted_result_token_limit: int
     authoritative_attested_recipe_result_token_limit: int
@@ -41,7 +41,7 @@ class CodexRecipeDeliveryBudgetDef(NamedTuple):
     contract_digest: str
 
 
-class CodexRecipeDeliveryEvidenceDef(NamedTuple):
+class RecipeDeliveryEvidenceDef(NamedTuple):
     """Version-pinned identity of a protected host evidence channel."""
 
     identity: str
@@ -68,7 +68,7 @@ class RecipeDeliveryRequest:
 
 @dataclass(frozen=True, slots=True)
 class RecipeDeliveryAttestation:
-    """Host observation bound to one Codex outer and nested call."""
+    """Host observation bound to one protected outer and nested call."""
 
     audience: str
     thread_id: str

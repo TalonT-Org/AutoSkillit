@@ -28,7 +28,6 @@ from autoskillit.core import (
     resolve_recipe_delivery_decision,
 )
 from autoskillit.execution import (
-    CODEX_RECIPE_DELIVERY_BUDGET,
     RecipeDeliveryReceiptLedger,
     RecipeReceiptHandle,
     codex_recipe_delivery_calling_contract,
@@ -37,7 +36,7 @@ from autoskillit.recipe import _extract_routing_edges, step_byte_ranges_from_yam
 from autoskillit.server._response_budget import enforce_response_budget
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodexRecipeDeliveryEvidenceDef
+    from autoskillit.core import RecipeDeliveryBudgetDef, RecipeDeliveryEvidenceDef
     from autoskillit.pipeline import ToolContext
 
 RECIPE_ARTIFACT_DESCRIPTOR_VERSION = 1
@@ -611,17 +610,21 @@ def _conservative_token_upper_bound(rendered: str) -> int:
 
 
 def _attested_render(
-    payload: dict[str, Any], generation: RecipeArtifactGeneration, *, evidence_identity: str
+    payload: dict[str, Any],
+    generation: RecipeArtifactGeneration,
+    *,
+    budget: RecipeDeliveryBudgetDef,
+    evidence_identity: str,
 ) -> str:
     body = payload.get("content") if isinstance(payload.get("content"), str) else ""
     metadata = {key: value for key, value in payload.items() if key != "content"}
     control = {
         "recipe_delivery": {
             "mode": RecipeDeliveryMode.ATTESTED_INLINE.value,
-            "contract_digest": CODEX_RECIPE_DELIVERY_BUDGET.contract_digest,
+            "contract_digest": budget.contract_digest,
             "evidence_identity": evidence_identity,
             "selected_result_token_limit": (
-                CODEX_RECIPE_DELIVERY_BUDGET.authoritative_attested_recipe_result_token_limit
+                budget.authoritative_attested_recipe_result_token_limit
             ),
             "recipe_pull": generation.pull_identity(),
             "payload_metadata": metadata,
@@ -635,7 +638,7 @@ def _attested_render(
 
 
 def _failure_decision(
-    *, producer: str, reason: str, selected_limit: int
+    *, producer: str, reason: str, selected_limit: int, contract_digest: str
 ) -> RecipeDeliveryDecision:
     return RecipeDeliveryDecision(
         mode=RecipeDeliveryMode.ENVELOPE,
@@ -644,7 +647,7 @@ def _failure_decision(
         required_outer_tokens=0,
         unnegotiated_tool_result_token_limit=selected_limit,
         selected_result_token_limit=selected_limit,
-        contract_digest=CODEX_RECIPE_DELIVERY_BUDGET.contract_digest,
+        contract_digest=contract_digest,
         evidence_identity=None,
         reason=reason,
         producer=producer,
@@ -661,7 +664,7 @@ def finalize_recipe_delivery(
     tool_ctx: ToolContext,
     delivery_request: RecipeDeliveryRequest | None = None,
     attestation: RecipeDeliveryAttestation | None = None,
-    supported_evidence: CodexRecipeDeliveryEvidenceDef | None = None,
+    supported_evidence: RecipeDeliveryEvidenceDef | None = None,
     receipt_ledger: RecipeDeliveryReceiptLedger | None = None,
     now_unix: int | None = None,
 ) -> FinalizedRecipeResponse:
@@ -676,11 +679,13 @@ def finalize_recipe_delivery(
         else replace(
             CLAUDE_CODE_CAPABILITIES,
             unnegotiated_tool_result_token_limit=(
-                CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
+                CLAUDE_CODE_CAPABILITIES.unnegotiated_tool_result_token_limit
             ),
             protected_recipe_delivery_capable=False,
+            recipe_delivery_budget=None,
         )
     )
+    delivery_budget = capabilities.recipe_delivery_budget
     ordinary_limit = resolve_general_output_token_limit(capabilities)
     try:
         generation = persist_recipe_artifact(
@@ -695,6 +700,7 @@ def finalize_recipe_delivery(
             producer=surface_definition.producer_tool,
             reason="recipe_artifact_persistence_failed",
             selected_limit=ordinary_limit,
+            contract_digest=(delivery_budget.contract_digest if delivery_budget else ""),
         )
         return FinalizedRecipeResponse(
             rendered=json.dumps(
@@ -708,12 +714,17 @@ def finalize_recipe_delivery(
     candidate_evidence = supported_evidence if surface_definition.negotiation_eligible else None
     candidate_attestation = attestation if surface_definition.negotiation_eligible else None
     candidate_request = delivery_request if surface_definition.negotiation_eligible else None
-    high_rendered = _attested_render(
-        payload,
-        generation,
-        evidence_identity=(
-            candidate_evidence.identity if candidate_evidence is not None else "unsupported"
-        ),
+    high_rendered = (
+        _attested_render(
+            payload,
+            generation,
+            budget=delivery_budget,
+            evidence_identity=(
+                candidate_evidence.identity if candidate_evidence is not None else "unsupported"
+            ),
+        )
+        if delivery_budget is not None
+        else ordinary_rendered
     )
     ordinary_required_tokens = _conservative_token_upper_bound(ordinary_rendered)
     required_tokens = (
@@ -724,7 +735,7 @@ def finalize_recipe_delivery(
     decision = resolve_recipe_delivery_decision(
         capabilities=capabilities,
         required_serialized_tokens=required_tokens,
-        budget=CODEX_RECIPE_DELIVERY_BUDGET,
+        budget=delivery_budget,
         producer=surface_definition.producer_tool,
         payload_sha256=generation.payload_sha256,
         request=candidate_request,
@@ -754,7 +765,8 @@ def finalize_recipe_delivery(
     receipt_handle: RecipeReceiptHandle | None = None
     if decision.mode is RecipeDeliveryMode.ATTESTED_INLINE:
         if (
-            receipt_ledger is None
+            delivery_budget is None
+            or receipt_ledger is None
             or candidate_request is None
             or candidate_attestation is None
             or candidate_evidence is None
@@ -770,7 +782,7 @@ def finalize_recipe_delivery(
             reservation = receipt_ledger.reserve(
                 capabilities=capabilities,
                 required_serialized_tokens=required_tokens,
-                budget=CODEX_RECIPE_DELIVERY_BUDGET,
+                budget=delivery_budget,
                 request=candidate_request,
                 attestation=candidate_attestation,
                 supported_evidence=candidate_evidence,

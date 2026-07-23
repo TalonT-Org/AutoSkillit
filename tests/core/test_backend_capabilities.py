@@ -180,6 +180,7 @@ def test_backend_capabilities_field_names_locked():
         "github_api_callable",
         "unnegotiated_tool_result_token_limit",
         "protected_recipe_delivery_capable",
+        "recipe_delivery_budget",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected

@@ -12,6 +12,7 @@ from typing import Any
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import BackendEventKind, OutputFormat
 from ._type_plugin_source import PluginSource
+from ._type_recipe_delivery import RecipeDeliveryBudgetDef
 from ._type_results import ValidatedAddDir
 
 __all__ = [
@@ -178,6 +179,10 @@ class BackendCapabilities:
     # result limit before nested MCP execution. Current backends remain False
     # until a version-pinned conformance report enables an evidence identity.
     protected_recipe_delivery_capable: bool = False
+    # Backend-owned authority for ordinary and protected recipe delivery.
+    # None means the backend has no version-pinned recipe-delivery contract;
+    # protected delivery must then fail closed even if capability data drifts.
+    recipe_delivery_budget: RecipeDeliveryBudgetDef | None = None
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
@@ -309,6 +314,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     supports_model_invocation_gating=True,
     unnegotiated_tool_result_token_limit=46_500,
     protected_recipe_delivery_capable=False,
+    recipe_delivery_budget=None,
 )
 
 

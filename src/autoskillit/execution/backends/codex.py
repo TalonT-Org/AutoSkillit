@@ -74,6 +74,7 @@ from autoskillit.execution.backends._claude_prompt import (
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._codex_config import (
+    CODEX_RECIPE_DELIVERY_BUDGET,
     _format_toml_value,
     ensure_codex_mcp_registered,
 )
@@ -641,6 +642,7 @@ class CodexBackend(BackendCmdBuilderBase):
             supports_model_invocation_gating=False,
             unnegotiated_tool_result_token_limit=10_000,
             protected_recipe_delivery_capable=False,
+            recipe_delivery_budget=CODEX_RECIPE_DELIVERY_BUDGET,
         )
 
     @property

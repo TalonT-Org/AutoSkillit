@@ -60,6 +60,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "patch_format": "OPTIONAL",
     "plugin_install_capable": "OPTIONAL",
     "protected_recipe_delivery_capable": "OPTIONAL",
+    "recipe_delivery_budget": "OPTIONAL",
     "process_name": "REQUIRED",
     "process_name_aliases": "REQUIRED",
     "project_local_skills_capable": "OPTIONAL",
@@ -365,6 +366,12 @@ class TestCodingAgentBackendConformance(BackendContractBase):
     def test_protected_recipe_delivery_capable_is_bool(self) -> None:
         """BackendCapabilities.protected_recipe_delivery_capable — protected host gate is bool."""
         assert isinstance(self.backend.capabilities.protected_recipe_delivery_capable, bool)
+
+    def test_recipe_delivery_budget_matches_protected_capability(self) -> None:
+        """BackendCapabilities.recipe_delivery_budget — protected backends select a budget."""
+        capabilities = self.backend.capabilities
+        if capabilities.protected_recipe_delivery_capable:
+            assert capabilities.recipe_delivery_budget is not None
 
 
 def test_every_capability_field_exercised_or_not_yet_live() -> None:

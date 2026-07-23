@@ -14,8 +14,8 @@ import pytest
 
 import autoskillit.execution.backends._codex_recipe_delivery as recipe_delivery
 from autoskillit.core import (
-    CodexRecipeDeliveryEvidenceDef,
     RecipeDeliveryAttestation,
+    RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
     recipe_delivery_request_digest,
@@ -71,8 +71,8 @@ def _request() -> RecipeDeliveryRequest:
     )
 
 
-def _evidence() -> CodexRecipeDeliveryEvidenceDef:
-    return CodexRecipeDeliveryEvidenceDef(
+def _evidence() -> RecipeDeliveryEvidenceDef:
+    return RecipeDeliveryEvidenceDef(
         identity="protected-test-host-v1",
         host_channel="test-only-process-isolated-host",
         evidence_schema_version=1,

@@ -9,10 +9,10 @@ import time
 from .types._type_backend import BackendCapabilities
 from .types._type_recipe_delivery import (
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
-    CodexRecipeDeliveryBudgetDef,
-    CodexRecipeDeliveryEvidenceDef,
     RecipeDeliveryAttestation,
+    RecipeDeliveryBudgetDef,
     RecipeDeliveryDecision,
+    RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
 )
@@ -52,12 +52,12 @@ def resolve_recipe_delivery_decision(
     *,
     capabilities: BackendCapabilities,
     required_serialized_tokens: int,
-    budget: CodexRecipeDeliveryBudgetDef,
+    budget: RecipeDeliveryBudgetDef | None,
     producer: str,
     payload_sha256: str,
     request: RecipeDeliveryRequest | None = None,
     attestation: RecipeDeliveryAttestation | None = None,
-    supported_evidence: CodexRecipeDeliveryEvidenceDef | None = None,
+    supported_evidence: RecipeDeliveryEvidenceDef | None = None,
     now_unix: int | None = None,
 ) -> RecipeDeliveryDecision:
     """Resolve one recipe response without treating caller claims as authority."""
@@ -81,7 +81,7 @@ def resolve_recipe_delivery_decision(
             required_outer_tokens=required_serialized_tokens,
             unnegotiated_tool_result_token_limit=ordinary_limit,
             selected_result_token_limit=selected_limit,
-            contract_digest=budget.contract_digest,
+            contract_digest=budget.contract_digest if budget is not None else "",
             evidence_identity=(attestation.evidence_identity if attestation is not None else None),
             reason=reason,
             producer=producer,
@@ -101,8 +101,6 @@ def resolve_recipe_delivery_decision(
         return _envelope("invalid_required_token_count")
     if not producer or not _is_sha256_identity(payload_sha256):
         return _envelope("invalid_payload_identity")
-    if not _is_sha256_identity(budget.contract_digest):
-        return _envelope("invalid_contract_digest")
     if required_serialized_tokens <= ordinary_limit:
         return _decision(
             RecipeDeliveryMode.ORDINARY_INLINE,
@@ -112,6 +110,10 @@ def resolve_recipe_delivery_decision(
         )
     if not capabilities.protected_recipe_delivery_capable:
         return _envelope("protected_host_delivery_unavailable")
+    if budget is None:
+        return _envelope("protected_delivery_budget_unavailable")
+    if not _is_sha256_identity(budget.contract_digest):
+        return _envelope("invalid_contract_digest")
     if required_serialized_tokens > budget.authoritative_attested_recipe_result_token_limit:
         return _envelope("authoritative_result_limit_exceeded")
     if request is None:

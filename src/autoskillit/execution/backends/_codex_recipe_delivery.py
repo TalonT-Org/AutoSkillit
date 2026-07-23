@@ -19,9 +19,9 @@ from uuid import uuid4
 
 from autoskillit.core import (
     BackendCapabilities,
-    CodexRecipeDeliveryBudgetDef,
-    CodexRecipeDeliveryEvidenceDef,
     RecipeDeliveryAttestation,
+    RecipeDeliveryBudgetDef,
+    RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
     resolve_recipe_delivery_decision,
@@ -67,7 +67,7 @@ class CodexAttestationResult:
     """Fail-closed protected-host attestation result."""
 
     attestation: RecipeDeliveryAttestation | None
-    evidence: CodexRecipeDeliveryEvidenceDef | None
+    evidence: RecipeDeliveryEvidenceDef | None
     correlation: CodexHostCorrelation | None
     reason: str
 
@@ -257,7 +257,7 @@ class CodexOuterBudgetAttestor:
 
     provider: ProtectedHostAttestationProvider
     locate_rollout: Callable[[str], Path | None]
-    supported_evidence: Mapping[str, CodexRecipeDeliveryEvidenceDef]
+    supported_evidence: Mapping[str, RecipeDeliveryEvidenceDef]
 
     def attest(
         self,
@@ -446,10 +446,10 @@ class RecipeDeliveryReceiptLedger:
         *,
         capabilities: BackendCapabilities,
         required_serialized_tokens: int,
-        budget: CodexRecipeDeliveryBudgetDef,
+        budget: RecipeDeliveryBudgetDef,
         request: RecipeDeliveryRequest,
         attestation: RecipeDeliveryAttestation,
-        supported_evidence: CodexRecipeDeliveryEvidenceDef,
+        supported_evidence: RecipeDeliveryEvidenceDef,
         producer: str,
         payload_sha256: str,
         now_unix: int,

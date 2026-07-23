@@ -13,8 +13,8 @@ import pytest
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
-    CodexRecipeDeliveryEvidenceDef,
     RecipeDeliveryAttestation,
+    RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
     recipe_delivery_request_digest,
@@ -268,6 +268,27 @@ def test_token_dense_payload_does_not_use_four_byte_ordinary_estimate(tool_ctx) 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
 
 
+def test_finalizer_uses_backend_selected_recipe_budget(tool_ctx) -> None:
+    selected_budget = CODEX_RECIPE_DELIVERY_BUDGET._replace(contract_digest="sha256:" + ("d" * 64))
+    backend = MagicMock()
+    backend.capabilities = replace(
+        CodexBackend().capabilities,
+        recipe_delivery_budget=selected_budget,
+    )
+    tool_ctx.backend = backend
+    tool_ctx.kitchen_id = "selected-budget"
+
+    finalized = finalize_recipe_delivery(
+        _payload(),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
+    assert finalized.decision.contract_digest == selected_budget.contract_digest
+
+
 def _request() -> RecipeDeliveryRequest:
     budget = CODEX_RECIPE_DELIVERY_BUDGET
     return RecipeDeliveryRequest(
@@ -280,9 +301,9 @@ def _request() -> RecipeDeliveryRequest:
     )
 
 
-def _evidence() -> CodexRecipeDeliveryEvidenceDef:
+def _evidence() -> RecipeDeliveryEvidenceDef:
     budget = CODEX_RECIPE_DELIVERY_BUDGET
-    return CodexRecipeDeliveryEvidenceDef(
+    return RecipeDeliveryEvidenceDef(
         identity="protected-finalizer-test-v1",
         host_channel="test-process-isolated-host",
         evidence_schema_version=budget.evidence_version,

@@ -11,10 +11,10 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
     BackendCapabilities,
-    CodexRecipeDeliveryBudgetDef,
-    CodexRecipeDeliveryEvidenceDef,
     RecipeDeliveryAttestation,
+    RecipeDeliveryBudgetDef,
     RecipeDeliveryDecision,
+    RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
     recipe_delivery_request_digest,
@@ -26,7 +26,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _PAYLOAD_SHA256 = f"sha256:{'a' * 64}"
 _CONTRACT_DIGEST = f"sha256:{'f' * 64}"
-_BUDGET = CodexRecipeDeliveryBudgetDef(
+_BUDGET = RecipeDeliveryBudgetDef(
     ordinary_omitted_result_token_limit=10_000,
     authoritative_attested_recipe_result_token_limit=56_750,
     history_retention_token_limit=56_750,
@@ -40,6 +40,7 @@ _BUDGET = CodexRecipeDeliveryBudgetDef(
 _CODEX_CAPABILITIES = BackendCapabilities(
     unnegotiated_tool_result_token_limit=10_000,
     protected_recipe_delivery_capable=True,
+    recipe_delivery_budget=_BUDGET,
 )
 
 
@@ -91,9 +92,9 @@ def _attestation(
     return attestation
 
 
-def _protected_evidence() -> CodexRecipeDeliveryEvidenceDef:
+def _protected_evidence() -> RecipeDeliveryEvidenceDef:
     budget = _BUDGET
-    return CodexRecipeDeliveryEvidenceDef(
+    return RecipeDeliveryEvidenceDef(
         identity="protected-test-host-v1",
         host_channel="test-only-process-isolated-host",
         evidence_schema_version=budget.evidence_version,
@@ -111,8 +112,8 @@ def _resolve(
     required: int,
     request: RecipeDeliveryRequest | None = None,
     attestation: RecipeDeliveryAttestation | None = None,
-    evidence: CodexRecipeDeliveryEvidenceDef | None = None,
-    budget: CodexRecipeDeliveryBudgetDef = _BUDGET,
+    evidence: RecipeDeliveryEvidenceDef | None = None,
+    budget: RecipeDeliveryBudgetDef | None = _BUDGET,
 ) -> RecipeDeliveryDecision:
     capabilities = (
         _CODEX_CAPABILITIES
@@ -133,7 +134,7 @@ def _resolve(
 
 
 def test_recipe_delivery_type_fields_keep_provenance_domains_distinct() -> None:
-    assert CodexRecipeDeliveryBudgetDef._fields == (
+    assert RecipeDeliveryBudgetDef._fields == (
         "ordinary_omitted_result_token_limit",
         "authoritative_attested_recipe_result_token_limit",
         "history_retention_token_limit",
@@ -203,7 +204,7 @@ def test_recipe_delivery_dataclasses_have_no_defaults(
 
 def test_static_budget_is_required_and_keeps_history_separate() -> None:
     budget = _BUDGET
-    assert CodexRecipeDeliveryBudgetDef._field_defaults == {}
+    assert RecipeDeliveryBudgetDef._field_defaults == {}
     assert budget.ordinary_omitted_result_token_limit == 10_000
     assert budget.measured_recipe_exemption_max_utf8_bytes == 195_000
     assert (
@@ -259,6 +260,14 @@ def test_over_authoritative_ceiling_is_envelope() -> None:
     )
     assert decision.mode is RecipeDeliveryMode.ENVELOPE
     assert decision.selected_result_token_limit == budget.ordinary_omitted_result_token_limit
+
+
+def test_protected_backend_without_selected_budget_fails_closed() -> None:
+    decision = _resolve(required=10_001, budget=None)
+
+    assert decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert decision.reason == "protected_delivery_budget_unavailable"
+    assert decision.contract_digest == ""
 
 
 @pytest.mark.parametrize("missing", ["request", "attestation", "evidence"])

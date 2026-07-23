@@ -17,9 +17,9 @@ from autoskillit.core import (
     RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
-    CodexRecipeDeliveryBudgetDef,
-    CodexRecipeDeliveryEvidenceDef,
     ReadResult,
+    RecipeDeliveryBudgetDef,
+    RecipeDeliveryEvidenceDef,
     atomic_write,
     get_logger,
     safe_upsert_section,
@@ -65,7 +65,7 @@ _CODEX_RECIPE_DELIVERY_CONTRACT_DIGEST = (
     ).hexdigest()
 )
 
-CODEX_RECIPE_DELIVERY_BUDGET: CodexRecipeDeliveryBudgetDef = CodexRecipeDeliveryBudgetDef(
+CODEX_RECIPE_DELIVERY_BUDGET: RecipeDeliveryBudgetDef = RecipeDeliveryBudgetDef(
     ordinary_omitted_result_token_limit=10_000,
     authoritative_attested_recipe_result_token_limit=(_CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT),
     history_retention_token_limit=_CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT,
@@ -82,7 +82,7 @@ CODEX_HISTORY_RETENTION_TOKEN_LIMIT: int = (
 
 # A protected evidence identity is enabled only with its passing conformance
 # report. Writable rollout and trace formats are intentionally absent.
-SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY: dict[str, CodexRecipeDeliveryEvidenceDef] = {}
+SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY: dict[str, RecipeDeliveryEvidenceDef] = {}
 
 
 def codex_recipe_delivery_calling_contract(*, mcp_prefix: str = "") -> str:

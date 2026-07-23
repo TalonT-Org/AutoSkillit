@@ -351,6 +351,9 @@ def test_token_dense_payload_does_not_use_four_byte_ordinary_estimate(tool_ctx) 
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert len(finalized.rendered.encode("utf-8")) <= (
+        CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
+    )
 
 
 def test_envelope_priority_fields_share_multibyte_budget_safely(tmp_path: Path) -> None:

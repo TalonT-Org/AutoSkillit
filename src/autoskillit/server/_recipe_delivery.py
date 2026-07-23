@@ -865,7 +865,7 @@ def finalize_recipe_delivery(
     elif decision.mode is RecipeDeliveryMode.ATTESTED_INLINE:
         rendered = high_rendered
     else:
-        envelope_bound_bytes = ordinary_limit * 4
+        envelope_bound_bytes = ordinary_limit
         if (
             surface_definition.response_exemption_tool is None
             and response_ceiling_bytes is not None

@@ -25,3 +25,4 @@ Documentation integrity, link validity, and naming convention tests.
 | `test_output_budget_protocol_decision.py` | Ratchet ADR-0005 limits, accepted gaps, operational signals, corrections, and forward obligations |
 | `test_recipe_redelivery_decision.py` | ADR-0004 recipe pull pagination identity and reconstruction contracts |
 | `test_check_sub_claude_md_script.py` | Unit and integration tests for the check_sub_claude_md.py pre-commit hook script |
+| `test_context_admission_decision.py` | Ratchet ADR-0007 context-admission authority, evidence, traceability, and downstream ownership |

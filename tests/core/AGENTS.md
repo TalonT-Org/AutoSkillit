@@ -17,6 +17,9 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_cmd_runner.py` | Tests for core/_cmd_runner.py — CmdRunner protocol, default_cmd_runner, run_git, run_gh |
 | `test_core.py` | Tests for the core/ sub-package foundation layer |
 | `test_core_terminal_table.py` | Tests for core/_terminal_table.py — the L0 shared table primitive |
+| `test_context_admission_coverage.py` | Exact producer/control-point coverage registry and evidence metadata contract |
+| `test_context_admission_reducer.py` | Pure context-admission reducer transition and replay tests |
+| `test_context_admission_state_machine.py` | Property-based context-admission accounting and lifecycle invariants |
 | `test_ensure_project_temp_with_config.py` | Tests for ensure_project_temp with configurable override |
 | `test_feature_flags.py` | Tests for core/feature_flags.py — _collect_disabled_feature_tags helper |
 | `test_github_url.py` | Unit tests for core.github_url.parse_github_repo |
@@ -70,3 +73,4 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_closure_attacks.py` | Adversarial attack tests for closure-mode verification (forged verdicts, containment escape, ref drift, unauthorized rows, metadata stability) |
 | `test_closure_authority_spec.py` | Tests for ClosureAuthoritySpec and factory validation |
 | `test_closure_report.py` | Tests for ClosureRow and ClosureReport schema validation |
+| `types/test_context_admission_contract.py` | Frozen context-admission enums, records, unions, validation, serialization, and gateway contract |

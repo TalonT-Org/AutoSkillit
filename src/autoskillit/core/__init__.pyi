@@ -48,6 +48,21 @@ from .claude_conventions import validate_add_dir as validate_add_dir
 from .claude_conventions import validate_worktree_path as validate_worktree_path
 from .closure_verifier import VerificationResult as VerificationResult
 from .closure_verifier import verify_closure_report as verify_closure_report
+from .context_admission import (
+    ContextAdmissionValidationError as ContextAdmissionValidationError,
+)
+from .context_admission import (
+    UnsupportedContextAdmissionProtocolError as UnsupportedContextAdmissionProtocolError,
+)
+from .context_admission import (
+    reduce_context_admission as reduce_context_admission,
+)
+from .context_admission import (
+    replay_context_admission as replay_context_admission,
+)
+from .context_admission import (
+    resolve_context_admission_coverage as resolve_context_admission_coverage,
+)
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
 from .git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
@@ -165,6 +180,10 @@ from .types import CODEX_SCHEMA_VERSION as CODEX_SCHEMA_VERSION
 from .types import CODEX_SESSIONS_SUBDIR as CODEX_SESSIONS_SUBDIR
 from .types import CODEX_VALID_MODEL_IDS as CODEX_VALID_MODEL_IDS
 from .types import CONFIG_AUTHORITY_KEYS as CONFIG_AUTHORITY_KEYS
+from .types import CONTEXT_ADMISSION_COVERAGE as CONTEXT_ADMISSION_COVERAGE
+from .types import (
+    CONTEXT_ADMISSION_PROTOCOL_VERSION as CONTEXT_ADMISSION_PROTOCOL_VERSION,
+)
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
 from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
@@ -271,16 +290,47 @@ from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VALID_INPUT_SPEC_TYPES as VALID_INPUT_SPEC_TYPES
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
+from .types import AcceptInputEvent as AcceptInputEvent
+from .types import ActiveContextAdmissionState as ActiveContextAdmissionState
+from .types import AdmissionAttemptId as AdmissionAttemptId
+from .types import AdmissionBatch as AdmissionBatch
+from .types import AdmissionBatchId as AdmissionBatchId
+from .types import AdmissionBatchRecord as AdmissionBatchRecord
+from .types import AdmissionDecision as AdmissionDecision
+from .types import AdmissionDecisionKind as AdmissionDecisionKind
+from .types import AdmissionEffect as AdmissionEffect
+from .types import AdmissionEventId as AdmissionEventId
+from .types import AdmissionOccurrence as AdmissionOccurrence
+from .types import AdmissionOccurrenceId as AdmissionOccurrenceId
+from .types import AdmissionOccurrenceRecord as AdmissionOccurrenceRecord
+from .types import AdmissionReplay as AdmissionReplay
+from .types import AdmissionRequestId as AdmissionRequestId
+from .types import AdmissionReservation as AdmissionReservation
+from .types import AdmissionReservationId as AdmissionReservationId
+from .types import AdmissionReservationKey as AdmissionReservationKey
+from .types import AdmissionSequence as AdmissionSequence
+from .types import AdmissionState as AdmissionState
+from .types import AdmissionTransition as AdmissionTransition
+from .types import AdmissionWitness as AdmissionWitness
+from .types import AdmissionWitnessId as AdmissionWitnessId
+from .types import AgentInstanceId as AgentInstanceId
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
+from .types import AggregateRevision as AggregateRevision
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import AuditLog as AuditLog
+from .types import AuthoritySourceId as AuthoritySourceId
+from .types import AuthorityUnavailableEffect as AuthorityUnavailableEffect
+from .types import AuthorityUnavailableEvent as AuthorityUnavailableEvent
 from .types import BackendCapabilities as BackendCapabilities
 from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import CampaignProtector as CampaignProtector
+from .types import CanonicalRepresentationManifest as CanonicalRepresentationManifest
+from .types import CanonicalSpanId as CanonicalSpanId
+from .types import CanonicalSpanOwner as CanonicalSpanOwner
 from .types import CanonicalTokenUsage as CanonicalTokenUsage
 from .types import CapabilityNotSupportedError as CapabilityNotSupportedError
 from .types import CapabilityResolutionDetail as CapabilityResolutionDetail
@@ -290,6 +340,8 @@ from .types import CaptureValueType as CaptureValueType
 from .types import CaptureValueTypeError as CaptureValueTypeError
 from .types import ChannelBStatus as ChannelBStatus
 from .types import ChannelConfirmation as ChannelConfirmation
+from .types import ChargeCommittedEffect as ChargeCommittedEffect
+from .types import ChargeDomain as ChargeDomain
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher
 from .types import ClaudeContentBlockType as ClaudeContentBlockType
@@ -302,6 +354,7 @@ from .types import CloneGateUnpublished as CloneGateUnpublished
 from .types import CloneManager as CloneManager
 from .types import CloneResult as CloneResult
 from .types import CloneSuccessResult as CloneSuccessResult
+from .types import ClosedEpochAudit as ClosedEpochAudit
 from .types import ClosureAuthoritySpec as ClosureAuthoritySpec
 from .types import ClosureReport as ClosureReport
 from .types import ClosureRow as ClosureRow
@@ -312,17 +365,33 @@ from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
 from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
+from .types import ConflictRejectedEffect as ConflictRejectedEffect
 from .types import ContaminationOutcome as ContaminationOutcome
+from .types import ContextAdmissionEvent as ContextAdmissionEvent
+from .types import ContextAdmissionState as ContextAdmissionState
+from .types import ContextLineage as ContextLineage
+from .types import ContextSessionId as ContextSessionId
+from .types import ContextThreadId as ContextThreadId
+from .types import ContextWindowSnapshot as ContextWindowSnapshot
+from .types import CoverageEvidence as CoverageEvidence
+from .types import CoverageEvidenceKind as CoverageEvidenceKind
+from .types import CoverageState as CoverageState
 from .types import CrossDomainAssessment as CrossDomainAssessment
 from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
+from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
 from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
+from .types import DispatchRequestEvent as DispatchRequestEvent
 from .types import EffectiveSkillCatalogAuthority as EffectiveSkillCatalogAuthority
 from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocationAuthority
 from .types import EnvPolicy as EnvPolicy
+from .types import EpochClosedEffect as EpochClosedEffect
+from .types import EpochFenceProof as EpochFenceProof
+from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
+from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
 from .types import FailureRecord as FailureRecord
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
@@ -330,12 +399,23 @@ from .types import FigureSpec as FigureSpec
 from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetLock as FleetLock
 from .types import FleetSessionEnv as FleetSessionEnv
+from .types import ForkOccurrenceId as ForkOccurrenceId
 from .types import GateState as GateState
+from .types import GenerationReconciledEffect as GenerationReconciledEffect
+from .types import GenerationReservationId as GenerationReservationId
+from .types import GenerationReservationRecord as GenerationReservationRecord
+from .types import (
+    GenerationReservationRecordedEffect as GenerationReservationRecordedEffect,
+)
+from .types import GenerationState as GenerationState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract
+from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect
+from .types import IdempotencyNamespace as IdempotencyNamespace
+from .types import IdempotencyRecord as IdempotencyRecord
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InputContractResolver as InputContractResolver
@@ -352,27 +432,42 @@ from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import MarketplaceInstall as MarketplaceInstall
+from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
+from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
 from .types import McpResponseLog as McpResponseLog
+from .types import MeasurementKind as MeasurementKind
 from .types import MergeFailedStep as MergeFailedStep
 from .types import MergeQueueWatcher as MergeQueueWatcher
 from .types import MergeState as MergeState
 from .types import MigrationService as MigrationService
 from .types import ModelIdentity as ModelIdentity
+from .types import ModelItemId as ModelItemId
 from .types import ModelTotalEntry as ModelTotalEntry
 from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
 from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
+from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
+from .types import OpenEpochEvent as OpenEpochEvent
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
 from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PluginSource as PluginSource
+from .types import PrepareBatchEvent as PrepareBatchEvent
+from .types import ProcessedEventRecord as ProcessedEventRecord
 from .types import ProcessStaleError as ProcessStaleError
+from .types import ProducerCoverageDef as ProducerCoverageDef
+from .types import ProducerInstanceId as ProducerInstanceId
+from .types import ProducerSurface as ProducerSurface
 from .types import PromptContractError as PromptContractError
+from .types import ProposeOccurrenceEvent as ProposeOccurrenceEvent
+from .types import ProtectedPoolOwnerId as ProtectedPoolOwnerId
+from .types import ProtectedPoolSpec as ProtectedPoolSpec
 from .types import ProviderOutcome as ProviderOutcome
 from .types import PRState as PRState
+from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
 from .types import ReadingToken as ReadingToken
@@ -393,12 +488,39 @@ from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDe
 from .types import RecipeSectionDef as RecipeSectionDef
 from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
+from .types import ReconcileGenerationEvent as ReconcileGenerationEvent
+from .types import (
+    ReconciliationEscalationEffect as ReconciliationEscalationEffect,
+)
+from .types import (
+    ReconciliationQueryRequestedEffect as ReconciliationQueryRequestedEffect,
+)
+from .types import ReleaseNonAdmissionEvent as ReleaseNonAdmissionEvent
+from .types import RepresentationBindingWitness as RepresentationBindingWitness
+from .types import RepresentationRevision as RepresentationRevision
+from .types import RequestReconciliationEvent as RequestReconciliationEvent
+from .types import ReservationInvalidatedEffect as ReservationInvalidatedEffect
+from .types import ReservationRecordedEffect as ReservationRecordedEffect
+from .types import ReservationReleasedEffect as ReservationReleasedEffect
+from .types import ReserveClass as ReserveClass
+from .types import ReserveRequestEvent as ReserveRequestEvent
+from .types import (
+    ResolveIndeterminateAcceptedEvent as ResolveIndeterminateAcceptedEvent,
+)
+from .types import (
+    ResolveIndeterminateNonAdmissionEvent as ResolveIndeterminateNonAdmissionEvent,
+)
+from .types import (
+    ResolveIndeterminateRollbackEvent as ResolveIndeterminateRollbackEvent,
+)
 from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
 from .types import RetryReason as RetryReason
+from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
+from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
@@ -428,6 +550,8 @@ from .types import SkillSourceRef as SkillSourceRef
 from .types import SkillVisibilitySpec as SkillVisibilitySpec
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
+from .types import StageHistoryEvent as StageHistoryEvent
+from .types import StartGenerationEvent as StartGenerationEvent
 from .types import StoredSkillSessionContract as StoredSkillSessionContract
 from .types import StreamParser as StreamParser
 from .types import SubprocessResult as SubprocessResult
@@ -441,10 +565,18 @@ from .types import TestResult as TestResult
 from .types import TestRunner as TestRunner
 from .types import TimingLog as TimingLog
 from .types import TokenFactory as TokenFactory
+from .types import TokenizerIdentity as TokenizerIdentity
 from .types import TokenLog as TokenLog
+from .types import ToolCallId as ToolCallId
 from .types import TraditionManifest as TraditionManifest
+from .types import TurnId as TurnId
+from .types import (
+    UninitializedContextAdmissionState as UninitializedContextAdmissionState,
+)
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath
+from .types import WindowEpochId as WindowEpochId
+from .types import WitnessKind as WitnessKind
 from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence

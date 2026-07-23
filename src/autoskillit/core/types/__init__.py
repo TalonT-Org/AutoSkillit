@@ -22,6 +22,8 @@ from ._type_constants_features import *  # noqa: F401, F403
 from ._type_constants_features import __all__ as _constants_features_all
 from ._type_constants_registries import *  # noqa: F401, F403
 from ._type_constants_registries import __all__ as _constants_registries_all
+from ._type_context_admission import *  # noqa: F401, F403
+from ._type_context_admission import __all__ as _context_admission_all
 from ._type_dispatch_identity import *  # noqa: F401, F403
 from ._type_dispatch_identity import __all__ as _dispatch_identity_all
 from ._type_enums import *  # noqa: F401, F403
@@ -84,6 +86,7 @@ __all__ = (
     + _constants_env_all
     + _constants_features_all
     + _constants_registries_all
+    + _context_admission_all
     + _dispatch_identity_all
     + _enums_all
     + _exceptions_all

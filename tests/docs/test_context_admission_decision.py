@@ -1,0 +1,310 @@
+"""Ratchet the accepted context-admission contract decision."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DECISION = REPO_ROOT / "docs/decisions/0007-context-admission.md"
+DECISION_INDEX = REPO_ROOT / "docs/decisions/README.md"
+
+pytestmark = pytest.mark.small
+
+CODEX_VERSION = "0.145.0"
+CODEX_REVISION = "25af12f7e61572b0bc18ddb1008be543b91519b0"
+
+REQUIRED_HEADINGS = (
+    "Context",
+    "Decision",
+    "Admission boundary and authority",
+    "Protocol version 1",
+    "State, witnesses, and atomic batches",
+    "Accounting and identity invariants",
+    "Protected reserve and epoch isolation",
+    "Producer coverage matrix",
+    "Authority unavailable and byte ceilings",
+    "Upstream authority request",
+    "Privacy and observability",
+    "Capability decision for Codex 0.145.0",
+    "Protocol evolution",
+    "Downstream dependency graph",
+    "Non-goals",
+    "Traceability",
+)
+
+TRACEABILITY_TERMS = {
+    "INV-1": "model-visible admission boundary",
+    "INV-2": "stable identities",
+    "INV-3": "atomic reserve/commit/release protocol",
+    "INV-4": "version-pinned coverage matrix",
+    "INV-5": "token_budget/get_context_remaining",
+    "INV-6": "upstream Codex contract",
+    "INV-7": "privacy-safe observability",
+    "OUT-1": "versioned admission protocol and state machine",
+    "OUT-2": "producer/control-point coverage matrix",
+    "OUT-3": "accounting and identity invariants",
+    "OUT-4": "failure and reconciliation semantics",
+    "OUT-5": "authoritative token accounting",
+    "OUT-6": "upstream Codex request",
+    "OUT-7": "implementation dependency graph",
+    "NG-1": "no enforcement or numeric budget defaults",
+    "NG-2": "retain existing raw per-producer ceilings",
+    "NG-3": "bytes are not an exact token proxy",
+    "NG-4": "digest is not an access capability or deduplication identity",
+    "AC-1": "every model-visible producer",
+    "AC-2": "idempotent reservation keys and compaction/window reset rules",
+    "AC-3": "outstanding concurrent calls and protected reserve",
+    "AC-4": "Codex claims cite tested version and primary sources",
+    "AC-5": "C2-C8 use the shared accounting contract",
+}
+
+ALLOWED_TRACEABILITY_TARGETS = (
+    "CONTEXT_ADMISSION_PROTOCOL_VERSION",
+    "CONTEXT_ADMISSION_COVERAGE",
+    "reduce_context_admission",
+    "replay_context_admission",
+    "test_context_admission_contract.py",
+    "test_context_admission_coverage.py",
+    "test_context_admission_reducer.py",
+    "test_context_admission_state_machine.py",
+    "test_context_admission_decision.py",
+    *REQUIRED_HEADINGS,
+)
+
+
+@pytest.fixture(scope="module")
+def decision_text() -> str:
+    assert DECISION.exists(), "ADR-0007 must exist"
+    return DECISION.read_text(encoding="utf-8")
+
+
+def _section(text: str, heading: str) -> str:
+    lines = text.splitlines()
+    start = -1
+    level = 0
+    for index, line in enumerate(lines):
+        match = re.fullmatch(r"(#{2,6}) (.+)", line)
+        if match is not None and match.group(2) == heading:
+            start = index + 1
+            level = len(match.group(1))
+            break
+    assert start >= 0, f"missing ADR heading: {heading}"
+    end = len(lines)
+    for index in range(start, len(lines)):
+        match = re.match(r"(#{2,6}) ", lines[index])
+        if match is not None and len(match.group(1)) <= level:
+            end = index
+            break
+    return "\n".join(lines[start:end])
+
+
+def _traceability_rows(text: str) -> dict[str, tuple[str, str]]:
+    rows: dict[str, tuple[str, str]] = {}
+    for row_id, requirement, target in re.findall(
+        r"^\|\s*((?:INV|OUT|NG|AC)-\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|$",
+        _section(text, "Traceability"),
+        flags=re.MULTILINE,
+    ):
+        assert row_id not in rows, f"duplicate traceability row: {row_id}"
+        rows[row_id] = (requirement.strip(), target.strip())
+    return rows
+
+
+def test_context_admission_decision_is_indexed(decision_text: str) -> None:
+    assert "**Status:** Accepted" in decision_text
+    assert "#4333" in decision_text
+    assert "C1" in decision_text
+    assert "0007-context-admission.md" in DECISION_INDEX.read_text(encoding="utf-8")
+
+
+def test_decision_has_the_normative_contract_sections(decision_text: str) -> None:
+    for heading in REQUIRED_HEADINGS:
+        assert re.search(
+            rf"^##+ {re.escape(heading)}\s*$",
+            decision_text,
+            flags=re.MULTILINE,
+        ), f"missing ADR heading: {heading}"
+
+
+def test_decision_references_the_executable_protocol(decision_text: str) -> None:
+    for required in [
+        "CONTEXT_ADMISSION_PROTOCOL_VERSION",
+        "reduce_context_admission",
+        "replay_context_admission",
+        "CONTEXT_ADMISSION_COVERAGE",
+    ]:
+        assert required in decision_text
+    protocol = _section(decision_text, "Protocol version 1")
+    assert re.search(r"\bprotocol version 1\b", protocol, flags=re.IGNORECASE)
+
+
+def test_traceability_freezes_the_entire_issue_scope(decision_text: str) -> None:
+    rows = _traceability_rows(decision_text)
+    assert set(rows) == set(TRACEABILITY_TERMS)
+    for row_id, required_term in TRACEABILITY_TERMS.items():
+        requirement, target = rows[row_id]
+        assert required_term.casefold() in requirement.casefold(), row_id
+        assert any(allowed in target for allowed in ALLOWED_TRACEABILITY_TARGETS), row_id
+
+
+def test_codex_capability_claims_are_version_pinned_to_primary_evidence(
+    decision_text: str,
+) -> None:
+    capability = _section(decision_text, "Capability decision for Codex 0.145.0")
+    for required in [
+        CODEX_VERSION,
+        CODEX_REVISION,
+        "token_budget",
+        "get_context_remaining",
+        "PreCompact",
+        "PostCompact",
+    ]:
+        assert required in capability
+    primary_source_prefix = f"https://github.com/openai/codex/blob/{CODEX_REVISION}/"
+    assert capability.count(primary_source_prefix) >= 3
+
+
+def test_authority_unavailable_behavior_preserves_byte_boundaries(
+    decision_text: str,
+) -> None:
+    section = _section(decision_text, "Authority unavailable and byte ceilings").casefold()
+    for required in [
+        "watermark_unavailable",
+        "upstream_gated",
+        "raw-byte",
+        "no numeric",
+        "independent",
+    ]:
+        assert required in section
+
+
+def test_decision_freezes_the_complete_producer_matrix(decision_text: str) -> None:
+    coverage = _section(decision_text, "Producer coverage matrix")
+    for surface in [
+        "NATIVE_SHELL",
+        "UNIFIED_EXEC_AND_WRITE_STDIN",
+        "APPLY_PATCH",
+        "AUTOSKILLIT_MCP",
+        "EXTERNAL_MCP",
+        "AUTOSKILLIT_LOCAL_FUNCTION",
+        "OTHER_LOCAL_FUNCTION",
+        "MCP_RESOURCE",
+        "CLIENT_PROVIDER_RETRIEVAL",
+        "CODE_MODE_AGGREGATE",
+        "HOSTED_SPECIALIZED_TOOL",
+        "HOOK_FEEDBACK",
+        "TOOL_ARGUMENT",
+        "TOOL_RESULT_ENVELOPE",
+        "USER_PROMPT",
+        "ASSISTANT_OUTPUT_HISTORY",
+        "SKILL_PLUGIN_CONTEXT",
+        "OTHER_CONTEXT_INJECTION",
+        "HEADLESS_CHILD_PROMPT",
+        "PARENT_VISIBLE_CHILD_DELIVERY",
+        "COMPACTION_MODEL_WINDOW_TRANSITION",
+    ]:
+        assert surface in coverage
+    assert "PARTIAL" in coverage
+    assert "UPSTREAM_GATED" in coverage
+    assert "VERIFIED" in coverage
+
+
+def test_upstream_request_contains_all_three_authority_parts_and_minimum_fields(
+    decision_text: str,
+) -> None:
+    request = _section(decision_text, "Upstream authority request")
+    for required in [
+        "atomic snapshot/reservation",
+        "generated-output maximum",
+        "synchronous blocking",
+        "final ordered batch",
+        "canonical representation manifest",
+        "receiver fence",
+        "durable/queryable journal",
+        "history staging",
+        "request inclusion",
+        "provider acceptance",
+        "output-usage reconciliation",
+        "rollback",
+        "truncation/compaction replacement",
+        "authoritative reconciliation",
+        "request_id",
+        "batch_id",
+        "ordered members",
+        "reservation IDs",
+        "thread/turn/agent lineage",
+        "admission sequence",
+        "window ID/number",
+        "model/tokenizer identity",
+        "snapshot sequence",
+        "measurement kind/source",
+        "active/hard-limit/remaining/proposed/max-output counts",
+        "reserve class",
+        "representation revision",
+    ]:
+        assert required in request
+
+
+def test_privacy_table_freezes_field_governance(decision_text: str) -> None:
+    privacy = _section(decision_text, "Privacy and observability")
+    for required in [
+        "Runtime/audit",
+        "Aggregate telemetry",
+        "Purpose",
+        "Maximum length/cardinality",
+        "Retention",
+        "Access",
+        "Deletion",
+        "Export",
+        "opaque",
+        "lineage",
+        "source locator",
+        "content",
+        "absolute paths",
+        "bearer tokens",
+        "content/artifact hashes",
+    ]:
+        assert required in privacy
+
+
+def test_decision_keeps_issue_non_goals_explicit(decision_text: str) -> None:
+    non_goals = _section(decision_text, "Non-goals").casefold()
+    for required in [
+        "enforcement",
+        "numeric budget defaults",
+        "existing raw per-producer ceilings",
+        "bytes",
+        "exact token proxy",
+        "digest",
+        "access capability",
+        "deduplication identity",
+    ]:
+        assert required in non_goals
+
+
+@pytest.mark.parametrize(
+    ("work_package", "issue"),
+    [
+        ("C2", "#4334"),
+        ("C3", "#4335"),
+        ("C4", "#4336"),
+        ("C5", "#4337"),
+        ("C6", "#4339"),
+        ("C7", "#4340"),
+        ("C8", "#4338"),
+    ],
+)
+def test_dependency_graph_maps_existing_child_issues(
+    decision_text: str,
+    work_package: str,
+    issue: str,
+) -> None:
+    graph = _section(decision_text, "Downstream dependency graph")
+    assert re.search(
+        rf"\b{re.escape(work_package)}\b[^\n]*{re.escape(issue)}"
+        rf"|{re.escape(issue)}[^\n]*\b{re.escape(work_package)}\b",
+        graph,
+    )

@@ -826,9 +826,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _type_invariant_registry.py adds InvariantDef frozen dataclass and
             INVARIANT_REGISTRY mapping 13 prose prohibitions to runtime gate targets,
             bringing the core/types count to 31.
+            _type_recipe_sections.py adds recipe-section schema and digest contracts.
             _type_skill_contract.py adds the backend-neutral SkillSourceRef identity
-            consumed by workspace projections, bringing the core/types count to 34.
-            Exempt at 35 files (core/types: 34).
+            consumed by workspace projections.
+            _context_admission.py adds the pure context-admission reducer, and
+            _type_context_admission.py adds its frozen IL-0 contract records.
+            Exempt at 26 files (core/types: 36).
           cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -892,9 +895,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 16,  # +_recipe_section_pagination deterministic bounded planner
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 25,  # +_delivery_bounds (resolve_general_output_token_limit)
-        "core/types": 35,  # +_type_recipe_sections schema and digest contracts
-        # +_type_skill_contract backend-neutral source identity
+        "core": 26,  # +_context_admission pure reducer
+        "core/types": 36,  # +_type_recipe_sections +_type_skill_contract +context admission
         "cli": 21,
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 12,  # +skill_capabilities semantic validation +skill_projection
@@ -1147,6 +1149,21 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "discovery, override precedence, filtering, dependency activation, and lifecycle "
         "cleanup remain in one manager; semantic validation and projection are already "
         "isolated in dedicated workspace modules.",
+    ),
+    "core/context_admission.py": (
+        1750,
+        "REQ-CNST-010-E13: #4333 freezes one exhaustive protocol-v1 reducer and replay "
+        "surface. Keeping all closed event transitions together makes atomic batch, "
+        "idempotency, protected-pool, reconciliation, rollover, and declarative effect "
+        "semantics reviewable as one state machine; splitting dispatch branches would "
+        "fragment exhaustiveness.",
+    ),
+    "core/types/_type_context_admission.py": (
+        1500,
+        "REQ-CNST-010-E14: #4333 freezes the complete content-free protocol-v1 schema in "
+        "one IL-0 shard. Co-locating identities, records, closed event/effect unions, "
+        "states, canonical serialization, and the static coverage registry prevents "
+        "downstream layers from defining incompatible wire contracts.",
     ),
 }
 

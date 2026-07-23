@@ -100,6 +100,7 @@ class TestModuleCascadeCore:
             "_type_backend",
             "_type_recipe_delivery",
             "_type_recipe_sections",
+            "_type_context_admission",
             "_type_dispatch_identity",
             "_type_figure_spec",
             "_type_session_env",
@@ -122,6 +123,7 @@ class TestModuleCascadeCore:
             "closure_hashing",
             "path_containment",
             "closure_verifier",
+            "context_admission",
             "_delivery_bounds",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems

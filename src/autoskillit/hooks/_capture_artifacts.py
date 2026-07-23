@@ -541,7 +541,7 @@ def _spawn_bash(
     try:
         os.fchdir(anchor.fd)
         process = subprocess.Popen(
-            [bash_path, "-c", _wrap_user_command(command), "autoskillit-capture"],
+            [bash_path, "-c", _wrap_user_command(command)],
             stdout=subprocess.PIPE if capture_output else None,
             stderr=subprocess.STDOUT if capture_output else None,
             close_fds=True,

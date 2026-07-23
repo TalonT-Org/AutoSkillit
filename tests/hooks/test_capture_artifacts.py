@@ -820,6 +820,18 @@ def test_verified_disabled_policy_runs_without_capture(
     assert not _capture_dir(project).exists()
 
 
+def test_capture_preserves_native_bash_command_name(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    assert run_capture('printf "%s" "$0"', str(project), _CAPTURE_ID) == 0
+
+    captured = capfd.readouterr()
+    assert captured.out == capture_artifacts._resolve_bash()
+
+
 def test_spawn_failure_closes_created_artifact_fd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

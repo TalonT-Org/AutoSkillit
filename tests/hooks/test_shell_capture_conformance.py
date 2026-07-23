@@ -133,8 +133,9 @@ def _main_generated_wrapper(command: str, cwd: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
     output = io.StringIO()
-    with pytest.raises(SystemExit), redirect_stdout(output):
+    with pytest.raises(SystemExit) as exit_info, redirect_stdout(output):
         shell_capture_hook.main()
+    assert exit_info.value.code == 0
     payload = json.loads(output.getvalue())
     return payload["hookSpecificOutput"]["updatedInput"]["command"]
 

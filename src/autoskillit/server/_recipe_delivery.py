@@ -841,8 +841,11 @@ def complete_finalized_recipe_response(
             {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
             separators=(",", ":"),
         )
-    if handle is not None and ledger is not None:
-        ledger.abort(handle)
+    if handle is not None and (ledger is None or not ledger.abort(handle)):
+        return json.dumps(
+            {"success": False, "error": "recipe_delivery_receipt_abort_failed"},
+            separators=(",", ":"),
+        )
     return enforced
 
 

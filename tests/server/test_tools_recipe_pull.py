@@ -400,6 +400,35 @@ def test_transformed_attested_response_aborts_pending_receipt(tmp_path: Path, to
     assert ledger.receipt_status("thread-abort") is None
 
 
+def test_failed_receipt_abort_is_reported(
+    tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool_ctx.backend = _protected_codex_backend()
+    tool_ctx.kitchen_id = "codex-abort-failure"
+    ledger = _ledger(tmp_path)
+    finalized = finalize_recipe_delivery(
+        _payload("x" * 50_000),
+        surface="load_recipe",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        delivery_request=_request(),
+        attestation=_attestation("thread-abort-failure"),
+        supported_evidence=_evidence(),
+        receipt_ledger=ledger,
+        now_unix=_NOW,
+    )
+    assert finalized.decision.mode is RecipeDeliveryMode.ATTESTED_INLINE
+    monkeypatch.setattr(RecipeDeliveryReceiptLedger, "abort", lambda *_args: False)
+
+    completed = complete_finalized_recipe_response(finalized, "bounded replacement")
+
+    assert json.loads(completed) == {
+        "success": False,
+        "error": "recipe_delivery_receipt_abort_failed",
+    }
+    assert ledger.receipt_status("thread-abort-failure") == "pending"
+
+
 async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     tool_ctx_kitchen_open,
 ) -> None:

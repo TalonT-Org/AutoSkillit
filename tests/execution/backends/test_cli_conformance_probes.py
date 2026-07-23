@@ -600,6 +600,7 @@ def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutp
     tmp_path.mkdir(parents=True, exist_ok=True)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    (workspace / "output_budget_probe.txt").write_text(("output_budget_probe " * 1_000) + "\n")
     env, codex_home, _claude_config = _isolated_cli_env(tmp_path, workspace)
 
     if backend == "codex":
@@ -686,6 +687,9 @@ def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
     assert "autoskillit-shell-capture" in output.transcript, (
         "Harness sentinel missing — hook may not have fired"
     )
+    assert "SHELL_OUTPUT_CAPTURED" in output.transcript, (
+        "Shell-capture marker missing — the live CLI path did not exercise bounded replay"
+    )
     completed_commands: list[str] = []
     for line in output.transcript.splitlines():
         try:
@@ -733,13 +737,23 @@ def test_shell_capture_assertion_requires_completed_rewritten_command() -> None:
         f"/tmp/workspace {capture_id}"
     )
 
-    def _output(*, status: str, command: str = rewritten_command) -> _DenyRoundTripOutput:
+    def _output(
+        *,
+        status: str,
+        command: str = rewritten_command,
+        include_marker: bool = True,
+    ) -> _DenyRoundTripOutput:
         event = {
             "type": "item.completed",
             "item": {
                 "type": "command_execution",
                 "command": command,
                 "status": status,
+                "aggregated_output": (
+                    "[AutoSkillit hook shell_capture_hook v1 (code=SHELL_OUTPUT_CAPTURED)]"
+                    if include_marker
+                    else "marker absent"
+                ),
             },
         }
         return _DenyRoundTripOutput(
@@ -749,6 +763,8 @@ def test_shell_capture_assertion_requires_completed_rewritten_command() -> None:
         )
 
     _assert_shell_capture_round_trip(_output(status="completed"))
+    with pytest.raises(AssertionError, match="Shell-capture marker missing"):
+        _assert_shell_capture_round_trip(_output(status="completed", include_marker=False))
 
     for noncompleted_status in ("denied", "failed"):
         with pytest.raises(AssertionError, match="No completed command_execution"):

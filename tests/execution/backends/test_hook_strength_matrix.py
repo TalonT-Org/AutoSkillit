@@ -27,6 +27,19 @@ _MATRIX_PATH = (
 )
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _require_completed_probe_session(request: pytest.FixtureRequest) -> None:
+    probe_is_collected = any(
+        Path(str(item.path)).name == "test_hook_deny_efficacy_probe.py"
+        for item in request.session.items
+    )
+    if probe_is_collected:
+        pytest.skip(
+            "strength matrix is serialized at session finish; "
+            "run matrix tests separately after the probe suite"
+        )
+
+
 def _load_matrix() -> dict:
     """Load the serialized strength matrix, skipping if absent."""
     if not _MATRIX_PATH.exists():

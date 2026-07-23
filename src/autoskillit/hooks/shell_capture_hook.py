@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shlex
+import struct
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -23,11 +24,42 @@ from uuid import uuid4
 _HARNESS_SENTINEL = "# autoskillit-shell-capture v1"
 _CAPTURE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
 _MAX_COMMAND_BYTES = 64 * 1024
-_RUNNER_PATH = Path(__file__).resolve().with_name("_capture_artifacts.py")
+_ARG_MAX_FALLBACK_BYTES = 128 * 1024
+_ARG_MAX_HEADROOM_BYTES = 32 * 1024
+_RUNNER_BASENAME = "_capture_artifacts.py"
 
 
 def _is_codex_session(payload: dict) -> bool:
     return os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex" or "turn_id" in payload
+
+
+def _system_arg_max() -> int:
+    try:
+        value = os.sysconf("SC_ARG_MAX")
+    except (AttributeError, OSError, ValueError):
+        return _ARG_MAX_FALLBACK_BYTES
+    return value if isinstance(value, int) and value > 0 else _ARG_MAX_FALLBACK_BYTES
+
+
+def _exec_footprint(argv: list[str]) -> int:
+    argv_bytes = sum(len(os.fsencode(argument)) + 1 for argument in argv)
+    environment_bytes = sum(
+        len(os.fsencode(key)) + len(os.fsencode(value)) + 2 for key, value in os.environ.items()
+    )
+    pointer_bytes = (len(argv) + len(os.environ) + 2) * struct.calcsize("P")
+    return argv_bytes + environment_bytes + pointer_bytes
+
+
+def _fits_arg_max(argv: list[str]) -> bool:
+    return _exec_footprint(argv) + _ARG_MAX_HEADROOM_BYTES <= _system_arg_max()
+
+
+def _render_harness(argv: list[str]) -> str:
+    return f"{_HARNESS_SENTINEL}\n{shlex.join(argv)}"
+
+
+def _runner_path() -> Path:
+    return Path(__file__).resolve().with_name(_RUNNER_BASENAME)
 
 
 def _build_harness(command: str, cwd: str, capture_id: str) -> str:
@@ -40,19 +72,23 @@ def _build_harness(command: str, cwd: str, capture_id: str) -> str:
     except UnicodeEncodeError:
         command_bytes = b""
     if "\x00" in command or not command_bytes or len(command_bytes) > _MAX_COMMAND_BYTES:
-        argv = [sys.executable, "-I", str(_RUNNER_PATH), "reject", capture_id]
+        argv = [sys.executable, "-I", str(_runner_path()), "reject", capture_id]
     else:
         encoded = base64.b64encode(command_bytes).decode("ascii")
         argv = [
             sys.executable,
             "-I",
-            str(_RUNNER_PATH),
+            str(_runner_path()),
             "run",
             encoded,
             cwd,
             capture_id,
         ]
-    return f"{_HARNESS_SENTINEL}\n{shlex.join(argv)}"
+        harness = _render_harness(argv)
+        outer_argv = ["bash", "-c", harness]
+        if not _fits_arg_max(argv) or not _fits_arg_max(outer_argv):
+            argv = [sys.executable, "-I", str(_runner_path()), "reject", capture_id]
+    return _render_harness(argv)
 
 
 def main() -> None:

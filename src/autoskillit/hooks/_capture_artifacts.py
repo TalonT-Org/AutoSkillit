@@ -21,20 +21,26 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
-    HOOK_CONFIG_FILENAME,
-    HOOK_CONFIG_OVERLAY_FILENAME,
-    merge_hook_configs,
-)
-from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
-    PolicyEvent,
-    render_capture_marker,
-)
+if TYPE_CHECKING:
+    from autoskillit.hooks._hook_settings import (
+        HOOK_CONFIG_FILENAME,
+        HOOK_CONFIG_OVERLAY_FILENAME,
+        merge_hook_configs,
+    )
+    from autoskillit.hooks._policy_event import PolicyEvent, render_capture_marker
+else:
+    from _hook_settings import (
+        HOOK_CONFIG_FILENAME,
+        HOOK_CONFIG_OVERLAY_FILENAME,
+        merge_hook_configs,
+    )
+    from _policy_event import PolicyEvent, render_capture_marker
 
 __all__ = [
     "CAPTURE_PATH_COMPONENTS",
@@ -596,6 +602,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
     anchor = open_project_anchor(cwd)
     root: CaptureRoot | None = None
     artifact: CaptureArtifact | None = None
+    process: subprocess.Popen[bytes] | None = None
     try:
         policy = read_capture_policy(anchor)
         bash_path = _resolve_bash()
@@ -628,6 +635,8 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         _emit_capture(result, artifact_path, policy.inline_bytes)
         return returncode
     finally:
+        if process is not None and process.stdout is not None:
+            process.stdout.close()
         if artifact is not None:
             artifact.close()
         if root is not None:
@@ -723,6 +732,9 @@ def _decode_command(value: str) -> str:
 def _main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if len(args) == 2 and args[0] == "reject":
+        if not _CAPTURE_ID_RE.fullmatch(args[1]):
+            _emit_failure("invalid capture id")
+            return 1
         _emit_failure("capture request rejected before command execution")
         return 1
     if len(args) != 4 or args[0] != "run":

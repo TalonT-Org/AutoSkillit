@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
+import stat
 import subprocess
 import time
 from pathlib import Path
@@ -82,6 +84,48 @@ def test_capture_root_rejects_symlinked_components(component: str, tmp_path: Pat
     anchor = open_project_anchor(str(project))
     try:
         with pytest.raises(CaptureSetupError):
+            open_capture_root(anchor, create=True)
+    finally:
+        anchor.close()
+
+
+@pytest.mark.parametrize("missing_component", CAPTURE_PATH_COMPONENTS)
+def test_capture_root_rejects_missing_components(missing_component: str, tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    parent = project
+    for name in CAPTURE_PATH_COMPONENTS:
+        if name == missing_component:
+            break
+        parent = parent / name
+        parent.mkdir()
+
+    anchor = open_project_anchor(str(project))
+    try:
+        with pytest.raises(CaptureSetupError, match="missing capture path component"):
+            open_capture_root(anchor, create=False)
+    finally:
+        anchor.close()
+
+
+@pytest.mark.parametrize("blocking_component", CAPTURE_PATH_COMPONENTS)
+def test_capture_root_rejects_blocking_regular_file_components(
+    blocking_component: str, tmp_path: Path
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    parent = project
+    for name in CAPTURE_PATH_COMPONENTS:
+        candidate = parent / name
+        if name == blocking_component:
+            candidate.write_text("blocking file")
+            break
+        candidate.mkdir()
+        parent = candidate
+
+    anchor = open_project_anchor(str(project))
+    try:
+        with pytest.raises(CaptureSetupError, match="unsafe capture path component"):
             open_capture_root(anchor, create=True)
     finally:
         anchor.close()
@@ -331,6 +375,17 @@ def test_setup_failure_prevents_user_command(tmp_path: Path) -> None:
     assert not (project / "command_ran").exists()
 
 
+@pytest.mark.parametrize("capture_id", ["", "0123456789abcde", "0123456789abcdeg"])
+def test_reject_mode_validates_capture_id(
+    capture_id: str,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    assert capture_artifacts._main(["reject", capture_id]) == 1
+    captured = capfd.readouterr()
+    assert "invalid capture id" in captured.err
+    assert "capture request rejected before command execution" not in captured.err
+
+
 def test_verified_disabled_policy_runs_without_capture(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
@@ -369,6 +424,114 @@ def test_spawn_failure_closes_created_artifact_fd(
     with pytest.raises(CaptureSetupError):
         run_capture("printf never", str(project), _CAPTURE_ID)
 
+    assert observed_fds
+    for fd in observed_fds:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
+def test_post_creation_identity_failure_closes_artifact_and_emits_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    artifact_fds: list[int] = []
+    real_fstat = os.fstat
+
+    def fail_artifact_identity(fd):
+        value = real_fstat(fd)
+        if stat.S_ISREG(value.st_mode):
+            artifact_fds.append(fd)
+            raise OSError("fault injection")
+        return value
+
+    monkeypatch.setattr(capture_artifacts.os, "fstat", fail_artifact_identity)
+    encoded = base64.b64encode(b"printf ran > command_ran").decode()
+
+    assert capture_artifacts._main(["run", encoded, str(project), _CAPTURE_ID]) == 1
+    captured = capfd.readouterr()
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert not (project / "command_ran").exists()
+    assert artifact_fds
+    for fd in artifact_fds:
+        with pytest.raises(OSError):
+            real_fstat(fd)
+
+
+def test_capture_pipe_closes_on_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    processes: list[subprocess.Popen[bytes]] = []
+    real_spawn = capture_artifacts._spawn_bash
+
+    def record_spawn(*args, **kwargs):
+        process = real_spawn(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", record_spawn)
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    assert processes
+    assert processes[0].stdout is not None
+    assert processes[0].stdout.closed
+
+
+def test_capture_stream_failure_closes_pipe_and_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    observed_fds: list[int] = []
+    real_create = capture_artifacts.create_capture_artifact
+
+    class FailingStream:
+        closed = False
+
+        def read(self, _size):
+            raise OSError("fault injection")
+
+        def close(self):
+            self.closed = True
+
+    class FailingProcess:
+        def __init__(self) -> None:
+            self.stdout = FailingStream()
+            self.terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self):
+            return 0
+
+    process = FailingProcess()
+
+    def record_artifact(root, capture_id):
+        artifact = real_create(root, capture_id)
+        observed_fds.append(artifact.fd)
+        return artifact
+
+    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert process.terminated
+    assert process.stdout.closed
     assert observed_fds
     for fd in observed_fds:
         with pytest.raises(OSError):

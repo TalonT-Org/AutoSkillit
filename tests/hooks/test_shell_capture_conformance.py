@@ -9,6 +9,7 @@ output lands inline vs. in an artifact file.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -159,7 +160,8 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
 
     wrapped = _run_wrapped(command, tmp_path)
 
-    assert wrapped.returncode == raw.returncode, (
+    expected_wrapped_returncode = 128 + (-raw.returncode) if raw.returncode < 0 else raw.returncode
+    assert wrapped.returncode == expected_wrapped_returncode, (
         f"[{label}] exit code mismatch: raw={raw.returncode} wrapped={wrapped.returncode}\n"
         f"raw stderr={raw.stderr!r}\nwrapped stderr={wrapped.stderr!r}"
     )
@@ -419,10 +421,15 @@ def test_capture_directory_replacement_uses_open_fds_and_hides_path(
     assert completed.returncode == 0
     assert b"-> unavailable " in completed.stdout
     assert b"SHELL_OUTPUT_CAPTURED" in completed.stdout
+    expected = b"0123456789abcdef"
+    assert f"full output {len(expected)} bytes".encode() in completed.stdout
+    assert f"sha256={hashlib.sha256(expected).hexdigest()}".encode() in completed.stdout
+    assert completed.stdout.startswith(expected[:5])
+    assert completed.stdout.endswith(expected[-3:])
     displaced = project / ".autoskillit" / "temp" / "shell_capture-original"
     artifacts = sorted(displaced.glob("shell_*.log"))
     assert len(artifacts) == 1
-    assert artifacts[0].read_bytes() == b"0123456789abcdef"
+    assert artifacts[0].read_bytes() == expected
     assert not list(external.iterdir())
 
 
@@ -461,7 +468,12 @@ def test_capture_artifact_replacement_uses_open_fd_and_hides_path(
 
     assert completed.returncode == 0
     assert b"-> unavailable " in completed.stdout
-    assert displaced.read_bytes() == b"fedcba9876543210"
+    expected = b"fedcba9876543210"
+    assert f"full output {len(expected)} bytes".encode() in completed.stdout
+    assert f"sha256={hashlib.sha256(expected).hexdigest()}".encode() in completed.stdout
+    assert completed.stdout.startswith(expected[:5])
+    assert completed.stdout.endswith(expected[-3:])
+    assert displaced.read_bytes() == expected
     assert external.read_bytes() == b"must-survive"
     assert artifact.is_symlink()
 

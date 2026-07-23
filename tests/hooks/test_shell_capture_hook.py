@@ -8,6 +8,7 @@ import json
 import re
 import shlex
 import subprocess
+import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -119,6 +120,16 @@ def test_verified_disabled_policy_is_runner_owned(monkeypatch, tmp_path):
     event = _build_event("echo hello", cwd=str(tmp_path))
     output = _run_hook(event, monkeypatch, env_backend="codex")
     command = _updated_command(output)
+    argv = _runner_argv(command)
+
+    assert argv[0] == sys.executable
+    assert argv[1] == "-I"
+    assert Path(argv[2]).name == "_capture_artifacts.py"
+    assert argv[3] == "run"
+    assert base64.b64decode(argv[4], validate=True).decode() == "echo hello"
+    assert argv[5] == str(tmp_path)
+    assert re.fullmatch(r"[0-9a-f]{16}", argv[6])
+
     completed = subprocess.run(
         ["bash", "-c", command],
         cwd=tmp_path,
@@ -159,6 +170,24 @@ def test_invalid_command_transport_builds_nonexecuting_rejection(command):
 
     assert argv[3] == "reject"
     assert command not in harness
+
+
+def test_arg_max_exhaustion_builds_nonexecuting_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.hooks.shell_capture_hook as shell_capture_hook
+
+    monkeypatch.setattr(shell_capture_hook.os, "sysconf", lambda _name: 1)
+
+    harness = shell_capture_hook._build_harness(
+        "printf must-not-run",
+        "/abs/project",
+        "0123456789abcdef",
+    )
+    argv = _runner_argv(harness)
+
+    assert argv[3] == "reject"
+    assert "printf must-not-run" not in harness
 
 
 def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):

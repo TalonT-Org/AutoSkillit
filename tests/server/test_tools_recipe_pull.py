@@ -77,6 +77,18 @@ def _persist(
     )
 
 
+@pytest.mark.parametrize("kitchen_id", ["a/b", "a?b"])
+def test_artifact_namespace_rejects_colliding_kitchen_ids(tmp_path: Path, kitchen_id: str) -> None:
+    with pytest.raises(RecipeArtifactError, match="unsafe recipe artifact path component"):
+        persist_recipe_artifact(
+            tmp_path,
+            kitchen_id=kitchen_id,
+            producer_tool="open_kitchen",
+            recipe_name="remediation",
+            payload=_payload(),
+        )
+
+
 def _remove_persisted_namespace(temp_dir: Path, *, kitchen_id: str) -> None:
     shutil.rmtree(temp_dir / "recipe-delivery" / kitchen_id)
 

@@ -171,6 +171,10 @@ def _generation_dir(
     )
 
 
+def _retired_namespace_marker(temp_dir: Path, *, kitchen_id: str) -> Path:
+    return _artifact_root(temp_dir) / ".retired" / f"{_safe_component(kitchen_id)}.retired"
+
+
 @contextmanager
 def _generation_lock(temp_dir: Path, *, exclusive: bool) -> Iterator[None]:
     root = _artifact_root(temp_dir)
@@ -228,6 +232,8 @@ def persist_recipe_artifact(
     )
     descriptor = _canonical_payload(generation.pull_identity())
     with _generation_lock(temp_dir, exclusive=True):
+        if _retired_namespace_marker(temp_dir, kitchen_id=kitchen_id).exists():
+            raise RecipeArtifactError("recipe artifact namespace is retired")
         directory.mkdir(parents=True, exist_ok=True)
         blob_path = directory / "payload.json"
         descriptor_path = directory / "descriptor.json"
@@ -316,7 +322,10 @@ def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
     """Retire one kitchen namespace after all shared-lock readers finish."""
     try:
         namespace = _artifact_root(temp_dir) / _safe_component(kitchen_id)
+        retired_marker = _retired_namespace_marker(temp_dir, kitchen_id=kitchen_id)
         with _generation_lock(temp_dir, exclusive=True):
+            retired_marker.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(retired_marker, "retired\n")
             if namespace.exists():
                 shutil.rmtree(namespace)
     except (OSError, RecipeArtifactError, TypeError):

@@ -239,6 +239,8 @@ def test_kitchen_retirement_removes_only_that_namespace(tmp_path: Path) -> None:
     assert retire_recipe_artifacts(tmp_path, kitchen_id="kitchen-test") is True
     with pytest.raises(RecipeArtifactError):
         load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=first)
+    with pytest.raises(RecipeArtifactError, match="namespace is retired"):
+        _persist(tmp_path)
     assert (
         load_recipe_artifact(tmp_path, kitchen_id="other-kitchen", identity=second) == _payload()
     )

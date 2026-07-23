@@ -139,16 +139,16 @@ def _read_bounded_bytes(path: Path, *, max_bytes: int, error: str) -> bytes:
 
 
 def _safe_component(value: str) -> str:
-    if (
-        not value
-        or value in {".", ".."}
-        or any(
-            not character.isascii() or (not character.isalnum() and character not in "._-")
-            for character in value
-        )
-    ):
+    if not value or value in {".", ".."}:
         raise RecipeArtifactError("unsafe recipe artifact path component")
-    return value
+    encoded: list[str] = []
+    for byte in value.encode("utf-8"):
+        character = chr(byte)
+        if character.isascii() and (character.isalnum() or character in "._-"):
+            encoded.append(character)
+        else:
+            encoded.append(f"~{byte:02x}")
+    return "".join(encoded)
 
 
 def _artifact_root(temp_dir: Path) -> Path:

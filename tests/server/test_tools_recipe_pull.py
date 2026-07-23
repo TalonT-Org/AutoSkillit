@@ -80,16 +80,26 @@ def _persist(
     )
 
 
-@pytest.mark.parametrize("kitchen_id", ["a/b", "a?b"])
-def test_artifact_namespace_rejects_colliding_kitchen_ids(tmp_path: Path, kitchen_id: str) -> None:
-    with pytest.raises(RecipeArtifactError, match="unsafe recipe artifact path component"):
-        persist_recipe_artifact(
-            tmp_path,
-            kitchen_id=kitchen_id,
-            producer_tool="open_kitchen",
-            recipe_name="remediation",
-            payload=_payload(),
-        )
+def test_artifact_namespace_encodes_colliding_kitchen_ids_injectively(tmp_path: Path) -> None:
+    first = persist_recipe_artifact(
+        tmp_path,
+        kitchen_id="a/b",
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+    second = persist_recipe_artifact(
+        tmp_path,
+        kitchen_id="a?b",
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="a/b") is True
+    with pytest.raises(RecipeArtifactError):
+        load_recipe_artifact(tmp_path, kitchen_id="a/b", identity=first)
+    assert load_recipe_artifact(tmp_path, kitchen_id="a?b", identity=second) == _payload()
 
 
 def test_artifact_persistence_rejects_blob_above_read_ceiling(tmp_path: Path) -> None:

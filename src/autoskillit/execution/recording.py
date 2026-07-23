@@ -180,6 +180,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     step_name=step_name,
                     completion_record_types=completion_record_types,
                     session_record_types=session_record_types,
+                    on_session_id_resolved=on_session_id_resolved,
                     child_deferral_ceiling=child_deferral_ceiling,
                     capture_dir=capture_dir,
                 )
@@ -207,6 +208,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 stream_parser=stream_parser,
                 completion_record_types=completion_record_types,
                 session_record_types=session_record_types,
+                on_session_id_resolved=on_session_id_resolved,
                 child_deferral_ceiling=child_deferral_ceiling,
                 capture_dir=capture_dir,
             )
@@ -244,6 +246,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             stream_parser=stream_parser,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
+            on_session_id_resolved=on_session_id_resolved,
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
         )
@@ -321,6 +324,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         step_name: str,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
+        on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
     ) -> SubprocessResult:
@@ -347,6 +351,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             stream_parser=stream_parser,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
+            on_session_id_resolved=on_session_id_resolved,
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
         )

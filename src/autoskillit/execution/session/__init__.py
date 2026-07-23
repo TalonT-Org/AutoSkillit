@@ -49,15 +49,23 @@ from autoskillit.execution.session._session_state import (
     persist_session_state,  # noqa: F401 — re-export for callers
     read_session_state,  # noqa: F401 — re-export for callers
 )
+from autoskillit.execution.session._skill_session_contract_store import (
+    DefaultSkillSessionContractStore,
+    SkillSessionContract,
+    StoredSkillSessionContract,
+)
 
 logger = get_logger(__name__)
 _truncate = truncate_text
 # Re-export SkillResult so existing callers can import from this module.
 __all__ = [
     "CliSubtype",
+    "DefaultSkillSessionContractStore",
     "SessionState",
     "SessionStateLock",
+    "SkillSessionContract",
     "SkillResult",
+    "StoredSkillSessionContract",
     "classify_infra_exit",
     "has_rate_limit_signal",
     "clear_session_state",

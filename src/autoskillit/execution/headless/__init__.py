@@ -152,6 +152,7 @@ async def run_headless_core(
     network_access: bool = False,
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
+    on_session_id_resolved: Callable[[str], None] | None = None,
     skill_contract: SkillContract | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
@@ -268,6 +269,7 @@ async def run_headless_core(
             backend_override_source=backend_override_source,
             closure_spec=closure_spec,
             closure_report_root=closure_report_root,
+            on_session_id_resolved=on_session_id_resolved,
             skill_contract=skill_contract,
         )
 
@@ -320,6 +322,7 @@ class DefaultHeadlessExecutor:
         network_access: bool = False,
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
         skill_contract: SkillContract | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
@@ -366,6 +369,7 @@ class DefaultHeadlessExecutor:
             network_access=network_access,
             closure_spec=closure_spec,
             closure_report_root=closure_report_root,
+            on_session_id_resolved=on_session_id_resolved,
             skill_contract=skill_contract,
         )
 

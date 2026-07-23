@@ -443,6 +443,7 @@ async def _watch_session_log(
     max_suppression_seconds: float | None = None,
     marker_dir: Path | None = None,
     session_id: str | None = None,
+    on_session_id_resolved: Callable[[str], None] | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -495,6 +496,8 @@ async def _watch_session_log(
     acc.channel_b_status = monitor_result.status
     acc.channel_b_session_id = monitor_result.session_id
     acc.channel_b_orphaned_tool_result = monitor_result.orphaned_tool_result
+    if on_session_id_resolved is not None and monitor_result.session_id:
+        on_session_id_resolved(monitor_result.session_id)
     channel_b_ready.set()
     trigger.set()
 

@@ -407,6 +407,7 @@ from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
+from .types import SkillSessionContractStore as SkillSessionContractStore
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSource as SkillSource
 from .types import SkillSourceRef as SkillSourceRef

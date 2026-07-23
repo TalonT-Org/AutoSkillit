@@ -22,6 +22,7 @@ __all__ = [
     "TestRunner",
     "HeadlessExecutor",
     "OutputPatternResolver",
+    "SkillSessionContractStore",
     "WriteExpectedResolver",
 ]
 
@@ -36,6 +37,23 @@ class TestRunner(Protocol):
     def check_infrastructure(self, cwd: Path) -> str | None: ...
 
     async def run(self, cwd: Path) -> TestResult: ...
+
+
+@runtime_checkable
+class SkillSessionContractStore(Protocol):
+    """Persistence boundary for skill-session contract ownership."""
+
+    def create_provisional(self, *, contract: Any, snapshot: Any) -> str: ...
+
+    def observe_candidate(self, correlation_key: str, session_id: str) -> None: ...
+
+    def finalize(self, correlation_key: str, session_id: str) -> None: ...
+
+    def load(self, session_id: str) -> Any: ...
+
+    def delete(self, session_id: str) -> None: ...
+
+    def discard(self, correlation_key: str) -> None: ...
 
 
 @runtime_checkable
@@ -84,6 +102,7 @@ class HeadlessExecutor(Protocol):
         network_access: bool = False,
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
         skill_contract: Any | None = None,
     ) -> SkillResult: ...
 

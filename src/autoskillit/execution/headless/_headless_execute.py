@@ -472,6 +472,9 @@ async def _execute_claude_headless(
             if nudge_success is not None:
                 skill_result = nudge_success
 
+        if on_session_id_resolved is not None and skill_result.session_id:
+            on_session_id_resolved(skill_result.session_id)
+
         _clone_reverted = False
         if _clone_snapshot is not None:
             _exclude_prefix = _derived_prefix or GUARD_EXCLUDE_PREFIX

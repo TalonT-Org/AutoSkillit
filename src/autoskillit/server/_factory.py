@@ -49,6 +49,7 @@ from autoskillit.execution import (
     build_replay_runner,
     get_backend,
 )
+from autoskillit.execution.session import DefaultSkillSessionContractStore
 from autoskillit.fleet import FleetSemaphore, build_protected_campaign_ids
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
@@ -347,6 +348,7 @@ def make_context(
         github_api_log=github_api_log,
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
+        skill_session_contract_store=DefaultSkillSessionContractStore(),
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         session_serve_overrides=None,

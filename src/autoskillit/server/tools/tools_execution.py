@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import shutil
@@ -31,6 +32,7 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
+    SkillSourceRef,
     TerminationReason,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -50,6 +52,7 @@ from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution import (
     CaptureSetupError,
 )
+from autoskillit.execution.session import SkillSessionContract
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
@@ -680,6 +683,81 @@ def _get_routing_caps(skill_caps: frozenset[str]) -> list[str]:
     )
 
 
+def _build_skill_session_contract(
+    *,
+    session_root: ValidatedAddDir,
+    invocation: object,
+    projection_context: SkillProjectionContext,
+    resolved_command: str,
+) -> tuple[SkillSessionContract, dict[str, str]]:
+    """Capture the exact projected invocation bytes before executor launch."""
+    closure = tuple(getattr(invocation, "closure"))
+    root = getattr(invocation, "root")
+    backend = projection_context.backend
+    conventions = projection_context.conventions
+    if backend is None or conventions is None:
+        raise SkillContractError("Projected invocation requires an effective backend")
+
+    snapshot: dict[str, str] = {}
+    projected_digests: dict[str, str] = {}
+    canonical_digests: dict[str, str] = {}
+    source_refs: dict[str, str | SkillSourceRef] = {}
+    session_path = Path(session_root.path)
+    for member in closure:
+        relative_path = Path(conventions.skills_subdir) / member.name / "SKILL.md"
+        content = (session_path / relative_path).read_text(encoding="utf-8")
+        snapshot[relative_path.as_posix()] = content
+        projected_digests[member.name] = hashlib.sha256(content.encode()).hexdigest()
+        canonical_digests[member.name] = member.canonical_digest
+        source_refs[member.name] = member.source_ref or str(member.path)
+
+    project_root = getattr(invocation, "project_root")
+    if project_root is None:
+        raise SkillContractError("Effective invocation requires a project root")
+    contract = SkillSessionContract(
+        root_name=root.name,
+        execution_role=getattr(invocation, "execution_role"),
+        source_refs=source_refs,
+        closure=tuple(member.name for member in closure),
+        capability_union=getattr(invocation, "capability_union"),
+        canonical_digests=canonical_digests,
+        projected_digests=projected_digests,
+        projection_version=projection_context.projection_version,
+        project_root=str(project_root.resolve()),
+        execution_cwd=str(projection_context.execution_cwd.resolve()),
+        backend=backend.name,
+        resolved_command=resolved_command,
+    )
+    return contract, snapshot
+
+
+def _validate_resumed_skill_contract(
+    contract: SkillSessionContract,
+    *,
+    cwd: str,
+    backend: CodingAgentBackend | None,
+) -> None:
+    """Validate resume invariants that depend on the current dispatch context."""
+    if contract.execution_role is not SkillExecutionRole.SESSION:
+        raise SkillContractError(
+            f"Resume contract role must be session, got {contract.execution_role.value!r}"
+        )
+    resolved_cwd = str(Path(cwd).resolve())
+    if contract.execution_cwd != resolved_cwd or contract.project_root != resolved_cwd:
+        raise SkillContractError(
+            "Resume contract cwd/project_root does not match the requested execution cwd"
+        )
+    if backend is None or contract.backend != backend.name:
+        actual = backend.name if backend is not None else "unconfigured"
+        raise SkillContractError(
+            f"Resume contract backend {contract.backend!r} does not match {actual!r}"
+        )
+    # Loading validates schema, capability ownership, closure/digest maps, and
+    # every retained projected file digest. Accessing this property also
+    # re-derives backend constraints solely from the persisted capability union.
+    contract.backend_requirements
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("run_skill")
@@ -816,10 +894,44 @@ async def run_skill(
 
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
-        _effective_skill_resolver = tool_ctx.skill_resolver
+        _contract_store = tool_ctx.skill_session_contract_store
+        if _contract_store is None:
+            return SkillResult.crashed(
+                exception=SkillContractError("Skill session contract store is not configured"),
+                skill_command=skill_command,
+                order_id=order_id,
+            ).to_json()
+
+        _contract_correlation_key: str | None = None
+        _bound_contract_session_id: str | None = None
+        _retain_bound_contract = True
+        _contract_execution_started = False
+        _stored_contract_entry = None
+        _resume_backend_obj: CodingAgentBackend | None = None
+        _effective_skill_resolver = None
         invocation = None
         target_name: str | None = None
-        if not resume_session_id:
+        if resume_session_id:
+            try:
+                _stored_contract_entry = _contract_store.load(resume_session_id)
+                _resume_backend_obj = _get_backend(_stored_contract_entry.contract.backend)
+                _validate_resumed_skill_contract(
+                    _stored_contract_entry.contract,
+                    cwd=cwd,
+                    backend=_resume_backend_obj,
+                )
+            except (OSError, ValueError, SkillContractError) as exc:
+                return SkillResult.crashed(
+                    exception=SkillContractError(
+                        f"Cannot resume session {resume_session_id!r}: {exc}"
+                    ),
+                    skill_command=skill_command,
+                    order_id=order_id,
+                ).to_json()
+            _bound_contract_session_id = resume_session_id
+            target_name = _stored_contract_entry.contract.root_name
+        else:
+            _effective_skill_resolver = tool_ctx.skill_resolver
             if _effective_skill_resolver is None:
                 _effective_skill_resolver = DefaultSkillResolver()
             target_name = extract_skill_name(skill_command)
@@ -995,6 +1107,12 @@ async def run_skill(
             # notification or provider/executor work. Backend-specific rendering waits
             # until capability-driven backend selection is complete.
             resolved_command = skill_command
+            _stored_contract = (
+                _stored_contract_entry.contract if _stored_contract_entry is not None else None
+            )
+            _effective_skill_contract = (
+                invocation.root if invocation is not None else _stored_contract
+            )
 
             _provider_override = (
                 provider_extras
@@ -1017,7 +1135,11 @@ async def run_skill(
             )
 
             _skill_caps: frozenset[str] = (
-                invocation.capability_union if invocation is not None else frozenset()
+                invocation.capability_union
+                if invocation is not None
+                else _stored_contract.capability_union
+                if _stored_contract is not None
+                else frozenset()
             )
             _sandbox_overrides = _aggregate_sandbox_overrides(_skill_caps)
             _network_access = "sandbox_workspace_write.network_access=true" in _sandbox_overrides
@@ -1032,7 +1154,11 @@ async def run_skill(
             # When an explicit backend override pins a step to a non-claude
             # backend, capability-driven routing must NOT crash on the missing
             # claude binary — the operator has explicitly chosen the backend.
-            if _skill_requires_claude and _explicit_backend_override is None:
+            if (
+                _stored_contract is None
+                and _skill_requires_claude
+                and _explicit_backend_override is None
+            ):
                 if shutil.which("claude") is None:
                     return SkillResult.crashed(
                         exception=RuntimeError(
@@ -1047,8 +1173,11 @@ async def run_skill(
 
             # If an explicit override points to a non-claude backend whose
             # binary is absent, fail closed with a clear message.
-            if _explicit_backend_override is not None and _explicit_backend_override != (
-                tool_ctx.backend.name if tool_ctx.backend else None
+            if (
+                _stored_contract is None
+                and _explicit_backend_override is not None
+                and _explicit_backend_override
+                != (tool_ctx.backend.name if tool_ctx.backend else None)
             ):
                 try:
                     _explicit_backend_obj_check = _get_backend(_explicit_backend_override)
@@ -1083,7 +1212,9 @@ async def run_skill(
                             order_id=effective_order_id,
                         ).to_json()
 
-            if _explicit_backend_override is not None:
+            if _stored_contract is not None:
+                backend_override = _stored_contract.backend
+            elif _explicit_backend_override is not None:
                 backend_override = _explicit_backend_override
             elif _provider_override or _skill_requires_claude:
                 backend_override = AGENT_BACKEND_CLAUDE_CODE
@@ -1091,7 +1222,9 @@ async def run_skill(
                 backend_override = None
 
             _effective_backend_obj: CodingAgentBackend | None = (
-                _get_backend(backend_override)
+                _resume_backend_obj
+                if _stored_contract is not None
+                else _get_backend(backend_override)
                 if backend_override is not None and tool_ctx.backend is not None
                 else tool_ctx.backend
             )
@@ -1102,7 +1235,9 @@ async def run_skill(
                 )
 
             _backend_override_source: str | None = None
-            if _explicit_resolution is not None:
+            if _stored_contract is not None:
+                _backend_override_source = "stored_contract"
+            elif _explicit_resolution is not None:
                 _backend_override_source = _explicit_resolution.key_path
             elif _skill_requires_claude:
                 _backend_override_source = "skill_requirement"
@@ -1160,9 +1295,13 @@ async def run_skill(
                 resolved_command=resolved_command,
                 effective_order_id=effective_order_id,
                 target_name=target_name,
-                skill_info=invocation,
+                skill_info=_effective_skill_contract,
                 effective_backend_obj=_effective_backend_obj,
-                skill_resolver=_effective_skill_resolver,
+                skill_resolver=(
+                    _effective_skill_resolver
+                    if _effective_skill_resolver is not None
+                    else _stored_contract_entry
+                ),
             ):
                 return compat_error
 
@@ -1247,7 +1386,12 @@ async def run_skill(
             skill_add_dirs: list[ValidatedAddDir] = []
             replay_snapshot_used = False
             _runner = tool_ctx.runner
-            if (
+            if _stored_contract_entry is not None:
+                skill_add_dirs.append(
+                    ValidatedAddDir(path=str(_stored_contract_entry.snapshot_dir))
+                )
+                replay_snapshot_used = True
+            elif (
                 step_name
                 and _runner is not None
                 and getattr(_runner, "skill_snapshots", None)
@@ -1308,18 +1452,8 @@ async def run_skill(
                         projection_context,
                     )
                 else:
-                    # Legacy resume fallback: until persisted invocation snapshots land,
-                    # a resume without a replay snapshot retains the previous broad
-                    # session initialization behavior.
-                    session_root = tool_ctx.session_skill_manager.init_session(
-                        session_id,
-                        cook_session=False,
-                        config=tool_ctx.config,
-                        project_dir=tool_ctx.project_dir,
-                        recipe_packs=tool_ctx.active_recipe_packs,
-                        recipe_features=tool_ctx.active_recipe_features,
-                        allow_only=None,
-                        backend=_effective_backend_obj,
+                    raise SkillContractError(
+                        "Fresh execution requires a resolved skill invocation"
                     )
                 if not tool_ctx.session_skill_manager.validate_session_exists(session_id):
                     logger.warning(
@@ -1351,6 +1485,34 @@ async def run_skill(
                             write_watch_dirs,
                         )
                     )
+
+            if invocation is not None:
+                if not skill_add_dirs:
+                    raise SkillContractError(
+                        "Fresh execution requires a materialized skill snapshot"
+                    )
+                projection_context = SkillProjectionContext(
+                    execution_cwd=Path(cwd).resolve(),
+                    backend=_effective_backend_obj,
+                    conventions=(
+                        _effective_backend_obj.conventions
+                        if _effective_backend_obj is not None
+                        else None
+                    ),
+                    substitutions={
+                        "{{AUTOSKILLIT_TEMP}}": str(Path(cwd).resolve() / ".autoskillit" / "temp")
+                    },
+                )
+                _session_contract, _session_snapshot = _build_skill_session_contract(
+                    session_root=skill_add_dirs[0],
+                    invocation=invocation,
+                    projection_context=projection_context,
+                    resolved_command=resolved_command,
+                )
+                _contract_correlation_key = _contract_store.create_provisional(
+                    contract=_session_contract,
+                    snapshot=_session_snapshot,
+                )
 
             allowed_write_prefix = ""
             allowed_write_prefixes: tuple[str, ...] = ()
@@ -1395,6 +1557,13 @@ async def run_skill(
             # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
             provider_extras = propagate_session_deadline(tool_ctx.project_dir, provider_extras)
 
+            def _observe_contract_session_id(candidate_session_id: str) -> None:
+                if _contract_correlation_key is not None:
+                    _contract_store.observe_candidate(
+                        _contract_correlation_key,
+                        candidate_session_id,
+                    )
+
             _start = time.monotonic()
             try:
                 try:
@@ -1404,6 +1573,7 @@ async def run_skill(
                             _orchestrator_sid,
                             "run-skill",
                         ):
+                            _contract_execution_started = True
                             skill_result = await tool_ctx.executor.run(
                                 resolved_command,
                                 cwd,
@@ -1444,8 +1614,14 @@ async def run_skill(
                                 closure_spec=closure_spec,
                                 closure_report_root=closure_report_root,
                                 skill_contract=_skill_contract,
+                                on_session_id_resolved=(
+                                    _observe_contract_session_id
+                                    if _contract_correlation_key is not None
+                                    else None
+                                ),
                             )
                 except TimeoutError as exc:
+                    _retain_bound_contract = False
                     logger.error(
                         "run_skill_mcp_tool_timeout",
                         timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
@@ -1459,6 +1635,31 @@ async def run_skill(
                         skill_command=resolved_command,
                         order_id=effective_order_id,
                     ).to_json()
+
+                if _contract_correlation_key is not None:
+                    if skill_result.session_id:
+                        _contract_store.finalize(
+                            _contract_correlation_key,
+                            skill_result.session_id,
+                        )
+                        _bound_contract_session_id = skill_result.session_id
+                    else:
+                        _contract_store.discard(_contract_correlation_key)
+                    _contract_correlation_key = None
+
+                if (
+                    _stored_contract_entry is not None
+                    and skill_result.session_id
+                    and skill_result.session_id != resume_session_id
+                ):
+                    raise SkillContractError(
+                        "Resumed execution returned a different final session ID"
+                    )
+                _retain_bound_contract = skill_result.needs_retry
+                if _bound_contract_session_id is not None and not _retain_bound_contract:
+                    _contract_store.delete(_bound_contract_session_id)
+                    _bound_contract_session_id = None
+
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)
                     clear_run_skill_state(tool_ctx.project_dir)
@@ -1528,6 +1729,7 @@ async def run_skill(
                     work_dir=cwd,
                 )
             except Exception as exc:
+                _retain_bound_contract = False
                 logger.error("run_skill executor raised unexpectedly", exc_info=True)
                 return SkillResult.crashed(
                     exception=exc,
@@ -1556,6 +1758,31 @@ async def run_skill(
             order_id=_oid,  # type: ignore[arg-type]
         ).to_json()
     finally:
+        _contract_store_for_cleanup = locals().get("_contract_store")
+        _correlation_key = locals().get("_contract_correlation_key")
+        if _contract_store_for_cleanup is not None and _correlation_key is not None:
+            try:
+                _contract_store_for_cleanup.discard(_correlation_key)
+            except Exception:
+                logger.warning(
+                    "skill_session_contract_discard_failed",
+                    exc_info=True,
+                )
+        _bound_session_id = locals().get("_bound_contract_session_id")
+        if (
+            _contract_store_for_cleanup is not None
+            and _bound_session_id is not None
+            and locals().get("_contract_execution_started", False)
+            and not locals().get("_retain_bound_contract", True)
+        ):
+            try:
+                _contract_store_for_cleanup.delete(_bound_session_id)
+            except Exception:
+                logger.warning(
+                    "skill_session_contract_delete_failed",
+                    session_id=_bound_session_id,
+                    exc_info=True,
+                )
         if _sn_token is not None:
             _current_step_name.reset(_sn_token)  # type: ignore[possibly-undefined]
         if _oid_token is not None:

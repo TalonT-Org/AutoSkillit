@@ -306,9 +306,7 @@ def fleet_status(
 
         if watch:
             sys.exit(_watch_loop(state_path))
-
         _render_status_display(state)
-
         if cleanup:
             from autoskillit.core import (
                 CODEX_SESSIONS_SUBDIR,
@@ -316,6 +314,7 @@ def fleet_status(
                 run_git,
                 sweep_stale_markers,
             )
+            from autoskillit.execution import delete_skill_session_contracts
             from autoskillit.workspace import (
                 DefaultSessionSkillManager,
                 SkillsDirectoryProvider,
@@ -339,6 +338,8 @@ def fleet_status(
                 for d in state.dispatches:
                     if d.dispatched_session_id:
                         skill_mgr.cleanup_session(d.dispatched_session_id)
+                contract_session_ids = (d.dispatched_session_id for d in state.dispatches)
+                delete_skill_session_contracts(contract_session_ids)
                 skill_mgr.cleanup_session(campaign_id)
             except Exception:
                 logger.warning(

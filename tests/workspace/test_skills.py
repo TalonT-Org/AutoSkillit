@@ -5,12 +5,13 @@ from __future__ import annotations
 import functools
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import autoskillit.workspace.skills as _skills_mod
 from autoskillit.core.io import load_yaml
-from autoskillit.core.types import SkillExecutionRole, SkillSource
+from autoskillit.core.types import SkillContractError, SkillExecutionRole, SkillSource
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     bundled_skills_dir,
@@ -946,7 +947,7 @@ class TestSkillExecutionRoleParsing:
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text(
             "---\nname: test\nexecution_role: orchestrator\n"
-            "uses_capabilities: [run_skill]\n---\n# body"
+            'uses_capabilities: [run_skill]\n---\nCall run_skill("child").'
         )
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.execution_role is SkillExecutionRole.ORCHESTRATOR
@@ -1006,6 +1007,104 @@ def test_effective_catalog_is_path_free(tmp_path: Path) -> None:
                 skill.source_identity.search_dir,
                 skill.source_identity.precedence,
             )
+        )
+
+
+def _resolver_with_visibility_skills(tmp_path: Path) -> DefaultSkillResolver:
+    skills_dir = tmp_path / "bundled"
+    extended_dir = tmp_path / "extended"
+    extended_dir.mkdir()
+    for name, category in (
+        ("core-skill", "kitchen-core"),
+        ("research-skill", "research"),
+        ("audit-skill", "audit"),
+        ("planner-skill", "planner"),
+    ):
+        skill_dir = skills_dir / name
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {name}\ncategories: [{category}]\n---\n# {name}\n",
+            encoding="utf-8",
+        )
+    resolver = DefaultSkillResolver()
+    resolver._dir = skills_dir
+    resolver._extended_dir = extended_dir
+    return resolver
+
+
+def test_effective_catalog_applies_pack_and_recipe_visibility(tmp_path: Path) -> None:
+    resolver = _resolver_with_visibility_skills(tmp_path)
+
+    default_catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+    recipe_catalog = resolver.list_effective(
+        tmp_path,
+        SkillExecutionRole.SESSION,
+        recipe_packs=frozenset({"research"}),
+    )
+
+    assert "research-skill" not in {skill.name for skill in default_catalog.skills}
+    assert "research-skill" in {skill.name for skill in recipe_catalog.skills}
+
+
+def test_invalid_project_override_fails_effective_catalog_admission(tmp_path: Path) -> None:
+    resolver = _resolver_with_visibility_skills(tmp_path)
+    override_dir = tmp_path / ".claude" / "skills" / "core-skill"
+    override_dir.mkdir(parents=True)
+    (override_dir / "SKILL.md").write_text(
+        '---\nname: core-skill\n---\nSpawn the worker via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SkillContractError, match="missing declaration for 'agent_model'"):
+        resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+
+
+def test_effective_catalog_applies_subsets_and_recipe_features(tmp_path: Path) -> None:
+    resolver = _resolver_with_visibility_skills(tmp_path)
+    config = SimpleNamespace(
+        subsets=SimpleNamespace(disabled=["audit"], custom_tags={}),
+        packs=SimpleNamespace(enabled=[]),
+        features={},
+        experimental_enabled=False,
+    )
+
+    catalog = resolver.list_effective(
+        tmp_path,
+        SkillExecutionRole.SESSION,
+        config=config,
+        recipe_features=frozenset({"planner"}),
+    )
+    names = {skill.name for skill in catalog.skills}
+
+    assert "audit-skill" not in names
+    assert "planner-skill" in names
+
+
+def test_explicit_invocation_bypasses_feature_but_not_pack_visibility(
+    tmp_path: Path,
+) -> None:
+    resolver = _resolver_with_visibility_skills(tmp_path)
+    config = SimpleNamespace(
+        subsets=SimpleNamespace(disabled=[], custom_tags={}),
+        packs=SimpleNamespace(enabled=[]),
+        features={},
+        experimental_enabled=False,
+    )
+
+    invocation = resolver.resolve_invocation(
+        "planner-skill",
+        tmp_path,
+        SkillExecutionRole.SESSION,
+        config=config,
+    )
+
+    assert invocation.root.name == "planner-skill"
+    with pytest.raises(SkillContractError, match="disabled"):
+        resolver.resolve_invocation(
+            "research-skill",
+            tmp_path,
+            SkillExecutionRole.SESSION,
+            config=config,
         )
 
 

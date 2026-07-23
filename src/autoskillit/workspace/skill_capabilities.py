@@ -8,6 +8,7 @@ whether the source is executable instruction or merely documentary artifact.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
 from typing import TYPE_CHECKING, Literal
 
 import regex as re
@@ -135,7 +136,8 @@ _EXAMPLE_CONTEXT = re.compile(
 )
 _CONFIG_CONTEXT = re.compile(
     r"(?:\buses_capabilities\s*:|\btool\s*:|"
-    r"\b\w+\.(?:command|commands)\b|\bfrontmatter\b)",
+    r"\b\w+\.(?:command|commands)\b|\bfrontmatter\b|"
+    r"\brun_skill`?\s+steps?\b|\bstores?\b[^\n]{0,80}\b(?:logs?|files?)\b)",
     re.IGNORECASE,
 )
 _EXCLUDED_PROSE_PHRASES = (
@@ -194,6 +196,8 @@ def _source_lines(body: str) -> tuple[_SourceLine, ...]:
             if is_step_heading or heading_level <= 3:
                 in_step_section = is_step_heading
             artifact_section = bool(_ARTIFACT_HEADING_RE.search(heading))
+            result.append(_SourceLine(number, text, False))
+            continue
 
         if stripped.startswith("```"):
             was_in_fence = in_fence
@@ -275,14 +279,23 @@ def _logical_lines(lines: tuple[_SourceLine, ...]) -> tuple[tuple[_SourceLine, .
     return tuple(result)
 
 
-def _has_tool_operation(text: str, tool_name: str) -> bool:
+@cache
+def _tool_operation_patterns(
+    tool_name: str,
+) -> tuple[re.Pattern[str], re.Pattern[str]]:
     tool = re.escape(tool_name)
-    direct_call = re.compile(rf"\b{tool}\s*\(")
-    imperative = re.compile(
-        rf"\b(?:call|run|invoke|use|execute|retry|re-run|test it)\b"
-        rf"[^\n]{{0,100}}\b{tool}\b",
-        re.IGNORECASE,
+    return (
+        re.compile(rf"\b{tool}\s*\("),
+        re.compile(
+            rf"\b(?:call|run|invoke|use|execute|retry|re-run|test it)\b"
+            rf"[^\n]{{0,100}}\b{tool}\b",
+            re.IGNORECASE,
+        ),
     )
+
+
+def _has_tool_operation(text: str, tool_name: str) -> bool:
+    direct_call, imperative = _tool_operation_patterns(tool_name)
     stripped = text.strip().strip("`")
     return bool(
         stripped

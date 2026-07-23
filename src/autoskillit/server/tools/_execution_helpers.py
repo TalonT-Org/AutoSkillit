@@ -50,8 +50,10 @@ from autoskillit.server._misc import SkillProjectionContext, _hook_config_overla
 from autoskillit.server._response_budget import shape_json_response
 from autoskillit.server.tools._types import deny_envelope
 from autoskillit.workspace import (
+    EffectiveSkillDispatchContract,
     EffectiveSkillInvocation,
     SkillInfo,
+    build_effective_skill_dispatch_contract,
     default_skill_resolver,
 )
 
@@ -136,6 +138,51 @@ def invocation_member_names(
 ) -> frozenset[str]:
     """Return the exact member inventory bound to an effective invocation."""
     return frozenset(member.name for member in invocation.closure)
+
+
+def build_fresh_projection_context(
+    cwd: str,
+    invocation: EffectiveSkillInvocation,
+) -> SkillProjectionContext:
+    """Bind a fresh invocation to normalized backend-neutral projection authority."""
+    execution_cwd = Path(cwd).resolve()
+    return SkillProjectionContext(
+        execution_cwd=execution_cwd,
+        invocation=invocation,
+        substitutions={"{{AUTOSKILLIT_TEMP}}": str(execution_cwd / ".autoskillit" / "temp")},
+        gating=False,
+    )
+
+
+def bind_projection_backend(
+    context: SkillProjectionContext,
+    backend: CodingAgentBackend | None,
+) -> SkillProjectionContext:
+    """Complete fresh projection authority after capability-driven backend selection."""
+    return dataclasses.replace(
+        context,
+        backend=backend,
+        conventions=backend.conventions if backend is not None else None,
+    )
+
+
+def build_validated_skill_dispatch_contract(
+    resolved_command: str,
+    projection_context: SkillProjectionContext,
+    add_dirs: list[ValidatedAddDir],
+    stored_contract: SkillSessionContract | None,
+) -> EffectiveSkillDispatchContract:
+    """Build immutable executor authority and verify resumed projected bytes."""
+    contract = build_effective_skill_dispatch_contract(
+        resolved_command,
+        projection_context,
+        artifact_paths=(add_dir.path for add_dir in add_dirs),
+    )
+    if stored_contract is not None and dict(contract.projected_digests) != dict(
+        stored_contract.projected_digests
+    ):
+        raise SkillContractError("resumed projected artifacts do not match the persisted contract")
+    return contract
 
 
 def aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:

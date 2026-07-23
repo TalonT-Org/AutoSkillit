@@ -330,6 +330,13 @@ def test_skill_visibility_tier_counts_match_defaults() -> None:
     assert "Tier 1" in text and str(tier1) in text
 
 
+def test_skill_catalog_tier_counts_match_defaults() -> None:
+    _, tier2, tier3 = _configured_skill_tier_counts()
+    text = _read(DOCS_DIR / "skills" / "catalog.md")
+    assert f"## Tier 2 — interactive cook + headless ({tier2} configured)" in text
+    assert f"## Tier 3 — pipeline / automation ({tier3} configured)" in text
+
+
 def test_process_issues_is_documented_as_role_derived_not_tiered() -> None:
     for path in (
         DOCS_DIR / "skills" / "visibility.md",

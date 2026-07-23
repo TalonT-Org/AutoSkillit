@@ -95,6 +95,12 @@ class SkillResolver(Protocol):
         self,
         project_root: Path | None,
         execution_role: SkillExecutionRole,
+        *,
+        config: Any | None = None,
+        cook_session: bool = False,
+        recipe_packs: frozenset[str] | None = None,
+        recipe_features: frozenset[str] | None = None,
+        allow_only: frozenset[str] | None = None,
     ) -> Any: ...
 
     def resolve_invocation(
@@ -102,6 +108,10 @@ class SkillResolver(Protocol):
         name: str,
         project_root: Path | None,
         execution_role: SkillExecutionRole,
+        *,
+        config: Any | None = None,
+        recipe_packs: frozenset[str] | None = None,
+        recipe_features: frozenset[str] | None = None,
     ) -> Any: ...
 
 

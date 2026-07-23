@@ -323,6 +323,7 @@ def make_context(
     session_catalog = provider.resolver.list_effective(
         project_dir,
         SkillExecutionRole.SESSION,
+        config=config,
     )
     plugin_source = project_plugin_source(
         resolved_plugin_source,

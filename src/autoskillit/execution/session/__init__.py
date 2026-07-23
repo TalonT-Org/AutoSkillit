@@ -43,6 +43,7 @@ from autoskillit.execution.session._skill_session_contract_store import (
     DefaultSkillSessionContractStore,
     SkillSessionContract,
     StoredSkillSessionContract,
+    delete_skill_session_contracts,
 )
 
 logger = get_logger(__name__)
@@ -57,6 +58,7 @@ __all__ = [
     "SkillResult",
     "StoredSkillSessionContract",
     "classify_infra_exit",
+    "delete_skill_session_contracts",
     "has_rate_limit_signal",
     "clear_session_state",
     "persist_session_state",

@@ -81,6 +81,9 @@ from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
     _spill_spec,
     _summarize_streams,
+    bind_projection_backend,
+    build_fresh_projection_context,
+    build_validated_skill_dispatch_contract,
     clear_run_skill_state,
     invocation_member_names,
     maybe_promote_work_dir,
@@ -712,7 +715,6 @@ async def run_skill(
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
         _contract_store = tool_ctx.skill_session_contract_store
-
         _contract_correlation_key: str | None = None
         _bound_contract_session_id: str | None = None
         _retain_bound_contract = True
@@ -767,14 +769,19 @@ async def run_skill(
                     target_name,
                     tool_ctx.project_dir,
                     SkillExecutionRole.SESSION,
+                    config=tool_ctx.config,
+                    recipe_packs=tool_ctx.active_recipe_packs,
+                    recipe_features=tool_ctx.active_recipe_features,
                 )
+                projection_context = build_fresh_projection_context(cwd, invocation)
             except SkillContractError as exc:
                 return SkillResult.crashed(
                     exception=exc,
                     skill_command=skill_command,
                     order_id=order_id,
                 ).to_json()
-
+        if invocation is None or projection_context is None:
+            raise SkillContractError("Skill dispatch branches did not produce a bound contract")
         if not step_name and not resume_session_id and tool_ctx.active_recipe_steps:
             _resolved, _ambiguous = _resolve_step_name_from_recipe(
                 skill_command, tool_ctx.active_recipe_steps
@@ -832,7 +839,6 @@ async def run_skill(
                         retriable=False,
                     )
                 )
-
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
             await _notify(
@@ -1045,21 +1051,9 @@ async def run_skill(
                 if backend_override is not None and tool_ctx.backend is not None
                 else tool_ctx.backend
             )
-            if invocation is None:
-                raise SkillContractError("Effective skill invocation was not prepared")
-            if projection_context is None:
-                projection_context = SkillProjectionContext(
-                    execution_cwd=Path(cwd).resolve(),
-                    invocation=invocation,
-                    backend=_effective_backend_obj,
-                    conventions=(
-                        _effective_backend_obj.conventions
-                        if _effective_backend_obj is not None
-                        else None
-                    ),
-                    substitutions={
-                        "{{AUTOSKILLIT_TEMP}}": str(Path(cwd).resolve() / ".autoskillit" / "temp")
-                    },
+            if _stored_contract is None:
+                projection_context = bind_projection_backend(
+                    projection_context, _effective_backend_obj
                 )
             if invocation is not None and _stored_contract is None:
                 if invocation.root.source_ref is None:
@@ -1343,6 +1337,12 @@ async def run_skill(
                     snapshot=_session_snapshot,
                 )
 
+            _capability_contract = build_validated_skill_dispatch_contract(
+                resolved_command,
+                projection_context,
+                skill_add_dirs,
+                _stored_contract,
+            )
             allowed_write_prefix = ""
             allowed_write_prefixes: tuple[str, ...] = ()
             if write_watch_dirs:
@@ -1360,7 +1360,6 @@ async def run_skill(
                         "read_only_skill_no_target_name",
                         skill_command=skill_command[:SKILL_COMMAND_DISPLAY_MAX],
                     )
-
             # Preflight: for WORKTREE_SKILLS dispatches, the computed scope must cover cwd
             # so the session can write to its own tracked tree. Fail-fast BEFORE spawning
             # a session — otherwise the session locks itself out and burns N turns.
@@ -1405,7 +1404,7 @@ async def run_skill(
                             _contract_execution_started = True
                             skill_result = await tool_ctx.executor.run(
                                 resolved_command,
-                                cwd,
+                                _capability_contract.execution_cwd,
                                 model=effective_model,
                                 add_dirs=skill_add_dirs,
                                 step_name=step_name,
@@ -1443,6 +1442,7 @@ async def run_skill(
                                 closure_spec=closure_spec,
                                 closure_report_root=closure_report_root,
                                 skill_contract=_skill_contract,
+                                capability_contract=_capability_contract,
                                 on_session_id_resolved=(
                                     _observe_contract_session_id
                                     if _contract_correlation_key is not None

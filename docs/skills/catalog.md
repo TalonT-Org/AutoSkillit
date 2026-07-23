@@ -11,7 +11,7 @@ Plugin-scanned at `src/autoskillit/skills/`:
 - `open-kitchen` — reveals the 41 kitchen MCP tools
 - `close-kitchen` — re-hides them
 
-## Tier 2 — interactive cook + headless (105 configured)
+## Tier 2 — interactive cook + headless (106 configured)
 
 Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 
@@ -38,7 +38,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 ### Research and review
 `review-design`, `stage-data`, `download-data`, `setup-environment`, `bundle-local-report`, `reload-session`
 
-## Tier 3 — pipeline / automation (31 configured)
+## Tier 3 — pipeline / automation (32 configured)
 
 Also under `src/autoskillit/skills_extended/`. Used by recipes for unattended
 runs:

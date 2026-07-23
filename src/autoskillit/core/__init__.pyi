@@ -329,6 +329,7 @@ from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
+from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InputContractResolver as InputContractResolver

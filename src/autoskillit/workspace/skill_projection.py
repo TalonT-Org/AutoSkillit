@@ -21,6 +21,7 @@ from autoskillit.core import (
     PluginSource,
     SkillContractError,
     SkillExecutionRole,
+    SkillResolver,
     SkillSource,
     SkillSourceIdentity,
     SkillSourceRef,
@@ -45,9 +46,13 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AgentSkillDocument",
+    "EffectiveSkillDispatchContract",
     "SkillProjectionContext",
+    "build_effective_skill_dispatch_contract",
     "materialize_agent_skill_tree",
     "materialize_sanitized_plugin_root",
+    "prepare_catalog_skill_dispatch",
+    "prepare_effective_skill_dispatch",
     "project_agent_skill_document",
     "project_default_plugin_source",
     "project_direct_install",
@@ -140,6 +145,103 @@ class SkillProjectionContext:
         return self.catalog.skills
 
 
+@dataclass(frozen=True, slots=True)
+class EffectiveSkillDispatchContract:
+    """Immutable execution-bound contract carried through headless dispatch."""
+
+    resolved_command: str
+    projection_context: SkillProjectionContext
+    invocation: EffectiveSkillInvocation | None
+    catalog: EffectiveSkillCatalog | None
+    root_name: str | None
+    member_names: tuple[str, ...]
+    execution_role: SkillExecutionRole
+    capability_union: frozenset[str]
+    source_identities: Mapping[str, SkillSourceIdentity]
+    canonical_digests: Mapping[str, str]
+    projected_digests: Mapping[str, str]
+    projected_artifacts: Mapping[str, str]
+    projection_version: int
+    project_root: str | None
+    execution_cwd: str
+    backend: str | None
+    artifact_paths: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.resolved_command:
+            raise SkillContractError("effective dispatch requires a resolved command")
+        if (self.invocation is None) == (self.catalog is None):
+            raise SkillContractError(
+                "effective dispatch must bind exactly one invocation or catalog"
+            )
+        expected_names = tuple(skill.name for skill in self.projection_context.skills)
+        if self.member_names != expected_names:
+            raise SkillContractError("effective dispatch member order does not match projection")
+        expected_set = set(expected_names)
+        for field_name, mapping in (
+            ("source identities", self.source_identities),
+            ("canonical digests", self.canonical_digests),
+            ("projected digests", self.projected_digests),
+            ("projected artifacts", self.projected_artifacts),
+        ):
+            if set(mapping) != expected_set:
+                raise SkillContractError(
+                    f"effective dispatch {field_name} do not match its members"
+                )
+            object.__setattr__(self, field_name.replace(" ", "_"), MappingProxyType(dict(mapping)))
+
+
+def build_effective_skill_dispatch_contract(
+    resolved_command: str,
+    projection_context: SkillProjectionContext,
+    *,
+    artifact_paths: Iterable[str] = (),
+) -> EffectiveSkillDispatchContract:
+    """Freeze role, identity, digests, and projected bytes for executor handoff."""
+    documents = {
+        skill.name: project_agent_skill_document(skill, projection_context)
+        for skill in projection_context.skills
+    }
+    invocation = projection_context.invocation
+    catalog = projection_context.catalog
+    if invocation is not None:
+        execution_role = invocation.execution_role
+    else:
+        assert catalog is not None
+        execution_role = catalog.execution_role
+    capability_union = frozenset().union(
+        *(skill.uses_capabilities for skill in projection_context.skills)
+    )
+    backend = projection_context.backend
+    return EffectiveSkillDispatchContract(
+        resolved_command=resolved_command,
+        projection_context=projection_context,
+        invocation=invocation,
+        catalog=catalog,
+        root_name=invocation.root.name if invocation is not None else None,
+        member_names=tuple(skill.name for skill in projection_context.skills),
+        execution_role=execution_role,
+        capability_union=capability_union,
+        source_identities={name: document.source_identity for name, document in documents.items()},
+        canonical_digests={
+            name: document.canonical_digest for name, document in documents.items()
+        },
+        projected_digests={
+            name: document.projected_digest for name, document in documents.items()
+        },
+        projected_artifacts={name: document.content for name, document in documents.items()},
+        projection_version=projection_context.projection_version,
+        project_root=(
+            str(invocation.project_root.resolve())
+            if invocation is not None and invocation.project_root is not None
+            else None
+        ),
+        execution_cwd=str(projection_context.execution_cwd),
+        backend=backend.name if backend is not None else None,
+        artifact_paths=tuple(artifact_paths),
+    )
+
+
 def project_agent_skill_document(
     skill_info: SkillContractRecord,
     context: SkillProjectionContext,
@@ -182,9 +284,16 @@ def project_agent_skill_document(
 
     def _rewrite_namespace(match: re.Match[str]) -> str:
         target = bound_by_name.get(match.group(1))
-        if target is None:
+        source = (
+            target.source
+            if target is not None
+            else context.catalog.namespace_sources.get(match.group(1))
+            if context.catalog is not None
+            else None
+        )
+        if source is None:
             return match.group(0)
-        return f"/{_agent_skill_namespace(target.source)}{target.name}"
+        return f"/{_agent_skill_namespace(source)}{match.group(1)}"
 
     content = _SKILL_NAMESPACE_REF_RE.sub(_rewrite_namespace, content)
 
@@ -618,4 +727,57 @@ def project_default_plugin_source(
         cwd=cwd,
         backend=backend,
         skill_catalog=skill_catalog,
+    )
+
+
+def prepare_catalog_skill_dispatch(
+    *,
+    resolved_command: str,
+    cwd: Path,
+    backend: CodingAgentBackend,
+    catalog: EffectiveSkillCatalog,
+) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
+    """Project a visible catalog and bind the artifact to executor authority."""
+    plugin_source = project_default_plugin_source(
+        cwd=cwd,
+        backend=backend,
+        skill_catalog=catalog,
+    )
+    contract = build_effective_skill_dispatch_contract(
+        resolved_command,
+        SkillProjectionContext(
+            execution_cwd=cwd,
+            catalog=catalog,
+            backend=backend,
+            conventions=backend.conventions,
+            gating=False,
+        ),
+        artifact_paths=(str(plugin_source.plugin_dir),),
+    )
+    return plugin_source, contract
+
+
+def prepare_effective_skill_dispatch(
+    *,
+    resolved_command: str,
+    cwd: Path,
+    backend: CodingAgentBackend,
+    resolver: SkillResolver,
+    config: Any,
+    recipe_packs: frozenset[str] | None,
+    recipe_features: frozenset[str] | None,
+) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
+    """Resolve visible orchestrator skills, project them, and bind dispatch authority."""
+    catalog = resolver.list_effective(
+        cwd,
+        SkillExecutionRole.ORCHESTRATOR,
+        config=config,
+        recipe_packs=recipe_packs,
+        recipe_features=recipe_features,
+    )
+    return prepare_catalog_skill_dispatch(
+        resolved_command=resolved_command,
+        cwd=cwd,
+        backend=backend,
+        catalog=catalog,
     )

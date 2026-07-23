@@ -66,6 +66,9 @@ from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.workspace import (
     SkillProjectionContext as SkillProjectionContext,
 )
+from autoskillit.workspace import (
+    build_effective_skill_dispatch_contract as build_effective_skill_dispatch_contract,
+)
 from autoskillit.workspace import clone_registry as clone_registry
 from autoskillit.workspace import (
     project_agent_skill_document as project_agent_skill_document,

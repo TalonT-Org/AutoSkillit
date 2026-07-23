@@ -60,6 +60,9 @@ def project_orchestrator_guidance(tool_ctx: Any) -> str:
     catalog = tool_ctx.skill_resolver.list_effective(
         tool_ctx.project_dir,
         SkillExecutionRole.ORCHESTRATOR,
+        config=tool_ctx.config,
+        recipe_packs=tool_ctx.active_recipe_packs,
+        recipe_features=tool_ctx.active_recipe_features,
     )
     sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
     if (

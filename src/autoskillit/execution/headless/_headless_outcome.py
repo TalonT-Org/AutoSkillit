@@ -1,4 +1,4 @@
-"""Contract-field parser and outcome invariant evaluator.
+"""Dispatch-contract validation, field parsing, and outcome invariant evaluation.
 
 Extracts declared output fields from session result text as ``KEY = value``
 lines, typed per the contract's output declarations. Evaluates outcome
@@ -8,11 +8,12 @@ invariants and success qualifiers against parsed fields.
 from __future__ import annotations
 
 import operator
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import regex as re
 
-from autoskillit.core import get_logger
+from autoskillit.core import HeadlessSkillDispatchContract, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.recipe._contracts_types import (
@@ -35,6 +36,34 @@ _OPS: dict[str, Any] = {
 }
 
 _EXPR_RE = re.compile(r"^(\w+)\s*(>=|<=|!=|==|>|<)\s*(\d+)$")
+
+
+def validated_dispatch_cwd(
+    capability_contract: HeadlessSkillDispatchContract | None,
+    *,
+    resolved_command: str,
+    cwd: str,
+) -> str:
+    """Normalize cwd and reject primitives that disagree with immutable authority."""
+    normalized_cwd = str(Path(cwd).resolve()) if cwd else ""
+    if capability_contract is None:
+        return normalized_cwd
+    if capability_contract.resolved_command != resolved_command:
+        raise ValueError("headless command does not match capability dispatch contract")
+    if capability_contract.execution_cwd != normalized_cwd:
+        raise ValueError("headless cwd does not match capability dispatch contract")
+    members = set(capability_contract.member_names)
+    if not members:
+        raise ValueError("capability dispatch contract has no projected members")
+    for field_name, values in (
+        ("source identities", capability_contract.source_identities),
+        ("canonical digests", capability_contract.canonical_digests),
+        ("projected digests", capability_contract.projected_digests),
+        ("projected artifacts", capability_contract.projected_artifacts),
+    ):
+        if set(values) != members:
+            raise ValueError(f"capability dispatch {field_name} do not match members")
+    return capability_contract.execution_cwd
 
 
 def parse_outcome_fields(

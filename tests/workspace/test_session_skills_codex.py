@@ -144,6 +144,7 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
         "execution_role: session\n"
         "backend_requirements: [codex]\n"
         "---\n"
+        'Invoke a worker via `Agent(model="sonnet")`.\n'
         "# MY SKILL\n"
     )
 

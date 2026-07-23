@@ -171,6 +171,12 @@ def test_real_direct_and_pack_closure_drives_every_policy_consumer(
     ) -> None:
         path = skill_root / name / "SKILL.md"
         path.parent.mkdir(parents=True, exist_ok=True)
+        evidence = {
+            "agent_model": 'Invoke a worker via `Agent(model="sonnet")`.',
+            "git_metadata_write": "Run `git commit -m test`.",
+            "github_api_write": "Run `gh issue edit 1 --body-file issue.md`.",
+        }
+        body = "\n".join(evidence[capability] for capability in capabilities)
         path.write_text(
             "---\n"
             f"name: {name}\n"
@@ -178,7 +184,7 @@ def test_real_direct_and_pack_closure_drives_every_policy_consumer(
             f"uses_capabilities: [{', '.join(capabilities)}]\n"
             f"categories: [{', '.join(categories)}]\n"
             f"activate_deps: [{', '.join(dependencies)}]\n"
-            "---\nbody\n",
+            f"---\n{body}\n",
             encoding="utf-8",
         )
 

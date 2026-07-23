@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, NamedTuple
 
 from autoskillit.core import (
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
+    FEATURE_REGISTRY,
     PACK_REGISTRY,
     RETIRED_SKILL_NAMES,
     SKILL_CAPABILITY_REGISTRY,
+    FeatureLifecycle,
     SkillContractError,
     SkillExecutionRole,
     SkillResolver,
@@ -21,6 +24,7 @@ from autoskillit.core import (
     SkillSourceRef,
     derive_backend_requirements,
     get_logger,
+    is_feature_enabled,
     pkg_root,
     validate_skill_capability_roles,
 )
@@ -147,8 +151,14 @@ class EffectiveSkillCatalog:
 
     skills: tuple[SkillCatalogEntry, ...]
     execution_role: SkillExecutionRole
+    namespace_sources: Mapping[str, SkillSource] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "namespace_sources",
+            MappingProxyType(dict(self.namespace_sources)),
+        )
         for skill in self.skills:
             if skill.invalid_reason is not None:
                 raise SkillContractError(
@@ -367,7 +377,7 @@ def _skill_info_from_frontmatter(
 
     canonical_digest = hashlib.sha256(parsed.content.encode()).hexdigest()
 
-    return SkillInfo(
+    info = SkillInfo(
         name=name,
         source=source,
         path=skill_path,
@@ -381,6 +391,149 @@ def _skill_info_from_frontmatter(
         frontmatter=parsed,
         invalid_reason="; ".join(invalid_reasons) or None,
     )
+    from autoskillit.workspace.skill_capabilities import (
+        validate_skill_capability_authenticity,
+    )
+
+    authenticity_diagnostics = validate_skill_capability_authenticity(info)
+    if authenticity_diagnostics:
+        reasons = [
+            reason
+            for reason in (
+                info.invalid_reason,
+                *authenticity_diagnostics,
+            )
+            if reason
+        ]
+        info = replace(info, invalid_reason="; ".join(reasons))
+    return info
+
+
+def _effective_disabled_categories(
+    *,
+    explicit_disabled: Iterable[str],
+    packs_enabled: Iterable[str],
+    recipe_packs: frozenset[str] | None,
+    disabled_feature_tags: frozenset[str],
+) -> frozenset[str]:
+    """Merge subset, pack, and feature visibility authority."""
+    default_disabled = frozenset(
+        tag for tag, pack_def in PACK_REGISTRY.items() if not pack_def.default_enabled
+    )
+    enabled_packs = frozenset(packs_enabled) | (recipe_packs or frozenset())
+    return (
+        frozenset(explicit_disabled) | (default_disabled - enabled_packs) | disabled_feature_tags
+    )
+
+
+def _skill_is_visible(
+    skill: SkillInfo,
+    *,
+    disabled: frozenset[str],
+    custom_tags: Mapping[str, Iterable[str]],
+    features: dict[str, bool],
+    experimental_enabled: bool,
+    allow_only: frozenset[str] | None,
+) -> bool:
+    """Apply the established subset/pack/feature policy to one effective source."""
+    if allow_only is not None and skill.name not in allow_only:
+        return False
+    allow_only_member = allow_only is not None and skill.name in allow_only
+    feature_tool_tags = frozenset(
+        tag
+        for feature_name, feature_def in FEATURE_REGISTRY.items()
+        for tag in feature_def.tool_tags
+        if not is_feature_enabled(
+            feature_name,
+            features,
+            experimental_enabled=experimental_enabled,
+        )
+    )
+    for tag in disabled:
+        if tag in custom_tags:
+            if skill.name in custom_tags[tag]:
+                return False
+        elif tag in skill.categories:
+            if allow_only_member and tag in feature_tool_tags:
+                continue
+            return False
+
+    enabled_categories: set[str] = set()
+    disabled_categories: set[str] = set()
+    for feature_name, feature_def in FEATURE_REGISTRY.items():
+        if is_feature_enabled(
+            feature_name,
+            features,
+            experimental_enabled=experimental_enabled,
+        ):
+            enabled_categories.update(feature_def.skill_categories)
+        else:
+            disabled_categories.update(feature_def.skill_categories)
+    gated_categories = disabled_categories - enabled_categories
+    return allow_only_member or not bool(skill.categories & gated_categories)
+
+
+def _visibility_policy(
+    config: Any | None,
+    *,
+    cook_session: bool,
+    recipe_packs: frozenset[str] | None,
+    recipe_features: frozenset[str] | None,
+) -> tuple[
+    frozenset[str],
+    Mapping[str, Iterable[str]],
+    dict[str, bool],
+    bool,
+]:
+    """Resolve configured visibility without importing the IL-1 config package."""
+    if cook_session:
+        explicit_disabled: Iterable[str] = ()
+        custom_tags: Mapping[str, Iterable[str]] = {}
+        features: dict[str, bool] = {
+            name: True
+            for name, definition in FEATURE_REGISTRY.items()
+            if definition.lifecycle is not FeatureLifecycle.DISABLED
+        }
+        experimental_enabled = False
+    elif config is None:
+        explicit_disabled = ()
+        custom_tags = {}
+        features = {}
+        experimental_enabled = False
+    else:
+        explicit_disabled = tuple(getattr(config.subsets, "disabled", ()))
+        custom_tags = dict(getattr(config.subsets, "custom_tags", {}))
+        features = dict(getattr(config, "features", {}))
+        experimental_enabled = bool(getattr(config, "experimental_enabled", False))
+
+    if recipe_features and not cook_session:
+        for feature_name in recipe_features:
+            if feature_name in FEATURE_REGISTRY and feature_name not in features:
+                features[feature_name] = True
+
+    disabled_feature_tags: frozenset[str] = frozenset()
+    if not cook_session:
+        enabled_tool_tags: set[str] = set()
+        disabled_tool_tags: set[str] = set()
+        for feature_name, feature_def in FEATURE_REGISTRY.items():
+            if is_feature_enabled(
+                feature_name,
+                features,
+                experimental_enabled=experimental_enabled,
+            ):
+                enabled_tool_tags.update(feature_def.tool_tags)
+            else:
+                disabled_tool_tags.update(feature_def.tool_tags)
+        disabled_feature_tags = frozenset(disabled_tool_tags - enabled_tool_tags)
+
+    packs_enabled = () if config is None else tuple(getattr(config.packs, "enabled", ()))
+    disabled = _effective_disabled_categories(
+        explicit_disabled=explicit_disabled,
+        packs_enabled=packs_enabled,
+        recipe_packs=recipe_packs,
+        disabled_feature_tags=disabled_feature_tags,
+    )
+    return disabled, custom_tags, features, experimental_enabled
 
 
 class DefaultSkillResolver:
@@ -494,8 +647,14 @@ class DefaultSkillResolver:
         self,
         project_root: Path | None,
         execution_role: SkillExecutionRole,
+        *,
+        config: Any | None = None,
+        cook_session: bool = False,
+        recipe_packs: frozenset[str] | None = None,
+        recipe_features: frozenset[str] | None = None,
+        allow_only: frozenset[str] | None = None,
     ) -> EffectiveSkillCatalog:
-        """Return a fresh, immutable catalog authorized for one exact role."""
+        """Return a fresh, immutable catalog authorized by role and visibility."""
         normalized_root = project_root.resolve() if project_root is not None else None
         effective_skills = self._list_effective_unfiltered(normalized_root)
         invalid = tuple(skill for skill in effective_skills if skill.invalid_reason is not None)
@@ -504,10 +663,24 @@ class DefaultSkillResolver:
             raise SkillContractError(
                 f"effective skill catalog contains invalid contracts: {details}"
             )
+        disabled, custom_tags, features, experimental_enabled = _visibility_policy(
+            config,
+            cook_session=cook_session,
+            recipe_packs=recipe_packs,
+            recipe_features=recipe_features,
+        )
         skills = tuple(
             SkillCatalogEntry.from_skill_info(skill)
             for skill in effective_skills
             if skill.execution_role is execution_role
+            and _skill_is_visible(
+                skill,
+                disabled=disabled,
+                custom_tags=custom_tags,
+                features=features,
+                experimental_enabled=experimental_enabled,
+                allow_only=allow_only,
+            )
         )
         if execution_role is SkillExecutionRole.ORCHESTRATOR:
             internal = tuple(
@@ -516,11 +689,20 @@ class DefaultSkillResolver:
                 if (skill := self.resolve_effective(name, normalized_root)) is not None
                 and skill.invalid_reason is None
                 and skill.execution_role is execution_role
+                and _skill_is_visible(
+                    skill,
+                    disabled=disabled,
+                    custom_tags=custom_tags,
+                    features=features,
+                    experimental_enabled=experimental_enabled,
+                    allow_only=allow_only,
+                )
             )
             skills = tuple(sorted((*skills, *internal), key=lambda skill: skill.name))
         return EffectiveSkillCatalog(
             skills=skills,
             execution_role=execution_role,
+            namespace_sources={skill.name: skill.source for skill in effective_skills},
         )
 
     def resolve_invocation(
@@ -528,6 +710,10 @@ class DefaultSkillResolver:
         name: str,
         project_root: Path | None,
         execution_role: SkillExecutionRole,
+        *,
+        config: Any | None = None,
+        recipe_packs: frozenset[str] | None = None,
+        recipe_features: frozenset[str] | None = None,
     ) -> EffectiveSkillInvocation:
         """Resolve and validate a root plus every direct/pack-expanded dependency."""
         normalized_root = project_root.resolve() if project_root is not None else None
@@ -583,6 +769,31 @@ class DefaultSkillResolver:
             visited.add(skill.name)
 
         visit(root)
+        if config is not None or recipe_packs is not None or recipe_features is not None:
+            requested_members = frozenset(member.name for member in closure)
+            disabled, custom_tags, features, experimental_enabled = _visibility_policy(
+                config,
+                cook_session=False,
+                recipe_packs=recipe_packs,
+                recipe_features=recipe_features,
+            )
+            hidden = tuple(
+                member.name
+                for member in closure
+                if not _skill_is_visible(
+                    member,
+                    disabled=disabled,
+                    custom_tags=custom_tags,
+                    features=features,
+                    experimental_enabled=experimental_enabled,
+                    allow_only=requested_members,
+                )
+            )
+            if hidden:
+                raise SkillContractError(
+                    "effective invocation is disabled by configured subset/pack policy: "
+                    f"{sorted(hidden)}"
+                )
         capability_union = frozenset().union(*(member.uses_capabilities for member in closure))
         return EffectiveSkillInvocation(
             root=root,

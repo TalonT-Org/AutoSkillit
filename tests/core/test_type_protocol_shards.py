@@ -22,6 +22,7 @@ def test_execution_shard_all():
 
     assert set(__all__) == {
         "CompletionRequiredResolver",
+        "HeadlessSkillDispatchContract",
         "InputContractResolver",
         "TestRunner",
         "HeadlessExecutor",

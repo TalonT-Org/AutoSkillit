@@ -7,7 +7,9 @@ semantic comparison of SKILL.md changes.
 
 from __future__ import annotations
 
+import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,7 @@ from autoskillit.core import (
     ClaudeFlags,
     CodingAgentBackend,
     OutputFormat,
+    SkillExecutionRole,
     SubprocessResult,
     TerminationReason,
     build_agent_env,
@@ -22,7 +25,15 @@ from autoskillit.core import (
 )
 from autoskillit.execution import parse_session_result, run_managed_async
 from autoskillit.recipe import StaleItem, load_bundled_manifest
-from autoskillit.workspace import bundled_skills_dir
+from autoskillit.workspace import (
+    EffectiveSkillCatalog,
+    SkillCatalogEntry,
+    SkillProjectionContext,
+    bundled_skills_dir,
+    default_skill_resolver,
+    parse_frontmatter_content,
+    project_agent_skill_document,
+)
 
 logger = get_logger(__name__)
 
@@ -63,14 +74,61 @@ async def triage_staleness(
     if not hash_items:
         return results
 
-    # Pre-load all SKILL.md content synchronously before any async task starts.
-    # Path.read_text() is blocking I/O and must not run inside async tasks.
+    # Pre-project all skill documents synchronously before any async task starts.
     skill_md_cache: dict[str, str] = {}
+    resolver = default_skill_resolver()
+    resolver._dir = bundled_skills_dir()
     for item in hash_items:
         if item.skill not in skill_md_cache:
-            skill_md_path = bundled_skills_dir() / item.skill / "SKILL.md"
-            if skill_md_path.is_file():
-                skill_md_cache[item.skill] = skill_md_path.read_text()
+            skill_info = resolver.resolve(item.skill)
+            if (
+                skill_info is not None
+                and skill_info.invalid_reason is not None
+                and skill_info.invalid_reason.startswith("invalid frontmatter:")
+            ):
+                synthetic_content = (
+                    "---\n"
+                    f"name: {skill_info.name}\n"
+                    "description: Skill document used for contract staleness comparison.\n"
+                    "---\n"
+                    f"{skill_info.canonical_content}"
+                )
+                skill_info = replace(
+                    skill_info,
+                    canonical_content=synthetic_content,
+                    canonical_digest=hashlib.sha256(synthetic_content.encode()).hexdigest(),
+                    frontmatter=parse_frontmatter_content(synthetic_content),
+                    execution_role=SkillExecutionRole.SESSION,
+                    invalid_reason=None,
+                )
+            if (
+                skill_info is None
+                or skill_info.invalid_reason is not None
+                or skill_info.execution_role is None
+            ):
+                continue
+            try:
+                entry = SkillCatalogEntry.from_skill_info(skill_info)
+                catalog = EffectiveSkillCatalog(
+                    skills=(entry,),
+                    execution_role=entry.execution_role,
+                )
+                skill_md_cache[item.skill] = project_agent_skill_document(
+                    entry,
+                    SkillProjectionContext(
+                        execution_cwd=Path.cwd(),
+                        catalog=catalog,
+                        backend=backend,
+                        conventions=backend.conventions,
+                        gating=False,
+                    ),
+                ).content
+            except ValueError:
+                logger.warning(
+                    "triage_skill_projection_failed",
+                    skill=item.skill,
+                    exc_info=True,
+                )
 
     results.extend(await _triage_batch(hash_items, skill_md_cache, backend=backend))
 

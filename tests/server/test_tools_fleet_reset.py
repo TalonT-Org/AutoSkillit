@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,6 +22,7 @@ def _setup_state(
     dispatch_id: str = "d-abc123",
     status: DispatchStatus = DispatchStatus.FAILURE,
     sidecar_path: str | None = None,
+    dispatched_session_id: str = "",
 ) -> Path:
     state_path = tmp_path / "dispatches" / "campaign.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -30,6 +31,7 @@ def _setup_state(
         dispatch_id=dispatch_id,
         status=status,
         sidecar_path=sidecar_path,
+        dispatched_session_id=dispatched_session_id,
     )
     write_initial_state(
         state_path,
@@ -457,6 +459,25 @@ class TestResetDispatchEdgeCases:
         state = json.loads(resume_state_path.read_text())
         assert "d-abc123" not in state["resume_attempted"]
         assert state["resume_attempted"]["other-id"] is True
+
+    @pytest.mark.anyio
+    async def test_reset_dispatch_deletes_retained_skill_contract(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        state_path = _setup_state(
+            tmp_path,
+            dispatched_session_id="session-retained-1",
+        )
+        tool_ctx = build_ctx_open()
+        tool_ctx.skill_session_contract_store = MagicMock()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        result = json.loads(await reset_dispatch(dispatch_id="d-abc123"))
+
+        assert result["success"] is True
+        tool_ctx.skill_session_contract_store.delete.assert_called_once_with("session-retained-1")
 
     @pytest.mark.anyio
     async def test_reset_dispatch_cleans_up_both_name_and_uuid(

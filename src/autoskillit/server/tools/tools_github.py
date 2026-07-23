@@ -666,7 +666,11 @@ async def _run_report_session(
         cfg = config.report_bug
         skill_result = await executor.run(
             (direct_dispatch.resolved_command if direct_dispatch is not None else skill_command),
-            cwd,
+            (
+                str(direct_dispatch.projection_context.execution_cwd)
+                if direct_dispatch is not None
+                else cwd
+            ),
             model=model,
             step_name=step_name,
             timeout=float(cfg.timeout),
@@ -676,6 +680,9 @@ async def _run_report_session(
             profile_name=profile_name,
             provider_name=provider_name,
             add_dirs=direct_dispatch.add_dirs if direct_dispatch is not None else (),
+            capability_contract=(
+                direct_dispatch.capability_contract if direct_dispatch is not None else None
+            ),
         )
 
         report_text = skill_result.result or skill_result.stderr or "No report generated."

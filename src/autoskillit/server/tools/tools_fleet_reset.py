@@ -195,6 +195,9 @@ async def reset_dispatch(
         )
         report.state_updated = state_updated
 
+        if state_updated and dispatch.dispatched_session_id:
+            tool_ctx.skill_session_contract_store.delete(dispatch.dispatched_session_id)
+
         _cleanup_resume_gate_state(project_dir, dispatch_id)
         if dispatch.dispatch_id and dispatch.dispatch_id != dispatch_id:
             _cleanup_resume_gate_state(project_dir, dispatch.dispatch_id)

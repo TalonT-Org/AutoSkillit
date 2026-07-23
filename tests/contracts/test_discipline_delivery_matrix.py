@@ -166,3 +166,41 @@ class TestSousChefDelivery:
         prompt = _build_fleet_dispatch_prompt("mcp__autoskillit__")
         assert sous_chef[:80] not in prompt
         assert "name: sous-chef" not in prompt
+
+
+@pytest.mark.anyio
+async def test_llm_triage_prompt_uses_projected_skill_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+    from autoskillit.core import SubprocessResult, TerminationReason
+    from autoskillit.recipe import StaleItem
+
+    run = AsyncMock(
+        return_value=SubprocessResult(
+            returncode=0,
+            stdout="not-json",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+    )
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", run)
+    await triage_staleness(
+        [
+            StaleItem(
+                skill="open-kitchen",
+                reason="hash_mismatch",
+                stored_value="old",
+                current_value="new",
+            )
+        ],
+        backend=ClaudeCodeBackend(),
+    )
+    prompt = run.await_args.kwargs["cmd"][2]
+    assert "name: open-kitchen" in prompt
+    assert "uses_capabilities:" not in prompt
+    assert "execution_role:" not in prompt
+    assert "backend_requirements:" not in prompt

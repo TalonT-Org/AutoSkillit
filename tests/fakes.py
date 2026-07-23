@@ -130,6 +130,7 @@ class ExecutorCall:
     closure_spec: ClosureAuthoritySpec | None = None
     closure_report_root: Path | None = None
     skill_contract: Any | None = None
+    capability_contract: Any | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
 
 
@@ -167,6 +168,7 @@ class DispatchFoodTruckCall:
     resume_message: str | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
     backend_override: str | None = None
+    capability_contract: Any | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -243,6 +245,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
         skill_contract: Any | None = None,
+        capability_contract: Any | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
     ) -> SkillResult:
         self.calls.append(
@@ -287,6 +290,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,
                 skill_contract=skill_contract,
+                capability_contract=capability_contract,
                 on_session_id_resolved=on_session_id_resolved,
             )
         )
@@ -338,6 +342,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         resume_message: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         backend_override: str | None = None,
+        capability_contract: Any | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
@@ -371,6 +376,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 resume_message=resume_message,
                 on_session_id_resolved=on_session_id_resolved,
                 backend_override=backend_override,
+                capability_contract=capability_contract,
             )
         )
         if self._queue:

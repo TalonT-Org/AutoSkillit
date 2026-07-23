@@ -22,7 +22,11 @@ from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,
     check_hard_capability_feasibility,
 )
-from autoskillit.workspace import SkillProjectionContext
+from autoskillit.workspace import (
+    EffectiveSkillDispatchContract,
+    SkillProjectionContext,
+    build_effective_skill_dispatch_contract,
+)
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
@@ -37,6 +41,7 @@ class DirectSkillDispatch:
     resolved_command: str
     invocation: object
     projection_context: SkillProjectionContext
+    capability_contract: EffectiveSkillDispatchContract
 
     def cleanup(self, tool_ctx: ToolContext) -> None:
         if tool_ctx.session_skill_manager is not None:
@@ -142,6 +147,9 @@ def _resolve_and_check_backend_compat(
                 target_name,
                 tool_ctx.project_dir,
                 SkillExecutionRole.SESSION,
+                config=tool_ctx.config,
+                recipe_packs=tool_ctx.active_recipe_packs,
+                recipe_features=tool_ctx.active_recipe_features,
             )
         except SkillContractError as exc:
             return SkillResult.crashed(
@@ -197,6 +205,9 @@ def _prepare_direct_skill_dispatch(
             target_name,
             tool_ctx.project_dir,
             SkillExecutionRole.SESSION,
+            config=tool_ctx.config,
+            recipe_packs=tool_ctx.active_recipe_packs,
+            recipe_features=tool_ctx.active_recipe_features,
         )
     except SkillContractError as exc:
         return None, SkillResult.crashed(
@@ -225,6 +236,7 @@ def _prepare_direct_skill_dispatch(
         backend=backend,
         conventions=backend.conventions if backend is not None else None,
         substitutions={"{{AUTOSKILLIT_TEMP}}": str(execution_cwd / ".autoskillit" / "temp")},
+        gating=False,
     )
     session_id = f"direct-{uuid4().hex[:12]}"
     try:
@@ -245,10 +257,16 @@ def _prepare_direct_skill_dispatch(
         invocation.root.source_ref,
         backend.conventions if backend is not None else None,
     )
+    capability_contract = build_effective_skill_dispatch_contract(
+        resolved_command,
+        projection_context,
+        artifact_paths=(add_dir.path,),
+    )
     return DirectSkillDispatch(
         add_dirs=(add_dir,),
         session_id=session_id,
         resolved_command=resolved_command,
         invocation=invocation,
         projection_context=projection_context,
+        capability_contract=capability_contract,
     ), None

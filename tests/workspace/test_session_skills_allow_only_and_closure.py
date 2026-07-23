@@ -161,7 +161,13 @@ def _write_invocation_skill(
         frontmatter.append(f"activate_deps: [{', '.join(deps)}]")
     if categories:
         frontmatter.append(f"categories: [{', '.join(categories)}]")
-    skill_path.write_text("---\n" + "\n".join(frontmatter) + "\n---\nbody\n")
+    evidence = {
+        "github_api_write": "Run `gh issue edit 1 --body-file issue.md`.",
+        "git_metadata_write": "Run `git commit -m test`.",
+        "run_skill": 'Call run_skill("child").',
+    }
+    body = "\n".join(evidence[capability] for capability in capabilities)
+    skill_path.write_text("---\n" + "\n".join(frontmatter) + "\n---\n" + (body or "body") + "\n")
 
 
 def _make_effective_resolver(tmp_path: Path, monkeypatch, skills: dict[str, dict]):

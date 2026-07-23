@@ -17,7 +17,6 @@ from autoskillit.core import (
     FleetErrorCode,
     ProcessStaleError,
     SessionCheckpoint,  # noqa: F401, TC001
-    SkillExecutionRole,
     SkillResult,
     atomic_write,
     get_logger,
@@ -35,7 +34,7 @@ from autoskillit.fleet.state_types import (
     DispatchRejected,
     DispatchResult,
 )
-from autoskillit.workspace import default_skill_resolver, project_default_plugin_source
+from autoskillit.workspace import default_skill_resolver, prepare_effective_skill_dispatch
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -760,22 +759,25 @@ async def _run_dispatch(
         capture=capture,
         caller_instructions=caller_instructions,
     )
-
     if tool_ctx.executor is None:
         return _reject_with_state(
             FleetErrorCode.FLEET_MANIFEST_MISSING,
             "Executor not configured.",
         )
     food_truck_plugin_source = None
+    food_truck_capability_contract = None
     if _effective_backend is not None:
-        resolver = tool_ctx.skill_resolver or default_skill_resolver()
-        catalog = resolver.list_effective(tool_ctx.project_dir, SkillExecutionRole.ORCHESTRATOR)
-        food_truck_plugin_source = project_default_plugin_source(
-            cwd=tool_ctx.project_dir,
-            backend=_effective_backend,
-            skill_catalog=catalog,
+        food_truck_plugin_source, food_truck_capability_contract = (
+            prepare_effective_skill_dispatch(
+                resolved_command=prompt,
+                cwd=tool_ctx.project_dir,
+                backend=_effective_backend,
+                resolver=tool_ctx.skill_resolver or default_skill_resolver(),
+                config=tool_ctx.config,
+                recipe_packs=tool_ctx.active_recipe_packs,
+                recipe_features=tool_ctx.active_recipe_features,
+            )
         )
-
     started_at = time.time()
     _dispatched_pid: list[int] = []
     _dispatched_ticks: list[int] = []
@@ -783,7 +785,6 @@ async def _run_dispatch(
     _dispatched_boot_id: list[str] = []
     _dispatched_session_id: list[str] = []
     _spawn_error: list[str] = []
-
     # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
     prior_ids: list[str] = []
     try:
@@ -801,11 +802,9 @@ async def _run_dispatch(
             state_path=str(state_path),
             exc_info=True,
         )
-
     prior_completion_markers = (
         [f"%%L3_DONE::{pid[:8]}%%" for pid in prior_ids] if prior_ids else None
     )
-
     _issue_urls_raw = extract_issue_urls(effective_ingredients)
 
     def _on_spawn(pid: int, ticks: int) -> None:
@@ -874,6 +873,7 @@ async def _run_dispatch(
                     cwd=str(tool_ctx.project_dir),
                     completion_marker=completion_marker,
                     plugin_source=food_truck_plugin_source,
+                    capability_contract=food_truck_capability_contract,
                     prior_completion_markers=prior_completion_markers,
                     resume_session_id=resume_session_id,
                     resume_checkpoint=resume_checkpoint,

@@ -327,10 +327,11 @@ async def prepare_issue(
             try:
                 result = await tool_ctx.executor.run(
                     dispatch.resolved_command,
-                    str(tool_ctx.project_dir),
+                    str(dispatch.projection_context.execution_cwd),
                     add_dirs=dispatch.add_dirs,
                     expected_output_patterns=expected_output_patterns,
                     write_behavior=write_spec,
+                    capability_contract=dispatch.capability_contract,
                 )
             finally:
                 dispatch.cleanup(tool_ctx)
@@ -458,10 +459,11 @@ async def enrich_issues(
             try:
                 result = await tool_ctx.executor.run(
                     dispatch.resolved_command,
-                    str(tool_ctx.project_dir),
+                    str(dispatch.projection_context.execution_cwd),
                     add_dirs=dispatch.add_dirs,
                     expected_output_patterns=expected_output_patterns,
                     write_behavior=write_spec,
+                    capability_contract=dispatch.capability_contract,
                 )
             finally:
                 dispatch.cleanup(tool_ctx)

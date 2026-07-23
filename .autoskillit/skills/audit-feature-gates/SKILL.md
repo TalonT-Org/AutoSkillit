@@ -1,6 +1,7 @@
 ---
 name: audit-feature-gates
 categories: [audit]
+uses_capabilities: [agent_model]
 description: >
   Audit feature flag isolation — traces import chains, runtime gates, tool/skill
   tag coverage, UI surfaces, and test markers to detect leakage and miswiring.

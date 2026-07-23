@@ -195,6 +195,8 @@ def cook(
     session_catalog = DefaultSkillResolver().list_effective(
         project_dir,
         SkillExecutionRole.SESSION,
+        config=config,
+        cook_session=True,
     )
     projection_context = skills_provider.catalog_projection_context(
         session_catalog,

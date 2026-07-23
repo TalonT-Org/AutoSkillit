@@ -8,7 +8,7 @@ import os
 import secrets
 import shutil
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from threading import RLock
@@ -36,6 +36,7 @@ __all__ = [
     "DefaultSkillSessionContractStore",
     "SkillSessionContract",
     "StoredSkillSessionContract",
+    "delete_skill_session_contracts",
 ]
 
 SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 2
@@ -223,10 +224,8 @@ class DefaultSkillSessionContractStore:
 
     def delete(self, session_id: str) -> None:
         """Explicitly delete finalized retained state for one raw session ID."""
-        _validate_raw_session_id(session_id)
-        entry = self._session_path(session_id)
         with self._lock:
-            shutil.rmtree(entry, ignore_errors=True)
+            _delete_finalized_contract(self._sessions_root, session_id)
 
     def discard(self, correlation_key: str) -> None:
         """Explicitly discard a provisional entry that never finalized."""
@@ -242,8 +241,7 @@ class DefaultSkillSessionContractStore:
         return path
 
     def _session_path(self, session_id: str) -> Path:
-        key = hashlib.sha256(session_id.encode()).hexdigest()
-        path = self._sessions_root / key
+        path = _finalized_contract_path(self._sessions_root, session_id)
         self._ensure_contained(path)
         return path
 
@@ -332,9 +330,38 @@ class DefaultSkillSessionContractStore:
         return contract
 
 
+def delete_skill_session_contracts(
+    session_ids: Iterable[str],
+    *,
+    root: Path | None = None,
+) -> None:
+    """Explicitly remove retained contracts for completed external sessions."""
+    configured_root = root or (default_log_dir() / "skill-session-contracts")
+    sessions_root = configured_root.expanduser().resolve() / "sessions"
+    for session_id in session_ids:
+        if session_id:
+            _delete_finalized_contract(sessions_root, session_id)
+
+
 def _validate_raw_session_id(session_id: str) -> None:
     if not isinstance(session_id, str) or not session_id or "\x00" in session_id:
         raise ValueError(f"Invalid session ID: {session_id!r}")
+
+
+def _finalized_contract_path(sessions_root: Path, session_id: str) -> Path:
+    _validate_raw_session_id(session_id)
+    key = hashlib.sha256(session_id.encode()).hexdigest()
+    path = sessions_root / key
+    if not path.resolve().is_relative_to(sessions_root.resolve()):
+        raise ValueError(f"Skill session contract path escapes sessions root: {path}")
+    return path
+
+
+def _delete_finalized_contract(sessions_root: Path, session_id: str) -> None:
+    shutil.rmtree(
+        _finalized_contract_path(sessions_root, session_id),
+        ignore_errors=True,
+    )
 
 
 def _validate_digest_map(

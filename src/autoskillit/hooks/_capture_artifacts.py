@@ -56,7 +56,7 @@ __all__ = [
     "open_project_anchor",
     "read_capture_policy",
     "run_capture",
-    "sweep_stale_captures",
+    "classify_stale_captures",
 ]
 
 CAPTURE_PATH_COMPONENTS = (".autoskillit", "temp", "shell_capture")
@@ -836,7 +836,7 @@ def _open_stale_candidate(
     )
 
 
-def sweep_stale_captures(
+def classify_stale_captures(
     project_root: str | Path,
     *,
     max_age_seconds: int = 3600,

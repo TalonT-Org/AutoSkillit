@@ -107,10 +107,10 @@ def _capture_path_redirections(source: str) -> list[str]:
     return violations
 
 
-def test_session_start_calls_canonical_capture_cleanup() -> None:
+def test_session_start_calls_canonical_capture_classification() -> None:
     source = _source("hooks/session_start_hook.py")
     assert "from _capture_artifacts import" in source
-    assert "sweep_stale_captures(Path.cwd())" in source
+    assert "classify_stale_captures(Path.cwd())" in source
     assert "shell_capture" not in source
 
 

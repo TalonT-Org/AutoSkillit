@@ -27,7 +27,7 @@ import pytest
 import autoskillit.hooks.shell_capture_hook as shell_capture_hook
 from autoskillit.hooks._capture_artifacts import (
     _CAPTURE_FILENAME_RE,
-    sweep_stale_captures,
+    classify_stale_captures,
 )
 from autoskillit.hooks.shell_capture_hook import _build_harness
 
@@ -517,7 +517,7 @@ def test_small_output_artifact_safely_retained_by_sweep(tmp_path: Path) -> None:
 
     target = artifacts[0]
     os.utime(target, (0, 0))
-    deleted = sweep_stale_captures(tmp_path, max_age_seconds=0)
+    deleted = classify_stale_captures(tmp_path, max_age_seconds=0)
     assert deleted == 0
     assert target.exists()
 
@@ -533,7 +533,7 @@ def test_sweep_rejects_symlinks_and_traversals(tmp_path: Path) -> None:
     symlink.symlink_to(outside)
     assert symlink.is_symlink()
 
-    deleted = sweep_stale_captures(tmp_path, max_age_seconds=0)
+    deleted = classify_stale_captures(tmp_path, max_age_seconds=0)
     assert deleted == 0
     assert outside.exists(), "outside target file must be untouched by sweep"
     assert outside.read_text() == "must-survive"
@@ -554,14 +554,14 @@ def test_sweep_filename_allowlist(tmp_path: Path) -> None:
     invalid_ext = capture / "evil.sh"
     invalid_ext.write_text("x")
 
-    deleted = sweep_stale_captures(tmp_path, max_age_seconds=0)
+    deleted = classify_stale_captures(tmp_path, max_age_seconds=0)
     assert deleted == 0
     assert valid.exists()
     assert short_uid.exists(), "old 8-char uid format files must not be deleted"
     assert invalid_ext.exists(), "files outside the shell_*.log allowlist must not be deleted"
 
 
-def test_sweep_stale_captures_uses_wall_clock_not_directory_mtime(tmp_path: Path) -> None:
+def test_classify_stale_captures_uses_wall_clock_not_directory_mtime(tmp_path: Path) -> None:
     """Staleness must be measured against real elapsed time, not the capture
     directory's own mtime (which only advances when its contents change)."""
     _make_project_dirs(tmp_path)
@@ -574,7 +574,7 @@ def test_sweep_stale_captures_uses_wall_clock_not_directory_mtime(tmp_path: Path
     os.utime(stale, (backdated, backdated))
     os.utime(capture, (backdated, backdated))
 
-    deleted = sweep_stale_captures(tmp_path, max_age_seconds=100)
+    deleted = classify_stale_captures(tmp_path, max_age_seconds=100)
     assert deleted == 0
     assert stale.exists()
 

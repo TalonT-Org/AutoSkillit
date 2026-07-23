@@ -18,13 +18,13 @@ from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CapturePolicy,
     CaptureSetupError,
+    classify_stale_captures,
     create_capture_artifact,
     current_artifact_path_if_bound,
     open_capture_root,
     open_project_anchor,
     read_capture_policy,
     run_capture,
-    sweep_stale_captures,
 )
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -570,7 +570,7 @@ def test_stale_capture_is_safely_retained_without_identity_unlink(tmp_path: Path
     old = time.time() - 7200
     os.utime(stale, (old, old))
 
-    assert sweep_stale_captures(project, max_age_seconds=3600) == 0
+    assert classify_stale_captures(project, max_age_seconds=3600) == 0
     assert stale.read_bytes() == b"retained"
 
 
@@ -585,8 +585,8 @@ def test_name_matching_fifo_does_not_block_stale_cleanup(tmp_path: Path) -> None
         pytest.skip(f"FIFO unavailable: {exc}")
     code = (
         "import sys\n"
-        "from autoskillit.hooks._capture_artifacts import sweep_stale_captures\n"
-        "raise SystemExit(sweep_stale_captures(sys.argv[1], max_age_seconds=0))\n"
+        "from autoskillit.hooks._capture_artifacts import classify_stale_captures\n"
+        "raise SystemExit(classify_stale_captures(sys.argv[1], max_age_seconds=0))\n"
     )
 
     completed = subprocess.run(
@@ -673,7 +673,7 @@ def test_cleanup_rejects_symlinked_capture_root(tmp_path: Path) -> None:
     os.utime(stale, (old, old))
     (temp_dir / CAPTURE_PATH_COMPONENTS[2]).symlink_to(external, target_is_directory=True)
 
-    assert sweep_stale_captures(project, max_age_seconds=0) == 0
+    assert classify_stale_captures(project, max_age_seconds=0) == 0
     assert stale.read_bytes() == b"must-survive"
 
 
@@ -706,7 +706,7 @@ def test_cleanup_retains_replacement_raced_after_validation(
         swap_after_validation,
     )
 
-    assert sweep_stale_captures(project, max_age_seconds=0) == 0
+    assert classify_stale_captures(project, max_age_seconds=0) == 0
     assert stale.read_bytes() == b"replacement"
     assert displaced.read_bytes() == b"validated"
 
@@ -740,7 +740,7 @@ def test_cleanup_failure_for_one_entry_does_not_skip_later_entries(
         fail_first_entry,
     )
 
-    assert sweep_stale_captures(project, max_age_seconds=0) == 0
+    assert classify_stale_captures(project, max_age_seconds=0) == 0
     assert len(calls) == 2
     assert {path.name for path in stale_paths} == set(calls)
     assert all(path.exists() for path in stale_paths)

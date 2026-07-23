@@ -21,7 +21,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _capture_artifacts import (  # type: ignore[import-not-found]  # noqa: E402
-    sweep_stale_captures,
+    classify_stale_captures,
 )
 
 
@@ -88,7 +88,7 @@ def main() -> None:
         pass
 
     try:
-        sweep_stale_captures(Path.cwd())
+        classify_stale_captures(Path.cwd())
     except Exception:
         pass
 

@@ -28,7 +28,9 @@ from autoskillit.recipe._recipe_ingredients import (  # noqa: E402
 )
 from autoskillit.recipe.contracts import (  # noqa: E402
     OutcomeInvariantEntry,
+    ResultFieldSpec,
     SkillContract,
+    SkillInput,
     SkillOutput,
     StaleItem,
     SuccessQualifierEntry,
@@ -330,7 +332,9 @@ __all__ = [
     "resolve_skill_name",
     "validate_recipe_cards",
     "OutcomeInvariantEntry",
+    "ResultFieldSpec",
     "SkillContract",
+    "SkillInput",
     "SkillOutput",
     "SuccessQualifierEntry",
     "DefaultRecipeRepository",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -21,8 +22,30 @@ from autoskillit.core import (
 
 if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, CodingAgentBackend
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillInfo
 
 logger = get_logger(__name__)
+
+
+def validate_public_plugin_projection(
+    source_root: Path,
+    public_root: Path,
+    private_manifest: Path,
+    skills: EffectiveSkillCatalog | Iterable[SkillInfo],
+) -> None:
+    """Fail install when public documents and the private machine manifest drift."""
+    from autoskillit.workspace import validate_sanitized_plugin_artifact
+
+    errors = validate_sanitized_plugin_artifact(
+        source_root,
+        public_root,
+        private_manifest,
+        skills,
+    )
+    if errors:
+        raise RuntimeError(
+            "refusing to publish invalid marketplace artifact: " + "; ".join(errors)
+        )
 
 
 class _ScanResult(NamedTuple):
@@ -389,7 +412,7 @@ def _register_mcp_server(claude_json_path: Path) -> None:
         "command": "autoskillit",
         "args": [],
     }
-    atomic_write(claude_json_path, json.dumps(data, indent=2))
+    atomic_write(claude_json_path, json.JSONEncoder(indent=2).encode(data))
 
 
 def evict_direct_mcp_entry(claude_json_path: Path) -> bool:
@@ -408,7 +431,7 @@ def evict_direct_mcp_entry(claude_json_path: Path) -> bool:
         return False
     del data["mcpServers"]["autoskillit"]
     try:
-        atomic_write(claude_json_path, json.dumps(data, indent=2))
+        atomic_write(claude_json_path, json.JSONEncoder(indent=2).encode(data))
     except OSError:
         return False
     return True

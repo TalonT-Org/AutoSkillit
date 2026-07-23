@@ -55,12 +55,6 @@ def _read_full_sous_chef(
     if catalog.execution_role is not SkillExecutionRole.ORCHESTRATOR:
         raise ValueError("sous-chef projection requires an orchestrator skill catalog")
     sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
-    if sous_chef is None:
-        # sous-chef is an internal bootstrap document and is intentionally
-        # omitted from public catalogs. Resolve it explicitly so the default
-        # bundled contract remains available while still honoring a
-        # project-local override selected into the supplied catalog above.
-        sous_chef = DefaultSkillResolver().resolve_effective("sous-chef", effective_root)
     if (
         sous_chef is None
         or sous_chef.invalid_reason is not None
@@ -71,6 +65,7 @@ def _read_full_sous_chef(
         sous_chef,
         SkillProjectionContext(
             execution_cwd=effective_root,
+            catalog=catalog,
             backend=backend,
             conventions=getattr(backend, "conventions", None),
             gating=False,

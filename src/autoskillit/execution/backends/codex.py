@@ -605,6 +605,7 @@ class CodexBackend(BackendCmdBuilderBase):
         return BackendConventions(
             skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
             project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
+            skill_sigil=self.capabilities.skill_sigil,
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:

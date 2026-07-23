@@ -251,9 +251,15 @@ class TestHardCapabilityFeasibilityPredicate:
         import json
         from unittest.mock import MagicMock
 
-        from autoskillit.core import SkillSource, ValidatedAddDir
+        from autoskillit.core import (
+            SkillExecutionRole,
+            SkillSource,
+            SkillSourceRef,
+            ValidatedAddDir,
+        )
         from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
         from autoskillit.server.tools.tools_execution import run_skill
+        from autoskillit.workspace import EffectiveSkillInvocation, SkillInfo
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
@@ -276,18 +282,24 @@ class TestHardCapabilityFeasibilityPredicate:
         mock_ssm.validate_session_exists.return_value = True
         tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
-        mock_skill_info = SimpleNamespace(
+        mock_skill_info = SkillInfo(
             name="investigate",
             source=SkillSource.BUNDLED_EXTENDED,
             path=skill_md,
-            backend_requirements=frozenset({"claude-code"}),
-            uses_capabilities=frozenset(),
+            source_ref=SkillSourceRef(
+                origin=SkillSource.BUNDLED_EXTENDED,
+                logical_name="investigate",
+                skill_path=skill_md,
+            ),
+            execution_role=SkillExecutionRole.SESSION,
+            uses_capabilities=frozenset({"open_kitchen"}),
         )
-        mock_invocation = SimpleNamespace(
+        mock_invocation = EffectiveSkillInvocation(
             root=mock_skill_info,
             closure=(mock_skill_info,),
-            capability_union=frozenset(),
-            backend_requirements=frozenset({"claude-code"}),
+            capability_union=frozenset({"open_kitchen"}),
+            project_root=tmp_path,
+            execution_role=SkillExecutionRole.SESSION,
         )
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = mock_skill_info

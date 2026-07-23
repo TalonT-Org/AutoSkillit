@@ -10,16 +10,11 @@ from __future__ import annotations
 
 import regex as re
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import Severity, SkillContractError, SkillExecutionRole
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._skill_helpers import (
-    _resolve_skill_md,
-    get_allowed_values_for_skill,
-)
+from autoskillit.recipe._skill_helpers import get_allowed_values_for_skill
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
-
-logger = get_logger(__name__)
 
 # Patterns that identify a graceful-degradation trigger line in SKILL.md.
 _DEGRADATION_TRIGGER_RE = re.compile(r"unavailable|graceful.{0,20}degrada", re.IGNORECASE)
@@ -88,6 +83,8 @@ def _find_nominal_verdicts(content: str) -> set[str]:
 )
 def _check_verdict_ungated_degradation(ctx: ValidationContext) -> list[RuleFinding]:
     """Scan recipe steps for skills whose SKILL.md shares a verdict across both paths."""
+    if ctx.skill_resolver is None:
+        return []
     findings: list[RuleFinding] = []
 
     for step_name, step in ctx.recipe.steps.items():
@@ -105,17 +102,16 @@ def _check_verdict_ungated_degradation(ctx: ValidationContext) -> list[RuleFindi
         if not verdict_allowed:
             continue
 
-        # Locate and read the SKILL.md.
-        skill_md_path = _resolve_skill_md(name)
-        if skill_md_path is None:
-            continue
         try:
-            skill_md_content = skill_md_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            logger.warning(
-                "could not read %s; skipping verdict-ungated-degradation check",
-                skill_md_path,
+            invocation = ctx.skill_resolver.resolve_invocation(
+                name,
+                ctx.project_dir,
+                SkillExecutionRole.SESSION,
             )
+        except SkillContractError:
+            continue
+        skill_md_content = getattr(invocation.root, "canonical_content", "")
+        if not isinstance(skill_md_content, str) or not skill_md_content:
             continue
 
         # Check that a degradation trigger phrase is present.

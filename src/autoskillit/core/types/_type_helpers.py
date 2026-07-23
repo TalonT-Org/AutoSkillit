@@ -13,11 +13,13 @@ import shlex
 import warnings
 from typing import Any, assert_never
 
-from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
+from ._type_backend import BackendConventions
+from ._type_constants import SKILL_COMMAND_PREFIX
 from ._type_constants_env import HEADLESS_ENV_VAR, SESSION_TYPE_ENV_VAR
 from ._type_constants_registries import FLEET_ERROR_CODES
 from ._type_enums import SessionType, SkillSource
 from ._type_protocols_workspace import SkillResolver
+from ._type_skill_contract import SkillSourceRef
 
 __all__ = [
     "is_path_like_token",
@@ -135,22 +137,34 @@ def resolve_target_skill(
     if info is None:
         return skill_command, name
 
-    return render_target_skill_command(skill_command, info.source), name
+    return render_target_skill_command(skill_command, info.source_ref), name
 
 
-def render_target_skill_command(skill_command: str, source: SkillSource) -> str:
-    """Render a parsed logical skill target using its selected effective origin."""
+def render_target_skill_command(
+    skill_command: str,
+    source_ref: SkillSourceRef | SkillSource,
+    conventions: BackendConventions | None = None,
+) -> str:
+    """Render a logical target from its effective source and backend conventions."""
     name = extract_skill_name(skill_command)
     if name is None:
         return skill_command
 
+    source = source_ref.origin if isinstance(source_ref, SkillSourceRef) else source_ref
+    configured_sigil = conventions.skill_sigil if conventions is not None else SKILL_COMMAND_PREFIX
+    sigil = (
+        configured_sigil
+        if isinstance(configured_sigil, str) and configured_sigil
+        else SKILL_COMMAND_PREFIX
+    )
     match source:
         case SkillSource.BUNDLED:
-            correct_prefix = AUTOSKILLIT_SKILL_PREFIX + name
+            namespace = "autoskillit:" if sigil == SKILL_COMMAND_PREFIX else ""
         case SkillSource.BUNDLED_EXTENDED | SkillSource.PROJECT_LOCAL | SkillSource.THIRD_PARTY:
-            correct_prefix = SKILL_COMMAND_PREFIX + name
+            namespace = ""
         case _ as unreachable:
             assert_never(unreachable)
+    correct_prefix = f"{sigil}{namespace}{name}"
 
     # Reconstruct: replace the skill reference, preserve trailing arguments
     stripped = skill_command.strip()

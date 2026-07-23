@@ -16,6 +16,7 @@ from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.pipeline.timings import DefaultTimingLog
 from autoskillit.pipeline.tokens import DefaultTokenLog
+from tests.fakes import FakeSkillSessionContractStore
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -32,6 +33,7 @@ def test_tool_context_fields_accessible(tmp_path):
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
     assert ctx.gate.enabled is True
     assert isinstance(ctx.plugin_source, DirectInstall)
@@ -50,6 +52,7 @@ def test_tool_context_audit_isolation(tmp_path):
         runner=None,
         temp_dir=tmp_path / "a" / ".autoskillit" / "temp",
         project_dir=tmp_path / "a",
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
     ctx_b = ToolContext(
         config=AutomationConfig(),
@@ -61,6 +64,7 @@ def test_tool_context_audit_isolation(tmp_path):
         runner=None,
         temp_dir=tmp_path / "b" / ".autoskillit" / "temp",
         project_dir=tmp_path / "b",
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
     ctx_a.audit.record_failure(
         FailureRecord(
@@ -89,6 +93,7 @@ def test_gate_state_replacement(tmp_path):
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
     assert ctx.gate.enabled is False
     ctx.gate = DefaultGateState(enabled=True)
@@ -107,6 +112,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
     assert ctx.executor is None
     assert ctx.tester is None
@@ -224,6 +230,7 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
 
 
@@ -277,6 +284,7 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
     assert isinstance(ctx.background, DefaultBackgroundSupervisor)
 
@@ -357,6 +365,7 @@ def test_toolcontext_raises_typeerror_when_temp_dir_unset(tmp_path):
             plugin_source=DirectInstall(plugin_dir=tmp_path),
             runner=None,
             project_dir=tmp_path,
+            skill_session_contract_store=FakeSkillSessionContractStore(),
         )
 
 
@@ -371,6 +380,7 @@ def test_toolcontext_raises_typeerror_when_project_dir_unset(tmp_path):
             plugin_source=DirectInstall(plugin_dir=tmp_path),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
+            skill_session_contract_store=FakeSkillSessionContractStore(),
         )
 
 
@@ -385,6 +395,7 @@ def test_toolcontext_accepts_explicit_path_fields(tmp_path):
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
     assert ctx.temp_dir == tmp_path / ".autoskillit" / "temp"
     assert ctx.project_dir == tmp_path

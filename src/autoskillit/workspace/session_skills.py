@@ -12,6 +12,7 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -45,12 +46,17 @@ from autoskillit.workspace.skill_projection import (
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
+    EffectiveSkillCatalog,
     EffectiveSkillInvocation,
     ProjectLocalOverride,
     SkillInfo,
+    _compute_skill_closure,
     _skill_info_from_frontmatter,
     detect_project_local_overrides,
     override_names,
+)
+from autoskillit.workspace.skills import (
+    compute_skill_closure as compute_skill_closure,
 )
 
 if TYPE_CHECKING:
@@ -130,6 +136,11 @@ def _materialize_codex_profile_skill_infos(
         infos,
         SkillProjectionContext(
             execution_cwd=Path.cwd().resolve(),
+            catalog=EffectiveSkillCatalog(
+                skills=infos,
+                project_root=None,
+                execution_role=SkillExecutionRole.SESSION,
+            ),
             backend=backend,
             conventions=backend.conventions,
         ),
@@ -204,7 +215,10 @@ _ACTIVATE_DEPS_PATTERN = re.compile(r"^activate_deps:\s*\[([^\]]*)\]", re.MULTIL
 _SKILL_NS_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
 
 
-def _rewrite_skill_namespace_refs(content: str, resolver: SkillResolver) -> str:
+def _rewrite_skill_namespace_refs(
+    content: str,
+    resolver: SkillResolver | Mapping[str, SkillInfo],
+) -> str:
     """Rewrite /autoskillit:<name> → /<name> for BUNDLED_EXTENDED targets.
 
     BUNDLED_EXTENDED skills are delivered via --add-dir as bare /name; the
@@ -213,7 +227,7 @@ def _rewrite_skill_namespace_refs(content: str, resolver: SkillResolver) -> str:
 
     def _replace(m: re.Match) -> str:  # type: ignore[type-arg]
         name = m.group(1)
-        info = resolver.resolve(name)
+        info = resolver.get(name) if isinstance(resolver, Mapping) else resolver.resolve(name)
         if info is not None and info.source == SkillSource.BUNDLED_EXTENDED:
             return f"/{name}"
         return m.group(0)
@@ -406,56 +420,6 @@ def _should_inject_skill(
     return True
 
 
-def _build_pack_index(provider: SkillsDirectoryProvider) -> dict[str, set[str]]:
-    """Build a pack-name → set of member skill names index from the provider."""
-    index: dict[str, set[str]] = {}
-    for skill in provider.list_skills():
-        for cat in skill.categories:
-            index.setdefault(cat, set()).add(skill.name)
-    return index
-
-
-def compute_skill_closure(
-    skill_name: str,
-    provider: SkillsDirectoryProvider,
-) -> frozenset[str]:
-    """Return the transitive activate_deps closure for a skill, including the skill itself.
-
-    Returns ``frozenset()`` if ``skill_name`` does not resolve to a real skill.
-    Pack-name dependencies are expanded to all pack members. Unknown deps are silently dropped.
-    """
-    if provider.resolver.resolve(skill_name) is None:
-        return frozenset()
-    pack_index: dict[str, set[str]] | None = None
-    visited: set[str] = set()
-    resolved: set[str] = set()
-    queue: list[str] = [skill_name]
-    while queue:
-        name = queue.pop()
-        if name in visited:
-            continue
-        visited.add(name)
-        info = provider.resolver.resolve(name)
-        if info is None:
-            continue
-        if (
-            info.invalid_reason is not None
-            or info.execution_role is not SkillExecutionRole.SESSION
-        ):
-            continue
-        resolved.add(name)
-        for dep in info.activate_deps:
-            if dep in PACK_REGISTRY:
-                if pack_index is None:
-                    pack_index = _build_pack_index(provider)
-                for member in pack_index.get(dep, ()):
-                    if member not in visited:
-                        queue.append(member)
-            elif dep not in visited:
-                queue.append(dep)
-    return frozenset(resolved)
-
-
 def collect_closure_write_paths(
     closure: frozenset[str],
     resolver: SkillResolver,
@@ -557,6 +521,7 @@ class SkillsDirectoryProvider:
 
     def projection_context(
         self,
+        skill_info: SkillInfo,
         execution_cwd: Path,
         *,
         gating: bool | None = None,
@@ -565,6 +530,11 @@ class SkillsDirectoryProvider:
         """Build the shared execution-local projection context."""
         return SkillProjectionContext(
             execution_cwd=execution_cwd,
+            catalog=EffectiveSkillCatalog(
+                skills=(skill_info,),
+                project_root=execution_cwd.resolve(),
+                execution_role=skill_info.execution_role or SkillExecutionRole.SESSION,
+            ),
             backend=backend,
             conventions=backend.conventions if backend is not None else None,
             substitutions={
@@ -587,11 +557,17 @@ class SkillsDirectoryProvider:
         return project_agent_skill_document(
             skill_info,
             self.projection_context(
+                skill_info,
                 execution_cwd,
                 gating=gating,
                 backend=backend,
             ),
         ).content
+
+
+def default_skill_resolver() -> DefaultSkillResolver:
+    """Construct the standard resolver for non-injected session dispatch."""
+    return DefaultSkillResolver()
 
 
 class DefaultSessionSkillManager:
@@ -609,6 +585,7 @@ class DefaultSessionSkillManager:
         self._codex_root = codex_root
         self._session_roots: dict[str, Path] = {}
         self._session_skill_infos: dict[str, dict[str, SkillInfo]] = {}
+        self._available_skill_infos = {skill.name: skill for skill in provider.list_skills()}
         self._skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
     def compute_skill_closure(self, skill_name: str) -> frozenset[str]:
@@ -616,7 +593,7 @@ class DefaultSessionSkillManager:
 
         See :func:`compute_skill_closure` for semantics.
         """
-        return compute_skill_closure(skill_name, self._provider)
+        return _compute_skill_closure(skill_name, self._available_skill_infos)
 
     def materialize_invocation(
         self,
@@ -699,7 +676,7 @@ class DefaultSessionSkillManager:
         if config is None:
             tier2_skills: frozenset[str] = frozenset()
         else:
-            all_known = {s.name for s in self._provider.list_skills()}
+            all_known = set(self._available_skill_infos)
             configured = (
                 set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
             )
@@ -796,7 +773,7 @@ class DefaultSessionSkillManager:
         skills_base = session_skills_dir / self._skills_subdir
         shutil.rmtree(skills_base, ignore_errors=True)
         skills_base.mkdir(parents=True, exist_ok=True)
-        self._session_skill_infos[session_id] = {}
+        self._session_skill_infos[session_id] = dict(self._available_skill_infos)
 
         if backend is not None and backend.capabilities.mcp_config_capable:
             pre_launch_errors = backend.ensure_pre_launch()
@@ -815,7 +792,7 @@ class DefaultSessionSkillManager:
                     (info.name, info) for info in profile_infos
                 )
         format_rejected: set[str] = set()
-        for skill_info in self._provider.list_skills():
+        for skill_info in self._available_skill_infos.values():
             if allow_only is not None and skill_info.name not in allow_only:
                 logger.debug("init_session_allow_only_skip", skill=skill_info.name)
                 continue
@@ -877,7 +854,10 @@ class DefaultSessionSkillManager:
                     )
                 format_rejected.add(skill_info.name)
                 continue
-            content = _rewrite_skill_namespace_refs(content, self._provider.resolver)
+            content = _rewrite_skill_namespace_refs(
+                content,
+                self._session_skill_infos[session_id],
+            )
             skill_dir = skills_base / skill_info.name
             skill_dir.mkdir(exist_ok=True)
             atomic_write(skill_dir / "SKILL.md", content)
@@ -905,6 +885,7 @@ class DefaultSessionSkillManager:
                     precedence=precedence,
                 ),
             )
+            self._session_skill_infos[session_id][override.name] = override_info
             if (
                 override_info.invalid_reason is not None
                 or override_info.execution_role is not SkillExecutionRole.SESSION
@@ -932,7 +913,10 @@ class DefaultSessionSkillManager:
                 execution_cwd=project_dir or Path.cwd(),
                 backend=backend,
             )
-            content = _rewrite_skill_namespace_refs(content, self._provider.resolver)
+            content = _rewrite_skill_namespace_refs(
+                content,
+                self._session_skill_infos[session_id],
+            )
             parsed = parse_frontmatter_content(content)
             fm_errors = (
                 [f"frontmatter parse failed: {parsed.error}"]
@@ -962,7 +946,9 @@ class DefaultSessionSkillManager:
         if allow_only is not None and allow_only:
             written = {p.name for p in skills_base.iterdir() if p.is_dir()}
             bundled_names = {
-                s.name for s in self._provider.list_skills() if s.source == SkillSource.BUNDLED
+                s.name
+                for s in self._available_skill_infos.values()
+                if s.source == SkillSource.BUNDLED
             }
             gated_omitted = tier2_skills & allow_only
             achievable = (
@@ -1020,27 +1006,27 @@ class DefaultSessionSkillManager:
             / skill_name
         )
         skill_md = skill_dir / "SKILL.md"
-        exact_info = self._session_skill_infos.get(session_id, {}).get(skill_name)
+        session_infos = self._session_skill_infos.setdefault(
+            session_id,
+            dict(self._available_skill_infos),
+        )
+        exact_info = session_infos.get(skill_name)
         if not skill_md.exists():
-            if isinstance(self._provider, SkillsDirectoryProvider):
-                exact_info = self._provider.resolver.resolve(skill_name)
-                if (
-                    exact_info is None
-                    or exact_info.invalid_reason is not None
-                    or exact_info.execution_role is not SkillExecutionRole.SESSION
-                ):
-                    return False
-                fetched = self._provider.project_skill_info(
-                    exact_info,
-                    execution_cwd=Path.cwd(),
-                    gating=False,
+            if exact_info is None or exact_info.execution_role is not SkillExecutionRole.SESSION:
+                return False
+            if exact_info.invalid_reason is not None:
+                logger.warning(
+                    "skill_format_validation",
+                    skill=skill_name,
+                    error=exact_info.invalid_reason,
+                    context="activate_deps",
                 )
-            else:
-                # Compatibility for protocol-like providers used by embedders.
-                try:
-                    fetched = self._provider.get_skill_content(skill_name, gated=False)
-                except FileNotFoundError:
-                    return False
+                return False
+            fetched = self._provider.project_skill_info(
+                exact_info,
+                execution_cwd=Path.cwd(),
+                gating=False,
+            )
             parsed = parse_frontmatter_content(fetched)
             fm_errors = (
                 [f"frontmatter parse failed: {parsed.error}"]
@@ -1057,10 +1043,11 @@ class DefaultSessionSkillManager:
                     )
                 return False
             skill_dir.mkdir(parents=True, exist_ok=True)
-            fetched = _rewrite_skill_namespace_refs(fetched, self._provider.resolver)
+            fetched = _rewrite_skill_namespace_refs(
+                fetched,
+                session_infos,
+            )
             atomic_write(skill_md, fetched)
-            if exact_info is not None:
-                self._session_skill_infos.setdefault(session_id, {})[skill_name] = exact_info
             logger.debug("activate_deps_materialise", skill=skill_name)
 
         content = skill_md.read_text()
@@ -1086,33 +1073,37 @@ class DefaultSessionSkillManager:
         skills_base = (
             self._session_roots.get(session_id, self._root) / session_id / self._skills_subdir
         )
-        on_disk: set[str] = set()
         if skills_base.is_dir():
             for skill_dir in sorted(skills_base.iterdir()):
                 if not skill_dir.is_dir():
                     continue
                 name = skill_dir.name
-                on_disk.add(name)
                 if name in activated:
                     continue
                 info = self._session_skill_infos.get(session_id, {}).get(name)
-                if info is None:
-                    info = self._provider.resolver.resolve(name)
-                if (
-                    info
-                    and info.invalid_reason is None
-                    and info.execution_role is SkillExecutionRole.SESSION
-                    and pack_name in info.categories
-                ):
+                if info is not None:
+                    is_member = (
+                        info.invalid_reason is None
+                        and info.execution_role is SkillExecutionRole.SESSION
+                        and pack_name in info.categories
+                    )
+                else:
+                    parsed = parse_frontmatter_content(skill_dir.joinpath("SKILL.md").read_text())
+                    categories = (
+                        parsed.data.get("categories", ())
+                        if parsed.is_valid and parsed.data is not None
+                        else ()
+                    )
+                    is_member = pack_name in categories
+                if is_member:
                     self._activate_with_deps(session_id, name, activated, _is_root=False)
-        for info in self._provider.list_skills():
+        for info in self._session_skill_infos.get(session_id, {}).values():
             if (
                 info.invalid_reason is not None
                 or info.execution_role is not SkillExecutionRole.SESSION
                 or pack_name not in info.categories
+                or info.name in activated
             ):
-                continue
-            if info.name in on_disk or info.name in activated:
                 continue
             self._activate_with_deps(session_id, info.name, activated, _is_root=False)
 

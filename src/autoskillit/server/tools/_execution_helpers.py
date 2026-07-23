@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import json
 import os
@@ -22,10 +23,12 @@ from autoskillit.core import (
     CodingAgentBackend,
     SkillContractError,
     SkillExecutionRole,
+    SkillResolver,
     SkillSourceRef,
     SpillSpec,
     SubprocessResult,
     ValidatedAddDir,
+    WriteBehaviorSpec,
     extract_skill_name,
     get_logger,
     is_git_worktree,
@@ -35,9 +38,22 @@ from autoskillit.core import (
 )
 from autoskillit.execution import CaptureReadError, SkillSessionContract, summarize_capture
 from autoskillit.pipeline import canonical_step_name
+from autoskillit.recipe import (
+    OutcomeInvariantEntry,
+    ResultFieldSpec,
+    SkillContract,
+    SkillInput,
+    SkillOutput,
+    SuccessQualifierEntry,
+)
 from autoskillit.server._misc import SkillProjectionContext, _hook_config_overlay_path
 from autoskillit.server._response_budget import shape_json_response
 from autoskillit.server.tools._types import deny_envelope
+from autoskillit.workspace import (
+    EffectiveSkillInvocation,
+    SkillInfo,
+    default_skill_resolver,
+)
 
 logger = get_logger(__name__)
 
@@ -150,6 +166,11 @@ def build_skill_session_contract(
     invocation: object,
     projection_context: SkillProjectionContext,
     resolved_command: str,
+    expected_output_patterns: tuple[str, ...],
+    write_behavior: WriteBehaviorSpec,
+    read_only: bool,
+    completion_required: bool,
+    skill_contract_json: str,
 ) -> tuple[SkillSessionContract, dict[str, str]]:
     """Capture the exact projected invocation bytes before executor launch."""
     closure = tuple(getattr(invocation, "closure"))
@@ -161,7 +182,11 @@ def build_skill_session_contract(
     snapshot: dict[str, str] = {}
     projected_digests: dict[str, str] = {}
     canonical_digests: dict[str, str] = {}
-    source_refs: dict[str, str | SkillSourceRef] = {}
+    source_refs: dict[str, SkillSourceRef] = {}
+    member_roles: dict[str, SkillExecutionRole] = {}
+    member_capabilities: dict[str, frozenset[str]] = {}
+    member_activate_deps: dict[str, tuple[str, ...]] = {}
+    canonical_contents: dict[str, str] = {}
     session_path = Path(session_root.path)
     for member in closure:
         relative_path = Path(conventions.skills_subdir) / member.name / "SKILL.md"
@@ -169,7 +194,15 @@ def build_skill_session_contract(
         snapshot[relative_path.as_posix()] = content
         projected_digests[member.name] = hashlib.sha256(content.encode()).hexdigest()
         canonical_digests[member.name] = member.canonical_digest
-        source_refs[member.name] = member.source_ref or str(member.path)
+        if member.source_ref is None or member.execution_role is None:
+            raise SkillContractError(
+                f"Effective invocation member {member.name!r} lacks typed identity"
+            )
+        source_refs[member.name] = member.source_ref
+        member_roles[member.name] = member.execution_role
+        member_capabilities[member.name] = member.uses_capabilities
+        member_activate_deps[member.name] = member.activate_deps
+        canonical_contents[member.name] = member.canonical_content
     project_root = getattr(invocation, "project_root")
     if project_root is None:
         raise SkillContractError("Effective invocation requires a project root")
@@ -186,8 +219,148 @@ def build_skill_session_contract(
         execution_cwd=str(projection_context.execution_cwd.resolve()),
         backend=backend.name,
         resolved_command=resolved_command,
+        member_roles=member_roles,
+        member_capabilities=member_capabilities,
+        member_activate_deps=member_activate_deps,
+        canonical_contents=canonical_contents,
+        expected_output_patterns=expected_output_patterns,
+        write_behavior=write_behavior,
+        read_only=read_only,
+        completion_required=completion_required,
+        skill_contract_json=skill_contract_json,
+        projection_substitutions=tuple(sorted((projection_context.substitutions or {}).items())),
+        projection_gating=projection_context.gating,
+        projection_namespace=projection_context.namespace,
     )
     return contract, snapshot
+
+
+def serialize_skill_contract(skill_contract: object | None) -> str:
+    """Serialize the resolved recipe contract into immutable resume state."""
+    if skill_contract is None:
+        return ""
+    if isinstance(skill_contract, type) or not dataclasses.is_dataclass(skill_contract):
+        raise SkillContractError("Resolved skill contract must be a dataclass")
+    return json.JSONEncoder(sort_keys=True, separators=(",", ":")).encode(
+        dataclasses.asdict(typing.cast(typing.Any, skill_contract))
+    )
+
+
+def deserialize_skill_contract(payload: str) -> SkillContract | None:
+    """Reconstruct a recipe skill contract without consulting current metadata."""
+    if not payload:
+        return None
+    try:
+        data = json.loads(payload)
+        return SkillContract(
+            inputs=[SkillInput(**item) for item in data["inputs"]],
+            outputs=[SkillOutput(**item) for item in data["outputs"]],
+            expected_output_patterns=list(data.get("expected_output_patterns", [])),
+            pattern_examples=list(data.get("pattern_examples", [])),
+            write_behavior=data.get("write_behavior"),
+            write_expected_when=list(data.get("write_expected_when", [])),
+            read_only=bool(data.get("read_only", False)),
+            completion_required=bool(data.get("completion_required", False)),
+            result_fields=[ResultFieldSpec(**item) for item in data.get("result_fields", [])],
+            outcome_invariants=[
+                OutcomeInvariantEntry(**item) for item in data.get("outcome_invariants", [])
+            ],
+            success_qualifiers=[
+                SuccessQualifierEntry(**item) for item in data.get("success_qualifiers", [])
+            ],
+        )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise SkillContractError("Persisted skill execution contract is invalid") from exc
+
+
+def resolve_skill_dispatch_metadata(
+    tool_ctx: ToolContext,
+    skill_command: str,
+    stored_contract: SkillSessionContract | None,
+) -> tuple[list[str], WriteBehaviorSpec | None, SkillContract | None]:
+    """Resolve fresh metadata or restore the exact persisted execution metadata."""
+    if stored_contract is not None:
+        return (
+            list(stored_contract.expected_output_patterns),
+            stored_contract.write_behavior,
+            deserialize_skill_contract(stored_contract.skill_contract_json),
+        )
+    return (
+        list(tool_ctx.output_pattern_resolver(skill_command))
+        if tool_ctx.output_pattern_resolver
+        else [],
+        tool_ctx.write_expected_resolver(skill_command)
+        if tool_ctx.write_expected_resolver
+        else None,
+        tool_ctx.skill_contract_resolver(skill_command)
+        if tool_ctx.skill_contract_resolver
+        else None,
+    )
+
+
+def resolve_step_name_from_recipe(
+    skill_command: str,
+    active_recipe_steps: dict[str, object],
+) -> tuple[str, bool]:
+    """Match a command prefix to exactly one active recipe step."""
+    command_prefix = skill_command.split()[0] if skill_command.strip() else ""
+    if not command_prefix:
+        return ("", False)
+    matches = [
+        step_name
+        for step_name, step in active_recipe_steps.items()
+        if isinstance((with_args := getattr(step, "with_args", None)), dict)
+        and (step_command := with_args.get("skill_command", ""))
+        and step_command.split()[0] == command_prefix
+    ]
+    if len(matches) == 1:
+        return (matches[0], False)
+    return ("", len(matches) > 1)
+
+
+def rehydrate_skill_invocation(
+    contract: SkillSessionContract,
+    backend: CodingAgentBackend,
+) -> tuple[EffectiveSkillInvocation, SkillProjectionContext]:
+    """Rebuild the immutable effective graph exclusively from persisted state."""
+    closure = tuple(
+        SkillInfo(
+            name=name,
+            source=contract.source_refs[name].origin,
+            path=contract.source_refs[name].skill_path,
+            source_ref=contract.source_refs[name],
+            uses_capabilities=contract.member_capabilities[name],
+            execution_role=contract.member_roles[name],
+            activate_deps=contract.member_activate_deps[name],
+            canonical_content=contract.canonical_contents[name],
+            canonical_digest=contract.canonical_digests[name],
+        )
+        for name in contract.closure
+    )
+    by_name = {member.name: member for member in closure}
+    invocation = EffectiveSkillInvocation(
+        root=by_name[contract.root_name],
+        closure=closure,
+        capability_union=contract.capability_union,
+        project_root=Path(contract.project_root),
+        execution_role=contract.execution_role,
+    )
+    projection_context = SkillProjectionContext(
+        execution_cwd=Path(contract.execution_cwd),
+        invocation=invocation,
+        backend=backend,
+        conventions=backend.conventions,
+        substitutions=dict(contract.projection_substitutions),
+        gating=contract.projection_gating,
+        namespace=contract.projection_namespace,
+        projection_version=contract.projection_version,
+    )
+    return invocation, projection_context
+
+
+def make_project_skill_resolver() -> SkillResolver:
+    """Construct the standard project-aware resolver for a fresh dispatch."""
+    return default_skill_resolver()
 
 
 def validate_resumed_skill_contract(

@@ -114,6 +114,7 @@ async def _execute_fleet_run(
             sous_chef,
             SkillProjectionContext(
                 execution_cwd=ctx.project_dir.resolve(),
+                catalog=orchestrator_catalog,
                 backend=effective_backend,
                 conventions=(
                     effective_backend.conventions if effective_backend is not None else None

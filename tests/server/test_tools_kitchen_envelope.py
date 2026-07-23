@@ -19,6 +19,72 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("delivery_mode", ["ordinary_inline", "attested_inline"])
+@pytest.mark.anyio
+async def test_named_delivery_preserves_finalized_bytes_across_anonymous_guidance_boundary(
+    tmp_path,
+    monkeypatch,
+    delivery_mode,
+):
+    """Named delivery preserves finalized bytes and never injects sous-chef."""
+    from autoskillit.core import RecipeDeliveryDecision, RecipeDeliveryMode
+    from autoskillit.server._recipe_delivery import FinalizedRecipeResponse
+
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "",
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+    finalized = FinalizedRecipeResponse(
+        rendered=f"{delivery_mode}:byte-identical",
+        decision=RecipeDeliveryDecision(
+            mode=RecipeDeliveryMode(delivery_mode),
+            caller_requested_outer_tokens=None,
+            host_observed_requested_outer_tokens=None,
+            required_outer_tokens=1,
+            unnegotiated_tool_result_token_limit=10_000,
+            selected_result_token_limit=10_000,
+            contract_digest="sha256:" + ("0" * 64),
+            evidence_identity=None,
+            reason="boundary-test",
+            producer="open_kitchen",
+            payload_sha256="sha256:" + ("1" * 64),
+            receipt_status="not_reserved",
+        ),
+    )
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+                new=AsyncMock(),
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.finalize_recipe_delivery",
+                        return_value=finalized,
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.project_orchestrator_guidance",
+                            side_effect=AssertionError(
+                                "anonymous guidance crossed named delivery boundary"
+                            ),
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            delivered = await open_kitchen(name="demo", ctx=mock_ctx)
+
+    assert delivered.encode() == finalized.rendered.encode()
+
+
 # T-KITCHEN-1
 @pytest.mark.anyio
 async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):

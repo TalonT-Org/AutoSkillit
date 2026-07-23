@@ -365,6 +365,7 @@ def minimal_ctx(tmp_path):
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
+    from tests.fakes import FakeSkillSessionContractStore
 
     ctx = ToolContext(
         config=AutomationConfig(features={"fleet": True}),
@@ -376,6 +377,7 @@ def minimal_ctx(tmp_path):
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
     return ctx
 
@@ -494,7 +496,11 @@ def bind_test_skill_resume_contract(
     import hashlib
     from pathlib import Path
 
-    from autoskillit.core import SkillExecutionRole
+    from autoskillit.core import (
+        SkillExecutionRole,
+        SkillSource,
+        SkillSourceRef,
+    )
     from autoskillit.execution import (
         DefaultSkillSessionContractStore,
         SkillSessionContract,
@@ -508,7 +514,15 @@ def bind_test_skill_resume_contract(
     contract = SkillSessionContract(
         root_name=skill_name,
         execution_role=SkillExecutionRole.SESSION,
-        source_refs={skill_name: f"project_local:{relative_path}"},
+        source_refs={
+            skill_name: SkillSourceRef(
+                origin=SkillSource.PROJECT_LOCAL,
+                logical_name=skill_name,
+                skill_path=Path(tool_ctx.project_dir) / relative_path,
+                search_dir=".claude/skills",
+                precedence=0,
+            )
+        },
         closure=(skill_name,),
         capability_union=frozenset(),
         canonical_digests={skill_name: digest},
@@ -518,6 +532,10 @@ def bind_test_skill_resume_contract(
         execution_cwd=str(Path(cwd).resolve()),
         backend=tool_ctx.backend.name,
         resolved_command=resolved_command or f"/{skill_name}",
+        member_roles={skill_name: SkillExecutionRole.SESSION},
+        member_capabilities={skill_name: frozenset()},
+        member_activate_deps={skill_name: ()},
+        canonical_contents={skill_name: text},
     )
     store = DefaultSkillSessionContractStore(root=Path(tool_ctx.temp_dir) / "test-skill-contracts")
     correlation_key = store.create_provisional(

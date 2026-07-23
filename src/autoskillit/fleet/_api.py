@@ -17,6 +17,7 @@ from autoskillit.core import (
     FleetErrorCode,
     ProcessStaleError,
     SessionCheckpoint,  # noqa: F401, TC001
+    SkillExecutionRole,
     SkillResult,
     atomic_write,
     get_logger,
@@ -34,6 +35,7 @@ from autoskillit.fleet.state_types import (
     DispatchRejected,
     DispatchResult,
 )
+from autoskillit.workspace import default_skill_resolver, project_default_plugin_source
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -764,6 +766,15 @@ async def _run_dispatch(
             FleetErrorCode.FLEET_MANIFEST_MISSING,
             "Executor not configured.",
         )
+    food_truck_plugin_source = None
+    if _effective_backend is not None:
+        resolver = tool_ctx.skill_resolver or default_skill_resolver()
+        catalog = resolver.list_effective(tool_ctx.project_dir, SkillExecutionRole.ORCHESTRATOR)
+        food_truck_plugin_source = project_default_plugin_source(
+            cwd=tool_ctx.project_dir,
+            backend=_effective_backend,
+            skill_catalog=catalog,
+        )
 
     started_at = time.time()
     _dispatched_pid: list[int] = []
@@ -771,8 +782,6 @@ async def _run_dispatch(
     _dispatched_create_time: list[float] = []
     _dispatched_boot_id: list[str] = []
     _dispatched_session_id: list[str] = []
-    # Closure-scoped spawn error state (layer L2). See _write_pid docstring
-    # for why raising from on_spawn would not propagate.
     _spawn_error: list[str] = []
 
     # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
@@ -864,6 +873,7 @@ async def _run_dispatch(
                     orchestrator_prompt=prompt,
                     cwd=str(tool_ctx.project_dir),
                     completion_marker=completion_marker,
+                    plugin_source=food_truck_plugin_source,
                     prior_completion_markers=prior_completion_markers,
                     resume_session_id=resume_session_id,
                     resume_checkpoint=resume_checkpoint,

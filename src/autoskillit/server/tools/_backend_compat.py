@@ -16,6 +16,7 @@ from autoskillit.core import (
     SkillResult,
     ValidatedAddDir,
     extract_skill_name,
+    render_target_skill_command,
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,
@@ -33,6 +34,9 @@ class DirectSkillDispatch:
 
     add_dirs: tuple[ValidatedAddDir, ...]
     session_id: str
+    resolved_command: str
+    invocation: object
+    projection_context: SkillProjectionContext
 
     def cleanup(self, tool_ctx: ToolContext) -> None:
         if tool_ctx.session_skill_manager is not None:
@@ -217,6 +221,7 @@ def _prepare_direct_skill_dispatch(
     backend = tool_ctx.backend
     projection_context = SkillProjectionContext(
         execution_cwd=execution_cwd,
+        invocation=invocation,
         backend=backend,
         conventions=backend.conventions if backend is not None else None,
         substitutions={"{{AUTOSKILLIT_TEMP}}": str(execution_cwd / ".autoskillit" / "temp")},
@@ -235,4 +240,15 @@ def _prepare_direct_skill_dispatch(
             skill_command=skill_command,
             order_id=order_id,
         ).to_json()
-    return DirectSkillDispatch(add_dirs=(add_dir,), session_id=session_id), None
+    resolved_command = render_target_skill_command(
+        skill_command,
+        invocation.root.source_ref,
+        backend.conventions if backend is not None else None,
+    )
+    return DirectSkillDispatch(
+        add_dirs=(add_dir,),
+        session_id=session_id,
+        resolved_command=resolved_command,
+        invocation=invocation,
+        projection_context=projection_context,
+    ), None

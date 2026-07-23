@@ -1,10 +1,4 @@
-"""Headless Claude Code session orchestration.
-
-IL-1 module (execution/). Owns the full lifecycle of a headless claude CLI session:
-command preparation, subprocess invocation via the injected runner, and
-SkillResult construction.
-Public API: run_headless_core(skill_command, cwd, ctx, *, ...) -> SkillResult
-"""
+"""IL-1 headless session lifecycle and food-truck dispatch."""
 
 from __future__ import annotations
 
@@ -19,6 +13,7 @@ from autoskillit.core import (
     SKILL_COMMAND_DISPLAY_MAX,
     ClosureAuthoritySpec,
     CodingAgentBackend,
+    PluginSource,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     SkillSessionConfig,
@@ -378,6 +373,7 @@ class DefaultHeadlessExecutor:
         cwd: str,
         *,
         completion_marker: str,
+        plugin_source: PluginSource | None = None,
         prior_completion_markers: Sequence[str] | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
@@ -462,7 +458,7 @@ class DefaultHeadlessExecutor:
         backend = dispatch_backend
         cmd_spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
-            plugin_source=self._ctx.plugin_source,
+            plugin_source=cast(PluginSource, plugin_source),
             cwd=cwd,
             completion_marker=completion_marker,
             resume_session_id=resume_session_id,

@@ -12,9 +12,14 @@ from pathlib import Path
 import regex as re
 
 import autoskillit.cli._hooks as _hooks_mod
-from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
+from autoskillit.cli._init_helpers import (
+    _user_claude_json_path,
+    evict_direct_mcp_entry,
+    validate_public_plugin_projection,
+)
 from autoskillit.core import (
     DIRECT_INSTALL_CACHE_SUBDIR,
+    SkillExecutionRole,
     SkillSource,
     atomic_write,
     get_logger,
@@ -24,9 +29,9 @@ from autoskillit.core import (
 from autoskillit.hooks import generate_hooks_json
 from autoskillit.workspace import (
     DefaultSkillResolver,
+    EffectiveSkillCatalog,
     SkillProjectionContext,
     materialize_sanitized_plugin_root,
-    validate_sanitized_plugin_artifact,
 )
 
 logger = get_logger(__name__)
@@ -98,7 +103,10 @@ def _ensure_marketplace() -> Path:
             }
         ],
     }
-    atomic_write(plugin_dir / "marketplace.json", json.dumps(manifest, indent=2) + "\n")
+    atomic_write(
+        plugin_dir / "marketplace.json",
+        json.JSONEncoder(indent=2).encode(manifest) + "\n",
+    )
 
     public_plugin_root = marketplace_dir / "plugins" / "autoskillit"
     catalog = tuple(
@@ -108,22 +116,25 @@ def _ensure_marketplace() -> Path:
         pkg_dir,
         public_plugin_root,
         catalog,
-        SkillProjectionContext(execution_cwd=Path.cwd().resolve()),
+        SkillProjectionContext(
+            execution_cwd=Path.cwd().resolve(),
+            catalog=EffectiveSkillCatalog(
+                skills=catalog,
+                project_root=None,
+                execution_role=SkillExecutionRole.SESSION,
+            ),
+        ),
     )
     atomic_write(
         public_plugin_root / "hooks" / "hooks.json",
-        json.dumps(generate_hooks_json(), indent=2) + "\n",
+        json.JSONEncoder(indent=2).encode(generate_hooks_json()) + "\n",
     )
-    errors = validate_sanitized_plugin_artifact(
+    validate_public_plugin_projection(
         pkg_dir,
         public_plugin_root,
         private_manifest,
         catalog,
     )
-    if errors:
-        raise RuntimeError(
-            "refusing to publish invalid marketplace artifact: " + "; ".join(errors)
-        )
 
     return marketplace_dir
 

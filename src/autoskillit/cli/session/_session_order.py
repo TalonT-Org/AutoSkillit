@@ -163,6 +163,10 @@ def order(
             resume_spec=resume_spec,
             extra_env=_write_order_entry(Path.cwd(), None),
             required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+            skill_catalog=DefaultSkillResolver().list_effective(
+                Path.cwd(),
+                SkillExecutionRole.ORCHESTRATOR,
+            ),
         )
         return
 
@@ -219,6 +223,7 @@ def order(
                 project_dir=Path.cwd(),
                 extra_env=_write_order_entry(Path.cwd(), None),
                 required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+                skill_catalog=skill_catalog,
             )
             return
         elif resolved is None:
@@ -353,4 +358,5 @@ def order(
         resume_spec=resume_spec,
         project_dir=Path.cwd(),
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+        skill_catalog=skill_catalog,
     )

@@ -377,23 +377,27 @@ class TestCopyOnActivate:
         assert "# Make-Arch-Diag: Architecture Diagram Generation" in dependency
 
     def test_copy_on_activate_single_absent_skill(self, tmp_path: Path) -> None:
-        """Absence of SKILL.md triggers provider fetch;
-        content is ungated after materialisation."""
+        """An absent file is materialized from the manager's captured contract."""
         from unittest.mock import MagicMock
+
+        from autoskillit.core import SkillSource
+        from autoskillit.workspace import SkillInfo
 
         session_id = "test-copy-on-activate"
         provider = MagicMock()
-
-        def get_skill_content(name: str, gated: bool = False) -> str:
-            if name == "absent-skill" and gated is False:
-                return (
-                    "---\nname: absent-skill\n"
-                    "description: Absent skill for testing.\n"
-                    "disable-model-invocation: true\n---\n# Body"
-                )
-            raise FileNotFoundError(name)
-
-        provider.get_skill_content.side_effect = get_skill_content
+        content = (
+            "---\nname: absent-skill\n"
+            "description: Absent skill for testing.\n"
+            "disable-model-invocation: true\n---\n# Body"
+        )
+        info = SkillInfo(
+            name="absent-skill",
+            source=SkillSource.BUNDLED_EXTENDED,
+            path=tmp_path / "captured" / "absent-skill" / "SKILL.md",
+            canonical_content=content,
+        )
+        provider.list_skills.return_value = [info]
+        provider.project_skill_info.return_value = content
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
         result = mgr.activate_skill_deps(session_id, "absent-skill")
@@ -401,7 +405,7 @@ class TestCopyOnActivate:
         assert result is True
         skill_md = tmp_path / session_id / ".claude" / "skills" / "absent-skill" / "SKILL.md"
         assert skill_md.exists()
-        provider.get_skill_content.assert_called_once_with("absent-skill", gated=False)
+        provider.project_skill_info.assert_called_once()
         assert "disable-model-invocation" not in skill_md.read_text()
 
     def test_copy_on_activate_unknown_skill_returns_false(self, tmp_path: Path) -> None:
@@ -420,8 +424,11 @@ class TestCopyOnActivate:
         assert not skills_dir.exists() or not any(skills_dir.iterdir())
 
     def test_copy_on_activate_transitive_absent_dep(self, tmp_path: Path) -> None:
-        """Transitive dep absent from disk is fetched and ungated after materialisation."""
+        """A transitive dep is projected from the captured contract snapshot."""
         from unittest.mock import MagicMock
+
+        from autoskillit.core import SkillSource
+        from autoskillit.workspace import SkillInfo
 
         session_id = "test-transitive-absent"
         _write_skill_md(
@@ -432,18 +439,20 @@ class TestCopyOnActivate:
             "disable-model-invocation: true\n---\n# Root",
         )
 
-        def get_skill_content(name: str, gated: bool = False) -> str:
-            if name == "dep-skill" and not gated:
-                return (
-                    "---\nname: dep-skill\n"
-                    "description: Dep skill for testing.\n"
-                    "disable-model-invocation: true\n---\n# Dep Body"
-                )
-            raise FileNotFoundError(name)
-
         provider = MagicMock()
-        provider.get_skill_content.side_effect = get_skill_content
-        provider.resolver.resolve.return_value = None
+        content = (
+            "---\nname: dep-skill\n"
+            "description: Dep skill for testing.\n"
+            "disable-model-invocation: true\n---\n# Dep Body"
+        )
+        info = SkillInfo(
+            name="dep-skill",
+            source=SkillSource.BUNDLED_EXTENDED,
+            path=tmp_path / "captured" / "dep-skill" / "SKILL.md",
+            canonical_content=content,
+        )
+        provider.list_skills.return_value = [info]
+        provider.project_skill_info.return_value = content
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
         result = mgr.activate_skill_deps(session_id, "root-skill")
@@ -478,18 +487,13 @@ class TestCopyOnActivate:
             "disable-model-invocation: true\n---\n# Lens A",
         )
 
-        def get_skill_content(name: str, gated: bool = False) -> str:
-            if name == "arch-lens-b" and not gated:
-                return (
-                    "---\nname: arch-lens-b\n"
-                    "description: Arch lens B skill for testing.\n"
-                    "categories: [arch-lens]\n"
-                    "disable-model-invocation: true\n---\n# Lens B"
-                )
-            raise FileNotFoundError(name)
-
         provider = MagicMock()
-        provider.get_skill_content.side_effect = get_skill_content
+        b_content = (
+            "---\nname: arch-lens-b\n"
+            "description: Arch lens B skill for testing.\n"
+            "categories: [arch-lens]\n"
+            "disable-model-invocation: true\n---\n# Lens B"
+        )
         provider.list_skills.return_value = [
             SkillInfo(
                 name="arch-lens-a",
@@ -502,20 +506,12 @@ class TestCopyOnActivate:
                 source=SkillSource.BUNDLED_EXTENDED,
                 path=tmp_path / ".claude" / "skills" / "arch-lens-b" / "SKILL.md",
                 categories=frozenset({"arch-lens"}),
+                canonical_content=b_content,
             ),
         ]
-
-        def resolve_fn(name: str) -> SkillInfo | None:
-            if name == "arch-lens-a":
-                return SkillInfo(
-                    name="arch-lens-a",
-                    source=SkillSource.BUNDLED_EXTENDED,
-                    path=tmp_path / session_id / ".claude" / "skills" / "arch-lens-a" / "SKILL.md",
-                    categories=frozenset({"arch-lens"}),
-                )
-            return None
-
-        provider.resolver.resolve.side_effect = resolve_fn
+        provider.project_skill_info.side_effect = lambda skill_info, **_: (
+            skill_info.canonical_content
+        )
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
         result = mgr.activate_skill_deps(session_id, "parent-skill")
@@ -532,19 +528,25 @@ class TestCopyOnActivate:
         """Materialised skill content has disable-model-invocation removed after ungating."""
         from unittest.mock import MagicMock
 
+        from autoskillit.core import SkillSource
+        from autoskillit.workspace import SkillInfo
+
         session_id = "test-structural-gating"
         provider = MagicMock()
-
-        def get_skill_content(name: str, gated: bool = False) -> str:
-            if name == "gated-skill" and gated is False:
-                return (
-                    "---\nname: gated-skill\n"
-                    "description: Gated skill for testing.\n"
-                    "disable-model-invocation: true\n---\n# Gated Body"
-                )
-            raise FileNotFoundError(name)
-
-        provider.get_skill_content.side_effect = get_skill_content
+        content = (
+            "---\nname: gated-skill\n"
+            "description: Gated skill for testing.\n"
+            "disable-model-invocation: true\n---\n# Gated Body"
+        )
+        provider.list_skills.return_value = [
+            SkillInfo(
+                name="gated-skill",
+                source=SkillSource.BUNDLED_EXTENDED,
+                path=tmp_path / "captured" / "gated-skill" / "SKILL.md",
+                canonical_content=content,
+            )
+        ]
+        provider.project_skill_info.return_value = content
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
         result = mgr.activate_skill_deps(session_id, "gated-skill")

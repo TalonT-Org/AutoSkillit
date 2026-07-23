@@ -12,18 +12,20 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from threading import RLock
+from types import MappingProxyType
 from typing import Any
 
 import regex as re
 
 from autoskillit.core import (
-    SKILL_CAPABILITY_REGISTRY,
     SkillContractError,
     SkillExecutionRole,
     SkillSource,
     SkillSourceRef,
+    WriteBehaviorSpec,
     atomic_write,
     default_log_dir,
+    derive_backend_requirements,
     read_versioned_json,
     validate_skill_capability_roles,
     write_versioned_json,
@@ -35,7 +37,7 @@ __all__ = [
     "StoredSkillSessionContract",
 ]
 
-SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 1
+SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 2
 _STORE_MANIFEST_SCHEMA_VERSION = 1
 _MANIFEST_FILENAME = "manifest.json"
 _SNAPSHOT_DIRNAME = "snapshot"
@@ -49,7 +51,7 @@ class SkillSessionContract:
 
     root_name: str
     execution_role: SkillExecutionRole
-    source_refs: Mapping[str, str | SkillSourceRef]
+    source_refs: Mapping[str, SkillSourceRef]
     closure: tuple[str, ...]
     capability_union: frozenset[str]
     canonical_digests: Mapping[str, str]
@@ -59,22 +61,54 @@ class SkillSessionContract:
     execution_cwd: str
     backend: str
     resolved_command: str
+    member_roles: Mapping[str, SkillExecutionRole]
+    member_capabilities: Mapping[str, frozenset[str]]
+    member_activate_deps: Mapping[str, tuple[str, ...]]
+    canonical_contents: Mapping[str, str]
+    expected_output_patterns: tuple[str, ...] = ()
+    write_behavior: WriteBehaviorSpec = WriteBehaviorSpec()
+    read_only: bool = False
+    completion_required: bool = False
+    skill_contract_json: str = ""
+    projection_substitutions: tuple[tuple[str, str], ...] = ()
+    projection_gating: bool | None = None
+    projection_namespace: str | None = None
     schema_version: int = SKILL_SESSION_CONTRACT_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "source_refs", MappingProxyType(dict(self.source_refs)))
+        object.__setattr__(self, "member_roles", MappingProxyType(dict(self.member_roles)))
+        object.__setattr__(
+            self,
+            "member_capabilities",
+            MappingProxyType(
+                {
+                    name: frozenset(capabilities)
+                    for name, capabilities in self.member_capabilities.items()
+                }
+            ),
+        )
+        object.__setattr__(
+            self,
+            "member_activate_deps",
+            MappingProxyType(
+                {
+                    name: tuple(dependencies)
+                    for name, dependencies in self.member_activate_deps.items()
+                }
+            ),
+        )
+        object.__setattr__(
+            self,
+            "canonical_contents",
+            MappingProxyType(dict(self.canonical_contents)),
+        )
 
     @property
     def backend_requirements(self) -> frozenset[str]:
         """Derive backend constraints from the persisted capability union."""
         validate_skill_capability_roles(self.capability_union, self.execution_role)
-        return (
-            frozenset().union(
-                *(
-                    SKILL_CAPABILITY_REGISTRY[capability].required_backends
-                    for capability in self.capability_union
-                )
-            )
-            if self.capability_union
-            else frozenset()
-        )
+        return derive_backend_requirements(self.capability_union)
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,6 +358,33 @@ def _validate_contract(contract: SkillSessionContract) -> None:
         raise SkillContractError("Skill session contract closure is invalid")
     if set(contract.source_refs) != closure:
         raise SkillContractError("source_refs keys must exactly match closure")
+    if set(contract.member_roles) != closure:
+        raise SkillContractError("member_roles keys must exactly match closure")
+    if set(contract.member_capabilities) != closure:
+        raise SkillContractError("member_capabilities keys must exactly match closure")
+    if set(contract.member_activate_deps) != closure:
+        raise SkillContractError("member_activate_deps keys must exactly match closure")
+    if set(contract.canonical_contents) != closure:
+        raise SkillContractError("canonical_contents keys must exactly match closure")
+    for name in contract.closure:
+        source_ref = contract.source_refs[name]
+        if not isinstance(source_ref, SkillSourceRef):
+            raise SkillContractError(f"source reference for {name!r} must be typed")
+        if source_ref.logical_name != name:
+            raise SkillContractError(f"source reference logical name mismatch for {name!r}")
+        role = contract.member_roles[name]
+        capabilities = contract.member_capabilities[name]
+        validate_skill_capability_roles(capabilities, role)
+        if role is not contract.execution_role:
+            raise SkillContractError(f"member role mismatch for {name!r}")
+        canonical_digest = hashlib.sha256(contract.canonical_contents[name].encode()).hexdigest()
+        if canonical_digest != contract.canonical_digests[name]:
+            raise SkillContractError(f"canonical content digest mismatch for {name!r}")
+    member_capability_union = frozenset().union(
+        *(contract.member_capabilities[name] for name in contract.closure)
+    )
+    if member_capability_union != contract.capability_union:
+        raise SkillContractError("member capability union does not match contract")
     _validate_digest_map("canonical_digests", contract.canonical_digests, closure)
     _validate_digest_map("projected_digests", contract.projected_digests, closure)
     if contract.projection_version < 1:
@@ -375,11 +436,8 @@ def _validate_snapshot_mapping(
     return by_skill
 
 
-def _source_ref_to_dict(source_ref: str | SkillSourceRef) -> dict[str, Any]:
-    if isinstance(source_ref, str):
-        return {"kind": "opaque", "value": source_ref}
+def _source_ref_to_dict(source_ref: SkillSourceRef) -> dict[str, Any]:
     return {
-        "kind": "source_ref",
         "origin": source_ref.origin.value,
         "logical_name": source_ref.logical_name,
         "skill_path": str(source_ref.skill_path),
@@ -388,14 +446,7 @@ def _source_ref_to_dict(source_ref: str | SkillSourceRef) -> dict[str, Any]:
     }
 
 
-def _source_ref_from_dict(data: Mapping[str, Any]) -> str | SkillSourceRef:
-    if data.get("kind") == "opaque":
-        value = data.get("value")
-        if not isinstance(value, str):
-            raise ValueError("Invalid opaque skill source reference")
-        return value
-    if data.get("kind") != "source_ref":
-        raise ValueError("Invalid skill source reference kind")
+def _source_ref_from_dict(data: Mapping[str, Any]) -> SkillSourceRef:
     try:
         return SkillSourceRef(
             origin=SkillSource(str(data["origin"])),
@@ -426,6 +477,27 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
         "execution_cwd": contract.execution_cwd,
         "backend": contract.backend,
         "resolved_command": contract.resolved_command,
+        "member_roles": {name: role.value for name, role in sorted(contract.member_roles.items())},
+        "member_capabilities": {
+            name: sorted(capabilities)
+            for name, capabilities in sorted(contract.member_capabilities.items())
+        },
+        "member_activate_deps": {
+            name: list(dependencies)
+            for name, dependencies in sorted(contract.member_activate_deps.items())
+        },
+        "canonical_contents": dict(sorted(contract.canonical_contents.items())),
+        "expected_output_patterns": list(contract.expected_output_patterns),
+        "write_behavior": {
+            "mode": contract.write_behavior.mode,
+            "expected_when": list(contract.write_behavior.expected_when),
+        },
+        "read_only": contract.read_only,
+        "completion_required": contract.completion_required,
+        "skill_contract_json": contract.skill_contract_json,
+        "projection_substitutions": [list(item) for item in contract.projection_substitutions],
+        "projection_gating": contract.projection_gating,
+        "projection_namespace": contract.projection_namespace,
     }
 
 
@@ -455,6 +527,47 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             execution_cwd=str(data["execution_cwd"]),
             backend=str(data["backend"]),
             resolved_command=str(data["resolved_command"]),
+            member_roles={
+                str(name): SkillExecutionRole(str(role))
+                for name, role in data["member_roles"].items()
+            },
+            member_capabilities={
+                str(name): frozenset(str(capability) for capability in capabilities)
+                for name, capabilities in data["member_capabilities"].items()
+            },
+            member_activate_deps={
+                str(name): tuple(str(dependency) for dependency in dependencies)
+                for name, dependencies in data["member_activate_deps"].items()
+            },
+            canonical_contents={
+                str(name): str(content) for name, content in data["canonical_contents"].items()
+            },
+            expected_output_patterns=tuple(
+                str(pattern) for pattern in data.get("expected_output_patterns", [])
+            ),
+            write_behavior=WriteBehaviorSpec(
+                mode=(
+                    str(data.get("write_behavior", {}).get("mode"))
+                    if data.get("write_behavior", {}).get("mode") is not None
+                    else None
+                ),
+                expected_when=tuple(
+                    str(pattern)
+                    for pattern in data.get("write_behavior", {}).get("expected_when", [])
+                ),
+            ),
+            read_only=bool(data.get("read_only", False)),
+            completion_required=bool(data.get("completion_required", False)),
+            skill_contract_json=str(data.get("skill_contract_json", "")),
+            projection_substitutions=tuple(
+                (str(item[0]), str(item[1])) for item in data.get("projection_substitutions", [])
+            ),
+            projection_gating=data.get("projection_gating"),
+            projection_namespace=(
+                str(data["projection_namespace"])
+                if data.get("projection_namespace") is not None
+                else None
+            ),
             schema_version=int(data["schema_version"]),
         )
     except (KeyError, TypeError, ValueError, AttributeError) as exc:

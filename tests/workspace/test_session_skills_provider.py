@@ -95,13 +95,13 @@ def test_provider_does_not_inject_for_cook_session() -> None:
 def test_agent_skill_projector_preserves_public_document_and_stable_digest(
     tmp_path: Path,
 ) -> None:
-    from autoskillit.core import SkillSource
+    from autoskillit.core import SkillExecutionRole, SkillSource
     from autoskillit.workspace import (
         AgentSkillDocument,
         SkillProjectionContext,
         project_agent_skill_document,
     )
-    from autoskillit.workspace.skills import SkillInfo
+    from autoskillit.workspace.skills import EffectiveSkillCatalog, SkillInfo
 
     skill_md = tmp_path / "SKILL.md"
     skill_md.write_text(
@@ -122,7 +122,14 @@ def test_agent_skill_projector_preserves_public_document_and_stable_digest(
         source=SkillSource.BUNDLED_EXTENDED,
         path=skill_md,
     )
-    context = SkillProjectionContext(execution_cwd=tmp_path)
+    context = SkillProjectionContext(
+        execution_cwd=tmp_path,
+        catalog=EffectiveSkillCatalog(
+            skills=(skill_info,),
+            project_root=tmp_path,
+            execution_role=SkillExecutionRole.SESSION,
+        ),
+    )
 
     first = project_agent_skill_document(skill_info, context)
     second = project_agent_skill_document(skill_info, context)
@@ -149,6 +156,60 @@ def test_provider_string_api_returns_unified_agent_safe_projection() -> None:
     _assert_agent_safe(content)
     assert _frontmatter(content)["name"] == "make-arch-diag"
     assert "# Make-Arch-Diag: Architecture Diagram Generation" in content
+
+
+def test_review_pr_four_way_metadata_transport_projection_matrix(tmp_path: Path) -> None:
+    """Metadata removal is byte-inert; transport prose remains an independent input."""
+    from autoskillit.core import SkillExecutionRole, SkillSource
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillInfo,
+        SkillProjectionContext,
+        bundled_skills_extended_dir,
+        project_agent_skill_document,
+    )
+
+    canonical = (bundled_skills_extended_dir() / "review-pr" / "SKILL.md").read_text()
+    with_metadata = canonical.replace(
+        "uses_capabilities: [agent_model, github_api_write]",
+        "uses_capabilities: [agent_model, github_api_write, run_skill]",
+    )
+    transport_line = "- Called by the recipe orchestrator via `run_skill` after `open_pr_step`\n"
+    variants = {
+        "metadata_plus_transport": with_metadata,
+        "metadata_removed": canonical,
+        "transport_removed": with_metadata.replace(transport_line, ""),
+        "both_removed": canonical.replace(transport_line, ""),
+    }
+    projected: dict[str, str] = {}
+    for name, content in variants.items():
+        capabilities = (
+            frozenset({"agent_model", "github_api_write", "run_skill"})
+            if name in {"metadata_plus_transport", "transport_removed"}
+            else frozenset({"agent_model", "github_api_write"})
+        )
+        info = SkillInfo(
+            name="review-pr",
+            source=SkillSource.BUNDLED_EXTENDED,
+            path=tmp_path / name / "SKILL.md",
+            execution_role=SkillExecutionRole.SESSION,
+            uses_capabilities=capabilities,
+            canonical_content=content,
+        )
+        context = SkillProjectionContext(
+            execution_cwd=tmp_path,
+            catalog=EffectiveSkillCatalog(
+                skills=(info,),
+                project_root=tmp_path,
+                execution_role=SkillExecutionRole.SESSION,
+            ),
+        )
+        projected[name] = project_agent_skill_document(info, context).content
+        _assert_agent_safe(projected[name])
+
+    assert projected["metadata_plus_transport"] == projected["metadata_removed"]
+    assert projected["transport_removed"] == projected["both_removed"]
+    assert projected["metadata_plus_transport"] != projected["transport_removed"]
 
 
 @pytest.mark.parametrize(

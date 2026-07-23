@@ -62,11 +62,6 @@ def project_orchestrator_guidance(tool_ctx: Any) -> str:
         SkillExecutionRole.ORCHESTRATOR,
     )
     sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
-    if sous_chef is None:
-        sous_chef = tool_ctx.skill_resolver.resolve_effective(
-            "sous-chef",
-            tool_ctx.project_dir,
-        )
     if (
         sous_chef is None
         or sous_chef.invalid_reason is not None
@@ -78,6 +73,7 @@ def project_orchestrator_guidance(tool_ctx: Any) -> str:
         sous_chef,
         SkillProjectionContext(
             execution_cwd=tool_ctx.project_dir,
+            catalog=catalog,
             backend=backend,
             conventions=backend.conventions if backend is not None else None,
             gating=False,

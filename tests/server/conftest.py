@@ -207,6 +207,7 @@ def build_ctx(tmp_path):
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
+    from tests.fakes import FakeSkillSessionContractStore
 
     def _factory(**overrides):
         ctx = ToolContext(
@@ -219,6 +220,7 @@ def build_ctx(tmp_path):
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,
+            skill_session_contract_store=FakeSkillSessionContractStore(),
         )
         for field_name, value in overrides.items():
             setattr(ctx, field_name, value)

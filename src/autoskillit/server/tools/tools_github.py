@@ -665,7 +665,7 @@ async def _run_report_session(
     try:
         cfg = config.report_bug
         skill_result = await executor.run(
-            skill_command,
+            (direct_dispatch.resolved_command if direct_dispatch is not None else skill_command),
             cwd,
             model=model,
             step_name=step_name,

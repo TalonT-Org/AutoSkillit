@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -17,6 +18,7 @@ from autoskillit.core import (
     SkillResolver,
     SkillSource,
     SkillSourceRef,
+    derive_backend_requirements,
     get_logger,
     pkg_root,
     validate_skill_capability_roles,
@@ -30,7 +32,7 @@ from autoskillit.workspace.skill_format import (
 logger = get_logger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class SkillInfo:
     """One exact, typed skill machine contract selected from a source."""
 
@@ -49,20 +51,36 @@ class SkillInfo:
 
     def __post_init__(self) -> None:
         if self.source_ref is None:
-            self.source_ref = SkillSourceRef(
-                origin=self.source,
-                logical_name=self.name,
-                skill_path=self.path,
+            object.__setattr__(
+                self,
+                "source_ref",
+                SkillSourceRef(
+                    origin=self.source,
+                    logical_name=self.name,
+                    skill_path=self.path,
+                ),
             )
         if not self.canonical_content and self.path.is_file():
             try:
-                self.canonical_content = self.path.read_text(encoding="utf-8")
+                object.__setattr__(
+                    self,
+                    "canonical_content",
+                    self.path.read_text(encoding="utf-8"),
+                )
             except (OSError, UnicodeDecodeError):
                 pass
         if self.canonical_content and not self.canonical_digest:
-            self.canonical_digest = hashlib.sha256(self.canonical_content.encode()).hexdigest()
+            object.__setattr__(
+                self,
+                "canonical_digest",
+                hashlib.sha256(self.canonical_content.encode()).hexdigest(),
+            )
         if self.frontmatter is None and self.canonical_content:
-            self.frontmatter = parse_frontmatter_content(self.canonical_content)
+            object.__setattr__(
+                self,
+                "frontmatter",
+                parse_frontmatter_content(self.canonical_content),
+            )
 
     @property
     def canonical_bytes(self) -> bytes:
@@ -71,12 +89,7 @@ class SkillInfo:
     @property
     def backend_requirements(self) -> frozenset[str]:
         """Backend requirements derived solely from the declared capability set."""
-        known = self.uses_capabilities & SKILL_CAPABILITY_REGISTRY.keys()
-        if not known:
-            return frozenset()
-        return frozenset().union(
-            *(SKILL_CAPABILITY_REGISTRY[capability].required_backends for capability in known)
-        )
+        return derive_backend_requirements(self.uses_capabilities)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,16 +114,57 @@ class EffectiveSkillInvocation:
     @property
     def backend_requirements(self) -> frozenset[str]:
         """Derive backend constraints once from the invocation capability union."""
-        return (
-            frozenset().union(
-                *(
-                    SKILL_CAPABILITY_REGISTRY[capability].required_backends
-                    for capability in self.capability_union
+        return derive_backend_requirements(self.capability_union)
+
+
+def _build_pack_index(skills: Iterable[SkillInfo]) -> dict[str, set[str]]:
+    index: dict[str, set[str]] = {}
+    for skill in skills:
+        for category in skill.categories:
+            index.setdefault(category, set()).add(skill.name)
+    return index
+
+
+def compute_skill_closure(skill_name: str, provider: Any) -> frozenset[str]:
+    """Return the valid transitive dependency closure from one captured catalog."""
+    skills = {skill.name: skill for skill in provider.list_skills()}
+    return _compute_skill_closure(skill_name, skills)
+
+
+def _compute_skill_closure(
+    skill_name: str,
+    skills: Mapping[str, SkillInfo],
+) -> frozenset[str]:
+    """Compute a closure without consulting a current metadata resolver."""
+    if skill_name not in skills:
+        return frozenset()
+    pack_index: dict[str, set[str]] | None = None
+    visited: set[str] = set()
+    resolved: set[str] = set()
+    queue: list[str] = [skill_name]
+    while queue:
+        name = queue.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        info = skills.get(name)
+        if (
+            info is None
+            or info.invalid_reason is not None
+            or info.execution_role is not SkillExecutionRole.SESSION
+        ):
+            continue
+        resolved.add(name)
+        for dependency in info.activate_deps:
+            if dependency in PACK_REGISTRY:
+                if pack_index is None:
+                    pack_index = _build_pack_index(skills.values())
+                queue.extend(
+                    member for member in pack_index.get(dependency, ()) if member not in visited
                 )
-            )
-            if self.capability_union
-            else frozenset()
-        )
+            elif dependency not in visited:
+                queue.append(dependency)
+    return frozenset(resolved)
 
 
 def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
@@ -403,6 +457,15 @@ class DefaultSkillResolver:
             for skill in self._list_effective_unfiltered(normalized_root)
             if skill.invalid_reason is None and skill.execution_role is execution_role
         )
+        if execution_role is SkillExecutionRole.ORCHESTRATOR:
+            internal = tuple(
+                skill
+                for name in sorted(_INTERNAL_SKILLS)
+                if (skill := self.resolve_effective(name, normalized_root)) is not None
+                and skill.invalid_reason is None
+                and skill.execution_role is execution_role
+            )
+            skills = tuple(sorted((*skills, *internal), key=lambda skill: skill.name))
         return EffectiveSkillCatalog(
             skills=skills,
             project_root=normalized_root,

@@ -154,14 +154,15 @@ async def test_run_skill_materializes_exact_resolver_closure(
 
 
 @pytest.mark.anyio
-async def test_run_skill_without_resolver_fails_closed(tool_ctx_kitchen_open, monkeypatch) -> None:
-    """A missing resolver cannot become an unrestricted session launch."""
-    import json
+async def test_run_skill_without_injected_resolver_uses_default(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
+    """Production dispatch constructs its effective resolver when DI omits one."""
     from unittest.mock import MagicMock
 
     from tests.fakes import InMemoryHeadlessExecutor
 
-    mock_ssm = MagicMock()
+    mock_ssm = MagicMock(wraps=tool_ctx_kitchen_open.session_skill_manager)
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
     tool_ctx_kitchen_open.skill_resolver = None
 
@@ -169,12 +170,11 @@ async def test_run_skill_without_resolver_fails_closed(tool_ctx_kitchen_open, mo
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
-    result = json.loads(await run_skill("/test skill", "/tmp"))
+    await run_skill("/autoskillit:investigate the bug", "/tmp")
 
-    assert result["success"] is False
-    assert "resolver is not configured" in result["result"]
-    mock_ssm.materialize_invocation.assert_not_called()
-    assert executor.calls == []
+    mock_ssm.materialize_invocation.assert_called_once()
+    assert mock_ssm.materialize_invocation.call_args.args[1].root.name == "investigate"
+    assert executor.calls
 
 
 @pytest.mark.anyio
@@ -649,13 +649,17 @@ async def test_run_skill_exact_role_denial_precedes_all_downstream_work(
 async def test_fresh_dispatch_without_injected_resolver_fails_before_writes(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """A missing injected resolver is not an authorization bypass."""
+    """The production resolver rejects an unknown skill before any writes."""
+    from unittest.mock import MagicMock
+
     from tests.fakes import InMemoryHeadlessExecutor
 
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.skill_resolver = None
+    manager = MagicMock()
+    tool_ctx_kitchen_open.session_skill_manager = manager
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
@@ -663,5 +667,6 @@ async def test_fresh_dispatch_without_injected_resolver_fails_before_writes(
 
     payload = __import__("json").loads(result)
     assert payload["success"] is False
-    assert "resolver is not configured" in payload["result"]
+    assert "was not found in any effective source" in payload["result"]
+    manager.materialize_invocation.assert_not_called()
     assert executor.calls == []

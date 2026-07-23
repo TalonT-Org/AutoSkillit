@@ -133,16 +133,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/tools_github.py", 340),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 24),
-    # _init_helpers.py — ~/.claude.json (co-owned)
-    ("src/autoskillit/cli/_init_helpers.py", 392),
-    # _init_helpers.py — evict_direct_mcp_entry write-back to ~/.claude.json (co-owned)
-    ("src/autoskillit/cli/_init_helpers.py", 411),
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/_installed_plugins.py", 81),
-    # _marketplace.py — marketplace.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 101),
-    # _marketplace.py — hooks.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 113),
     # tools_config.py — hook config overlay dict (session-scoped, not schema-versioned)
     ("src/autoskillit/server/tools/tools_config.py", 50),
     # _update_checks.py — dismissal state file

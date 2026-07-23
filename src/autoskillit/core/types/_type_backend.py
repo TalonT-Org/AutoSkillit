@@ -52,6 +52,8 @@ class BackendConventions:
     skills_subdir: Path = Path("skills")
     #: Project-relative directories to scan for project-local skills.
     project_local_skill_search_dirs: tuple[str, ...] = ()
+    #: Native model-facing skill invocation sigil.
+    skill_sigil: str = "/"
 
 
 @dataclass(frozen=True, slots=True)

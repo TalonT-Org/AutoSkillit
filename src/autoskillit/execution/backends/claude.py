@@ -319,6 +319,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                 ".autoskillit/skills",
                 ".agents/skills",
             ),
+            skill_sigil=self.capabilities.skill_sigil,
         )
 
     def setup_session_dir(self, session_dir: Path) -> None:

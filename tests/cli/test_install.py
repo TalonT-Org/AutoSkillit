@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import shutil
@@ -63,6 +64,46 @@ class TestCLIInstall:
         assert public_plugin.is_dir()
         assert not public_plugin.is_symlink()
         assert (marketplace_dir / "plugins" / ".autoskillit.autoskillit-projection.json").is_file()
+
+    def test_install_public_documents_and_private_manifest_are_synchronized(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every installed public projection is safe and privately attested."""
+        import importlib as _importlib
+
+        from autoskillit.workspace import parse_frontmatter_content
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        marketplace = _importlib.import_module("autoskillit.cli._marketplace")
+        monkeypatch.setattr(marketplace, "is_git_worktree", lambda path: False)
+
+        marketplace_dir = marketplace._ensure_marketplace()
+        public_root = marketplace_dir / "plugins" / "autoskillit"
+        private_path = marketplace_dir / "plugins" / ".autoskillit.autoskillit-projection.json"
+        private = json.loads(private_path.read_text())
+        public_names = {path.name for path in (public_root / "skills").iterdir()}
+
+        assert set(private["skills"]) == public_names
+        for name, identity in private["skills"].items():
+            projected = (public_root / "skills" / name / "SKILL.md").read_text()
+            parsed = parse_frontmatter_content(projected)
+            assert parsed.is_valid and parsed.data is not None
+            assert {
+                "uses_capabilities",
+                "execution_role",
+                "backend_requirements",
+            }.isdisjoint(parsed.data)
+            assert {
+                "canonical_digest",
+                "projected_digest",
+                "source",
+                "source_path",
+                "uses_capabilities",
+                "execution_role",
+            } <= set(identity)
+            canonical = Path(identity["source_path"]).read_bytes()
+            assert hashlib.sha256(canonical).hexdigest() == identity["canonical_digest"]
+            assert hashlib.sha256(projected.encode()).hexdigest() == identity["projected_digest"]
 
     def test_install_projection_is_independent_of_test_file_location(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

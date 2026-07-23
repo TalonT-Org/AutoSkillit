@@ -437,6 +437,7 @@ from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_remaining as compute_remaining
+from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args

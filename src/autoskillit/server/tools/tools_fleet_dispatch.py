@@ -183,6 +183,7 @@ def _project_food_truck_sous_chef(
         sous_chef,
         SkillProjectionContext(
             execution_cwd=tool_ctx.project_dir.resolve(),
+            catalog=catalog,
             backend=backend,
             conventions=backend.conventions if backend is not None else None,
             gating=False,

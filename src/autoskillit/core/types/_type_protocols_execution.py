@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
+from ._type_plugin_source import PluginSource
 from ._type_results import (
     ClosureAuthoritySpec,
     InputSpec,
@@ -112,6 +113,7 @@ class HeadlessExecutor(Protocol):
         cwd: str,
         *,
         completion_marker: str,
+        plugin_source: PluginSource | None = None,
         prior_completion_markers: Sequence[str] | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,

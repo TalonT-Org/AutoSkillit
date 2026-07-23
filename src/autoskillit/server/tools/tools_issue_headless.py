@@ -326,7 +326,7 @@ async def prepare_issue(
                 )
             try:
                 result = await tool_ctx.executor.run(
-                    skill_command,
+                    dispatch.resolved_command,
                     str(tool_ctx.project_dir),
                     add_dirs=dispatch.add_dirs,
                     expected_output_patterns=expected_output_patterns,
@@ -457,7 +457,7 @@ async def enrich_issues(
                 )
             try:
                 result = await tool_ctx.executor.run(
-                    skill_command,
+                    dispatch.resolved_command,
                     str(tool_ctx.project_dir),
                     add_dirs=dispatch.add_dirs,
                     expected_output_patterns=expected_output_patterns,

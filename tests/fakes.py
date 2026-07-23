@@ -22,6 +22,7 @@ from autoskillit.core.types import (
     DatabaseReader,
     HeadlessExecutor,
     MergeQueueWatcher,
+    PluginSource,
     ProcessStaleError,
     RecipeNotFoundError,
     RecipeRepository,
@@ -34,6 +35,29 @@ from autoskillit.core.types import (
     TestRunner,
     WriteBehaviorSpec,
 )
+
+
+class FakeSkillSessionContractStore:
+    """Always-present protocol fake for contexts that never launch skill sessions."""
+
+    def create_provisional(self, *, contract: Any, snapshot: Any) -> str:
+        raise AssertionError("unexpected skill session contract persistence")
+
+    def observe_candidate(self, correlation_key: str, session_id: str) -> None:
+        raise AssertionError("unexpected skill session candidate")
+
+    def finalize(self, correlation_key: str, session_id: str) -> None:
+        raise AssertionError("unexpected skill session finalization")
+
+    def load(self, session_id: str) -> Any:
+        raise AssertionError("unexpected skill session resume")
+
+    def delete(self, session_id: str) -> None:
+        raise AssertionError("unexpected skill session deletion")
+
+    def discard(self, correlation_key: str) -> None:
+        raise AssertionError("unexpected skill session discard")
+
 
 # ---------------------------------------------------------------------------
 # Shared side-effect resolution helper
@@ -116,6 +140,7 @@ class DispatchFoodTruckCall:
     orchestrator_prompt: str
     cwd: str
     completion_marker: str = ""
+    plugin_source: PluginSource | None = None
     resume_session_id: str | None = None
     resume_checkpoint: SessionCheckpoint | None = None
     model: str = ""
@@ -283,6 +308,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         cwd: str,
         *,
         completion_marker: str,
+        plugin_source: PluginSource | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",
@@ -318,6 +344,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 orchestrator_prompt=orchestrator_prompt,
                 cwd=cwd,
                 completion_marker=completion_marker,
+                plugin_source=plugin_source,
                 resume_session_id=resume_session_id,
                 resume_checkpoint=resume_checkpoint,
                 model=model,

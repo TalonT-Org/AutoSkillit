@@ -143,8 +143,10 @@ def _probe_prompt(workspace: Path) -> str:
         "ingredients_only=true. Then call load_recipe with name=remediation and omit "
         "delivery_request because no protected host values were supplied. The result "
         "must be a bounded recipe_pull envelope. Call get_recipe_section with "
-        "section=content and copy every immutable identity field from recipe_pull "
-        "unchanged. After that tool result, respond with exactly one line beginning "
+        "section=content, part=0, and copy every immutable identity field from recipe_pull "
+        "unchanged. While has_more is true, call it again with next_part and the same "
+        "identity until every content chunk has been returned. Then respond with exactly "
+        "one line beginning "
         "RECIPE-PROBE-COMPLETE and include body_sha256=<the recipe_pull body_sha256>, "
         "has_more=<the pull result has_more>, and protected_host_evidence=unavailable. "
         f"The workspace is {workspace}."
@@ -205,8 +207,44 @@ def _run_live_probe(tmp_path: Path) -> tuple[_RecipeProbeObservation, str]:
     assert pulls, "live Codex probe did not retain a get_recipe_section result"
     recipe_pull = envelopes[-1]["recipe_pull"]
     assert isinstance(recipe_pull, dict)
-    pull = pulls[-1]
     body_sha256 = recipe_pull.get("body_sha256")
+    payload_sha256 = recipe_pull.get("payload_sha256")
+    pull_parts: dict[int, dict[str, object]] = {}
+    for candidate in pulls:
+        if (
+            candidate.get("body_sha256") != body_sha256
+            or candidate.get("payload_sha256") != payload_sha256
+        ):
+            continue
+        byte_start = candidate.get("byte_start")
+        if not isinstance(byte_start, int):
+            continue
+        existing = pull_parts.get(byte_start)
+        if existing is not None:
+            assert existing == candidate, "duplicate pull offset returned conflicting content"
+        pull_parts[byte_start] = candidate
+    assert pull_parts, "live Codex probe did not retain pull chunks for the envelope identity"
+
+    reconstructed_parts: list[str] = []
+    expected_byte_start = 0
+    terminal_pull: dict[str, object] | None = None
+    for byte_start, pull_part in sorted(pull_parts.items()):
+        content = pull_part.get("content")
+        byte_end = pull_part.get("byte_end")
+        assert isinstance(content, str)
+        assert byte_start == expected_byte_start
+        assert isinstance(byte_end, int)
+        assert byte_end == byte_start + len(content.encode("utf-8"))
+        reconstructed_parts.append(content)
+        expected_byte_start = byte_end
+        if pull_part.get("has_more") is False:
+            terminal_pull = pull_part
+    assert terminal_pull is not None, "live Codex probe did not retain the terminal pull chunk"
+    assert terminal_pull.get("byte_total") == expected_byte_start
+    reconstructed_content = "".join(reconstructed_parts)
+    reconstructed_body_sha256 = (
+        "sha256:" + hashlib.sha256(reconstructed_content.encode("utf-8")).hexdigest()
+    )
     messages = _agent_messages(transcript)
     final_message = messages[-1] if messages else ""
     events = _transcript_events(transcript)
@@ -250,8 +288,10 @@ def _run_live_probe(tmp_path: Path) -> tuple[_RecipeProbeObservation, str]:
         },
         outer={"raw_pre_truncation_bytes": None},
         retained={
-            "body_sha256": pull.get("body_sha256"),
-            "has_more": pull.get("has_more"),
+            "body_sha256": terminal_pull.get("body_sha256"),
+            "reconstructed_body_sha256": reconstructed_body_sha256,
+            "content_bytes": expected_byte_start,
+            "has_more": terminal_pull.get("has_more"),
             "truncation_markers": [
                 marker
                 for marker in ("[tool output truncated]", "[output truncated by transport]")
@@ -345,6 +385,9 @@ def test_live_codex_envelope_pull_and_next_request_retention(tmp_path: Path) -> 
     body_sha256 = observation.payload["body_sha256"]
     assert isinstance(body_sha256, str) and body_sha256.startswith("sha256:")
     assert observation.retained["body_sha256"] == body_sha256
+    assert observation.retained["reconstructed_body_sha256"] == body_sha256
+    assert int(observation.retained["content_bytes"]) > 0
+    assert observation.retained["has_more"] is False
     assert observation.retained["truncation_markers"] == []
     final_message = str(observation.next_request["final_message"])
     assert "RECIPE-PROBE-COMPLETE" in final_message

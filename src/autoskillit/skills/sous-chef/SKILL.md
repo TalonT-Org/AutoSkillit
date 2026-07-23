@@ -975,7 +975,14 @@ the backend's delivery bound), the envelope omits full step bodies. Call
 `get_recipe_section(section=<step_name>)` to pull the body of a specific step on
 demand — this is still the authoritative channel (backed by the same persisted
 artifact `load_recipe` wrote), not a raw-file read. For sections spanning multiple
-chunks, follow `has_more`/`next_part` until exhausted.
+pages, require one known `pagination_version` and stable `section_registry_sha256`,
+`section_sha256`, and `page_plan_sha256`; reject an unknown pagination_version or
+unknown content_format and do not guess. Reconstruct `raw-text` by concatenating
+contiguous byte ranges. For `json-array-page`, call `json.loads` on every page and
+extend in order. For `json-scalar-page`, call `json.loads` and concatenate decoded
+strings. For `json-element-fragment`, call `json.loads` on each string fragment,
+concatenate and verify the canonical element, then parse it once. Follow
+`has_more`/`next_part`; a terminal page must omit `next_part`.
 
 Similarly, NEVER read SKILL.md files directly from the filesystem. Use the Skill tool
 to load skill instructions — it applies runtime transformations (namespace rewriting,

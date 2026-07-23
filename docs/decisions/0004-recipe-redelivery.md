@@ -50,6 +50,25 @@ is relaxed, the `load_recipe` / `open_kitchen` / `get_recipe_section` end-to-end
 recovery path — including envelope re-delivery plus per-step pulls — must be tested as
 the recovery path.
 
+### Schema-driven pull continuation
+
+The fixed pullable sections are `content`, `ingredients_table`, `orchestration_rules`,
+`stop_step_semantics`, `errors`, and `warnings`; a validated post-prune step is a
+separate dynamic raw-YAML definition. Every page pins `pagination_version`,
+`section_registry_sha256`, `section_sha256`, and `page_plan_sha256`.
+
+The four exhaustive reconstruction algorithms are:
+
+- `raw-text`: verify contiguous UTF-8 byte ranges and concatenate content.
+- `json-array-page`: run `json.loads` on every complete array page and extend in order.
+- `json-scalar-page`: run `json.loads` on every string page and concatenate decoded text.
+- `json-element-fragment`: decode string fragments, concatenate one canonical element,
+  verify `element_sha256`, then parse that element once.
+
+Consumers reject an unknown pagination version or unknown content format, mixed
+identities, gaps, overlaps, duplicates, a page after the terminal page, or a terminal
+page carrying `next_part`. They must not guess or repair a malformed continuation.
+
 ## Consequences
 
 - `recipe_read_guard.py` error messages direct the agent to call `load_recipe` (and,

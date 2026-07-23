@@ -476,20 +476,25 @@ async def get_recipe_section(
 ) -> str:
     """Retrieve a recipe step or section from the persisted recipe artifact.
 
-    Returns the body for the named step or section, bounded to the
-    effective delivery limit. The body is the same YAML that
-    ``open_kitchen`` / ``load_recipe`` would have returned inline — the
-    envelope omits ``content`` and the pull tool serves it on demand.
+    Fixed sections are ``content``, ``ingredients_table``,
+    ``orchestration_rules``, ``stop_step_semantics``, ``errors``, and
+    ``warnings``. A validated ``post_prune_step_names`` entry selects raw
+    named-step YAML. Every page carries ``pagination_version``,
+    ``section_registry_sha256``, section/plan digests, and immutable payload
+    and body identities. Consumers must reject unknown versions or formats.
 
-    For sections larger than the bound, use ``part=1``, ``part=2``,
-    etc. to retrieve continuation chunks. The response includes
-    ``has_more=True`` and ``next_part=N`` when more chunks remain.
+    ``content_format`` selects exactly one reconstruction algorithm:
+    ``raw-text`` concatenates contiguous UTF-8 byte ranges;
+    ``json-scalar-page`` JSON-decodes and concatenates string pages;
+    ``json-array-page`` JSON-decodes and extends complete array pages; and
+    ``json-element-fragment`` JSON-decodes string fragments, concatenates and
+    verifies one canonical element, then JSON-decodes that element. Arrays may
+    interleave complete pages and oversized-element fragments.
 
     Args:
         section: The step or section name to retrieve. Must match a
             ``post_prune_step_names`` entry from the envelope, or the
-            special values ``"content"`` (full raw recipe YAML),
-            ``"ingredients_table"``, or ``"orchestration_rules"``.
+            fixed section names documented above.
         part: Continuation index (0-based). Default 0 returns the first
             chunk; pass the value from the previous response's
             ``next_part`` to retrieve the next chunk.
@@ -504,8 +509,8 @@ async def get_recipe_section(
         body_size_bytes: Exact recipe body byte size.
 
     Returns:
-        JSON with ``success``, ``section``, ``content``, ``has_more``,
-        and (when more chunks remain) ``next_part``.
+        A versioned JSON page. Nonterminal pages include ``next_part``;
+        terminal pages omit it.
 
     This tool requires the kitchen to be open (gated by open_kitchen).
 

@@ -17,6 +17,8 @@ from autoskillit.core import (
     OUTPUT_DISCIPLINE_COMBINED_SHA256,
     OUTPUT_DISCIPLINE_POLICY_VERSION,
     RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST,
+    RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
+    RECIPE_SECTION_REGISTRY_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     get_logger,
     read_versioned_json,
@@ -36,7 +38,7 @@ PROBE_SUITE_CONTRACT: tuple[str, ...] = (
     "generated-codex-child-v1",
     "deep-investigate-codex-v2",
     "deep-investigate-claude-200k-v2",
-    "codex-recipe-delivery-v1",
+    "codex-recipe-delivery-v2",
 )
 PROBE_SUITE_CONTRACT_DIGEST: str = hashlib.sha256(
     "\n".join(PROBE_SUITE_CONTRACT).encode("utf-8")
@@ -59,6 +61,8 @@ CODEX_RECIPE_PROBE_POLICY_COMPONENTS: tuple[str, ...] = (
     f"evidence-schema:{CODEX_RECIPE_DELIVERY_BUDGET.evidence_version}",
     f"attestation-registry:{_SUPPORTED_RECIPE_EVIDENCE_DIGEST}",
     f"surface-registry:{RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST}",
+    f"section-registry:{RECIPE_SECTION_REGISTRY_DIGEST}",
+    f"pagination-policy:{RECIPE_SECTION_PAGINATION_POLICY_DIGEST}",
     f"prompt:{CODEX_RECIPE_DELIVERY_CALLING_CONTRACT_DIGEST}",
     f"response-exemptions:{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}",
     "cli-pin:" + ".".join(str(value) for value in CODEX_LIMITS_LAST_VERIFIED_VERSION),

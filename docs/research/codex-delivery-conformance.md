@@ -2,7 +2,7 @@
 
 Status: blocked
 
-**Probe contract:** `codex-recipe-delivery-v1`
+**Probe contract:** `codex-recipe-delivery-v2`
 **Decision date:** 2026-07-22
 **Model identity:** `gpt-5.6-sol`
 
@@ -53,6 +53,11 @@ the retained body digest. With the isolated MCP process explicitly identified as
 probe retained the bounded `recipe_pull`, pulled content with the same `body_sha256`, found
 no transport-truncation marker, and echoed the digest in the terminal next-request canary.
 `task test-smoke-codex` passed the dedicated oracle on `gpt-5.6-sol`.
+
+The v2 oracle also creates multiple server-authoritative override warnings, including one
+oversized `warnings` element. It reconstructs the ordered list from `json-array-page` and
+`json-element-fragment` pages, verifies `section_sha256`, `element_sha256`, and
+`page_plan_sha256`, and requires terminal omission of `next_part`.
 
 This pass proves the fail-closed envelope/pull recovery path. It does not prove an
 authoritative selected outer limit, raw pre-truncation bytes, or a protected pre-call event,

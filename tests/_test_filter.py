@@ -749,6 +749,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_sub_recipe_validation.py",
             # Server file-level entries:
             "server/test_backend_ingredient_injection.py",
+            "server/test_explicit_backend_override.py",
+            "server/test_preflight_explicit_backend.py",
             "server/test_factory.py",
             "server/test_tools_issue_lifecycle.py",
             "server/test_tools_kitchen_envelope.py",

@@ -142,11 +142,28 @@ class TestExplicitOverrideProviderPrecedence:
         )
         tool_ctx_kitchen_open.recipe_name = "remediation"
 
-        # tool_ctx_kitchen_open leaves skill_resolver=None by default, so
-        # resolve_target_skill() is never invoked and target_name/skill_info
-        # stay None — _check_backend_compat receives target_name=None and
-        # returns None (no crash), which is fine: this test only exercises
-        # the backend_override precedence path, not skill compat checking.
+        from autoskillit.core import SkillExecutionRole, SkillSource
+        from autoskillit.workspace import EffectiveSkillInvocation, SkillInfo
+
+        root = SkillInfo(
+            name="investigate",
+            source=SkillSource.BUNDLED_EXTENDED,
+            path=tmp_path / "investigate" / "SKILL.md",
+            canonical_content=(
+                "---\nname: investigate\ndescription: Test skill.\n"
+                "execution_role: session\n---\n# Investigate\n"
+            ),
+        )
+        invocation = EffectiveSkillInvocation(
+            root=root,
+            closure=(root,),
+            capability_union=frozenset(),
+            project_root=tmp_path,
+            execution_role=SkillExecutionRole.SESSION,
+        )
+        resolver = MagicMock()
+        resolver.resolve_invocation.return_value = invocation
+        tool_ctx_kitchen_open.skill_resolver = resolver
 
         # Provider profile returns ANTHROPIC_BASE_URL — normally this would
         # trigger _provider_override=True and set backend_override="claude-code"
@@ -177,7 +194,7 @@ class TestExplicitOverrideProviderPrecedence:
 
         monkeypatch.setattr(executor, "run", spy_run)
 
-        json.loads(
+        result = json.loads(
             await run_skill(
                 "/autoskillit:investigate",
                 str(tmp_path),
@@ -188,7 +205,7 @@ class TestExplicitOverrideProviderPrecedence:
         # NOT "claude-code" from the provider routing
         assert captured.get("backend_override") == "codex", (
             f"Expected explicit override 'codex' to beat provider routing, "
-            f"got backend_override={captured.get('backend_override')!r}"
+            f"got backend_override={captured.get('backend_override')!r}: {result}"
         )
 
 

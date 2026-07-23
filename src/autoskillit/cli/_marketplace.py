@@ -30,6 +30,7 @@ from autoskillit.hooks import generate_hooks_json
 from autoskillit.workspace import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,
+    SkillCatalogEntry,
     SkillProjectionContext,
     materialize_sanitized_plugin_root,
 )
@@ -109,8 +110,12 @@ def _ensure_marketplace() -> Path:
     )
 
     public_plugin_root = marketplace_dir / "plugins" / "autoskillit"
-    catalog = tuple(
+    source_infos = tuple(
         skill for skill in DefaultSkillResolver().list_all() if skill.source is SkillSource.BUNDLED
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=tuple(SkillCatalogEntry.from_skill_info(skill) for skill in source_infos),
+        execution_role=SkillExecutionRole.SESSION,
     )
     private_manifest = materialize_sanitized_plugin_root(
         pkg_dir,
@@ -118,11 +123,7 @@ def _ensure_marketplace() -> Path:
         catalog,
         SkillProjectionContext(
             execution_cwd=Path.cwd().resolve(),
-            catalog=EffectiveSkillCatalog(
-                skills=catalog,
-                project_root=None,
-                execution_role=SkillExecutionRole.SESSION,
-            ),
+            catalog=catalog,
         ),
     )
     atomic_write(
@@ -133,7 +134,7 @@ def _ensure_marketplace() -> Path:
         pkg_dir,
         public_plugin_root,
         private_manifest,
-        catalog,
+        source_infos,
     )
 
     return marketplace_dir

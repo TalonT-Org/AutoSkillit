@@ -41,6 +41,8 @@ from autoskillit.core import (
     ClaudeDirectoryConventions,
     CmdSpec,
     CodexEventType,
+    DirectInstall,
+    MarketplaceInstall,
     NamedResume,
     NoResume,
     OutputFormat,
@@ -80,6 +82,17 @@ from autoskillit.execution.backends._codex_config import (
 )
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
+
+
+def _codex_home_from_plugin_source(plugin_source: PluginSource | None) -> str | None:
+    if plugin_source is None:
+        return None
+    if isinstance(plugin_source, MarketplaceInstall):
+        raise ValueError("Codex requires a sanitized DirectInstall plugin projection")
+    if isinstance(plugin_source, DirectInstall):
+        return str(plugin_source.plugin_dir)
+    raise TypeError(f"Unsupported plugin source: {type(plugin_source).__name__}")
+
 
 __all__ = [
     "CODEX_EXEC_FLAGS",
@@ -718,8 +731,7 @@ class CodexBackend(BackendCmdBuilderBase):
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]
             network_access = cfg.get("network_access", False)
-        if plugin_source is not None:
-            logger.warning("codex_plugin_source_discarded", plugin_source=str(plugin_source))
+        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
         if output_format != OutputFormat.JSON:
             logger.warning("codex_output_format_coerced")
         _has_prefix = (
@@ -782,6 +794,8 @@ class CodexBackend(BackendCmdBuilderBase):
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
         if add_dirs:
             extras["CODEX_HOME"] = add_dirs[0].path
+        elif projected_codex_home is not None:
+            extras["CODEX_HOME"] = projected_codex_home
         if exit_after_stop_delay_ms:
             extras.setdefault(
                 "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
@@ -844,8 +858,7 @@ class CodexBackend(BackendCmdBuilderBase):
         sentinel_contract: str = "",
         resume_message: str | None = None,
     ) -> CmdSpec:
-        if plugin_source is not None:
-            logger.warning("codex_plugin_source_discarded", plugin_source=str(plugin_source))
+        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
         if output_format != OutputFormat.STREAM_JSON:
             logger.warning("codex_output_format_coerced")
 
@@ -892,6 +905,8 @@ class CodexBackend(BackendCmdBuilderBase):
             for k, v in env_extras.items():
                 if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:
                     extras[k] = v
+        if projected_codex_home is not None:
+            extras["CODEX_HOME"] = projected_codex_home
         if exit_after_stop_delay_ms:
             extras.setdefault(
                 "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
@@ -995,6 +1010,10 @@ class CodexBackend(BackendCmdBuilderBase):
             merged_extras.update(env_extras)
         if add_dirs:
             merged_extras.setdefault("CODEX_HOME", str(add_dirs[0]))
+        else:
+            projected_codex_home = _codex_home_from_plugin_source(plugin_source)
+            if projected_codex_home is not None:
+                merged_extras.setdefault("CODEX_HOME", projected_codex_home)
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
         env = CodexEnvPolicy().build_env(
             base_env, extras=merged_extras, required=effective_required
@@ -1029,6 +1048,9 @@ class CodexBackend(BackendCmdBuilderBase):
         )
         if env_extras:
             resume_extras.update(env_extras)
+        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
+        if projected_codex_home is not None:
+            resume_extras["CODEX_HOME"] = projected_codex_home
         env = self.env_policy().build_env(
             filtered_base,
             extras=resume_extras,

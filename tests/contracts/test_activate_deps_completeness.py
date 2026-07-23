@@ -20,8 +20,11 @@ from autoskillit.workspace.session_skills import (
     _parse_write_paths,
     compute_skill_closure,
 )
+from autoskillit.workspace.skill_format import (
+    parse_frontmatter_content,
+    read_skill_frontmatter,
+)
 from autoskillit.workspace.skills import (
-    _read_skill_frontmatter,
     bundled_skills_dir,
     bundled_skills_extended_dir,
 )
@@ -89,12 +92,13 @@ def test_planning_skill_frontmatter_and_closures(
 
     rectify_md = _find_skill_md("rectify")
     assert rectify_md is not None
-    rectify_frontmatter = _read_skill_frontmatter(rectify_md)
-    assert set(rectify_frontmatter.get("uses_capabilities", [])) == {
+    rectify_frontmatter = read_skill_frontmatter(rectify_md)
+    assert rectify_frontmatter.data is not None
+    assert set(rectify_frontmatter.data.get("uses_capabilities", [])) == {
         "agent_model",
         "agent_subagent",
     }
-    assert "activate_deps" not in rectify_frontmatter
+    assert "activate_deps" not in rectify_frontmatter.data
     assert compute_skill_closure("rectify", provider) == frozenset({"rectify"})
 
 
@@ -197,7 +201,7 @@ def test_write_paths_use_autoskillit_temp_prefix() -> None:
             content = info.path.read_text()
         except OSError:
             continue
-        paths = _parse_write_paths(content)
+        paths = _parse_write_paths(parse_frontmatter_content(content))
         for wp in paths:
             if not wp.startswith("{{AUTOSKILLIT_TEMP}}/"):
                 violations.append(f"{info.name}: {wp!r}")

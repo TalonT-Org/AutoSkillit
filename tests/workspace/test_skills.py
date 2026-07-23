@@ -453,38 +453,38 @@ class TestSkillResolver:
 
 
 class TestSkillCategories:
-    # T6 — read_skill_categories() and SkillInfo.categories
+    # T6 — structured frontmatter categories and SkillInfo.categories
 
     def test_read_skill_categories_returns_frozenset_for_github_skill(self, tmp_path) -> None:
-        from autoskillit.workspace.skills import read_skill_categories
+        from autoskillit.workspace.skill_format import read_skill_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: open-pr\ncategories: [github]\n---\n# content")
-        result = read_skill_categories(skill_md)
+        result = frozenset((read_skill_frontmatter(skill_md).data or {}).get("categories", ()))
         assert result == frozenset({"github"})
 
     def test_read_skill_categories_returns_empty_when_no_categories_key(self, tmp_path) -> None:
-        from autoskillit.workspace.skills import read_skill_categories
+        from autoskillit.workspace.skill_format import read_skill_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: investigate\ndescription: foo\n---\n# content")
-        result = read_skill_categories(skill_md)
+        result = frozenset((read_skill_frontmatter(skill_md).data or {}).get("categories", ()))
         assert result == frozenset()
 
     def test_read_skill_categories_returns_empty_when_no_frontmatter(self, tmp_path) -> None:
-        from autoskillit.workspace.skills import read_skill_categories
+        from autoskillit.workspace.skill_format import read_skill_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("# No frontmatter here")
-        result = read_skill_categories(skill_md)
+        result = frozenset((read_skill_frontmatter(skill_md).data or {}).get("categories", ()))
         assert result == frozenset()
 
     def test_read_skill_categories_multiple_categories(self, tmp_path) -> None:
-        from autoskillit.workspace.skills import read_skill_categories
+        from autoskillit.workspace.skill_format import read_skill_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: foo\ncategories: [github, audit]\n---\n# body")
-        result = read_skill_categories(skill_md)
+        result = frozenset((read_skill_frontmatter(skill_md).data or {}).get("categories", ()))
         assert result == frozenset({"github", "audit"})
 
     def test_skill_info_has_categories_field(self) -> None:
@@ -670,14 +670,11 @@ def test_orchestrator_skill_cannot_be_readded_to_session_tier(tmp_path: Path) ->
 def test_activate_deps_are_resolvable():
     """Every activate_deps entry resolves to a known pack or known skill."""
     from autoskillit.core import PACK_REGISTRY
-    from autoskillit.workspace.session_skills import _parse_activate_deps
 
     resolver = DefaultSkillResolver()
     all_names = {s.name for s in resolver.list_all()}
     for skill_info in resolver.list_all():
-        content = skill_info.path.read_text()
-        deps = _parse_activate_deps(content)
-        for dep in deps:
+        for dep in skill_info.activate_deps:
             assert dep in PACK_REGISTRY or dep in all_names, (
                 f"Skill {skill_info.name!r} has unresolvable activate_dep: {dep!r}"
             )
@@ -989,3 +986,115 @@ class TestSkillInfoSchemaExhaustiveness:
             f"_skill_info_from_frontmatter via data.get(). "
             f"Add data.get() calls for these fields."
         )
+
+
+def test_effective_catalog_is_path_free(tmp_path: Path) -> None:
+    catalog = DefaultSkillResolver().list_effective(
+        tmp_path,
+        SkillExecutionRole.SESSION,
+    )
+
+    assert not hasattr(catalog, "project_root")
+    assert catalog.skills
+    for skill in catalog.skills:
+        assert not hasattr(skill, "path")
+        assert not hasattr(skill, "source_ref")
+        assert all(
+            not isinstance(value, Path)
+            for value in (
+                skill.source_identity.logical_name,
+                skill.source_identity.search_dir,
+                skill.source_identity.precedence,
+            )
+        )
+
+
+def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypatch) -> None:
+    import autoskillit.workspace.skill_projection as projection_module
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillProjectionContext,
+        project_agent_skill_document,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    skill_md = tmp_path / "SKILL.md"
+    skill_md.write_text(
+        "---\nname: parsed-once\ndescription: Parsed once.\n---\nbody\n",
+        encoding="utf-8",
+    )
+    info = _skill_info_from_frontmatter("parsed-once", SkillSource.PROJECT_LOCAL, skill_md)
+    entry = SkillCatalogEntry.from_skill_info(info)
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    monkeypatch.setattr(
+        projection_module,
+        "parse_frontmatter_content",
+        lambda _content: pytest.fail("projection reparsed canonical frontmatter"),
+    )
+
+    document = project_agent_skill_document(
+        entry,
+        SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog),
+    )
+
+    assert document.content.endswith("body\n")
+    assert entry.frontmatter is info.frontmatter
+    assert not hasattr(_skills_mod, "_read_skill_frontmatter")
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_reference"),
+    [
+        (SkillSource.BUNDLED, "/autoskillit:target"),
+        (SkillSource.BUNDLED_EXTENDED, "/target"),
+        (SkillSource.PROJECT_LOCAL, "/target"),
+        (SkillSource.THIRD_PARTY, "/target"),
+    ],
+)
+def test_projection_namespace_is_exhaustive_for_every_source(
+    tmp_path: Path,
+    source: SkillSource,
+    expected_reference: str,
+) -> None:
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillProjectionContext,
+        project_agent_skill_document,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    def write_skill(name: str, body: str, origin: SkillSource) -> SkillCatalogEntry:
+        skill_md = tmp_path / origin.value / name / "SKILL.md"
+        skill_md.parent.mkdir(parents=True, exist_ok=True)
+        skill_md.write_text(
+            f"---\nname: {name}\ndescription: Fixture.\n---\n{body}\n",
+            encoding="utf-8",
+        )
+        return SkillCatalogEntry.from_skill_info(
+            _skill_info_from_frontmatter(name, origin, skill_md)
+        )
+
+    root = write_skill("root", "Call /autoskillit:target now.", SkillSource.BUNDLED)
+    target = write_skill("target", "Target.", source)
+    catalog = EffectiveSkillCatalog(
+        skills=(root, target),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    projected = project_agent_skill_document(
+        root,
+        SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog),
+    )
+
+    assert f"Call {expected_reference} now." in projected.content
+    assert {member.value for member in SkillSource} == {
+        "bundled",
+        "bundled_extended",
+        "project_local",
+        "third_party",
+    }

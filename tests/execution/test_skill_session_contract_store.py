@@ -149,6 +149,7 @@ def test_store_rejects_projected_digest_tampering_and_deletes_only_explicitly(
         ),
         ({"canonical_contents": {"root": "changed canonical bytes"}}, "canonical"),
         ({"projection_version": 0}, "projection_version"),
+        ({"projection_version": 999}, "projection_version"),
     ],
 )
 def test_store_rejects_incompatible_machine_contracts_before_persistence(

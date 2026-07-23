@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from ._type_protocols_backend import CodingAgentBackend
+    pass
 
 from ._type_enums import SkillExecutionRole
 from ._type_results import CleanupResult, CloneResult, ValidatedAddDir
@@ -62,27 +62,17 @@ class CloneManager(Protocol):
 class SessionSkillManager(Protocol):
     """Protocol for managing per-session ephemeral skill directories."""
 
-    def init_session(
-        self,
-        session_id: str,
-        *,
-        cook_session: bool = False,
-        config: Any | None = None,
-        project_dir: Path | None = None,
-        recipe_packs: frozenset[str] | None = None,
-        recipe_features: frozenset[str] | None = None,
-        allow_only: frozenset[str] | None = None,
-        backend: CodingAgentBackend | None = None,
-    ) -> ValidatedAddDir: ...
-
-    def compute_skill_closure(self, skill_name: str) -> frozenset[str]: ...
-
-    def activate_skill_deps(self, session_id: str, skill_name: str) -> bool: ...
-
     def materialize_invocation(
         self,
         session_id: str,
         invocation: Any,
+        projection_context: Any,
+    ) -> ValidatedAddDir: ...
+
+    def init_session(
+        self,
+        session_id: str,
+        catalog: Any,
         projection_context: Any,
     ) -> ValidatedAddDir: ...
 

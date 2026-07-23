@@ -13,6 +13,7 @@ from autoskillit.execution._recording_skills import (
     restore_skill_snapshot,
     scan_skill_snapshots,
     snapshot_skill_dir,
+    validate_skill_snapshot_members,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -129,6 +130,56 @@ def test_restore_skill_snapshot_no_snapshot_returns_none(tmp_path: Path) -> None
     result = restore_skill_snapshot(snapshot_dir, ephemeral_root, "headless-missing")
 
     assert result is None
+
+
+@pytest.mark.parametrize(
+    "machine_field",
+    ["uses_capabilities", "execution_role", "backend_requirements"],
+)
+def test_restore_rejects_machine_authority_before_writing(
+    tmp_path: Path,
+    machine_field: str,
+) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    skill_dir = snapshot_dir / ".claude" / "skills" / "unsafe"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: unsafe\n{machine_field}: unsafe\n---\nbody\n",
+        encoding="utf-8",
+    )
+    ephemeral_root = tmp_path / "sessions"
+
+    with pytest.raises(ValueError, match="machine-only"):
+        restore_skill_snapshot(snapshot_dir, ephemeral_root, "headless-unsafe")
+
+    assert not ephemeral_root.exists()
+
+
+def test_restore_rejects_symlink_to_raw_canonical_tree(tmp_path: Path) -> None:
+    canonical_skill = tmp_path / "canonical" / "unsafe"
+    canonical_skill.mkdir(parents=True)
+    (canonical_skill / "SKILL.md").write_text("# raw canonical\n", encoding="utf-8")
+    skills_root = tmp_path / "snapshot" / ".claude" / "skills"
+    skills_root.mkdir(parents=True)
+    (skills_root / "unsafe").symlink_to(canonical_skill, target_is_directory=True)
+    ephemeral_root = tmp_path / "sessions"
+
+    with pytest.raises(ValueError, match="symlink"):
+        restore_skill_snapshot(tmp_path / "snapshot", ephemeral_root, "headless-symlink")
+
+    assert not ephemeral_root.exists()
+
+
+def test_replay_snapshot_inventory_is_bound_before_restore(tmp_path: Path) -> None:
+    snapshot_dir = tmp_path / "snapshot"
+    skills_root = snapshot_dir / ".claude" / "skills"
+    for name in ("root", "unexpected"):
+        skill_dir = skills_root / name
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="inventory"):
+        validate_skill_snapshot_members(snapshot_dir, frozenset({"root", "dependency"}))
 
 
 # --- T-REST-3: restore preserves gated and ungated skill content byte-for-byte ---

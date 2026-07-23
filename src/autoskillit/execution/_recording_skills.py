@@ -25,6 +25,14 @@ def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
     for entry in skills_dir.rglob("*"):
         if entry.is_symlink():
             raise ValueError(f"agent-safe skill snapshots must not contain symlinks: {entry}")
+    for skill_dir in skills_dir.iterdir():
+        if not skill_dir.is_dir():
+            raise ValueError(
+                f"agent-safe skill snapshots must contain only skill directories: {skill_dir}"
+            )
+        children = {child.name for child in skill_dir.iterdir()}
+        if children != {"SKILL.md"} or not (skill_dir / "SKILL.md").is_file():
+            raise ValueError(f"agent-safe skill directory must contain only SKILL.md: {skill_dir}")
     for skill_md in sorted(skills_dir.rglob("SKILL.md")):
         try:
             content = skill_md.read_text(encoding="utf-8")
@@ -48,6 +56,24 @@ def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
             raise ValueError(
                 f"agent-safe SKILL.md contains machine-only fields {leaked!r}: {skill_md}"
             )
+
+
+def validate_skill_snapshot_members(
+    snapshot_path: Path,
+    expected_names: frozenset[str],
+) -> None:
+    """Validate a replay snapshot against its fresh resolved invocation."""
+    skills_dir = snapshot_path / ".claude" / "skills"
+    if not skills_dir.is_dir():
+        raise ValueError("skill snapshot has no projected skills directory")
+    _assert_agent_safe_skill_tree(skills_dir)
+    actual_names = frozenset(entry.name for entry in skills_dir.iterdir())
+    if actual_names != expected_names:
+        raise ValueError(
+            "skill snapshot inventory does not match the effective invocation: "
+            f"missing={sorted(expected_names - actual_names)!r}, "
+            f"unexpected={sorted(actual_names - expected_names)!r}"
+        )
 
 
 def _extract_ephemeral_add_dir(cmd: list[str]) -> Path | None:

@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import re
-import time
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,7 +14,6 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
-from tests.workspace._helpers import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -98,6 +94,7 @@ def test_agent_skill_projector_preserves_public_document_and_stable_digest(
     from autoskillit.core import SkillExecutionRole, SkillSource
     from autoskillit.workspace import (
         AgentSkillDocument,
+        SkillCatalogEntry,
         SkillProjectionContext,
         project_agent_skill_document,
     )
@@ -122,17 +119,17 @@ def test_agent_skill_projector_preserves_public_document_and_stable_digest(
         source=SkillSource.BUNDLED_EXTENDED,
         path=skill_md,
     )
+    catalog_entry = SkillCatalogEntry.from_skill_info(skill_info)
     context = SkillProjectionContext(
         execution_cwd=tmp_path,
         catalog=EffectiveSkillCatalog(
-            skills=(skill_info,),
-            project_root=tmp_path,
+            skills=(catalog_entry,),
             execution_role=SkillExecutionRole.SESSION,
         ),
     )
 
-    first = project_agent_skill_document(skill_info, context)
-    second = project_agent_skill_document(skill_info, context)
+    first = project_agent_skill_document(catalog_entry, context)
+    second = project_agent_skill_document(catalog_entry, context)
 
     assert isinstance(first, AgentSkillDocument)
     _assert_agent_safe(first.content)
@@ -158,11 +155,50 @@ def test_provider_string_api_returns_unified_agent_safe_projection() -> None:
     assert "# Make-Arch-Diag: Architecture Diagram Generation" in content
 
 
+def test_materialization_rejects_wrong_role_before_filesystem_work(tmp_path: Path) -> None:
+    from autoskillit.core import SkillContractError, SkillExecutionRole, SkillSource
+    from autoskillit.workspace import (
+        EffectiveSkillInvocation,
+        SkillInfo,
+        SkillProjectionContext,
+    )
+
+    ephemeral_root = tmp_path / "ephemeral"
+    manager = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
+    skill = SkillInfo(
+        name="orchestrator",
+        source=SkillSource.PROJECT_LOCAL,
+        path=tmp_path / "source" / "SKILL.md",
+        execution_role=SkillExecutionRole.ORCHESTRATOR,
+        canonical_content=(
+            "---\nname: orchestrator\ndescription: Wrong role.\n"
+            "execution_role: orchestrator\n---\nbody\n"
+        ),
+    )
+    invocation = EffectiveSkillInvocation(
+        root=skill,
+        closure=(skill,),
+        capability_union=frozenset(),
+        project_root=tmp_path,
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    context = SkillProjectionContext(
+        execution_cwd=tmp_path,
+        invocation=invocation,
+    )
+
+    with pytest.raises(SkillContractError, match="SESSION"):
+        manager.materialize_invocation("wrong-role", invocation, context)
+
+    assert not ephemeral_root.exists()
+
+
 def test_review_pr_four_way_metadata_transport_projection_matrix(tmp_path: Path) -> None:
     """Metadata removal is byte-inert; transport prose remains an independent input."""
     from autoskillit.core import SkillExecutionRole, SkillSource
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
+        SkillCatalogEntry,
         SkillInfo,
         SkillProjectionContext,
         bundled_skills_extended_dir,
@@ -199,12 +235,11 @@ def test_review_pr_four_way_metadata_transport_projection_matrix(tmp_path: Path)
         context = SkillProjectionContext(
             execution_cwd=tmp_path,
             catalog=EffectiveSkillCatalog(
-                skills=(info,),
-                project_root=tmp_path,
+                skills=(SkillCatalogEntry.from_skill_info(info),),
                 execution_role=SkillExecutionRole.SESSION,
             ),
         )
-        projected[name] = project_agent_skill_document(info, context).content
+        projected[name] = project_agent_skill_document(context.catalog.skills[0], context).content
         _assert_agent_safe(projected[name])
 
     assert projected["metadata_plus_transport"] == projected["metadata_removed"]
@@ -212,432 +247,49 @@ def test_review_pr_four_way_metadata_transport_projection_matrix(tmp_path: Path)
     assert projected["metadata_plus_transport"] != projected["transport_removed"]
 
 
-@pytest.mark.parametrize(
-    ("backend_name", "skills_subdir"),
-    [
-        pytest.param(None, ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR, id="claude-code"),
-        pytest.param("codex", ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR, id="codex"),
-    ],
-)
-def test_session_skill_manager_creates_ephemeral_dir(
-    make_session_skill_manager,
-    backend_name: str | None,
-    skills_subdir: Path,
-) -> None:
-    backend = None
-    if backend_name == "codex":
-        backend = MagicMock()
-        backend.capabilities = _CODEX_CAPABILITIES
-        backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-        backend.ensure_pre_launch.return_value = []
-
-    mgr = make_session_skill_manager()
-    session_path = mgr.init_session("test-session-abc", cook_session=True, backend=backend)
-    assert session_path.exists()
-    assert session_path.is_dir()
-    skill_files = list((session_path / skills_subdir).glob("*/SKILL.md"))
-    assert len(skill_files) > 0
-    if backend_name == "codex":
-        assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
-
-
-@pytest.mark.parametrize(
-    ("backend_name", "skills_subdir"),
-    [
-        pytest.param(None, ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR, id="claude-code"),
-        pytest.param("codex", ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR, id="codex"),
-    ],
-)
-def test_session_manager_injects_disable_for_tier2(
-    make_session_skill_manager,
-    backend_name: str | None,
-    skills_subdir: Path,
-) -> None:
-    """Structural gating: tier2 skill directory is absent after init_session for all backends."""
-    from tests._helpers import make_skills_config, make_test_config
-
-    backend = None
-    if backend_name == "codex":
-        backend = MagicMock()
-        backend.capabilities = _CODEX_CAPABILITIES
-        backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-        backend.ensure_pre_launch.return_value = []
-
-    mgr = make_session_skill_manager()
-    config = make_test_config(
-        skills=make_skills_config(
-            tier1=["open-kitchen", "close-kitchen"],
-            tier2=["mermaid"],
-            tier3=[],
-        )
+def test_session_manager_materializes_exact_catalog(tmp_path: Path) -> None:
+    from autoskillit.core import SessionSkillManager, SkillExecutionRole, SkillSource
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillInfo,
+        SkillProjectionContext,
     )
-    session_path = mgr.init_session(
-        "test-session-xyz", cook_session=False, config=config, backend=backend
-    )
-    mermaid_dir = session_path / skills_subdir / "mermaid"
-    assert not mermaid_dir.exists()
-    if backend_name == "codex":
-        assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
 
-
-def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
-    """Cook session writes all skills including tier2 (no gating)."""
-    from tests._helpers import make_skills_config, make_test_config
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    config = make_test_config(
-        skills=make_skills_config(
-            tier1=["open-kitchen", "close-kitchen"],
-            tier2=["mermaid"],
-            tier3=[],
-        )
-    )
-    session_path = mgr.init_session("cook-session-123", cook_session=True, config=config)
-    mermaid_md = (
-        session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR / "mermaid" / "SKILL.md"
-    )
-    assert mermaid_md.exists()
-
-
-def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
-    from tests._helpers import make_skills_config, make_test_config
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    config = make_test_config(
-        skills=make_skills_config(
-            tier1=["open-kitchen", "close-kitchen"],
-            tier2=["mermaid"],
-            tier3=[],
-        )
-    )
-    mgr.init_session(
-        "session-toggle",
-        cook_session=False,
-        config=config,
-        allow_only=frozenset({"mermaid"}),
-    )
-    result = mgr.activate_skill_deps("session-toggle", "mermaid")
-    assert result is True
-    mermaid_md = (
-        tmp_path
-        / "session-toggle"
-        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-        / "mermaid"
-        / "SKILL.md"
-    )
-    content = mermaid_md.read_text()
-    fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    assert fm_match
-    fm = load_yaml(fm_match.group(1))
-    assert "disable-model-invocation" not in fm or fm.get("disable-model-invocation") is not True
-
-
-def test_activate_with_deps_materialises_absent_skill(
-    tmp_path: Path, make_session_skill_manager
-) -> None:
-    """When SKILL.md is absent (structural gating), _activate_with_deps copies it from provider."""
-    from tests._helpers import make_skills_config, make_test_config
-
-    mgr = make_session_skill_manager()
-    config = make_test_config(
-        skills=make_skills_config(
-            tier1=["open-kitchen", "close-kitchen"],
-            tier2=["mermaid"],
-            tier3=[],
-        )
-    )
-    mgr.init_session("session-materialise", cook_session=False, config=config)
-    mermaid_md = (
-        tmp_path
-        / "session-materialise"
-        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-        / "mermaid"
-        / "SKILL.md"
-    )
-    assert not mermaid_md.exists()
-
-    result = mgr.activate_skill_deps("session-materialise", "mermaid")
-    assert result is True
-    assert mermaid_md.exists()
-
-    content = mermaid_md.read_text()
-    fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    assert fm_match
-    fm = load_yaml(fm_match.group(1))
-    assert "disable-model-invocation" not in fm or fm.get("disable-model-invocation") is not True
-
-
-def test_activate_with_deps_already_present_removes_flag(
-    tmp_path: Path, make_session_skill_manager
-) -> None:
-    """When SKILL.md already exists with disable-model-invocation, activate removes the key."""
-    from tests._helpers import make_skills_config, make_test_config
-
-    mgr = make_session_skill_manager()
-    config = make_test_config(
-        skills=make_skills_config(
-            tier1=["open-kitchen", "close-kitchen"],
-            tier2=["mermaid"],
-            tier3=[],
-        )
-    )
-    mgr.init_session(
-        "session-flag-remove",
-        cook_session=False,
-        config=config,
-        allow_only=frozenset({"mermaid"}),
-    )
-    mermaid_md = (
-        tmp_path
-        / "session-flag-remove"
-        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-        / "mermaid"
-        / "SKILL.md"
-    )
-    assert mermaid_md.exists()
-
-    content = mermaid_md.read_text()
-    injected = content.replace("---\n", "---\ndisable-model-invocation: true\n", 1)
-    mermaid_md.write_text(injected)
-
-    result = mgr.activate_skill_deps("session-flag-remove", "mermaid")
-    assert result is True
-    updated = mermaid_md.read_text()
-    fm_match = re.match(r"^---\n(.*?)\n---", updated, re.DOTALL)
-    assert fm_match
-    fm = load_yaml(fm_match.group(1))
-    assert "disable-model-invocation" not in fm or fm.get("disable-model-invocation") is not True
-
-
-def test_init_session_gated_tier2_skill_dir_absent(tmp_path: Path) -> None:
-    """Gated tier2 skill has no directory at all; non-gated skills have SKILL.md."""
-    from tests._helpers import make_skills_config, make_test_config
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    config = make_test_config(
-        skills=make_skills_config(
-            tier1=["open-kitchen", "close-kitchen"],
-            tier2=["mermaid"],
-            tier3=[],
-        )
-    )
-    session_path = mgr.init_session("test-absent", cook_session=False, config=config)
-    skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-    # Tier2 directory absent
-    assert not (skills_base / "mermaid").exists()
-    # Non-gated BUNDLED_EXTENDED skills are written (BUNDLED skills go via --plugin-dir, not here)
-    assert (skills_base / "implement-worktree" / "SKILL.md").exists()
-
-
-def test_init_session_tier2_skill_present_when_in_allow_only(tmp_path: Path) -> None:
-    """Tier2 skill in allow_only is written; tier2 skill NOT in allow_only is absent."""
-    from tests._helpers import make_skills_config, make_test_config
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    config = make_test_config(
-        skills=make_skills_config(
-            tier1=["open-kitchen", "close-kitchen"],
-            tier2=["mermaid", "make-plan"],
-            tier3=[],
-        )
-    )
-    session_path = mgr.init_session(
-        "test-allow",
-        cook_session=False,
-        config=config,
-        allow_only=frozenset({"mermaid"}),
-    )
-    skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-    assert (skills_base / "mermaid" / "SKILL.md").exists()
-    assert not (skills_base / "make-plan").exists()
-
-
-def test_init_session_projects_project_local_override_instead_of_raw_copy(
-    tmp_path: Path,
-) -> None:
-    project_dir = tmp_path / "project"
-    override_dir = project_dir / ".claude" / "skills" / "local-safe"
-    override_dir.mkdir(parents=True)
-    (override_dir / "SKILL.md").write_text(
+    canonical = (
         "---\n"
-        "name: local-safe\n"
-        "description: Public local description.\n"
-        "uses_capabilities: [agent_model]\n"
+        "name: exact-skill\n"
+        "description: Exact catalog member.\n"
         "execution_role: session\n"
-        "backend_requirements: [claude-code]\n"
         "---\n"
-        "# Local override body\n"
+        "# Exact skill\n"
     )
-    session_root = tmp_path / "sessions"
+    entry = SkillCatalogEntry.from_skill_info(
+        SkillInfo(
+            name="exact-skill",
+            source=SkillSource.PROJECT_LOCAL,
+            path=tmp_path / "source" / "SKILL.md",
+            canonical_content=canonical,
+        )
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    context = SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog)
     manager = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
-        ephemeral_root=session_root,
+        ephemeral_root=tmp_path / "sessions",
     )
 
-    session_path = manager.init_session(
-        "local-projection",
-        cook_session=True,
-        project_dir=project_dir,
-        allow_only=frozenset({"local-safe"}),
-    )
+    result = manager.init_session("exact", catalog, context)
 
+    assert isinstance(manager, SessionSkillManager)
     projected = (
-        session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR / "local-safe" / "SKILL.md"
-    ).read_text()
-    _assert_agent_safe(projected)
-    assert _frontmatter(projected)["description"] == "Public local description."
-    assert projected.endswith("# Local override body\n")
-
-
-def test_cleanup_stale_removes_old_dirs(tmp_path: Path) -> None:
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    stale_dir = tmp_path / "stale-session"
-    stale_dir.mkdir()
-    os.utime(stale_dir, (time.time() - 90000, time.time() - 90000))  # 25h old
-    fresh_dir = tmp_path / "fresh-session"
-    fresh_dir.mkdir()
-    count = mgr.cleanup_stale(max_age_seconds=86400)
-    assert count == 1
-    assert not stale_dir.exists()
-    assert fresh_dir.exists()
-
-
-def test_init_session_backend_none_uses_claude_skills_subdir(tmp_path: Path) -> None:
-    """When backend is None (default), skills_base resolves to .claude/skills/."""
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    session_path = mgr.init_session("test-backend-none", cook_session=True)
-    skills_dir = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-    assert skills_dir.is_dir()
-    skill_files = list(skills_dir.glob("*/SKILL.md"))
-    assert len(skill_files) > 0
-
-
-def test_init_session_codex_backend_uses_codex_skills_subdir(
-    tmp_path: Path,
-) -> None:
-    """When conventions.skills_subdir == Path('skills'), skills_base resolves to skills/."""
-
-    codex_backend = MagicMock()
-    codex_backend.capabilities = _CODEX_CAPABILITIES
-    codex_backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-    codex_backend.ensure_pre_launch.return_value = []
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    session_path = mgr.init_session("test-codex-backend", cook_session=True, backend=codex_backend)
-
-    codex_skills = session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-    claude_skills = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-    assert codex_skills.is_dir()
-    skill_files = list(codex_skills.glob("*/SKILL.md"))
-    assert len(skill_files) > 0
-    assert not claude_skills.exists()
-
-
-def test_codex_session_root_is_persistent_not_tmpfs(tmp_path: Path) -> None:
-    """Codex backend sessions use the persistent codex_root, not the ephemeral /dev/shm root."""
-    ephemeral = tmp_path / "ephemeral"
-    codex = tmp_path / "codex-sessions"
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral, codex_root=codex)
-    codex_backend = MagicMock()
-    codex_backend.capabilities = _CODEX_CAPABILITIES
-    codex_backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-    codex_backend.ensure_pre_launch.return_value = []
-
-    result = mgr.init_session("codex-persistent", cook_session=True, backend=codex_backend)
-    session_path = Path(result.path)
-    assert session_path.parent == codex
-    assert not (ephemeral / "codex-persistent").exists()
-
-
-def test_claude_session_root_remains_ephemeral(tmp_path: Path) -> None:
-    """Claude Code (no session_dir_persistent) sessions still use the ephemeral root."""
-    ephemeral = tmp_path / "ephemeral"
-    codex = tmp_path / "codex-sessions"
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral, codex_root=codex)
-
-    result = mgr.init_session("claude-ephemeral", cook_session=True)
-    session_path = Path(result.path)
-    assert session_path.parent == ephemeral
-    assert not (codex / "claude-ephemeral").exists()
-
-
-def test_session_dir_survives_cleanup_when_codex_uses_fallback(tmp_path: Path) -> None:
-    """Session dir is created under codex_root for Codex backend.
-
-    The persistent path is not subject to eager cleanup because it is outside
-    the ephemeral root.
-    """
-    ephemeral = tmp_path / "ephemeral"
-    codex = tmp_path / "codex-sessions"
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral, codex_root=codex)
-    codex_backend = MagicMock()
-    codex_backend.capabilities = _CODEX_CAPABILITIES
-    codex_backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-    codex_backend.ensure_pre_launch.return_value = []
-
-    mgr.init_session("codex-survives", cook_session=True, backend=codex_backend)
-    assert (codex / "codex-survives" / "skills").is_dir()
-    skill_md_files = list((codex / "codex-survives" / "skills").rglob("SKILL.md"))
-    assert skill_md_files, "Expected at least one SKILL.md under session skills dir"
-    sample = skill_md_files[0]
-    assert sample.read_text(), "SKILL.md must not be empty"
-    assert str(sample).startswith(str(codex)), (
-        "SKILL.md must be under persistent codex root, not ephemeral"
+        Path(result.path)
+        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        / "exact-skill"
+        / "SKILL.md"
     )
-
-
-def test_cleanup_stale_sweeps_both_roots(tmp_path: Path) -> None:
-    """cleanup_stale sweeps both ephemeral and codex roots independently."""
-    ephemeral = tmp_path / "ephemeral"
-    codex = tmp_path / "codex-sessions"
-    ephemeral.mkdir()
-    codex.mkdir()
-
-    eph_stale = ephemeral / "eph-stale"
-    eph_fresh = ephemeral / "eph-fresh"
-    codex_stale = codex / "codex-stale"
-    codex_fresh = codex / "codex-fresh"
-    for d in (eph_stale, eph_fresh, codex_stale, codex_fresh):
-        d.mkdir()
-
-    now = time.time()
-    os.utime(eph_stale, (now - 90000, now - 90000))
-    os.utime(codex_stale, (now - 90000, now - 90000))
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral, codex_root=codex)
-    count = mgr.cleanup_stale(max_age_seconds=86400)
-    assert count == 2
-    assert not eph_stale.exists()
-    assert not codex_stale.exists()
-    assert eph_fresh.exists()
-    assert codex_fresh.exists()
-
-
-def test_init_session_returns_validated_add_dir_for_default_backend(tmp_path: Path) -> None:
-    """init_session() returns a ValidatedAddDir regardless of backend."""
-    from autoskillit.core import ValidatedAddDir
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    result = mgr.init_session("test-validated-return", cook_session=True)
-    assert isinstance(result, ValidatedAddDir)
-
-
-def test_default_session_skill_manager_satisfies_protocol() -> None:
-    """DefaultSessionSkillManager satisfies the SessionSkillManager Protocol."""
-    from autoskillit.core.types._type_protocols_workspace import SessionSkillManager
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, ephemeral_root=Path("/tmp/dummy"))
-    assert isinstance(mgr, SessionSkillManager)
+    assert projected.read_text().endswith("# Exact skill\n")
+    _assert_agent_safe(projected.read_text())

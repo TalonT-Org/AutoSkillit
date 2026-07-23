@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import SkillExecutionRole
+from autoskillit.workspace import EffectiveSkillCatalog, SkillCatalogEntry
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
@@ -163,6 +165,7 @@ def test_init_session_writes_substituted_skill_md_for_real_skill(
         (
             s
             for s in provider.list_skills()
+            if s.execution_role is SkillExecutionRole.SESSION
             if "{{AUTOSKILLIT_TEMP}}" in s.path.read_text(encoding="utf-8")
         ),
         key=lambda s: s.name,
@@ -172,7 +175,12 @@ def test_init_session_writes_substituted_skill_md_for_real_skill(
 
     ephemeral_root = tmp_path / "ephemeral"
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral_root)
-    validated = mgr.init_session(session_id="sess-1", cook_session=True)
+    catalog = EffectiveSkillCatalog(
+        skills=(SkillCatalogEntry.from_skill_info(target),),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    context = provider.catalog_projection_context(catalog, tmp_path)
+    validated = mgr.init_session("sess-1", catalog, context)
 
     written = Path(str(validated.path)) / ".claude" / "skills" / target.name / "SKILL.md"
     assert written.exists(), f"ephemeral SKILL.md not written at {written}"

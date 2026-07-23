@@ -16,6 +16,23 @@ import pytest
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
+
+def _materialize_session_catalog(
+    manager,
+    session_id: str,
+    project_root: Path,
+):
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace import DefaultSkillResolver
+
+    catalog = DefaultSkillResolver().list_effective(
+        project_root,
+        SkillExecutionRole.SESSION,
+    )
+    context = manager._provider.catalog_projection_context(catalog, project_root)
+    return manager.init_session(session_id, catalog, context)
+
+
 # ---------------------------------------------------------------------------
 # CC-DIR: ClaudeDirectoryConventions value pinning
 # Mirror of TestClaudeFlagValues in test_flag_contracts.py — same pattern.
@@ -89,7 +106,11 @@ class TestAddDirLayoutContract:
 
         provider = SkillsDirectoryProvider()
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        session_dir = mgr.init_session("cc001-contract-test", cook_session=True)
+        session_dir = _materialize_session_catalog(
+            mgr,
+            "cc001-contract-test",
+            tmp_path,
+        )
 
         # ".claude", "skills", "SKILL.md" are literal strings — NOT from any constant.
         discovered = list(session_dir.glob(".claude/skills/*/SKILL.md"))
@@ -108,7 +129,11 @@ class TestAddDirLayoutContract:
 
         provider = SkillsDirectoryProvider()
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        session_dir = mgr.init_session("cc001-flat-regression", cook_session=True)
+        session_dir = _materialize_session_catalog(
+            mgr,
+            "cc001-flat-regression",
+            tmp_path,
+        )
 
         # Only .claude/ is allowed as a top-level child of session_dir
         flat_skills = list(session_dir.glob("*/SKILL.md"))
@@ -283,84 +308,6 @@ class TestCookAddDirStructure:
         assert add_dir_seen, "Expected at least one --add-dir in command"
         assert not structure_errors, "\n".join(structure_errors)
 
-    def test_cook_add_dir_excludes_tier1_skills(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """Tier 1 skills (open-kitchen, close-kitchen) must NOT appear in --add-dir.
-
-        They are already registered via --plugin-dir. Presence in --add-dir
-        creates duplicate slash commands in the picker.
-        """
-        from autoskillit.workspace.session_skills import (
-            DefaultSessionSkillManager,
-            SkillsDirectoryProvider,
-        )
-
-        ephemeral_root = tmp_path / "ephemeral"
-        ephemeral_root.mkdir()
-        mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root=ephemeral_root)
-        skills_dir = mgr.init_session("ds002-tier1-check", cook_session=True)
-
-        # "open-kitchen" and "close-kitchen" are literal strings — NOT from any constant.
-        for tier1_name in ("open-kitchen", "close-kitchen"):
-            assert not (skills_dir / ".claude" / "skills" / tier1_name / "SKILL.md").exists(), (
-                f"Tier 1 skill '{tier1_name}' found in --add-dir ephemeral dir. "
-                "It is already served by --plugin-dir and must NOT be duplicated."
-            )
-
-
-# ---------------------------------------------------------------------------
-# CC-CHANNEL: Multi-channel skill uniqueness contract
-# ---------------------------------------------------------------------------
-
-
-class TestMultiChannelSkillUniqueness:
-    """Guard: no skill name may appear in more than one discovery channel.
-
-    Channel 1: --plugin-dir (BUNDLED skills)
-    Channel 2: --add-dir (ephemeral session dir, written by init_session)
-
-    Channel 3 (CWD) is no longer used for skill delivery — all project-local
-    overrides are delivered via Channel 2.
-    Overlap between Channel 1 and Channel 2 would produce duplicate slash commands.
-    """
-
-    @pytest.mark.parametrize("cook_session", [True, False], ids=["cook", "headless"])
-    def test_multi_channel_uniqueness_contract(self, tmp_path: Path, cook_session: bool) -> None:
-        from autoskillit.core.types import SkillSource
-        from autoskillit.workspace.session_skills import (
-            DefaultSessionSkillManager,
-            SkillsDirectoryProvider,
-        )
-        from autoskillit.workspace.skills import DefaultSkillResolver
-
-        project_dir = tmp_path / "project"
-        (project_dir / ".claude" / "skills" / "investigate").mkdir(parents=True)
-        (project_dir / ".claude" / "skills" / "investigate" / "SKILL.md").write_text("# custom")
-
-        mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-        skills_dir = mgr.init_session(
-            "chan-uniq", cook_session=cook_session, project_dir=project_dir
-        )
-
-        # Channel 1: BUNDLED skill names (served by --plugin-dir)
-        resolver = DefaultSkillResolver()
-        channel_1 = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED}
-
-        # Channel 2: skills written to ephemeral dir (bundled extended + project-local overrides)
-        skills_base = skills_dir / ".claude" / "skills"
-        channel_2 = (
-            {d.name for d in skills_base.iterdir() if d.is_dir()}
-            if skills_base.is_dir()
-            else set()
-        )
-
-        overlap_1_2 = channel_1 & channel_2
-
-        assert not overlap_1_2, (
-            f"Channel 1 (--plugin-dir) ∩ Channel 2 (--add-dir) overlap: {sorted(overlap_1_2)}"
-        )
-
 
 # ---------------------------------------------------------------------------
 # CC-005: .mcp.json structure contract
@@ -484,7 +431,11 @@ class TestRunSkillAddDirLayoutContract:
 
         provider = SkillsDirectoryProvider()
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        session_root = mgr.init_session("cc-headless-001-test", cook_session=False)
+        session_root = _materialize_session_catalog(
+            mgr,
+            "cc-headless-001-test",
+            tmp_path,
+        )
 
         # The returned ValidatedAddDir wraps a path; resolve to Path for globbing
         session_dir = Path(str(session_root))

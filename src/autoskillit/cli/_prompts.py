@@ -43,11 +43,7 @@ def _read_full_sous_chef(
     backend: Any | None = None,
 ) -> str:
     """Project the effective sous-chef contract for an orchestrator prompt."""
-    effective_root = (
-        project_dir
-        or (skill_catalog.project_root if skill_catalog is not None else None)
-        or Path.cwd()
-    ).resolve()
+    effective_root = (project_dir or Path.cwd()).resolve()
     catalog = skill_catalog or DefaultSkillResolver().list_effective(
         effective_root,
         SkillExecutionRole.ORCHESTRATOR,

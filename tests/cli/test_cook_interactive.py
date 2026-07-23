@@ -38,14 +38,11 @@ class TestCookInteractive:
         def fake_init_session(
             self,
             session_id: str,
-            *,
-            cook_session: bool = False,
-            config=None,
-            project_dir=None,
-            backend=None,
-            allow_only=None,
+            catalog,
+            projection_context,
         ) -> Path:
-            captured["cook_session"] = cook_session
+            captured["catalog"] = catalog
+            captured["projection_context"] = projection_context
             return fake_skills_dir
 
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
@@ -53,7 +50,7 @@ class TestCookInteractive:
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         cli.cook()
-        assert captured["cook_session"] is True
+        assert captured["projection_context"].catalog == captured["catalog"]
 
     # CH-2
     def test_cook_launches_claude_add_dir(
@@ -67,12 +64,8 @@ class TestCookInteractive:
         def fake_init_session(
             self,
             session_id: str,
-            *,
-            cook_session: bool = False,
-            config=None,
-            project_dir=None,
-            backend=None,
-            allow_only=None,
+            catalog,
+            projection_context,
         ) -> Path:
             return fake_skills_dir
 
@@ -100,12 +93,8 @@ class TestCookInteractive:
         def fake_init_session(
             self,
             session_id: str,
-            *,
-            cook_session: bool = False,
-            config=None,
-            project_dir=None,
-            backend=None,
-            allow_only=None,
+            catalog,
+            projection_context,
         ) -> Path:
             return fake_skills_dir
 
@@ -965,14 +954,10 @@ class TestCookInteractive:
         def fake_init_session(
             self,
             session_id: str,
-            *,
-            cook_session: bool = False,
-            config=None,
-            project_dir=None,
-            backend=None,
-            allow_only=None,
+            catalog,
+            projection_context,
         ) -> Path:
-            captured["backend"] = backend
+            captured["backend"] = projection_context.backend
             return fake_skills_dir
 
         class _FakeBackend(_ProjectionBackendStub):

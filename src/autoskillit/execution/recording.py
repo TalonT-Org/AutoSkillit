@@ -30,6 +30,7 @@ from autoskillit.execution._recording_skills import (
     _extract_ephemeral_add_dir,
     scan_skill_snapshots,
     snapshot_skill_dir,
+    validate_skill_snapshot_members,
 )
 from autoskillit.execution._recording_skills import (
     restore_skill_snapshot as _restore_skill_snapshot,
@@ -423,6 +424,17 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         if snap_path is None:
             return None
         return _restore_skill_snapshot(snap_path, ephemeral_root, session_id)
+
+    def validate_skill_snapshot(
+        self,
+        step_name: str,
+        expected_names: frozenset[str],
+    ) -> None:
+        """Reject replay snapshot drift before any restore-side filesystem work."""
+        snap_path = self.skill_snapshots.get(step_name)
+        if snap_path is None:
+            return
+        validate_skill_snapshot_members(snap_path, expected_names)
 
     async def __call__(
         self,

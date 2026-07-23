@@ -150,13 +150,17 @@ async def test_skill_backend_requirement_triggers_incompatibility_gate(
     import structlog
 
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.execution.backends.codex import CodexBackend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     fake_backend = MagicMock(spec=CodingAgentBackend)
     fake_backend.name = "codex"
-    fake_backend.capabilities.anthropic_provider_capable = False
+    concrete_backend = CodexBackend()
+    fake_backend.capabilities = concrete_backend.capabilities
+    fake_backend.conventions = concrete_backend.conventions
+    fake_backend.ensure_pre_launch.return_value = []
     tool_ctx_kitchen_open.backend = fake_backend
 
     _install_skill_invocation(
@@ -501,13 +505,17 @@ async def test_github_api_write_capability_skill_not_auto_routed(
     import structlog
 
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.execution.backends.codex import CodexBackend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     fake_backend = MagicMock(spec=CodingAgentBackend)
     fake_backend.name = "codex"
-    fake_backend.capabilities.anthropic_provider_capable = False
+    concrete_backend = CodexBackend()
+    fake_backend.capabilities = concrete_backend.capabilities
+    fake_backend.conventions = concrete_backend.conventions
+    fake_backend.ensure_pre_launch.return_value = []
     tool_ctx_kitchen_open.backend = fake_backend
     _install_skill_invocation(
         tool_ctx_kitchen_open,
@@ -532,7 +540,8 @@ async def test_github_api_write_capability_skill_not_auto_routed(
 
     data = json.loads(result)
     assert data.get("subtype") == "success", (
-        "github_api_write skill must run successfully on Codex — not auto-routed, not blocked"
+        "github_api_write skill must run successfully on Codex — "
+        f"not auto-routed, not blocked: {data}"
     )
     override_logs = [
         entry for entry in log_list if entry.get("event") == "backend_override_activated"

@@ -17,6 +17,7 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillResolver,
     SkillSource,
+    SkillSourceIdentity,
     SkillSourceRef,
     derive_backend_requirements,
     get_logger,
@@ -93,12 +94,71 @@ class SkillInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillCatalogEntry:
+    """Path-free machine contract used by role-derived downstream catalogs."""
+
+    name: str
+    source: SkillSource
+    source_identity: SkillSourceIdentity
+    categories: frozenset[str]
+    uses_capabilities: frozenset[str]
+    execution_role: SkillExecutionRole
+    activate_deps: tuple[str, ...]
+    canonical_content: str
+    canonical_digest: str
+    frontmatter: SkillFrontmatterParseResult
+    invalid_reason: str | None = None
+
+    @classmethod
+    def from_skill_info(cls, skill: SkillInfo) -> SkillCatalogEntry:
+        """Remove private source paths while preserving the parsed contract."""
+        if skill.invalid_reason is not None:
+            raise SkillContractError(
+                f"invalid contract for {skill.name!r}: {skill.invalid_reason}"
+            )
+        if skill.execution_role is None:
+            raise SkillContractError(f"skill {skill.name!r} has no valid execution role")
+        if skill.source_ref is None:
+            raise SkillContractError(f"skill {skill.name!r} has no effective source identity")
+        if skill.frontmatter is None:
+            raise SkillContractError(f"skill {skill.name!r} has no parsed frontmatter")
+        return cls(
+            name=skill.name,
+            source=skill.source,
+            source_identity=skill.source_ref.identity,
+            categories=skill.categories,
+            uses_capabilities=skill.uses_capabilities,
+            execution_role=skill.execution_role,
+            activate_deps=skill.activate_deps,
+            canonical_content=skill.canonical_content,
+            canonical_digest=skill.canonical_digest,
+            frontmatter=skill.frontmatter,
+        )
+
+    @property
+    def backend_requirements(self) -> frozenset[str]:
+        """Backend requirements derived solely from the declared capability set."""
+        return derive_backend_requirements(self.uses_capabilities)
+
+
+@dataclass(frozen=True, slots=True)
 class EffectiveSkillCatalog:
     """Immutable role-filtered view of every effective skill source."""
 
-    skills: tuple[SkillInfo, ...]
-    project_root: Path | None
+    skills: tuple[SkillCatalogEntry, ...]
     execution_role: SkillExecutionRole
+
+    def __post_init__(self) -> None:
+        for skill in self.skills:
+            if skill.invalid_reason is not None:
+                raise SkillContractError(
+                    f"invalid catalog contract for {skill.name!r}: {skill.invalid_reason}"
+                )
+            if skill.execution_role is not self.execution_role:
+                raise SkillContractError(
+                    f"catalog role {self.execution_role.value!r} cannot contain "
+                    f"{skill.execution_role.value!r} skill {skill.name!r}"
+                )
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,21 +225,6 @@ def _compute_skill_closure(
             elif dependency not in visited:
                 queue.append(dependency)
     return frozenset(resolved)
-
-
-def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
-    """Compatibility adapter for callers that only consume valid mappings."""
-    result = read_skill_frontmatter(path)
-    return result.data if result.is_valid and result.data is not None else {}
-
-
-def read_skill_categories(path: Path) -> frozenset[str]:
-    """Parse categories: from SKILL.md YAML frontmatter."""
-    data = _read_skill_frontmatter(path)
-    categories = data.get("categories", [])
-    if not isinstance(categories, list):
-        return frozenset()
-    return frozenset(str(c) for c in categories)
 
 
 _INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
@@ -452,14 +497,21 @@ class DefaultSkillResolver:
     ) -> EffectiveSkillCatalog:
         """Return a fresh, immutable catalog authorized for one exact role."""
         normalized_root = project_root.resolve() if project_root is not None else None
+        effective_skills = self._list_effective_unfiltered(normalized_root)
+        invalid = tuple(skill for skill in effective_skills if skill.invalid_reason is not None)
+        if invalid:
+            details = "; ".join(f"{skill.name!r}: {skill.invalid_reason}" for skill in invalid)
+            raise SkillContractError(
+                f"effective skill catalog contains invalid contracts: {details}"
+            )
         skills = tuple(
-            skill
-            for skill in self._list_effective_unfiltered(normalized_root)
-            if skill.invalid_reason is None and skill.execution_role is execution_role
+            SkillCatalogEntry.from_skill_info(skill)
+            for skill in effective_skills
+            if skill.execution_role is execution_role
         )
         if execution_role is SkillExecutionRole.ORCHESTRATOR:
             internal = tuple(
-                skill
+                SkillCatalogEntry.from_skill_info(skill)
                 for name in sorted(_INTERNAL_SKILLS)
                 if (skill := self.resolve_effective(name, normalized_root)) is not None
                 and skill.invalid_reason is None
@@ -468,7 +520,6 @@ class DefaultSkillResolver:
             skills = tuple(sorted((*skills, *internal), key=lambda skill: skill.name))
         return EffectiveSkillCatalog(
             skills=skills,
-            project_root=normalized_root,
             execution_role=execution_role,
         )
 

@@ -18,6 +18,7 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import (
+    SKILL_PROJECTION_VERSION,
     SkillContractError,
     SkillExecutionRole,
     SkillSource,
@@ -387,8 +388,11 @@ def _validate_contract(contract: SkillSessionContract) -> None:
         raise SkillContractError("member capability union does not match contract")
     _validate_digest_map("canonical_digests", contract.canonical_digests, closure)
     _validate_digest_map("projected_digests", contract.projected_digests, closure)
-    if contract.projection_version < 1:
-        raise SkillContractError("projection_version must be positive")
+    if contract.projection_version != SKILL_PROJECTION_VERSION:
+        raise SkillContractError(
+            f"unsupported projection_version {contract.projection_version}; "
+            f"expected {SKILL_PROJECTION_VERSION}"
+        )
     if not contract.project_root or not contract.execution_cwd:
         raise SkillContractError("project_root and execution_cwd are required")
     if not contract.backend or not contract.resolved_command:

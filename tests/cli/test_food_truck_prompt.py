@@ -41,7 +41,11 @@ def _projected_sous_chef() -> str:
     skill = next(item for item in catalog.skills if item.name == "sous-chef")
     return project_agent_skill_document(
         skill,
-        SkillProjectionContext(execution_cwd=project_root, gating=False),
+        SkillProjectionContext(
+            execution_cwd=project_root,
+            catalog=catalog,
+            gating=False,
+        ),
     ).content
 
 

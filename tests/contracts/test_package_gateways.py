@@ -247,7 +247,8 @@ def test_factory_make_context_accepts_plugin_dir(tmp_path):
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path), project_dir=tmp_path)
     assert isinstance(ctx.plugin_source, DirectInstall)
-    assert ctx.plugin_source.plugin_dir == tmp_path
+    assert ctx.plugin_source.plugin_dir != tmp_path
+    assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
 
 
 # ---------------------------------------------------------------------------

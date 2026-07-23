@@ -97,12 +97,13 @@ class TestCLIInstall:
                 "canonical_digest",
                 "projected_digest",
                 "source",
-                "source_path",
+                "logical_name",
+                "search_dir",
+                "precedence",
                 "uses_capabilities",
                 "execution_role",
             } <= set(identity)
-            canonical = Path(identity["source_path"]).read_bytes()
-            assert hashlib.sha256(canonical).hexdigest() == identity["canonical_digest"]
+            assert "source_path" not in identity
             assert hashlib.sha256(projected.encode()).hexdigest() == identity["projected_digest"]
 
     def test_install_projection_is_independent_of_test_file_location(

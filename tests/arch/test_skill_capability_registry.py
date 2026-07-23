@@ -6,21 +6,22 @@ import pytest
 
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
 from autoskillit.core.types._type_enums import SessionType, SkillExecutionRole
-from autoskillit.workspace.skills import _read_skill_frontmatter
+from autoskillit.workspace import SkillFrontmatterParseResult, read_skill_frontmatter
 from tests.arch._helpers import _iter_skill_dirs
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-def _all_skill_frontmatter() -> list[tuple[str, dict]]:
-    return [(name, _read_skill_frontmatter(skill_md)) for name, skill_md in _iter_skill_dirs()]
+def _all_skill_frontmatter() -> list[tuple[str, SkillFrontmatterParseResult]]:
+    return [(name, read_skill_frontmatter(skill_md)) for name, skill_md in _iter_skill_dirs()]
 
 
 def test_all_capability_keys_are_consumed():
     all_fm = _all_skill_frontmatter()
     used_caps: set[str] = set()
-    for _name, fm in all_fm:
-        for cap in fm.get("uses_capabilities", []):
+    for _name, parsed in all_fm:
+        assert parsed.data is not None
+        for cap in parsed.data.get("uses_capabilities", []):
             used_caps.add(cap)
     unused = set(SKILL_CAPABILITY_REGISTRY) - used_caps
     assert not unused, (
@@ -99,7 +100,8 @@ def test_no_unknown_capability_declared():
     all_fm = _all_skill_frontmatter()
     violations: list[str] = []
     for name, fm in all_fm:
-        for cap in fm.get("uses_capabilities", []):
+        assert fm.data is not None
+        for cap in fm.data.get("uses_capabilities", []):
             if cap not in SKILL_CAPABILITY_REGISTRY:
                 violations.append(f"{name}: unknown capability '{cap}'")
     assert not violations, "Unknown capabilities declared in SKILL.md files:\n" + "\n".join(

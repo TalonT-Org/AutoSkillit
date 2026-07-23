@@ -10,15 +10,19 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, assert_never
+
+import regex as re
 
 from autoskillit.core import (
+    SKILL_PROJECTION_VERSION,
     DirectInstall,
     MarketplaceInstall,
     PluginSource,
     SkillContractError,
     SkillExecutionRole,
     SkillSource,
+    SkillSourceIdentity,
     SkillSourceRef,
     atomic_write,
     dump_yaml_str,
@@ -31,6 +35,7 @@ from autoskillit.workspace.skill_format import parse_frontmatter_content
 from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
     EffectiveSkillInvocation,
+    SkillCatalogEntry,
     SkillInfo,
     _skill_info_from_frontmatter,
 )
@@ -51,6 +56,7 @@ __all__ = [
 ]
 
 _MACHINE_ONLY_KEYS = frozenset({"uses_capabilities", "execution_role", "backend_requirements"})
+_SKILL_NAMESPACE_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
 _CANONICAL_SKILL_DIRS = frozenset({"skills", "skills_extended"})
 _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
     {
@@ -67,6 +73,27 @@ _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
 )
 
 
+SkillContractRecord = SkillInfo | SkillCatalogEntry
+
+
+def _source_identity(skill: SkillContractRecord) -> SkillSourceIdentity:
+    if isinstance(skill, SkillCatalogEntry):
+        return skill.source_identity
+    if skill.source_ref is None:
+        raise SkillContractError(f"skill {skill.name!r} has no effective source identity")
+    return skill.source_ref.identity
+
+
+def _agent_skill_namespace(source: SkillSource) -> str:
+    match source:
+        case SkillSource.BUNDLED:
+            return "autoskillit:"
+        case SkillSource.BUNDLED_EXTENDED | SkillSource.PROJECT_LOCAL | SkillSource.THIRD_PARTY:
+            return ""
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 @dataclass(frozen=True, slots=True)
 class AgentSkillDocument:
     """One model-safe projection with identity bound to its canonical source."""
@@ -74,7 +101,7 @@ class AgentSkillDocument:
     content: str
     projected_digest: str
     canonical_digest: str
-    source_ref: SkillSourceRef
+    source_identity: SkillSourceIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +116,7 @@ class SkillProjectionContext:
     substitutions: Mapping[str, str] | None = None
     gating: bool | None = None
     namespace: str | None = None
-    projection_version: int = 1
+    projection_version: int = SKILL_PROJECTION_VERSION
 
     def __post_init__(self) -> None:
         if (self.catalog is None) == (self.invocation is None):
@@ -105,7 +132,7 @@ class SkillProjectionContext:
             )
 
     @property
-    def skills(self) -> tuple[SkillInfo, ...]:
+    def skills(self) -> tuple[SkillContractRecord, ...]:
         """Return the immutable effective skill set bound to this projection."""
         if self.invocation is not None:
             return self.invocation.closure
@@ -114,7 +141,7 @@ class SkillProjectionContext:
 
 
 def project_agent_skill_document(
-    skill_info: SkillInfo,
+    skill_info: SkillContractRecord,
     context: SkillProjectionContext,
 ) -> AgentSkillDocument:
     """Remove machine authority fields while preserving public YAML and body."""
@@ -129,8 +156,6 @@ def project_agent_skill_document(
         raise SkillContractError(
             f"cannot project invalid contract for {skill_info.name!r}: {parsed.error}"
         )
-    if skill_info.source_ref is None:
-        raise SkillContractError(f"skill {skill_info.name!r} has no effective source reference")
     bound = {skill.name: skill for skill in context.skills}.get(skill_info.name)
     if bound != skill_info:
         raise SkillContractError(
@@ -153,6 +178,15 @@ def project_agent_skill_document(
     content = f"---\n{yaml_text}\n---\n{parsed.body}"
     for source, replacement in (context.substitutions or {}).items():
         content = content.replace(source, replacement)
+    bound_by_name = {skill.name: skill for skill in context.skills}
+
+    def _rewrite_namespace(match: re.Match[str]) -> str:
+        target = bound_by_name.get(match.group(1))
+        if target is None:
+            return match.group(0)
+        return f"/{_agent_skill_namespace(target.source)}{target.name}"
+
+    content = _SKILL_NAMESPACE_REF_RE.sub(_rewrite_namespace, content)
 
     projected_digest = hashlib.sha256(content.encode()).hexdigest()
     canonical_digest = (
@@ -163,13 +197,13 @@ def project_agent_skill_document(
         content=content,
         projected_digest=projected_digest,
         canonical_digest=canonical_digest,
-        source_ref=skill_info.source_ref,
+        source_identity=_source_identity(skill_info),
     )
 
 
 def _skill_sequence(
-    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillInfo],
-) -> tuple[SkillInfo, ...]:
+    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillContractRecord],
+) -> tuple[SkillContractRecord, ...]:
     if isinstance(skills_or_catalog, EffectiveSkillCatalog):
         return skills_or_catalog.skills
     return tuple(skills_or_catalog)
@@ -185,7 +219,7 @@ def _replace_directory(staging: Path, destination: Path) -> None:
 
 def materialize_agent_skill_tree(
     destination: Path,
-    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillInfo],
+    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillContractRecord],
     context: SkillProjectionContext,
 ) -> dict[str, AgentSkillDocument]:
     """Replace *destination* with an exact tree of agent-safe skill projections."""
@@ -195,7 +229,7 @@ def materialize_agent_skill_tree(
     skills = _skill_sequence(skills_or_catalog)
     resolved_destination = destination.resolve()
     for skill in skills:
-        if resolved_destination in skill.path.resolve().parents:
+        if isinstance(skill, SkillInfo) and resolved_destination in skill.path.resolve().parents:
             raise SkillContractError(
                 f"projected skill destination contains canonical source for {skill.name!r}"
             )
@@ -255,15 +289,17 @@ def _copy_non_skill_plugin_assets(
 
 
 def _manifest_skill_entry(
-    skill: SkillInfo,
+    skill: SkillContractRecord,
     document: AgentSkillDocument,
 ) -> dict[str, Any]:
     role = skill.execution_role
     return {
         "canonical_digest": document.canonical_digest,
         "projected_digest": document.projected_digest,
-        "source": document.source_ref.origin.value,
-        "source_path": str(document.source_ref.skill_path),
+        "source": document.source_identity.origin.value,
+        "logical_name": document.source_identity.logical_name,
+        "search_dir": document.source_identity.search_dir,
+        "precedence": document.source_identity.precedence,
         "uses_capabilities": sorted(skill.uses_capabilities),
         "execution_role": role.value if role is not None else None,
     }
@@ -272,7 +308,7 @@ def _manifest_skill_entry(
 def materialize_sanitized_plugin_root(
     source_root: Path,
     destination: Path,
-    catalog: EffectiveSkillCatalog | Iterable[SkillInfo],
+    catalog: EffectiveSkillCatalog | Iterable[SkillContractRecord],
     context: SkillProjectionContext,
 ) -> Path:
     """Copy plugin assets and replace its public skills with safe projections.
@@ -324,7 +360,7 @@ def validate_sanitized_plugin_artifact(
     source_root: Path,
     public_root: Path,
     manifest_path: Path,
-    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillInfo],
+    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillContractRecord],
     *,
     require_sources_within_root: bool = True,
 ) -> tuple[str, ...]:
@@ -340,16 +376,18 @@ def validate_sanitized_plugin_artifact(
     else:
         errors.append("projection manifest must be outside the public plugin root")
     infos = _skill_sequence(skills_or_catalog)
-    expected: dict[str, SkillInfo] = {}
+    expected: dict[str, SkillContractRecord] = {}
     for info in infos:
         if info.name in expected:
             errors.append(f"duplicate expected skill: {info.name}")
         expected[info.name] = info
-        if require_sources_within_root:
+        if require_sources_within_root and isinstance(info, SkillInfo):
             try:
                 info.path.resolve().relative_to(source_root)
             except ValueError:
                 errors.append(f"skill source is outside plugin source root: {info.name}")
+        elif require_sources_within_root:
+            errors.append(f"path-free catalog cannot prove source containment: {info.name}")
 
     manifest = read_versioned_json(manifest_path, 1)
     if manifest is None:
@@ -430,9 +468,21 @@ def validate_sanitized_plugin_artifact(
         expected_entry = {
             "projected_digest": projected_digest,
             "canonical_digest": canonical_digest,
-            "source": info.source_ref.origin.value if info.source_ref is not None else None,
-            "source_path": (
-                str(info.source_ref.skill_path) if info.source_ref is not None else None
+            "source": info.source.value,
+            "logical_name": info.name,
+            "search_dir": (
+                info.source_ref.search_dir
+                if isinstance(info, SkillInfo) and info.source_ref is not None
+                else info.source_identity.search_dir
+                if isinstance(info, SkillCatalogEntry)
+                else None
+            ),
+            "precedence": (
+                info.source_ref.precedence
+                if isinstance(info, SkillInfo) and info.source_ref is not None
+                else info.source_identity.precedence
+                if isinstance(info, SkillCatalogEntry)
+                else None
             ),
             "uses_capabilities": sorted(info.uses_capabilities),
             "execution_role": (
@@ -458,24 +508,17 @@ def project_direct_install(
     """Return a stable, validated public projection for a direct plugin install."""
     source_root = source.plugin_dir.resolve()
     bundled_root = source_root / "skills"
-    if not bundled_root.is_dir() or bundled_root.is_symlink():
+    if not source_root.is_dir():
+        raise SkillContractError(f"direct plugin root does not exist: {source_root}")
+    if skill_catalog is None and (not bundled_root.is_dir() or bundled_root.is_symlink()):
         raise SkillContractError(
             f"direct plugin has no canonical bundled skill root: {source_root}"
         )
-    skill_infos: tuple[SkillInfo, ...] = (
-        skill_catalog.skills
+    source_infos = (
+        tuple()
         if skill_catalog is not None
         else tuple(
-            _skill_info_from_frontmatter(
-                entry.name,
-                SkillSource.BUNDLED,
-                entry / "SKILL.md",
-                source_ref=SkillSourceRef(
-                    origin=SkillSource.BUNDLED,
-                    logical_name=entry.name,
-                    skill_path=entry / "SKILL.md",
-                ),
-            )
+            info
             for entry in sorted(bundled_root.iterdir(), key=lambda item: item.name)
             if (
                 not entry.is_symlink()
@@ -483,13 +526,30 @@ def project_direct_install(
                 and not (entry / "SKILL.md").is_symlink()
                 and (entry / "SKILL.md").is_file()
             )
+            and (
+                info := _skill_info_from_frontmatter(
+                    entry.name,
+                    SkillSource.BUNDLED,
+                    entry / "SKILL.md",
+                    source_ref=SkillSourceRef(
+                        origin=SkillSource.BUNDLED,
+                        logical_name=entry.name,
+                        skill_path=entry / "SKILL.md",
+                    ),
+                )
+            ).execution_role
+            is SkillExecutionRole.SESSION
         )
     )
-    if not skill_infos:
+    catalog = skill_catalog or EffectiveSkillCatalog(
+        skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in source_infos),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    if not catalog.skills:
         raise SkillContractError(f"direct plugin has no bundled skills: {source_root}")
     identity = "\n".join(
         f"{info.name}:{info.canonical_digest}"
-        for info in sorted(skill_infos, key=lambda s: s.name)
+        for info in sorted(catalog.skills, key=lambda s: s.name)
     )
     cache_key = hashlib.sha256(f"{source_root}\0{backend.name}\0{identity}".encode()).hexdigest()[
         :24
@@ -497,12 +557,7 @@ def project_direct_install(
     destination = Path.home() / ".autoskillit" / "plugin-projections" / cache_key
     context = SkillProjectionContext(
         execution_cwd=Path(cwd).resolve(),
-        catalog=skill_catalog
-        or EffectiveSkillCatalog(
-            skills=skill_infos,
-            project_root=Path(cwd).resolve(),
-            execution_role=SkillExecutionRole.SESSION,
-        ),
+        catalog=catalog,
         backend=backend,
         conventions=backend.conventions,
         substitutions={
@@ -514,15 +569,15 @@ def project_direct_install(
     manifest_path = materialize_sanitized_plugin_root(
         source_root,
         destination,
-        skill_infos,
+        catalog,
         context,
     )
     errors = validate_sanitized_plugin_artifact(
         source_root,
         destination,
         manifest_path,
-        skill_infos,
-        require_sources_within_root=skill_catalog is None,
+        source_infos if source_infos else catalog,
+        require_sources_within_root=bool(source_infos),
     )
     if errors:
         shutil.rmtree(destination, ignore_errors=True)
@@ -540,9 +595,9 @@ def project_plugin_source(
     backend: CodingAgentBackend,
     skill_catalog: EffectiveSkillCatalog | None = None,
 ) -> PluginSource:
-    """Project direct installs while preserving marketplace source semantics."""
+    """Project every plugin source into one sanitized direct-install tree."""
     if isinstance(source, MarketplaceInstall):
-        return source
+        source = DirectInstall(plugin_dir=source.cache_path)
     return project_direct_install(
         source,
         cwd=cwd,

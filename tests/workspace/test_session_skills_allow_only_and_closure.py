@@ -1,4 +1,4 @@
-"""Phase 2 tests: session_skills module — allow_only filter and compute_skill_closure."""
+"""Tests for effective skill closure and closure write-path contracts."""
 
 from __future__ import annotations
 
@@ -6,25 +6,20 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import FEATURE_REGISTRY
 from autoskillit.workspace.session_skills import (
-    DefaultSessionSkillManager,
     SkillsDirectoryProvider,
-    _parse_write_paths,
     collect_closure_write_paths,
 )
+from autoskillit.workspace.session_skills import (
+    _parse_write_paths as _parse_structured_write_paths,
+)
+from autoskillit.workspace.skill_format import parse_frontmatter_content
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
-_FEATURE_SKILL_CATEGORY_PARAMS = [
-    pytest.param(feat_name, cat, id=f"{feat_name}-{cat}")
-    for feat_name, feat_def in FEATURE_REGISTRY.items()
-    for cat in feat_def.skill_categories
-]
-assert len(_FEATURE_SKILL_CATEGORY_PARAMS) > 0, (
-    "FEATURE_REGISTRY has no entries with skill_categories — "
-    "test_allow_only_overrides_all_feature_registry_entries would be silently skipped"
-)
+
+def _write_paths(content: str) -> list[str]:
+    return _parse_structured_write_paths(parse_frontmatter_content(content))
 
 
 def _make_synthetic_provider(
@@ -73,324 +68,6 @@ def _make_synthetic_provider(
     resolver.resolve.side_effect = lambda n: by_name.get(n)
     provider._resolver = resolver
     return provider
-
-
-class TestInitSessionAllowOnly:
-    """Tests for the ``allow_only`` filter on ``DefaultSessionSkillManager.init_session``."""
-
-    def test_allow_only_writes_only_named_skill(self, tmp_path: Path) -> None:
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"alpha": {}, "beta": {}, "gamma": {}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        session_path = mgr.init_session("s1", allow_only=frozenset({"alpha"}))
-
-        skills_base = session_path / ".claude" / "skills"
-        assert (skills_base / "alpha" / "SKILL.md").exists()
-        assert not (skills_base / "beta").exists()
-        assert not (skills_base / "gamma").exists()
-
-    def test_allow_only_empty_writes_no_skills(self, tmp_path: Path) -> None:
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"alpha": {}, "beta": {}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        session_path = mgr.init_session("s2", allow_only=frozenset())
-
-        skills_base = session_path / ".claude" / "skills"
-        assert skills_base.exists()
-        assert list(skills_base.glob("*/SKILL.md")) == []
-
-    def test_allow_only_none_preserves_full_injection(self, tmp_path: Path) -> None:
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"alpha": {}, "beta": {}, "gamma": {}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        session_path = mgr.init_session("s3", allow_only=None)
-
-        skills_base = session_path / ".claude" / "skills"
-        names = {p.parent.name for p in skills_base.glob("*/SKILL.md")}
-        assert names == {"alpha", "beta", "gamma"}
-
-    def test_allow_only_does_not_override_explicit_subsets_disabled(self, tmp_path: Path) -> None:
-        from tests._helpers import make_subsetsconfig, make_test_config
-
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"alpha": {"categories": ["github"]}, "beta": {}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
-        session_path = mgr.init_session(
-            "s4", config=config, allow_only=frozenset({"alpha", "beta"})
-        )
-
-        skills_base = session_path / ".claude" / "skills"
-        assert not (skills_base / "alpha").exists()  # disabled wins
-        assert (skills_base / "beta" / "SKILL.md").exists()
-
-    def test_allow_only_skips_project_local_overrides(self, tmp_path: Path) -> None:
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"alpha": {}, "beta": {}},
-        )
-        # Simulate a project-local override of "alpha"
-        project_dir = tmp_path / "project"
-        local_skill = project_dir / ".claude" / "skills" / "alpha"
-        local_skill.mkdir(parents=True)
-        (local_skill / "SKILL.md").write_text(
-            "---\nname: alpha\ndescription: Local alpha override.\n---\nlocal\n"
-        )
-
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        session_path = mgr.init_session(
-            "s5",
-            project_dir=project_dir,
-            allow_only=frozenset({"alpha", "beta"}),
-        )
-
-        skills_base = session_path / ".claude" / "skills"
-        # alpha bundled copy suppressed; project-local copy delivered via Channel 2
-        delivered = skills_base / "alpha" / "SKILL.md"
-        assert delivered.exists(), "project-local override must be copied into ephemeral dir"
-        assert "local" in delivered.read_text()
-        assert (skills_base / "beta" / "SKILL.md").exists()
-
-    def test_allow_only_logs_debug_skip(self, tmp_path: Path) -> None:
-        import structlog
-
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"alpha": {}, "beta": {}, "gamma": {}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-
-        with structlog.testing.capture_logs() as cap_logs:
-            mgr.init_session("s6", allow_only=frozenset({"alpha"}))
-
-        skipped = {
-            entry["skill"]
-            for entry in cap_logs
-            if entry.get("event") == "init_session_allow_only_skip"
-        }
-        assert skipped == {"beta", "gamma"}
-
-    def test_allow_only_overrides_feature_gate_for_explicitly_requested_skills(
-        self, tmp_path: Path
-    ) -> None:
-        from tests._helpers import make_test_config
-
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"planner-skill": {"categories": ["planner"]}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        config = make_test_config(features={}, experimental_enabled=False)
-        session_path = mgr.init_session(
-            "s-feat-bypass",
-            allow_only=frozenset({"planner-skill"}),
-            config=config,
-        )
-
-        skills_base = session_path / ".claude" / "skills"
-        assert (skills_base / "planner-skill" / "SKILL.md").exists(), (
-            "planner-skill must be written when allow_only explicitly requests it, "
-            "even though the planner feature gate is off (experimental_enabled=False)"
-        )
-
-    def test_allow_only_nonempty_but_zero_skills_raises(self, tmp_path: Path) -> None:
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"alpha": {}, "beta": {}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        with pytest.raises(RuntimeError, match="allow_only") as exc_info:
-            mgr.init_session("s-zero", allow_only=frozenset({"ghost-skill"}))
-        assert "zero skills" in str(exc_info.value)
-
-    @pytest.mark.parametrize("feature_name,category", _FEATURE_SKILL_CATEGORY_PARAMS)
-    def test_allow_only_overrides_all_feature_registry_entries(
-        self, tmp_path: Path, feature_name: str, category: str
-    ) -> None:
-        from tests._helpers import make_test_config
-
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"test-skill": {"categories": [category]}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-        config = make_test_config(features={feature_name: False}, experimental_enabled=False)
-        session_path = mgr.init_session(
-            "s-feat-registry",
-            allow_only=frozenset({"test-skill"}),
-            config=config,
-        )
-
-        skills_base = session_path / ".claude" / "skills"
-        assert (skills_base / "test-skill" / "SKILL.md").exists(), (
-            f"test-skill (category={category!r}) must be written when allow_only explicitly "
-            f"requests it, even though feature {feature_name!r} is disabled"
-        )
-
-
-_CROSS_AXIS_PARAMS = [
-    # (allow_only, feature_enabled, subsets_disabled, cook_session, expected_target_written)
-    # allow_only=None cases
-    pytest.param(None, True, [], False, True, id="ao-none_feat-on_disabled-no_cook-no"),
-    pytest.param(None, True, ["planner"], False, False, id="ao-none_feat-on_disabled-yes_cook-no"),
-    pytest.param(None, False, [], False, False, id="ao-none_feat-off_disabled-no_cook-no"),
-    pytest.param(
-        None, False, ["planner"], False, False, id="ao-none_feat-off_disabled-yes_cook-no"
-    ),
-    pytest.param(None, True, [], True, True, id="ao-none_feat-on_disabled-no_cook-yes"),
-    pytest.param(None, True, ["planner"], True, True, id="ao-none_feat-on_disabled-yes_cook-yes"),
-    pytest.param(None, False, [], True, True, id="ao-none_feat-off_disabled-no_cook-yes"),
-    pytest.param(
-        None, False, ["planner"], True, True, id="ao-none_feat-off_disabled-yes_cook-yes"
-    ),
-    # allow_only=frozenset({"target","sibling"}) cases
-    pytest.param(
-        frozenset({"target", "sibling"}),
-        True,
-        [],
-        False,
-        True,
-        id="ao-set_feat-on_disabled-no_cook-no",
-    ),
-    pytest.param(
-        frozenset({"target", "sibling"}),
-        True,
-        ["planner"],
-        False,
-        False,
-        id="ao-set_feat-on_disabled-yes_cook-no",
-    ),
-    pytest.param(
-        frozenset({"target", "sibling"}),
-        False,
-        [],
-        False,
-        True,
-        id="ao-set_feat-off_disabled-no_cook-no",  # THE BUG CASE
-    ),
-    pytest.param(
-        frozenset({"target", "sibling"}),
-        False,
-        ["planner"],
-        False,
-        False,
-        id="ao-set_feat-off_disabled-yes_cook-no",
-    ),
-    pytest.param(
-        frozenset({"target", "sibling"}),
-        True,
-        [],
-        True,
-        True,
-        id="ao-set_feat-on_disabled-no_cook-yes",
-    ),
-    pytest.param(
-        frozenset({"target", "sibling"}),
-        True,
-        ["planner"],
-        True,
-        True,
-        id="ao-set_feat-on_disabled-yes_cook-yes",
-    ),
-    pytest.param(
-        frozenset({"target", "sibling"}),
-        False,
-        [],
-        True,
-        True,
-        id="ao-set_feat-off_disabled-no_cook-yes",
-    ),
-    pytest.param(
-        frozenset({"target", "sibling"}),
-        False,
-        ["planner"],
-        True,
-        True,
-        id="ao-set_feat-off_disabled-yes_cook-yes",
-    ),
-]
-
-
-class TestCrossAxisGatingMatrix:
-    """Cross-axis parametrized test matrix: allow_only × feature_gate × subsets.disabled × cook."""
-
-    @pytest.mark.parametrize(
-        "allow_only,feature_enabled,subsets_disabled,cook_session,expected_target_written",
-        _CROSS_AXIS_PARAMS,
-    )
-    def test_cross_axis_gating_matrix(
-        self,
-        tmp_path: Path,
-        allow_only: frozenset[str] | None,
-        feature_enabled: bool,
-        subsets_disabled: list[str],
-        cook_session: bool,
-        expected_target_written: bool,
-    ) -> None:
-        from tests._helpers import make_subsetsconfig, make_test_config
-
-        provider = _make_synthetic_provider(
-            tmp_path / "skills",
-            {"target": {"categories": ["planner"]}, "sibling": {}},
-        )
-        root = tmp_path / "sessions"
-        root.mkdir()
-        mgr = DefaultSessionSkillManager(provider, ephemeral_root=root)
-
-        features = {"planner": True} if feature_enabled else {}
-        config = make_test_config(
-            features=features,
-            experimental_enabled=False,
-            subsets=make_subsetsconfig(disabled=subsets_disabled),
-        )
-
-        session_path = mgr.init_session(
-            "s-matrix",
-            config=config,
-            allow_only=allow_only,
-            cook_session=cook_session,
-        )
-
-        skills_base = session_path / ".claude" / "skills"
-        target_written = (skills_base / "target").exists()
-        assert target_written == expected_target_written, (
-            f"target (category=planner) written={target_written!r}, "
-            f"expected={expected_target_written!r} for "
-            f"allow_only={allow_only!r}, feature_enabled={feature_enabled!r}, "
-            f"subsets_disabled={subsets_disabled!r}, cook_session={cook_session!r}"
-        )
-        sibling_written = (skills_base / "sibling").exists()
-        assert sibling_written, (
-            f"sibling (no categories) must always be written — "
-            f"allow_only={allow_only!r}, feature_enabled={feature_enabled!r}, "
-            f"subsets_disabled={subsets_disabled!r}, cook_session={cook_session!r}"
-        )
 
 
 class TestComputeSkillClosure:
@@ -579,30 +256,30 @@ class TestParseWritePaths:
 
     def test_no_write_paths_returns_empty(self) -> None:
         content = "---\nname: skill-a\ndescription: A.\n---\nbody"
-        assert _parse_write_paths(content) == []
+        assert _write_paths(content) == []
 
     def test_single_path(self) -> None:
         content = (
             '---\nname: a\ndescription: A.\nwrite_paths: ["{{AUTOSKILLIT_TEMP}}/a/"]\n---\nbody'
         )
-        assert _parse_write_paths(content) == ["{{AUTOSKILLIT_TEMP}}/a/"]
+        assert _write_paths(content) == ["{{AUTOSKILLIT_TEMP}}/a/"]
 
     def test_multiple_paths(self) -> None:
         content = (
             "---\nname: a\ndescription: A.\n"
             'write_paths: ["{{AUTOSKILLIT_TEMP}}/a/", "{{AUTOSKILLIT_TEMP}}/b/"]\n---\nbody'
         )
-        assert _parse_write_paths(content) == [
+        assert _write_paths(content) == [
             "{{AUTOSKILLIT_TEMP}}/a/",
             "{{AUTOSKILLIT_TEMP}}/b/",
         ]
 
     def test_no_frontmatter(self) -> None:
-        assert _parse_write_paths("no frontmatter here") == []
+        assert _write_paths("no frontmatter here") == []
 
     def test_empty_list(self) -> None:
         content = "---\nname: a\ndescription: A.\nwrite_paths: []\n---\nbody"
-        assert _parse_write_paths(content) == []
+        assert _write_paths(content) == []
 
     def test_multiline_yaml_list(self) -> None:
         content = (
@@ -610,14 +287,14 @@ class TestParseWritePaths:
             '  - "{{AUTOSKILLIT_TEMP}}/a/"\n'
             '  - "{{AUTOSKILLIT_TEMP}}/b/"\n---\nbody'
         )
-        assert _parse_write_paths(content) == [
+        assert _write_paths(content) == [
             "{{AUTOSKILLIT_TEMP}}/a/",
             "{{AUTOSKILLIT_TEMP}}/b/",
         ]
 
     def test_non_list_returns_empty(self) -> None:
         content = '---\nname: a\ndescription: A.\nwrite_paths: "bad"\n---\nbody'
-        assert _parse_write_paths(content) == []
+        assert _write_paths(content) == []
 
 
 class TestCollectClosureWritePaths:

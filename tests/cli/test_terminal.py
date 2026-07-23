@@ -454,12 +454,8 @@ class TestCookTerminalGuard:
         def _fake_init_session(
             self,
             session_id,
-            *,
-            cook_session=False,
-            config=None,
-            project_dir=None,
-            backend=None,
-            allow_only=None,
+            catalog,
+            projection_context,
         ):
             return fake_skills_dir
 

@@ -10,10 +10,25 @@ import pytest
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
+def _materialize(manager, session_id: str) -> None:
+    from pathlib import Path
+
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace import DefaultSkillResolver
+
+    project_root = Path.cwd()
+    catalog = DefaultSkillResolver().list_effective(
+        project_root,
+        SkillExecutionRole.SESSION,
+    )
+    context = manager._provider.catalog_projection_context(catalog, project_root)
+    manager.init_session(session_id, catalog, context)
+
+
 def test_validate_session_exists_true_for_live_session(make_session_skill_manager) -> None:
     """validate_session_exists returns True for a freshly created session."""
     mgr = make_session_skill_manager()
-    mgr.init_session("sess-live", cook_session=True)
+    _materialize(mgr, "sess-live")
 
     assert mgr.validate_session_exists("sess-live") is True
 
@@ -21,7 +36,7 @@ def test_validate_session_exists_true_for_live_session(make_session_skill_manage
 def test_validate_session_exists_false_after_delete(make_session_skill_manager) -> None:
     """validate_session_exists returns False after cleanup_session removes the dir."""
     mgr = make_session_skill_manager()
-    mgr.init_session("sess-deleted", cook_session=True)
+    _materialize(mgr, "sess-deleted")
 
     assert mgr.cleanup_session("sess-deleted") is True
     assert mgr.validate_session_exists("sess-deleted") is False
@@ -38,7 +53,7 @@ def test_cleanup_stale_emits_log_event(make_session_skill_manager, monkeypatch) 
     import autoskillit.workspace.session_skills as skills_mod
 
     mgr = make_session_skill_manager()
-    mgr.init_session("sess-stale", cook_session=True)
+    _materialize(mgr, "sess-stale")
 
     session_dir = mgr._session_roots["sess-stale"] / "sess-stale"  # type: ignore[attr-defined]
     assert session_dir.is_dir()

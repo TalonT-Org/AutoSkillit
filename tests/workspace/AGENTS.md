@@ -19,18 +19,12 @@ Workspace cleanup, clone lifecycle, session skills, and worktree tests.
 | `test_clone_split.py` | Structural guard for clone test split |
 | `test_clone_timeouts.py` | Static analysis: git network commands in clone.py must have timeouts |
 | `test_constants.py` | Asserts that workspace directory name constants are exported from workspace/__init__ |
-| `test_project_local_overrides.py` | Tests for project-local skill override detection and enforcement (T-OVR-001..011) |
-| `test_session_skills_allow_only_and_closure.py` | Phase 2 tests: session_skills module — allow_only filter and compute_skill_closure |
-| `test_session_skills_deps.py` | Phase 2 tests: session_skills module — activate_deps resolution |
-| `test_session_skills_features.py` | Phase 2 tests: session_skills module — feature-gate skill filtering |
-| `test_session_skills_filtering.py` | Phase 2 tests: session_skills module — subset/disabled-category and pack filtering |
-| `test_session_skills_provider.py` | Phase 2 tests: session_skills module — provider and core manager |
-| `test_session_skills_backend_filter.py` | Tests for backend-aware skill injection filtering in _should_inject_skill |
+| `test_project_local_overrides.py` | Tests for backend-neutral project-local detection, effective resolution, and late rendering |
+| `test_session_skills_allow_only_and_closure.py` | Tests for effective invocation closure and write-path contracts |
+| `test_session_skills_provider.py` | Tests for unified projection and exact-catalog materialization |
 | `test_session_skills_codex.py` | Tests for Codex-specific session skill layout, config file copying, and backend regression guard |
 | `test_skill_format.py` | Unit tests for skill frontmatter validation functions |
-| `test_session_skills_format_gate.py` | Format gate tests for init_session and activate_with_deps |
 | `test_skill_content_substitution.py` | Tests for SkillsDirectoryProvider.get_skill_content placeholder substitution |
-| `test_session_skills_namespace.py` | Phase 2 tests: session_skills module — namespace rewriting for ephemeral SKILL.md content |
 | `test_session_skills_stale_path.py` | Tests for validate_session_exists() and cleanup_stale() structured logging |
 | `test_skills.py` | Tests for skill resolution hierarchy |
 | `test_worktree.py` | Worktree tests |

@@ -167,6 +167,7 @@ def cook(
         get_logger,
         pkg_root,
         resume_spec_from_cli,
+        temp_dir_display_str,
         write_registry_entry,
     )
 
@@ -185,19 +186,25 @@ def cook(
     session_id_local = uuid.uuid4().hex[:16]
     write_registry_entry(project_dir, session_id_local, SESSION_TYPE_COOK, None)
     ephemeral_root = resolve_ephemeral_root()
-    session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
+    skills_provider = SkillsDirectoryProvider(
+        temp_dir_relpath=temp_dir_display_str(config.workspace.temp_dir),
+        default_base_branch=config.branching.default_base_branch,
+    )
+    session_mgr = DefaultSessionSkillManager(skills_provider, ephemeral_root)
     session_mgr.cleanup_stale()
     session_catalog = DefaultSkillResolver().list_effective(
         project_dir,
         SkillExecutionRole.SESSION,
     )
+    projection_context = skills_provider.catalog_projection_context(
+        session_catalog,
+        project_dir,
+        backend=backend,
+    )
     skills_dir = session_mgr.init_session(
         session_id_local,
-        cook_session=True,
-        config=config,
-        project_dir=project_dir,
-        backend=backend,
-        allow_only=frozenset(skill.name for skill in session_catalog.skills),
+        session_catalog,
+        projection_context,
     )
 
     plugin_source: MarketplaceInstall | DirectInstall
@@ -216,6 +223,7 @@ def cook(
         plugin_source,
         cwd=project_dir,
         backend=backend,
+        skill_catalog=session_catalog,
     )
 
     if isinstance(resume_spec, BareResume):

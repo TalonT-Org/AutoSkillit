@@ -164,12 +164,8 @@ def test_cook_reload_loop_uses_named_resume(
     def fake_init_session(
         self,
         sid,
-        *,
-        cook_session=False,
-        config=None,
-        project_dir=None,
-        backend=None,
-        allow_only=None,
+        catalog,
+        projection_context,
     ):
         return fake_skills_dir
 

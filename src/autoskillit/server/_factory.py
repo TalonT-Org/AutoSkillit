@@ -22,6 +22,7 @@ from autoskillit.core import (
     FleetLock,
     MarketplaceInstall,
     PluginSource,
+    SkillExecutionRole,
     SubprocessRunner,
     WriteBehaviorSpec,
     _get_autoskillit_install_path,
@@ -311,17 +312,6 @@ def make_context(
     gate = DefaultGateState(enabled=False)
 
     project_dir = project_dir if project_dir is not None else _resolve_project_dir()
-    if (
-        isinstance(resolved_plugin_source, DirectInstall)
-        and resolved_plugin_source.plugin_dir.resolve() == _default_plugin_dir().resolve()
-    ):
-        plugin_source = project_plugin_source(
-            resolved_plugin_source,
-            cwd=project_dir,
-            backend=backend,
-        )
-    else:
-        plugin_source = resolved_plugin_source
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 
@@ -330,6 +320,16 @@ def make_context(
         default_base_branch=config.branching.default_base_branch,
     )
     validate_skill_tier_roles(config, provider.resolver, project_dir)
+    session_catalog = provider.resolver.list_effective(
+        project_dir,
+        SkillExecutionRole.SESSION,
+    )
+    plugin_source = project_plugin_source(
+        resolved_plugin_source,
+        cwd=project_dir,
+        backend=backend,
+        skill_catalog=session_catalog,
+    )
     ephemeral_root = resolve_ephemeral_root()
     codex_root = temp_dir / "codex-sessions"
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root, codex_root=codex_root)

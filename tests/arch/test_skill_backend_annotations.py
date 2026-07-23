@@ -11,9 +11,9 @@ import pytest
 
 from autoskillit.workspace import (
     detect_skill_capabilities,
+    read_skill_frontmatter,
     validate_skill_capability_declarations,
 )
-from autoskillit.workspace.skills import _read_skill_frontmatter
 from tests.arch._helpers import _iter_skill_dirs, _strip_frontmatter
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -26,7 +26,9 @@ def test_forward_check_capabilities_declared():
     violations: list[str] = []
     for name, skill_md in _iter_skill_dirs():
         content = skill_md.read_text(encoding="utf-8")
-        fm = _read_skill_frontmatter(skill_md)
+        parsed = read_skill_frontmatter(skill_md)
+        assert parsed.data is not None
+        fm = parsed.data
         validation = validate_skill_capability_declarations(
             content,
             name,
@@ -48,7 +50,9 @@ def test_reverse_check_capability_declarations_are_genuine():
     violations: list[str] = []
     for name, skill_md in _iter_skill_dirs():
         content = skill_md.read_text(encoding="utf-8")
-        fm = _read_skill_frontmatter(skill_md)
+        parsed = read_skill_frontmatter(skill_md)
+        assert parsed.data is not None
+        fm = parsed.data
         validation = validate_skill_capability_declarations(
             content,
             name,
@@ -142,7 +146,9 @@ def test_derivation_backend_requirements_match_capabilities():
     """backend_requirements must NOT be declared in SKILL.md — derivation is runtime-only."""
     violations: list[str] = []
     for name, skill_md in _iter_skill_dirs():
-        fm = _read_skill_frontmatter(skill_md)
+        parsed = read_skill_frontmatter(skill_md)
+        assert parsed.data is not None
+        fm = parsed.data
         declared = fm.get("backend_requirements", [])
         if declared:
             violations.append(f"{name}: has backend_requirements={declared} in frontmatter")
@@ -177,7 +183,9 @@ def test_review_pr_declares_github_api_write() -> None:
     from autoskillit.core import pkg_root
 
     skill_md = pkg_root() / "skills_extended" / "review-pr" / "SKILL.md"
-    fm = _read_skill_frontmatter(skill_md)
+    parsed = read_skill_frontmatter(skill_md)
+    assert parsed.data is not None
+    fm = parsed.data
     assert "github_api_write" in set(fm.get("uses_capabilities", [])), (
         "review-pr SKILL.md must declare uses_capabilities: [..., github_api_write, ...]"
     )
@@ -209,7 +217,9 @@ def test_cross_skill_ref_declarations_are_genuine():
     """Skills declaring cross_skill_ref must have a genuine Skill-tool invocation."""
     violations: list[str] = []
     for name, skill_md in _iter_skill_dirs():
-        fm = _read_skill_frontmatter(skill_md)
+        parsed = read_skill_frontmatter(skill_md)
+        assert parsed.data is not None
+        fm = parsed.data
         declared = set(fm.get("uses_capabilities", []))
         if "cross_skill_ref" not in declared:
             continue

@@ -82,6 +82,7 @@ from autoskillit.server.tools._execution_helpers import (
     _spill_spec,
     _summarize_streams,
     clear_run_skill_state,
+    invocation_member_names,
     maybe_promote_work_dir,
     persist_run_skill_state,
     propagate_session_deadline,
@@ -1232,6 +1233,15 @@ async def run_skill(
                 and tool_ctx.ephemeral_root is not None
             ):
                 _ephemeral_root = tool_ctx.ephemeral_root
+                if invocation is None:
+                    raise SkillContractError(
+                        "Fresh replay requires a validated effective invocation"
+                    )
+                if hasattr(_runner, "validate_skill_snapshot"):
+                    _runner.validate_skill_snapshot(  # type: ignore[attr-defined]
+                        step_name,
+                        invocation_member_names(invocation),
+                    )
                 session_id = f"headless-{uuid4().hex[:12]}"
                 _cleanup_session_id = session_id
                 _restored = _runner.restore_skill_snapshot(  # type: ignore[attr-defined]

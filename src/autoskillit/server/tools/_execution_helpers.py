@@ -131,6 +131,13 @@ def scope_covers_cwd(allowed_write_prefixes: tuple[str, ...], cwd: str) -> bool:
     return any(resolved_cwd.startswith(prefix) for prefix in allowed_write_prefixes)
 
 
+def invocation_member_names(
+    invocation: EffectiveSkillInvocation,
+) -> frozenset[str]:
+    """Return the exact member inventory bound to an effective invocation."""
+    return frozenset(member.name for member in invocation.closure)
+
+
 def aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
     """Aggregate required sandbox overrides from declared capabilities."""
     return frozenset().union(

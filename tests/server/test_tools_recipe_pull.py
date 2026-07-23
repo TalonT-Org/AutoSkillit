@@ -220,6 +220,7 @@ def test_non_utf8_payload_is_normalized_to_recipe_artifact_error(tmp_path: Path)
         / "kitchen-test"
         / "open_kitchen"
         / "remediation"
+        / f"descriptor-{generation.descriptor_version}-schema-{generation.schema_version}"
         / payload_sha.replace(":", "_")
     )
     directory.mkdir(parents=True)

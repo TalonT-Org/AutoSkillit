@@ -188,15 +188,27 @@ def _generation_lock(temp_dir: Path, *, exclusive: bool) -> Iterator[None]:
 
 
 def _generation_from_payload(
-    *, producer_tool: str, recipe_name: str, blob: bytes, payload: dict[str, Any]
+    *,
+    producer_tool: str,
+    recipe_name: str,
+    blob: bytes,
+    payload: dict[str, Any],
+    descriptor_version: int | None = None,
+    schema_version: int | None = None,
 ) -> RecipeArtifactGeneration:
     body = payload.get("content")
     body_bytes = body.encode("utf-8") if isinstance(body, str) else b""
     return RecipeArtifactGeneration(
         producer_tool=producer_tool,
         recipe_name=recipe_name,
-        descriptor_version=RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
-        schema_version=RECIPE_ARTIFACT_SCHEMA_VERSION,
+        descriptor_version=(
+            RECIPE_ARTIFACT_DESCRIPTOR_VERSION
+            if descriptor_version is None
+            else descriptor_version
+        ),
+        schema_version=(
+            RECIPE_ARTIFACT_SCHEMA_VERSION if schema_version is None else schema_version
+        ),
         payload_sha256=_domain_sha256("autoskillit.recipe-payload.v1", blob),
         artifact_blob_sha256=_qualified_sha256(blob),
         artifact_blob_size_bytes=len(blob),
@@ -312,6 +324,8 @@ def load_recipe_artifact(
         recipe_name=identity.recipe_name,
         blob=blob,
         payload=payload,
+        descriptor_version=identity.descriptor_version,
+        schema_version=identity.schema_version,
     )
     if expected != identity:
         raise RecipeArtifactError("recipe body identity mismatch")

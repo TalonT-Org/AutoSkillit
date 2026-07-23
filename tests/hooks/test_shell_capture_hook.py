@@ -193,17 +193,59 @@ def test_arg_max_exhaustion_builds_nonexecuting_rejection(
 ) -> None:
     import autoskillit.hooks.shell_capture_hook as shell_capture_hook
 
-    monkeypatch.setattr(shell_capture_hook.os, "sysconf", lambda _name: 1)
+    command = "printf must-not-run"
+    cwd = "/abs/project"
+    capture_id = "0123456789abcdef"
+    encoded = base64.b64encode(command.encode()).decode("ascii")
+    runner_argv = [
+        sys.executable,
+        "-I",
+        str(shell_capture_hook._runner_path()),
+        "run",
+        encoded,
+        cwd,
+        capture_id,
+    ]
+    preflight_harness = shell_capture_hook._render_harness(
+        runner_argv,
+        policy_command=command,
+    )
+    argv_candidates = (runner_argv, ["bash", "-c", preflight_harness])
+
+    def _argv_bytes(argv: list[str]) -> int:
+        return sum(len(shell_capture_hook.os.fsencode(argument)) + 1 for argument in argv)
+
+    environment_bytes = sum(
+        len(shell_capture_hook.os.fsencode(key)) + len(shell_capture_hook.os.fsencode(value)) + 2
+        for key, value in shell_capture_hook.os.environ.items()
+    )
+    pointer_size = shell_capture_hook.struct.calcsize("P")
+    for argv in argv_candidates:
+        pointer_bytes = (len(argv) + len(shell_capture_hook.os.environ) + 2) * pointer_size
+        assert shell_capture_hook._exec_footprint(argv) == (
+            _argv_bytes(argv) + environment_bytes + pointer_bytes
+        )
+
+    arg_max = (
+        max(shell_capture_hook._exec_footprint(argv) for argv in argv_candidates)
+        + shell_capture_hook._ARG_MAX_HEADROOM_BYTES
+        - 1
+    )
+    assert all(
+        _argv_bytes(argv) + shell_capture_hook._ARG_MAX_HEADROOM_BYTES <= arg_max
+        for argv in argv_candidates
+    )
+    monkeypatch.setattr(shell_capture_hook.os, "sysconf", lambda _name: arg_max)
 
     harness = shell_capture_hook._build_harness(
-        "printf must-not-run",
-        "/abs/project",
-        "0123456789abcdef",
+        command,
+        cwd,
+        capture_id,
     )
     argv = _runner_argv(harness)
 
     assert argv[3] == "reject"
-    assert "printf must-not-run" not in harness
+    assert command not in harness
 
 
 def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):

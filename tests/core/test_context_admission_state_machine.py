@@ -578,23 +578,31 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
     @rule()
     def rollover_preserves_dispatched_and_indeterminate_charge(self) -> None:
         before_charges = dict(self.charges)
+        old_snapshot = self.state.snapshot
+        new_window_epoch_number = old_snapshot.window_epoch_number + 1
+        new_window_epoch_id = WindowEpochId(f"epoch-state-machine-{new_window_epoch_number}")
+        event_fields = self._fields("rollover-epoch")
+        witness_suffix = (
+            f"{old_snapshot.window_epoch_number}-to-"
+            f"{new_window_epoch_number}-{self.event_sequence}"
+        )
         proof = EpochFenceProof(
-            old_window_epoch_id=WindowEpochId("epoch-state-machine"),
-            old_window_epoch_number=1,
-            new_window_epoch_id=WindowEpochId("epoch-state-machine-2"),
-            new_window_epoch_number=2,
+            old_window_epoch_id=old_snapshot.window_epoch_id,
+            old_window_epoch_number=old_snapshot.window_epoch_number,
+            new_window_epoch_id=new_window_epoch_id,
+            new_window_epoch_number=new_window_epoch_number,
             receiver_authority_source_id=AuthoritySourceId("authority-state-machine"),
-            fence_witness_id=AdmissionWitnessId("fence-1-to-2"),
+            fence_witness_id=AdmissionWitnessId(f"fence-{witness_suffix}"),
             highest_admitted_dispatch_sequence=self.state.admission_sequence.value,
         )
         rollover_event = RolloverEpochEvent(
-            **self._fields("rollover-epoch"),
+            **event_fields,
             witness=AdmissionWitness(
-                witness_id=AdmissionWitnessId("rollover-witness-1-to-2"),
+                witness_id=AdmissionWitnessId(f"rollover-witness-{witness_suffix}"),
                 kind=WitnessKind.EPOCH_ROLLOVER,
-                window_epoch_id=WindowEpochId("epoch-state-machine"),
-                window_epoch_number=1,
-                snapshot_sequence=1,
+                window_epoch_id=old_snapshot.window_epoch_id,
+                window_epoch_number=old_snapshot.window_epoch_number,
+                snapshot_sequence=old_snapshot.snapshot_sequence,
                 request_id=AdmissionRequestId("rollover-request"),
                 batch_id=AdmissionBatchId("rollover-batch"),
                 representation_revision=RepresentationRevision("rollover-revision"),
@@ -604,8 +612,8 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             fence_proof=proof,
             new_snapshot=ContextWindowSnapshot(
                 protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
-                window_epoch_id=WindowEpochId("epoch-state-machine-2"),
-                window_epoch_number=2,
+                window_epoch_id=new_window_epoch_id,
+                window_epoch_number=new_window_epoch_number,
                 model_identity=ModelIdentity.anthropic("claude-state-machine"),
                 tokenizer_identity=TokenizerIdentity("tokenizer-state-machine"),
                 snapshot_sequence=1,

@@ -24,6 +24,7 @@ from autoskillit.core import (
     RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
+    get_logger,
     resolve_recipe_delivery_decision,
 )
 
@@ -279,7 +280,12 @@ class CodexOuterBudgetAttestor:
                 correlation=correlation,
                 now_unix=now_unix,
             )
-        except (OSError, RuntimeError, ValueError, TypeError):
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:
+            get_logger(__name__).warning(
+                "codex_protected_provider_failed",
+                exception_type=type(exc).__name__,
+                exc_info=True,
+            )
             return CodexAttestationResult(None, None, correlation, "protected_provider_failed")
         if attestation is None:
             return CodexAttestationResult(

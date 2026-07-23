@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -354,6 +355,27 @@ def test_oversized_record_and_unavailable_provider_are_envelope(tmp_path: Path) 
         ).attest(request=_request(), project_dir=tmp_path, now_unix=_NOW)
         assert result.attestation is None
         assert _delivery_mode(result) is RecipeDeliveryMode.ENVELOPE
+
+
+def test_unavailable_provider_preserves_protected_failure_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rollout = _write_marker_and_rollout(tmp_path, "thread-protected-001")
+    logger = MagicMock()
+    monkeypatch.setattr(recipe_delivery, "get_logger", lambda _name: logger)
+
+    result = _attestor(
+        tmp_path,
+        _FixtureProtectedProvider(_protected_record(), unavailable=True),
+        {"thread-protected-001": rollout},
+    ).attest(request=_request(), project_dir=tmp_path, now_unix=_NOW)
+
+    assert result.reason == "protected_provider_failed"
+    logger.warning.assert_called_once_with(
+        "codex_protected_provider_failed",
+        exception_type="OSError",
+        exc_info=True,
+    )
 
 
 def test_direct_forged_and_unsigned_diagnostic_records_are_envelope(tmp_path: Path) -> None:

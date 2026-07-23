@@ -1,8 +1,10 @@
 """Path containment guards for closure-mode artifact validation (IL-0, stdlib-only).
 
-Resolves a path against an allowed root, rejecting symlinks, hardlinks,
-traversal escapes, oversized files, and world-writable files. Also provides
-a metadata-stability check for TOCTOU detection between pre- and post-read stats.
+Resolves a child path against an already-trusted allowed root, rejecting child
+symlinks, hardlinks, traversal escapes, oversized files, and world-writable
+files. Root authority is a caller precondition; this module does not establish
+whether ``allowed_root`` itself or its ancestors are hostile. Also provides a
+metadata-stability check for TOCTOU detection between pre- and post-read stats.
 """
 
 from __future__ import annotations
@@ -24,6 +26,8 @@ def resolve_contained_path(
     *,
     max_size_bytes: int = 50_000_000,
 ) -> Path:
+    """Validate a child path beneath an allowed root whose authority is pre-established."""
+
     original = Path(path)
     orig_st = original.lstat()
     if stat.S_ISLNK(orig_st.st_mode):

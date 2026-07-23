@@ -110,6 +110,21 @@ def test_symlinked_policy_root_is_not_trusted(tmp_path: Path) -> None:
         anchor.close()
 
 
+def test_symlinked_policy_leaf_is_not_trusted(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
+    temp_dir.mkdir(parents=True)
+    external_config = tmp_path / "external-config.json"
+    external_config.write_text(json.dumps({"output_budget_policy": {"disabled": True}}))
+    (temp_dir / ".hook_config.json").symlink_to(external_config)
+
+    anchor = open_project_anchor(str(project))
+    try:
+        assert read_capture_policy(anchor) == CapturePolicy()
+    finally:
+        anchor.close()
+
+
 def test_verified_policy_merges_overlay_and_bounds_inline_bytes(tmp_path: Path) -> None:
     project = tmp_path / "project"
     temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
@@ -195,6 +210,66 @@ def test_stale_capture_is_safely_retained_without_identity_unlink(tmp_path: Path
     assert stale.read_bytes() == b"retained"
 
 
+def test_cleanup_candidate_classification_rejects_unsafe_entries(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor, root = _open_authority(project)
+    capture_dir = _capture_dir(project)
+    valid = capture_dir / "shell_1111111111111111.log"
+    valid.write_text("valid")
+    world_writable = capture_dir / "shell_2222222222222222.log"
+    world_writable.write_text("unsafe")
+    os.chmod(world_writable, 0o666)
+    hardlink_source = tmp_path / "hardlink-source"
+    hardlink_source.write_text("unsafe")
+    hardlink = capture_dir / "shell_3333333333333333.log"
+    try:
+        os.link(hardlink_source, hardlink)
+    except OSError:
+        root.close()
+        anchor.close()
+        pytest.skip("hardlinks unavailable")
+
+    try:
+        threshold = time.time() - 100
+        assert (
+            capture_artifacts._open_stale_candidate(
+                root,
+                valid.name,
+                mtime_threshold=threshold,
+            )
+            is None
+        )
+        os.utime(valid, (threshold - 100, threshold - 100))
+        candidate = capture_artifacts._open_stale_candidate(
+            root,
+            valid.name,
+            mtime_threshold=threshold,
+        )
+        assert candidate is not None
+        assert candidate.inode == valid.stat().st_ino
+        candidate.close()
+        assert (
+            capture_artifacts._open_stale_candidate(
+                root,
+                world_writable.name,
+                mtime_threshold=time.time() + 1,
+            )
+            is None
+        )
+        assert (
+            capture_artifacts._open_stale_candidate(
+                root,
+                hardlink.name,
+                mtime_threshold=time.time() + 1,
+            )
+            is None
+        )
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_cleanup_rejects_symlinked_capture_root(tmp_path: Path) -> None:
     project = tmp_path / "project"
     temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
@@ -209,6 +284,40 @@ def test_cleanup_rejects_symlinked_capture_root(tmp_path: Path) -> None:
 
     assert sweep_stale_captures(project, max_age_seconds=0) == 0
     assert stale.read_bytes() == b"must-survive"
+
+
+def test_cleanup_retains_replacement_raced_after_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    capture_dir = _capture_dir(project)
+    capture_dir.mkdir(parents=True)
+    stale = capture_dir / f"shell_{_CAPTURE_ID}.log"
+    stale.write_bytes(b"validated")
+    os.utime(stale, (0, 0))
+    displaced = capture_dir / "validated-inode"
+    real_open = capture_artifacts._open_stale_candidate
+    swapped = False
+
+    def swap_after_validation(root, name, *, mtime_threshold):
+        nonlocal swapped
+        candidate = real_open(root, name, mtime_threshold=mtime_threshold)
+        if candidate is not None and not swapped:
+            stale.rename(displaced)
+            stale.write_bytes(b"replacement")
+            swapped = True
+        return candidate
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_open_stale_candidate",
+        swap_after_validation,
+    )
+
+    assert sweep_stale_captures(project, max_age_seconds=0) == 0
+    assert stale.read_bytes() == b"replacement"
+    assert displaced.read_bytes() == b"validated"
 
 
 def test_setup_failure_prevents_user_command(tmp_path: Path) -> None:
@@ -264,3 +373,46 @@ def test_spawn_failure_closes_created_artifact_fd(
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+def test_artifact_write_failure_emits_failure_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    def fail_write(fd, data):
+        raise OSError("fault injection")
+
+    monkeypatch.setattr(capture_artifacts, "_write_all", fail_write)
+
+    assert run_capture("printf ran > command_ran; printf output", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    assert (project / "command_ran").read_text() == "ran"
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+
+
+def test_marker_verification_failure_emits_failure_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    def fail_verification(anchor, root, artifact):
+        raise OSError("fault injection")
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "current_artifact_path_if_bound",
+        fail_verification,
+    )
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err

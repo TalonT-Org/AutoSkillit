@@ -9,20 +9,23 @@ output lands inline vs. in an artifact file.
 
 from __future__ import annotations
 
+import io
+import json
 import os
-import re
+import shlex
 import shutil
 import subprocess
 import time
-from collections.abc import Callable
+from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
-from autoskillit.hooks._capture_cleanup import (
+import autoskillit.hooks.shell_capture_hook as shell_capture_hook
+from autoskillit.hooks._capture_artifacts import (
     _CAPTURE_FILENAME_RE,
-    _is_safe_capture_file,
     sweep_stale_captures,
 )
 from autoskillit.hooks.shell_capture_hook import _build_harness
@@ -73,7 +76,7 @@ _CORPUS = [
         "unicode_heavy",
         "python3 -c \"import sys; sys.stdout.buffer.write(b'\\xc3\\xa9' * 8000)\"",
     ),
-    ("nested_wrap", None),  # filled in below once _build_harness is available
+    ("nested_wrap", None),
 ]
 
 
@@ -111,7 +114,7 @@ def _run_raw_merged(command: str, tmp_path: Path) -> subprocess.CompletedProcess
 
 
 def _run_wrapped(command: str, tmp_path: Path) -> subprocess.CompletedProcess[bytes]:
-    wrapped = _build_harness(command, str(tmp_path), _INLINE_BYTES)
+    wrapped = _build_harness(command, str(tmp_path), uuid4().hex[:16])
     return subprocess.run(
         ["bash", "-c", wrapped],
         capture_output=True,
@@ -120,10 +123,15 @@ def _run_wrapped(command: str, tmp_path: Path) -> subprocess.CompletedProcess[by
     )
 
 
-# nested_wrap wraps a harness-of-"echo hi" and feeds it back through the
-# harness a second time, proving the sentinel/idempotency path is also
-# byte-safe under double-wrapping.
-_CORPUS[-1] = ("nested_wrap", _build_harness(_NESTED_WRAP_INNER, "/tmp", _INLINE_BYTES))
+def _main_generated_wrapper(command: str, cwd: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    event = {"cwd": str(cwd), "tool_input": {"command": command}}
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+    output = io.StringIO()
+    with pytest.raises(SystemExit), redirect_stdout(output):
+        shell_capture_hook.main()
+    payload = json.loads(output.getvalue())
+    return payload["hookSpecificOutput"]["updatedInput"]["command"]
 
 
 @pytest.mark.parametrize("label,command", _CORPUS, ids=[row[0] for row in _CORPUS])
@@ -134,6 +142,8 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
         pytest.skip("jq not available")
 
     _make_project_dirs(tmp_path)
+    if label == "nested_wrap":
+        command = _build_harness(_NESTED_WRAP_INNER, str(tmp_path), uuid4().hex[:16])
 
     raw = _run_raw(command, tmp_path)
     raw_combined = raw.stdout + raw.stderr
@@ -143,6 +153,9 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
         # wrapped run's append produces byte-identical content to compare.
         report = tmp_path / ".autoskillit" / "temp" / "investigate" / "report.md"
         report.unlink(missing_ok=True)
+    if label == "nested_wrap":
+        for artifact in _artifact_files(tmp_path):
+            artifact.unlink()
 
     wrapped = _run_wrapped(command, tmp_path)
 
@@ -187,10 +200,10 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
         assert wrapped.returncode == 1
 
     if label == "self_signal":
-        # subprocess.run reports signal-terminated processes as -signum
-        # (SIGTERM -> -15) rather than the 128+signum shells report via $?.
+        # The isolated runner deliberately translates a child signal to the
+        # shell-compatible 128+signal status.
         assert raw.returncode == -15
-        assert wrapped.returncode == -15
+        assert wrapped.returncode == 143
         if artifacts:
             assert b"pre" in artifacts[0].read_bytes()
         return
@@ -260,6 +273,199 @@ def test_capture_dir_uncreatable_fail_stops(tmp_path: Path) -> None:
     assert "should_not_run" not in combined
 
 
+@pytest.mark.parametrize("component", [".autoskillit", "temp", "shell_capture"])
+def test_main_generated_wrapper_rejects_symlinked_capture_components(
+    component: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    secret = external / "secret"
+    secret.write_text("must-not-be-read")
+
+    parent = project
+    for name in (".autoskillit", "temp", "shell_capture"):
+        candidate = parent / name
+        if name == component:
+            candidate.symlink_to(external, target_is_directory=True)
+            break
+        candidate.mkdir()
+        parent = candidate
+    if component == "temp":
+        (external / ".hook_config.json").write_text(
+            json.dumps({"output_budget_policy": {"disabled": True}})
+        )
+
+    wrapper = _main_generated_wrapper(
+        "printf ran > command_ran",
+        project,
+        monkeypatch,
+    )
+    completed = subprocess.run(
+        ["bash", "-c", wrapper],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert "CAPTURE_FAILED" in completed.stdout + completed.stderr
+    assert not (project / "command_ran").exists()
+    assert not list(external.glob("shell_*.log"))
+    assert secret.read_text() == "must-not-be-read"
+    assert "must-not-be-read" not in completed.stdout + completed.stderr
+
+
+def test_main_generated_wrapper_accepts_symlinked_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    supplied_cwd = tmp_path / "project-link"
+    supplied_cwd.symlink_to(project, target_is_directory=True)
+
+    wrapper = _main_generated_wrapper("printf anchored", supplied_cwd, monkeypatch)
+    completed = subprocess.run(
+        ["bash", "-c", wrapper],
+        cwd=supplied_cwd,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == b"anchored"
+    assert len(_artifact_files(project)) == 1
+
+
+@pytest.mark.parametrize("collision", ["symlink", "hardlink", "regular"])
+def test_main_generated_wrapper_rejects_final_artifact_collisions(
+    collision: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    _make_project_dirs(project)
+    capture_id = "a1b2c3d4e5f60718"
+    monkeypatch.setattr(
+        shell_capture_hook,
+        "uuid4",
+        lambda: SimpleNamespace(hex=capture_id + "0" * 16),
+    )
+    artifact = _capture_dir(project) / f"shell_{capture_id}.log"
+    external = tmp_path / "external-secret"
+    external.write_bytes(b"must-survive")
+    if collision == "symlink":
+        artifact.symlink_to(external)
+    elif collision == "hardlink":
+        try:
+            os.link(external, artifact)
+        except OSError:
+            pytest.skip("hardlinks unavailable")
+    else:
+        artifact.write_bytes(b"existing")
+
+    wrapper = _main_generated_wrapper(
+        "printf ran > command_ran",
+        project,
+        monkeypatch,
+    )
+    completed = subprocess.run(
+        ["bash", "-c", wrapper],
+        cwd=project,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    combined = (completed.stdout + completed.stderr).decode()
+    assert "CAPTURE_FAILED" in combined
+    assert "must-survive" not in combined
+    assert not (project / "command_ran").exists()
+    assert external.read_bytes() == b"must-survive"
+    if collision == "regular":
+        assert artifact.read_bytes() == b"existing"
+
+
+def test_capture_directory_replacement_uses_open_fds_and_hides_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    _make_project_dirs(project)
+    config = project / ".autoskillit" / "temp" / ".hook_config.json"
+    config.write_text(json.dumps({"output_budget_policy": {"shell_max_inline_bytes": 8}}))
+    external = tmp_path / "replacement-target"
+    external.mkdir()
+    command = (
+        "mv .autoskillit/temp/shell_capture "
+        ".autoskillit/temp/shell_capture-original; "
+        f"ln -s {shlex.quote(str(external))} .autoskillit/temp/shell_capture; "
+        "printf 0123456789abcdef"
+    )
+
+    wrapper = _main_generated_wrapper(command, project, monkeypatch)
+    completed = subprocess.run(
+        ["bash", "-c", wrapper],
+        cwd=project,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert b"-> unavailable " in completed.stdout
+    assert b"SHELL_OUTPUT_CAPTURED" in completed.stdout
+    displaced = project / ".autoskillit" / "temp" / "shell_capture-original"
+    artifacts = sorted(displaced.glob("shell_*.log"))
+    assert len(artifacts) == 1
+    assert artifacts[0].read_bytes() == b"0123456789abcdef"
+    assert not list(external.iterdir())
+
+
+def test_capture_artifact_replacement_uses_open_fd_and_hides_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    _make_project_dirs(project)
+    config = project / ".autoskillit" / "temp" / ".hook_config.json"
+    config.write_text(json.dumps({"output_budget_policy": {"shell_max_inline_bytes": 8}}))
+    capture_id = "1029384756abcdef"
+    monkeypatch.setattr(
+        shell_capture_hook,
+        "uuid4",
+        lambda: SimpleNamespace(hex=capture_id + "0" * 16),
+    )
+    capture_dir = _capture_dir(project)
+    artifact = capture_dir / f"shell_{capture_id}.log"
+    displaced = capture_dir / "opened-artifact.log"
+    external = tmp_path / "external-target"
+    external.write_bytes(b"must-survive")
+    command = (
+        f"mv {shlex.quote(str(artifact))} {shlex.quote(str(displaced))}; "
+        f"ln -s {shlex.quote(str(external))} {shlex.quote(str(artifact))}; "
+        "printf fedcba9876543210"
+    )
+
+    wrapper = _main_generated_wrapper(command, project, monkeypatch)
+    completed = subprocess.run(
+        ["bash", "-c", wrapper],
+        cwd=project,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert b"-> unavailable " in completed.stdout
+    assert displaced.read_bytes() == b"fedcba9876543210"
+    assert external.read_bytes() == b"must-survive"
+    assert artifact.is_symlink()
+
+
 @pytest.mark.parametrize(
     "cmd",
     ["echo hello", "ls -la", "cat /dev/null", "python3 -c 'print(1)'", ""],
@@ -271,7 +477,7 @@ def test_harness_contains_no_destructive_verbs(cmd: str) -> None:
     hook-injected scaffolding. Destructive verbs (rm, unlink, etc.) are forbidden
     by Codex's built-in policy. This test ensures the harness never introduces them.
     """
-    harness = _build_harness(cmd, "/tmp/test", _INLINE_BYTES)
+    harness = _build_harness(cmd, "/tmp/test", uuid4().hex[:16])
     for raw_line in harness.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -287,8 +493,8 @@ def test_harness_contains_no_destructive_verbs(cmd: str) -> None:
         )
 
 
-def test_small_output_artifact_cleaned_by_sweep(tmp_path: Path) -> None:
-    """Small-output captures are retained on disk but reaped by the Python-side sweep."""
+def test_small_output_artifact_safely_retained_by_sweep(tmp_path: Path) -> None:
+    """Portable cleanup retains stale captures without identity-conditioned unlink."""
     _make_project_dirs(tmp_path)
     command = "echo hello_small"
     wrapped = _run_wrapped(command, tmp_path)
@@ -298,11 +504,10 @@ def test_small_output_artifact_cleaned_by_sweep(tmp_path: Path) -> None:
     assert len(artifacts) == 1
 
     target = artifacts[0]
-    # Force mtime into the past so max_age_seconds=0 sweeps it.
     os.utime(target, (0, 0))
-    deleted = sweep_stale_captures(_capture_dir(tmp_path), max_age_seconds=0)
-    assert deleted == 1
-    assert not target.exists()
+    deleted = sweep_stale_captures(tmp_path, max_age_seconds=0)
+    assert deleted == 0
+    assert target.exists()
 
 
 def test_sweep_rejects_symlinks_and_traversals(tmp_path: Path) -> None:
@@ -316,7 +521,7 @@ def test_sweep_rejects_symlinks_and_traversals(tmp_path: Path) -> None:
     symlink.symlink_to(outside)
     assert symlink.is_symlink()
 
-    deleted = sweep_stale_captures(capture, max_age_seconds=0)
+    deleted = sweep_stale_captures(tmp_path, max_age_seconds=0)
     assert deleted == 0
     assert outside.exists(), "outside target file must be untouched by sweep"
     assert outside.read_text() == "must-survive"
@@ -337,9 +542,9 @@ def test_sweep_filename_allowlist(tmp_path: Path) -> None:
     invalid_ext = capture / "evil.sh"
     invalid_ext.write_text("x")
 
-    deleted = sweep_stale_captures(capture, max_age_seconds=0)
-    assert deleted == 1
-    assert not valid.exists()
+    deleted = sweep_stale_captures(tmp_path, max_age_seconds=0)
+    assert deleted == 0
+    assert valid.exists()
     assert short_uid.exists(), "old 8-char uid format files must not be deleted"
     assert invalid_ext.exists(), "files outside the shell_*.log allowlist must not be deleted"
 
@@ -357,89 +562,13 @@ def test_sweep_stale_captures_uses_wall_clock_not_directory_mtime(tmp_path: Path
     os.utime(stale, (backdated, backdated))
     os.utime(capture, (backdated, backdated))
 
-    deleted = sweep_stale_captures(capture, max_age_seconds=100)
-    assert deleted == 1
-    assert not stale.exists(), (
-        "file older than max_age_seconds must be swept even when the capture "
-        "directory's own mtime is equally stale"
-    )
-
-
-def _cc_case_valid(capture: Path) -> Path:
-    good = capture / f"shell_{uuid4().hex[:16]}.log"
-    good.write_text("ok")
-    return good
-
-
-def _cc_case_symlink(capture: Path) -> Path:
-    target = capture / f"shell_{uuid4().hex[:16]}.log"
-    target.write_text("ok")
-    sym = capture / f"shell_{uuid4().hex[:16]}.log"
-    sym.symlink_to(target)
-    return sym
-
-
-def _cc_case_traversal(capture: Path) -> Path:
-    traversal = capture / "../../escape.log"
-    traversal.write_text("x")
-    return traversal
-
-
-def _cc_case_hardlink(capture: Path) -> Path:
-    source = capture.parent / "hardlink_source.log"
-    source.write_text("data")
-    hardlinked = capture / f"shell_{uuid4().hex[:16]}.log"
-    try:
-        os.link(source, hardlinked)
-    except OSError:
-        pytest.skip("hardlink not supported in this environment")
-    return hardlinked
-
-
-def _cc_case_world_writable(capture: Path) -> Path:
-    path = capture / f"shell_{uuid4().hex[:16]}.log"
-    path.write_text("x")
-    os.chmod(path, 0o666)
-    return path
-
-
-@pytest.mark.parametrize(
-    "case_builder,expect_safe",
-    [
-        (_cc_case_valid, True),
-        (_cc_case_symlink, False),
-        (_cc_case_traversal, False),
-        (_cc_case_hardlink, False),
-        (_cc_case_world_writable, False),
-    ],
-    ids=["valid", "symlink", "traversal", "hardlink", "world_writable"],
-)
-def test_capture_cleanup_containment_parity(
-    case_builder: Callable[[Path], Path], expect_safe: bool, tmp_path: Path
-) -> None:
-    """_is_safe_capture_file rejects the same attack vectors as core.path_containment."""
-    from autoskillit.core.path_containment import ContainmentError, resolve_contained_path
-
-    _make_project_dirs(tmp_path)
-    capture = _capture_dir(tmp_path)
-    path = case_builder(capture)
-
-    assert _is_safe_capture_file(path, capture) is expect_safe
-    if expect_safe:
-        try:
-            resolve_contained_path(path, capture)
-        except ContainmentError as exc:
-            pytest.fail(f"core containment rejected a valid capture file: {exc}")
-    else:
-        with pytest.raises(ContainmentError):
-            resolve_contained_path(path, capture)
+    deleted = sweep_stale_captures(tmp_path, max_age_seconds=100)
+    assert deleted == 0
+    assert stale.exists()
 
 
 def test_capture_filename_regex_consistency() -> None:
-    """Hook module and sweep module must agree on the shell_*.log regex."""
+    """The canonical helper accepts only the current capture filename contract."""
     sample = f"shell_{uuid4().hex[:16]}.log"
-    assert _CAPTURE_FILENAME_RE.match(sample) is not None
-
-    # The inline literal in session_start_hook.py must accept the same filename.
-    inline_pattern = r"^shell_[0-9a-f]{16}\.log$"
-    assert re.match(inline_pattern, sample) is not None
+    assert _CAPTURE_FILENAME_RE.fullmatch(sample) is not None
+    assert _CAPTURE_FILENAME_RE.fullmatch("shell_deadbeef.log") is None

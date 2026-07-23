@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
+import re
+import shlex
+import subprocess
 from contextlib import redirect_stdout
+from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _SENTINEL = "# autoskillit-shell-capture v1"
 
@@ -39,6 +44,21 @@ def _updated_command(output: str) -> str:
     return payload["hookSpecificOutput"]["updatedInput"]["command"]
 
 
+def _runner_argv(command: str) -> list[str]:
+    lines = command.splitlines()
+    assert lines[0] == _SENTINEL
+    assert len(lines) == 2
+    return shlex.split(lines[1])
+
+
+def _transported_command(command: str) -> str:
+    argv = _runner_argv(command)
+    assert argv[1] == "-I"
+    assert Path(argv[2]).name == "_capture_artifacts.py"
+    assert argv[3] == "run"
+    return base64.b64decode(argv[4], validate=True).decode()
+
+
 def test_silent_off_codex(monkeypatch):
     event = _build_event("echo hello")
 
@@ -55,7 +75,8 @@ def test_rewrites_on_codex_env(monkeypatch):
     assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     command = payload["hookSpecificOutput"]["updatedInput"]["command"]
     assert _SENTINEL in command
-    assert "echo hello" in command
+    assert _transported_command(command) == "echo hello"
+    assert "echo hello" not in command
 
 
 def test_rewrites_on_turn_id_payload(monkeypatch):
@@ -68,7 +89,7 @@ def test_rewrites_on_turn_id_payload(monkeypatch):
     assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     command = payload["hookSpecificOutput"]["updatedInput"]["command"]
     assert _SENTINEL in command
-    assert "echo hello" in command
+    assert _transported_command(command) == "echo hello"
 
 
 def test_always_wraps_sentinel_prefixed_command(monkeypatch):
@@ -76,18 +97,19 @@ def test_always_wraps_sentinel_prefixed_command(monkeypatch):
     output = _run_hook(_build_event(already_wrapped), monkeypatch, env_backend="codex")
 
     command = _updated_command(output)
-    assert command.count(_SENTINEL) == 2
-    assert already_wrapped in command
+    assert command.count(_SENTINEL) == 1
+    assert _transported_command(command) == already_wrapped
 
 
-def test_newline_normalization_applied(monkeypatch):
-    output = _run_hook(_build_event("echo test"), monkeypatch, env_backend="codex")
+@pytest.mark.parametrize("original", ["echo test", "echo test\n"])
+def test_command_transport_preserves_original(monkeypatch, original):
+    output = _run_hook(_build_event(original), monkeypatch, env_backend="codex")
 
     command = _updated_command(output)
-    assert "echo test\n)" in command
+    assert _transported_command(command) == original
 
 
-def test_disabled_policy_no_rewrite(monkeypatch, tmp_path):
+def test_verified_disabled_policy_is_runner_owned(monkeypatch, tmp_path):
     config_dir = tmp_path / ".autoskillit" / "temp"
     config_dir.mkdir(parents=True)
     (config_dir / ".hook_config.json").write_text(
@@ -95,7 +117,20 @@ def test_disabled_policy_no_rewrite(monkeypatch, tmp_path):
     )
 
     event = _build_event("echo hello", cwd=str(tmp_path))
-    assert _run_hook(event, monkeypatch, env_backend="codex") == ""
+    output = _run_hook(event, monkeypatch, env_backend="codex")
+    command = _updated_command(output)
+    completed = subprocess.run(
+        ["bash", "-c", command],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == "hello\n"
+    assert "SHELL_OUTPUT_CAPTURED" not in completed.stdout
+    assert not (config_dir / "shell_capture").exists()
 
 
 def test_malformed_stdin_fails_open(monkeypatch):
@@ -115,25 +150,46 @@ def test_non_string_command_fails_open(monkeypatch):
     assert _run_hook(event, monkeypatch, env_backend="codex") == ""
 
 
-def test_marker_provenance_and_shell_safety(monkeypatch):
-    output = _run_hook(_build_event("echo hello"), monkeypatch, env_backend="codex")
+@pytest.mark.parametrize("command", ["x" * (64 * 1024 + 1), "printf bad\x00command"])
+def test_invalid_command_transport_builds_nonexecuting_rejection(command):
+    from autoskillit.hooks.shell_capture_hook import _build_harness
+
+    harness = _build_harness(command, "/abs/project", "0123456789abcdef")
+    argv = _runner_argv(harness)
+
+    assert argv[3] == "reject"
+    assert command not in harness
+
+
+def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
+    config_dir = tmp_path / ".autoskillit" / "temp"
+    config_dir.mkdir(parents=True)
+    (config_dir / ".hook_config.json").write_text(
+        json.dumps({"output_budget_policy": {"shell_max_inline_bytes": 8}})
+    )
+    output = _run_hook(
+        _build_event("printf 0123456789abcdef", cwd=str(tmp_path)),
+        monkeypatch,
+        env_backend="codex",
+    )
     command = _updated_command(output)
+    argv = _runner_argv(command)
 
-    assert "AutoSkillit" in command
-    assert "shell_capture_hook" in command
+    assert argv[1] == "-I"
+    assert Path(argv[2]).name == "_capture_artifacts.py"
+    assert re.fullmatch(r"[0-9a-f]{16}", argv[-1])
+    assert "printf 0123456789abcdef" not in command
+    assert "AutoSkillit" not in command
+    assert "`" not in command
 
-    import re
-
-    marker_matches = re.findall(r"printf '\\n%s\\n' (.+)", command)
-    assert marker_matches, "expected a printf-embedded capture marker in the harness"
-    marker = marker_matches[0]
-
-    assert "`" not in marker
-
-    for var in ("$__as_sz", "$__as_f", "$__as_sha"):
-        assert f'"{var}"' in marker, f"expected expansion-safe {var} in marker"
-
-    stripped = marker
-    for var in ("$__as_sz", "$__as_f", "$__as_sha"):
-        stripped = stripped.replace(f'"{var}"', "")
-    assert "$" not in stripped
+    completed = subprocess.run(
+        ["bash", "-c", command],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0
+    assert "AutoSkillit hook shell_capture_hook" in completed.stdout
+    assert "SHELL_OUTPUT_CAPTURED" in completed.stdout
+    assert f"shell_{argv[-1]}.log" in completed.stdout

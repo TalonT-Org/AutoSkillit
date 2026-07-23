@@ -78,6 +78,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_pty_coherence.py` | Dispatch-type-aware PTY allocation guards: AST enforcement that dispatch_food_truck passes pty_override=False and _attempt_contract_nudge accepts pty_override |
 | `test_pyright_suppression_allowlist.py` | REQ-PYRIGHT-001: pyright/type-ignore suppression allowlist + count budget |
 | `test_python_no_hardcoded_temp.py` | Architectural invariant: no literal `.autoskillit/temp` outside the whitelist |
+| `test_shell_capture_trust_anchor.py` | Guards canonical descriptor-anchored capture/cleanup wiring and explicit project-temp cleanup debt |
 | `test_quota_capability_isolation.py` | AST guard: quota modules must not reference BackendCapabilities fields |
 | `test_recipe_diagram_freshness.py` | Parametrized diagram freshness enforcement: bundled recipes must have non-stale diagrams; missing diagrams are xfail(strict=True) with shrink-enforcement meta-test |
 | `test_recipe_contract_freshness.py` | Parametrized JSON card freshness enforcement: contract cards must have non-stale .json companions with content parity |

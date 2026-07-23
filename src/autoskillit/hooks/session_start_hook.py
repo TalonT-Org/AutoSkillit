@@ -12,10 +12,17 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _capture_artifacts import (  # type: ignore[import-not-found]  # noqa: E402
+    sweep_stale_captures,
+)
 
 
 def main() -> None:
@@ -81,21 +88,7 @@ def main() -> None:
         pass
 
     try:
-        _capture_dir = Path.cwd() / ".autoskillit" / "temp" / "shell_capture"
-        if _capture_dir.is_dir():
-            _CAPTURE_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
-            _now = datetime.now(UTC)
-            for _cp in _capture_dir.iterdir():
-                try:
-                    if not _CAPTURE_RE.match(_cp.name):
-                        continue
-                    if _cp.is_symlink():
-                        continue
-                    _c_age = _now.timestamp() - _cp.stat().st_mtime
-                    if _c_age >= 3600:
-                        _cp.unlink()
-                except Exception:
-                    pass
+        sweep_stale_captures(Path.cwd())
     except Exception:
         pass
 

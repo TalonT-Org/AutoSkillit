@@ -153,6 +153,22 @@ class _DrainResult:
     write_error: OSError | None
 
 
+@dataclass(slots=True)
+class _CleanupCandidate:
+    name: str
+    fd: int
+    device: int
+    inode: int
+    mode: int
+    nlink: int
+    mtime: float
+
+    def close(self) -> None:
+        if self.fd >= 0:
+            os.close(self.fd)
+            self.fd = -1
+
+
 def _require_capabilities() -> None:
     required_dir_fd = (os.open, os.mkdir)
     if (
@@ -283,7 +299,7 @@ def _read_bounded_file_at(directory_fd: int, name: str) -> dict:
         return {}
     try:
         value = os.fstat(fd)
-        if not stat.S_ISREG(value.st_mode):
+        if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1 or value.st_mode & stat.S_IWOTH:
             return {}
         data = bytearray()
         while len(data) <= _MAX_POLICY_FILE_BYTES:
@@ -393,7 +409,13 @@ def current_artifact_path_if_bound(
         except OSError:
             return None
         opened.append(current_artifact_fd)
-        if not _same_identity(current_artifact_fd, artifact.identity):
+        current_value = os.fstat(current_artifact_fd)
+        if (
+            FileIdentity.from_stat(current_value) != artifact.identity
+            or not stat.S_ISREG(current_value.st_mode)
+            or current_value.st_nlink != 1
+            or current_value.st_mode & stat.S_IWOTH
+        ):
             return None
         return str(anchor.physical_path.joinpath(*CAPTURE_PATH_COMPONENTS, artifact.name))
     finally:
@@ -560,7 +582,10 @@ def _resolve_bash() -> str:
 def run_capture(command: str, cwd: str, capture_id: str) -> int:
     """Run ``command`` from a descriptor-anchored project and capture its output."""
 
-    command_bytes = command.encode("utf-8")
+    try:
+        command_bytes = command.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise CaptureSetupError("invalid command encoding") from exc
     if (
         not _CAPTURE_ID_RE.fullmatch(capture_id)
         or "\x00" in command
@@ -581,7 +606,16 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         root = open_capture_root(anchor, create=True)
         artifact = create_capture_artifact(root, capture_id)
         process = _spawn_bash(anchor, bash_path, command, capture_output=True)
-        result = _drain_capture(process, artifact, policy.inline_bytes)
+        try:
+            result = _drain_capture(process, artifact, policy.inline_bytes)
+        except (CaptureSetupError, OSError):
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.poll() is None:
+                process.terminate()
+            returncode = _normalized_returncode(process.wait())
+            _emit_failure("capture pipe drain failed")
+            return returncode
         returncode = _normalized_returncode(process.wait())
         if result.write_error is not None:
             _emit_failure("capture artifact write failed")
@@ -599,6 +633,42 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         if root is not None:
             root.close()
         anchor.close()
+
+
+def _open_stale_candidate(
+    root: CaptureRoot,
+    name: str,
+    *,
+    mtime_threshold: float,
+) -> _CleanupCandidate | None:
+    if not _CAPTURE_FILENAME_RE.fullmatch(name):
+        return None
+    try:
+        fd = os.open(name, _READ_FLAGS, dir_fd=root.fd)
+    except OSError:
+        return None
+    try:
+        value = os.fstat(fd)
+    except OSError:
+        os.close(fd)
+        return None
+    if (
+        not stat.S_ISREG(value.st_mode)
+        or value.st_nlink != 1
+        or value.st_mode & stat.S_IWOTH
+        or value.st_mtime > mtime_threshold
+    ):
+        os.close(fd)
+        return None
+    return _CleanupCandidate(
+        name=name,
+        fd=fd,
+        device=value.st_dev,
+        inode=value.st_ino,
+        mode=value.st_mode,
+        nlink=value.st_nlink,
+        mtime=value.st_mtime,
+    )
 
 
 def sweep_stale_captures(
@@ -623,24 +693,10 @@ def sweep_stale_captures(
         except OSError:
             return 0
         for name in names:
-            if not _CAPTURE_FILENAME_RE.fullmatch(name):
-                continue
-            try:
-                fd = os.open(name, _READ_FLAGS, dir_fd=root.fd)
-            except OSError:
-                continue
-            try:
-                value = os.fstat(fd)
-                if (
-                    not stat.S_ISREG(value.st_mode)
-                    or value.st_nlink != 1
-                    or value.st_mode & stat.S_IWOTH
-                    or value.st_mtime > threshold
-                ):
-                    continue
+            candidate = _open_stale_candidate(root, name, mtime_threshold=threshold)
+            if candidate is not None:
                 # Retention is the safe disposition without expected-inode unlink.
-            finally:
-                os.close(fd)
+                candidate.close()
         return 0
     except (CaptureSetupError, OSError):
         return 0

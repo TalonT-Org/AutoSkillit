@@ -88,25 +88,33 @@ in `.hook_config.json` for future recipes that legitimately need these operation
 **Matched tool:** `Bash`
 **Scope:** Codex sessions only (#4286 / ADR-0006); Claude Code is unaffected.
 PreToolUse input-rewrite hook that wraps every native shell command on Codex in a
-capture harness. The original command runs unmodified in a subshell; its complete
-combined stdout+stderr goes to a mechanism-owned artifact at
-`<cwd>/.autoskillit/temp/shell_capture/shell_<uuid16>.log`. Only a bounded inline
-slice enters context: full content when small (artifact retained; reclaimed by SessionStart sweep), else head +
-provenance marker (bytes, sha256, path) + tail. Exit codes are preserved via a
-trap-EXIT postlude. Set `output_budget.guard_enabled: false` to disable;
-inline threshold controlled by `output_budget.shell_max_inline_bytes`.
+minimal isolated-Python runner. The runner opens the supplied `cwd` as a
+`ProjectAnchor` directory descriptor before deriving a physical path, then opens or
+creates `.autoskillit`, `temp`, and `shell_capture` relative to retained directory
+descriptors without following symlinks. It reads output policy through the verified
+`temp` descriptor and creates `shell_<uuid16>.log` exclusively with no-follow
+semantics. The child sends combined stdout+stderr through a pipe; the runner writes,
+measures, hashes, and replays bytes through owned descriptors. Only a bounded inline
+slice enters context: full content when small, otherwise head + provenance marker
+(bytes, sha256, verified path or `unavailable`) + tail. Set
+`output_budget.guard_enabled: false` to disable capture after verified policy loading;
+the inline threshold is controlled by `output_budget.shell_max_inline_bytes`.
 
 #### Capture Artifact Lifecycle
 
 | Phase | Behavior |
 |-------|----------|
-| Creation | Harness creates `<cwd>/.autoskillit/temp/shell_capture/shell_<uuid16>.log` via `mkdir -p` + redirect |
+| Creation | Runner creates the artifact relative to a verified capture-directory fd with `O_CREAT | O_EXCL | O_NOFOLLOW` and mode `0600` |
 | Retention | Artifact is always retained after command execution (both inline and spill branches) |
-| Ownership | The hook subprocess; no downstream consumer reads these files |
-| Cleanup — session lifecycle | `session_start_hook.py` sweeps stale captures (older than 1 hour, measured against wall-clock time) at every SessionStart |
+| Ownership | The isolated runner retains all directory/artifact fds through measurement, replay, and marker-path identity verification |
+| Cleanup — session lifecycle | `session_start_hook.py` calls the same descriptor-anchored helper to classify stale captures. Portable Python cannot unlink by expected inode, so candidates are conservatively retained rather than deleted through a race-prone pathname |
 | Naming contract | `shell_[0-9a-f]{16}.log` — files not matching this pattern are never deleted |
-| Safety | Sweep validates the filename allowlist and rejects symlinks via `lstat`-backed checks |
-| Failure mode | Sweep errors are swallowed (fail-open); cleanup failure never blocks command execution |
+| Safety | Capture components reject symlinks; artifacts reject collisions, symlinks, hardlinks, and world-writable entries; marker paths are emitted only while every current binding matches the opened identities |
+| Failure mode | Capture setup failure stops before the user command. SessionStart cleanup errors remain fail-open and never block reminder injection |
+
+Codex hook generation excludes the interactive-only SessionStart hook, so Codex
+artifacts have no automatic deletion guarantee. Lifecycle/quota reclamation must not
+weaken the descriptor and identity contract when it is added.
 
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`

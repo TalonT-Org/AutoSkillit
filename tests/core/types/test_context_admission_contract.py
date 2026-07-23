@@ -10,21 +10,26 @@ import pytest
 
 from autoskillit.core import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
+    AcceptInputEvent,
     ActiveContextAdmissionState,
     AdmissionAttemptId,
+    AdmissionBatch,
     AdmissionBatchId,
+    AdmissionBatchRecord,
     AdmissionDecision,
     AdmissionDecisionKind,
     AdmissionEffect,
     AdmissionEventId,
     AdmissionOccurrence,
     AdmissionOccurrenceId,
+    AdmissionOccurrenceRecord,
     AdmissionRequestId,
     AdmissionReservationId,
     AdmissionReservationKey,
     AdmissionSequence,
     AdmissionState,
     AdmissionTransition,
+    AdmissionWitness,
     AdmissionWitnessId,
     AgentInstanceId,
     AggregateRevision,
@@ -41,6 +46,7 @@ from autoskillit.core import (
     ContextSessionId,
     ContextThreadId,
     ContextWindowSnapshot,
+    CoverageEvidence,
     CoverageEvidenceKind,
     CoverageState,
     DeliveryOccurrenceId,
@@ -52,10 +58,12 @@ from autoskillit.core import (
     MeasurementKind,
     ModelIdentity,
     ModelItemId,
+    PrepareBatchEvent,
     ProducerInstanceId,
     ProducerSurface,
     ProtectedPoolOwnerId,
     ProtectedPoolSpec,
+    RepresentationBindingWitness,
     RepresentationRevision,
     ReserveClass,
     TokenizerIdentity,
@@ -291,6 +299,53 @@ def _manifest(*occurrences: AdmissionOccurrence) -> CanonicalRepresentationManif
     )
 
 
+def _batch(batch_id: str, occurrences: tuple[AdmissionOccurrence, ...]) -> AdmissionBatch:
+    return AdmissionBatch(
+        batch_id=AdmissionBatchId(batch_id),
+        request_id=AdmissionRequestId("request-1"),
+        occurrence_ids=tuple(occurrence.occurrence_id for occurrence in occurrences),
+        reserve_class=ReserveClass.ORDINARY,
+        protected_pool_owner_id=None,
+        manifest=_manifest(*occurrences),
+    )
+
+
+def _namespace(operation_kind: str) -> IdempotencyNamespace:
+    return IdempotencyNamespace(caller_scope="test-caller", operation_kind=operation_kind)
+
+
+def _witness(
+    batch: AdmissionBatch,
+    kind: WitnessKind,
+    *,
+    witness: str | None = None,
+) -> AdmissionWitness:
+    return AdmissionWitness(
+        witness_id=AdmissionWitnessId(witness or f"{kind.value}-witness-{batch.batch_id.value}"),
+        kind=kind,
+        window_epoch_id=WindowEpochId("epoch-1"),
+        window_epoch_number=1,
+        snapshot_sequence=1,
+        request_id=batch.request_id,
+        batch_id=batch.batch_id,
+        representation_revision=batch.manifest.representation_revision,
+        occurrence_ids=batch.occurrence_ids,
+        authority_source_id=AuthoritySourceId("authority-test"),
+    )
+
+
+def _binding(batch: AdmissionBatch) -> RepresentationBindingWitness:
+    bound_revision = batch.manifest.representation_revision
+    return RepresentationBindingWitness(
+        counted_representation_revision=bound_revision,
+        dispatched_representation_revision=bound_revision,
+        final_manifest_revision=bound_revision,
+        request_id=batch.request_id,
+        batch_id=batch.batch_id,
+        authority_source_id=AuthoritySourceId("authority-test"),
+    )
+
+
 def _snapshot(
     *,
     protocol_version: int = CONTEXT_ADMISSION_PROTOCOL_VERSION,
@@ -447,7 +502,7 @@ def test_numeric_revisions_are_non_negative_and_have_no_default(
 
 def test_dispatch_identity_is_validated_and_projects_only_dispatch_id() -> None:
     identity = DispatchIdentity.from_dispatch_id("dispatch-12345678")
-    lineage = _lineage(dispatch_identity=identity)
+    lineage = _lineage(surface=ProducerSurface.NATIVE_SHELL, dispatch_identity=identity)
     serialized = lineage.to_dict()
     assert serialized["dispatch_identity"] == {"dispatch_id": identity.dispatch_id}
     assert ContextLineage.from_dict(serialized) == lineage
@@ -606,3 +661,129 @@ def test_closed_epoch_audits_survive_state_serialization() -> None:
     restored = UninitializedContextAdmissionState.from_dict(state.to_dict())
     assert restored == state
     assert restored.closed_epochs == (empty_audit,)
+
+
+@pytest.mark.parametrize(
+    "non_dispatch_surface",
+    [
+        ProducerSurface.TOOL_ARGUMENT,
+        ProducerSurface.TOOL_RESULT_ENVELOPE,
+        ProducerSurface.USER_PROMPT,
+        ProducerSurface.ASSISTANT_OUTPUT_HISTORY,
+        ProducerSurface.SKILL_PLUGIN_CONTEXT,
+        ProducerSurface.OTHER_CONTEXT_INJECTION,
+        ProducerSurface.CLIENT_PROVIDER_RETRIEVAL,
+        ProducerSurface.CODE_MODE_AGGREGATE,
+        ProducerSurface.HOSTED_SPECIALIZED_TOOL,
+        ProducerSurface.HOOK_FEEDBACK,
+        ProducerSurface.COMPACTION_MODEL_WINDOW_TRANSITION,
+    ],
+)
+def test_dispatch_identity_is_rejected_on_non_dispatch_surfaces(
+    non_dispatch_surface: ProducerSurface,
+) -> None:
+    identity = DispatchIdentity.from_dispatch_id("dispatch-12345678")
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        _lineage(surface=non_dispatch_surface, dispatch_identity=identity)
+    assert "dispatch_identity_on_non_dispatch_surface" in str(exc_info.value)
+
+
+def test_occurrence_record_rejects_duplicate_witness_ids() -> None:
+    occurrence = _occurrence()
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        AdmissionOccurrenceRecord(
+            occurrence=occurrence,
+            state=AdmissionState.COMMITTED,
+            batch_id=None,
+            reservation_id=None,
+            accepted_witness_ids=(
+                AdmissionWitnessId("dup"),
+                AdmissionWitnessId("dup"),
+            ),
+            indeterminate_reason_code=None,
+            quarantine_reason_code=None,
+        )
+    assert "duplicate_witness_id" in str(exc_info.value)
+
+
+def test_batch_record_rejects_committed_and_unresolved_simultaneously() -> None:
+    occurrence = _occurrence()
+    batch = _batch("batch-simul", (occurrence,))
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        AdmissionBatchRecord(
+            batch=batch,
+            state=AdmissionState.INDETERMINATE,
+            reservation_id=None,
+            witness_ids=(),
+            prepared_input_count=None,
+            committed_input_count=5,
+            unresolved_input_count=5,
+        )
+    assert "committed_and_unresolved_simultaneously" in str(exc_info.value)
+
+
+def test_privacy_canaries_are_rejected_from_coverage_evidence() -> None:
+    with pytest.raises(ContextAdmissionValidationError):
+        CoverageEvidence(
+            claim_id="COV-test",
+            kind=CoverageEvidenceKind.AUTOSKILLIT_SOURCE,
+            backend="autoskillit",
+            configuration_mode="default",
+            verifier="source_inspection",
+            source_locator="/home/alice/private/source.py",
+            tested_version="0.10.890",
+            tested_revision="ac8f653a00d2",
+            checked_at="2026-07-23",
+            freshness_policy="verify_on_version_or_configuration_change",
+        )
+    with pytest.raises(ContextAdmissionValidationError):
+        CoverageEvidence(
+            claim_id="COV-test",
+            kind=CoverageEvidenceKind.AUTOSKILLIT_SOURCE,
+            backend="autoskillit",
+            configuration_mode="default",
+            verifier="source_inspection",
+            source_locator="~alice/private",
+            tested_version="0.10.890",
+            tested_revision="ac8f653a00d2",
+            checked_at="2026-07-23",
+            freshness_policy="verify_on_version_or_configuration_change",
+        )
+
+
+def test_prepare_event_rejects_estimate_measurement() -> None:
+    occurrence = _occurrence()
+    batch = _batch("batch-estimate", (occurrence,))
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        PrepareBatchEvent(
+            event_id=AdmissionEventId("prepare-estimate"),
+            protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+            idempotency_namespace=_namespace("prepare-batch"),
+            expected_aggregate_revision=AggregateRevision(0),
+            batch_id=batch.batch_id,
+            representation_revision=batch.manifest.representation_revision,
+            proposed_charge=5,
+            measurement_kind=MeasurementKind.HOST_ESTIMATE,
+            authority_source_id=AuthoritySourceId("authority-test"),
+        )
+    assert "non_authoritative_measurement" in str(exc_info.value)
+
+
+def test_accept_event_rejects_estimate_measurement() -> None:
+    occurrence = _occurrence()
+    batch = _batch("batch-estimate-accept", (occurrence,))
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        AcceptInputEvent(
+            event_id=AdmissionEventId("accept-estimate"),
+            protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+            idempotency_namespace=_namespace("accept-input"),
+            expected_aggregate_revision=AggregateRevision(0),
+            batch_id=batch.batch_id,
+            witness=_witness(batch, WitnessKind.PROVIDER_ACCEPTED),
+            final_manifest_revision=batch.manifest.representation_revision,
+            exact_input_charge=5,
+            measurement_kind=MeasurementKind.BYTE_EMERGENCY,
+            authority_source_id=AuthoritySourceId("authority-test"),
+            representation_binding_witness=_binding(batch),
+        )
+    assert "non_authoritative_measurement" in str(exc_info.value)

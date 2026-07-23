@@ -609,7 +609,7 @@ def test_input_commit_and_output_reconciliation_remain_distinct_domains() -> Non
         final_manifest_revision=batch.manifest.representation_revision,
         exact_input_charge=18,
         measurement_kind=MeasurementKind.PROVIDER_EXACT,
-        authority_source_id=AuthoritySourceId("provider-test"),
+        authority_source_id=AuthoritySourceId("authority-test"),
         representation_binding_witness=_binding(batch),
     )
     accepted = reduce_context_admission(state, accept)
@@ -1016,18 +1016,23 @@ def test_retry_resume_fork_and_parent_delivery_keep_distinct_occurrences() -> No
 
 def test_rollover_invalidates_undispatched_work_and_preserves_closed_audits() -> None:
     state, batch, _, _ = _reserved_batch(name="rollover")
+    receiver_authority = AuthoritySourceId("receiver-2")
     proof = EpochFenceProof(
         old_window_epoch_id=WindowEpochId("epoch-1"),
         old_window_epoch_number=1,
         new_window_epoch_id=WindowEpochId("epoch-2"),
         new_window_epoch_number=2,
-        receiver_authority_source_id=AuthoritySourceId("receiver-2"),
+        receiver_authority_source_id=receiver_authority,
         fence_witness_id=AdmissionWitnessId("fence-1-to-2"),
         highest_admitted_dispatch_sequence=state.admission_sequence.value,
     )
+    rollover_witness = replace(
+        _witness(batch, WitnessKind.EPOCH_ROLLOVER),
+        authority_source_id=receiver_authority,
+    )
     event = RolloverEpochEvent(
         **_event_fields(state, "rollover-1-to-2", "rollover-epoch"),
-        witness=_witness(batch, WitnessKind.EPOCH_ROLLOVER),
+        witness=rollover_witness,
         fence_proof=proof,
         new_snapshot=_snapshot(epoch=2),
         protected_pools=(),
@@ -1049,9 +1054,13 @@ def test_rollover_invalidates_undispatched_work_and_preserves_closed_audits() ->
         new_window_epoch_number=3,
         fence_witness_id=AdmissionWitnessId("fence-2-to-3"),
     )
+    second_witness = replace(
+        _witness(second_batch, WitnessKind.EPOCH_ROLLOVER, epoch=2),
+        authority_source_id=second_proof.receiver_authority_source_id,
+    )
     second = RolloverEpochEvent(
         **_event_fields(rolled.next_state, "rollover-2-to-3", "rollover-epoch"),
-        witness=_witness(second_batch, WitnessKind.EPOCH_ROLLOVER, epoch=2),
+        witness=second_witness,
         fence_proof=second_proof,
         new_snapshot=_snapshot(epoch=3, model="claude-new", tokenizer="tokenizer-new"),
         protected_pools=(),

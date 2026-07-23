@@ -75,7 +75,6 @@ def _validate_bounded_text(
     reason_code: str,
     *,
     maximum: int = 128,
-    allow_path: bool = False,
 ) -> None:
     if not isinstance(value, str) or not value or len(value) > maximum:
         _raise_invalid(reason_code)
@@ -83,9 +82,13 @@ def _validate_bounded_text(
     if (
         lowered.startswith("bearer")
         or lowered.startswith("sha256:")
+        or lowered.startswith("blake2:")
+        or lowered.startswith("content:")
         or "\n" in value
         or "\r" in value
-        or (not allow_path and (value.startswith("/") or "\\" in value or "/" in value))
+        or value.startswith("/")
+        or "\\" in value
+        or value.startswith("~")
     ):
         _raise_invalid(reason_code)
 
@@ -407,6 +410,8 @@ class ContextLineage(_ContractValue):
             expected = DispatchIdentity.from_dispatch_id(self.dispatch_identity.dispatch_id)
             if self.dispatch_identity != expected:
                 _raise_invalid("invalid_dispatch_identity")
+            if self.producer_surface in _NON_DISPATCH_PRODUCER_SURFACES:
+                _raise_invalid("dispatch_identity_on_non_dispatch_surface")
 
 
 @dataclass(frozen=True, slots=True)
@@ -654,6 +659,23 @@ class AdmissionOccurrenceRecord(_ContractValue):
     indeterminate_reason_code: str | None
     quarantine_reason_code: str | None
 
+    def __post_init__(self) -> None:
+        _validate_tuple(self.accepted_witness_ids, "invalid_witness_ids")
+        if len(self.accepted_witness_ids) != len(set(self.accepted_witness_ids)):
+            _raise_invalid("duplicate_witness_id")
+        if self.indeterminate_reason_code is not None:
+            _validate_bounded_text(
+                self.indeterminate_reason_code,
+                "invalid_indeterminate_reason",
+                maximum=64,
+            )
+        if self.quarantine_reason_code is not None:
+            _validate_bounded_text(
+                self.quarantine_reason_code,
+                "invalid_quarantine_reason",
+                maximum=64,
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class AdmissionBatchRecord(_ContractValue):
@@ -666,10 +688,15 @@ class AdmissionBatchRecord(_ContractValue):
     unresolved_input_count: int
 
     def __post_init__(self) -> None:
+        _validate_tuple(self.witness_ids, "invalid_witness_ids")
+        if len(self.witness_ids) != len(set(self.witness_ids)):
+            _raise_invalid("duplicate_witness_id")
         if self.prepared_input_count is not None:
             _validate_non_negative(self.prepared_input_count, "invalid_prepared_count")
         _validate_non_negative(self.committed_input_count, "invalid_committed_count")
         _validate_non_negative(self.unresolved_input_count, "invalid_unresolved_count")
+        if self.committed_input_count > 0 and self.unresolved_input_count > 0:
+            _raise_invalid("committed_and_unresolved_simultaneously")
 
 
 @dataclass(frozen=True, slots=True)
@@ -748,12 +775,7 @@ class CoverageEvidence(_ContractValue):
             (self.checked_at, "invalid_checked_at", 32),
             (self.freshness_policy, "invalid_freshness_policy", 128),
         ):
-            _validate_bounded_text(
-                value,
-                reason,
-                maximum=maximum,
-                allow_path=reason == "invalid_source_locator",
-            )
+            _validate_bounded_text(value, reason, maximum=maximum)
 
 
 @dataclass(frozen=True, slots=True)
@@ -826,6 +848,20 @@ class ReserveRequestEvent(_AdmissionEventBase):
     input_reservations: tuple[AdmissionReservation, ...]
     generation_reservation: GenerationReservationRecord | None
 
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_non_negative(self.snapshot_sequence, "invalid_snapshot_sequence")
+        _validate_tuple(self.input_reservations, "invalid_input_reservations")
+        reservation_ids = tuple(
+            reservation.reservation_id for reservation in self.input_reservations
+        )
+        if len(reservation_ids) != len(set(reservation_ids)):
+            _raise_invalid("duplicate_reservation_id")
+        if self.batch.occurrence_ids != self.input_reservations[0].occurrence_ids:
+            _raise_invalid("reservation_occurrence_mismatch")
+        if self.idempotency_namespace != self.input_reservations[0].key.idempotency_namespace:
+            _raise_invalid("reservation_namespace_mismatch")
+
 
 @dataclass(frozen=True, slots=True)
 class PrepareBatchEvent(_AdmissionEventBase):
@@ -834,6 +870,15 @@ class PrepareBatchEvent(_AdmissionEventBase):
     proposed_charge: int
     measurement_kind: MeasurementKind
     authority_source_id: AuthoritySourceId
+
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_non_negative(self.proposed_charge, "invalid_proposed_charge")
+        if self.measurement_kind in {
+            MeasurementKind.HOST_ESTIMATE,
+            MeasurementKind.BYTE_EMERGENCY,
+        }:
+            _raise_invalid("non_authoritative_measurement")
 
 
 @dataclass(frozen=True, slots=True)
@@ -858,6 +903,15 @@ class AcceptInputEvent(_AdmissionEventBase):
     authority_source_id: AuthoritySourceId
     representation_binding_witness: RepresentationBindingWitness
 
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_non_negative(self.exact_input_charge, "invalid_exact_input_charge")
+        if self.measurement_kind in {
+            MeasurementKind.HOST_ESTIMATE,
+            MeasurementKind.BYTE_EMERGENCY,
+        }:
+            _raise_invalid("non_authoritative_measurement")
+
 
 @dataclass(frozen=True, slots=True)
 class ReleaseNonAdmissionEvent(_AdmissionEventBase):
@@ -876,6 +930,10 @@ class MarkIndeterminateEvent(_AdmissionEventBase):
     batch_id: AdmissionBatchId
     reason_code: str
 
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+
 
 @dataclass(frozen=True, slots=True)
 class ResolveIndeterminateAcceptedEvent(_AdmissionEventBase):
@@ -884,6 +942,15 @@ class ResolveIndeterminateAcceptedEvent(_AdmissionEventBase):
     exact_charge: int
     measurement_kind: MeasurementKind
     authority_source_id: AuthoritySourceId
+
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_non_negative(self.exact_charge, "invalid_exact_charge")
+        if self.measurement_kind in {
+            MeasurementKind.HOST_ESTIMATE,
+            MeasurementKind.BYTE_EMERGENCY,
+        }:
+            _raise_invalid("non_authoritative_measurement")
 
 
 @dataclass(frozen=True, slots=True)
@@ -910,17 +977,29 @@ class ReconcileGenerationEvent(_AdmissionEventBase):
     output_usage_witness: AdmissionWitness
     exact_output_usage: int
 
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_non_negative(self.exact_output_usage, "invalid_exact_output_usage")
+
 
 @dataclass(frozen=True, slots=True)
 class MarkGenerationIndeterminateEvent(_AdmissionEventBase):
     generation_reservation_id: GenerationReservationId
     reason_code: str
 
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+
 
 @dataclass(frozen=True, slots=True)
 class RequestReconciliationEvent(_AdmissionEventBase):
     target_id: AdmissionBatchId | GenerationReservationId
     reason_code: str
+
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
 
 
 @dataclass(frozen=True, slots=True)
@@ -935,6 +1014,10 @@ class RolloverEpochEvent(_AdmissionEventBase):
     fence_proof: EpochFenceProof
     new_snapshot: ContextWindowSnapshot
     protected_pools: tuple[ProtectedPoolSpec, ...]
+
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_tuple(self.protected_pools, "invalid_protected_pools")
 
 
 ContextAdmissionEvent: TypeAlias = (
@@ -1164,6 +1247,60 @@ class ActiveContextAdmissionState(_ContractValue):
             self.snapshot.remaining_count
         ):
             _raise_invalid("protected_pool_capacity_exceeded")
+        _validate_tuple(self.batch_records, "invalid_batch_records")
+        _validate_tuple(self.reservations, "invalid_reservations")
+        _validate_tuple(self.generation_reservations, "invalid_generation_reservations")
+        _validate_tuple(self.occurrence_records, "invalid_occurrence_records")
+        batch_ids = tuple(record.batch.batch_id for record in self.batch_records)
+        if len(batch_ids) != len(set(batch_ids)):
+            _raise_invalid("duplicate_batch_owner")
+        reservation_ids = tuple(reservation.reservation_id for reservation in self.reservations)
+        if len(reservation_ids) != len(set(reservation_ids)):
+            _raise_invalid("duplicate_reservation_owner")
+        generation_ids = tuple(
+            record.generation_reservation_id for record in self.generation_reservations
+        )
+        if len(generation_ids) != len(set(generation_ids)):
+            _raise_invalid("duplicate_generation_owner")
+        occurrence_ids = tuple(
+            record.occurrence.occurrence_id for record in self.occurrence_records
+        )
+        if len(occurrence_ids) != len(set(occurrence_ids)):
+            _raise_invalid("duplicate_occurrence_owner")
+        seen_pool_owners: set[tuple[ReserveClass, ProtectedPoolOwnerId]] = set()
+        seen_batch_owners: set[tuple[ReserveClass, ProtectedPoolOwnerId]] = set()
+        seen_generation_owners: set[tuple[ReserveClass, ProtectedPoolOwnerId]] = set()
+        for record in self.batch_records:
+            owner = record.batch.protected_pool_owner_id
+            if record.batch.reserve_class is not ReserveClass.ORDINARY:
+                if owner is None:
+                    _raise_invalid("missing_protected_pool_owner")
+                key = (record.batch.reserve_class, owner)
+                if key in seen_batch_owners:
+                    _raise_invalid("duplicate_protected_charge_owner")
+                seen_batch_owners.add(key)
+                seen_pool_owners.add(key)
+                if not any(
+                    pool.reserve_class is record.batch.reserve_class
+                    and pool.capability_owner_id == owner
+                    for pool in self.protected_pools
+                ):
+                    _raise_invalid("orphan_protected_charge_owner")
+        for generation_record in self.generation_reservations:
+            owner = generation_record.protected_pool_owner_id
+            if generation_record.reserve_class is not ReserveClass.ORDINARY:
+                if owner is None:
+                    _raise_invalid("missing_protected_pool_owner")
+                key = (generation_record.reserve_class, owner)
+                if key in seen_generation_owners:
+                    _raise_invalid("duplicate_protected_charge_owner")
+                seen_generation_owners.add(key)
+                if not any(
+                    pool.reserve_class is generation_record.reserve_class
+                    and pool.capability_owner_id == owner
+                    for pool in self.protected_pools
+                ):
+                    _raise_invalid("orphan_protected_charge_owner")
 
 
 ContextAdmissionState: TypeAlias = UninitializedContextAdmissionState | ActiveContextAdmissionState
@@ -1190,6 +1327,21 @@ _VERIFIED_SURFACES = frozenset(
         ProducerSurface.HOOK_FEEDBACK,
         ProducerSurface.HEADLESS_CHILD_PROMPT,
         ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY,
+    }
+)
+_NON_DISPATCH_PRODUCER_SURFACES = frozenset(
+    {
+        ProducerSurface.TOOL_ARGUMENT,
+        ProducerSurface.TOOL_RESULT_ENVELOPE,
+        ProducerSurface.USER_PROMPT,
+        ProducerSurface.ASSISTANT_OUTPUT_HISTORY,
+        ProducerSurface.SKILL_PLUGIN_CONTEXT,
+        ProducerSurface.OTHER_CONTEXT_INJECTION,
+        ProducerSurface.CLIENT_PROVIDER_RETRIEVAL,
+        ProducerSurface.CODE_MODE_AGGREGATE,
+        ProducerSurface.HOSTED_SPECIALIZED_TOOL,
+        ProducerSurface.HOOK_FEEDBACK,
+        ProducerSurface.COMPACTION_MODEL_WINDOW_TRANSITION,
     }
 )
 _UNOBSERVABLE_SURFACES = frozenset(

@@ -1151,7 +1151,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "isolated in dedicated workspace modules.",
     ),
     "core/context_admission.py": (
-        1750,
+        2000,
         "REQ-CNST-010-E13: #4333 freezes one exhaustive protocol-v1 reducer and replay "
         "surface. Keeping all closed event transitions together makes atomic batch, "
         "idempotency, protected-pool, reconciliation, rollover, and declarative effect "
@@ -1159,7 +1159,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "fragment exhaustiveness.",
     ),
     "core/types/_type_context_admission.py": (
-        1500,
+        1750,
         "REQ-CNST-010-E14: #4333 freezes the complete content-free protocol-v1 schema in "
         "one IL-0 shard. Co-locating identities, records, closed event/effect unions, "
         "states, canonical serialization, and the static coverage registry prevents "

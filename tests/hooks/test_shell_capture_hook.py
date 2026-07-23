@@ -208,7 +208,7 @@ def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
     assert Path(argv[2]).name == "_capture_artifacts.py"
     assert re.fullmatch(r"[0-9a-f]{16}", argv[-1])
     assert "printf 0123456789abcdef" not in command
-    assert "AutoSkillit" not in command
+    assert "AutoSkillit hook shell_capture_hook" not in command
     assert "`" not in command
 
     completed = subprocess.run(

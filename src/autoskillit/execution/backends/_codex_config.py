@@ -40,6 +40,7 @@ _MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES: int = max(
     definition.max_utf8_bytes for definition in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.values()
 )
 _CODEX_RECIPE_DELIVERY_HEADROOM_TOKENS: int = 8_000
+_CODEX_ORDINARY_RESULT_TOKEN_LIMIT: int = 10_000
 _CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT: int = (
     (_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES + 3) // 4
 ) + _CODEX_RECIPE_DELIVERY_HEADROOM_TOKENS
@@ -55,7 +56,7 @@ _CODEX_RECIPE_DELIVERY_CONTRACT_DIGEST = (
                 "headroom_tokens": _CODEX_RECIPE_DELIVERY_HEADROOM_TOKENS,
                 "history_retention_tokens": _CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT,
                 "measured_recipe_bytes": _MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES,
-                "ordinary_result_tokens": 10_000,
+                "ordinary_result_tokens": _CODEX_ORDINARY_RESULT_TOKEN_LIMIT,
                 "parser_version": 1,
                 "response_exemption_registry": RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
                 "surface_registry": RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST,
@@ -68,7 +69,7 @@ _CODEX_RECIPE_DELIVERY_CONTRACT_DIGEST = (
 )
 
 CODEX_RECIPE_DELIVERY_BUDGET: RecipeDeliveryBudgetDef = RecipeDeliveryBudgetDef(
-    ordinary_omitted_result_token_limit=10_000,
+    ordinary_omitted_result_token_limit=_CODEX_ORDINARY_RESULT_TOKEN_LIMIT,
     authoritative_attested_recipe_result_token_limit=(_CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT),
     history_retention_token_limit=_CODEX_ATTESTED_RECIPE_RESULT_TOKEN_LIMIT,
     measured_recipe_exemption_max_utf8_bytes=_MAX_RESPONSE_BACKSTOP_EXEMPTION_BYTES,

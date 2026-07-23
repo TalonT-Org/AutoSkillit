@@ -15,6 +15,7 @@ from autoskillit.core import (
 from autoskillit.execution.backends import (
     CODEX_RECIPE_DELIVERY_BUDGET,
     SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY,
+    CodexBackend,
     codex_recipe_delivery_calling_contract,
     ensure_codex_mcp_registered,
 )
@@ -50,6 +51,10 @@ def test_codex_history_retention_limit_is_derived_from_largest_measured_exemptio
 def test_codex_recipe_delivery_authorities_start_fail_closed() -> None:
     budget = CODEX_RECIPE_DELIVERY_BUDGET
     assert budget.ordinary_omitted_result_token_limit == 10_000
+    assert (
+        CodexBackend().capabilities.unnegotiated_tool_result_token_limit
+        == budget.ordinary_omitted_result_token_limit
+    )
     assert budget.authoritative_attested_recipe_result_token_limit == 56_750
     assert budget.history_retention_token_limit == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
     assert budget.contract_digest.startswith("sha256:")

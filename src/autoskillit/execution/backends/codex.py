@@ -640,7 +640,9 @@ class CodexBackend(BackendCmdBuilderBase):
             skill_sigil="$",
             session_dir_persistent=True,
             supports_model_invocation_gating=False,
-            unnegotiated_tool_result_token_limit=10_000,
+            unnegotiated_tool_result_token_limit=(
+                CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
+            ),
             protected_recipe_delivery_capable=False,
             recipe_delivery_budget=CODEX_RECIPE_DELIVERY_BUDGET,
         )

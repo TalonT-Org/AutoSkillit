@@ -143,6 +143,7 @@ class TestSousChefDelivery:
         assert sous_chef[:80] in prompt
         assert "uses_capabilities:" not in sous_chef
         assert "execution_role:" not in sous_chef
+        assert "activate_deps:" not in sous_chef
         assert "backend_requirements:" not in sous_chef
         calling_contract = codex_recipe_delivery_calling_contract(mcp_prefix="mcp__autoskillit__")
         assert prompt.count(calling_contract) == 1
@@ -156,6 +157,7 @@ class TestSousChefDelivery:
         assert sous_chef[:80] in prompt
         assert "uses_capabilities:" not in prompt
         assert "execution_role:" not in prompt
+        assert "activate_deps:" not in prompt
         assert "backend_requirements:" not in prompt
 
     def test_sous_chef_not_in_fleet_dispatch_prompt(self) -> None:
@@ -203,4 +205,5 @@ async def test_llm_triage_prompt_uses_projected_skill_document(
     assert "name: open-kitchen" in prompt
     assert "uses_capabilities:" not in prompt
     assert "execution_role:" not in prompt
+    assert "activate_deps:" not in prompt
     assert "backend_requirements:" not in prompt

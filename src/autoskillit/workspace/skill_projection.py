@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, assert_never
 import regex as re
 
 from autoskillit.core import (
+    MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
     SKILL_PROJECTION_VERSION,
     DirectInstall,
     MarketplaceInstall,
@@ -60,7 +61,6 @@ __all__ = [
     "validate_sanitized_plugin_artifact",
 ]
 
-_MACHINE_ONLY_KEYS = frozenset({"uses_capabilities", "execution_role", "backend_requirements"})
 _SKILL_NAMESPACE_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
 _CANONICAL_SKILL_DIRS = frozenset({"skills", "skills_extended"})
 _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
@@ -265,7 +265,7 @@ def project_agent_skill_document(
         )
 
     frontmatter = dict(parsed.data)
-    for key in _MACHINE_ONLY_KEYS:
+    for key in MACHINE_ONLY_SKILL_FRONTMATTER_KEYS:
         frontmatter.pop(key, None)
     if context.gating is True:
         frontmatter["disable-model-invocation"] = True
@@ -411,6 +411,7 @@ def _manifest_skill_entry(
         "precedence": document.source_identity.precedence,
         "uses_capabilities": sorted(skill.uses_capabilities),
         "execution_role": role.value if role is not None else None,
+        "activate_deps": list(skill.activate_deps),
     }
 
 
@@ -562,7 +563,7 @@ def validate_sanitized_plugin_artifact(
         if not parsed.is_valid or parsed.data is None:
             errors.append(f"public SKILL.md frontmatter is invalid for {name}: {parsed.error}")
         else:
-            leaked = sorted(_MACHINE_ONLY_KEYS & parsed.data.keys())
+            leaked = sorted(MACHINE_ONLY_SKILL_FRONTMATTER_KEYS & parsed.data.keys())
             if leaked:
                 errors.append(f"public SKILL.md exposes machine fields for {name}: {leaked!r}")
 
@@ -597,6 +598,7 @@ def validate_sanitized_plugin_artifact(
             "execution_role": (
                 info.execution_role.value if info.execution_role is not None else None
             ),
+            "activate_deps": list(info.activate_deps),
         }
         for field, value in expected_entry.items():
             if entry.get(field) != value:

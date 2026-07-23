@@ -81,9 +81,13 @@ def cook(
         SkillsDirectoryProvider,
         project_plugin_source,
         resolve_ephemeral_root,
+        validate_skill_tier_roles,
     )
 
     config = load_config()
+    project_dir = Path.cwd()
+    skill_resolver = DefaultSkillResolver()
+    validate_skill_tier_roles(config, skill_resolver, project_dir)
     if backend is None:
         backend = get_backend(config.agent_backend.backend)
 
@@ -177,7 +181,6 @@ def cook(
 
     resume_spec = resume_spec_from_cli(resume=resume, session_id=session_id)
 
-    project_dir = Path.cwd()
     initial_prompt: str | None = None
     _first_run = is_first_run(project_dir)
     if _first_run:
@@ -192,7 +195,7 @@ def cook(
     )
     session_mgr = DefaultSessionSkillManager(skills_provider, ephemeral_root)
     session_mgr.cleanup_stale()
-    session_catalog = DefaultSkillResolver().list_effective(
+    session_catalog = skill_resolver.list_effective(
         project_dir,
         SkillExecutionRole.SESSION,
         config=config,

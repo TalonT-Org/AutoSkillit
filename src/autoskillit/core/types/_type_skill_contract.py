@@ -9,6 +9,7 @@ from ._type_constants_registries import SKILL_CAPABILITY_REGISTRY
 from ._type_enums import SkillSource
 
 __all__ = [
+    "MACHINE_ONLY_SKILL_FRONTMATTER_KEYS",
     "SKILL_PROJECTION_VERSION",
     "SkillSourceIdentity",
     "SkillSourceRef",
@@ -16,6 +17,14 @@ __all__ = [
 ]
 
 
+MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
+    {
+        "activate_deps",
+        "backend_requirements",
+        "execution_role",
+        "uses_capabilities",
+    }
+)
 SKILL_PROJECTION_VERSION = 1
 
 

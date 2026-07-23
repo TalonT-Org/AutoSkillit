@@ -5,15 +5,49 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from autoskillit import cli
-from autoskillit.core import ClaudeFlags
+from autoskillit.core import ClaudeFlags, SkillContractError
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+
+@pytest.mark.parametrize(
+    ("recipe", "resume"),
+    [
+        ("test-script", False),
+        (None, True),
+    ],
+)
+def test_order_rejects_orchestrator_skill_in_l1_tier_before_launch(
+    recipe: str | None,
+    resume: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every order catalog branch validates configured L1 tier membership."""
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.chdir(tmp_path)
+    cfg = SimpleNamespace(
+        skills=SimpleNamespace(
+            tier1=("process-issues",),
+            tier2=(),
+            tier3=(),
+        )
+    )
+    with (
+        patch("autoskillit.config.load_config", return_value=cfg),
+        patch("autoskillit.cli.session._session_order._launch_cook_session") as launch,
+    ):
+        with pytest.raises(SkillContractError, match="process-issues.*ORCHESTRATOR"):
+            cli.order(recipe, resume=resume)
+
+    launch.assert_not_called()
 
 
 class TestCLIOrderPrompt:

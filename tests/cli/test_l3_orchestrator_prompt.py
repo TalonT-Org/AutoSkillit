@@ -83,6 +83,7 @@ class TestL3NativeDiscipline:
         assert "name: sous-chef" not in prompt
         assert "uses_capabilities:" not in prompt
         assert "execution_role:" not in prompt
+        assert "activate_deps:" not in prompt
         assert "backend_requirements:" not in prompt
 
     def test_native_fleet_sections_remain_without_sous_chef(self) -> None:

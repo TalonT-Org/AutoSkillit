@@ -89,6 +89,7 @@ class TestCLIInstall:
             parsed = parse_frontmatter_content(projected)
             assert parsed.is_valid and parsed.data is not None
             assert {
+                "activate_deps",
                 "uses_capabilities",
                 "execution_role",
                 "backend_requirements",
@@ -102,6 +103,7 @@ class TestCLIInstall:
                 "precedence",
                 "uses_capabilities",
                 "execution_role",
+                "activate_deps",
             } <= set(identity)
             assert "source_path" not in identity
             assert hashlib.sha256(projected.encode()).hexdigest() == identity["projected_digest"]

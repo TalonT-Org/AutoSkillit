@@ -22,7 +22,7 @@ from autoskillit.core import (
     pkg_root,
     resume_spec_from_cli,
 )
-from autoskillit.workspace import DefaultSkillResolver
+from autoskillit.workspace import DefaultSkillResolver, validate_skill_tier_roles
 
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
@@ -136,6 +136,17 @@ def order(
         print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
+    from autoskillit.config import load_config
+
+    project_dir = Path.cwd()
+    config = load_config(project_dir)
+    skill_resolver = DefaultSkillResolver()
+    validate_skill_tier_roles(config, skill_resolver, project_dir)
+    skill_catalog = skill_resolver.list_effective(
+        project_dir,
+        SkillExecutionRole.ORCHESTRATOR,
+        config=config,
+    )
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
 
@@ -163,19 +174,11 @@ def order(
             resume_spec=resume_spec,
             extra_env=_write_order_entry(Path.cwd(), None),
             required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
-            skill_catalog=DefaultSkillResolver().list_effective(
-                Path.cwd(),
-                SkillExecutionRole.ORCHESTRATOR,
-            ),
+            skill_catalog=skill_catalog,
         )
         return
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
-    project_dir = Path.cwd()
-    skill_catalog = DefaultSkillResolver().list_effective(
-        project_dir,
-        SkillExecutionRole.ORCHESTRATOR,
-    )
 
     from autoskillit.cli.ui._timed_input import timed_prompt
 

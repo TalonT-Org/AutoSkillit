@@ -1145,6 +1145,66 @@ def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypa
     assert not hasattr(_skills_mod, "_read_skill_frontmatter")
 
 
+def test_projection_strips_all_machine_authority_and_preserves_private_deps(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import MACHINE_ONLY_SKILL_FRONTMATTER_KEYS
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillProjectionContext,
+        parse_frontmatter_content,
+        project_agent_skill_document,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    expected_machine_keys = frozenset(
+        {
+            "activate_deps",
+            "backend_requirements",
+            "execution_role",
+            "uses_capabilities",
+        }
+    )
+    assert MACHINE_ONLY_SKILL_FRONTMATTER_KEYS == expected_machine_keys
+    skill_md = tmp_path / "SKILL.md"
+    skill_md.write_text(
+        "---\n"
+        "name: projected-contract\n"
+        "description: Public description.\n"
+        "uses_capabilities: []\n"
+        "execution_role: session\n"
+        "activate_deps: [dependency]\n"
+        "backend_requirements: [claude-code]\n"
+        "---\n"
+        "public body\n",
+        encoding="utf-8",
+    )
+    info = _skill_info_from_frontmatter(
+        "projected-contract",
+        SkillSource.PROJECT_LOCAL,
+        skill_md,
+    )
+    entry = SkillCatalogEntry.from_skill_info(info)
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    document = project_agent_skill_document(
+        entry,
+        SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog),
+    )
+    projected = parse_frontmatter_content(document.content)
+
+    assert projected.is_valid and projected.data is not None
+    assert expected_machine_keys.isdisjoint(projected.data)
+    assert projected.data["description"] == "Public description."
+    assert document.content.endswith("public body\n")
+    assert info.activate_deps == ("dependency",)
+    assert entry.activate_deps == ("dependency",)
+
+
 @pytest.mark.parametrize(
     ("source", "expected_reference"),
     [

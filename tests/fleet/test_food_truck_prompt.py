@@ -54,6 +54,7 @@ def test_l2_food_truck_retains_run_skill_guidance_without_machine_frontmatter():
     assert "retry the EXACT same run_skill call" in prompt
     assert "uses_capabilities:" not in prompt
     assert "execution_role:" not in prompt
+    assert "activate_deps:" not in prompt
     assert "backend_requirements:" not in prompt
 
 

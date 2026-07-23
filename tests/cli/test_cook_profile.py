@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import autoskillit.cli.session._session_cook as cook_module
-from autoskillit.core import BackendConventions, CmdSpec
+from autoskillit.core import BackendConventions, CmdSpec, SkillContractError
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -128,3 +129,25 @@ def test_profile_unknown_exits(capsys, _mock_mgr):
     err = capsys.readouterr().err
     assert "minimax" in err
     assert "anthropic" in err or "openai" in err
+
+
+def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
+    """Direct cook composition validates configured tiers before materialization."""
+    cfg = SimpleNamespace(
+        skills=SimpleNamespace(
+            tier1=(),
+            tier2=("process-issues",),
+            tier3=(),
+        )
+    )
+    mock_backend_cls, _ = _make_mock_backend_class()
+    with (
+        patch("autoskillit.config.load_config", return_value=cfg),
+        patch("autoskillit.workspace.DefaultSessionSkillManager") as manager_cls,
+        patch("subprocess.run") as run,
+    ):
+        with pytest.raises(SkillContractError, match="process-issues.*ORCHESTRATOR"):
+            cook_module.cook(backend=mock_backend_cls())
+
+    manager_cls.assert_not_called()
+    run.assert_not_called()

@@ -112,13 +112,19 @@ pre-opened.
 
 ### Headless session (launched by `run_skill`)
 
-`run_skill` launches a headless Claude Code process with:
-```
-claude --add-dir <skills_extended/> --add-dir <cwd>
-```
-The worker receives the resolved L1 catalog plus applicable project-local skills.
-Exact ORCHESTRATOR-role entries such as `process-issues` are excluded. The AUTOSKILLIT_HEADLESS
-environment variable activates session-boundary enforcement.
+Before launch, `run_skill` resolves the requested L1 skill and its dependency closure
+from the fixed-precedence effective catalog. That resolution includes applicable
+project-local overrides; role, capability, configured-tier, and closure contracts are
+validated before session initialization or filesystem writes.
+
+The selected canonical documents are then projected into a session-bound ephemeral
+skill tree. Machine-only authority (`uses_capabilities`, `execution_role`,
+`activate_deps`, and retired `backend_requirements`) stays in AutoSkillit's private
+contract and is omitted from every model-facing `SKILL.md`. Claude Code receives that
+sanitized ephemeral tree rather than a raw `skills_extended/` directory. Exact
+ORCHESTRATOR-role entries such as `process-issues` remain excluded from the L1 catalog,
+and project-local bytes are exposed only when that source won effective resolution.
+The `AUTOSKILLIT_HEADLESS` environment variable activates session-boundary enforcement.
 
 ## Config-Driven Tier Reclassification
 

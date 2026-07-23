@@ -415,6 +415,7 @@ async def test_prepare_issue_dispatches_only_projected_skill_documents(
     for content in documents:
         assert "uses_capabilities:" not in content
         assert "execution_role:" not in content
+        assert "activate_deps:" not in content
         assert "backend_requirements:" not in content
     root = captured["root"]
     assert isinstance(root, Path)

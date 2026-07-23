@@ -11,13 +11,17 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import ValidatedAddDir, load_yaml, write_versioned_json
+from autoskillit.core import (
+    MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
+    ValidatedAddDir,
+    load_yaml,
+    write_versioned_json,
+)
 
 SKILLS_SNAPSHOT_DIR = "skill-snapshots"
 _EPHEMERAL_SESSION_PATTERN = "autoskillit-sessions"
 _GATED_PATTERN = re.compile(r"disable-model-invocation\s*:\s*true", re.IGNORECASE)
 _FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL)
-_MACHINE_ONLY_KEYS = frozenset({"uses_capabilities", "execution_role", "backend_requirements"})
 
 
 def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
@@ -51,7 +55,7 @@ def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
             frontmatter = {}
         if not isinstance(frontmatter, Mapping):
             raise ValueError(f"agent-safe SKILL.md frontmatter must be a mapping: {skill_md}")
-        leaked = sorted(_MACHINE_ONLY_KEYS & frontmatter.keys())
+        leaked = sorted(MACHINE_ONLY_SKILL_FRONTMATTER_KEYS & frontmatter.keys())
         if leaked:
             raise ValueError(
                 f"agent-safe SKILL.md contains machine-only fields {leaked!r}: {skill_md}"

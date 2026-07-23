@@ -160,6 +160,7 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
     content = (target / "SKILL.md").read_text()
     frontmatter = load_yaml(content.split("---\n", 2)[1])
     assert {
+        "activate_deps",
         "uses_capabilities",
         "execution_role",
         "backend_requirements",
@@ -210,6 +211,7 @@ def test_session_projection_is_agent_safe_for_each_backend(
     content = (session_path / skills_subdir / "make-arch-diag" / "SKILL.md").read_text()
     frontmatter = load_yaml(content.split("---\n", 2)[1])
     assert {
+        "activate_deps",
         "uses_capabilities",
         "execution_role",
         "backend_requirements",

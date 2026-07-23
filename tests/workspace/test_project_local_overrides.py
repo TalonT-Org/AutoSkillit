@@ -260,6 +260,54 @@ def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
     assert second.execution_role.value == "orchestrator"
 
 
+def test_resolve_effective_observes_removed_override_and_falls_back(tmp_path, monkeypatch):
+    """Removing a winning override exposes the lower-priority source on the next lookup."""
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    bundled_path = _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("github_api_write", "agent_model"),
+        execution_role="session",
+        body="fallback bundled body",
+    )
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("git_metadata_write", "run_skill"),
+        execution_role="orchestrator",
+        body="temporary override body",
+    )
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+
+    first = resolver.resolve_effective("target", project)
+    assert first is not None
+    assert first.path == override_path
+    assert first.source.value == "project_local"
+    assert "temporary override body" in first.canonical_content
+
+    override_path.unlink()
+    second = resolver.resolve_effective("target", project)
+
+    assert second is not None
+    assert second is not first
+    assert second.path == bundled_path
+    assert second.source.value == "bundled"
+    assert second.source_ref is not None
+    assert second.source_ref.identity.origin.value == "bundled"
+    assert "fallback bundled body" in second.canonical_content
+    assert "temporary override body" not in second.canonical_content
+
+
 def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path, monkeypatch):
     """Source precedence cannot mix policy metadata with bytes from a lower-priority source."""
     from autoskillit.workspace.skills import DefaultSkillResolver

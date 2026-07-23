@@ -134,7 +134,7 @@ def test_restore_skill_snapshot_no_snapshot_returns_none(tmp_path: Path) -> None
 
 @pytest.mark.parametrize(
     "machine_field",
-    ["uses_capabilities", "execution_role", "backend_requirements"],
+    ["uses_capabilities", "execution_role", "activate_deps", "backend_requirements"],
 )
 def test_restore_rejects_machine_authority_before_writing(
     tmp_path: Path,

@@ -18,9 +18,13 @@ from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from autoskillit.core import (
+    BackendCapabilities,
+    CodexRecipeDeliveryBudgetDef,
     CodexRecipeDeliveryEvidenceDef,
     RecipeDeliveryAttestation,
+    RecipeDeliveryMode,
     RecipeDeliveryRequest,
+    resolve_recipe_delivery_decision,
 )
 
 _MARKER_MAX_BYTES = 64 * 1024
@@ -440,22 +444,30 @@ class RecipeDeliveryReceiptLedger:
     def reserve(
         self,
         *,
+        capabilities: BackendCapabilities,
+        required_serialized_tokens: int,
+        budget: CodexRecipeDeliveryBudgetDef,
         request: RecipeDeliveryRequest,
         attestation: RecipeDeliveryAttestation,
+        supported_evidence: CodexRecipeDeliveryEvidenceDef,
         producer: str,
         payload_sha256: str,
         now_unix: int,
     ) -> RecipeReservationResult:
         """Consume one host call and create its pending receipt in one transaction."""
-        if (
-            request.delivery_call_id != attestation.delivery_call_id
-            or request.caller_requested_outer_tokens
-            != attestation.host_observed_requested_outer_tokens
-            or request.code_digest != attestation.code_digest
-            or not producer
-            or not payload_sha256.startswith("sha256:")
-        ):
-            return RecipeReservationResult(None, "reservation_identity_mismatch")
+        validation = resolve_recipe_delivery_decision(
+            capabilities=capabilities,
+            required_serialized_tokens=required_serialized_tokens,
+            budget=budget,
+            producer=producer,
+            payload_sha256=payload_sha256,
+            request=request,
+            attestation=attestation,
+            supported_evidence=supported_evidence,
+            now_unix=now_unix,
+        )
+        if validation.mode is not RecipeDeliveryMode.ATTESTED_INLINE:
+            return RecipeReservationResult(None, validation.reason)
         connection = self._connect()
         if connection is None:
             return RecipeReservationResult(None, "store_unavailable")

@@ -751,7 +751,12 @@ def finalize_recipe_delivery(
         )
     receipt_handle: RecipeReceiptHandle | None = None
     if decision.mode is RecipeDeliveryMode.ATTESTED_INLINE:
-        if receipt_ledger is None or candidate_request is None or candidate_attestation is None:
+        if (
+            receipt_ledger is None
+            or candidate_request is None
+            or candidate_attestation is None
+            or candidate_evidence is None
+        ):
             decision = replace(
                 decision,
                 mode=RecipeDeliveryMode.ENVELOPE,
@@ -761,8 +766,12 @@ def finalize_recipe_delivery(
             )
         else:
             reservation = receipt_ledger.reserve(
+                capabilities=capabilities,
+                required_serialized_tokens=required_tokens,
+                budget=CODEX_RECIPE_DELIVERY_BUDGET,
                 request=candidate_request,
                 attestation=candidate_attestation,
+                supported_evidence=candidate_evidence,
                 producer=surface_definition.producer_tool,
                 payload_sha256=generation.payload_sha256,
                 now_unix=int(time.time()) if now_unix is None else now_unix,

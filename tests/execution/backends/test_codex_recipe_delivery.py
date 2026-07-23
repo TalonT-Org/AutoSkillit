@@ -436,8 +436,15 @@ def _ledger_attestation(thread_id: str = "thread-ledger-001") -> RecipeDeliveryA
 
 def _reserve(ledger: RecipeDeliveryReceiptLedger, attestation: RecipeDeliveryAttestation):
     return ledger.reserve(
+        capabilities=replace(
+            BACKEND_REGISTRY["codex"]().capabilities,
+            protected_recipe_delivery_capable=True,
+        ),
+        required_serialized_tokens=10_001,
+        budget=CODEX_RECIPE_DELIVERY_BUDGET._replace(contract_digest=_FIXTURE_DIGEST),
         request=_request(),
         attestation=attestation,
+        supported_evidence=_evidence(),
         producer="open_kitchen",
         payload_sha256=_PAYLOAD_SHA,
         now_unix=_NOW,
@@ -459,6 +466,36 @@ def test_reservation_atomically_consumes_call_and_creates_pending(tmp_path: Path
     with sqlite3.connect(ledger.path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM consumed_calls").fetchone() == (1,)
         assert connection.execute("SELECT COUNT(*) FROM receipts").fetchone() == (1,)
+
+
+@pytest.mark.parametrize(
+    ("changes", "reason"),
+    [
+        ({"audience": "forged-audience"}, "attestation_audience_mismatch"),
+        (
+            {"contract_digest": "sha256:" + ("0" * 64)},
+            "attestation_contract_digest_mismatch",
+        ),
+        ({"request_digest": "sha256:" + ("0" * 64)}, "request_digest_mismatch"),
+        ({"expires_at_unix": _NOW}, "attestation_expired"),
+        ({"evidence_identity": "unknown-evidence"}, "unsupported_evidence_identity"),
+        ({"selected_result_token_limit": _HIGH - 1}, "host_selected_limit_mismatch"),
+    ],
+)
+def test_reservation_revalidates_attestation_before_consuming_evidence(
+    tmp_path: Path,
+    changes: dict[str, object],
+    reason: str,
+) -> None:
+    ledger = RecipeDeliveryReceiptLedger.initialize_protected(_authority(tmp_path))
+
+    result = _reserve(ledger, replace(_ledger_attestation(), **changes))
+
+    assert result.handle is None
+    assert result.reason == reason
+    with sqlite3.connect(ledger.path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM consumed_calls").fetchone() == (0,)
+        assert connection.execute("SELECT COUNT(*) FROM receipts").fetchone() == (0,)
 
 
 def test_interrupted_first_initialization_does_not_publish_invalid_store(

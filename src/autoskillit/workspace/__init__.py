@@ -51,6 +51,11 @@ from autoskillit.workspace.skill_format import (
     read_skill_frontmatter,
     validate_skill_frontmatter,
 )
+from autoskillit.workspace.skill_projection import (
+    AgentSkillDocument,
+    SkillProjectionContext,
+    project_agent_skill_document,
+)
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,
@@ -75,6 +80,7 @@ delete_directory_contents = _delete_directory_contents
 
 __all__ = [
     "batch_delete",
+    "AgentSkillDocument",
     "CleanupResult",
     "cleanup_candidates",
     "delete_directory_contents",
@@ -96,6 +102,7 @@ __all__ = [
     "SkillInfo",
     "SkillFrontmatterParseError",
     "SkillFrontmatterParseResult",
+    "SkillProjectionContext",
     "SkillsDirectoryProvider",
     "bundled_skills_dir",
     "bundled_skills_extended_dir",
@@ -115,6 +122,7 @@ __all__ = [
     "resolve_ephemeral_root",
     "WORKTREES_DIR",
     "parse_frontmatter_content",
+    "project_agent_skill_document",
     "read_skill_frontmatter",
     "validate_skill_tier_roles",
     "validate_skill_frontmatter",

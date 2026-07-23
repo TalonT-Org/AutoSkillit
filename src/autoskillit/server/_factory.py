@@ -74,6 +74,7 @@ from autoskillit.workspace import (
     DefaultWorkspaceManager,
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
+    validate_skill_tier_roles,
 )
 
 logger = get_logger(__name__)
@@ -316,6 +317,7 @@ def make_context(
         temp_dir_relpath=temp_dir_relpath,
         default_base_branch=config.branching.default_base_branch,
     )
+    validate_skill_tier_roles(config, provider.resolver, project_dir)
     ephemeral_root = resolve_ephemeral_root()
     codex_root = temp_dir / "codex-sessions"
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root, codex_root=codex_root)

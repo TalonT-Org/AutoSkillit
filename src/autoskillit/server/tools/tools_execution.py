@@ -26,9 +26,10 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
-    ClaudeDirectoryConventions,
     ClosureAuthoritySpec,
     CodingAgentBackend,
+    SkillContractError,
+    SkillExecutionRole,
     SkillResult,
     TerminationReason,
     ValidatedAddDir,
@@ -41,7 +42,7 @@ from autoskillit.core import (
     is_feature_enabled,
     is_git_worktree,
     parse_plan_paths,
-    resolve_target_skill,
+    render_target_skill_command,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
@@ -95,6 +96,10 @@ from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
 )
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
+from autoskillit.workspace import (
+    DefaultSkillResolver,
+    SkillProjectionContext,
+)
 
 logger = get_logger(__name__)
 
@@ -811,6 +816,33 @@ async def run_skill(
 
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
+        _effective_skill_resolver = tool_ctx.skill_resolver
+        invocation = None
+        target_name: str | None = None
+        if not resume_session_id:
+            if _effective_skill_resolver is None:
+                _effective_skill_resolver = DefaultSkillResolver()
+            target_name = extract_skill_name(skill_command)
+            if target_name is None:
+                return SkillResult.crashed(
+                    exception=SkillContractError(
+                        f"Cannot resolve a logical skill target from {skill_command!r}"
+                    ),
+                    skill_command=skill_command,
+                    order_id=order_id,
+                ).to_json()
+            try:
+                invocation = _effective_skill_resolver.resolve_invocation(
+                    target_name,
+                    Path(cwd).resolve(),
+                    SkillExecutionRole.SESSION,
+                )
+            except SkillContractError as exc:
+                return SkillResult.crashed(
+                    exception=exc,
+                    skill_command=skill_command,
+                    order_id=order_id,
+                ).to_json()
 
         if not step_name and not resume_session_id and tool_ctx.active_recipe_steps:
             _resolved, _ambiguous = _resolve_step_name_from_recipe(
@@ -959,29 +991,10 @@ async def run_skill(
                         if _step_mo:
                             effective_model = _step_mo
 
-            # Resolve correct namespace and prepare for tier2 activation.
-            # Must precede backend_override — _skill_info feeds skill-requirement check.
+            # The fresh branch resolved the complete effective invocation before any
+            # notification or provider/executor work. Backend-specific rendering waits
+            # until capability-driven backend selection is complete.
             resolved_command = skill_command
-            target_name: str | None = None
-            if tool_ctx.skill_resolver is not None:
-                resolved_command, target_name = resolve_target_skill(
-                    skill_command, tool_ctx.skill_resolver
-                )
-            _skill_info = (
-                tool_ctx.skill_resolver.resolve(target_name)
-                if tool_ctx.skill_resolver and target_name
-                else None
-            )
-            if target_name and _skill_info is None:
-                return SkillResult.crashed(
-                    exception=RuntimeError(
-                        f"Skill '{target_name}' not found in any discovery source "
-                        f"(bundled skills/, skills_extended/, or project-local). "
-                        f"Cannot launch session for undiscoverable skill name."
-                    ),
-                    skill_command=resolved_command,
-                    order_id=effective_order_id,
-                ).to_json()
 
             _provider_override = (
                 provider_extras
@@ -1004,9 +1017,7 @@ async def run_skill(
             )
 
             _skill_caps: frozenset[str] = (
-                getattr(_skill_info, "uses_capabilities", frozenset())
-                if _skill_info
-                else frozenset()
+                invocation.capability_union if invocation is not None else frozenset()
             )
             _sandbox_overrides = _aggregate_sandbox_overrides(_skill_caps)
             _network_access = "sandbox_workspace_write.network_access=true" in _sandbox_overrides
@@ -1084,6 +1095,11 @@ async def run_skill(
                 if backend_override is not None and tool_ctx.backend is not None
                 else tool_ctx.backend
             )
+            if invocation is not None:
+                resolved_command = render_target_skill_command(
+                    skill_command,
+                    invocation.root.source,
+                )
 
             _backend_override_source: str | None = None
             if _explicit_resolution is not None:
@@ -1144,9 +1160,9 @@ async def run_skill(
                 resolved_command=resolved_command,
                 effective_order_id=effective_order_id,
                 target_name=target_name,
-                skill_info=_skill_info,
+                skill_info=invocation,
                 effective_backend_obj=_effective_backend_obj,
-                skill_resolver=tool_ctx.skill_resolver,
+                skill_resolver=_effective_skill_resolver,
             ):
                 return compat_error
 
@@ -1269,33 +1285,42 @@ async def run_skill(
                     )
 
             if not replay_snapshot_used and tool_ctx.session_skill_manager is not None:
-                allow_only: frozenset[str] | None = None
-                closure: frozenset[str] = frozenset()
-                if target_name:
-                    closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
-                    if not closure:
-                        return SkillResult.crashed(
-                            exception=RuntimeError(
-                                f"Skill '{target_name}' resolved to an empty closure. "
-                                f"This indicates the skill exists but has no injectable content."
-                            ),
-                            skill_command=resolved_command,
-                            order_id=effective_order_id,
-                        ).to_json()
-                    allow_only = closure
-
                 session_id = f"headless-{uuid4().hex[:12]}"
                 _cleanup_session_id = session_id
-                session_root = tool_ctx.session_skill_manager.init_session(
-                    session_id,
-                    cook_session=False,
-                    config=tool_ctx.config,
-                    project_dir=tool_ctx.project_dir,
-                    recipe_packs=tool_ctx.active_recipe_packs,
-                    recipe_features=tool_ctx.active_recipe_features,
-                    allow_only=allow_only,
-                    backend=_effective_backend_obj,
-                )
+                if invocation is not None:
+                    projection_context = SkillProjectionContext(
+                        execution_cwd=Path(cwd).resolve(),
+                        backend=_effective_backend_obj,
+                        conventions=(
+                            _effective_backend_obj.conventions
+                            if _effective_backend_obj is not None
+                            else None
+                        ),
+                        substitutions={
+                            "{{AUTOSKILLIT_TEMP}}": str(
+                                Path(cwd).resolve() / ".autoskillit" / "temp"
+                            )
+                        },
+                    )
+                    session_root = tool_ctx.session_skill_manager.materialize_invocation(
+                        session_id,
+                        invocation,
+                        projection_context,
+                    )
+                else:
+                    # Legacy resume fallback: until persisted invocation snapshots land,
+                    # a resume without a replay snapshot retains the previous broad
+                    # session initialization behavior.
+                    session_root = tool_ctx.session_skill_manager.init_session(
+                        session_id,
+                        cook_session=False,
+                        config=tool_ctx.config,
+                        project_dir=tool_ctx.project_dir,
+                        recipe_packs=tool_ctx.active_recipe_packs,
+                        recipe_features=tool_ctx.active_recipe_features,
+                        allow_only=None,
+                        backend=_effective_backend_obj,
+                    )
                 if not tool_ctx.session_skill_manager.validate_session_exists(session_id):
                     logger.warning(
                         "stale_session_path",
@@ -1313,64 +1338,19 @@ async def run_skill(
                     ).to_json()
                 skill_add_dirs.append(session_root)
 
-                if target_name:
-                    tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
-                    _is_known_skill = (
-                        tool_ctx.skill_resolver is not None
-                        and tool_ctx.skill_resolver.resolve(target_name) is not None
+                # Fresh invocations extend scope from their validated closure.
+                # Restored replay snapshots bypass this branch and retain their
+                # original scope. This helper still re-reads write_paths until the
+                # persisted invocation contract includes them.
+                if invocation is not None and _effective_skill_resolver is not None:
+                    write_watch_dirs.extend(
+                        resolve_closure_write_dirs(
+                            frozenset(member.name for member in invocation.closure),
+                            _effective_skill_resolver,
+                            cwd,
+                            write_watch_dirs,
+                        )
                     )
-                    if _is_known_skill:
-                        _skills_subdir = (
-                            _effective_backend_obj.conventions.skills_subdir
-                            if _effective_backend_obj is not None
-                            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-                        )
-                        _skill_md = (
-                            Path(session_root.path) / _skills_subdir / target_name / "SKILL.md"
-                        )
-                        if not _skill_md.exists():
-                            logger.error(
-                                "target_skill_not_in_session",
-                                target=target_name,
-                                session_id=session_id,
-                                session_root=str(session_root.path),
-                            )
-                            return SkillResult.crashed(
-                                exception=RuntimeError(
-                                    f"Target skill {target_name!r} not available in session "
-                                    f"{session_id!r}: SKILL.md not found after init_session + "
-                                    f"activate_skill_deps. Check tier/feature/pack gating."
-                                ),
-                                skill_command=resolved_command,
-                                session_id=session_id,
-                                order_id=effective_order_id,
-                            ).to_json()
-                    else:
-                        # Defense-in-depth: should be unreachable after the pre-init
-                        # existence gate (3a), but if reached, reject rather than proceed.
-                        logger.error(
-                            "unknown_skill_reached_init",
-                            target=target_name,
-                            session_id=session_id,
-                        )
-                        return SkillResult.crashed(
-                            exception=RuntimeError(
-                                f"Skill '{target_name}' unknown to resolver after session init. "
-                                f"This should have been caught by the pre-init existence gate."
-                            ),
-                            skill_command=resolved_command,
-                            session_id=session_id,
-                            order_id=effective_order_id,
-                        ).to_json()
-                    # Replay-path sessions inherit write scope from their original
-                    # snapshot — they don't need re-augmentation because the snapshot
-                    # was built from a live session that already had the full prefix set.
-                    if closure and tool_ctx.skill_resolver is not None:
-                        write_watch_dirs.extend(
-                            resolve_closure_write_dirs(
-                                closure, tool_ctx.skill_resolver, cwd, write_watch_dirs
-                            )
-                        )
 
             allowed_write_prefix = ""
             allowed_write_prefixes: tuple[str, ...] = ()

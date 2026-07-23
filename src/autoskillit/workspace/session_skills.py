@@ -12,6 +12,7 @@ import os
 import shutil
 import tempfile
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -34,8 +35,13 @@ from autoskillit.workspace.skill_format import (
     parse_frontmatter_content,
     validate_skill_frontmatter,
 )
+from autoskillit.workspace.skill_projection import (
+    SkillProjectionContext,
+    project_agent_skill_document,
+)
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
+    EffectiveSkillInvocation,
     ProjectLocalOverride,
     SkillInfo,
     detect_project_local_overrides,
@@ -77,26 +83,6 @@ def resolve_ephemeral_root() -> Path:
         except (OSError, PermissionError):
             continue
     raise RuntimeError("No writable ephemeral root found for session skill dirs")
-
-
-def _inject_disable_model_invocation(content: str) -> str:
-    """Ensure disable-model-invocation: true is present in SKILL.md frontmatter."""
-    m = _FM_PATTERN.match(content)
-    if m:
-        fm_text = m.group(1)
-        body = m.group(2)
-        if re.search(r"^disable-model-invocation:", fm_text, re.MULTILINE):
-            fm_text = re.sub(
-                r"^(disable-model-invocation:).*$",
-                r"\1 true",
-                fm_text,
-                flags=re.MULTILINE,
-            )
-        else:
-            fm_text = fm_text + "\ndisable-model-invocation: true"
-        return f"---\n{fm_text}\n---\n{body}"
-    # No frontmatter — prepend one
-    return f"---\ndisable-model-invocation: true\n---\n{content}"
 
 
 def _remove_disable_model_invocation(content: str) -> str:
@@ -474,15 +460,18 @@ class SkillsDirectoryProvider:
         skill_info = self._resolver.resolve(name)
         if skill_info is None:
             raise FileNotFoundError(f"Skill not found: {name}")
-        content = skill_info.path.read_text()
-        if gated:
-            content = _inject_disable_model_invocation(content)
-        content = content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
-        content = content.replace(
-            "{{AUTOSKILLIT_SCRIPTS}}",
-            str(pkg_root() / "recipes" / "scripts"),
+        projection_context = SkillProjectionContext(
+            execution_cwd=Path.cwd(),
+            substitutions={
+                "{{AUTOSKILLIT_TEMP}}": self._temp_dir_relpath,
+                "{{AUTOSKILLIT_SCRIPTS}}": str(pkg_root() / "recipes" / "scripts"),
+                "{{DEFAULT_BASE_BRANCH}}": self._default_base_branch,
+            },
+            # ``False`` means remove gating. Legacy gated=False preserves an
+            # at-rest public gate; the invocation materializer explicitly ungates.
+            gating=True if gated else None,
         )
-        return content.replace("{{DEFAULT_BASE_BRANCH}}", self._default_base_branch)
+        return project_agent_skill_document(skill_info, projection_context).content
 
 
 class DefaultSessionSkillManager:
@@ -507,6 +496,63 @@ class DefaultSessionSkillManager:
         See :func:`compute_skill_closure` for semantics.
         """
         return compute_skill_closure(skill_name, self._provider)
+
+    def materialize_invocation(
+        self,
+        session_id: str,
+        invocation: EffectiveSkillInvocation,
+        projection_context: SkillProjectionContext,
+    ) -> ValidatedAddDir:
+        """Write only a prevalidated closure from its captured canonical content."""
+        if (
+            not session_id
+            or "\x00" in session_id
+            or "/" in session_id
+            or "\\" in session_id
+            or session_id in (".", "..")
+        ):
+            raise ValueError(f"Invalid session_id: {session_id!r}")
+        if not invocation.closure or invocation.root not in invocation.closure:
+            raise ValueError("Effective invocation closure must contain its root")
+
+        conventions = projection_context.conventions
+        skills_subdir = (
+            conventions.skills_subdir
+            if conventions is not None
+            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        )
+        effective_root = self._root
+        backend = projection_context.backend
+        if (
+            backend is not None
+            and getattr(
+                getattr(backend, "capabilities", None),
+                "session_dir_persistent",
+                False,
+            )
+            and self._codex_root is not None
+        ):
+            effective_root = self._codex_root
+
+        self._session_roots[session_id] = effective_root
+        self._skills_subdir = skills_subdir
+        session_dir = effective_root / session_id
+        skills_base = session_dir / skills_subdir
+        shutil.rmtree(skills_base, ignore_errors=True)
+        skills_base.mkdir(parents=True, exist_ok=True)
+
+        ungated_context = replace(projection_context, gating=False)
+        written: set[str] = set()
+        for member in invocation.closure:
+            if member.name in written:
+                raise ValueError(f"Duplicate skill in effective closure: {member.name!r}")
+            written.add(member.name)
+            document = project_agent_skill_document(member, ungated_context)
+            skill_dir = skills_base / member.name
+            skill_dir.mkdir(parents=True, exist_ok=False)
+            atomic_write(skill_dir / "SKILL.md", document.content)
+
+        return ValidatedAddDir(path=str(session_dir))
 
     def init_session(
         self,

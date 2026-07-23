@@ -14,6 +14,7 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SkillContractError,
     SkillExecutionRole,
+    SkillResolver,
     SkillSource,
     SkillSourceRef,
     get_logger,
@@ -21,6 +22,8 @@ from autoskillit.core import (
     validate_skill_capability_roles,
 )
 from autoskillit.workspace.skill_format import (
+    SkillFrontmatterParseResult,
+    parse_frontmatter_content,
     read_skill_frontmatter,
 )
 
@@ -41,6 +44,7 @@ class SkillInfo:
     activate_deps: tuple[str, ...] = ()
     canonical_content: str = ""
     canonical_digest: str = ""
+    frontmatter: SkillFrontmatterParseResult | None = None
     invalid_reason: str | None = None
 
     def __post_init__(self) -> None:
@@ -57,6 +61,8 @@ class SkillInfo:
                 pass
         if self.canonical_content and not self.canonical_digest:
             self.canonical_digest = hashlib.sha256(self.canonical_content.encode()).hexdigest()
+        if self.frontmatter is None and self.canonical_content:
+            self.frontmatter = parse_frontmatter_content(self.canonical_content)
 
     @property
     def canonical_bytes(self) -> bytes:
@@ -91,6 +97,20 @@ class EffectiveSkillInvocation:
     capability_union: frozenset[str]
     project_root: Path | None
     execution_role: SkillExecutionRole
+
+    @property
+    def backend_requirements(self) -> frozenset[str]:
+        """Derive backend constraints once from the invocation capability union."""
+        return (
+            frozenset().union(
+                *(
+                    SKILL_CAPABILITY_REGISTRY[capability].required_backends
+                    for capability in self.capability_union
+                )
+            )
+            if self.capability_union
+            else frozenset()
+        )
 
 
 def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
@@ -188,6 +208,7 @@ def _skill_info_from_frontmatter(
             execution_role=None,
             canonical_content=parsed.content,
             canonical_digest=hashlib.sha256(parsed.content.encode()).hexdigest(),
+            frontmatter=parsed,
             invalid_reason=f"invalid frontmatter: {parsed.error}",
         )
 
@@ -258,6 +279,7 @@ def _skill_info_from_frontmatter(
         activate_deps=activate_deps,
         canonical_content=parsed.content,
         canonical_digest=canonical_digest,
+        frontmatter=parsed,
         invalid_reason="; ".join(invalid_reasons) or None,
     )
 
@@ -459,7 +481,7 @@ class DefaultSkillResolver:
 
 def validate_skill_tier_roles(
     config: Any,
-    resolver: DefaultSkillResolver,
+    resolver: SkillResolver,
     project_root: Path | None,
 ) -> None:
     """Reject configured L1 tiers containing non-SESSION skill contracts.

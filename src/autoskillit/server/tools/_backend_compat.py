@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     CodingAgentBackend,
+    SkillContractError,
+    SkillExecutionRole,
     SkillResult,
     extract_skill_name,
-    resolve_target_skill,
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,
@@ -21,9 +22,9 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 
-def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool:
-    """Return True if skill's backend_requirements exclude effective_backend."""
-    reqs = getattr(skill_info, "backend_requirements", None)
+def _is_backend_incompatible(skill_invocation: object, effective_backend: str) -> bool:
+    """Return True if the closure's derived requirements exclude the backend."""
+    reqs = getattr(skill_invocation, "backend_requirements", None)
     return bool(reqs and effective_backend not in reqs)
 
 
@@ -36,7 +37,13 @@ def _check_backend_compat(
     effective_backend_obj: CodingAgentBackend | None,
     skill_resolver: object | None,
 ) -> str | None:
-    """Fail closed when a skill is incompatible with its effective backend."""
+    """Fail closed when an effective skill invocation is backend-incompatible.
+
+    ``skill_info`` retains its compatibility-facing parameter name because
+    ``tools_execution`` still calls this helper by keyword. The value is an
+    ``EffectiveSkillInvocation``; policy reads its closure-wide capability union
+    and derived backend requirements.
+    """
     if target_name is None:
         return None
     if skill_resolver is None:
@@ -69,7 +76,7 @@ def _check_backend_compat(
             skill_command=resolved_command,
             order_id=effective_order_id,
         ).to_json()
-    skill_capabilities: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
+    skill_capabilities: frozenset[str] = getattr(skill_info, "capability_union", frozenset())
     if skill_capabilities:
         hard_capability_error = check_hard_capability_feasibility(
             skill_capabilities, effective_backend_obj
@@ -107,21 +114,27 @@ def _resolve_and_check_backend_compat(
     """Resolve a direct skill invocation and run the fail-closed compatibility gate."""
     resolved_command = skill_command
     target_name = extract_skill_name(skill_command)
-    skill_info: object | None = None
-    if tool_ctx.skill_resolver is not None:
-        resolved_command, target_name = resolve_target_skill(
-            skill_command,
-            tool_ctx.skill_resolver,
-        )
-        if target_name is not None:
-            skill_info = tool_ctx.skill_resolver.resolve(target_name)
+    skill_invocation: object | None = None
+    if tool_ctx.skill_resolver is not None and target_name is not None:
+        try:
+            skill_invocation = tool_ctx.skill_resolver.resolve_invocation(
+                target_name,
+                tool_ctx.project_dir,
+                SkillExecutionRole.SESSION,
+            )
+        except SkillContractError as exc:
+            return SkillResult.crashed(
+                exception=exc,
+                skill_command=resolved_command,
+                order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
+            ).to_json()
 
     return _check_backend_compat(
         skill_command=skill_command,
         resolved_command=resolved_command,
         effective_order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
         target_name=target_name,
-        skill_info=skill_info,
+        skill_info=skill_invocation,
         effective_backend_obj=tool_ctx.backend,
         skill_resolver=tool_ctx.skill_resolver,
     )

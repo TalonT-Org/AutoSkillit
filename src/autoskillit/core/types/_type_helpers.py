@@ -25,6 +25,7 @@ __all__ = [
     "extract_positional_args",
     "extract_skill_name",
     "fleet_error",
+    "render_target_skill_command",
     "resolve_skill_name",
     "resolve_target_skill",
     "session_type",
@@ -134,8 +135,16 @@ def resolve_target_skill(
     if info is None:
         return skill_command, name
 
-    # Determine the invocation namespace from the selected effective origin.
-    match info.source:
+    return render_target_skill_command(skill_command, info.source), name
+
+
+def render_target_skill_command(skill_command: str, source: SkillSource) -> str:
+    """Render a parsed logical skill target using its selected effective origin."""
+    name = extract_skill_name(skill_command)
+    if name is None:
+        return skill_command
+
+    match source:
         case SkillSource.BUNDLED:
             correct_prefix = AUTOSKILLIT_SKILL_PREFIX + name
         case SkillSource.BUNDLED_EXTENDED | SkillSource.PROJECT_LOCAL | SkillSource.THIRD_PARTY:
@@ -149,7 +158,7 @@ def resolve_target_skill(
     if m is None:
         raise RuntimeError(f"regex failed after extract_skill_name succeeded: {stripped!r}")
     remainder = stripped[m.end() :]
-    return correct_prefix + remainder, name
+    return correct_prefix + remainder
 
 
 def truncate_text(text: str, max_len: int = 5000) -> str:

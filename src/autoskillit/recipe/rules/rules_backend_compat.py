@@ -7,6 +7,8 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
     Severity,
+    SkillContractError,
+    SkillExecutionRole,
     describe_capability_mismatches,
     unsatisfied_backend_capabilities,
 )
@@ -41,17 +43,20 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_info = ctx.skill_resolver.resolve(skill_name)
-        if skill_info is None:
-            continue
-        if getattr(skill_info, "invalid_reason", None):
+        try:
+            invocation = ctx.skill_resolver.resolve_invocation(
+                skill_name,
+                ctx.project_dir,
+                SkillExecutionRole.SESSION,
+            )
+        except SkillContractError as exc:
             findings.append(
                 make_finding(
                     rule_name="backend-incompatible-skill",
                     step_name=step_name,
                     message=(
-                        f"step '{step_name}': skill '{skill_name}' has invalid capabilities: "
-                        f"{skill_info.invalid_reason}"
+                        f"step '{step_name}': skill '{skill_name}' has no valid effective "
+                        f"invocation: {exc}"
                     ),
                 )
             )
@@ -66,7 +71,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         )
         if step_backend is None:
             continue
-        uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
+        uses_caps = invocation.capability_union
         _step_origin = (ctx.backend_origin_map or {}).get(step_name)
         _step_remedy = (
             (
@@ -77,7 +82,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
             if _step_origin
             else None
         )
-        if skill_info.backend_requirements and step_backend not in skill_info.backend_requirements:
+        if invocation.backend_requirements and step_backend not in invocation.backend_requirements:
             cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
             _required = CLAUDE_CODE_CAPABILITIES.git_metadata_writable
             git_detail = (
@@ -91,7 +96,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': skill '{skill_name}' requires backend "
-                        f"{sorted(skill_info.backend_requirements)} but recipe targets "
+                        f"{sorted(invocation.backend_requirements)} but recipe targets "
                         f"backend '{step_backend}'.{git_detail}"
                     ),
                     origin=_step_origin,

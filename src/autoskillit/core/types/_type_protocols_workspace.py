@@ -79,6 +79,13 @@ class SessionSkillManager(Protocol):
 
     def activate_skill_deps(self, session_id: str, skill_name: str) -> bool: ...
 
+    def materialize_invocation(
+        self,
+        session_id: str,
+        invocation: Any,
+        projection_context: Any,
+    ) -> ValidatedAddDir: ...
+
     def cleanup_session(self, session_id: str) -> bool: ...
 
     def validate_session_exists(self, session_id: str) -> bool: ...

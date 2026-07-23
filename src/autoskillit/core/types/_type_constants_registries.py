@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from types import MappingProxyType
 from typing import Literal, NamedTuple
 
@@ -49,6 +49,14 @@ __all__ = [
     "RecipeDeliverySurfaceDef",
     "RECIPE_DELIVERY_SURFACE_REGISTRY",
     "RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST",
+    "RecipeSectionDef",
+    "RECIPE_SECTION_REGISTRY",
+    "DYNAMIC_RECIPE_SECTION_DEF",
+    "RECIPE_SECTION_PAGINATION_VERSION",
+    "RECIPE_SECTION_REGISTRY_DIGEST",
+    "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
+    "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
+    "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
     "SkillCapabilityDef",
     "HardCapabilityMismatch",
     "SKILL_CAPABILITY_REGISTRY",
@@ -265,6 +273,211 @@ def _recipe_delivery_surface_registry_digest() -> str:
 
 
 RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST: str = _recipe_delivery_surface_registry_digest()
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeSectionDef:
+    """Static schema and pagination definition for one pullable recipe section."""
+
+    name: str
+    value_kind: Literal["string", "array"]
+    element_kind: Literal["string"] | None
+    missing_behavior: Literal["invalid", "absent", "default"]
+    none_behavior: Literal["invalid", "absent"]
+    section_strategy: Literal["raw", "scalar", "array"]
+    ordinary_content_format: Literal["raw-text", "json-scalar-page", "json-array-page"]
+    oversized_content_format: Literal["json-element-fragment"] | None
+    has_default: bool = False
+    default_value: tuple[str, ...] | None = None
+
+
+RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = MappingProxyType(
+    {
+        "content": RecipeSectionDef(
+            name="content",
+            value_kind="string",
+            element_kind=None,
+            missing_behavior="invalid",
+            none_behavior="invalid",
+            section_strategy="raw",
+            ordinary_content_format="raw-text",
+            oversized_content_format=None,
+        ),
+        "ingredients_table": RecipeSectionDef(
+            name="ingredients_table",
+            value_kind="string",
+            element_kind=None,
+            missing_behavior="absent",
+            none_behavior="absent",
+            section_strategy="scalar",
+            ordinary_content_format="json-scalar-page",
+            oversized_content_format=None,
+        ),
+        "orchestration_rules": RecipeSectionDef(
+            name="orchestration_rules",
+            value_kind="string",
+            element_kind=None,
+            missing_behavior="absent",
+            none_behavior="invalid",
+            section_strategy="raw",
+            ordinary_content_format="raw-text",
+            oversized_content_format=None,
+        ),
+        "stop_step_semantics": RecipeSectionDef(
+            name="stop_step_semantics",
+            value_kind="string",
+            element_kind=None,
+            missing_behavior="absent",
+            none_behavior="invalid",
+            section_strategy="raw",
+            ordinary_content_format="raw-text",
+            oversized_content_format=None,
+        ),
+        "errors": RecipeSectionDef(
+            name="errors",
+            value_kind="array",
+            element_kind="string",
+            missing_behavior="default",
+            none_behavior="invalid",
+            section_strategy="array",
+            ordinary_content_format="json-array-page",
+            oversized_content_format="json-element-fragment",
+            has_default=True,
+            default_value=(),
+        ),
+        "warnings": RecipeSectionDef(
+            name="warnings",
+            value_kind="array",
+            element_kind="string",
+            missing_behavior="default",
+            none_behavior="invalid",
+            section_strategy="array",
+            ordinary_content_format="json-array-page",
+            oversized_content_format="json-element-fragment",
+            has_default=True,
+            default_value=(),
+        ),
+    }
+)
+
+DYNAMIC_RECIPE_SECTION_DEF = RecipeSectionDef(
+    name="post_prune_step",
+    value_kind="string",
+    element_kind=None,
+    missing_behavior="absent",
+    none_behavior="invalid",
+    section_strategy="raw",
+    ordinary_content_format="raw-text",
+    oversized_content_format=None,
+)
+
+RECIPE_SECTION_PAGINATION_VERSION = 1
+
+
+def _qualified_registry_digest(value: object) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    return f"sha256:{hashlib.sha256(payload).hexdigest()}"
+
+
+RECIPE_SECTION_REGISTRY_DIGEST = _qualified_registry_digest(
+    {name: asdict(definition) for name, definition in sorted(RECIPE_SECTION_REGISTRY.items())}
+    | {"$dynamic": asdict(DYNAMIC_RECIPE_SECTION_DEF)}
+)
+
+_RECIPE_SECTION_PAGINATION_POLICY = {
+    "version": RECIPE_SECTION_PAGINATION_VERSION,
+    "canonical_json": {
+        "ensure_ascii": False,
+        "separators": [",", ":"],
+        "sort_keys": True,
+    },
+    "success_fields": [
+        "success",
+        "pagination_version",
+        "section_registry_sha256",
+        "section",
+        "content_format",
+        "content",
+        "part",
+        "total_parts",
+        "has_more",
+        "next_part",
+        "section_sha256",
+        "page_plan_sha256",
+        "payload_sha256",
+        "body_sha256",
+    ],
+    "optional_fields": {"next_part": "omit_on_terminal"},
+    "content_formats": {
+        "raw-text": ["byte_start", "byte_end", "byte_total"],
+        "json-array-page": ["element_start", "element_end", "element_total"],
+        "json-scalar-page": [
+            "scalar_byte_start",
+            "scalar_byte_end",
+            "scalar_byte_total",
+        ],
+        "json-element-fragment": [
+            "element_index",
+            "element_sha256",
+            "fragment_index",
+            "fragment_count",
+            "fragment_byte_start",
+            "fragment_byte_end",
+            "fragment_byte_total",
+        ],
+    },
+    "range_units": {
+        "raw": "utf8-bytes",
+        "scalar": "decoded-utf8-bytes",
+        "array": "elements",
+    },
+    "digest_domains": {
+        "raw_section": "autoskillit.recipe-section.raw.v1",
+        "structured_section": "autoskillit.recipe-section.structured.v1",
+        "element": "autoskillit.recipe-section.element.v1",
+        "plan": "autoskillit.recipe-section.plan.v1",
+    },
+    "reconstruction": {
+        "raw-text": "concatenate-content",
+        "json-array-page": "json-load-each-and-extend",
+        "json-scalar-page": "json-load-each-and-concatenate-strings",
+        "json-element-fragment": "json-load-fragments-concatenate-verify-and-json-load",
+    },
+}
+RECIPE_SECTION_PAGINATION_POLICY_DIGEST = _qualified_registry_digest(
+    _RECIPE_SECTION_PAGINATION_POLICY
+)
+
+RECIPE_SECTION_MANDATORY_FAILURE_CODES: tuple[str, ...] = (
+    "invalid_recipe_artifact_identity",
+    "invalid_recipe_section_part",
+    "recipe_artifact_identity_required",
+    "recipe_artifact_parse_failed",
+    "recipe_artifact_schema_mismatch",
+    "recipe_artifact_unavailable",
+    "recipe_section_bound_too_small",
+    "recipe_section_cancelled",
+    "recipe_section_internal_error",
+    "recipe_section_pagination_nonconvergent",
+    "recipe_section_serialization_failed",
+    "section_not_found",
+)
+RECIPE_SECTION_RESPONSE_FLOOR_BYTES = max(
+    len(
+        json.dumps(
+            {"error": code, "success": False},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    )
+    for code in RECIPE_SECTION_MANDATORY_FAILURE_CODES
+)
 
 RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: Mapping[str, ResponseBackstopExemptionDef] = (
     MappingProxyType(

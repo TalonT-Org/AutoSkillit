@@ -56,6 +56,8 @@ from ._type_protocols_workspace import *  # noqa: F401, F403
 from ._type_protocols_workspace import __all__ as _protocols_workspace_all
 from ._type_recipe_delivery import *  # noqa: F401, F403
 from ._type_recipe_delivery import __all__ as _recipe_delivery_all
+from ._type_recipe_sections import *  # noqa: F401, F403
+from ._type_recipe_sections import __all__ as _recipe_sections_all
 from ._type_results import *  # noqa: F401, F403
 from ._type_results import __all__ as _results_all
 from ._type_results_execution import *  # noqa: F401, F403
@@ -99,6 +101,7 @@ __all__ = (
     + _results_all
     + _results_execution_all
     + _recipe_delivery_all
+    + _recipe_sections_all
     + _resume_all
     + _session_env_all
     + _subprocess_all

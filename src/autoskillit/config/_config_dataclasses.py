@@ -11,6 +11,7 @@ from autoskillit.core import (
     DRY_WALKTHROUGH_VERIFIED_MARKER,
     KNOWN_BACKEND_NAMES,
     LABEL_LIFECYCLE_REGISTRY,
+    RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     IssueLabelState,
     OutputFormat,
     get_logger,
@@ -358,8 +359,10 @@ class OutputBudgetConfig:
     shell_max_inline_bytes: int = 12_000
 
     def __post_init__(self) -> None:
-        if self.response_max_bytes <= 0:
-            raise ValueError("response_max_bytes must be positive")
+        if self.response_max_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES:
+            raise ValueError(
+                f"response_max_bytes must be at least {RECIPE_SECTION_RESPONSE_FLOOR_BYTES} bytes"
+            )
 
 
 @dataclass

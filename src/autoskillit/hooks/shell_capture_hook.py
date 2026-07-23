@@ -60,8 +60,13 @@ def _fits_arg_max(argv: list[str]) -> bool:
     return _exec_footprint(argv) + _ARG_MAX_HEADROOM_BYTES <= _system_arg_max()
 
 
-def _render_harness(argv: list[str]) -> str:
-    return f"{_HARNESS_SENTINEL}\n{shlex.join(argv)}"
+def _render_harness(argv: list[str], *, policy_command: str | None = None) -> str:
+    lines = [_HARNESS_SENTINEL]
+    if policy_command is not None:
+        policy_text = json.dumps(policy_command, ensure_ascii=True)
+        lines.append(f": {shlex.quote(policy_text)}")
+    lines.append(shlex.join(argv))
+    return "\n".join(lines)
 
 
 def _runner_path() -> Path:
@@ -79,6 +84,7 @@ def _build_harness(command: str, cwd: str, capture_id: str) -> str:
         command_bytes = b""
     if "\x00" in command or not command_bytes or len(command_bytes) > _MAX_COMMAND_BYTES:
         argv = [sys.executable, "-I", str(_runner_path()), "reject", capture_id]
+        harness = _render_harness(argv)
     else:
         encoded = base64.b64encode(command_bytes).decode("ascii")
         argv = [
@@ -90,11 +96,12 @@ def _build_harness(command: str, cwd: str, capture_id: str) -> str:
             cwd,
             capture_id,
         ]
-        harness = _render_harness(argv)
+        harness = _render_harness(argv, policy_command=command)
         outer_argv = ["bash", "-c", harness]
         if not _fits_arg_max(argv) or not _fits_arg_max(outer_argv):
             argv = [sys.executable, "-I", str(_runner_path()), "reject", capture_id]
-    return _render_harness(argv)
+            harness = _render_harness(argv)
+    return harness
 
 
 def main() -> None:

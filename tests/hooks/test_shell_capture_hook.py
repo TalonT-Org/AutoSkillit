@@ -174,6 +174,18 @@ def test_invalid_command_transport_builds_nonexecuting_rejection(command):
     assert command not in harness
 
 
+def test_valid_command_remains_policy_visible_without_becoming_shell_code() -> None:
+    from autoskillit.hooks.shell_capture_hook import _build_harness  # noqa: PLC0415
+
+    command = "printf safe; rm -rf /policy-probe"
+
+    harness = _build_harness(command, "/abs/project", "0123456789abcdef")
+    preview_argv = shlex.split(harness.splitlines()[1])
+
+    assert command in harness
+    assert preview_argv == [":", json.dumps(command)]
+
+
 def test_arg_max_exhaustion_builds_nonexecuting_rejection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -209,7 +221,7 @@ def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
     assert argv[1] == "-I"
     assert Path(argv[2]).name == "_capture_artifacts.py"
     assert re.fullmatch(r"[0-9a-f]{16}", argv[-1])
-    assert "printf 0123456789abcdef" not in command
+    assert "printf 0123456789abcdef" in command
     assert "AutoSkillit hook shell_capture_hook" not in command
     assert "`" not in command
 

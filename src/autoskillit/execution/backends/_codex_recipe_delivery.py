@@ -30,6 +30,14 @@ _LEDGER_SCHEMA_VERSION = 1
 _DATABASE_NAME = "codex-recipe-delivery.sqlite3"
 
 
+def _is_private_regular_file(path: Path) -> bool:
+    try:
+        descriptor = path.lstat()
+    except OSError:
+        return False
+    return stat.S_ISREG(descriptor.st_mode) and stat.S_IMODE(descriptor.st_mode) == 0o600
+
+
 @dataclass(frozen=True, slots=True)
 class CodexHostCorrelation:
     """Diagnostic marker-to-rollout correlation for one canonical thread."""
@@ -367,8 +375,10 @@ class RecipeDeliveryReceiptLedger:
                 connection.close()
             try:
                 os.chmod(temporary_path, 0o600)
-            except OSError:
-                pass
+            except OSError as exc:
+                raise RuntimeError("protected receipt store permissions unavailable") from exc
+            if not _is_private_regular_file(temporary_path):
+                raise RuntimeError("protected receipt store permissions unavailable")
             try:
                 os.link(temporary_path, ledger._path)
             except FileExistsError:
@@ -391,7 +401,7 @@ class RecipeDeliveryReceiptLedger:
             ledger = cls(authority)
         except ValueError:
             return None
-        if not ledger._path.is_file():
+        if not _is_private_regular_file(ledger._path):
             return None
         connection = ledger._connect()
         if connection is None:

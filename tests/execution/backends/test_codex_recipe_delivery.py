@@ -495,6 +495,30 @@ def test_interrupted_first_initialization_does_not_publish_invalid_store(
     assert reopened.path == ledger.path
 
 
+def test_initialization_fails_closed_when_private_permissions_cannot_be_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    authority = _authority(tmp_path)
+
+    def _deny_chmod(_path: Path, _mode: int) -> None:
+        raise PermissionError("simulated protected-store chmod failure")
+
+    monkeypatch.setattr(recipe_delivery.os, "chmod", _deny_chmod)
+    with pytest.raises(RuntimeError, match="permissions unavailable"):
+        RecipeDeliveryReceiptLedger.initialize_protected(authority)
+
+    assert not (authority.root / "codex-recipe-delivery.sqlite3").exists()
+    assert list(authority.root.glob("*.tmp")) == []
+
+
+def test_open_existing_rejects_nonprivate_store_permissions(tmp_path: Path) -> None:
+    authority = _authority(tmp_path)
+    ledger = RecipeDeliveryReceiptLedger.initialize_protected(authority)
+    ledger.path.chmod(0o640)
+
+    assert RecipeDeliveryReceiptLedger.open_existing(authority) is None
+
+
 def test_owner_checked_commit_and_abort(tmp_path: Path) -> None:
     ledger = RecipeDeliveryReceiptLedger.initialize_protected(_authority(tmp_path))
     first = _reserve(ledger, _ledger_attestation("thread-owner-commit"))

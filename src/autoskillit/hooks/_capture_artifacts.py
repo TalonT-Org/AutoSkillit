@@ -14,7 +14,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import stat
 import subprocess
 import sys
@@ -69,6 +68,18 @@ _MAX_POLICY_FILE_BYTES = 64 * 1024
 _MAX_COMMAND_BYTES = 64 * 1024
 _MAX_ENCODED_COMMAND_BYTES = ((_MAX_COMMAND_BYTES + 2) // 3) * 4
 _DRAIN_CHUNK_BYTES = 64 * 1024
+_CAPTURE_FAILURE_RETURN_CODE = 1
+_TRUSTED_BASH_CANDIDATES = ("/bin/bash", "/usr/bin/bash")
+_EXECUTABLE_MODE_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+_UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
+_CAPTURE_RUNTIME_ERRORS = (
+    OSError,
+    subprocess.SubprocessError,
+    RuntimeError,
+    TypeError,
+    UnicodeError,
+    ValueError,
+)
 
 _DIRECTORY_FLAGS = (
     os.O_RDONLY
@@ -553,36 +564,79 @@ def _emit_failure(detail: str) -> None:
     sys.stderr.write(f"{prefix} {safe_detail}]\n")
 
 
+def _capture_failure_return(detail: str, returncode: int | None) -> int:
+    try:
+        _emit_failure(detail)
+    except _CAPTURE_RUNTIME_ERRORS:
+        return _CAPTURE_FAILURE_RETURN_CODE
+    return returncode if returncode is not None else _CAPTURE_FAILURE_RETURN_CODE
+
+
 def _emit_capture(
     result: _DrainResult,
     artifact_path: str | None,
     inline_bytes: int,
 ) -> None:
     if result.total_bytes <= inline_bytes:
-        sys.stdout.buffer.write(result.inline)
-        sys.stdout.buffer.flush()
-        return
-
-    prefix = render_capture_marker(_capture_event("SHELL_OUTPUT_CAPTURED", "input rewrite"))
-    path = artifact_path if artifact_path is not None else "unavailable"
-    marker = (
-        f"\n{prefix} full output {result.total_bytes} bytes -> {path} "
-        f"sha256={result.sha256} complete=true]\n"
-    ).encode()
-    sys.stdout.buffer.write(result.head)
-    sys.stdout.buffer.write(marker)
-    sys.stdout.buffer.write(result.tail)
+        payload = result.inline
+    else:
+        prefix = render_capture_marker(_capture_event("SHELL_OUTPUT_CAPTURED", "input rewrite"))
+        path = artifact_path if artifact_path is not None else "unavailable"
+        marker = (
+            f"\n{prefix} full output {result.total_bytes} bytes -> {path} "
+            f"sha256={result.sha256} complete=true]\n"
+        ).encode()
+        payload = result.head + marker + result.tail
+    sys.stdout.buffer.write(payload)
     sys.stdout.buffer.flush()
 
 
 def _resolve_bash() -> str:
-    bash_path = shutil.which("bash")
-    if bash_path is None:
-        raise CaptureSetupError("bash executable unavailable")
-    resolved = os.path.realpath(bash_path)
-    if not os.path.isabs(resolved):
-        raise CaptureSetupError("bash executable path is not absolute")
-    return resolved
+    for candidate in _TRUSTED_BASH_CANDIDATES:
+        if not os.path.isabs(candidate):
+            continue
+        try:
+            fd = os.open(candidate, _READ_FLAGS)
+        except OSError:
+            continue
+        try:
+            value = os.fstat(fd)
+            if (
+                stat.S_ISREG(value.st_mode)
+                and value.st_uid == 0
+                and value.st_mode & _EXECUTABLE_MODE_BITS
+                and not value.st_mode & _UNTRUSTED_WRITE_BITS
+            ):
+                return candidate
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
+    raise CaptureSetupError("trusted bash executable unavailable")
+
+
+def _settle_failed_capture(process: subprocess.Popen[bytes]) -> int | None:
+    if process.stdout is not None:
+        try:
+            process.stdout.close()
+        except _CAPTURE_RUNTIME_ERRORS:
+            pass
+    try:
+        running = process.poll() is None
+    except _CAPTURE_RUNTIME_ERRORS:
+        running = True
+    if running:
+        try:
+            process.terminate()
+        except _CAPTURE_RUNTIME_ERRORS:
+            try:
+                process.kill()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
+    try:
+        return _normalized_returncode(process.wait())
+    except _CAPTURE_RUNTIME_ERRORS:
+        return None
 
 
 def run_capture(command: str, cwd: str, capture_id: str) -> int:
@@ -613,35 +667,43 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         root = open_capture_root(anchor, create=True)
         artifact = create_capture_artifact(root, capture_id)
         process = _spawn_bash(anchor, bash_path, command, capture_output=True)
+        returncode: int | None = None
+        failure_stage = "capture pipe drain"
         try:
             result = _drain_capture(process, artifact, policy.inline_bytes)
-        except (CaptureSetupError, OSError):
-            if process.stdout is not None:
-                process.stdout.close()
-            if process.poll() is None:
-                process.terminate()
+            failure_stage = "capture process wait"
             returncode = _normalized_returncode(process.wait())
-            _emit_failure("capture pipe drain failed")
-            return returncode
-        returncode = _normalized_returncode(process.wait())
-        if result.write_error is not None:
-            _emit_failure("capture artifact write failed")
-            return returncode
-        try:
+            if result.write_error is not None:
+                return _capture_failure_return("capture artifact write failed", returncode)
+            failure_stage = "capture marker verification"
             artifact_path = current_artifact_path_if_bound(anchor, root, artifact)
-        except OSError:
-            _emit_failure("capture marker verification failed")
+            failure_stage = "capture replay emission"
+            _emit_capture(result, artifact_path, policy.inline_bytes)
             return returncode
-        _emit_capture(result, artifact_path, policy.inline_bytes)
-        return returncode
+        except _CAPTURE_RUNTIME_ERRORS:
+            if returncode is None:
+                returncode = _settle_failed_capture(process)
+            return _capture_failure_return(f"{failure_stage} failed", returncode)
     finally:
         if process is not None and process.stdout is not None:
-            process.stdout.close()
+            try:
+                process.stdout.close()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
         if artifact is not None:
-            artifact.close()
+            try:
+                artifact.close()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
         if root is not None:
-            root.close()
-        anchor.close()
+            try:
+                root.close()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
+        try:
+            anchor.close()
+        except _CAPTURE_RUNTIME_ERRORS:
+            pass
 
 
 def _open_stale_candidate(

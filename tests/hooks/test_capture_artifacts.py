@@ -45,6 +45,53 @@ def _open_authority(project: Path):
     return anchor, root
 
 
+class _ReadableStream:
+    def __init__(self, value: bytes) -> None:
+        self._value = value
+        self.closed = False
+
+    def read(self, _size: int) -> bytes:
+        value, self._value = self._value, b""
+        return value
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakeCaptureProcess:
+    def __init__(self, value: bytes) -> None:
+        self.stdout = _ReadableStream(value)
+        self.terminated = False
+        self.killed = False
+        self.wait_calls = 0
+
+    def poll(self) -> None:
+        return None
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+    def wait(self) -> int:
+        self.wait_calls += 1
+        return 0
+
+
+def _record_artifact_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    observed_fds: list[int] = []
+    real_create = capture_artifacts.create_capture_artifact
+
+    def record_artifact(root, capture_id):
+        artifact = real_create(root, capture_id)
+        observed_fds.append(artifact.fd)
+        return artifact
+
+    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
+    return observed_fds
+
+
 def test_project_anchor_accepts_symlink_cwd(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
@@ -483,6 +530,52 @@ def test_capture_pipe_closes_on_success(
     assert processes[0].stdout.closed
 
 
+def test_bash_resolution_ignores_ambient_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    attacker_bin = tmp_path / "attacker-bin"
+    attacker_bin.mkdir()
+    fake_bash = attacker_bin / "bash"
+    fake_bash.write_text("#!/bin/sh\nprintf attacker-controlled\nexit 99\n")
+    fake_bash.chmod(0o755)
+    monkeypatch.setenv("PATH", str(attacker_bin))
+
+    assert run_capture("printf trusted-bash", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    assert captured.out == "trusted-bash"
+    assert "attacker-controlled" not in captured.out + captured.err
+
+
+@pytest.mark.parametrize("candidate_kind", ["symlink", "world-writable"])
+def test_bash_resolution_rejects_untrusted_explicit_candidate(
+    candidate_kind: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "candidate-target"
+    target.write_text("#!/bin/sh\nexit 0\n")
+    target.chmod(0o755)
+    candidate = target
+    if candidate_kind == "symlink":
+        candidate = tmp_path / "bash"
+        candidate.symlink_to(target)
+    else:
+        target.chmod(0o777)
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_TRUSTED_BASH_CANDIDATES",
+        (str(candidate),),
+    )
+
+    with pytest.raises(CaptureSetupError, match="trusted bash executable unavailable"):
+        capture_artifacts._resolve_bash()
+
+
 def test_capture_stream_failure_closes_pipe_and_artifact(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -536,6 +629,89 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+def test_digest_failure_emits_failure_and_closes_runtime_resources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    observed_fds = _record_artifact_fds(monkeypatch)
+    process = _FakeCaptureProcess(b"captured-output")
+
+    class BrokenDigest:
+        def update(self, _chunk: bytes) -> None:
+            raise RuntimeError("fault injection")
+
+        def hexdigest(self) -> str:
+            raise AssertionError("digest failure must stop before finalization")
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_artifacts.hashlib, "sha256", BrokenDigest)
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert process.terminated
+    assert process.stdout.closed
+    assert process.wait_calls == 1
+    assert observed_fds
+    for fd in observed_fds:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
+def test_success_marker_emission_failure_closes_resources_without_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    observed_fds = _record_artifact_fds(monkeypatch)
+    process = _FakeCaptureProcess(b"captured-output")
+
+    def fail_success_marker(*_args, **_kwargs) -> None:
+        raise RuntimeError("fault injection")
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_artifacts, "_emit_capture", fail_success_marker)
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert process.stdout.closed
+    assert process.wait_calls == 1
+    assert _capture_dir(project).joinpath(f"shell_{_CAPTURE_ID}.log").read_bytes() == (
+        b"captured-output"
+    )
+    assert observed_fds
+    for fd in observed_fds:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
+def test_failure_marker_emission_failure_returns_capture_failure_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"captured-output")
+
+    def fail_marker(*_args, **_kwargs) -> None:
+        raise RuntimeError("fault injection")
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_artifacts, "_emit_capture", fail_marker)
+    monkeypatch.setattr(capture_artifacts, "_emit_failure", fail_marker)
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
+    assert process.stdout.closed
 
 
 def test_artifact_write_failure_emits_failure_marker(

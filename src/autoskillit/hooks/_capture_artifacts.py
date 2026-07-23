@@ -617,7 +617,7 @@ def _capture_event(reason_code: str, decision: str) -> PolicyEvent:
 
 def _emit_failure(detail: str) -> None:
     prefix = render_capture_marker(_capture_event("CAPTURE_FAILED", "deny"))
-    safe_detail = " ".join(detail.split())[:240]
+    safe_detail = " ".join(detail.split()).replace("]", "\\u005d")[:240]
     sys.stderr.write(f"{prefix} {safe_detail}]\n")
 
 
@@ -754,10 +754,13 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             failure_stage = "capture replay emission"
             _emit_capture(result, artifact_path, policy.inline_bytes)
             return returncode
-        except _CAPTURE_RUNTIME_ERRORS:
+        except _CAPTURE_RUNTIME_ERRORS as exc:
             if returncode is None:
                 returncode = _settle_failed_capture(process)
-            return _capture_failure_return(f"{failure_stage} failed", returncode)
+            return _capture_failure_return(
+                f"{failure_stage} failed: {type(exc).__name__}: {exc}",
+                returncode,
+            )
     finally:
         if process is not None and process.stdout is not None:
             try:

@@ -92,3 +92,15 @@ def test_serve_surfaces_contains_expected_members() -> None:
         f"Missing: {expected - actual}. "
         f"Extra: {actual - expected}."
     )
+
+
+def test_recipe_recreation_policy_is_registry_owned() -> None:
+    from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
+
+    eligible = {
+        surface
+        for surface, definition in RECIPE_DELIVERY_SURFACE_REGISTRY.items()
+        if definition.recreation_eligible
+    }
+
+    assert eligible == {"open_kitchen", "open_kitchen_deferred_recall", "get_recipe"}

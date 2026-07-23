@@ -191,6 +191,7 @@ class RecipeDeliverySurfaceDef(NamedTuple):
     route_kind: Literal["tool", "deferred_tool", "resource"]
     negotiation_eligible: bool
     pull_eligible: bool
+    recreation_eligible: bool
     response_exemption_tool: str | None
     response_exemption: ResponseBackstopExemptionDef | None
 
@@ -204,6 +205,7 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             route_kind="tool",
             negotiation_eligible=True,
             pull_eligible=True,
+            recreation_eligible=True,
             response_exemption_tool="open_kitchen",
             response_exemption=ResponseBackstopExemptionDef(
                 max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
@@ -216,6 +218,7 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             route_kind="deferred_tool",
             negotiation_eligible=True,
             pull_eligible=True,
+            recreation_eligible=True,
             response_exemption_tool="open_kitchen",
             response_exemption=None,
         ),
@@ -224,6 +227,7 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             route_kind="tool",
             negotiation_eligible=True,
             pull_eligible=True,
+            recreation_eligible=False,
             response_exemption_tool="load_recipe",
             response_exemption=ResponseBackstopExemptionDef(
                 max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
@@ -236,6 +240,7 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             route_kind="resource",
             negotiation_eligible=False,
             pull_eligible=True,
+            recreation_eligible=True,
             response_exemption_tool=None,
             response_exemption=None,
         ),

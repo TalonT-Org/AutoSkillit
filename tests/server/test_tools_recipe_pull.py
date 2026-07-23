@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -36,6 +37,7 @@ from autoskillit.server._recipe_delivery import (
     load_recipe_artifact,
     persist_recipe_artifact,
     recipe_pull_producers,
+    recipe_recreation_producers,
     retire_recipe_artifacts,
 )
 from autoskillit.server._response_budget import enforce_response_budget
@@ -72,6 +74,10 @@ def _persist(
         recipe_name="remediation",
         payload=dict(payload or _payload()),
     )
+
+
+def _remove_persisted_namespace(temp_dir: Path, *, kitchen_id: str) -> None:
+    shutil.rmtree(temp_dir / "recipe-delivery" / kitchen_id)
 
 
 def test_same_payload_is_idempotent_and_changed_payload_is_immutable(tmp_path: Path) -> None:
@@ -225,6 +231,7 @@ def test_generation_descriptor_has_no_caller_selected_path(tmp_path: Path) -> No
     }
     assert not {"artifact_path", "path", "sha256"} & set(pull)
     assert recipe_pull_producers() == {"open_kitchen", "load_recipe", "get_recipe"}
+    assert recipe_recreation_producers() == {"open_kitchen", "get_recipe"}
 
 
 def test_kitchen_retirement_removes_only_that_namespace(tmp_path: Path) -> None:
@@ -560,7 +567,7 @@ async def test_pull_tool_recreates_missing_exact_generation(
         recipe_name="remediation",
         payload=_payload(),
     )
-    assert retire_recipe_artifacts(
+    _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
     )
     monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: _payload())
@@ -599,7 +606,7 @@ async def test_pull_tool_reports_invalid_missing_generation_recreation(
         recipe_name="remediation",
         payload=_payload(),
     )
-    assert retire_recipe_artifacts(
+    _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
     )
     monkeypatch.setattr(
@@ -632,7 +639,7 @@ async def test_pull_tool_rejects_changed_recreated_generation(
         recipe_name="remediation",
         payload=_payload(),
     )
-    assert retire_recipe_artifacts(
+    _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
     )
     monkeypatch.setattr(

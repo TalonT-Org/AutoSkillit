@@ -342,6 +342,15 @@ def recipe_pull_producers() -> frozenset[str]:
     )
 
 
+def recipe_recreation_producers() -> frozenset[str]:
+    """Return producers whose missing generations may be rebuilt in-session."""
+    return frozenset(
+        definition.producer_tool
+        for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
+        if definition.recreation_eligible
+    )
+
+
 def _step_one_line_summary(step: Any) -> str:
     """Return a compact single-line summary for one recipe step."""
     description = getattr(step, "description", "") or ""

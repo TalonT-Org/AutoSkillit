@@ -42,6 +42,7 @@ from autoskillit.server._recipe_delivery import (
     load_recipe_artifact,
     persist_recipe_artifact,
     recipe_pull_producers,
+    recipe_recreation_producers,
 )
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
@@ -522,7 +523,7 @@ async def get_recipe_section(
                     identity=identity,
                 )
             except RecipeArtifactError:
-                if producer_tool not in {"open_kitchen", "get_recipe"}:
+                if producer_tool not in recipe_recreation_producers():
                     return json.dumps({"success": False, "error": "recipe_artifact_unavailable"})
                 # Recreation path: re-invoke the same serve pipeline that
                 # built the artifact originally. This handles the case

@@ -245,14 +245,59 @@ provider acceptance. Post-hoc usage likewise cannot substitute for this three-pa
 ## Privacy and observability
 
 Runtime IDs are random, opaque, non-secret values and are never derived from personal data.
-Runtime/audit records and Aggregate telemetry are governed separately:
+Runtime/audit records and Aggregate telemetry are governed separately by field. Each field below
+maps to a concrete protocol dataclass attribute (`protocol_version`, `claim_id`, `reason_code`,
+etc.) and is governed by an explicit maximum length/cardinality, retention, access, deletion, and
+export rule.
 
-| Field class | Purpose | Maximum length/cardinality | Retention | Access | Deletion | Export |
+### Runtime/audit fields (per-record, persisted with the session)
+
+| Field | Purpose | Maximum length/cardinality | Retention | Access | Deletion | Export |
 |---|---|---|---|---|---|---|
-| Runtime/audit opaque IDs, counts, versions, reason codes, timestamps, and witness kinds | deterministic replay, reconciliation, and incident audit | IDs/reason codes are schema-bounded; collection cardinality is bounded by one epoch and configured audit retention | only for configured operational/audit retention | authorized operators and the owning runtime | delete with the owning session/audit-retention policy, subject to required security retention | content-free structured records only |
-| Runtime/audit lineage and source locator fields | correlate a request, turn, agent, source claim, and authority witness | typed fixed field set; each value is schema-bounded; no free-form labels | same as the owning session or coverage record | authorized operators and maintainers | delete runtime lineage with its session; retain static provenance only with the released contract | export only to access-controlled audit channels; never to Aggregate telemetry |
-| Aggregate telemetry state/reason/version counters | measure coverage state, unavailable decisions, and protocol health | fixed enum dimensions and bounded aggregate buckets; no per-session cardinality | configured aggregate-metrics retention | operators with aggregate-metrics access | delete by aggregate retention schedule | aggregates only; no opaque IDs, lineage, source locator, or user-controlled values |
-| Forbidden content | prevent model or user data from escaping the accounting plane | zero: no content, payloads, prompts, tool results, absolute paths, bearer tokens, credentials, or content/artifact hashes | never retained | no access because collection is prohibited | reject before publication; remove affected invalid record under incident procedure | never exported |
+| `protocol_version` | pinned reducer semantics | 1 non-negative integer | session lifetime + audit retention | owning runtime + audit tooling | dropped with the session; ADR header is the static anchor | content-free structured records only |
+| `aggregate_revision` / `admission_sequence` | monotonic per-session counters | 64-bit non-negative | session lifetime + audit retention | owning runtime + audit tooling | dropped with the session | content-free structured records only |
+| `event_id`, `reservation_id`, `witness_id`, `batch_id`, `request_id`, `reservation_key`, `occurrence_id`, `attempt_id`, `delivery_occurrence_id`, `generation_reservation_id` | identity | opaque 96 ASCII chars (`[A-Za-z0-9_.:-]`); no `-` leading/trailing segments | session lifetime + audit retention | owning runtime + audit tooling | dropped with the session; tombstone keys preserve identity until retention | content-free structured records only |
+| `reason_code` (event/decision) | typed provenance | 64 ASCII chars; kebab-case `^[a-z][a-z0-9-]*$`; no `bearer`, `sha256:`, `blake2:`, `content:` prefix | session lifetime + audit retention | owning runtime + audit tooling | dropped with the session | content-free structured records only |
+| `count` / `requested_count` / `available_ordinary_count` / `available_protected_count` / `reserved_count` / `committed_input_count` / `unresolved_input_count` / `retained_unresolved_count` / `maximum_allowance` / `exact_terminal_usage` / `injected_count` / `priority` / `predicted_authoritative_maximum` / `active_count` / `hard_limit` / `remaining_count` / `highest_admitted_dispatch_sequence` | exact accounting counts | 64-bit non-negative integer | session lifetime + audit retention | owning runtime + audit tooling | dropped with the session | content-free structured records only |
+| `version` / `representation_revision` / `tested_version` / `tested_revision` / `publication_revision` | binding identity | opaque 96 ASCII chars; tested_revision is a pinned git SHA (40 hex chars) | session lifetime + audit retention | owning runtime + audit tooling | dropped with the session; static ADR pins preserve release provenance | content-free structured records only |
+| `checked_at` | evidence freshness date | ISO-8601 date (10 ASCII chars: `YYYY-MM-DD`) | coverage record lifetime | maintainers with release-provenance access | dropped with the coverage record | content-free structured records only |
+| `witness_ids` / `span_owners` / `occurrence_ids` / `input_reservations` / `generation_reservations` / `protected_pools` / `idempotency_records` / `expired_idempotency_tombstones` / `closed_epochs` / `processed_events` / `occurrence_records` / `batch_records` / `reservations` / `terminal_occurrence_records` / `terminal_reservations` / `processed_event_tombstones` | ordered collection of typed records | bounded by one epoch (≤ 1 active + ≤ N closed audits, each audit ≤ 10⁴ occurrence records) | session lifetime + audit retention | owning runtime + audit tooling | dropped with the session; closed audits survive until audit retention | content-free structured records only |
+| `freshness_policy` | typed degradation policy | 128 ASCII chars; literal enum (`verify_on_version_or_configuration_change`, `verify_on_revision_change`, `infer_only`) | coverage record lifetime | maintainers with release-provenance access | dropped with the coverage record | content-free structured records only |
+| `verifier`, `configuration_mode`, `backend`, `control_point_owner` | evidence metadata | 64 ASCII chars (verifier, configuration_mode, backend); 96 ASCII chars (control_point_owner); no secrets or paths | coverage record lifetime | maintainers with release-provenance access | dropped with the coverage record | content-free structured records only |
+
+### Lineage and source locator fields (per-record)
+
+| Field | Purpose | Maximum length/cardinality | Retention | Access | Deletion | Export |
+|---|---|---|---|---|---|---|
+| `root_session_id`, `current_session_id`, `root_agent_id`, `current_agent_id`, `parent_agent_id`, `root_thread_id`, `current_thread_id`, `parent_thread_id`, `fork_occurrence_id`, `turn_id`, `producer_surface`, `producer_instance_id`, `tool_call_id`, `model_item_id`, `dispatch_identity`, `delivery_occurrence_id` | correlate a request, turn, agent, source claim, and authority witness | opaque 96 ASCII chars; `producer_surface` is a closed enum; `dispatch_identity` is a single opaque dispatch ID plus derived sentinels (no per-call secrets) | same as the owning session or coverage record | authorized operators and maintainers | delete runtime lineage with its session; retain static provenance only with the released contract | export only to access-controlled audit channels; never to aggregate telemetry |
+| `source_locator` (coverage evidence) | static relative source path under `src/` | 256 ASCII chars; forward-slash relative path only (no `/` or `~` prefix, no `\`); no absolute paths, no home-directory paths, no URLs, or secrets | coverage record lifetime (static) | maintainers with release-provenance access | dropped with the coverage record; release pins remain in the ADR | export only to access-controlled audit channels; never to aggregate telemetry |
+
+### Aggregate telemetry fields (population-level, never per-session)
+
+| Field | Purpose | Maximum length/cardinality | Retention | Access | Deletion | Export |
+|---|---|---|---|---|---|---|
+| `state`, `reason_code` counters (privacy-only aggregates) | measure coverage state, unavailable decisions, and protocol health | fixed enum dimensions; counter buckets ≤ 10⁴ distinct labels per dimension | configured aggregate-metrics retention (≤ 30 days) | operators with aggregate-metrics access | delete by aggregate retention schedule | aggregates only; no opaque IDs, lineage, source locator, or user-controlled values |
+| `version` counters | track pinned protocol version usage | one bucket per released protocol version | configured aggregate-metrics retention (≤ 30 days) | operators with aggregate-metrics access | delete by aggregate retention schedule | aggregates only |
+
+### Forbidden content (zero cardinality, rejected at the validator)
+
+The following are forbidden from every serialized contract value, `repr`, and exception message:
+
+- model content, payloads, prompts, tool results, tool arguments, retrieval bodies, or
+  `system_message` text;
+- absolute paths (any string starting with `/` or `~`, or containing `\\`);
+- bearer tokens, credentials, API keys, session cookies, or any string starting with `bearer`,
+  `sha256:`, `blake2:`, or `content:`;
+- content/artifact hashes (any string matching `sha256:[hex]`, `blake2:[hex]`, `content:[hex]`,
+  or other digest prefixes);
+- newlines or carriage returns (`\n`, `\r`) anywhere in a serialized field.
+
+Validator behavior: each contract type carries a `__post_init__` check that rejects the
+construction outright before reduction. Rejection raises `ContextAdmissionValidationError` with a
+bounded reason code; the rejected value never reaches storage, telemetry, or the reducer. Tests
+in `tests/core/types/test_context_admission_contract.py` and
+`tests/core/test_context_admission_coverage.py` freeze this contract by parameterizing against
+canary values for every forbidden category.
 
 Serialization, `repr`, and exception paths must remain content-free. Contract tests use canaries to
 prove that content, absolute paths, bearer tokens, and content/artifact hashes cannot escape.

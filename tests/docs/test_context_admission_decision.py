@@ -251,8 +251,10 @@ def test_upstream_request_contains_all_three_authority_parts_and_minimum_fields(
 def test_privacy_table_freezes_field_governance(decision_text: str) -> None:
     privacy = _section(decision_text, "Privacy and observability")
     for required in [
-        "Runtime/audit",
-        "Aggregate telemetry",
+        "Runtime/audit fields",
+        "Lineage and source locator fields",
+        "Aggregate telemetry fields",
+        "Forbidden content",
         "Purpose",
         "Maximum length/cardinality",
         "Retention",
@@ -268,6 +270,145 @@ def test_privacy_table_freezes_field_governance(decision_text: str) -> None:
         "content/artifact hashes",
     ]:
         assert required in privacy
+
+
+REQUIRED_RUNTIME_AUDIT_FIELDS = (
+    "protocol_version",
+    "aggregate_revision",
+    "admission_sequence",
+    "event_id",
+    "reservation_id",
+    "witness_id",
+    "batch_id",
+    "request_id",
+    "reservation_key",
+    "occurrence_id",
+    "attempt_id",
+    "delivery_occurrence_id",
+    "generation_reservation_id",
+    "reason_code",
+    "requested_count",
+    "available_ordinary_count",
+    "available_protected_count",
+    "reserved_count",
+    "committed_input_count",
+    "unresolved_input_count",
+    "retained_unresolved_count",
+    "maximum_allowance",
+    "exact_terminal_usage",
+    "injected_count",
+    "priority",
+    "predicted_authoritative_maximum",
+    "active_count",
+    "hard_limit",
+    "remaining_count",
+    "highest_admitted_dispatch_sequence",
+    "representation_revision",
+    "tested_version",
+    "tested_revision",
+    "publication_revision",
+    "checked_at",
+    "freshness_policy",
+    "verifier",
+    "configuration_mode",
+    "backend",
+    "control_point_owner",
+)
+
+REQUIRED_LINEAGE_FIELDS = (
+    "root_session_id",
+    "current_session_id",
+    "root_agent_id",
+    "current_agent_id",
+    "parent_agent_id",
+    "root_thread_id",
+    "current_thread_id",
+    "parent_thread_id",
+    "fork_occurrence_id",
+    "turn_id",
+    "producer_surface",
+    "producer_instance_id",
+    "tool_call_id",
+    "model_item_id",
+    "dispatch_identity",
+    "source_locator",
+)
+
+REQUIRED_AGGREGATE_FIELDS = (
+    "state",
+    "reason_code",
+    "version",
+)
+
+REQUIRED_FORBIDDEN_CONTENT = (
+    "model content",
+    "payloads",
+    "prompts",
+    "tool results",
+    "absolute paths",
+    "bearer",
+    "credentials",
+    "API keys",
+    "session cookies",
+    "content/artifact hashes",
+    "sha256:",
+    "blake2:",
+    "content:",
+)
+
+CONCRETE_MAXIMA_HINTS = (
+    "96 ASCII",
+    "64 ASCII",
+    "128 ASCII",
+    "256 ASCII",
+    "10 ASCII",
+    "10⁴",
+    "64-bit non-negative",
+    "kebab-case",
+    "ISO-8601",
+    "30 days",
+    "no `",
+    "no absolute",
+    "no secrets",
+    "no home-directory",
+    "no URLs",
+)
+
+
+def test_privacy_table_freezes_complete_runtime_audit_field_inventory(
+    decision_text: str,
+) -> None:
+    privacy = _section(decision_text, "Privacy and observability")
+    missing = [field for field in REQUIRED_RUNTIME_AUDIT_FIELDS if field not in privacy]
+    assert not missing, f"missing runtime/audit fields in ADR-0007 privacy table: {missing}"
+
+
+def test_privacy_table_freezes_complete_lineage_field_inventory(
+    decision_text: str,
+) -> None:
+    privacy = _section(decision_text, "Privacy and observability")
+    missing = [field for field in REQUIRED_LINEAGE_FIELDS if field not in privacy]
+    assert not missing, f"missing lineage fields in ADR-0007 privacy table: {missing}"
+
+
+def test_privacy_table_freezes_aggregate_telemetry_field_inventory(
+    decision_text: str,
+) -> None:
+    privacy = _section(decision_text, "Privacy and observability")
+    missing = [field for field in REQUIRED_AGGREGATE_FIELDS if field not in privacy]
+    assert not missing, f"missing aggregate telemetry fields in ADR-0007 privacy table: {missing}"
+
+
+def test_privacy_table_forbids_complete_content_categories(decision_text: str) -> None:
+    privacy = _section(decision_text, "Privacy and observability").casefold()
+    missing = [item for item in REQUIRED_FORBIDDEN_CONTENT if item.casefold() not in privacy]
+    assert not missing, f"missing forbidden-content categories in ADR-0007: {missing}"
+
+
+def test_privacy_table_requires_concrete_field_maxima(decision_text: str) -> None:
+    privacy = _section(decision_text, "Privacy and observability")
+    missing = [hint for hint in CONCRETE_MAXIMA_HINTS if hint not in privacy]
+    assert not missing, f"ADR-0007 privacy table must specify concrete maxima: {missing}"
 
 
 def test_decision_keeps_issue_non_goals_explicit(decision_text: str) -> None:

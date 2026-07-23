@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -91,10 +92,20 @@ _ARTIFACT_FLAGS = (
     os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
 )
 _READ_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+_STALE_READ_FLAGS = _READ_FLAGS | getattr(os, "O_NONBLOCK", 0)
 
 
 class CaptureSetupError(RuntimeError):
     """Raised when the descriptor-anchored capture authority cannot be established."""
+
+
+class _CleanupDeletionMode(Enum):
+    """Observed cleanup capability; neither stdlib mode permits identity-bound deletion."""
+
+    SAFE_RETENTION_WITHOUT_DIR_FD_UNLINK = "safe-retention-without-dir-fd-unlink"
+    SAFE_RETENTION_WITH_UNCONDITIONAL_DIR_FD_UNLINK = (
+        "safe-retention-with-unconditional-dir-fd-unlink"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +124,7 @@ class ProjectAnchor:
 
     fd: int
     identity: FileIdentity
+    supplied_path: str
     physical_path: Path
 
     def close(self) -> None:
@@ -186,15 +198,25 @@ class _CleanupCandidate:
             self.fd = -1
 
 
-def _require_capabilities() -> None:
-    required_dir_fd = (os.open, os.mkdir)
+def _probe_cleanup_deletion_mode() -> _CleanupDeletionMode:
+    if os.unlink in getattr(os, "supports_dir_fd", ()):
+        return _CleanupDeletionMode.SAFE_RETENTION_WITH_UNCONDITIONAL_DIR_FD_UNLINK
+    return _CleanupDeletionMode.SAFE_RETENTION_WITHOUT_DIR_FD_UNLINK
+
+
+def _require_capabilities() -> _CleanupDeletionMode:
+    required_dir_fd = (os.open, os.mkdir, os.stat)
+    required_flags = ("O_CLOEXEC", "O_CREAT", "O_DIRECTORY", "O_EXCL", "O_NOFOLLOW", "O_NONBLOCK")
     if (
-        getattr(os, "O_DIRECTORY", 0) == 0
-        or getattr(os, "O_NOFOLLOW", 0) == 0
+        any(getattr(os, flag, 0) == 0 for flag in required_flags)
         or not hasattr(os, "fchdir")
+        or not hasattr(os, "fstat")
         or any(function not in os.supports_dir_fd for function in required_dir_fd)
+        or os.stat not in getattr(os, "supports_follow_symlinks", ())
+        or os.listdir not in getattr(os, "supports_fd", ())
     ):
         raise CaptureSetupError("required descriptor-relative filesystem primitives unavailable")
+    return _probe_cleanup_deletion_mode()
 
 
 def _identity(fd: int) -> FileIdentity:
@@ -251,6 +273,7 @@ def open_project_anchor(cwd: str) -> ProjectAnchor:
         return ProjectAnchor(
             fd=fd,
             identity=FileIdentity.from_stat(anchor_stat),
+            supplied_path=cwd,
             physical_path=physical_path,
         )
     except BaseException:
@@ -392,9 +415,10 @@ def current_artifact_path_if_bound(
     opened: list[int] = []
     try:
         try:
+            marker_physical_path = Path(os.path.realpath(anchor.supplied_path))
             project_fd = os.open(
-                anchor.physical_path,
-                _DIRECTORY_FLAGS & ~getattr(os, "O_NOFOLLOW", 0),
+                marker_physical_path,
+                _DIRECTORY_FLAGS,
             )
         except OSError:
             return None
@@ -434,7 +458,7 @@ def current_artifact_path_if_bound(
             or current_value.st_mode & stat.S_IWOTH
         ):
             return None
-        return str(anchor.physical_path.joinpath(*CAPTURE_PATH_COMPONENTS, artifact.name))
+        return str(marker_physical_path.joinpath(*CAPTURE_PATH_COMPONENTS, artifact.name))
     finally:
         for fd in reversed(opened):
             os.close(fd)
@@ -478,8 +502,7 @@ def _spawn_bash(
 
     if restore_error is not None:
         if process is not None:
-            process.terminate()
-            process.wait()
+            _settle_failed_capture(process)
         raise CaptureSetupError("cannot restore runner cwd") from restore_error
     if process is None:
         raise CaptureSetupError("capture shell did not start")
@@ -715,7 +738,18 @@ def _open_stale_candidate(
     if not _CAPTURE_FILENAME_RE.fullmatch(name):
         return None
     try:
-        fd = os.open(name, _READ_FLAGS, dir_fd=root.fd)
+        observed = os.stat(name, dir_fd=root.fd, follow_symlinks=False)
+    except OSError:
+        return None
+    if (
+        not stat.S_ISREG(observed.st_mode)
+        or observed.st_nlink != 1
+        or observed.st_mode & stat.S_IWOTH
+        or observed.st_mtime > mtime_threshold
+    ):
+        return None
+    try:
+        fd = os.open(name, _STALE_READ_FLAGS, dir_fd=root.fd)
     except OSError:
         return None
     try:
@@ -724,7 +758,8 @@ def _open_stale_candidate(
         os.close(fd)
         return None
     if (
-        not stat.S_ISREG(value.st_mode)
+        FileIdentity.from_stat(value) != FileIdentity.from_stat(observed)
+        or not stat.S_ISREG(value.st_mode)
         or value.st_nlink != 1
         or value.st_mode & stat.S_IWOTH
         or value.st_mtime > mtime_threshold
@@ -756,6 +791,7 @@ def sweep_stale_captures(
     anchor: ProjectAnchor | None = None
     root: CaptureRoot | None = None
     try:
+        _cleanup_mode = _require_capabilities()
         anchor = open_project_anchor(os.fspath(project_root))
         root = open_capture_root(anchor, create=False)
         threshold = time.time() - max_age_seconds
@@ -766,7 +802,7 @@ def sweep_stale_captures(
         for name in names:
             candidate = _open_stale_candidate(root, name, mtime_threshold=threshold)
             if candidate is not None:
-                # Retention is the safe disposition without expected-inode unlink.
+                # Both probed stdlib modes retain: neither can bind unlink to this fd identity.
                 candidate.close()
         return 0
     except (CaptureSetupError, OSError):

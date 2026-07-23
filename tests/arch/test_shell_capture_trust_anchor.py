@@ -32,6 +32,11 @@ _PROJECT_TEMP_CLEANUP_DEBT = {
         "reason": "clone cleanup still uses pathname-based unlink/rmtree",
         "tracking_issue": "#4319",
     },
+    "scripts/recipe/create_worktree.sh": {
+        "owner": "workspace worktree lifecycle",
+        "reason": "recipe-side worktree sidecars are still written and removed by pathname",
+        "tracking_issue": "#4319",
+    },
 }
 
 
@@ -71,9 +76,11 @@ def test_project_temp_cleanup_debt_is_narrow_and_owned() -> None:
         "workspace/worktree.py",
         "workspace/clone_registry.py",
         "workspace/clone.py",
+        "scripts/recipe/create_worktree.sh",
     }
     for relative, debt in _PROJECT_TEMP_CLEANUP_DEBT.items():
-        assert (_SRC / relative).is_file()
+        path = _REPO_ROOT / relative if relative.startswith("scripts/") else _SRC / relative
+        assert path.is_file()
         assert debt["owner"]
         assert debt["reason"]
         assert debt["tracking_issue"] == "#4319"

@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -110,6 +111,79 @@ def test_project_anchor_accepts_symlink_cwd(tmp_path: Path) -> None:
         artifact.close()
         root.close()
         anchor.close()
+
+
+def test_symlinked_cwd_is_opened_before_path_derivation_and_descendants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    supplied_cwd = tmp_path / "project-link"
+    supplied_cwd.symlink_to(project, target_is_directory=True)
+    events: list[tuple[str, int | None]] = []
+    real_open = capture_artifacts.os.open
+    real_realpath = capture_artifacts.os.path.realpath
+
+    def track_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = real_open(path, flags, mode, dir_fd=dir_fd)
+        if os.fspath(path) == str(supplied_cwd) and dir_fd is None:
+            events.append(("project", None))
+        elif path in CAPTURE_PATH_COMPONENTS:
+            events.append((os.fspath(path), dir_fd))
+        return fd
+
+    def track_realpath(path):
+        events.append(("derive", None))
+        return real_realpath(path)
+
+    monkeypatch.setattr(capture_artifacts, "_require_capabilities", lambda: None)
+    monkeypatch.setattr(capture_artifacts.os, "open", track_open)
+    monkeypatch.setattr(capture_artifacts.os.path, "realpath", track_realpath)
+
+    anchor, root = _open_authority(supplied_cwd)
+    try:
+        assert events[:2] == [("project", None), ("derive", None)]
+        assert events[2:] == [
+            (CAPTURE_PATH_COMPONENTS[0], anchor.fd),
+            (CAPTURE_PATH_COMPONENTS[1], root.autoskillit_fd),
+            (CAPTURE_PATH_COMPONENTS[2], root.temp_fd),
+        ]
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_capability_probe_requires_descriptor_relative_stat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supported = set(capture_artifacts.os.supports_dir_fd)
+    supported.discard(capture_artifacts.os.stat)
+    monkeypatch.setattr(capture_artifacts.os, "supports_dir_fd", supported)
+
+    with pytest.raises(CaptureSetupError, match="filesystem primitives unavailable"):
+        capture_artifacts._require_capabilities()
+
+
+def test_capability_probe_requires_exclusive_creation_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(capture_artifacts.os, "O_EXCL", 0)
+
+    with pytest.raises(CaptureSetupError, match="filesystem primitives unavailable"):
+        capture_artifacts._require_capabilities()
+
+
+def test_cleanup_capability_probe_selects_safe_retention_without_dir_fd_unlink(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supported = set(capture_artifacts.os.supports_dir_fd)
+    supported.discard(capture_artifacts.os.unlink)
+    monkeypatch.setattr(capture_artifacts.os, "supports_dir_fd", supported)
+
+    mode = capture_artifacts._probe_cleanup_deletion_mode()
+
+    assert mode is capture_artifacts._CleanupDeletionMode.SAFE_RETENTION_WITHOUT_DIR_FD_UNLINK
 
 
 @pytest.mark.parametrize("component", CAPTURE_PATH_COMPONENTS)
@@ -288,6 +362,26 @@ def test_marker_path_requires_current_directory_binding(tmp_path: Path) -> None:
         anchor.close()
 
 
+def test_marker_path_rederives_symlinked_project_path(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    replacement = tmp_path / "replacement"
+    replacement.mkdir()
+    supplied_cwd = tmp_path / "project-link"
+    supplied_cwd.symlink_to(project, target_is_directory=True)
+    anchor, root = _open_authority(supplied_cwd)
+    artifact = create_capture_artifact(root, _CAPTURE_ID)
+    try:
+        supplied_cwd.unlink()
+        supplied_cwd.symlink_to(replacement, target_is_directory=True)
+
+        assert current_artifact_path_if_bound(anchor, root, artifact) is None
+    finally:
+        artifact.close()
+        root.close()
+        anchor.close()
+
+
 def test_stale_capture_is_safely_retained_without_identity_unlink(tmp_path: Path) -> None:
     project = tmp_path / "project"
     capture_dir = _capture_dir(project)
@@ -299,6 +393,33 @@ def test_stale_capture_is_safely_retained_without_identity_unlink(tmp_path: Path
 
     assert sweep_stale_captures(project, max_age_seconds=3600) == 0
     assert stale.read_bytes() == b"retained"
+
+
+def test_name_matching_fifo_does_not_block_stale_cleanup(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    capture_dir = _capture_dir(project)
+    capture_dir.mkdir(parents=True)
+    fifo = capture_dir / f"shell_{_CAPTURE_ID}.log"
+    try:
+        os.mkfifo(fifo)
+    except OSError as exc:
+        pytest.skip(f"FIFO unavailable: {exc}")
+    code = (
+        "import sys\n"
+        "from autoskillit.hooks._capture_artifacts import sweep_stale_captures\n"
+        "raise SystemExit(sweep_stale_captures(sys.argv[1], max_age_seconds=0))\n"
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", code, str(project)],
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert fifo.is_fifo()
 
 
 def test_cleanup_candidate_classification_rejects_unsafe_entries(tmp_path: Path) -> None:
@@ -411,14 +532,20 @@ def test_cleanup_retains_replacement_raced_after_validation(
     assert displaced.read_bytes() == b"validated"
 
 
-def test_setup_failure_prevents_user_command(tmp_path: Path) -> None:
+def test_setup_failure_prevents_user_command_and_emits_failure_marker(
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
     project = tmp_path / "project"
     temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
     temp_dir.mkdir(parents=True)
     (temp_dir / CAPTURE_PATH_COMPONENTS[2]).write_text("blocking file")
+    encoded = base64.b64encode(b"printf ran > command_ran").decode()
 
-    with pytest.raises(CaptureSetupError):
-        run_capture("printf ran > command_ran", str(project), _CAPTURE_ID)
+    assert capture_artifacts._main(["run", encoded, str(project), _CAPTURE_ID]) == 1
+    captured = capfd.readouterr()
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
     assert not (project / "command_ran").exists()
 
 
@@ -450,12 +577,26 @@ def test_verified_disabled_policy_runs_without_capture(
 
 
 def test_spawn_failure_closes_created_artifact_fd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
     observed_fds: list[int] = []
+    real_open_anchor = capture_artifacts.open_project_anchor
+    real_open_root = capture_artifacts.open_capture_root
     real_create = capture_artifacts.create_capture_artifact
+
+    def record_anchor(cwd):
+        anchor = real_open_anchor(cwd)
+        observed_fds.append(anchor.fd)
+        return anchor
+
+    def record_root(anchor, *, create):
+        root = real_open_root(anchor, create=create)
+        observed_fds.extend((root.autoskillit_fd, root.temp_fd, root.fd))
+        return root
 
     def record_artifact(root, capture_id):
         artifact = real_create(root, capture_id)
@@ -465,16 +606,73 @@ def test_spawn_failure_closes_created_artifact_fd(
     def fail_spawn(*args, **kwargs):
         raise OSError("fault injection")
 
+    monkeypatch.setattr(capture_artifacts, "open_project_anchor", record_anchor)
+    monkeypatch.setattr(capture_artifacts, "open_capture_root", record_root)
     monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
     monkeypatch.setattr(subprocess, "Popen", fail_spawn)
+    encoded = base64.b64encode(b"printf ran > command_ran").decode()
 
-    with pytest.raises(CaptureSetupError):
-        run_capture("printf never", str(project), _CAPTURE_ID)
+    assert capture_artifacts._main(["run", encoded, str(project), _CAPTURE_ID]) == 1
 
-    assert observed_fds
+    captured = capfd.readouterr()
+    assert "CAPTURE_FAILED" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert not (project / "command_ran").exists()
+    assert len(observed_fds) == 5
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+def test_restore_failure_closes_pipe_and_original_cwd_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor = open_project_anchor(str(project))
+    process = _FakeCaptureProcess(b"")
+    runner_cwd_fd = os.open(".", os.O_RDONLY | os.O_DIRECTORY)
+    original_cwd_fds: list[int] = []
+    real_open = capture_artifacts.os.open
+    real_fchdir = capture_artifacts.os.fchdir
+    fchdir_calls = 0
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = real_open(path, flags, mode, dir_fd=dir_fd)
+        if path == "." and dir_fd is None:
+            original_cwd_fds.append(fd)
+        return fd
+
+    def fail_restore(fd):
+        nonlocal fchdir_calls
+        fchdir_calls += 1
+        if fchdir_calls == 2:
+            raise OSError("fault injection")
+        real_fchdir(fd)
+
+    monkeypatch.setattr(capture_artifacts.os, "open", record_open)
+    monkeypatch.setattr(capture_artifacts.os, "fchdir", fail_restore)
+    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", lambda *_args, **_kwargs: process)
+
+    try:
+        with pytest.raises(CaptureSetupError, match="cannot restore runner cwd"):
+            capture_artifacts._spawn_bash(
+                anchor,
+                "/bin/bash",
+                "printf never",
+                capture_output=True,
+            )
+        assert process.stdout.closed
+        assert process.terminated
+        assert process.wait_calls == 1
+        assert len(original_cwd_fds) == 1
+        with pytest.raises(OSError):
+            os.fstat(original_cwd_fds[0])
+    finally:
+        real_fchdir(runner_cwd_fd)
+        os.close(runner_cwd_fd)
+        anchor.close()
 
 
 def test_post_creation_identity_failure_closes_artifact_and_emits_failure(

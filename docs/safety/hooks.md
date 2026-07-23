@@ -96,9 +96,12 @@ descriptors without following symlinks. It reads output policy through the verif
 semantics. The child sends combined stdout+stderr through a pipe; the runner writes,
 measures, hashes, and replays bytes through owned descriptors. Only a bounded inline
 slice enters context: full content when small, otherwise head + provenance marker
-(bytes, sha256, verified path or `unavailable`) + tail. Set
-`output_budget.guard_enabled: false` to disable capture after verified policy loading;
-the inline threshold is controlled by `output_budget.shell_max_inline_bytes`.
+(bytes, sha256, verified path or `unavailable`) + tail. The user-facing configuration
+uses `output_budget.guard_enabled` and `output_budget.shell_max_inline_bytes`. The
+server serializes those values into the stdlib hook bridge as
+`output_budget_policy.disabled` (the inverse of `guard_enabled`) and
+`output_budget_policy.shell_max_inline_bytes`; the runner reads that internal bridge
+shape after verified policy loading.
 
 #### Capture Artifact Lifecycle
 

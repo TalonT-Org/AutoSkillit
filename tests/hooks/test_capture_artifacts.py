@@ -269,6 +269,30 @@ def test_capture_root_rejects_missing_components(missing_component: str, tmp_pat
         anchor.close()
 
 
+@pytest.mark.parametrize("unsafe_component", CAPTURE_PATH_COMPONENTS)
+@pytest.mark.parametrize("unsafe_mode", [0o770, 0o707])
+def test_capture_root_rejects_writable_components(
+    unsafe_component: str,
+    unsafe_mode: int,
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    parent = project
+    for name in CAPTURE_PATH_COMPONENTS:
+        parent = parent / name
+        parent.mkdir()
+        if name == unsafe_component:
+            parent.chmod(unsafe_mode)
+
+    anchor = open_project_anchor(str(project))
+    try:
+        with pytest.raises(CaptureSetupError, match="unsafe ownership or mode"):
+            open_capture_root(anchor, create=True)
+    finally:
+        anchor.close()
+
+
 @pytest.mark.parametrize("blocking_component", CAPTURE_PATH_COMPONENTS)
 def test_capture_root_rejects_blocking_regular_file_components(
     blocking_component: str, tmp_path: Path

@@ -247,8 +247,11 @@ def _open_directory_component(parent_fd: int, name: str, *, create: bool) -> int
         raise CaptureSetupError(f"unsafe capture path component: {name}") from exc
 
     try:
-        if not stat.S_ISDIR(os.fstat(fd).st_mode):
+        value = os.fstat(fd)
+        if not stat.S_ISDIR(value.st_mode):
             raise CaptureSetupError(f"capture path component is not a directory: {name}")
+        if value.st_uid != os.geteuid() or value.st_mode & _UNTRUSTED_WRITE_BITS:
+            raise CaptureSetupError(f"capture path component has unsafe ownership or mode: {name}")
     except BaseException:
         os.close(fd)
         raise

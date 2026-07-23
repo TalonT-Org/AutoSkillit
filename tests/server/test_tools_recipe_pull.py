@@ -19,6 +19,7 @@ from autoskillit.core import (
     RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
+    load_yaml,
     recipe_delivery_request_digest,
 )
 from autoskillit.execution import (
@@ -627,6 +628,91 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     assert part > 0
     assert expected_byte_start == response["byte_total"]
     assert "".join(chunks) == expected_content
+
+
+async def test_pull_tool_returns_named_step_and_rejects_unknown_section(
+    tool_ctx_kitchen_open,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-named-step"
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    named = json.loads(await get_recipe_section(section="first", **kwargs))
+    assert named["success"] is True
+    assert named["section"] == "first"
+    assert load_yaml(named["content"]) == {"first": {"action": "stop"}}
+
+    unknown = json.loads(await get_recipe_section(section="not_a_real_step", **kwargs))
+    assert unknown == {
+        "success": False,
+        "error": "section_not_found",
+        "section": "not_a_real_step",
+    }
+
+
+async def test_pull_tool_reports_malformed_named_step_yaml(tool_ctx_kitchen_open) -> None:
+    tool_ctx_kitchen_open.kitchen_id = "pull-malformed-step"
+    malformed = _payload("steps: [")
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=malformed,
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    response = json.loads(await get_recipe_section(section="first", **kwargs))
+
+    assert response["success"] is False
+    assert response["error"] == "recipe_artifact_parse_failed"
+
+
+async def test_oversized_named_step_round_trips_through_continuation(
+    tool_ctx_kitchen_open,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-oversized-step"
+    content = "steps:\n  giant_step:\n    note: " + ("X" * 80_000) + "\n"
+    payload = _payload(content)
+    payload["post_prune_step_names"] = ["giant_step"]
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=payload,
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+    chunks: list[str] = []
+    part = 0
+
+    while True:
+        rendered = await get_recipe_section(section="giant_step", part=part, **kwargs)
+        assert len(rendered.encode("utf-8")) <= (
+            CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
+        )
+        response = json.loads(rendered)
+        assert response["success"] is True
+        chunks.append(response["content"])
+        if response["has_more"] is False:
+            break
+        part = response["next_part"]
+
+    assert part > 0
+    reconstructed = load_yaml("".join(chunks))
+    parsed = load_yaml(content)
+    assert reconstructed == {"giant_step": parsed["steps"]["giant_step"]}
 
 
 async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open) -> None:

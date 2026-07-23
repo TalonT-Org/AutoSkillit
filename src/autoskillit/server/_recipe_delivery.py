@@ -308,8 +308,8 @@ def load_recipe_artifact(
 
 def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
     """Retire one kitchen namespace after all shared-lock readers finish."""
-    namespace = _artifact_root(temp_dir) / _safe_component(kitchen_id)
     try:
+        namespace = _artifact_root(temp_dir) / _safe_component(kitchen_id)
         with _generation_lock(temp_dir, exclusive=True):
             if namespace.exists():
                 shutil.rmtree(namespace)

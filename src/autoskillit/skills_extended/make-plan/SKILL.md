@@ -1,7 +1,7 @@
 ---
 name: make-plan
-uses_capabilities: [agent_model, agent_subagent, cross_skill_ref]
-activate_deps: [arch-lens, write-recipe]
+uses_capabilities: [agent_model, agent_subagent]
+activate_deps: [write-recipe]
 description: Planning executor. ALWAYS invoke this skill when instructed to create, devise, or write an implementation plan. Do not explore the codebase or draft a plan directly — use this skill first to load the planning workflow.
 hooks:
   PreToolUse:
@@ -87,63 +87,9 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 **DO NOT evaluate based on:** implementation effort, risk, number of changes, test breakage, or ease of rollback. These are not engineering criteria.
 
-5. **Visualize with Architecture Lens** - After finalizing the plan, determine which architecture lens best illustrates the proposed changes, then create a mermaid diagram.
+5. **Complexity-Gated Adversarial Review Decision**
 
-**5a. Select the lens based on what the plan primarily affects:**
-
-| If the plan primarily involves... | Use Lens |
-|-----------------------------------|----------|
-| Adding/modifying containers, services, or integrations | C4 Container |
-| Changing workflow logic, state machines, or decision flow | Process Flow |
-| Altering data storage, transformations, or information flow | Data Lineage |
-| Restructuring modules, changing dependencies, or layering | Module Dependency |
-| Adding/modifying parallel execution or thread handling | Concurrency |
-| Changing error handling, retry logic, or recovery paths | Error/Resilience |
-| Modifying repository patterns or data access | Repository Access |
-| Changing CLI commands, config, or monitoring | Operational |
-| Adding/modifying validation, trust boundaries, or isolation | Security |
-| Changing build tools, test framework, or quality gates | Development |
-| Affecting multiple user journeys or cross-component flows | Scenarios |
-| Modifying state contracts, field lifecycles, or resume logic | State Lifecycle |
-| Changing deployment topology or infrastructure | Deployment |
-
-**5b. Write your lens selection rationale to a file using the Write tool:**
-
-- **Path:** `{{AUTOSKILLIT_TEMP}}/make-plan/arch_lens_selection_{YYYY-MM-DD_HHMMSS}.md`
-- **Content:** Which lens was selected and why (1-2 sentences of rationale).
-
-**5c. MANDATORY: LOAD the appropriate arch-lens skill using the Skill tool:**
-
-| Lens | Skill to LOAD |
-|------|---------------|
-| C4 Container | `/autoskillit:arch-lens-c4-container` |
-| Process Flow | `/autoskillit:arch-lens-process-flow` |
-| Data Lineage | `/autoskillit:arch-lens-data-lineage` |
-| Module Dependency | `/autoskillit:arch-lens-module-dependency` |
-| Concurrency | `/autoskillit:arch-lens-concurrency` |
-| Error/Resilience | `/autoskillit:arch-lens-error-resilience` |
-| Repository Access | `/autoskillit:arch-lens-repository-access` |
-| Operational | `/autoskillit:arch-lens-operational` |
-| Security | `/autoskillit:arch-lens-security` |
-| Development | `/autoskillit:arch-lens-development` |
-| Scenarios | `/autoskillit:arch-lens-scenarios` |
-| State Lifecycle | `/autoskillit:arch-lens-state-lifecycle` |
-| Deployment | `/autoskillit:arch-lens-deployment` |
-
-If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, proceed without the architectural diagram.
-
-**5d. Create the diagram following the loaded skill's instructions:**
-- Focus on the PROPOSED changes (use `newComponent` class for new elements)
-- Show how new components integrate with existing architecture
-- Use `●` prefix for modified existing components
-- Use `★` prefix for new components
-
-Include the diagram in the plan document under a "## Proposed Architecture" section.
-More than one lens diagram is okay if it is complex plan (don't do more than 3, and make sure to load each appropriate skill).
-
-**5e. Complexity-Gated Adversarial Review Decision**
-
-Before spawning adversarial review agents, determine the review level.
+Draft the complete plan from the selected approach using the Output format before calculating complexity or spawning adversarial review agents. Then determine the review level.
 
 **Reading the override:** Check if ARGUMENTS contains a line matching
 `adversarial_review_level=<value>`. Valid values: `auto`, `full`, `none`.
@@ -224,7 +170,7 @@ The `summary` field is **required** when `message` is a string — omitting it c
 The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 
 9. **Plan Revision** - Read all available adversarial reports (0, 1, 2, or 3
-   depending on the complexity gate decision in Step 5e). For each valid finding (where the agent identified a real gap, not a hypothetical):
+   depending on the complexity gate decision in Step 5). For each valid finding (where the agent identified a real gap, not a hypothetical):
    - Add missing consumers to implementation steps
    - Add missing entity categories to search/update operations
    - Replace invalid assumptions with verified facts
@@ -271,18 +217,6 @@ handles correctly.
 
 ---
 
-## Skill Loading Checklist
-
-Before writing the final plan, verify:
-
-- [ ] Determined which architecture lens best fits the proposed changes
-- [ ] LOADED the corresponding `/autoskillit:arch-lens-*` skill using the Skill tool
-- [ ] The arch-lens skill LOADED the `/autoskillit:mermaid` skill for styling
-- [ ] Diagram uses ONLY the classDef styles from the mermaid skill (no invented colors)
-- [ ] Diagram includes a color legend table
-- [ ] Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
-- [ ] Adversarial review pass completed per complexity gate (Steps 5e-9) — skipped agents documented in plan
-
 ## Critical Constraints
 
 **NEVER use EnterPlanMode.** This skill IS the planning process. Execute the planning steps directly — explore with subagents, design the approach, write the plan file to `{{AUTOSKILLIT_TEMP}}/make-plan/` (relative to the current working directory). Do not enter plan mode, do not call ExitPlanMode. Just do the work and deliver the plan.
@@ -324,8 +258,9 @@ Before writing the final plan, verify:
 - Be willing to recommend significant refactoring if that's the right answer
 - Issue all Task calls in a single message to maximize parallelism
 - The plan must cover every remediation item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan
+- Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
 
-**Requirement Echo Rule:** Every behavioral requirement stated in `## Summary`, `## Proposed Architecture`, or `## Design Decisions` prose MUST be echoed as an explicit `## Implementation Steps` directive. After drafting the plan:
+**Requirement Echo Rule:** Every behavioral requirement stated in `## Summary` or `## Design Decisions` prose MUST be echoed as an explicit `## Implementation Steps` directive. After drafting the plan:
 
 1. Enumerate every behavioral constraint in the prose sections above.
 2. For each constraint, verify it maps to at least one explicit step directive.
@@ -422,11 +357,6 @@ verdict = false_positive
 ## Summary
 {Brief overview of what will be implemented}
 
-## Proposed Architecture
-{Mermaid diagram showing the proposed changes using the selected lens}
-
-**Lens Used:** {lens name} - {why this lens was chosen}
-
 ## Tests
 {Tests to write first — should fail now, pass after implementation}
 
@@ -439,7 +369,7 @@ verdict = false_positive
 ## Requirements Map
 | Requirement (from prose) | Implementation Step |
 |---|---|
-| {behavioral constraint from Summary/Architecture/Design Decisions} | Step {N.M}: {step description} |
+| {behavioral constraint from Summary/Design Decisions} | Step {N.M}: {step description} |
 ```
 
 **Plan structure (multi-part — use for EACH part file):**
@@ -450,11 +380,6 @@ verdict = false_positive
 
 ## Summary
 {What THIS part covers. Explicitly note what is deferred: "Part B will cover X (separate task). Part C will cover Y (separate task)."}
-
-## Proposed Architecture
-{Mermaid diagram showing the proposed changes using the selected lens}
-
-**Lens Used:** {lens name} - {why this lens was chosen}
 
 ## Tests
 {Tests for THIS part only — should fail now, pass after THIS part's implementation}
@@ -468,5 +393,5 @@ verdict = false_positive
 ## Requirements Map
 | Requirement (from prose) | Implementation Step |
 |---|---|
-| {behavioral constraint from THIS part's Summary/Architecture/Design Decisions} | Step {N.M}: {step description} |
+| {behavioral constraint from THIS part's Summary/Design Decisions} | Step {N.M}: {step description} |
 ```

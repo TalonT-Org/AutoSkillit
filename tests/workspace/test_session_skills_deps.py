@@ -79,8 +79,8 @@ class TestActivateDepsResolution:
         _write_skill_md(
             tmp_path,
             session_id,
-            "make-plan",
-            f"---\nname: make-plan\nactivate_deps: [arch-lens]\n{gate}\n---\n# Plan",
+            "make-arch-diag",
+            f"---\nname: make-arch-diag\nactivate_deps: [arch-lens]\n{gate}\n---\n# Diagram",
         )
         # Three arch-lens skills
         for name in ["arch-lens-a", "arch-lens-b", "arch-lens-c"]:
@@ -114,9 +114,9 @@ class TestActivateDepsResolution:
         provider.list_skills.return_value = []
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        result = mgr.activate_skill_deps(session_id, "make-plan")
+        result = mgr.activate_skill_deps(session_id, "make-arch-diag")
         assert result is True
-        assert not _is_gated(tmp_path, session_id, "make-plan")
+        assert not _is_gated(tmp_path, session_id, "make-arch-diag")
         for name in ["arch-lens-a", "arch-lens-b", "arch-lens-c"]:
             assert not _is_gated(tmp_path, session_id, name), f"{name} should be ungated"
 
@@ -149,7 +149,7 @@ class TestActivateDepsResolution:
         assert not _is_gated(tmp_path, session_id, "mermaid")
 
     def test_activate_skill_deps_resolves_two_level_transitive(self, tmp_path: Path) -> None:
-        """make-plan -> arch-lens-* -> mermaid: all three levels get ungated."""
+        """make-arch-diag -> arch-lens-* -> mermaid: all levels get ungated."""
         from unittest.mock import MagicMock
 
         from autoskillit.core.types import SkillSource
@@ -160,8 +160,8 @@ class TestActivateDepsResolution:
         _write_skill_md(
             tmp_path,
             session_id,
-            "make-plan",
-            f"---\nname: make-plan\nactivate_deps: [arch-lens]\n{gate}\n---\n# Plan",
+            "make-arch-diag",
+            f"---\nname: make-arch-diag\nactivate_deps: [arch-lens]\n{gate}\n---\n# Diagram",
         )
         _write_skill_md(
             tmp_path,
@@ -196,8 +196,8 @@ class TestActivateDepsResolution:
         provider.list_skills.return_value = []
 
         mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-        mgr.activate_skill_deps(session_id, "make-plan")
-        assert not _is_gated(tmp_path, session_id, "make-plan")
+        mgr.activate_skill_deps(session_id, "make-arch-diag")
+        assert not _is_gated(tmp_path, session_id, "make-arch-diag")
         assert not _is_gated(tmp_path, session_id, "arch-lens-x")
         assert not _is_gated(tmp_path, session_id, "mermaid")
 

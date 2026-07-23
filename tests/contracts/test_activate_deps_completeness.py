@@ -1,7 +1,7 @@
 """Contracts: SKILL.md activate_deps must cover invoked Skill tool calls.
 
-Catches the four known cases (rectify, open-integration-pr, elaborate-phase,
-make-arch-diag) and prevents future regressions where a SKILL.md body invokes
+Catches known dependency cases such as open-integration-pr, elaborate-phase,
+and make-arch-diag, and prevents future regressions where a SKILL.md body invokes
 ``/autoskillit:<name>`` via the Skill tool without declaring the corresponding
 ``activate_deps`` entry.
 """
@@ -20,7 +20,11 @@ from autoskillit.workspace.session_skills import (
     _parse_write_paths,
     compute_skill_closure,
 )
-from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
+from autoskillit.workspace.skills import (
+    _read_skill_frontmatter,
+    bundled_skills_dir,
+    bundled_skills_extended_dir,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -75,9 +79,27 @@ def test_elaborate_phase_declares_dry_walkthrough_dep(provider: SkillsDirectoryP
     assert "dry-walkthrough" in closure, closure
 
 
-def test_rectify_declares_arch_lens_dep(provider: SkillsDirectoryProvider) -> None:
-    closure = compute_skill_closure("rectify", provider)
-    assert any(name.startswith("arch-lens-") for name in closure), closure
+def test_planning_skill_frontmatter_and_closures(
+    provider: SkillsDirectoryProvider,
+) -> None:
+    make_plan_md = _find_skill_md("make-plan")
+    assert make_plan_md is not None
+    assert _get_activate_deps(make_plan_md) == ["write-recipe"]
+    assert compute_skill_closure("make-plan", provider) == frozenset({"make-plan", "write-recipe"})
+
+    rectify_md = _find_skill_md("rectify")
+    assert rectify_md is not None
+    rectify_frontmatter = _read_skill_frontmatter(rectify_md)
+    assert set(rectify_frontmatter.get("uses_capabilities", [])) == {
+        "agent_model",
+        "agent_subagent",
+    }
+    assert "activate_deps" not in rectify_frontmatter
+    assert compute_skill_closure("rectify", provider) == frozenset({"rectify"})
+
+
+def test_make_plan_required_dependency_registry_is_exact() -> None:
+    assert SKILL_ACTIVATE_DEPS_REQUIRED["make-plan"] == frozenset({"write-recipe"})
 
 
 def test_open_integration_pr_declares_arch_lens_dep(provider: SkillsDirectoryProvider) -> None:

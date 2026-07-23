@@ -39,7 +39,7 @@ Agent(subagent_type="autoskillit:{agent-name}", prompt="...")
 Claude Code automatically applies tool restrictions, model, maxTurns, and the
 markdown body as the system prompt from the agent definition frontmatter.
 
-**Used by:** make-plan Steps 6-9, rectify Steps 5-7
+**Used by:** make-plan Steps 6-9, rectify Steps 4-6
 
 ### MCP Resource path (available for programmatic access)
 
@@ -52,7 +52,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 
 | Pack | Tag | Agents | Used By |
 |------|-----|--------|---------|
-| `plan-review` | `plan-review` | 3 adversarial reviewers | make-plan Steps 6-9, rectify Steps 5-7 |
+| `plan-review` | `plan-review` | 3 adversarial reviewers | make-plan Steps 6-9, rectify Steps 4-6 |
 | _(none)_ | _(none)_ | `wp-elaborator` | planner-elaborate-wps (subagent_type-only) |
 | _(none)_ | _(none)_ | `pipeline-health-scanner` | analyze-pipeline-health (subagent_type-only) |
 | _(none)_ | _(none)_ | `audit-impl-slice-auditor` | audit-impl Step 3 (subagent_type-only) |

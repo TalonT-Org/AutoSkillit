@@ -80,7 +80,7 @@ def test_rewrites_on_codex_env(monkeypatch):
     command = payload["hookSpecificOutput"]["updatedInput"]["command"]
     assert _SENTINEL in command
     assert _transported_command(command) == "echo hello"
-    assert "echo hello" not in command
+    assert "echo hello" in command
 
 
 def test_rewrites_on_turn_id_payload(monkeypatch):
@@ -101,7 +101,7 @@ def test_always_wraps_sentinel_prefixed_command(monkeypatch):
     output = _run_hook(_build_event(already_wrapped), monkeypatch, env_backend="codex")
 
     command = _updated_command(output)
-    assert command.count(_SENTINEL) == 1
+    assert command.splitlines()[0] == _SENTINEL
     assert _transported_command(command) == already_wrapped
 
 

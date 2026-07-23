@@ -35,6 +35,7 @@ from autoskillit.server._recipe_delivery import (
     RECIPE_COMPLETION_SENTINEL,
     RecipeArtifactError,
     RecipeArtifactGeneration,
+    _generation_dir,
     build_recipe_envelope,
     complete_finalized_recipe_response,
     finalize_recipe_delivery,
@@ -264,14 +265,14 @@ def test_non_utf8_payload_is_normalized_to_recipe_artifact_error(tmp_path: Path)
         body_sha256=empty_body_sha,
         body_size_bytes=0,
     )
-    directory = (
-        tmp_path
-        / "recipe-delivery"
-        / "kitchen-test"
-        / "open_kitchen"
-        / "remediation"
-        / f"descriptor-{generation.descriptor_version}-schema-{generation.schema_version}"
-        / payload_sha.replace(":", "_")
+    directory = _generation_dir(
+        tmp_path,
+        kitchen_id="kitchen-test",
+        producer_tool=generation.producer_tool,
+        recipe_name=generation.recipe_name,
+        descriptor_version=generation.descriptor_version,
+        schema_version=generation.schema_version,
+        payload_sha256=generation.payload_sha256,
     )
     directory.mkdir(parents=True)
     (directory / "payload.json").write_bytes(blob)

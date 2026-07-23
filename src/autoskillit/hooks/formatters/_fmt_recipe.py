@@ -21,6 +21,9 @@ from _fmt_recipe_compact import (  # type: ignore[import-not-found]
     compact_orchestration_rules,
     compact_recipe_display,
 )
+from _recipe_delivery_framing import (  # type: ignore[import-not-found]
+    is_attested_recipe_delivery,
+)
 
 if TYPE_CHECKING:
     from autoskillit.recipe import ListRecipesResult, LoadRecipeResult, OpenKitchenResult
@@ -253,12 +256,7 @@ def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
 
 def _fmt_open_kitchen_plain_text(text: str, _pipeline: bool) -> str:
     """Format open_kitchen plain-text response (no recipe attached)."""
-    if (
-        text.startswith('{"recipe_delivery":')
-        and "--- AUTOSKILLIT RECIPE BODY START ---" in text
-        and "--- AUTOSKILLIT RECIPE BODY END ---" in text
-        and "AUTOSKILLIT_RECIPE_DELIVERY_COMPLETE" in text
-    ):
+    if is_attested_recipe_delivery(text):
         return text
     return f"## open_kitchen\n\n{text}"
 

@@ -13,6 +13,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from autoskillit._recipe_delivery_framing import (
+    RECIPE_BODY_END,
+    RECIPE_BODY_START,
+    RECIPE_COMPLETION_SENTINEL,
+)
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
@@ -43,9 +48,6 @@ RECIPE_ARTIFACT_DESCRIPTOR_VERSION = 1
 RECIPE_ARTIFACT_SCHEMA_VERSION = 1
 RECIPE_ARTIFACT_MAX_BLOB_BYTES = 1_000_000
 RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES = 16_384
-RECIPE_BODY_START = "--- AUTOSKILLIT RECIPE BODY START ---"
-RECIPE_BODY_END = "--- AUTOSKILLIT RECIPE BODY END ---"
-RECIPE_COMPLETION_SENTINEL = "AUTOSKILLIT_RECIPE_DELIVERY_COMPLETE"
 
 
 def document_recipe_delivery_contract(function: Any) -> Any:

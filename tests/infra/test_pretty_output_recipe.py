@@ -16,7 +16,9 @@ from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
 )
+from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.hooks.formatters.pretty_output_hook import _format_response
+from autoskillit.server._recipe_delivery import _attested_render, persist_recipe_artifact
 from tests.infra._pretty_output_helpers import (
     REALISTIC_RECIPE_YAML,
     _make_event,
@@ -450,15 +452,25 @@ def test_fmt_open_kitchen_plain_text():
 
 
 @pytest.mark.parametrize("tool_name", ["open_kitchen", "load_recipe"])
-def test_attested_recipe_delivery_region_is_preserved_byte_for_byte(tool_name: str) -> None:
-    protected = (
-        '{"recipe_delivery":{"recipe_pull":{"payload_sha256":"sha256:'
-        + ("a" * 64)
-        + '"}}}\n--- AUTOSKILLIT RECIPE BODY START ---\n'
-        + "steps:\n  impl:\n    action: stop\n"
-        + "--- AUTOSKILLIT RECIPE BODY END ---\n"
-        + "AUTOSKILLIT_RECIPE_DELIVERY_COMPLETE sha256:"
-        + ("b" * 64)
+def test_attested_recipe_delivery_region_is_preserved_byte_for_byte(
+    tmp_path: Path, tool_name: str
+) -> None:
+    payload = {
+        "success": True,
+        "content": "steps:\n  impl:\n    action: stop\n",
+    }
+    generation = persist_recipe_artifact(
+        tmp_path,
+        kitchen_id="formatter-contract",
+        producer_tool=tool_name,
+        recipe_name="remediation",
+        payload=payload,
+    )
+    protected = _attested_render(
+        payload,
+        generation,
+        budget=CODEX_RECIPE_DELIVERY_BUDGET,
+        evidence_identity="formatter-contract-v1",
     )
     wrapped = json.dumps({"result": protected})
     assert _format_response(f"mcp__autoskillit__{tool_name}", wrapped, False) == protected

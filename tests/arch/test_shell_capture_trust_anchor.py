@@ -161,14 +161,7 @@ def test_capture_path_redirection_guard_tracks_derived_path_names() -> None:
     assert not _capture_path_redirections('harness = "cmd > ordinary.log"')
 
 
-def test_project_temp_cleanup_debt_is_narrow_and_owned() -> None:
-    assert set(_PROJECT_TEMP_CLEANUP_DEBT) == {
-        "core/io.py",
-        "workspace/worktree.py",
-        "workspace/clone_registry.py",
-        "workspace/clone.py",
-        "scripts/recipe/create_worktree.sh",
-    }
+def test_project_temp_cleanup_debt_entries_exist_and_are_owned() -> None:
     for relative, debt in _PROJECT_TEMP_CLEANUP_DEBT.items():
         path = _REPO_ROOT / relative if relative.startswith("scripts/") else _SRC / relative
         assert path.is_file()

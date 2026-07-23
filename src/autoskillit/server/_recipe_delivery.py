@@ -881,7 +881,7 @@ def enforce_recipe_resource_response(
             temp_dir / "responses" / "get_recipe" if isinstance(temp_dir, Path) else None
         ),
         config=output_budget,
-        unnegotiated_tool_result_token_limit=(finalized.decision.selected_result_token_limit),
+        selected_result_token_limit=finalized.decision.selected_result_token_limit,
     )
     completed = complete_finalized_recipe_response(finalized, enforced)
     if isinstance(completed, str):

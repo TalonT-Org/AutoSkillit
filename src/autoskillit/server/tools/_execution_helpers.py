@@ -203,18 +203,18 @@ def shape_execution_response(
         if work_dir and Path(work_dir).is_absolute()
         else tool_ctx.temp_dir / tool_name
     )
-    unnegotiated_tool_result_token_limit: int | None = None
+    selected_result_token_limit: int | None = None
     backend = getattr(tool_ctx, "backend", None)
     caps = getattr(backend, "capabilities", None) if backend is not None else None
 
     if isinstance(caps, BackendCapabilities):
-        unnegotiated_tool_result_token_limit = resolve_general_output_token_limit(caps)
+        selected_result_token_limit = resolve_general_output_token_limit(caps)
     return shape_json_response(
         payload,
         tool_name=tool_name,
         artifact_dir=artifact_root,
         config=tool_ctx.config.output_budget,
-        unnegotiated_tool_result_token_limit=unnegotiated_tool_result_token_limit,
+        selected_result_token_limit=selected_result_token_limit,
     )
 
 

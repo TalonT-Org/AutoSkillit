@@ -293,7 +293,7 @@ class TestTrackResponseSize:
             result = await fake_handler()
 
         assert result == finalized.rendered
-        assert enforce.call_args.kwargs["unnegotiated_tool_result_token_limit"] == 56_750
+        assert enforce.call_args.kwargs["selected_result_token_limit"] == 56_750
         ledger.commit.assert_called_once()
         ledger.abort.assert_not_called()
 

@@ -152,23 +152,21 @@ def track_response_size(
             artifact_dir = (
                 temp_dir / "responses" / tool_name if isinstance(temp_dir, Path) else None
             )
-            unnegotiated_tool_result_token_limit: int | None = None
+            selected_result_token_limit: int | None = None
             if finalized is not None:
-                unnegotiated_tool_result_token_limit = (
-                    finalized.decision.selected_result_token_limit
-                )
+                selected_result_token_limit = finalized.decision.selected_result_token_limit
             elif ctx is not None:
                 backend = getattr(ctx, "backend", None)
                 caps = getattr(backend, "capabilities", None) if backend is not None else None
                 if isinstance(caps, BackendCapabilities):
-                    unnegotiated_tool_result_token_limit = resolve_general_output_token_limit(caps)
+                    selected_result_token_limit = resolve_general_output_token_limit(caps)
             try:
                 result = enforce_response_budget(
                     response_value,
                     tool_name=tool_name,
                     artifact_dir=artifact_dir,
                     config=budget,
-                    unnegotiated_tool_result_token_limit=unnegotiated_tool_result_token_limit,
+                    selected_result_token_limit=selected_result_token_limit,
                 )
             except Exception:
                 logger.error("track_response_size_enforcement_failed", tool_name=tool_name)

@@ -391,7 +391,7 @@ def test_attested_finalization_commits_only_after_exact_enforcement(
         tool_name="open_kitchen",
         artifact_dir=tmp_path / "responses",
         config=OutputBudgetConfig(),
-        unnegotiated_tool_result_token_limit=(finalized.decision.selected_result_token_limit),
+        selected_result_token_limit=finalized.decision.selected_result_token_limit,
     )
     assert (
         complete_finalized_recipe_response(finalized, enforced, now_unix=_NOW)

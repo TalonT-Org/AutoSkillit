@@ -182,7 +182,7 @@ def test_bundled_recipe_open_kitchen_raw_spill_projection_fits_per_backend(
             tool_name="open_kitchen",
             artifact_dir=tmp_path / backend_name,
             config=OutputBudgetConfig(),
-            unnegotiated_tool_result_token_limit=bound_tokens,
+            selected_result_token_limit=bound_tokens,
         )
         assert isinstance(result, str), (
             f"{backend_name}: expected str result for {recipe_name} payload"
@@ -215,7 +215,7 @@ def test_non_exempted_oversized_payload_spills_within_delivery_bound(tmp_path) -
             tool_name="run_skill",
             artifact_dir=tmp_path / backend_name,
             config=config,
-            unnegotiated_tool_result_token_limit=bound_tokens,
+            selected_result_token_limit=bound_tokens,
         )
         assert isinstance(result, str)
         assert len(result.encode("utf-8")) <= bound_bytes, (
@@ -275,7 +275,7 @@ def test_delivery_bound_summary_carries_all_step_names(
             tool_name="open_kitchen",
             artifact_dir=tmp_path / backend_name,
             config=OutputBudgetConfig(),
-            unnegotiated_tool_result_token_limit=bound_tokens,
+            selected_result_token_limit=bound_tokens,
         )
         assert isinstance(result, str), (
             f"{backend_name}: expected str result for {recipe_name} payload"
@@ -414,7 +414,7 @@ def test_non_exempted_delivery_bound_preserves_result_field(tmp_path: Path) -> N
         tool_name="run_skill",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        unnegotiated_tool_result_token_limit=bound_tokens,
+        selected_result_token_limit=bound_tokens,
     )
     assert isinstance(result, str)
     assert len(result.encode("utf-8")) <= bound_bytes, (
@@ -445,7 +445,7 @@ def test_non_exempted_delivery_bound_preserves_non_string_result(tmp_path: Path)
         tool_name="run_skill",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        unnegotiated_tool_result_token_limit=bound_tokens,
+        selected_result_token_limit=bound_tokens,
     )
     assert isinstance(result, str)
     assert len(result.encode("utf-8")) <= bound_tokens * 4
@@ -462,7 +462,7 @@ def test_non_exempted_delivery_bound_finds_multibyte_result_prefix(tmp_path: Pat
         tool_name="run_skill",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        unnegotiated_tool_result_token_limit=bound_tokens,
+        selected_result_token_limit=bound_tokens,
     )
     assert isinstance(result, str)
     assert len(result.encode("utf-8")) <= bound_tokens * 4

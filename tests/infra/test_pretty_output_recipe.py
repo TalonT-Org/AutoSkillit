@@ -1111,7 +1111,7 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     # and does not have a full `ToolContext` fixture available; replicates the
     # fits/build-envelope decision directly rather than depending on
     # `maybe_envelope_recipe_response`, which receives its bound as a
-    # caller-supplied parameter (unnegotiated_tool_result_token_limit) derived from
+    # caller-supplied parameter (selected_result_token_limit) derived from
     # the single active session's backend, not computed via `min()`.
     backend_caps = {name: cls().capabilities for name, cls in BACKEND_REGISTRY.items()}
     smallest_bound_tokens = min(

@@ -1,6 +1,6 @@
 ---
 name: select-directions
-uses_capabilities: [run_skill]
+uses_capabilities: []
 categories: [research]
 description: >
   Direction-selection gate: parse scope directions manifest, present for

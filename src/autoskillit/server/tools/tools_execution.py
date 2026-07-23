@@ -58,6 +58,7 @@ from autoskillit.server._guards import (
     _check_recipe_read_prohibition,
     _check_write_target_boundary,
     _require_enabled,
+    _require_orchestrator_exact,
     _require_orchestrator_or_higher,
     _validate_skill_command,
 )
@@ -759,7 +760,7 @@ async def run_skill(
 
     Never raises.
     """
-    if (tier_gate := _require_orchestrator_or_higher("run_skill")) is not None:
+    if (tier_gate := _require_orchestrator_exact("run_skill")) is not None:
         return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate

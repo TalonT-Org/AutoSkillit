@@ -1,7 +1,7 @@
 ---
 name: resolve-review
 categories: [github]
-uses_capabilities: [agent_model, commit_files, github_api_write, run_skill, test_check]
+uses_capabilities: [agent_model, commit_files, github_api_write]
 description: Fetch PR review comments, run intent validation (ACCEPT/REJECT/DISCUSS) before applying fixes, and post inline replies. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
 hooks:
   PreToolUse:

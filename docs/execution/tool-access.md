@@ -33,9 +33,15 @@ session types can see each tool.
 | `$ autoskillit cook` (after `/open-kitchen`) | ✓ | ✓ | ✗ |
 | `$ autoskillit order` | ✓ | ✓ (pre-opened) | ✗ |
 | `run_skill` (headless) | ✓ | ✗ | ✓ |
+| L2 food truck | ✓ | ✓ (pre-opened) | ✗ |
+| L3 fleet | ✓ | fleet surface | ✗ |
 
 Note: Disabled subsets further restrict visibility within the Kitchen tier — their tools
 remain hidden even after `open_kitchen`.
+
+Visibility is not authority. At the application and hook layers, `run_skill` is restricted
+to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks through
+`dispatch_food_truck`; they retain `run_cmd` and `run_python` but cannot call `run_skill`.
 
 ## FastMCP Tag Glossary
 
@@ -77,8 +83,8 @@ Three independent layers prevent headless sessions from calling orchestration to
 | Layer | Mechanism | What It Blocks |
 |-------|-----------|----------------|
 | 1. FastMCP | Kitchen tools remain hidden (`mcp.enable(headless)` does not reveal kitchen-only tools) | `run_skill`, `run_cmd`, `run_python`, `merge_worktree`, and all other kitchen-only tools |
-| 2. Hook | `skill_orchestration_guard.py` PreToolUse hook | `run_skill`, `run_cmd`, `run_python` |
-| 3. Code | `_require_orchestrator_or_higher()` guard in `tools_execution.py` | `run_skill`, `run_cmd`, `run_python` |
+| 2. Hook | `skill_orchestration_guard.py` PreToolUse hook | L1: `run_skill`, `run_cmd`, `run_python`; L3: `run_skill` |
+| 3. Code | Exact and monotonic guards in `tools_execution.py` | exact-L2 `run_skill`; L2-or-higher `run_cmd` and `run_python` |
 
 All three layers must independently agree before any orchestration tool can execute.
 A bypassed hook is caught by the code guard; a bypassed code guard is caught by the

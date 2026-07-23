@@ -2,45 +2,121 @@
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal
 
 import regex as re
 
-from autoskillit.core import get_logger, load_yaml
+from autoskillit.core import YAMLError, get_logger, load_yaml
 
 logger = get_logger(__name__)
 
-__all__ = ["parse_frontmatter_content", "validate_skill_frontmatter"]
+__all__ = [
+    "SkillFrontmatterParseError",
+    "SkillFrontmatterParseResult",
+    "parse_frontmatter_content",
+    "read_skill_frontmatter",
+    "validate_skill_frontmatter",
+]
 
 _NAME_PATTERN = re.compile(r"^[a-z0-9-]+$")
 _NAME_MAX_LEN = 64
 _DESCRIPTION_MAX_LEN = 1024
 
 
-def parse_frontmatter_content(content: str) -> dict[str, Any]:
-    """Parse YAML frontmatter from a SKILL.md content string.
+SkillFrontmatterParseError = Literal[
+    "unreadable",
+    "missing_opening_delimiter",
+    "missing_closing_delimiter",
+    "malformed_yaml",
+    "non_mapping",
+]
 
-    Returns ``{}`` when frontmatter is absent or malformed.
-    """
+
+@dataclass(frozen=True, slots=True)
+class SkillFrontmatterParseResult:
+    """Lossless result of parsing one SKILL.md machine contract."""
+
+    content: str
+    data: dict[str, Any] | None
+    frontmatter_text: str = ""
+    body: str = ""
+    error: SkillFrontmatterParseError | None = None
+
+    @property
+    def is_valid(self) -> bool:
+        return self.error is None and self.data is not None
+
+
+def _parse_failure(
+    content: str,
+    error: SkillFrontmatterParseError,
+    *,
+    frontmatter_text: str = "",
+    body: str = "",
+) -> SkillFrontmatterParseResult:
+    return SkillFrontmatterParseResult(
+        content=content,
+        data=None,
+        frontmatter_text=frontmatter_text,
+        body=body,
+        error=error,
+    )
+
+
+def parse_frontmatter_content(content: str) -> SkillFrontmatterParseResult:
+    """Parse YAML frontmatter without collapsing distinct failure modes."""
     stripped = content.lstrip()
-    if not stripped.startswith("---"):
-        return {}
-    lines = stripped.split("\n")
-    if len(lines) < 2:
-        return {}
-    close_idx = None
+    lines = stripped.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != "---":
+        return _parse_failure(content, "missing_opening_delimiter")
+
+    close_idx: int | None = None
     for i, line in enumerate(lines[1:], start=1):
-        if line.rstrip("\r") == "---":
+        if line.rstrip("\r\n") == "---":
             close_idx = i
             break
     if close_idx is None:
-        return {}
-    yaml_block = "\n".join(lines[1:close_idx])
+        return _parse_failure(content, "missing_closing_delimiter")
+
+    yaml_block_with_newline = "".join(lines[1:close_idx])
+    yaml_block = yaml_block_with_newline.rstrip("\r\n")
+    body = "".join(lines[close_idx + 1 :])
     try:
-        return load_yaml(yaml_block) or {}
-    except Exception:
+        loaded: Any = load_yaml(yaml_block)
+    except YAMLError:
         logger.warning("parse_frontmatter_malformed_yaml", exc_info=True)
-        return {}
+        return _parse_failure(
+            content,
+            "malformed_yaml",
+            frontmatter_text=yaml_block,
+            body=body,
+        )
+    if loaded is None:
+        loaded = {}
+    if not isinstance(loaded, dict):
+        return _parse_failure(
+            content,
+            "non_mapping",
+            frontmatter_text=yaml_block,
+            body=body,
+        )
+    return SkillFrontmatterParseResult(
+        content=content,
+        data=loaded,
+        frontmatter_text=yaml_block,
+        body=body,
+    )
+
+
+def read_skill_frontmatter(path: Path) -> SkillFrontmatterParseResult:
+    """Read and parse one SKILL.md, preserving unreadable as a typed failure."""
+    try:
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return _parse_failure("", "unreadable")
+    return parse_frontmatter_content(content)
 
 
 def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> list[str]:

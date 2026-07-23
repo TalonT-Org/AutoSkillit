@@ -1,7 +1,7 @@
 ---
 name: plan-experiment
 categories: [research]
-uses_capabilities: [agent_model, test_check]
+uses_capabilities: [agent_model]
 description: Convert a scope report into a structured experiment plan with hypothesis, variables, phases, and success criteria.
 hooks:
   PreToolUse:

@@ -11,7 +11,7 @@ import os
 import re
 import shlex
 import warnings
-from typing import Any
+from typing import Any, assert_never
 
 from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
 from ._type_constants_env import HEADLESS_ENV_VAR, SESSION_TYPE_ENV_VAR
@@ -134,11 +134,14 @@ def resolve_target_skill(
     if info is None:
         return skill_command, name
 
-    # Determine correct prefix based on physical location
-    if info.source == SkillSource.BUNDLED:
-        correct_prefix = AUTOSKILLIT_SKILL_PREFIX + name
-    else:
-        correct_prefix = SKILL_COMMAND_PREFIX + name
+    # Determine the invocation namespace from the selected effective origin.
+    match info.source:
+        case SkillSource.BUNDLED:
+            correct_prefix = AUTOSKILLIT_SKILL_PREFIX + name
+        case SkillSource.BUNDLED_EXTENDED | SkillSource.PROJECT_LOCAL | SkillSource.THIRD_PARTY:
+            correct_prefix = SKILL_COMMAND_PREFIX + name
+        case _ as unreachable:
+            assert_never(unreachable)
 
     # Reconstruct: replace the skill reference, preserve trailing arguments
     stripped = skill_command.strip()

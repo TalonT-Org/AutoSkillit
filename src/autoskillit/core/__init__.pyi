@@ -400,13 +400,16 @@ from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
 from .types import SkillCapabilityDef as SkillCapabilityDef
+from .types import SkillContractError as SkillContractError
 from .types import SkillContractResolver as SkillContractResolver
+from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSource as SkillSource
+from .types import SkillSourceRef as SkillSourceRef
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StreamParser as StreamParser
@@ -450,8 +453,10 @@ from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
+from .types import session_type_for_skill_execution_role as session_type_for_skill_execution_role
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
 from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import validate_label_transition as validate_label_transition
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
+from .types import validate_skill_capability_roles as validate_skill_capability_roles

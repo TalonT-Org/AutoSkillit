@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from ._type_protocols_backend import CodingAgentBackend
 
+from ._type_enums import SkillExecutionRole
 from ._type_results import CleanupResult, CloneResult, ValidatedAddDir
 
 __all__ = [
@@ -90,6 +91,21 @@ class SkillResolver(Protocol):
     """Protocol for resolving skill names to their source tier."""
 
     def resolve(self, name: str) -> Any: ...
+
+    def resolve_effective(self, name: str, project_root: Path | None) -> Any: ...
+
+    def list_effective(
+        self,
+        project_root: Path | None,
+        execution_role: SkillExecutionRole,
+    ) -> Any: ...
+
+    def resolve_invocation(
+        self,
+        name: str,
+        project_root: Path | None,
+        execution_role: SkillExecutionRole,
+    ) -> Any: ...
 
 
 @runtime_checkable

@@ -181,8 +181,10 @@ def _parse_write_paths(content: str) -> list[str]:
     both inline ``write_paths: ["path1", "path2"]`` and multi-line YAML
     list syntax. Returns raw template strings (may contain ``{{AUTOSKILLIT_TEMP}}``).
     """
-    fm = parse_frontmatter_content(content)
-    raw = fm.get("write_paths", [])
+    parsed = parse_frontmatter_content(content)
+    if not parsed.is_valid or parsed.data is None:
+        return []
+    raw = parsed.data.get("write_paths", [])
     if not isinstance(raw, list):
         return []
     return [str(p) for p in raw if p and isinstance(p, str)]
@@ -689,8 +691,12 @@ class DefaultSessionSkillManager:
             except FileNotFoundError:
                 logger.warning("init_session_skill_content_missing", skill=skill_info.name)
                 continue
-            fm = parse_frontmatter_content(content)
-            fm_errors = validate_skill_frontmatter(fm, skill_info.name)
+            parsed = parse_frontmatter_content(content)
+            fm_errors = (
+                [f"frontmatter parse failed: {parsed.error}"]
+                if not parsed.is_valid or parsed.data is None
+                else validate_skill_frontmatter(parsed.data, skill_info.name)
+            )
             if fm_errors:
                 for err in fm_errors:
                     logger.warning(
@@ -792,8 +798,12 @@ class DefaultSessionSkillManager:
                 fetched = self._provider.get_skill_content(skill_name, gated=False)
             except FileNotFoundError:
                 return False
-            fm = parse_frontmatter_content(fetched)
-            fm_errors = validate_skill_frontmatter(fm, skill_name)
+            parsed = parse_frontmatter_content(fetched)
+            fm_errors = (
+                [f"frontmatter parse failed: {parsed.error}"]
+                if not parsed.is_valid or parsed.data is None
+                else validate_skill_frontmatter(parsed.data, skill_name)
+            )
             if fm_errors:
                 for err in fm_errors:
                     logger.warning(

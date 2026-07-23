@@ -102,8 +102,7 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
     if st is SessionType.FLEET:
         msg = (
             f"{tool_name} cannot be called from {st.value} sessions. "
-            f"{st.value.capitalize()} sessions have an auto-opened gate."
-            " open_kitchen is unnecessary."
+            "Only orchestrator sessions may call this tool."
             if tool_name
             else None
         )

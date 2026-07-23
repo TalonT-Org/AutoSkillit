@@ -1,7 +1,7 @@
 ---
 name: resolve-design-review
 categories: [research]
-uses_capabilities: [agent_model, run_skill]
+uses_capabilities: [agent_model]
 description: >
   Triage STOP verdict findings from review-design, classifying each as
   ADDRESSABLE/STRUCTURAL/DISCUSS using parallel subagents. If any are ADDRESSABLE

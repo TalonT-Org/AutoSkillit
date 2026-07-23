@@ -2,10 +2,12 @@
 
 ## Overview
 
-AutoSkillit's 142 bundled skills are organized into three tiers that control when and where
-they appear as slash commands. The tier system is orthogonal to subset categories — you can
-disable a subset across all tiers simultaneously, or reclassify individual skills between
-tiers. See [Subset Categories](subsets.md) for subset configuration.
+AutoSkillit has 142 bundled skill sources. Session-role skills are organized into three
+configurable tiers that control when and where they appear as slash commands. Exact-role
+orchestration skills are exposed through role-derived catalogs instead of a user tier. The
+tier system is orthogonal to subset categories — you can disable a subset across all tiers
+simultaneously or reclassify session-role skills between tiers. See
+[Subset Categories](subsets.md) for subset configuration.
 
 ## The Three Tiers
 
@@ -14,15 +16,15 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
 - **Location**: `src/autoskillit/skills/` (plugin-scanned by Claude Code)
 - **Default members**: `open-kitchen`, `close-kitchen`
 - **Visible in**: ALL session modes, including plain `$ claude` with the plugin loaded
-- `sous-chef` lives in this directory but is internal — injected by `open_kitchen` at
-  runtime and excluded from user-facing slash commands
+- `sous-chef` lives in this directory but is an exact-role L2 document, not a Tier 1
+  command
 - **Filesystem mechanism**: Claude Code auto-discovers skills via `--plugin-dir`; anything
   in `skills/` is registered as `/autoskillit:<name>`
 
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (106 total):
+- **Default members** (105 total):
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
   `make-experiment-diag`, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan`, `phoropter-null-synthesis`, `phoropter-priority-synthesis`,
@@ -33,7 +35,7 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
   `audit-docs`, `audit-feature-gates`, `audit-review-decisions`,
   `make-req`, `elaborate-phase`, `write-recipe`, `migrate-recipes`, `setup-project`,
   `design-guards`, `triage-issues`, `collapse-issues`,
-  `issue-splitter`, `enrich-issues`, `prepare-issue`, `process-issues`, `make-campaign`,
+  `issue-splitter`, `enrich-issues`, `prepare-issue`, `make-campaign`,
   `scope`, `plan-experiment`, `implement-experiment`, `run-experiment`,
   `generate-report`, `validate-test-audit`, `validate-review-decisions`,
   `stage-data`, `setup-environment`, `bundle-local-report`, `reload-session`
@@ -59,20 +61,31 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
   are available in the same session modes. The tier distinction lets users reclassify
   skills between "interactive" and "automation" via config without moving files.
 
+### Role-derived — L2 Orchestrator
+
+- `sous-chef` is the internal L2 operating document injected into order and food-truck
+  orchestrators; it is never a user-facing slash command.
+- `process-issues` is an L2 command available in role-derived order and food-truck
+  catalogs.
+- Neither skill appears in `skills.tier1`, `skills.tier2`, or `skills.tier3`.
+- L1 session catalogs and L3 fleet catalogs exclude both skills. A custom configuration
+  that assigns an exact-role skill to a session tier is invalid.
+
 ## Session Mode Skill Visibility
 
 ```
-Session Mode           Tier 1   Tier 2   Tier 3
-─────────────────────  ───────  ───────  ───────
-$ claude (plugin)        ✓        ✗        ✗
-$ autoskillit cook       ✓        ✓        ✓
-$ autoskillit order      ✓        ✓        ✓
-run_skill (headless)     ✓        ✓        ✓
+Session Mode              Tier 1   Tier 2   Tier 3   L2 role-derived
+────────────────────────  ───────  ───────  ───────  ───────────────
+$ claude (plugin)           ✓        ✗        ✗             ✗
+$ autoskillit cook (L1)     ✓        ✓        ✓             ✗
+$ autoskillit order (L2)    ✓        ✓        ✓             ✓
+food truck (L2)             ✓        ✓        ✓             ✓
+run_skill worker (L1)       ✓        ✓        ✓             ✗
+$ autoskillit fleet (L3)    ✓        ✓        ✓             ✗
 ```
 
-Note: All modes see Tier 1. Cook, order, and headless sessions see Tiers 2 and 3.
-Subset filtering applies after tier visibility — a disabled subset removes its members
-from all tiers.
+Subset filtering applies after tier and role visibility — a disabled subset removes its
+members from the resulting catalog.
 
 ## How Skills Are Discovered Per Session Mode
 
@@ -85,18 +98,17 @@ and `/autoskillit:close-kitchen`. Skills in `skills_extended/` are never seen.
 ### Cook session (`$ autoskillit cook`)
 
 1. AutoSkillit creates an ephemeral session directory at `/dev/shm/autoskillit-sessions/<id>/`
-2. Skills from both `skills/` and `skills_extended/` are copied into this ephemeral dir
-   (subset-filtered and override-aware)
+2. Session-role skills from both configured directories are copied into this ephemeral
+   dir (subset-filtered and override-aware); L2-only skills are excluded
 3. Claude Code is launched with `--plugin-dir <ephemeral-dir>` and `--add-dir <cwd>` so
    project-local skills in `.claude/skills/` are also discoverable
-4. All 60 bundled slash-command skills appear as `/autoskillit:*` slash commands within the session
-5. The ephemeral directory is cleaned up when the session ends
+4. The ephemeral directory is cleaned up when the session ends
 
 ### Order session (`$ autoskillit order`)
 
-Order is similar to cook: AutoSkillit launches Claude Code with access to all tiers.
-The key difference is the orchestrator (`sous-chef` skill) is injected and the kitchen
-is pre-opened so all 60 MCP tools are available from the start.
+Order is similar to cook, but its L2 role-derived catalog additionally includes
+`process-issues`. The internal `sous-chef` document is injected and the kitchen is
+pre-opened.
 
 ### Headless session (launched by `run_skill`)
 
@@ -104,13 +116,14 @@ is pre-opened so all 60 MCP tools are available from the start.
 ```
 claude --add-dir <skills_extended/> --add-dir <cwd>
 ```
-Both `skills_extended/` skills and project-local skills in `.claude/skills/` are
-discoverable. Tier 1 skills from `skills/` are available via the installed plugin.
-The AUTOSKILLIT_HEADLESS environment variable activates session-boundary enforcement.
+The worker receives the resolved L1 catalog plus applicable project-local skills.
+Exact ORCHESTRATOR-role entries such as `process-issues` are excluded. The AUTOSKILLIT_HEADLESS
+environment variable activates session-boundary enforcement.
 
 ## Config-Driven Tier Reclassification
 
-Any bundled skill can be promoted or demoted via `.autoskillit/config.yaml`:
+Any session-role bundled skill can be promoted or demoted via
+`.autoskillit/config.yaml`:
 
 ```yaml
 # .autoskillit/config.yaml
@@ -127,6 +140,7 @@ skills:
 
 **Rules:**
 - A skill must appear in exactly one tier (listed in multiple tiers = validation error)
+- Exact-role skills cannot be assigned to a session tier
 - Unknown skill names are logged as a warning, not a crash
 - Resolution order: package defaults → user config (`~/.autoskillit/config.yaml`) →
   project config (`.autoskillit/config.yaml`), last wins (dynaconf)

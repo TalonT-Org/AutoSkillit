@@ -4,15 +4,14 @@ The complete list of bundled skills (142 total: 3 in `src/autoskillit/skills/`,
 139 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
-## Tier 1 — free range (3)
+## Tier 1 — free range (2 configured)
 
 Plugin-scanned at `src/autoskillit/skills/`:
 
 - `open-kitchen` — reveals the 41 kitchen MCP tools
 - `close-kitchen` — re-hides them
-- `sous-chef` — internal injection by `open_kitchen`; never appears as a slash command
 
-## Tier 2 — interactive cook + headless
+## Tier 2 — interactive cook + headless (105 configured)
 
 Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 
@@ -30,7 +29,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 `make-req`, `elaborate-phase`, `write-recipe`, `migrate-recipes`,
 `setup-project`, `design-guards`, `triage-issues`,
 `collapse-issues`, `issue-splitter`, `enrich-issues`, `prepare-issue`,
-`process-issues`, `make-campaign`
+`make-campaign`
 
 ### Experiment family
 `scope`, `select-directions`, `plan-experiment`, `implement-experiment`, `run-experiment`,
@@ -39,7 +38,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 ### Research and review
 `review-design`, `stage-data`, `download-data`, `setup-environment`, `bundle-local-report`, `reload-session`
 
-## Tier 3 — pipeline / automation
+## Tier 3 — pipeline / automation (31 configured)
 
 Also under `src/autoskillit/skills_extended/`. Used by recipes for unattended
 runs:
@@ -51,6 +50,13 @@ runs:
 `resolve-claims-review`, `resolve-design-review`, `resolve-research-review`,
 `compose-research-pr`, `prepare-research-pr`, `review-research-pr`,
 `promote-to-main`, `classify-experiment-type`, `apply-review-dimensions`
+
+## Role-derived — L2 orchestrator
+
+- `sous-chef` — internal L2 operating document; never a slash command
+- `process-issues` — exposed only in L2 order and food-truck catalogs
+
+These exact-role skills are intentionally absent from all three configurable tiers.
 
 ## arch-lens family (13)
 
@@ -139,8 +145,9 @@ symptom, and the audit suite is updated so the same class of bug cannot
 recur. Commit messages prefix with `Rectify:` for traceability; the count of
 `Rectify:` commits is reported in `docs/developer/contributing.md`.
 
-## Total: 140
+## Total: 142
 
-3 (Tier 1) + 137 (`skills_extended/`) = 140 bundled skills. The total is
+3 sources under `skills/` + 139 sources under `skills_extended/` = 142 bundled skills.
+Configured tier counts exclude exact-role/internal sources. The filesystem total is
 verified by `tests/docs/test_doc_counts.py` against a filesystem walk so any
 addition or removal is caught immediately.

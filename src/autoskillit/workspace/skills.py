@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from autoskillit.core import (
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
+    PACK_REGISTRY,
     RETIRED_SKILL_NAMES,
     SKILL_CAPABILITY_REGISTRY,
+    SkillContractError,
+    SkillExecutionRole,
     SkillSource,
-    YAMLError,
+    SkillSourceRef,
     get_logger,
-    load_yaml,
     pkg_root,
+    validate_skill_capability_roles,
+)
+from autoskillit.workspace.skill_format import (
+    read_skill_frontmatter,
 )
 
 logger = get_logger(__name__)
@@ -22,32 +29,74 @@ logger = get_logger(__name__)
 
 @dataclass
 class SkillInfo:
+    """One exact, typed skill machine contract selected from a source."""
+
     name: str
     source: SkillSource
     path: Path
+    source_ref: SkillSourceRef | None = None
     categories: frozenset[str] = frozenset()
-    backend_requirements: frozenset[str] = frozenset()
     uses_capabilities: frozenset[str] = frozenset()
+    execution_role: SkillExecutionRole | None = SkillExecutionRole.SESSION
+    activate_deps: tuple[str, ...] = ()
+    canonical_content: str = ""
+    canonical_digest: str = ""
     invalid_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.source_ref is None:
+            self.source_ref = SkillSourceRef(
+                origin=self.source,
+                logical_name=self.name,
+                skill_path=self.path,
+            )
+        if not self.canonical_content and self.path.is_file():
+            try:
+                self.canonical_content = self.path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                pass
+        if self.canonical_content and not self.canonical_digest:
+            self.canonical_digest = hashlib.sha256(self.canonical_content.encode()).hexdigest()
+
+    @property
+    def canonical_bytes(self) -> bytes:
+        return self.canonical_content.encode("utf-8")
+
+    @property
+    def backend_requirements(self) -> frozenset[str]:
+        """Backend requirements derived solely from the declared capability set."""
+        known = self.uses_capabilities & SKILL_CAPABILITY_REGISTRY.keys()
+        if not known:
+            return frozenset()
+        return frozenset().union(
+            *(SKILL_CAPABILITY_REGISTRY[capability].required_backends for capability in known)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveSkillCatalog:
+    """Immutable role-filtered view of every effective skill source."""
+
+    skills: tuple[SkillInfo, ...]
+    project_root: Path | None
+    execution_role: SkillExecutionRole
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveSkillInvocation:
+    """Validated root plus its complete executable dependency closure."""
+
+    root: SkillInfo
+    closure: tuple[SkillInfo, ...]
+    capability_union: frozenset[str]
+    project_root: Path | None
+    execution_role: SkillExecutionRole
 
 
 def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
-    """Parse SKILL.md YAML frontmatter, returning a dict (empty on any failure)."""
-    try:
-        with open(path, encoding="utf-8") as fh:
-            content = fh.read()
-    except (OSError, UnicodeDecodeError):
-        return {}
-    if not content.startswith("---"):
-        return {}
-    parts = content.split("---", 2)
-    if len(parts) < 3:
-        return {}
-    try:
-        data: Any = load_yaml(parts[1])
-    except YAMLError:
-        return {}
-    return data if isinstance(data, dict) else {}
+    """Compatibility adapter for callers that only consume valid mappings."""
+    result = read_skill_frontmatter(path)
+    return result.data if result.is_valid and result.data is not None else {}
 
 
 def read_skill_categories(path: Path) -> frozenset[str]:
@@ -121,58 +170,95 @@ def detect_project_local_overrides(
     return frozenset(overrides)
 
 
-def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Path) -> SkillInfo:
+def _skill_info_from_frontmatter(
+    name: str,
+    source: SkillSource,
+    skill_path: Path,
+    *,
+    source_ref: SkillSourceRef | None = None,
+) -> SkillInfo:
     """Build a SkillInfo by reading all frontmatter fields in a single parse."""
-    data = _read_skill_frontmatter(skill_path)
+    parsed = read_skill_frontmatter(skill_path)
+    if not parsed.is_valid or parsed.data is None:
+        return SkillInfo(
+            name=name,
+            source=source,
+            path=skill_path,
+            source_ref=source_ref,
+            execution_role=None,
+            canonical_content=parsed.content,
+            canonical_digest=hashlib.sha256(parsed.content.encode()).hexdigest(),
+            invalid_reason=f"invalid frontmatter: {parsed.error}",
+        )
+
+    data = parsed.data
+    invalid_reasons: list[str] = []
     categories_raw = data.get("categories", [])
-    categories = (
-        frozenset(str(c) for c in categories_raw)
-        if isinstance(categories_raw, list)
-        else frozenset()
-    )
+    if not isinstance(categories_raw, list):
+        invalid_reasons.append("categories must be a list")
+        categories_raw = []
+    categories = frozenset(str(c) for c in categories_raw)
+
     caps_raw = data.get("uses_capabilities", [])
-    if caps_raw and not isinstance(caps_raw, list):
+    if not isinstance(caps_raw, list):
         logger.warning(
             "uses_capabilities_not_a_list",
             value=caps_raw,
             skill=name,
             hint="use bracket syntax: uses_capabilities: [agent_subagent]",
         )
-        caps_raw = [caps_raw]
-    uses_capabilities = (
-        frozenset(str(c) for c in caps_raw) if isinstance(caps_raw, list) else frozenset()
-    )
+        invalid_reasons.append("uses_capabilities must be a list")
+        caps_raw = []
+    uses_capabilities = frozenset(str(c) for c in caps_raw)
+
+    role_raw = data.get("execution_role", SkillExecutionRole.SESSION.value)
+    try:
+        execution_role = SkillExecutionRole(role_raw)
+    except (TypeError, ValueError):
+        execution_role = None
+        invalid_reasons.append(f"invalid execution_role: {role_raw!r}")
+
+    activate_deps_raw = data.get("activate_deps", [])
+    if not isinstance(activate_deps_raw, list):
+        invalid_reasons.append("activate_deps must be a list")
+        activate_deps_raw = []
+    activate_deps = tuple(str(dep) for dep in activate_deps_raw)
+
+    # These names are reserved machine-derived fields. Reading them here makes
+    # attempts to inject source identity through YAML an explicit contract error.
+    supplied_canonical_content = data.get("canonical_content")
+    supplied_canonical_digest = data.get("canonical_digest")
+    if supplied_canonical_content is not None or supplied_canonical_digest is not None:
+        invalid_reasons.append("canonical content and digest are source-derived")
+
     unknown_caps = uses_capabilities - frozenset(SKILL_CAPABILITY_REGISTRY)
-    _invalid_reason: str | None = None
     if unknown_caps:
-        _invalid_reason = (
-            f"unknown uses_capabilities: {sorted(unknown_caps)} "
-            f"(valid: {sorted(SKILL_CAPABILITY_REGISTRY)})"
-        )
         logger.warning(
             "unrecognized_uses_capabilities",
             invalid=sorted(unknown_caps),
             skill=name,
             valid=sorted(SKILL_CAPABILITY_REGISTRY),
         )
-        uses_capabilities = uses_capabilities - unknown_caps
+    if execution_role is not None:
+        try:
+            validate_skill_capability_roles(uses_capabilities, execution_role)
+        except SkillContractError as exc:
+            invalid_reasons.append(str(exc))
 
-    backend_requirements: frozenset[str] = (
-        frozenset().union(
-            *(SKILL_CAPABILITY_REGISTRY[c].required_backends for c in uses_capabilities)
-        )
-        if uses_capabilities
-        else frozenset()
-    )
+    canonical_digest = hashlib.sha256(parsed.content.encode()).hexdigest()
 
     return SkillInfo(
         name=name,
         source=source,
         path=skill_path,
+        source_ref=source_ref,
         categories=categories,
-        backend_requirements=backend_requirements,
         uses_capabilities=uses_capabilities,
-        invalid_reason=_invalid_reason,
+        execution_role=execution_role,
+        activate_deps=activate_deps,
+        canonical_content=parsed.content,
+        canonical_digest=canonical_digest,
+        invalid_reason="; ".join(invalid_reasons) or None,
     )
 
 
@@ -194,7 +280,16 @@ class DefaultSkillResolver:
         ):
             skill_path = directory / name / "SKILL.md"
             if skill_path.is_file():
-                info = _skill_info_from_frontmatter(name, source, skill_path)
+                info = _skill_info_from_frontmatter(
+                    name,
+                    source,
+                    skill_path,
+                    source_ref=SkillSourceRef(
+                        origin=source,
+                        logical_name=name,
+                        skill_path=skill_path,
+                    ),
+                )
                 self._resolve_cache[name] = info
                 return info
         self._resolve_cache[name] = None
@@ -219,6 +314,185 @@ class DefaultSkillResolver:
         _LIST_ALL_CACHE = combined
         _LIST_ALL_CACHE_KEY = key
         return list(combined)
+
+    def resolve_effective(self, name: str, project_root: Path | None) -> SkillInfo | None:
+        """Resolve the current highest-precedence source without caching overrides."""
+        normalized_root = project_root.resolve() if project_root is not None else None
+        if normalized_root is not None:
+            for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
+                skill_path = normalized_root / search_dir / name / "SKILL.md"
+                if not skill_path.is_file():
+                    continue
+                return _skill_info_from_frontmatter(
+                    name,
+                    SkillSource.PROJECT_LOCAL,
+                    skill_path,
+                    source_ref=SkillSourceRef(
+                        origin=SkillSource.PROJECT_LOCAL,
+                        logical_name=name,
+                        skill_path=skill_path,
+                        search_dir=search_dir,
+                        precedence=precedence,
+                    ),
+                )
+        return self.resolve(name)
+
+    def _list_effective_unfiltered(self, project_root: Path | None) -> tuple[SkillInfo, ...]:
+        normalized_root = project_root.resolve() if project_root is not None else None
+        by_name = {skill.name: skill for skill in self.list_all()}
+        if normalized_root is not None:
+            selected: set[str] = set()
+            for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
+                search_root = normalized_root / search_dir
+                if not search_root.is_dir():
+                    continue
+                try:
+                    entries = sorted(search_root.iterdir(), key=lambda entry: entry.name)
+                except OSError:
+                    continue
+                for entry in entries:
+                    skill_path = entry / "SKILL.md"
+                    if not entry.is_dir() or entry.name in selected or not skill_path.is_file():
+                        continue
+                    selected.add(entry.name)
+                    by_name[entry.name] = _skill_info_from_frontmatter(
+                        entry.name,
+                        SkillSource.PROJECT_LOCAL,
+                        skill_path,
+                        source_ref=SkillSourceRef(
+                            origin=SkillSource.PROJECT_LOCAL,
+                            logical_name=entry.name,
+                            skill_path=skill_path,
+                            search_dir=search_dir,
+                            precedence=precedence,
+                        ),
+                    )
+        return tuple(sorted(by_name.values(), key=lambda skill: skill.name))
+
+    def list_effective(
+        self,
+        project_root: Path | None,
+        execution_role: SkillExecutionRole,
+    ) -> EffectiveSkillCatalog:
+        """Return a fresh, immutable catalog authorized for one exact role."""
+        normalized_root = project_root.resolve() if project_root is not None else None
+        skills = tuple(
+            skill
+            for skill in self._list_effective_unfiltered(normalized_root)
+            if skill.invalid_reason is None and skill.execution_role is execution_role
+        )
+        return EffectiveSkillCatalog(
+            skills=skills,
+            project_root=normalized_root,
+            execution_role=execution_role,
+        )
+
+    def resolve_invocation(
+        self,
+        name: str,
+        project_root: Path | None,
+        execution_role: SkillExecutionRole,
+    ) -> EffectiveSkillInvocation:
+        """Resolve and validate a root plus every direct/pack-expanded dependency."""
+        normalized_root = project_root.resolve() if project_root is not None else None
+        catalog = self._list_effective_unfiltered(normalized_root)
+        by_name = {skill.name: skill for skill in catalog}
+        root = by_name.get(name)
+        if root is None:
+            raise SkillContractError(f"skill {name!r} was not found in any effective source")
+
+        closure: list[SkillInfo] = []
+        visited: set[str] = set()
+        visiting: set[str] = set()
+
+        def validate_member(skill: SkillInfo) -> None:
+            if skill.invalid_reason is not None:
+                raise SkillContractError(
+                    f"invalid contract for {skill.name!r}: {skill.invalid_reason}"
+                )
+            if skill.execution_role is not execution_role:
+                actual = (
+                    skill.execution_role.value if skill.execution_role is not None else "invalid"
+                )
+                raise SkillContractError(
+                    f"skill {skill.name!r} requires {actual} execution role; "
+                    f"invocation requires {execution_role.value}"
+                )
+            validate_skill_capability_roles(skill.uses_capabilities, execution_role)
+
+        def visit(skill: SkillInfo) -> None:
+            if skill.name in visited:
+                return
+            if skill.name in visiting:
+                return
+            validate_member(skill)
+            visiting.add(skill.name)
+            closure.append(skill)
+            for dependency in skill.activate_deps:
+                if dependency in PACK_REGISTRY:
+                    members = sorted(
+                        (candidate for candidate in catalog if dependency in candidate.categories),
+                        key=lambda candidate: candidate.name,
+                    )
+                    for member in members:
+                        visit(member)
+                    continue
+                dependency_member = by_name.get(dependency)
+                if dependency_member is None:
+                    raise SkillContractError(
+                        f"skill {skill.name!r} has unresolved dependency {dependency!r}"
+                    )
+                visit(dependency_member)
+            visiting.remove(skill.name)
+            visited.add(skill.name)
+
+        visit(root)
+        capability_union = frozenset().union(*(member.uses_capabilities for member in closure))
+        return EffectiveSkillInvocation(
+            root=root,
+            closure=tuple(closure),
+            capability_union=capability_union,
+            project_root=normalized_root,
+            execution_role=execution_role,
+        )
+
+
+def validate_skill_tier_roles(
+    config: Any,
+    resolver: DefaultSkillResolver,
+    project_root: Path | None,
+) -> None:
+    """Reject configured L1 tiers containing non-SESSION skill contracts.
+
+    ``config`` is intentionally duck-typed so workspace remains independent of
+    the IL-1 config package. Composition roots call this after loading config.
+    """
+    skills_config = getattr(config, "skills", None)
+    if skills_config is None:
+        return
+    for tier_name in ("tier1", "tier2", "tier3"):
+        configured = getattr(skills_config, tier_name, ())
+        for skill_name in configured:
+            effective = resolver.resolve_effective(str(skill_name), project_root)
+            if effective is None:
+                raise SkillContractError(
+                    f"configured {tier_name} skill {skill_name!r} was not found"
+                )
+            if effective.invalid_reason is not None:
+                raise SkillContractError(
+                    f"configured {tier_name} skill {skill_name!r} is invalid: "
+                    f"{effective.invalid_reason}"
+                )
+            if effective.execution_role is not SkillExecutionRole.SESSION:
+                role = (
+                    effective.execution_role.value
+                    if effective.execution_role is not None
+                    else "invalid"
+                )
+                raise SkillContractError(
+                    f"configured {tier_name} skill {skill_name!r} requires "
+                    f"{role.upper()} execution role, not SESSION"
+                )
 
 
 def bundled_skills_dir() -> Path:

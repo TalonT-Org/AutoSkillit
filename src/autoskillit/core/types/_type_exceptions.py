@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = [
     "CapabilityNotSupportedError",
+    "SkillContractError",
     "RecipeLoadError",
     "ProcessStaleError",
     "RecipeNotFoundError",
@@ -29,3 +30,7 @@ class CapabilityNotSupportedError(Exception):
         self.capability = capability
         self.backend_name = backend_name
         super().__init__(f"{backend_name!r} does not support capability {capability!r}")
+
+
+class SkillContractError(ValueError):
+    """A skill machine contract is malformed or exceeds its execution role."""

@@ -334,9 +334,12 @@ skills:
     # ...
 ```
 
-Any bundled skill can be promoted or demoted by adding it to the desired tier list. A skill
-in multiple tiers simultaneously is a validation error. See **[Skill Visibility](skills/visibility.md)**
-for the full tier breakdown, session mode table, and override rules.
+Session-role skills can be promoted or demoted by adding them to the desired tier list. A
+skill in multiple tiers simultaneously is a validation error. Exact-role orchestration
+skills are not user-tiered: `process-issues`, for example, is exposed only in L2
+orchestrator catalogs and a configuration that adds it to a session tier is rejected.
+See **[Skill Visibility](skills/visibility.md)** for the full tier breakdown, session mode
+table, role-derived catalogs, and override rules.
 
 ## Subset Categories
 

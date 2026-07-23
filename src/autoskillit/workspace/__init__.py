@@ -45,16 +45,23 @@ from autoskillit.workspace.session_skills import (
     resolve_ephemeral_root,
 )
 from autoskillit.workspace.skill_format import (
+    SkillFrontmatterParseError,
+    SkillFrontmatterParseResult,
     parse_frontmatter_content,
+    read_skill_frontmatter,
     validate_skill_frontmatter,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
+    EffectiveSkillCatalog,
+    EffectiveSkillInvocation,
     ProjectLocalOverride,
+    SkillInfo,
     bundled_skills_dir,
     bundled_skills_extended_dir,
     detect_project_local_overrides,
     override_names,
+    validate_skill_tier_roles,
 )
 from autoskillit.workspace.worktree import (
     WORKTREES_DIR,
@@ -83,7 +90,12 @@ __all__ = [
     "write_worktree_sidecar",
     "RUNS_DIR",
     "DefaultSkillResolver",
+    "EffectiveSkillCatalog",
+    "EffectiveSkillInvocation",
     "SkillResolver",
+    "SkillInfo",
+    "SkillFrontmatterParseError",
+    "SkillFrontmatterParseResult",
     "SkillsDirectoryProvider",
     "bundled_skills_dir",
     "bundled_skills_extended_dir",
@@ -103,5 +115,7 @@ __all__ = [
     "resolve_ephemeral_root",
     "WORKTREES_DIR",
     "parse_frontmatter_content",
+    "read_skill_frontmatter",
+    "validate_skill_tier_roles",
     "validate_skill_frontmatter",
 ]

@@ -27,7 +27,10 @@ import pytest
 import autoskillit.hooks.shell_capture_hook as shell_capture_hook
 from autoskillit.hooks._capture_artifacts import (
     _CAPTURE_FILENAME_RE,
+    _open_stale_candidate,
     classify_stale_captures,
+    open_capture_root,
+    open_project_anchor,
 )
 from autoskillit.hooks.shell_capture_hook import _build_harness
 
@@ -547,8 +550,8 @@ def test_sweep_rejects_symlinks_and_traversals(tmp_path: Path) -> None:
     )
 
 
-def test_sweep_filename_allowlist(tmp_path: Path) -> None:
-    """Sweep only deletes files matching the strict ``shell_<16hex>.log`` allowlist."""
+def test_stale_candidate_classifier_enforces_filename_allowlist(tmp_path: Path) -> None:
+    """Only strict ``shell_<16hex>.log`` names reach stale-candidate classification."""
     _make_project_dirs(tmp_path)
     capture = _capture_dir(tmp_path)
 
@@ -559,11 +562,35 @@ def test_sweep_filename_allowlist(tmp_path: Path) -> None:
     invalid_ext = capture / "evil.sh"
     invalid_ext.write_text("x")
 
-    deleted = classify_stale_captures(tmp_path, max_age_seconds=0)
-    assert deleted == 0
-    assert valid.exists()
-    assert short_uid.exists(), "old 8-char uid format files must not be deleted"
-    assert invalid_ext.exists(), "files outside the shell_*.log allowlist must not be deleted"
+    anchor = open_project_anchor(str(tmp_path))
+    root = open_capture_root(anchor, create=False)
+    try:
+        candidate = _open_stale_candidate(
+            root,
+            valid.name,
+            mtime_threshold=time.time() + 1,
+        )
+        assert candidate is not None
+        candidate.close()
+        assert (
+            _open_stale_candidate(
+                root,
+                short_uid.name,
+                mtime_threshold=time.time() + 1,
+            )
+            is None
+        )
+        assert (
+            _open_stale_candidate(
+                root,
+                invalid_ext.name,
+                mtime_threshold=time.time() + 1,
+            )
+            is None
+        )
+    finally:
+        root.close()
+        anchor.close()
 
 
 def test_classify_stale_captures_uses_wall_clock_not_directory_mtime(tmp_path: Path) -> None:

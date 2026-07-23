@@ -9,6 +9,8 @@ import pytest
 from autoskillit.core import (
     OUTPUT_DISCIPLINE_COMBINED_SHA256,
     OUTPUT_DISCIPLINE_POLICY_VERSION,
+    RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
+    RECIPE_SECTION_REGISTRY_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
 )
 from autoskillit.execution.backends._probe_cache import (
@@ -182,11 +184,19 @@ def test_probe_policy_identity_uses_output_discipline_authorities() -> None:
         "generated-codex-child-v1",
         "deep-investigate-codex-v2",
         "deep-investigate-claude-200k-v2",
-        "codex-recipe-delivery-v1",
+        "codex-recipe-delivery-v2",
     )
 
 
 def test_recipe_probe_policy_identity_covers_every_invalidation_domain() -> None:
+    assert (
+        f"section-registry:{RECIPE_SECTION_REGISTRY_DIGEST}"
+        in CODEX_RECIPE_PROBE_POLICY_COMPONENTS
+    )
+    assert (
+        f"pagination-policy:{RECIPE_SECTION_PAGINATION_POLICY_DIGEST}"
+        in CODEX_RECIPE_PROBE_POLICY_COMPONENTS
+    )
     prefixes = {component.partition(":")[0] for component in CODEX_RECIPE_PROBE_POLICY_COMPONENTS}
     assert prefixes == {
         "budget",
@@ -200,6 +210,8 @@ def test_recipe_probe_policy_identity_covers_every_invalidation_domain() -> None
         "model",
         "fixtures",
         "attestation-provider",
+        "section-registry",
+        "pagination-policy",
     }
 
 

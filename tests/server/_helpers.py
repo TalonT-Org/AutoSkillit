@@ -5,44 +5,274 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from autoskillit.core import SkillResult
+from autoskillit.core import (
+    RECIPE_SECTION_PAGINATION_VERSION,
+    RECIPE_SECTION_REGISTRY_DIGEST,
+    SkillResult,
+    recipe_section_digest,
+    recipe_section_element_digest,
+)
 from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
 
 
-async def _resolve_recipe_content(result: dict[str, Any]) -> str:
-    """Return exact recipe content from either inline or pull delivery."""
+async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "content") -> Any:
+    """Reconstruct one typed recipe section from inline or paginated delivery."""
     assert result.get("success") is True, f"recipe response was not successful: {result}"
-    inline_content = result.get("content")
-    if isinstance(inline_content, str):
-        return inline_content
-
     pull = result.get("recipe_pull")
+    if pull is None and section in result:
+        return result[section]
     assert isinstance(pull, dict), f"recipe response has neither content nor pull: {result}"
     assert pull.get("pull_tool") == "get_recipe_section"
 
     from autoskillit.server.tools.tools_recipe import get_recipe_section
 
     identity = {key: value for key, value in pull.items() if key != "pull_tool"}
-    chunks: list[str] = []
+    raw_chunks: list[str] = []
+    scalar_chunks: list[str] = []
+    elements: list[object] = []
+    fragment_chunks: list[str] = []
+    fragment_count: int | None = None
+    fragment_byte_total: int | None = None
+    fragment_element_sha256: str | None = None
+    expected_range_start = 0
+    expected_fragment_index = 0
+    range_identities: set[tuple[object, ...]] = set()
+    shared_identity: tuple[object, ...] | None = None
+    expected_format_family: str | None = None
+    expected_total_parts: int | None = None
+    expected_section_total: int | None = None
     part = 0
-    expected_byte_start = 0
     while True:
-        response = json.loads(await get_recipe_section(section="content", part=part, **identity))
-        assert response.get("success") is not False, (
-            f"get_recipe_section returned error: {response}"
+        response = json.loads(await get_recipe_section(section=section, part=part, **identity))
+        assert response.get("success") is True, f"get_recipe_section returned error: {response}"
+        assert response["pagination_version"] == RECIPE_SECTION_PAGINATION_VERSION
+        assert response["section_registry_sha256"] == RECIPE_SECTION_REGISTRY_DIGEST
+        assert response["section"] == section
+        assert response["part"] == part
+        assert type(response["total_parts"]) is int and response["total_parts"] > 0
+        assert type(response["has_more"]) is bool
+        assert isinstance(response["section_sha256"], str)
+        assert isinstance(response["page_plan_sha256"], str)
+        assert isinstance(response["payload_sha256"], str)
+        assert isinstance(response["body_sha256"], str)
+        assert response["payload_sha256"] == identity["payload_sha256"]
+        assert response["body_sha256"] == identity["body_sha256"]
+
+        page_identity = (
+            response["pagination_version"],
+            response["section_registry_sha256"],
+            response["section_sha256"],
+            response["page_plan_sha256"],
+            response["payload_sha256"],
+            response["body_sha256"],
         )
+        if shared_identity is None:
+            shared_identity = page_identity
+            expected_total_parts = response["total_parts"]
+        else:
+            assert page_identity == shared_identity
+            assert response["total_parts"] == expected_total_parts
+
         chunk = response.get("content")
         assert isinstance(chunk, str)
-        assert response["byte_start"] == expected_byte_start
-        expected_byte_start = response["byte_end"]
-        chunks.append(chunk)
-        if not response.get("has_more", False):
-            assert expected_byte_start == response["byte_total"]
-            return "".join(chunks)
-        part = response["next_part"]
+        content_format = response.get("content_format")
+        assert content_format in {
+            "raw-text",
+            "json-array-page",
+            "json-scalar-page",
+            "json-element-fragment",
+        }, f"unknown recipe section format: {content_format!r}"
+
+        if content_format == "raw-text":
+            assert expected_format_family in (None, "raw")
+            expected_format_family = "raw"
+            assert response["byte_start"] == expected_range_start
+            assert response["byte_end"] == response["byte_start"] + len(chunk.encode("utf-8"))
+            expected_range_start = response["byte_end"]
+            if expected_section_total is None:
+                expected_section_total = response["byte_total"]
+            else:
+                assert response["byte_total"] == expected_section_total
+            range_identity = (
+                content_format,
+                response["byte_start"],
+                response["byte_end"],
+            )
+            raw_chunks.append(chunk)
+            forbidden = {
+                "element_start",
+                "element_end",
+                "element_total",
+                "scalar_byte_start",
+                "scalar_byte_end",
+                "scalar_byte_total",
+                "element_index",
+                "element_sha256",
+                "fragment_index",
+                "fragment_count",
+                "fragment_byte_start",
+                "fragment_byte_end",
+                "fragment_byte_total",
+            }
+        elif content_format == "json-scalar-page":
+            assert expected_format_family in (None, "scalar")
+            expected_format_family = "scalar"
+            decoded = json.loads(chunk)
+            assert isinstance(decoded, str)
+            assert response["scalar_byte_start"] == expected_range_start
+            assert response["scalar_byte_end"] == response["scalar_byte_start"] + len(
+                decoded.encode("utf-8")
+            )
+            expected_range_start = response["scalar_byte_end"]
+            if expected_section_total is None:
+                expected_section_total = response["scalar_byte_total"]
+            else:
+                assert response["scalar_byte_total"] == expected_section_total
+            range_identity = (
+                content_format,
+                response["scalar_byte_start"],
+                response["scalar_byte_end"],
+            )
+            scalar_chunks.append(decoded)
+            forbidden = {
+                "byte_start",
+                "byte_end",
+                "byte_total",
+                "element_start",
+                "element_end",
+                "element_total",
+                "element_index",
+                "element_sha256",
+                "fragment_index",
+                "fragment_count",
+                "fragment_byte_start",
+                "fragment_byte_end",
+                "fragment_byte_total",
+            }
+        elif content_format == "json-array-page":
+            assert expected_format_family in (None, "array")
+            expected_format_family = "array"
+            decoded = json.loads(chunk)
+            assert isinstance(decoded, list)
+            assert response["element_start"] == len(elements)
+            assert response["element_end"] == response["element_start"] + len(decoded)
+            assert response["element_end"] > response["element_start"] or (
+                response["element_total"] == 0
+                and response["total_parts"] == 1
+                and response["has_more"] is False
+            )
+            expected_range_start = response["element_end"]
+            if expected_section_total is None:
+                expected_section_total = response["element_total"]
+            else:
+                assert response["element_total"] == expected_section_total
+            range_identity = (
+                content_format,
+                response["element_start"],
+                response["element_end"],
+            )
+            elements.extend(decoded)
+            forbidden = {
+                "byte_start",
+                "byte_end",
+                "byte_total",
+                "scalar_byte_start",
+                "scalar_byte_end",
+                "scalar_byte_total",
+                "element_index",
+                "element_sha256",
+                "fragment_index",
+                "fragment_count",
+                "fragment_byte_start",
+                "fragment_byte_end",
+                "fragment_byte_total",
+            }
+        else:
+            assert expected_format_family in (None, "array")
+            expected_format_family = "array"
+            decoded = json.loads(chunk)
+            assert isinstance(decoded, str)
+            assert response["element_index"] == len(elements)
+            assert response["fragment_index"] == expected_fragment_index
+            assert response["fragment_byte_start"] == sum(
+                len(value.encode("utf-8")) for value in fragment_chunks
+            )
+            assert response["fragment_byte_end"] == response["fragment_byte_start"] + len(
+                decoded.encode("utf-8")
+            )
+            if fragment_count is None:
+                fragment_count = response["fragment_count"]
+                fragment_byte_total = response["fragment_byte_total"]
+                fragment_element_sha256 = response["element_sha256"]
+            else:
+                assert response["fragment_count"] == fragment_count
+                assert response["fragment_byte_total"] == fragment_byte_total
+                assert response["element_sha256"] == fragment_element_sha256
+            range_identity = (
+                content_format,
+                response["element_index"],
+                response["fragment_index"],
+                response["fragment_byte_start"],
+                response["fragment_byte_end"],
+            )
+            fragment_chunks.append(decoded)
+            expected_fragment_index += 1
+            assert fragment_count is not None
+            if expected_fragment_index == fragment_count:
+                canonical_element = "".join(fragment_chunks)
+                assert len(canonical_element.encode("utf-8")) == fragment_byte_total
+                element = json.loads(canonical_element)
+                assert recipe_section_element_digest(element) == fragment_element_sha256
+                elements.append(element)
+                expected_range_start = len(elements)
+                fragment_chunks = []
+                fragment_count = None
+                fragment_byte_total = None
+                fragment_element_sha256 = None
+                expected_fragment_index = 0
+            forbidden = {
+                "byte_start",
+                "byte_end",
+                "byte_total",
+                "element_start",
+                "element_end",
+                "element_total",
+                "scalar_byte_start",
+                "scalar_byte_end",
+                "scalar_byte_total",
+            }
+
+        assert not (forbidden & response.keys())
+        assert range_identity not in range_identities
+        range_identities.add(range_identity)
+        if response["has_more"]:
+            assert response["next_part"] == part + 1
+            assert part + 1 < response["total_parts"]
+            part = response["next_part"]
+            continue
+
+        assert "next_part" not in response
+        assert part + 1 == response["total_parts"]
+        assert not fragment_chunks
+        if expected_section_total is not None:
+            assert expected_range_start == expected_section_total
+        else:
+            assert expected_format_family == "array"
+            assert expected_range_start == len(elements)
+        if expected_format_family == "raw":
+            value: object = "".join(raw_chunks)
+            raw_digest = True
+        elif expected_format_family == "scalar":
+            value = "".join(scalar_chunks)
+            raw_digest = False
+        else:
+            value = elements
+            raw_digest = False
+        assert recipe_section_digest(value, raw=raw_digest) == response["section_sha256"]
+        return value
 
 
 def _write_registry(monkeypatch: Any, tmp_path: Any, entries: list[dict[str, Any]]) -> Any:

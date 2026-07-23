@@ -118,6 +118,44 @@ def test_all_mcp_tool_handlers_have_cancellation_shield() -> None:
     )
 
 
+def test_get_recipe_section_tracks_typed_cancellation_response_size() -> None:
+    """The recipe pull backstop must wrap its typed cancellation shield immediately."""
+    path = SRC_ROOT / "server" / "tools" / "tools_recipe.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    function = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "get_recipe_section"
+    )
+
+    decorators = function.decorator_list
+    shield_index = next(
+        index
+        for index, decorator in enumerate(decorators)
+        if isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Name)
+        and decorator.func.id == "_cancellation_shield"
+    )
+    assert shield_index > 0
+
+    outer = decorators[shield_index - 1]
+    assert (
+        isinstance(outer, ast.Call)
+        and isinstance(outer.func, ast.Name)
+        and outer.func.id == "track_response_size"
+    ), (
+        "get_recipe_section must place @track_response_size immediately above "
+        "@_cancellation_shield so cancellation output reaches the universal backstop"
+    )
+    shield = decorators[shield_index]
+    assert isinstance(shield, ast.Call)
+    assert {keyword.arg for keyword in shield.keywords} == {
+        "state_factory",
+        "state_context_var",
+        "response_factory",
+    }
+
+
 def test_never_raises_contracts_are_structurally_enforced() -> None:
     """All 'Never raises' functions in server/ must have a top-level try/except Exception."""
     server_dir = _repo_root() / "src" / "autoskillit" / "server"

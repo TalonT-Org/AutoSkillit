@@ -14,6 +14,7 @@ _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.js
 
 async def _resolve_recipe_content(result: dict[str, Any]) -> str:
     """Return exact recipe content from either inline or pull delivery."""
+    assert result.get("success") is True, f"recipe response was not successful: {result}"
     inline_content = result.get("content")
     if isinstance(inline_content, str):
         return inline_content

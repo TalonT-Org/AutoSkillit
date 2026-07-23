@@ -9,6 +9,14 @@ import pytest
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+@pytest.mark.anyio
+async def test_recipe_content_helper_rejects_failed_inline_response() -> None:
+    from tests.server._helpers import _resolve_recipe_content
+
+    with pytest.raises(AssertionError, match="recipe response was not successful"):
+        await _resolve_recipe_content({"success": False, "content": "stale"})
+
+
 class TestGateDisabledSchema:
     """Gate-disabled response schema matches the expected skill result keys."""
 

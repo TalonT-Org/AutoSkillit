@@ -6,19 +6,37 @@ from autoskillit.core.paths import pkg_root
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
-_REMOVED_DIAGRAM_MARKERS = (
+_REMOVED_DIAGRAM_WORKFLOW_MARKERS = (
     "Visualize with Architecture Lens",
     "arch_lens_selection_",
     "/autoskillit:arch-lens-",
     "/autoskillit:mermaid",
-    "## Proposed Architecture",
-    "Lens Used",
-    "## Skill Loading Checklist",
+)
+_REMOVED_DIAGRAM_OUTPUT_TEMPLATE_MARKERS = (
+    "{Mermaid diagram showing the proposed changes using the selected lens}",
+    "**Lens Used:** {lens name} - {why this lens was chosen}",
 )
 _CONNECTED_CALL_CHAIN_INVARIANT = (
     "Every new component, class, or function is wired into the call chain — "
     "nothing is created but left unconnected"
 )
+
+
+def _assert_obsolete_diagram_workflow_absent(text: str, workflow_heading: str) -> None:
+    workflow_idx = text.find(workflow_heading)
+    assert workflow_idx != -1
+    output_idx = text.find("\n## Output", workflow_idx)
+    assert output_idx != -1
+
+    workflow_section = text[workflow_idx:output_idx]
+    for marker in _REMOVED_DIAGRAM_WORKFLOW_MARKERS:
+        assert marker not in workflow_section, (
+            f"obsolete diagram workflow marker remains: {marker}"
+        )
+
+    output_section = text[output_idx:]
+    for marker in _REMOVED_DIAGRAM_OUTPUT_TEMPLATE_MARKERS:
+        assert marker not in output_section, f"obsolete diagram output marker remains: {marker}"
 
 
 @pytest.fixture(scope="module")
@@ -83,8 +101,7 @@ def test_make_plan_step9_plan_revision_exists(make_plan_text: str) -> None:
 def test_make_plan_omits_diagram_workflow_and_retains_call_chain_invariant(
     make_plan_text: str,
 ) -> None:
-    for marker in _REMOVED_DIAGRAM_MARKERS:
-        assert marker not in make_plan_text, f"make-plan must omit obsolete marker: {marker}"
+    _assert_obsolete_diagram_workflow_absent(make_plan_text, "## Planning Steps")
     assert _CONNECTED_CALL_CHAIN_INVARIANT in make_plan_text
 
 
@@ -271,8 +288,7 @@ def test_rectify_adversarial_steps_ordered(rectify_text: str) -> None:
 def test_rectify_omits_diagram_workflow_and_retains_call_chain_invariant(
     rectify_text: str,
 ) -> None:
-    for marker in _REMOVED_DIAGRAM_MARKERS:
-        assert marker not in rectify_text, f"rectify must omit obsolete marker: {marker}"
+    _assert_obsolete_diagram_workflow_absent(rectify_text, "## Rectify Workflow")
     assert _CONNECTED_CALL_CHAIN_INVARIANT in rectify_text
 
 

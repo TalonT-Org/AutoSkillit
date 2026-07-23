@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import time
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,35 @@ def _open_authority(project: Path):
         anchor.close()
         raise
     return anchor, root
+
+
+def test_capture_authorities_are_factory_only_and_externally_immutable(tmp_path: Path) -> None:
+    identity = capture_artifacts.FileIdentity(device=1, inode=2)
+    with pytest.raises(CaptureSetupError, match="open_project_anchor"):
+        capture_artifacts.ProjectAnchor(
+            fd=-1,
+            identity=identity,
+            supplied_path=str(tmp_path),
+            physical_path=tmp_path,
+        )
+    with pytest.raises(CaptureSetupError, match="open_capture_root"):
+        capture_artifacts.CaptureRoot(
+            autoskillit_fd=-1,
+            temp_fd=-1,
+            fd=-1,
+            autoskillit_identity=identity,
+            temp_identity=identity,
+            identity=identity,
+        )
+    with pytest.raises(CaptureSetupError, match="create_capture_artifact"):
+        capture_artifacts.CaptureArtifact(fd=-1, name="shell.log", identity=identity)
+
+    anchor = open_project_anchor(str(tmp_path))
+    try:
+        with pytest.raises(FrozenInstanceError):
+            setattr(anchor, "supplied_path", "/unvalidated")
+    finally:
+        anchor.close()
 
 
 class _ReadableStream:

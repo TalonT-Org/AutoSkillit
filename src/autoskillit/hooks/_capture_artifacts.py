@@ -18,7 +18,7 @@ import stat
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -82,6 +82,7 @@ _CAPTURE_RUNTIME_ERRORS = (
     UnicodeError,
     ValueError,
 )
+_AUTHORITY_FACTORY_TOKEN = object()
 
 _DIRECTORY_FLAGS = (
     os.O_RDONLY
@@ -119,7 +120,7 @@ class FileIdentity:
         return cls(device=value.st_dev, inode=value.st_ino)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class ProjectAnchor:
     """Opened project directory and its post-open physical-path hint."""
 
@@ -127,14 +128,19 @@ class ProjectAnchor:
     identity: FileIdentity
     supplied_path: str
     physical_path: Path
+    _factory_token: InitVar[object | None] = None
+
+    def __post_init__(self, _factory_token: object | None) -> None:
+        if _factory_token is not _AUTHORITY_FACTORY_TOKEN:
+            raise CaptureSetupError("ProjectAnchor must be created by open_project_anchor")
 
     def close(self) -> None:
         if self.fd >= 0:
             os.close(self.fd)
-            self.fd = -1
+            object.__setattr__(self, "fd", -1)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class CaptureRoot:
     """Opened capture-root chain retained for the capture lifetime."""
 
@@ -144,27 +150,37 @@ class CaptureRoot:
     autoskillit_identity: FileIdentity
     temp_identity: FileIdentity
     identity: FileIdentity
+    _factory_token: InitVar[object | None] = None
+
+    def __post_init__(self, _factory_token: object | None) -> None:
+        if _factory_token is not _AUTHORITY_FACTORY_TOKEN:
+            raise CaptureSetupError("CaptureRoot must be created by open_capture_root")
 
     def close(self) -> None:
         for field_name in ("fd", "temp_fd", "autoskillit_fd"):
             fd = getattr(self, field_name)
             if fd >= 0:
                 os.close(fd)
-                setattr(self, field_name, -1)
+                object.__setattr__(self, field_name, -1)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class CaptureArtifact:
     """Exclusive capture artifact retained by descriptor."""
 
     fd: int
     name: str
     identity: FileIdentity
+    _factory_token: InitVar[object | None] = None
+
+    def __post_init__(self, _factory_token: object | None) -> None:
+        if _factory_token is not _AUTHORITY_FACTORY_TOKEN:
+            raise CaptureSetupError("CaptureArtifact must be created by create_capture_artifact")
 
     def close(self) -> None:
         if self.fd >= 0:
             os.close(self.fd)
-            self.fd = -1
+            object.__setattr__(self, "fd", -1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,6 +295,7 @@ def open_project_anchor(cwd: str) -> ProjectAnchor:
             identity=FileIdentity.from_stat(anchor_stat),
             supplied_path=cwd,
             physical_path=physical_path,
+            _factory_token=_AUTHORITY_FACTORY_TOKEN,
         )
     except BaseException:
         os.close(fd)
@@ -307,6 +324,7 @@ def open_capture_root(anchor: ProjectAnchor, *, create: bool) -> CaptureRoot:
             autoskillit_identity=_identity(autoskillit_fd),
             temp_identity=_identity(temp_fd),
             identity=_identity(capture_fd),
+            _factory_token=_AUTHORITY_FACTORY_TOKEN,
         )
     except BaseException:
         for fd in reversed(opened):
@@ -328,7 +346,12 @@ def create_capture_artifact(root: CaptureRoot, capture_id: str) -> CaptureArtifa
         value = os.fstat(fd)
         if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1 or value.st_mode & stat.S_IWOTH:
             raise CaptureSetupError("unsafe capture artifact")
-        return CaptureArtifact(fd=fd, name=name, identity=FileIdentity.from_stat(value))
+        return CaptureArtifact(
+            fd=fd,
+            name=name,
+            identity=FileIdentity.from_stat(value),
+            _factory_token=_AUTHORITY_FACTORY_TOKEN,
+        )
     except BaseException:
         os.close(fd)
         raise

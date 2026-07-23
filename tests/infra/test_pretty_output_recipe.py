@@ -446,6 +446,7 @@ def test_fmt_open_kitchen_plain_text():
     )
     assert formatted is not None
     assert "open_kitchen" in formatted
+    assert "Kitchen is open. AutoSkillit 1.2.3." in formatted
 
 
 @pytest.mark.parametrize("tool_name", ["open_kitchen", "load_recipe"])

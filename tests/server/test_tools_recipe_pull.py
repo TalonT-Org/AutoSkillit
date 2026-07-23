@@ -32,6 +32,7 @@ from autoskillit.server._recipe_delivery import (
     RECIPE_COMPLETION_SENTINEL,
     RecipeArtifactError,
     RecipeArtifactGeneration,
+    build_recipe_envelope,
     complete_finalized_recipe_response,
     finalize_recipe_delivery,
     load_recipe_artifact,
@@ -78,6 +79,23 @@ def _persist(
 
 def _remove_persisted_namespace(temp_dir: Path, *, kitchen_id: str) -> None:
     shutil.rmtree(temp_dir / "recipe-delivery" / kitchen_id)
+
+
+def _build_envelope(
+    tmp_path: Path, payload: dict[str, object], *, bound_bytes: int
+) -> tuple[dict[str, object], RecipeArtifactGeneration]:
+    generation = _persist(tmp_path, payload)
+    skeleton_source = MagicMock()
+    skeleton_source.recipe_name = "remediation"
+    skeleton_source.active_recipe_steps = {}
+    envelope = build_recipe_envelope(
+        payload,
+        recipe_name="remediation",
+        generation=generation,
+        skeleton_source=skeleton_source,
+        bound_bytes=bound_bytes,
+    )
+    return envelope, generation
 
 
 def test_same_payload_is_idempotent_and_changed_payload_is_immutable(tmp_path: Path) -> None:
@@ -293,6 +311,52 @@ def test_token_dense_payload_does_not_use_four_byte_ordinary_estimate(tool_ctx) 
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+
+
+def test_envelope_priority_fields_share_multibyte_budget_safely(tmp_path: Path) -> None:
+    payload = _payload()
+    payload["orchestration_rules"] = "雪" * 1_000
+    payload["stop_step_semantics"] = "界" * 1_000
+    bound_bytes = 4_000
+
+    envelope, _generation = _build_envelope(tmp_path, payload, bound_bytes=bound_bytes)
+    rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+
+    assert len(rendered.encode("utf-8")) <= bound_bytes
+    for key in ("orchestration_rules", "stop_step_semantics"):
+        projected = envelope[key]
+        assert isinstance(projected, str)
+        assert projected
+        assert len(projected.encode("utf-8")) < len(str(payload[key]).encode("utf-8"))
+        assert projected.encode("utf-8").decode("utf-8") == projected
+
+
+def test_envelope_fallbacks_follow_tight_and_extreme_bounds(tmp_path: Path) -> None:
+    payload = _payload()
+    payload["post_prune_step_names"] = [f"step-{index:03d}" for index in range(100)]
+    generation = _persist(tmp_path, payload)
+    pull_fallback = {
+        "success": False,
+        "error": "recipe_envelope_exceeds_delivery_bound",
+        "recipe_pull": generation.pull_identity(),
+    }
+    error_fallback = {
+        "success": False,
+        "error": "recipe_envelope_exceeds_delivery_bound",
+    }
+
+    pull_bound = len(
+        json.dumps(pull_fallback, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    error_bound = len(
+        json.dumps(error_fallback, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+
+    assert _build_envelope(tmp_path, payload, bound_bytes=pull_bound)[0] == pull_fallback
+    assert _build_envelope(tmp_path, payload, bound_bytes=error_bound)[0] == error_fallback
+    assert _build_envelope(tmp_path, payload, bound_bytes=2)[0] == {}
+    with pytest.raises(ValueError, match="too small for a JSON object"):
+        _build_envelope(tmp_path, payload, bound_bytes=1)
 
 
 def test_finalizer_uses_backend_selected_recipe_budget(tool_ctx) -> None:

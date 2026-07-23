@@ -587,6 +587,7 @@ def test_failed_receipt_abort_is_reported(
 async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     tool_ctx_kitchen_open,
 ) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-kitchen"
     expected_content = "héllo\n" * 12_000
     generation = persist_recipe_artifact(
@@ -602,7 +603,11 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     expected_byte_start = 0
     part = 0
     while True:
-        response = json.loads(await get_recipe_section(section="content", part=part, **kwargs))
+        rendered = await get_recipe_section(section="content", part=part, **kwargs)
+        assert len(rendered.encode("utf-8")) <= (
+            CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
+        )
+        response = json.loads(rendered)
         assert response["success"] is True
         assert response["byte_start"] == expected_byte_start
         assert response["byte_end"] == response["byte_start"] + len(

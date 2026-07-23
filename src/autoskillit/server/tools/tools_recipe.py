@@ -692,7 +692,7 @@ async def get_recipe_section(
                 if _backend_caps is not None
                 else 10_000
             )
-            bound_bytes = bound_tokens * 4
+            bound_bytes = bound_tokens
             configured_response_max = getattr(
                 getattr(tool_ctx.config, "output_budget", None),
                 "response_max_bytes",

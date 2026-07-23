@@ -372,7 +372,9 @@ def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
     except (OSError, RecipeArtifactError, TypeError):
         return False
     try:
-        from autoskillit.server._recipe_section_pagination import evict_kitchen
+        from autoskillit.server._recipe_section_pagination import (  # circular-break
+            evict_kitchen,
+        )
 
         evict_kitchen(kitchen_id)
     except Exception:

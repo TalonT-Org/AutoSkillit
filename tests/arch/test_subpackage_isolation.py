@@ -98,6 +98,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
+        "tools_recipe",  # request-scoped recipe pagination ContextVar
         # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
         "_label_cleanup",  # fleet/_label_cleanup.py: _REMOVE_LABELS constant (see comment above)
         "_step_context",  # core/_step_context.py: current_step_name, current_order_id ContextVars
@@ -884,11 +885,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
             logic on DispatchRecord.from_dict. Exempt at 15 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 15,  # +_recipe_delivery unified finalizer and immutable generation store
+        "server": 16,  # +_recipe_section_pagination deterministic bounded planner
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 25,  # +_delivery_bounds (resolve_general_output_token_limit)
-        "core/types": 33,  # +recipe_delivery typed budget/provenance contracts
+        "core/types": 34,  # +_type_recipe_sections schema and digest contracts
         "cli": 21,
         "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_artifacts.py  # noqa: E501
         "pipeline": 12,

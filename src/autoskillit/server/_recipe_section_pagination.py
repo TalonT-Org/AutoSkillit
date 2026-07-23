@@ -429,12 +429,8 @@ def _raw_or_scalar_pages(
     start = 0
     while start < len(value):
         part = len(pages)
-        low = start + 1
-        high = len(value)
-        accepted: _PlannedPage | None = None
-        accepted_end = start
-        while low <= high:
-            end = (low + high) // 2
+
+        def candidate_for(end: int) -> _PlannedPage:
             chunk = value[start:end]
             content = canonical_recipe_section_json(chunk) if scalar else chunk
             if scalar:
@@ -453,7 +449,29 @@ def _raw_or_scalar_pages(
                     byte_end=offsets[end],
                     byte_total=offsets[-1],
                 )
-            candidate = _PlannedPage(descriptor, content)
+            return _PlannedPage(descriptor, content)
+
+        terminal_candidate = candidate_for(len(value))
+        if _fits(
+            selected=selected,
+            generation=generation,
+            section_sha256=section_sha256,
+            page=terminal_candidate,
+            part=part,
+            total_width=total_width,
+            terminal=True,
+            bound_bytes=bound_bytes,
+        ):
+            pages.append(terminal_candidate)
+            break
+
+        low = start + 1
+        high = len(value) - 1
+        accepted: _PlannedPage | None = None
+        accepted_end = start
+        while low <= high:
+            end = (low + high) // 2
+            candidate = candidate_for(end)
             if _fits(
                 selected=selected,
                 generation=generation,
@@ -461,7 +479,7 @@ def _raw_or_scalar_pages(
                 page=candidate,
                 part=part,
                 total_width=total_width,
-                terminal=end == len(value),
+                terminal=False,
                 bound_bytes=bound_bytes,
             ):
                 accepted = candidate
@@ -510,32 +528,55 @@ def _fragment_pages(
     bound_bytes: int,
 ) -> list[_PlannedPage]:
     offsets = _utf8_prefix_offsets(canonical_element)
+    element_sha256 = recipe_section_element_digest(element)
     pages: list[_PlannedPage] = []
     start = 0
     assumed_fragment_count = (10**fragment_width) - 1
     while start < len(canonical_element):
         part = part_start + len(pages)
         fragment_index = len(pages)
-        low = start + 1
-        high = len(canonical_element)
-        accepted: _PlannedPage | None = None
-        accepted_end = start
-        while low <= high:
-            end = (low + high) // 2
+
+        def candidate_for(end: int) -> _PlannedPage:
             content = canonical_recipe_section_json(canonical_element[start:end])
             descriptor = RecipeSectionPageDescriptor(
                 content_format="json-element-fragment",
                 page_content_sha256=_qualified_content_digest(content),
                 element_index=element_index,
-                element_sha256=recipe_section_element_digest(element),
+                element_sha256=element_sha256,
                 fragment_index=fragment_index,
                 fragment_count=assumed_fragment_count,
                 fragment_byte_start=offsets[start],
                 fragment_byte_end=offsets[end],
                 fragment_byte_total=offsets[-1],
             )
-            candidate = _PlannedPage(descriptor, content)
-            terminal = end == len(canonical_element) and element_index + 1 == element_total
+            return _PlannedPage(descriptor, content)
+
+        if element_index + 1 == element_total:
+            terminal_candidate = candidate_for(len(canonical_element))
+            if _fits(
+                selected=selected,
+                generation=generation,
+                section_sha256=section_sha256,
+                page=terminal_candidate,
+                part=part,
+                total_width=total_width,
+                terminal=True,
+                bound_bytes=bound_bytes,
+            ):
+                pages.append(terminal_candidate)
+                break
+
+        low = start + 1
+        high = (
+            len(canonical_element) - 1
+            if element_index + 1 == element_total
+            else len(canonical_element)
+        )
+        accepted: _PlannedPage | None = None
+        accepted_end = start
+        while low <= high:
+            end = (low + high) // 2
+            candidate = candidate_for(end)
             if _fits(
                 selected=selected,
                 generation=generation,
@@ -543,7 +584,7 @@ def _fragment_pages(
                 page=candidate,
                 part=part,
                 total_width=total_width,
-                terminal=terminal,
+                terminal=False,
                 bound_bytes=bound_bytes,
             ):
                 accepted = candidate
@@ -596,8 +637,26 @@ def _array_pages(
     start = 0
     while start < len(values):
         part = len(pages)
+        terminal_candidate = _array_page(
+            canonical_elements=canonical_elements,
+            start=start,
+            end=len(values),
+        )
+        if _fits(
+            selected=selected,
+            generation=generation,
+            section_sha256=section_sha256,
+            page=terminal_candidate,
+            part=part,
+            total_width=total_width,
+            terminal=True,
+            bound_bytes=bound_bytes,
+        ):
+            pages.append(terminal_candidate)
+            break
+
         low = start + 1
-        high = len(values)
+        high = len(values) - 1
         accepted: _PlannedPage | None = None
         accepted_end = start
         while low <= high:
@@ -614,7 +673,7 @@ def _array_pages(
                 page=candidate,
                 part=part,
                 total_width=total_width,
-                terminal=end == len(values),
+                terminal=False,
                 bound_bytes=bound_bytes,
             ):
                 accepted = candidate

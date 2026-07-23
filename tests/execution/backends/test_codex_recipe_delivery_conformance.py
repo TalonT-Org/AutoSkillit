@@ -25,6 +25,7 @@ from autoskillit.core import (
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
     canonical_recipe_section_json,
+    load_yaml,
     recipe_section_digest,
     recipe_section_element_digest,
 )
@@ -116,18 +117,18 @@ def _expected_authority_warnings() -> list[str]:
     return [
         "Override for server-authoritative ingredient 'adversarial_review_level' "
         "ignored — server value 'full' (from config plan.adversarial_review_level) "
-        "wins; set the config key and re-call load_recipe to change it",
+        "wins; set the config key and re-call open_kitchen to change it",
         "Override for server-authoritative ingredient 'base_branch' ignored — "
         f"server value '{_OVERSIZED_BASE_BRANCH}' (from config "
         "branching.default_base_branch) wins; set the config key and re-call "
-        "load_recipe to change it",
+        "open_kitchen to change it",
         "Override for server-authoritative ingredient 'dispatch_id' ignored — "
         "set by the dispatch runtime at session launch, not user-configurable",
         "Override for server-authoritative ingredient 'is_fleet_dispatch' ignored — "
         "set by the dispatch runtime at session launch, not user-configurable",
         "Override for server-authoritative ingredient 'local_review_rounds' ignored — "
         "server value '17' (from config review.local_review_rounds) wins; set the "
-        "config key and re-call load_recipe to change it",
+        "config key and re-call open_kitchen to change it",
     ]
 
 
@@ -162,9 +163,6 @@ def _isolated_environment(tmp_path: Path, workspace: Path) -> tuple[dict[str, st
             HEADLESS_AUTO_GATE_ENV_VAR: "",
             "AUTOSKILLIT_SESSION_TYPE": "",
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            "AUTOSKILLIT_BRANCHING__DEFAULT_BASE_BRANCH": _OVERSIZED_BASE_BRANCH,
-            "AUTOSKILLIT_REVIEW__LOCAL_REVIEW_ROUNDS": "17",
-            "AUTOSKILLIT_PLAN__ADVERSARIAL_REVIEW_LEVEL": "full",
             "AUTOSKILLIT_DISPATCH_ID": "probe-dispatch",
         }
     )
@@ -173,12 +171,27 @@ def _isolated_environment(tmp_path: Path, workspace: Path) -> tuple[dict[str, st
     return env, codex_home
 
 
+def _write_probe_project_config(workspace: Path) -> Path:
+    config_dir = workspace / ".autoskillit"
+    config_dir.mkdir()
+    config_path = config_dir / "config.yaml"
+    config_path.write_text(
+        "branching:\n"
+        f"  default_base_branch: {json.dumps(_OVERSIZED_BASE_BRANCH)}\n"
+        "plan:\n"
+        "  adversarial_review_level: full\n"
+        "review:\n"
+        "  local_review_rounds: 17\n",
+        encoding="utf-8",
+    )
+    return config_path
+
+
 def _probe_prompt(workspace: Path) -> str:
     caller_overrides = json.dumps(_PROBE_CALLER_OVERRIDES, separators=(",", ":"))
     return (
         "This is the dedicated recipe-delivery conformance probe. Use only AutoSkillit "
-        "MCP tools. First call open_kitchen with name=remediation and "
-        "ingredients_only=true. Then call load_recipe with name=remediation, "
+        "MCP tools. Call open_kitchen exactly once with name=remediation, "
         f"overrides={caller_overrides}, and omit delivery_request because no protected "
         "host values were supplied. The result must be a bounded recipe_pull envelope. "
         "Call get_recipe_section with section=content, part=0, and copy every immutable "
@@ -399,6 +412,7 @@ def _reconstruct_array_section(
 def _run_live_probe(tmp_path: Path) -> tuple[_RecipeProbeObservation, str]:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    _write_probe_project_config(workspace)
     env, codex_home = _isolated_environment(tmp_path / "isolated", workspace)
     config_path = codex_home / "config.toml"
     ensure_codex_mcp_registered(config_path=config_path, headless_auto_gate=False)
@@ -436,10 +450,15 @@ def _run_live_probe(tmp_path: Path) -> tuple[_RecipeProbeObservation, str]:
         raise OSError(f"Codex recipe-delivery probe rc={result.returncode}: {transcript}")
 
     candidates = _candidate_dicts(transcript)
-    envelopes = [
-        candidate for candidate in candidates if isinstance(candidate.get("recipe_pull"), dict)
-    ]
-    assert envelopes, "live Codex probe did not retain a recipe_pull envelope"
+    envelopes: list[dict[str, object]] = []
+    for candidate in candidates:
+        candidate_pull = candidate.get("recipe_pull")
+        if (
+            isinstance(candidate_pull, dict)
+            and candidate_pull.get("producer_tool") == "open_kitchen"
+        ):
+            envelopes.append(candidate)
+    assert envelopes, "live Codex probe did not retain the open_kitchen pull envelope"
     recipe_pull = envelopes[-1]["recipe_pull"]
     assert isinstance(recipe_pull, dict)
     body_sha256 = recipe_pull.get("body_sha256")
@@ -499,7 +518,13 @@ def _run_live_probe(tmp_path: Path) -> tuple[_RecipeProbeObservation, str]:
         outer={"raw_pre_truncation_bytes": None},
         retained={
             "body_sha256": terminal_content_page.get("body_sha256"),
-            "reconstructed_body_sha256": terminal_content_page.get("section_sha256"),
+            "reconstructed_body_sha256": "sha256:"
+            + hashlib.sha256(reconstructed_content.encode("utf-8")).hexdigest(),
+            "content_section_sha256": terminal_content_page.get("section_sha256"),
+            "reconstructed_content_section_sha256": recipe_section_digest(
+                reconstructed_content,
+                raw=True,
+            ),
             "content_bytes": len(reconstructed_content.encode("utf-8")),
             "has_more": terminal_warning_page.get("has_more"),
             "warnings": reconstructed_warnings,
@@ -585,6 +610,27 @@ def test_isolated_probe_environment_identifies_codex_backend(tmp_path: Path) -> 
     assert env[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] == ""
 
 
+def test_probe_project_config_pins_server_authority_values(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    config = load_yaml(_write_probe_project_config(workspace))
+
+    assert config == {
+        "branching": {"default_base_branch": _OVERSIZED_BASE_BRANCH},
+        "plan": {"adversarial_review_level": "full"},
+        "review": {"local_review_rounds": 17},
+    }
+
+
+def test_probe_prompt_pins_one_envelope_producer_call(tmp_path: Path) -> None:
+    prompt = _probe_prompt(tmp_path)
+
+    assert "Call open_kitchen exactly once with name=remediation" in prompt
+    assert "ingredients_only=true" not in prompt
+    assert "load_recipe" not in prompt
+
+
 def test_tracked_report_records_the_unsupported_host_dependency() -> None:
     report = (
         Path(__file__).resolve().parents[3] / "docs" / "research" / "codex-delivery-conformance.md"
@@ -617,6 +663,11 @@ def test_live_codex_envelope_pull_and_next_request_retention(tmp_path: Path) -> 
     assert isinstance(body_sha256, str) and body_sha256.startswith("sha256:")
     assert observation.retained["body_sha256"] == body_sha256
     assert observation.retained["reconstructed_body_sha256"] == body_sha256
+    assert (
+        observation.retained["reconstructed_content_section_sha256"]
+        == observation.retained["content_section_sha256"]
+    )
+    assert observation.retained["content_section_sha256"] != body_sha256
     assert int(observation.retained["content_bytes"]) > 0
     assert observation.retained["has_more"] is False
     assert observation.retained["warnings"] == _expected_authority_warnings()

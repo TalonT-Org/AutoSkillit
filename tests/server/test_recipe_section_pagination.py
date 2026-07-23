@@ -11,13 +11,6 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
-from autoskillit.server._recipe_section_pagination import (
-    PagePlanCache,
-    build_recipe_section_page_plan,
-    get_or_build_recipe_section_page_plan,
-    render_recipe_section_page,
-    select_recipe_section,
-)
 
 from autoskillit.core import (
     recipe_section_digest,
@@ -26,6 +19,13 @@ from autoskillit.core import (
 )
 from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
+from autoskillit.server._recipe_section_pagination import (
+    PagePlanCache,
+    build_recipe_section_page_plan,
+    get_or_build_recipe_section_page_plan,
+    render_recipe_section_page,
+    select_recipe_section,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 

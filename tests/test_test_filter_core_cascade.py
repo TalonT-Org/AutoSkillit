@@ -99,6 +99,7 @@ class TestModuleCascadeCore:
             "_type_results_execution",
             "_type_backend",
             "_type_recipe_delivery",
+            "_type_recipe_sections",
             "_type_dispatch_identity",
             "_type_figure_spec",
             "_type_session_env",

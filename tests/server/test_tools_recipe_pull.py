@@ -80,10 +80,11 @@ def _persist(
     payload: dict[str, object] | None = None,
     *,
     producer: str = "open_kitchen",
+    kitchen_id: str = "kitchen-test",
 ) -> RecipeArtifactGeneration:
     return persist_recipe_artifact(
         tmp_path,
-        kitchen_id="kitchen-test",
+        kitchen_id=kitchen_id,
         producer_tool=producer,
         recipe_name="remediation",
         payload=dict(payload or _payload()),
@@ -128,6 +129,8 @@ def test_pull_fixture_matches_load_and_validate_section_shapes(tmp_path: Path) -
 name: remediation
 description: Fixture recipe
 summary: Fixture recipe
+kitchen_rules:
+  - Follow routing rules
 ingredients:
   task:
     description: Work to perform
@@ -135,13 +138,14 @@ ingredients:
 steps:
   first:
     action: stop
-    message: Done.
+    message: Done. Emit the L3 result sentinel JSON block now.
 """,
         encoding="utf-8",
     )
 
     producer = dict(load_and_validate("remediation", project_dir=tmp_path))
-    producer.setdefault("warnings", [])
+    if producer.get("warnings") is None:
+        producer["warnings"] = []
     fixture = _payload(str(producer["content"]))
 
     assert producer["valid"] is True
@@ -846,7 +850,10 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-write"
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    generation = _persist(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+    )
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,

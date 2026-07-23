@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import operator
 import os
 import shutil
 import subprocess
@@ -267,6 +268,12 @@ def _run_live_probe(tmp_path: Path) -> tuple[_RecipeProbeObservation, str]:
 
 def test_current_host_has_no_supported_recipe_evidence_identity() -> None:
     assert SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY == {}
+    with pytest.raises(TypeError):
+        operator.setitem(
+            SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY,
+            "unattested-runtime-mutation",
+            object(),
+        )
 
 
 def test_forged_direct_request_cannot_upgrade_recipe_delivery() -> None:

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import regex as _re
@@ -82,7 +84,9 @@ CODEX_HISTORY_RETENTION_TOKEN_LIMIT: int = (
 
 # A protected evidence identity is enabled only with its passing conformance
 # report. Writable rollout and trace formats are intentionally absent.
-SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY: dict[str, RecipeDeliveryEvidenceDef] = {}
+SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY: Mapping[str, RecipeDeliveryEvidenceDef] = (
+    MappingProxyType({})
+)
 
 
 def codex_recipe_delivery_calling_contract(*, mcp_prefix: str = "") -> str:

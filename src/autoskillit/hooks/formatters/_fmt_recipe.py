@@ -21,12 +21,12 @@ from _fmt_recipe_compact import (  # type: ignore[import-not-found]
     compact_orchestration_rules,
     compact_recipe_display,
 )
-from _recipe_delivery_framing import (  # type: ignore[import-not-found]
-    is_attested_recipe_delivery,
-)
 
 if TYPE_CHECKING:
+    from autoskillit._recipe_delivery_framing import is_attested_recipe_delivery
     from autoskillit.recipe import ListRecipesResult, LoadRecipeResult, OpenKitchenResult
+else:
+    from _recipe_delivery_framing import is_attested_recipe_delivery
 
 
 # Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult

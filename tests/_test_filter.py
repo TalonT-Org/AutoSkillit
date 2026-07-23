@@ -943,6 +943,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         }
     ),
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
+    "_recipe_delivery_framing": frozenset({"server", "infra"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
     "smoke_utils": frozenset({"test_smoke_utils.py", "recipe", "smoke_utils"}),
     "version": frozenset({"test_version.py", "server", "cli"}),
@@ -1046,6 +1047,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "hook_registry": frozenset({"hooks"}),
     "planner": frozenset({"planner"}),
     "_llm_triage": frozenset({"test_llm_triage.py"}),
+    "_recipe_delivery_framing": frozenset({"server", "infra"}),
     "smoke_utils": frozenset({"test_smoke_utils.py"}),
     "version": frozenset({"test_version.py"}),
     "_test_filter": frozenset({"arch", "contracts"}),

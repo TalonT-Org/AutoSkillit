@@ -17,6 +17,7 @@ Sub-package: tools/ (see tools/AGENTS.md).
 | `_response_budget.py` | Lossless response spill, exact canonical projection finalization, measured exemptions, and privacy-safe budget telemetry |
 | `_response_conformance.py` | Post-FastMCP-conversion conformance gate for registered string tool responses |
 | `_recipe_delivery.py` | Unified recipe finalization, content-addressed generations, pull integrity, and receipt completion |
+| `_recipe_section_pagination.py` | Typed recipe-section selection, deterministic byte-bounded page planning, rendering, and verified-plan caching |
 | `_session_type.py` | Session-type tag visibility dispatcher — controls which tools are visible per session type |
 | `_state.py` | Mutable singleton state and context accessor functions (`_ctx` sentinel, `get_ctx`, `set_ctx`) |
 | `_subprocess.py` | Subprocess execution helpers for MCP tools |

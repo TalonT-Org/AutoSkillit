@@ -371,6 +371,16 @@ def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
                 shutil.rmtree(namespace)
     except (OSError, RecipeArtifactError, TypeError):
         return False
+    try:
+        from autoskillit.server._recipe_section_pagination import evict_kitchen
+
+        evict_kitchen(kitchen_id)
+    except Exception:
+        get_logger(__name__).warning(
+            "recipe_section_cache_retirement_eviction_failed",
+            kitchen_id=kitchen_id,
+            exc_info=True,
+        )
     return True
 
 

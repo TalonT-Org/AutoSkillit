@@ -22,7 +22,6 @@ from autoskillit.core import (
     RecipeDeliveryRequest,
     load_yaml,
     recipe_delivery_request_digest,
-    resolve_recipe_section_bound_bytes,
 )
 from autoskillit.execution import (
     CODEX_RECIPE_DELIVERY_BUDGET,
@@ -51,6 +50,7 @@ from autoskillit.server._recipe_delivery import (
     recipe_recreation_producers,
     retire_recipe_artifacts,
 )
+from autoskillit.server._recipe_section_pagination import resolve_recipe_section_bound_bytes
 from autoskillit.server._response_budget import enforce_response_budget
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 

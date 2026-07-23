@@ -157,6 +157,8 @@ def _generation_dir(
     kitchen_id: str,
     producer_tool: str,
     recipe_name: str,
+    descriptor_version: int,
+    schema_version: int,
     payload_sha256: str,
 ) -> Path:
     return (
@@ -164,6 +166,7 @@ def _generation_dir(
         / _safe_component(kitchen_id)
         / _safe_component(producer_tool)
         / _safe_component(recipe_name)
+        / f"descriptor-{descriptor_version}-schema-{schema_version}"
         / _safe_component(payload_sha256)
     )
 
@@ -219,6 +222,8 @@ def persist_recipe_artifact(
         kitchen_id=kitchen_id,
         producer_tool=producer_tool,
         recipe_name=recipe_name,
+        descriptor_version=generation.descriptor_version,
+        schema_version=generation.schema_version,
         payload_sha256=generation.payload_sha256,
     )
     descriptor = _canonical_payload(generation.pull_identity())
@@ -263,6 +268,8 @@ def load_recipe_artifact(
         kitchen_id=kitchen_id,
         producer_tool=identity.producer_tool,
         recipe_name=identity.recipe_name,
+        descriptor_version=identity.descriptor_version,
+        schema_version=identity.schema_version,
         payload_sha256=identity.payload_sha256,
     )
     with _generation_lock(temp_dir, exclusive=False):

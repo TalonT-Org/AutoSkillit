@@ -87,6 +87,24 @@ def test_same_payload_is_idempotent_and_changed_payload_is_immutable(tmp_path: P
     )
 
 
+@pytest.mark.parametrize(
+    "version_name",
+    ["RECIPE_ARTIFACT_DESCRIPTOR_VERSION", "RECIPE_ARTIFACT_SCHEMA_VERSION"],
+)
+def test_generation_path_includes_version_domain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version_name: str
+) -> None:
+    first = _persist(tmp_path)
+    monkeypatch.setattr(f"autoskillit.server._recipe_delivery.{version_name}", 2)
+
+    second = _persist(tmp_path)
+
+    assert second.payload_sha256 == first.payload_sha256
+    assert second.pull_identity() != first.pull_identity()
+    assert load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=first) == _payload()
+    assert load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=second) == _payload()
+
+
 def test_concurrent_writers_publish_one_exact_generation(tmp_path: Path) -> None:
     with ThreadPoolExecutor(max_workers=8) as pool:
         generations = list(pool.map(lambda _: _persist(tmp_path), range(24)))

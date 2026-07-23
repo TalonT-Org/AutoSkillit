@@ -478,6 +478,25 @@ def test_marker_path_rederives_symlinked_project_path(tmp_path: Path) -> None:
         anchor.close()
 
 
+def test_capture_marker_encodes_path_control_characters(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    result = capture_artifacts._DrainResult(
+        total_bytes=2,
+        sha256="a" * 64,
+        inline=b"",
+        head=b"h",
+        tail=b"t",
+        write_error=None,
+    )
+
+    capture_artifacts._emit_capture(result, "/project\n] forged", inline_bytes=1)
+
+    captured = capfd.readouterr()
+    assert "/project\\n\\u005d forged" in captured.out
+    assert "\n] forged" not in captured.out
+
+
 def test_marker_directory_identity_failure_closes_partial_open_fd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

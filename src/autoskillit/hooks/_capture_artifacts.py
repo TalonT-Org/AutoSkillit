@@ -628,6 +628,12 @@ def _capture_failure_return(detail: str, returncode: int | None) -> int:
     return returncode if returncode is not None else _CAPTURE_FAILURE_RETURN_CODE
 
 
+def _encode_marker_path(path: str) -> str:
+    """Return a single-line path that cannot terminate the provenance marker."""
+
+    return json.dumps(path, ensure_ascii=True)[1:-1].replace("]", "\\u005d")
+
+
 def _emit_capture(
     result: _DrainResult,
     artifact_path: str | None,
@@ -637,7 +643,7 @@ def _emit_capture(
         payload = result.inline
     else:
         prefix = render_capture_marker(_capture_event("SHELL_OUTPUT_CAPTURED", "input rewrite"))
-        path = artifact_path if artifact_path is not None else "unavailable"
+        path = _encode_marker_path(artifact_path) if artifact_path is not None else "unavailable"
         marker = (
             f"\n{prefix} full output {result.total_bytes} bytes -> {path} "
             f"sha256={result.sha256} complete=true]\n"

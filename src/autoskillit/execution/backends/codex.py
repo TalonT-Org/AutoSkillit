@@ -78,9 +78,7 @@ from autoskillit.execution.backends._codex_config import (
     _format_toml_value,
     ensure_codex_mcp_registered,
 )
-from autoskillit.execution.backends._codex_hooks import (
-    sync_hooks_to_codex_config,
-)
+from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 
 __all__ = [

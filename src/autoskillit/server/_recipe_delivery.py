@@ -31,6 +31,7 @@ from autoskillit.core import (
     get_logger,
     resolve_general_output_token_limit,
     resolve_recipe_delivery_decision,
+    validate_recipe_artifact_sections,
 )
 from autoskillit.execution import (
     RecipeDeliveryReceiptLedger,
@@ -59,6 +60,10 @@ def document_recipe_delivery_contract(function: Any) -> Any:
 
 class RecipeArtifactError(RuntimeError):
     """A requested immutable recipe generation is absent or corrupt."""
+
+
+class RecipeArtifactSchemaError(RecipeArtifactError):
+    """A recipe artifact violates the static pullable-section schema."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +129,16 @@ def _canonical_payload(payload: dict[str, Any]) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def _validate_recipe_artifact_schema(payload: dict[str, Any]) -> None:
+    findings = validate_recipe_artifact_sections(payload)
+    if findings:
+        summary = ",".join(
+            f"{finding.code}@{'.'.join(str(part) for part in finding.path)}"
+            for finding in findings
+        )
+        raise RecipeArtifactSchemaError(f"recipe artifact section schema mismatch: {summary}")
 
 
 def _read_bounded_bytes(path: Path, *, max_bytes: int, error: str) -> bytes:
@@ -234,6 +249,7 @@ def persist_recipe_artifact(
     payload: dict[str, Any],
 ) -> RecipeArtifactGeneration:
     """Publish an immutable canonical payload and its generation descriptor."""
+    _validate_recipe_artifact_schema(payload)
     blob = _canonical_payload(payload)
     if len(blob) > RECIPE_ARTIFACT_MAX_BLOB_BYTES:
         raise RecipeArtifactError("recipe artifact blob exceeds persistence limit")
@@ -339,6 +355,7 @@ def load_recipe_artifact(
     )
     if expected != identity:
         raise RecipeArtifactError("recipe body identity mismatch")
+    _validate_recipe_artifact_schema(payload)
     return payload
 
 
@@ -959,6 +976,7 @@ __all__ = [
     "RECIPE_BODY_START",
     "RECIPE_COMPLETION_SENTINEL",
     "RecipeArtifactError",
+    "RecipeArtifactSchemaError",
     "RecipeArtifactGeneration",
     "complete_finalized_recipe_response",
     "enforce_recipe_resource_response",

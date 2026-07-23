@@ -37,6 +37,7 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._recipe_delivery import (
     RecipeArtifactError,
     RecipeArtifactGeneration,
+    RecipeArtifactSchemaError,
     document_recipe_delivery_contract,
     finalize_recipe_delivery,
     load_recipe_artifact,
@@ -522,6 +523,8 @@ async def get_recipe_section(
                     kitchen_id=tool_ctx.kitchen_id,
                     identity=identity,
                 )
+            except RecipeArtifactSchemaError:
+                return json.dumps({"success": False, "error": "recipe_artifact_schema_mismatch"})
             except RecipeArtifactError:
                 if producer_tool not in recipe_recreation_producers():
                     return json.dumps({"success": False, "error": "recipe_artifact_unavailable"})
@@ -579,6 +582,10 @@ async def get_recipe_section(
                             recipe_name=requested_recipe_name,
                             payload=_recreate,
                         )
+                    except RecipeArtifactSchemaError:
+                        return json.dumps(
+                            {"success": False, "error": "recipe_artifact_schema_mismatch"}
+                        )
                     except (OSError, RecipeArtifactError):
                         return json.dumps(
                             {
@@ -615,6 +622,10 @@ async def get_recipe_section(
                         artifact_dir,
                         kitchen_id=tool_ctx.kitchen_id,
                         identity=identity,
+                    )
+                except RecipeArtifactSchemaError:
+                    return json.dumps(
+                        {"success": False, "error": "recipe_artifact_schema_mismatch"}
                     )
                 except RecipeArtifactError as exc:
                     return json.dumps(

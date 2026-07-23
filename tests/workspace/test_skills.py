@@ -10,7 +10,7 @@ import pytest
 
 import autoskillit.workspace.skills as _skills_mod
 from autoskillit.core.io import load_yaml
-from autoskillit.core.types import SkillSource
+from autoskillit.core.types import SkillExecutionRole, SkillSource
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     bundled_skills_dir,
@@ -828,6 +828,9 @@ class TestBackendRequirements:
         )
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.backend_requirements == frozenset()
+        assert info.invalid_reason is not None
+        assert "run_skill" in info.invalid_reason
+        assert "session" in info.invalid_reason
 
     def test_investigate_skill_has_no_backend_requirement(self) -> None:
         info = DefaultSkillResolver().resolve("investigate")
@@ -859,6 +862,80 @@ class TestBackendRequirements:
         )
 
 
+class TestSkillExecutionRoleParsing:
+    def test_valid_omission_defaults_to_session(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: test\n---\n# body")
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.execution_role is SkillExecutionRole.SESSION
+        assert info.invalid_reason is None
+
+    @pytest.mark.parametrize(
+        ("role", "expected"),
+        [
+            ("session", SkillExecutionRole.SESSION),
+            ("orchestrator", SkillExecutionRole.ORCHESTRATOR),
+            ("fleet", SkillExecutionRole.FLEET),
+        ],
+    )
+    def test_explicit_execution_role_is_typed(
+        self, tmp_path: Path, role: str, expected: SkillExecutionRole
+    ) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(f"---\nname: test\nexecution_role: {role}\n---\n# body")
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.execution_role is expected
+        assert info.invalid_reason is None
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "# no frontmatter",
+            "---\nname: [unterminated\n---\n# body",
+            "---\nname: test\n# missing closing delimiter",
+            "---\n- name\n- test\n---\n# body",
+        ],
+    )
+    def test_invalid_frontmatter_never_receives_session_default(
+        self, tmp_path: Path, content: str
+    ) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(content)
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.execution_role is None
+        assert info.invalid_reason is not None
+
+    def test_session_contract_cannot_declare_run_skill(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: test\nexecution_role: session\nuses_capabilities: [run_skill]\n---\n# body"
+        )
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.invalid_reason is not None
+        assert "run_skill" in info.invalid_reason
+        assert "session" in info.invalid_reason
+
+    def test_orchestrator_contract_may_declare_run_skill(self, tmp_path: Path) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: test\nexecution_role: orchestrator\n"
+            "uses_capabilities: [run_skill]\n---\n# body"
+        )
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.execution_role is SkillExecutionRole.ORCHESTRATOR
+        assert info.invalid_reason is None
+
+
 class TestSkillInfoSchemaExhaustiveness:
     def test_all_skillinfo_fields_parsed_by_frontmatter_function(self) -> None:
         """Every non-constructor field on SkillInfo must be parsed."""
@@ -869,7 +946,7 @@ class TestSkillInfoSchemaExhaustiveness:
         from autoskillit.workspace.skills import SkillInfo, _skill_info_from_frontmatter
 
         dc_fields = {f.name for f in dataclasses.fields(SkillInfo)}
-        constructor_only = {"name", "source", "path"}
+        constructor_only = {"name", "source", "path", "source_ref"}
         derived_fields = {"backend_requirements", "invalid_reason"}
         parseable_fields = dc_fields - constructor_only - derived_fields
 

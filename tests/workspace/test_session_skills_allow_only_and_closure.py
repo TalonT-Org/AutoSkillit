@@ -467,6 +467,118 @@ class TestComputeSkillClosure:
         assert compute_skill_closure("target", provider) == frozenset({"target"})
 
 
+def _write_invocation_skill(
+    root: Path,
+    name: str,
+    *,
+    capabilities: tuple[str, ...] = (),
+    execution_role: str = "session",
+    deps: tuple[str, ...] = (),
+    categories: tuple[str, ...] = (),
+) -> None:
+    skill_path = root / name / "SKILL.md"
+    skill_path.parent.mkdir(parents=True, exist_ok=True)
+    frontmatter = [
+        f"name: {name}",
+        f"description: Synthetic {name} invocation contract.",
+        f"execution_role: {execution_role}",
+    ]
+    if capabilities:
+        frontmatter.append(f"uses_capabilities: [{', '.join(capabilities)}]")
+    if deps:
+        frontmatter.append(f"activate_deps: [{', '.join(deps)}]")
+    if categories:
+        frontmatter.append(f"categories: [{', '.join(categories)}]")
+    skill_path.write_text("---\n" + "\n".join(frontmatter) + "\n---\nbody\n")
+
+
+def _make_effective_resolver(tmp_path: Path, monkeypatch, skills: dict[str, dict]):
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    bundled.mkdir()
+    extended.mkdir()
+    for name, spec in skills.items():
+        _write_invocation_skill(extended, name, **spec)
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    return resolver
+
+
+class TestEffectiveInvocationClosurePolicy:
+    """The complete direct/pack closure supplies one validated capability contract."""
+
+    def test_capability_union_includes_direct_and_pack_expanded_dependencies(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from autoskillit.core import SkillExecutionRole
+
+        resolver = _make_effective_resolver(
+            tmp_path,
+            monkeypatch,
+            {
+                "root": {"deps": ("direct", "audit")},
+                "direct": {"capabilities": ("github_api_write",)},
+                "pack-member": {
+                    "capabilities": ("git_metadata_write",),
+                    "categories": ("audit",),
+                },
+            },
+        )
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        invocation = resolver.resolve_invocation("root", project_root, SkillExecutionRole.SESSION)
+
+        assert invocation.root.name == "root"
+        assert {member.name for member in invocation.closure} == {
+            "root",
+            "direct",
+            "pack-member",
+        }
+        assert invocation.capability_union == frozenset({"github_api_write", "git_metadata_write"})
+        assert invocation.project_root == project_root.resolve()
+
+    @pytest.mark.parametrize(
+        ("dependency", "root_deps", "categories"),
+        [
+            pytest.param("direct", ("direct",), (), id="direct"),
+            pytest.param("pack-member", ("audit",), ("audit",), id="pack-expanded"),
+        ],
+    )
+    def test_orchestrator_dependency_rejected_before_materialization(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        dependency: str,
+        root_deps: tuple[str, ...],
+        categories: tuple[str, ...],
+    ) -> None:
+        from autoskillit.core import SkillExecutionRole
+
+        resolver = _make_effective_resolver(
+            tmp_path,
+            monkeypatch,
+            {
+                "root": {"deps": root_deps},
+                dependency: {
+                    "execution_role": "orchestrator",
+                    "capabilities": ("run_skill",),
+                    "categories": categories,
+                },
+            },
+        )
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        with pytest.raises(
+            ValueError, match=rf"{dependency}.*orchestrator|orchestrator.*{dependency}"
+        ):
+            resolver.resolve_invocation("root", project_root, SkillExecutionRole.SESSION)
+
+
 class TestParseWritePaths:
     """Unit tests for _parse_write_paths frontmatter parser."""
 

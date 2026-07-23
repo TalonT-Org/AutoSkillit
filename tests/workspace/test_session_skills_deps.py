@@ -341,6 +341,41 @@ class TestActivateDepsResolution:
 
 
 class TestCopyOnActivate:
+    def test_transitive_dependency_materialisation_uses_agent_safe_projection(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.core.io import load_yaml
+        from autoskillit.workspace.session_skills import SkillsDirectoryProvider
+
+        session_id = "test-projected-dependency"
+        _write_skill_md(
+            tmp_path,
+            session_id,
+            "root-skill",
+            "---\nname: root-skill\nactivate_deps: [make-arch-diag]\n"
+            "disable-model-invocation: true\n---\n# Root",
+        )
+        provider = SkillsDirectoryProvider()
+        raw = provider.resolver.resolve("make-arch-diag")
+        assert raw is not None
+        assert "uses_capabilities:" in raw.path.read_text()
+
+        manager = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
+        assert manager.activate_skill_deps(session_id, "root-skill") is True
+
+        dependency = (
+            tmp_path / session_id / ".claude" / "skills" / "make-arch-diag" / "SKILL.md"
+        ).read_text()
+        frontmatter_text = dependency.split("---\n", 2)[1]
+        frontmatter = load_yaml(frontmatter_text)
+        assert {
+            "uses_capabilities",
+            "execution_role",
+            "backend_requirements",
+        }.isdisjoint(frontmatter)
+        assert frontmatter["name"] == "make-arch-diag"
+        assert "# Architecture Diagram Generator" in dependency
+
     def test_copy_on_activate_single_absent_skill(self, tmp_path: Path) -> None:
         """Absence of SKILL.md triggers provider fetch;
         content is ungated after materialisation."""

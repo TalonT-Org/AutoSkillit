@@ -1,9 +1,8 @@
-"""Bidirectional backend annotation enforcement with capability-aware detection.
+"""Bidirectional capability annotation enforcement with semantic evidence detection.
 
 Forward: skill content using a capability → uses_capabilities must declare it.
-Reverse: backend_requirements present → at least one capability justifies it.
-Co-requirement: backend_requirements non-empty → uses_capabilities must also exist.
-Derivation: backend_requirements == union of required_backends from uses_capabilities.
+Reverse: uses_capabilities declarations → genuine self-initiated operation evidence.
+Derivation: backend_requirements remains runtime-only.
 """
 
 from __future__ import annotations
@@ -21,9 +20,9 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     "agent_subagent": [re.compile(r"Agent\(\s*subagent_type\s*=")],
     "agent_model": [re.compile(r"Agent\(\s*model\s*=")],
-    "open_kitchen": [re.compile(r"\bopen_kitchen\b"), re.compile(r"\bclose_kitchen\b")],
-    "run_skill": [re.compile(r"\brun_skill\b")],
-    "test_check": [re.compile(r"\btest_check\b")],
+    "open_kitchen": [],
+    "run_skill": [],
+    "test_check": [],
     "claude_dir": [re.compile(r"\.claude/")],
     "commit_files": [re.compile(r"\bcommit_files\s*\(")],
     "git_metadata_write": [
@@ -40,6 +39,56 @@ _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         ),
     ],
 }
+
+_SELF_INITIATED_TOOL_CAPABILITIES: dict[str, tuple[str, ...]] = {
+    "open_kitchen": ("open_kitchen", "close_kitchen"),
+    "run_skill": ("run_skill",),
+    "test_check": ("test_check",),
+}
+
+_NON_OPERATION_CONTEXT = re.compile(
+    r"\b(?:"
+    r"called by|calls this via|invoked by|launched by|"
+    r"do not|don't|never|must not|cannot|can't|without|skip|"
+    r"returns?|returned|result|output|response|warning|denied|blocked|"
+    r"configuration|config key|frontmatter|documentation|artifact|"
+    r"gated behind|generated recipe"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _has_self_initiated_tool_operation(filtered: str, tool_name: str) -> bool:
+    """Detect an outbound tool operation, excluding transport and documentary prose."""
+    tool = re.escape(tool_name)
+    direct_call = re.compile(rf"\b{tool}\s*\(")
+    imperative = re.compile(
+        rf"\b(?:call|run|invoke|use|execute|retry|re-run|test it)\b"
+        rf"[^\n]{{0,100}}\b{tool}\b",
+        re.IGNORECASE,
+    )
+    configuration = re.compile(
+        rf"(?:\buses_capabilities\s*:|\btool\s*:|\b{tool}\.(?:command|commands)\b)",
+        re.IGNORECASE,
+    )
+
+    for raw_line in filtered.splitlines():
+        line = raw_line.strip().strip("`")
+        if not line or line.startswith("#"):
+            continue
+        if configuration.search(line) or _NON_OPERATION_CONTEXT.search(line):
+            continue
+        if direct_call.search(line) or imperative.search(line):
+            return True
+    return False
+
+
+def _has_graphql_mutation_operation(filtered: str) -> bool:
+    """Default-POST ``gh api graphql`` is a write when its query is a mutation."""
+    return bool(
+        re.search(r"\bgh\s+api\s+graphql\b", filtered)
+        and re.search(r"\bmutation\b", filtered, re.IGNORECASE)
+    )
 
 
 _EXCLUDED_SECTION_HEADINGS = (
@@ -296,6 +345,11 @@ def _detect_capabilities(body: str, skill_name: str) -> set[str]:
             if pat.search(filtered):
                 detected.add(cap_name)
                 break
+    for cap_name, tool_names in _SELF_INITIATED_TOOL_CAPABILITIES.items():
+        if any(_has_self_initiated_tool_operation(filtered, tool) for tool in tool_names):
+            detected.add(cap_name)
+    if _has_graphql_mutation_operation(filtered):
+        detected.add("github_api_write")
     if _detect_cross_skill_ref(filtered, skill_name):
         detected.add("cross_skill_ref")
     return detected
@@ -332,46 +386,97 @@ def test_forward_check_capabilities_declared():
     )
 
 
-def test_reverse_check_annotation_justified():
-    """Skills with backend_requirements must have at least one capability justifying it."""
+def test_reverse_check_capability_declarations_are_genuine():
+    """Every declared capability must have genuine self-initiated evidence."""
     violations: list[str] = []
     for name, skill_md in _iter_skill_dirs():
+        content = skill_md.read_text(encoding="utf-8")
+        body = _strip_frontmatter(content)
+        detected = _detect_capabilities(body, name)
         fm = _read_skill_frontmatter(skill_md)
-        backend_reqs = set(fm.get("backend_requirements", []))
-        if not backend_reqs:
-            continue
-        uses_caps = list(fm.get("uses_capabilities", []))
-        if not uses_caps:
-            violations.append(f"{name}: has backend_requirements but no uses_capabilities")
-            continue
-        derived: set[str] = set()
-        for cap_name in uses_caps:
-            cap_def = SKILL_CAPABILITY_REGISTRY.get(cap_name)
-            if cap_def:
-                derived |= cap_def.required_backends
-        for req in backend_reqs:
-            if req not in derived:
-                violations.append(
-                    f"{name}: backend_requirements includes '{req}' "
-                    f"but no declared capability requires it"
-                )
+        declared = set(fm.get("uses_capabilities", []))
+        unsupported = declared - detected
+        if unsupported:
+            violations.append(
+                f"{name}: declared={sorted(declared)}, without_evidence={sorted(unsupported)}"
+            )
     assert not violations, (
-        f"{len(violations)} annotation(s) not justified by capabilities:\n"
+        f"{len(violations)} skill(s) declare capabilities without genuine evidence:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
 
 
-def test_co_requirement_backend_requires_capabilities():
-    """Non-empty backend_requirements → uses_capabilities must also be declared."""
-    violations: list[str] = []
-    for name, skill_md in _iter_skill_dirs():
-        fm = _read_skill_frontmatter(skill_md)
-        if fm.get("backend_requirements") and not fm.get("uses_capabilities"):
-            violations.append(name)
-    assert not violations, (
-        f"{len(violations)} skill(s) have backend_requirements without uses_capabilities:\n"
-        + "\n".join(f"  {v}" for v in violations)
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ('### Step 1\nrun_skill("/autoskillit:investigate report.md")', {"run_skill"}),
+        ("### Step 1\nRun `test_check` on the worktree.", {"test_check"}),
+        ("### Step 1\nCall `open_kitchen()` with no arguments.", {"open_kitchen"}),
+        (
+            '### Step 1\nQUERY="mutation { closeIssue(input: $input) { issue { id } } }"\n'
+            'gh api graphql -f query="$QUERY"',
+            {"github_api_write"},
+        ),
+    ],
+)
+def test_semantic_capability_evidence_positive(body: str, expected: set[str]) -> None:
+    assert expected <= _detect_capabilities(body, "test-skill")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "The parent orchestrator calls this skill via `run_skill`.",
+        "Never call `run_skill`; the parent owns dispatch.",
+        "When `run_skill` returns, copy its result.",
+        "Read the configured `test_check.command` value.",
+        "```yaml\ntool: run_skill\nskill: /autoskillit:investigate\n```",
+        "## Requirements\n```python\nrun_skill('/autoskillit:investigate')\n```",
+        "The artifact documents the `run_skill` request and response.",
+        "uses_capabilities: [run_skill, test_check]",
+    ],
+)
+def test_semantic_capability_evidence_negative(body: str) -> None:
+    detected = _detect_capabilities(body, "test-skill")
+    assert detected.isdisjoint({"run_skill", "test_check"}), (
+        f"documentary/transport prose was misclassified: {sorted(detected)}"
     )
+
+
+def test_genuine_run_skill_inventory_is_exact() -> None:
+    inventory = {
+        name
+        for name, skill_md in _iter_skill_dirs()
+        if "run_skill"
+        in _detect_capabilities(_strip_frontmatter(skill_md.read_text(encoding="utf-8")), name)
+    }
+    assert inventory == {"process-issues", "sous-chef"}
+
+
+def test_genuine_test_check_inventory_is_exact() -> None:
+    inventory = {
+        name
+        for name, skill_md in _iter_skill_dirs()
+        if "test_check"
+        in _detect_capabilities(_strip_frontmatter(skill_md.read_text(encoding="utf-8")), name)
+    }
+    assert inventory == {"resolve-failures", "sous-chef"}
+
+
+def test_enrich_issues_does_not_have_open_kitchen_evidence() -> None:
+    skill = next(skill_md for name, skill_md in _iter_skill_dirs() if name == "enrich-issues")
+    detected = _detect_capabilities(
+        _strip_frontmatter(skill.read_text(encoding="utf-8")), "enrich-issues"
+    )
+    assert "open_kitchen" not in detected
+
+
+def test_graphql_default_post_mutation_implies_github_api_write() -> None:
+    body = (
+        'MUTATION_QUERY="mutation { resolveReviewThread(input: $input) { thread { id } } }"\n'
+        'gh api graphql -f query="${MUTATION_QUERY}"'
+    )
+    assert "github_api_write" in _detect_capabilities(body, "test-skill")
 
 
 def test_derivation_backend_requirements_match_capabilities():

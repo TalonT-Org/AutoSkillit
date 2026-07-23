@@ -135,11 +135,17 @@ class TestSkillSession:
 class TestSousChefDelivery:
     def test_sous_chef_in_orchestrator_prompt(self) -> None:
         from autoskillit.cli._prompts import _build_orchestrator_prompt, _read_full_sous_chef
+        from autoskillit.execution import codex_recipe_delivery_calling_contract
 
         sous_chef = _read_full_sous_chef()
         assert sous_chef, "_read_full_sous_chef must return non-empty content"
         prompt = _build_orchestrator_prompt("test-recipe", "mcp__autoskillit__")
         assert sous_chef[:80] in prompt
+        assert "uses_capabilities:" not in sous_chef
+        assert "execution_role:" not in sous_chef
+        assert "backend_requirements:" not in sous_chef
+        calling_contract = codex_recipe_delivery_calling_contract(mcp_prefix="mcp__autoskillit__")
+        assert prompt.count(calling_contract) == 1
 
     def test_sous_chef_in_open_kitchen_prompt(self) -> None:
         from autoskillit.cli._prompts import _build_open_kitchen_prompt, _read_full_sous_chef
@@ -148,6 +154,9 @@ class TestSousChefDelivery:
         assert sous_chef, "_read_full_sous_chef must return non-empty content"
         prompt = _build_open_kitchen_prompt("mcp__autoskillit__")
         assert sous_chef[:80] in prompt
+        assert "uses_capabilities:" not in prompt
+        assert "execution_role:" not in prompt
+        assert "backend_requirements:" not in prompt
 
     def test_sous_chef_not_in_fleet_dispatch_prompt(self) -> None:
         from autoskillit.cli._prompts import _build_fleet_dispatch_prompt, _read_full_sous_chef
@@ -156,3 +165,4 @@ class TestSousChefDelivery:
         assert sous_chef, "_read_full_sous_chef must return non-empty content"
         prompt = _build_fleet_dispatch_prompt("mcp__autoskillit__")
         assert sous_chef[:80] not in prompt
+        assert "name: sous-chef" not in prompt

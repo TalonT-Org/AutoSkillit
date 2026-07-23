@@ -21,6 +21,22 @@ from tests.workspace._helpers import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
+_MACHINE_ONLY_FRONTMATTER_KEYS = {
+    "uses_capabilities",
+    "execution_role",
+    "backend_requirements",
+}
+
+
+def _frontmatter(content: str) -> dict[str, object]:
+    match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+    assert match, "Content must have YAML frontmatter"
+    return load_yaml(match.group(1))
+
+
+def _assert_agent_safe(content: str) -> None:
+    assert _MACHINE_ONLY_FRONTMATTER_KEYS.isdisjoint(_frontmatter(content))
+
 
 def test_resolve_ephemeral_root_returns_writable_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -74,6 +90,65 @@ def test_provider_does_not_inject_for_cook_session() -> None:
     assert fm_match, "Content must have YAML frontmatter"
     fm = load_yaml(fm_match.group(1))
     assert fm.get("disable-model-invocation") is not True
+
+
+def test_agent_skill_projector_preserves_public_document_and_stable_digest(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import SkillSource
+    from autoskillit.workspace import (
+        AgentSkillDocument,
+        SkillProjectionContext,
+        project_agent_skill_document,
+    )
+    from autoskillit.workspace.skills import SkillInfo
+
+    skill_md = tmp_path / "SKILL.md"
+    skill_md.write_text(
+        "---\n"
+        "name: projected-skill\n"
+        "description: Public description.\n"
+        "uses_capabilities: [agent_model]\n"
+        "execution_role: session\n"
+        "backend_requirements: [claude-code]\n"
+        "metadata:\n"
+        "  public-key: public-value\n"
+        "---\n"
+        "# Public body\n\n"
+        "Keep this body byte-for-byte.\n"
+    )
+    skill_info = SkillInfo(
+        name="projected-skill",
+        source=SkillSource.BUNDLED_EXTENDED,
+        path=skill_md,
+    )
+    context = SkillProjectionContext(execution_cwd=tmp_path)
+
+    first = project_agent_skill_document(skill_info, context)
+    second = project_agent_skill_document(skill_info, context)
+
+    assert isinstance(first, AgentSkillDocument)
+    _assert_agent_safe(first.content)
+    frontmatter = _frontmatter(first.content)
+    assert frontmatter["name"] == "projected-skill"
+    assert frontmatter["description"] == "Public description."
+    assert frontmatter["metadata"] == {"public-key": "public-value"}
+    assert first.content.endswith("# Public body\n\nKeep this body byte-for-byte.\n")
+    assert first.projected_digest == second.projected_digest
+    assert first.content == second.content
+
+
+def test_provider_string_api_returns_unified_agent_safe_projection() -> None:
+    provider = SkillsDirectoryProvider()
+    raw = provider.resolver.resolve("make-arch-diag")
+    assert raw is not None
+    assert "uses_capabilities:" in raw.path.read_text()
+
+    content = provider.get_skill_content("make-arch-diag", gated=False)
+
+    _assert_agent_safe(content)
+    assert _frontmatter(content)["name"] == "make-arch-diag"
+    assert "# Architecture Diagram Generator" in content
 
 
 @pytest.mark.parametrize(
@@ -318,6 +393,43 @@ def test_init_session_tier2_skill_present_when_in_allow_only(tmp_path: Path) -> 
     skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
     assert (skills_base / "mermaid" / "SKILL.md").exists()
     assert not (skills_base / "make-plan").exists()
+
+
+def test_init_session_projects_project_local_override_instead_of_raw_copy(
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "project"
+    override_dir = project_dir / ".claude" / "skills" / "local-safe"
+    override_dir.mkdir(parents=True)
+    (override_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: local-safe\n"
+        "description: Public local description.\n"
+        "uses_capabilities: [agent_model]\n"
+        "execution_role: session\n"
+        "backend_requirements: [claude-code]\n"
+        "---\n"
+        "# Local override body\n"
+    )
+    session_root = tmp_path / "sessions"
+    manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=session_root,
+    )
+
+    session_path = manager.init_session(
+        "local-projection",
+        cook_session=True,
+        project_dir=project_dir,
+        allow_only=frozenset({"local-safe"}),
+    )
+
+    projected = (
+        session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR / "local-safe" / "SKILL.md"
+    ).read_text()
+    _assert_agent_safe(projected)
+    assert _frontmatter(projected)["description"] == "Public local description."
+    assert projected.endswith("# Local override body\n")
 
 
 def test_cleanup_stale_removes_old_dirs(tmp_path: Path) -> None:

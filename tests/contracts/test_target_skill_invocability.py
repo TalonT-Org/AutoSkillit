@@ -131,6 +131,46 @@ class TestResolvedNamespaceMatchesSkillLocation:
         assert resolved == "Fix the bug"
 
 
+class TestRoleDerivedInvocability:
+    def test_process_issues_only_appears_in_orchestrator_catalog(self) -> None:
+        from autoskillit.core import SkillExecutionRole
+
+        resolver = DefaultSkillResolver()
+        session_names = {
+            skill.name
+            for skill in resolver.list_effective(_PROJECT_ROOT, SkillExecutionRole.SESSION).skills
+        }
+        orchestrator_names = {
+            skill.name
+            for skill in resolver.list_effective(
+                _PROJECT_ROOT, SkillExecutionRole.ORCHESTRATOR
+            ).skills
+        }
+
+        assert "process-issues" not in session_names
+        assert "process-issues" in orchestrator_names
+
+    def test_direct_session_invocation_cannot_target_process_issues(self) -> None:
+        from autoskillit.core import SkillContractError, SkillExecutionRole
+
+        resolver = DefaultSkillResolver()
+        with pytest.raises(SkillContractError, match="process-issues|ORCHESTRATOR"):
+            resolver.resolve_invocation(
+                "process-issues",
+                _PROJECT_ROOT,
+                SkillExecutionRole.SESSION,
+            )
+
+        assert (
+            resolver.resolve_invocation(
+                "process-issues",
+                _PROJECT_ROOT,
+                SkillExecutionRole.ORCHESTRATOR,
+            )
+            is not None
+        )
+
+
 class TestDepSkillsNotGatedAfterActivation:
     """After activating a target with activate_deps, dependency skills are also ungated."""
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
-from autoskillit.core.types._type_enums import SessionType
+from autoskillit.core.types._type_enums import SessionType, SkillExecutionRole
 from autoskillit.workspace.skills import _read_skill_frontmatter
 from tests.arch._helpers import _iter_skill_dirs
 
@@ -25,6 +25,44 @@ def test_all_capability_keys_are_consumed():
     unused = set(SKILL_CAPABILITY_REGISTRY) - used_caps
     assert not unused, (
         f"Capability keys not referenced by any SKILL.md uses_capabilities: {sorted(unused)}"
+    )
+
+
+def test_every_capability_def_declares_exact_allowed_execution_roles() -> None:
+    """Role ownership must be explicit at every registry construction site."""
+    import ast
+    import inspect
+
+    import autoskillit.core.types._type_constants_registries as registries
+
+    tree = ast.parse(inspect.getsource(registries))
+    definitions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "SkillCapabilityDef"
+    ]
+    assert len(definitions) == len(SKILL_CAPABILITY_REGISTRY)
+    missing = [
+        node.lineno
+        for node in definitions
+        if "allowed_execution_roles" not in {kw.arg for kw in node.keywords}
+    ]
+    assert not missing, (
+        "Every SkillCapabilityDef must explicitly declare allowed_execution_roles; "
+        f"missing at source lines {missing}"
+    )
+    all_roles = frozenset(SkillExecutionRole)
+    for name, capability in SKILL_CAPABILITY_REGISTRY.items():
+        assert isinstance(capability.allowed_execution_roles, frozenset)
+        assert capability.allowed_execution_roles
+        assert capability.allowed_execution_roles <= all_roles, name
+
+
+def test_run_skill_is_owned_by_exact_orchestrator_role() -> None:
+    assert SKILL_CAPABILITY_REGISTRY["run_skill"].allowed_execution_roles == frozenset(
+        {SkillExecutionRole.ORCHESTRATOR}
     )
 
 

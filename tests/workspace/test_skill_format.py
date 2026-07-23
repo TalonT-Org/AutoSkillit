@@ -5,7 +5,9 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.workspace.skill_format import (
+    SkillFrontmatterParseResult,
     parse_frontmatter_content,
+    read_skill_frontmatter,
     validate_skill_frontmatter,
 )
 
@@ -84,18 +86,37 @@ class TestParseFrontmatterContent:
     def test_parse_frontmatter_content_valid(self) -> None:
         content = "---\nname: my-skill\ndescription: A skill\n---\nBody"
         result = parse_frontmatter_content(content)
-        assert result["name"] == "my-skill"
-        assert result["description"] == "A skill"
+        assert isinstance(result, SkillFrontmatterParseResult)
+        assert result.is_valid
+        assert result.error is None
+        assert result.data == {"name": "my-skill", "description": "A skill"}
+        assert result.frontmatter_text == "name: my-skill\ndescription: A skill"
+        assert result.body == "Body"
+        assert result.content == content
 
-    def test_parse_frontmatter_content_no_frontmatter(self) -> None:
-        content = "Just plain text without frontmatter"
+    @pytest.mark.parametrize(
+        ("content", "error"),
+        [
+            ("Just plain text without frontmatter", "missing_opening_delimiter"),
+            ("---\nname: my-skill\nBody", "missing_closing_delimiter"),
+            ("---\nname: [unterminated\n---\nBody", "malformed_yaml"),
+            ("---\n- one\n- two\n---\nBody", "non_mapping"),
+        ],
+    )
+    def test_invalid_frontmatter_has_typed_failure(self, content: str, error: str) -> None:
         result = parse_frontmatter_content(content)
-        assert result == {}
+        assert isinstance(result, SkillFrontmatterParseResult)
+        assert not result.is_valid
+        assert result.error == error
+        assert result.data is None
+        assert result.content == content
 
-    def test_parse_frontmatter_content_malformed_yaml(self) -> None:
-        content = "---\n: invalid\n---\nBody"
-        result = parse_frontmatter_content(content)
-        assert result == {}
+    def test_unreadable_frontmatter_is_distinct(self, tmp_path) -> None:
+        result = read_skill_frontmatter(tmp_path / "missing" / "SKILL.md")
+        assert isinstance(result, SkillFrontmatterParseResult)
+        assert not result.is_valid
+        assert result.error == "unreadable"
+        assert result.data is None
 
 
 class TestWritePathsValidation:

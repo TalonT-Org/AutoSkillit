@@ -40,6 +40,23 @@ def test_food_truck_prompt_contains_hook_denial_compliance():
     assert "HOOK DENIAL" in prompt.upper()
 
 
+def test_l2_food_truck_retains_run_skill_guidance_without_machine_frontmatter():
+    prompt = _build_food_truck_prompt(
+        recipe="process-issues",
+        task="Process the issue batches",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    assert "run_skill" in prompt
+    assert "retry the EXACT same run_skill call" in prompt
+    assert "uses_capabilities:" not in prompt
+    assert "execution_role:" not in prompt
+    assert "backend_requirements:" not in prompt
+
+
 def test_fleet_prompt_contains_budget_exceeded_routing():
     """L3 food truck prompt must contain QUOTA WAIT REQUIRED and QUOTA BUDGET EXCEEDED routing."""
     prompt = _build_food_truck_prompt(

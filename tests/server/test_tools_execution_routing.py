@@ -726,3 +726,63 @@ async def test_run_skill_no_inspector_outside_dispatch(tool_ctx_kitchen_open, mo
     assert len(executor.calls) == 1
     assert executor.calls[0].inspector_eligible is False
     assert executor.calls[0].inspector_model == ""
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("session_type", ["skill", "fleet"])
+async def test_run_skill_exact_role_denial_precedes_all_downstream_work(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path, session_type
+) -> None:
+    """L1 and L3 are denied before resolution, materialization, or execution."""
+    from unittest.mock import MagicMock
+
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", session_type)
+    resolver = MagicMock()
+    manager = MagicMock()
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.skill_resolver = resolver
+    tool_ctx_kitchen_open.session_skill_manager = manager
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = await run_skill("/autoskillit:root work", str(tmp_path))
+
+    assert __import__("json").loads(result)["subtype"] == "headless_error"
+    resolver.resolve_effective.assert_not_called()
+    resolver.resolve_invocation.assert_not_called()
+    manager.init_session.assert_not_called()
+    manager.activate_skill_deps.assert_not_called()
+    assert executor.calls == []
+
+
+@pytest.mark.anyio
+async def test_fresh_dispatch_constructs_default_project_aware_resolver_before_writes(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """A missing injected resolver is not an authorization bypass or unrestricted launch."""
+    from autoskillit.workspace.skills import DefaultSkillResolver
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+    calls: list[tuple[str, object, object]] = []
+
+    def unresolved(self, name, project_root, execution_role):
+        calls.append((name, project_root, execution_role))
+        return None
+
+    monkeypatch.setattr(DefaultSkillResolver, "resolve_invocation", unresolved)
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.skill_resolver = None
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = await run_skill("/autoskillit:not-installed work", str(tmp_path))
+
+    assert calls and calls[0][0] == "not-installed"
+    assert calls[0][1] == tmp_path
+    assert __import__("json").loads(result)["success"] is False
+    assert executor.calls == []

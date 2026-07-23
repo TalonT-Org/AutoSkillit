@@ -3,12 +3,9 @@ sentinel format, progress markers, and negative bootstrap assertions."""
 
 from __future__ import annotations
 
-import pathlib
-
 import pytest
 
 from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
-from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -77,30 +74,27 @@ class TestL3PromptPlaceholders:
         assert _MANIFEST_YAML.strip() in prompt
 
 
-# --- K-2: TestL3SousChefDiscipline ---
+# --- K-2: TestL3NativeDiscipline ---
 
 
-class TestL3AdmiralDiscipline:
-    def test_full_admiral_content_appended(self) -> None:
+class TestL3NativeDiscipline:
+    def test_l2_sous_chef_document_is_not_injected(self) -> None:
         prompt = _build()
-        for header in SOUS_CHEF_MANDATORY_SECTIONS:
-            assert header in prompt, f"Missing admiral section: {header}"
+        assert "name: sous-chef" not in prompt
+        assert "uses_capabilities:" not in prompt
+        assert "execution_role:" not in prompt
+        assert "backend_requirements:" not in prompt
 
-    def test_graceful_degradation_on_missing_skill_md(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ) -> None:
-        from autoskillit.cli import _prompts
-
-        monkeypatch.setattr(_prompts, "pkg_root", lambda: tmp_path)
-        result = _build()
-        assert isinstance(result, str)
-        assert len(result) > 0
-        # Non-sous-chef structural sections must survive degradation
-        assert "CAMPAIGN OVERVIEW" in result
-        assert "DISPATCH MANIFEST" in result
-        assert "FAILURE RECOVERY" in result
-        assert "QUOTA RETRY" in result
-        assert "INTERRUPT/CLEANUP SEQUENCE" in result
+    def test_native_fleet_sections_remain_without_sous_chef(self) -> None:
+        prompt = _build()
+        for section in (
+            "CAMPAIGN OVERVIEW",
+            "DISPATCH MANIFEST",
+            "FAILURE RECOVERY",
+            "QUOTA RETRY",
+            "INTERRUPT/CLEANUP SEQUENCE",
+        ):
+            assert section in prompt
 
 
 # --- K-3: TestCampaignOverviewSection ---
@@ -381,9 +375,16 @@ class TestToolSurface:
     def test_uses_dispatch_food_truck_not_run_skill(self) -> None:
         prompt = _build()
         assert f"{DIRECT_PREFIX}dispatch_food_truck" in prompt
-        # run_skill must not be described as the dispatch mechanism
-        assert "dispatch via run_skill" not in prompt
-        assert "dispatch through run_skill" not in prompt
+        affirmative_run_skill_lines = [
+            line
+            for line in prompt.splitlines()
+            if "run_skill" in line
+            and not any(
+                denial in line.lower()
+                for denial in ("forbidden", "never", "do not", "must not", "not callable")
+            )
+        ]
+        assert affirmative_run_skill_lines == []
 
 
 # --- K-13: TestL3NoBootstrapSequence ---

@@ -113,14 +113,24 @@ def test_codex_init_session_raises_when_pre_launch_fails(
         mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
 
 
-def test_profile_skills_symlinked_into_session_dir(tmp_path, monkeypatch) -> None:
-    """_materialize_profile_skills symlinks ~/.codex/skills/<name> into session_dir/skills/<name>."""  # noqa: E501
+def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) -> None:
+    """Codex profile skills are copied as projections, never linked to raw sources."""
+    from autoskillit.core.io import load_yaml
     from autoskillit.execution.backends.codex import _materialize_profile_skills
 
     fake_home = tmp_path / "fake_home"
     profile_skill = fake_home / ".codex" / "skills" / "my-skill"
     profile_skill.mkdir(parents=True)
-    (profile_skill / "SKILL.md").write_text("# MY SKILL")
+    (profile_skill / "SKILL.md").write_text(
+        "---\n"
+        "name: my-skill\n"
+        "description: Public profile description.\n"
+        "uses_capabilities: [agent_model]\n"
+        "execution_role: session\n"
+        "backend_requirements: [codex]\n"
+        "---\n"
+        "# MY SKILL\n"
+    )
 
     session_dir = tmp_path / "session"
     (session_dir / "skills").mkdir(parents=True)
@@ -129,8 +139,17 @@ def test_profile_skills_symlinked_into_session_dir(tmp_path, monkeypatch) -> Non
     count = _materialize_profile_skills(session_dir)
 
     target = session_dir / "skills" / "my-skill"
-    assert target.is_symlink() or target.is_dir()
-    assert (target / "SKILL.md").read_text() == "# MY SKILL"
+    assert target.is_dir()
+    assert not target.is_symlink()
+    content = (target / "SKILL.md").read_text()
+    frontmatter = load_yaml(content.split("---\n", 2)[1])
+    assert {
+        "uses_capabilities",
+        "execution_role",
+        "backend_requirements",
+    }.isdisjoint(frontmatter)
+    assert frontmatter["description"] == "Public profile description."
+    assert content.endswith("# MY SKILL\n")
     assert count == 1
 
 
@@ -198,3 +217,34 @@ def test_codex_session_cook_mode_still_writes_all_skills(
     skills_base = session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
     skill_files = list(skills_base.glob("*/SKILL.md"))
     assert len(skill_files) > 0, "Cook sessions must write all skills regardless of backend"
+
+
+@pytest.mark.parametrize("backend_kind", ["claude-code", "codex"])
+def test_session_projection_is_agent_safe_for_each_backend(
+    make_session_skill_manager,
+    codex_env,
+    backend_kind: str,
+) -> None:
+    from autoskillit.core.io import load_yaml
+
+    backend = codex_env.backend if backend_kind == "codex" else None
+    manager = make_session_skill_manager()
+    session_path = manager.init_session(
+        f"projection-{backend_kind}",
+        cook_session=True,
+        backend=backend,
+        allow_only=frozenset({"make-arch-diag"}),
+    )
+    skills_subdir = (
+        ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+        if backend is not None
+        else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+    )
+    content = (session_path / skills_subdir / "make-arch-diag" / "SKILL.md").read_text()
+    frontmatter = load_yaml(content.split("---\n", 2)[1])
+    assert {
+        "uses_capabilities",
+        "execution_role",
+        "backend_requirements",
+    }.isdisjoint(frontmatter)
+    assert frontmatter["name"] == "make-arch-diag"

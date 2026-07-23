@@ -182,6 +182,122 @@ def test_detect_project_local_overrides_claude_code_backend_scoping(tmp_path):
     )
 
 
+def _write_effective_skill(
+    root,
+    name,
+    *,
+    capabilities: tuple[str, ...],
+    execution_role: str,
+    body: str,
+):
+    skill_path = root / name / "SKILL.md"
+    skill_path.parent.mkdir(parents=True, exist_ok=True)
+    skill_path.write_text(
+        "\n".join(
+            (
+                "---",
+                f"name: {name}",
+                "description: Effective source fixture.",
+                f"uses_capabilities: [{', '.join(capabilities)}]",
+                f"execution_role: {execution_role}",
+                "---",
+                body,
+                "",
+            )
+        )
+    )
+    return skill_path
+
+
+def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
+    tmp_path, monkeypatch
+):
+    """A higher-priority source created between fresh dispatches is immediately effective."""
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    bundled_path = _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("github_api_write", "agent_model"),
+        execution_role="session",
+        body="bundled body",
+    )
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+
+    first = resolver.resolve_effective("target", project)
+    assert first is not None
+    assert first.path == bundled_path
+    assert first.uses_capabilities == frozenset({"github_api_write", "agent_model"})
+
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("git_metadata_write", "run_skill"),
+        execution_role="orchestrator",
+        body="fresh override body",
+    )
+    second = resolver.resolve_effective("target", project)
+
+    assert second is not None
+    assert second is not first
+    assert second.path == override_path
+    assert second.source.value == "project_local"
+    assert second.uses_capabilities == frozenset({"git_metadata_write", "run_skill"})
+    assert second.execution_role.value == "orchestrator"
+
+
+def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path, monkeypatch):
+    """Source precedence cannot mix policy metadata with bytes from a lower-priority source."""
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("agent_model",),
+        execution_role="session",
+        body="bundled",
+    )
+    claude_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("github_api_write",),
+        execution_role="session",
+        body="first match",
+    )
+    _write_effective_skill(
+        project / ".autoskillit" / "skills",
+        "target",
+        capabilities=("git_metadata_write",),
+        execution_role="session",
+        body="lower priority",
+    )
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    effective = resolver.resolve_effective("target", project)
+
+    assert effective is not None
+    assert effective.path == claude_path
+    assert effective.path.read_text().endswith("first match\n")
+    assert effective.uses_capabilities == frozenset({"github_api_write"})
+
+
 # ---------------------------------------------------------------------------
 # T-OVR-007..011: init_session() — project_dir override filtering
 # ---------------------------------------------------------------------------

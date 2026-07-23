@@ -51,6 +51,25 @@ class TestSkillsConfig:
         assert "make-plan" in cfg.skills.tier2
         assert "compose-pr" in cfg.skills.tier3
 
+    def test_process_issues_is_role_derived_not_user_tiered(self) -> None:
+        from autoskillit.config import load_config
+
+        cfg = load_config()
+        assert "process-issues" not in cfg.skills.tier1
+        assert "process-issues" not in cfg.skills.tier2
+        assert "process-issues" not in cfg.skills.tier3
+
+    def test_process_issues_cannot_be_readded_to_session_tier(self, tmp_path) -> None:
+        from autoskillit.config import load_config
+        from autoskillit.core import SkillContractError
+
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("skills:\n  tier2:\n    - process-issues\n")
+
+        with pytest.raises(SkillContractError, match="process-issues|ORCHESTRATOR"):
+            load_config(tmp_path)
+
     def test_file_audit_issues_in_tier3(self) -> None:
         from autoskillit.config import load_config
 

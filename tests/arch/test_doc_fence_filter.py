@@ -50,6 +50,17 @@ def test_step_2a_heading_recognized():
     assert "git commit" in _strip_doc_fenced_blocks(body)
 
 
+def test_nested_part_heading_is_executable():
+    body = (
+        "### Step 2: Inspect history\n"
+        "#### Part A — Locate Claude sessions\n"
+        "```bash\n"
+        'find "$PROJECT_ROOT/.claude/projects" -name "*.jsonl"\n'
+        "```\n"
+    )
+    assert ".claude/projects" in _strip_doc_fenced_blocks(body)
+
+
 def test_detect_capabilities_ignores_doc_fence_git_commit():
     body = (
         "## Conflict-Resolution Plan Requirements\n"
@@ -66,3 +77,15 @@ def test_detect_capabilities_finds_step_fence_git_commit():
     body = '### Step 4: Apply Fixes\n```bash\ngit commit -m "fix: resolve issue"\n```\n'
     detected = _detect_capabilities(body, "test-skill")
     assert "git_metadata_write" in detected
+
+
+def test_detect_capabilities_finds_nested_part_fence_claude_dir():
+    body = (
+        "### Step 2: Inspect history\n"
+        "#### Part A — Read session artifacts\n"
+        "```bash\n"
+        'find "$PROJECT_ROOT/.claude/projects" -name "*.jsonl"\n'
+        "```\n"
+    )
+    detected = _detect_capabilities(body, "test-skill")
+    assert "claude_dir" in detected

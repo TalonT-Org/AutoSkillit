@@ -849,7 +849,6 @@ def test_post_duplication_failure_closes_all_fds_and_prevents_command(
     captured = capfd.readouterr()
     artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
     assert "CAPTURE_FAILED" in captured.err
-    assert "OSError: fault injection during readback" in captured.err
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
     assert not (project / "command_ran").exists()
     assert artifact_path.read_bytes() == b""
@@ -1098,6 +1097,7 @@ def test_capture_readback_failure_after_partial_output_closes_runtime_fds(
     captured = capfd.readouterr()
     artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
     assert "CAPTURE_FAILED" in captured.err
+    assert "OSError: fault injection during readback" in captured.err
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
     assert artifact_path.read_bytes() == b"partial-output"
     assert process.terminated

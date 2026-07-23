@@ -18,16 +18,17 @@ import shlex
 import struct
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _capture_contract import (  # type: ignore[import-not-found]  # noqa: E402
-    _CAPTURE_ID_RE,
-    _MAX_COMMAND_BYTES,
-)
+if TYPE_CHECKING:
+    from autoskillit.hooks._capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
+else:
+    from _capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
 
 _HARNESS_SENTINEL = "# autoskillit-shell-capture v1"
 _ARG_MAX_FALLBACK_BYTES = 128 * 1024

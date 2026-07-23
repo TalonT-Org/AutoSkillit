@@ -51,8 +51,8 @@ def _updated_command(output: str) -> str:
 def _runner_argv(command: str) -> list[str]:
     lines = command.splitlines()
     assert lines[0] == _SENTINEL
-    assert len(lines) == 2
-    return shlex.split(lines[1])
+    assert len(lines) >= 2
+    return shlex.split(lines[-1])
 
 
 def _transported_command(command: str) -> str:

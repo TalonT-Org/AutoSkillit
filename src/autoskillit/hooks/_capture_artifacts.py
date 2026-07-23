@@ -27,12 +27,8 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _capture_contract import (  # type: ignore[import-not-found]  # noqa: E402
-    _CAPTURE_ID_RE,
-    _MAX_COMMAND_BYTES,
-)
-
 if TYPE_CHECKING:
+    from autoskillit.hooks._capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
     from autoskillit.hooks._hook_settings import (
         HOOK_CONFIG_FILENAME,
         HOOK_CONFIG_OVERLAY_FILENAME,
@@ -40,6 +36,7 @@ if TYPE_CHECKING:
     )
     from autoskillit.hooks._policy_event import PolicyEvent, render_capture_marker
 else:
+    from _capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
     from _hook_settings import (
         HOOK_CONFIG_FILENAME,
         HOOK_CONFIG_OVERLAY_FILENAME,

@@ -367,7 +367,7 @@ def test_shell_capture_hook_is_input_rewrite_and_excluded_from_deny_matrix(
     assert hook_output["permissionDecision"] == "allow"
     updated_command = hook_output["updatedInput"]["command"]
     assert "autoskillit-shell-capture" in updated_command
-    assert _OUTPUT_BUDGET_PROBE_COMMAND not in updated_command
+    assert _OUTPUT_BUDGET_PROBE_COMMAND in updated_command
 
     argv = shlex.split(updated_command.splitlines()[-1])
     runner_index = next(

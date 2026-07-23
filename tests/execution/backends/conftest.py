@@ -110,6 +110,7 @@ EXPECTED_NON_INERT_COMBINATIONS: int = _compute_expected_non_inert()
 _probe_rows: list[dict] = []
 _controller_rows: list[dict] = []
 _controller_probe_suite_collected = False
+_probe_suite_collected = False
 
 
 def record_probe_row(row: dict) -> None:
@@ -158,6 +159,13 @@ def _full_probe_suite_collected(items: list[pytest.Item]) -> bool:
     return probe_count == EXPECTED_TOTAL_PROBE_COUNT
 
 
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Record full probe collection before xdist assigns subsets to workers."""
+
+    global _probe_suite_collected
+    _probe_suite_collected = _full_probe_suite_collected(session.items)
+
+
 def pytest_testnodedown(node, error):
     """Controller-side: harvest rows from a finishing worker."""
     global _controller_probe_suite_collected
@@ -173,9 +181,7 @@ def pytest_sessionfinish(session, exitstatus):
     if hasattr(session.config, "workerinput"):
         # xdist worker: send accumulated rows to controller via workeroutput IPC.
         session.config.workeroutput["hook_probe_rows"] = _probe_rows
-        session.config.workeroutput["hook_probe_suite_collected"] = _full_probe_suite_collected(
-            session.items
-        )
+        session.config.workeroutput["hook_probe_suite_collected"] = _probe_suite_collected
         return
     # Controller (or non-xdist run): write matrix JSON.
     all_rows = _controller_rows or _probe_rows
@@ -189,9 +195,7 @@ def pytest_sessionfinish(session, exitstatus):
         json.dumps({"combinations": all_rows}, indent=2),
         encoding="utf-8",
     )
-    full_probe_suite = _controller_probe_suite_collected or _full_probe_suite_collected(
-        session.items
-    )
+    full_probe_suite = _controller_probe_suite_collected or _probe_suite_collected
     if full_probe_suite and (failures := validate_strength_matrix(all_rows)):
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")
         if reporter is not None:

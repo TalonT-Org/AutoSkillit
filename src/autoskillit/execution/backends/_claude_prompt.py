@@ -16,6 +16,9 @@ from autoskillit.core import (
     extract_skill_name,
     temp_dir_display_str,
 )
+from autoskillit.execution.backends._codex_config import (
+    CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
+)
 
 
 def _extract_write_artifacts(tool_uses: list[dict[str, Any]]) -> list[str]:
@@ -186,7 +189,10 @@ def _inject_narration_suppression(skill_command: str, *, has_skill_prefix: bool 
 
 def codex_discipline_suffix() -> str:
     """Canonical combined discipline suffix: output-discipline + intake-discipline."""
-    return f"{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
+    return (
+        f"{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}\n\n"
+        f"{CODEX_RECIPE_DELIVERY_CALLING_CONTRACT}"
+    )
 
 
 def _inject_output_discipline(prompt: str, *, include: bool = False) -> str:

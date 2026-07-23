@@ -23,7 +23,10 @@ from _fmt_recipe_compact import (  # type: ignore[import-not-found]
 )
 
 if TYPE_CHECKING:
+    from autoskillit._recipe_delivery_framing import is_attested_recipe_delivery
     from autoskillit.recipe import ListRecipesResult, LoadRecipeResult, OpenKitchenResult
+else:
+    from _recipe_delivery_framing import is_attested_recipe_delivery
 
 
 # Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
@@ -253,6 +256,8 @@ def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
 
 def _fmt_open_kitchen_plain_text(text: str, _pipeline: bool) -> str:
     """Format open_kitchen plain-text response (no recipe attached)."""
+    if is_attested_recipe_delivery(text):
+        return text
     return f"## open_kitchen\n\n{text}"
 
 

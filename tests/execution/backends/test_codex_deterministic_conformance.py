@@ -20,8 +20,8 @@ import pytest
 from autoskillit.core.types._type_enums import CodexEventType, CodexItemType
 from autoskillit.execution.backends._codex_config import (
     CODEX_AUTO_COMPACT_LIMIT,
+    CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_MCP_REQUIRED_KEYS,
-    CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
 )
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR
@@ -86,7 +86,7 @@ def _generate_config_template() -> dict:
             "tool_output_token_limit": {
                 "expected_type": "int",
                 "constraint": "exact",
-                "expected_value": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+                "expected_value": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             },
             "model_auto_compact_token_limit": {
                 "expected_type": "int",
@@ -214,7 +214,7 @@ class TestCodexConfigTomlSchemaTemplate:
         assert top["tool_output_token_limit"] == {
             "constraint": "exact",
             "expected_type": "int",
-            "expected_value": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "expected_value": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
         }
         assert top["model_auto_compact_token_limit"] == {
             "constraint": "minimum",
@@ -238,7 +238,7 @@ class TestCodexConfigTomlSchemaTemplate:
         assert top["tool_output_token_limit"] == {
             "constraint": "exact",
             "expected_type": "int",
-            "expected_value": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "expected_value": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
         }
         assert top["model_auto_compact_token_limit"]["floor_value"] == CODEX_AUTO_COMPACT_LIMIT, (
             f"CODEX_AUTO_COMPACT_LIMIT drift: "
@@ -268,7 +268,7 @@ class TestCodexConfigTomlSchemaTemplate:
         assert set(reloaded["_codex_mcp_required_keys"]) == CODEX_MCP_REQUIRED_KEYS
         assert (
             reloaded["top_level_keys"]["tool_output_token_limit"]["expected_value"]
-            == CODEX_TOOL_OUTPUT_TOKEN_LIMIT
+            == CODEX_HISTORY_RETENTION_TOKEN_LIMIT
         )
         assert (
             reloaded["top_level_keys"]["model_auto_compact_token_limit"]["floor_value"]

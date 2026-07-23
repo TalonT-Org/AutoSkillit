@@ -74,12 +74,11 @@ from autoskillit.execution.backends._claude_prompt import (
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._codex_config import (
+    CODEX_RECIPE_DELIVERY_BUDGET,
     _format_toml_value,
     ensure_codex_mcp_registered,
 )
-from autoskillit.execution.backends._codex_hooks import (
-    sync_hooks_to_codex_config,
-)
+from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 
 __all__ = [
@@ -639,7 +638,11 @@ class CodexBackend(BackendCmdBuilderBase):
             skill_sigil="$",
             session_dir_persistent=True,
             supports_model_invocation_gating=False,
-            effective_delivery_token_limit=10_000,
+            unnegotiated_tool_result_token_limit=(
+                CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
+            ),
+            protected_recipe_delivery_capable=False,
+            recipe_delivery_budget=CODEX_RECIPE_DELIVERY_BUDGET,
         )
 
     @property

@@ -16,7 +16,11 @@ from autoskillit.core import (
     RESERVED_LOG_RECORD_KEYS,
     BackendCapabilities,
     get_logger,
-    resolve_effective_delivery_bound,
+    resolve_general_output_token_limit,
+)
+from autoskillit.server._recipe_delivery import (
+    FinalizedRecipeResponse,
+    complete_finalized_recipe_response,
 )
 from autoskillit.server._response_budget import (
     bounded_response_budget_failure,
@@ -108,9 +112,15 @@ def track_response_size(
                     }
                 )
                 logger.exception("track_response_size_handler_failed", tool_name=tool_name)
+            finalized = result if isinstance(result, FinalizedRecipeResponse) else None
+            response_value = finalized.rendered if finalized is not None else result
             ctx = _get_ctx_or_none()
             try:
-                response_str = result if isinstance(result, str) else json.dumps(result)
+                response_str = (
+                    response_value
+                    if isinstance(response_value, str)
+                    else json.dumps(response_value)
+                )
             except (TypeError, ValueError):
                 logger.warning(
                     "track_response_size_nonserializable_result",
@@ -142,19 +152,21 @@ def track_response_size(
             artifact_dir = (
                 temp_dir / "responses" / tool_name if isinstance(temp_dir, Path) else None
             )
-            effective_delivery_token_limit: int | None = None
-            if ctx is not None:
+            selected_result_token_limit: int | None = None
+            if finalized is not None:
+                selected_result_token_limit = finalized.decision.selected_result_token_limit
+            elif ctx is not None:
                 backend = getattr(ctx, "backend", None)
                 caps = getattr(backend, "capabilities", None) if backend is not None else None
                 if isinstance(caps, BackendCapabilities):
-                    effective_delivery_token_limit = resolve_effective_delivery_bound(caps)
+                    selected_result_token_limit = resolve_general_output_token_limit(caps)
             try:
                 result = enforce_response_budget(
-                    result,
+                    response_value,
                     tool_name=tool_name,
                     artifact_dir=artifact_dir,
                     config=budget,
-                    effective_delivery_token_limit=effective_delivery_token_limit,
+                    selected_result_token_limit=selected_result_token_limit,
                 )
             except Exception:
                 logger.error("track_response_size_enforcement_failed", tool_name=tool_name)
@@ -192,6 +204,8 @@ def track_response_size(
                         "track_response_size_notification_failed",
                         tool_name=tool_name,
                     )
+            if finalized is not None:
+                result = complete_finalized_recipe_response(finalized, result)
             return result
 
         return wrapper

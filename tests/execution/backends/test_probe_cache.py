@@ -13,6 +13,8 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends._probe_cache import (
     _SCHEMA_VERSION,
+    CODEX_RECIPE_PROBE_POLICY_COMPONENTS,
+    CODEX_RECIPE_PROBE_POLICY_DIGEST,
     PROBE_CACHE_TTL,
     PROBE_POLICY_IDENTITY,
     PROBE_SUITE_CONTRACT,
@@ -173,17 +175,36 @@ class TestReadProbeCache:
 def test_probe_policy_identity_uses_output_discipline_authorities() -> None:
     assert PROBE_POLICY_IDENTITY == (
         f"v{OUTPUT_DISCIPLINE_POLICY_VERSION}-{OUTPUT_DISCIPLINE_COMBINED_SHA256}-"
-        f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}-{PROBE_SUITE_CONTRACT_DIGEST}"
+        f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}-{PROBE_SUITE_CONTRACT_DIGEST}-"
+        f"{CODEX_RECIPE_PROBE_POLICY_DIGEST}"
     )
     assert PROBE_SUITE_CONTRACT == (
         "generated-codex-child-v1",
         "deep-investigate-codex-v2",
         "deep-investigate-claude-200k-v2",
+        "codex-recipe-delivery-v1",
     )
 
 
-def test_probe_cache_schema_is_version_two() -> None:
-    assert _SCHEMA_VERSION == 2
+def test_recipe_probe_policy_identity_covers_every_invalidation_domain() -> None:
+    prefixes = {component.partition(":")[0] for component in CODEX_RECIPE_PROBE_POLICY_COMPONENTS}
+    assert prefixes == {
+        "budget",
+        "parser",
+        "evidence-schema",
+        "attestation-registry",
+        "surface-registry",
+        "prompt",
+        "response-exemptions",
+        "cli-pin",
+        "model",
+        "fixtures",
+        "attestation-provider",
+    }
+
+
+def test_probe_cache_schema_is_version_three() -> None:
+    assert _SCHEMA_VERSION == 3
 
 
 class TestWriteProbeCache:

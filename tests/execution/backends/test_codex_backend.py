@@ -832,7 +832,7 @@ class TestCodexBuildInteractiveCmd:
     def test_system_prompt_with_no_resume_appends_config_override(self) -> None:
         import tomllib
 
-        from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
+        from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 
         spec = CodexBackend().build_interactive_cmd(system_prompt="foo")
         overrides = [
@@ -844,10 +844,7 @@ class TestCodexBuildInteractiveCmd:
             if value.startswith("developer_instructions=")
         )
         parsed = tomllib.loads(f"developer_instructions = {rendered}")
-        assert (
-            parsed["developer_instructions"]
-            == f"foo\n\n{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
-        )
+        assert parsed["developer_instructions"] == f"foo\n\n{codex_discipline_suffix()}"
         assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_named_resume_does_not_append_config_override(self) -> None:
@@ -1846,13 +1843,12 @@ class TestCodexBackendSetupSessionDir:
             assert data["developer_instructions"], (
                 f"{toml_path.name}: developer_instructions empty"
             )
-            from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
+            from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 
-            assert OUTPUT_DISCIPLINE_DIGEST in data["developer_instructions"]
             assert (
                 data["developer_instructions"]
                 .rstrip()
-                .endswith(CODEX_INTAKE_DISCIPLINE_DIGEST.rstrip())
+                .endswith(codex_discipline_suffix().rstrip())
             )
             assert data["sandbox_mode"] == "workspace-write", (
                 f"{toml_path.name}: wrong sandbox_mode"

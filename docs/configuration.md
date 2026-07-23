@@ -200,25 +200,26 @@ run_skill:
   stale_threshold: 1200    # 20 minutes of no output before declaring stale
 ```
 
-### Per-repo Codex output ceilings
+### Codex result and history budgets
 
-The global `~/.codex/config.toml` sets `tool_output_token_limit` to 54,500 (written
-by `autoskillit init` via `ensure_codex_mcp_registered`). This value is sized for
-autoskillit kitchen sessions — see [ADR-0005](decisions/0005-output-budget-protocol.md)
-for the derivation.
+The global `~/.codex/config.toml` sets `tool_output_token_limit` to 56,750 (written
+by `autoskillit init` via `ensure_codex_mcp_registered`). The setting governs how
+much tool output Codex retains in later conversation history. It does not select the
+outer result limit of the current `functions.exec` call.
 
-For non-autoskillit repos, cap casual reads at ~40 KB (10,000 tokens × 4 bytes/token)
-using either approach:
+Ordinary calls use Codex's 10,000-token omitted outer default and must not request a
+larger result. A narrow exception exists for full `open_kitchen` and `load_recipe`
+delivery: the outer cell starts with
+`// @exec: {"max_output_tokens": 56750}` and passes the protected host-provided
+`delivery_request` unchanged. AutoSkillit accepts that exception only for a supported,
+unforgeable host evidence identity and only for the thread's first oversized insertion.
+Without that evidence—including direct MCP calls and current writable rollout files—the
+server returns the bounded, content-addressed `recipe_pull` envelope.
 
-1. **Per-invocation**: `codex -c tool_output_token_limit=10000`
-2. **Per-project**: set `CODEX_HOME=<project>/.codex` with a dedicated `config.toml`
-   containing `tool_output_token_limit = 10000`
-
-**Scope caveat**: the ceiling clamps regular-path exec/tool output
-(`min(model request, tool_output_token_limit)`), but code-mode models (gpt-5.6-sol)
-honor model-declared `max_output_tokens` unclamped — for those sessions the ceiling
-is not a hard cap and the intake digest's `max_output_tokens` <= 10000 rule is the
-operative bound.
+Changing `tool_output_token_limit` is a history-retention choice, not a per-call output
+selector. Bound ordinary producers directly and use `max_output_tokens` only within the
+generated recipe-delivery contract. See
+[ADR-0005](decisions/0005-output-budget-protocol.md) for the separate authority domains.
 
 ## MCP Response Tracking
 

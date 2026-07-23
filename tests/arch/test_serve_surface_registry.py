@@ -1,12 +1,14 @@
-"""Structural tests for SERVE_SURFACES frozenset and load_and_validate call-site enforcement.
+"""Structural tests for the delivery registry and load-and-validate call sites.
 
 AST guard: load_and_validate must only be called from _serve_helpers.py within server/tools/.
-SERVE_SURFACES membership: all four surfaces registered, no phantom entries.
+Registry membership: all four surfaces registered, no phantom entries.
 """
 
 from __future__ import annotations
 
 import ast
+import operator
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -54,18 +56,29 @@ def test_serve_surfaces_registry_is_exhaustive() -> None:
     )
 
 
-def test_serve_surfaces_frozenset_defined() -> None:
-    """SERVE_SURFACES must be importable from autoskillit.core and be a frozenset."""
-    from autoskillit.core import SERVE_SURFACES
-
-    assert isinstance(SERVE_SURFACES, frozenset), (
-        f"SERVE_SURFACES must be a frozenset, got {type(SERVE_SURFACES)}"
+def test_recipe_delivery_surface_registry_is_typed() -> None:
+    """The sole route authority is a typed core registry."""
+    from autoskillit.core import (
+        RECIPE_DELIVERY_SURFACE_REGISTRY,
+        RecipeDeliverySurfaceDef,
     )
+
+    assert isinstance(RECIPE_DELIVERY_SURFACE_REGISTRY, Mapping)
+    assert all(
+        isinstance(definition, RecipeDeliverySurfaceDef)
+        for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
+    )
+    with pytest.raises(TypeError):
+        operator.setitem(
+            RECIPE_DELIVERY_SURFACE_REGISTRY,
+            "mutated",
+            next(iter(RECIPE_DELIVERY_SURFACE_REGISTRY.values())),
+        )
 
 
 def test_serve_surfaces_contains_expected_members() -> None:
-    """SERVE_SURFACES must list all four known serve surfaces."""
-    from autoskillit.core import SERVE_SURFACES
+    """The registry lists exactly the four recipe-bearing serve routes."""
+    from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
 
     expected = {
         "open_kitchen",
@@ -73,8 +86,21 @@ def test_serve_surfaces_contains_expected_members() -> None:
         "load_recipe",
         "get_recipe",
     }
-    assert expected == SERVE_SURFACES, (
-        f"SERVE_SURFACES mismatch. "
-        f"Missing: {expected - SERVE_SURFACES}. "
-        f"Extra: {SERVE_SURFACES - expected}."
+    actual = set(RECIPE_DELIVERY_SURFACE_REGISTRY)
+    assert expected == actual, (
+        f"RECIPE_DELIVERY_SURFACE_REGISTRY mismatch. "
+        f"Missing: {expected - actual}. "
+        f"Extra: {actual - expected}."
     )
+
+
+def test_recipe_recreation_policy_is_registry_owned() -> None:
+    from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
+
+    eligible = {
+        surface
+        for surface, definition in RECIPE_DELIVERY_SURFACE_REGISTRY.items()
+        if definition.recreation_eligible
+    }
+
+    assert eligible == {"open_kitchen", "open_kitchen_deferred_recall", "get_recipe"}

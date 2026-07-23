@@ -29,6 +29,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_protocols_backend.py` | Protocols: `StreamParser`, `ResultParser`, `EnvPolicy`, `SessionLocator`, `CodingAgentBackend` |
 | `_type_checkpoint.py` | `SessionCheckpoint` frozen dataclass and `compute_remaining()` helper for session resume |
 | `_type_backend.py` | `BackendCapabilities` frozen dataclass, `CLAUDE_CODE_CAPABILITIES` constant, `CmdSpec`, `SkillSessionConfig`, `ClaudeEventData`, `CodexEventData`, `SessionEvent`, `AgentSessionResult` |
+| `_type_recipe_delivery.py` | Typed Codex recipe budgets, protected-host evidence definitions, requests, attestations, and delivery decisions |
 | `_type_capture.py` | `CaptureEntrySpec` and `CaptureValueTypeError` for typed capture contract enforcement |
 | `_type_dispatch_identity.py` | `DispatchIdentity` frozen value object, `PromptContractError`, and `assert_prompt_sentinel` for sentinel contract enforcement |
 | `_type_helpers.py` | Text processing and skill-name extraction utilities |

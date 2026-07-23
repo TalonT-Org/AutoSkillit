@@ -482,7 +482,7 @@ def test_exempted_payload_spills_when_over_delivery_bound(tmp_path):
         tool_name="open_kitchen",
         artifact_dir=tmp_path,
         config=_config(),
-        effective_delivery_token_limit=10_000,
+        selected_result_token_limit=10_000,
     )
     assert isinstance(result, str)
     bound = 10_000 * 4
@@ -519,7 +519,7 @@ def test_delivery_bound_summary_preserves_operational_fields(tmp_path):
         tool_name="open_kitchen",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=10_000,
+        selected_result_token_limit=10_000,
     )
     assert isinstance(result, str)
     bound = 10_000 * 4
@@ -565,7 +565,7 @@ def test_delivery_bound_summary_small_bound_no_exception(tmp_path):
         tool_name="open_kitchen",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=500,
+        selected_result_token_limit=500,
     )
     assert isinstance(result, str)
     bound = 500 * 4
@@ -599,7 +599,7 @@ def test_delivery_bound_summary_drops_diagram_when_needed(tmp_path):
         tool_name="open_kitchen",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=500,
+        selected_result_token_limit=500,
     )
     assert isinstance(result, str)
     bound = 500 * 4
@@ -623,7 +623,7 @@ def test_over_ceiling_payload_fails_even_when_over_delivery_bound(tmp_path):
         tool_name="open_kitchen",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=10_000,
+        selected_result_token_limit=10_000,
     )
     assert isinstance(result, str)
     data = json.loads(result)
@@ -634,7 +634,7 @@ def test_over_ceiling_payload_fails_even_when_over_delivery_bound(tmp_path):
 
 def test_non_exempted_projection_capped_at_delivery_bound(tmp_path):
     """REQ-023 pin: non-exempted projection must be capped at min(
-    response_max_bytes, effective_delivery_token_limit * 4)."""
+    response_max_bytes, selected_result_token_limit * 4)."""
     payload = {"data": "y" * 150_000}
     original = json.dumps(payload)
     result = enforce_response_budget(
@@ -642,7 +642,7 @@ def test_non_exempted_projection_capped_at_delivery_bound(tmp_path):
         tool_name="run_skill",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=500,
+        selected_result_token_limit=500,
     )
     assert isinstance(result, str)
     bound = 500 * 4
@@ -672,7 +672,7 @@ def test_delivery_bound_summary_projects_oversized_preserved_fields(tmp_path):
         tool_name="open_kitchen",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=10_000,
+        selected_result_token_limit=10_000,
     )
     assert isinstance(result, str)
     bound = 10_000 * 4
@@ -725,7 +725,7 @@ def test_delivery_bound_summary_with_realistic_suggestions_preserves_content(tmp
         tool_name="open_kitchen",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=bound_tokens,
+        selected_result_token_limit=bound_tokens,
     )
     assert isinstance(result, str)
     assert len(result.encode("utf-8")) <= bound_bytes, (
@@ -795,7 +795,7 @@ def test_delivery_bound_summary_reallocates_freed_budget_to_content(tmp_path):
         tool_name="open_kitchen",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=bound_tokens,
+        selected_result_token_limit=bound_tokens,
     )
     assert isinstance(result, str)
     rendered_bytes = len(result.encode("utf-8"))

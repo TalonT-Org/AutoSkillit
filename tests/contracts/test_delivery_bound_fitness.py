@@ -15,26 +15,34 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import cast
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
-    resolve_effective_delivery_bound,
+    resolve_general_output_token_limit,
 )
-from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_TOOL_OUTPUT_TOKEN_LIMIT
-from autoskillit.recipe import all_validated_recipe_names, load_and_validate
+from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
+from autoskillit.recipe import (
+    all_validated_recipe_names,
+    find_recipe_by_name,
+    load_and_validate,
+    load_recipe,
+)
+from autoskillit.server._recipe_delivery import build_recipe_envelope, persist_recipe_artifact
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     enforce_response_budget,
 )
 from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
-    build_recipe_envelope,
-    extract_step_skeleton,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
@@ -81,7 +89,10 @@ def _full_open_kitchen_payload(recipe_name: str) -> dict[str, object]:
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
 @pytest.mark.parametrize("backend_name", sorted(_backend_capabilities().keys()), ids=lambda n: n)
 def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
-    recipe_name: str, backend_name: str, tmp_path: Path
+    recipe_name: str,
+    backend_name: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """System-level fitness contract (issue #4304 Part B REQ-B-T7): the bounded
     envelope built unconditionally for every bundled recipe via
@@ -96,37 +107,48 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     envelope-fit-by-construction guarantee is the post-#4304-Part-B invariant
     that this file exists to defend.
     """
+    from autoskillit.recipe import _api_cache
+    from autoskillit.recipe._api_cache import LoadCache
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     payload = _full_open_kitchen_payload(recipe_name)
-    step_names = [
-        str(n)
-        for n in cast(list[object], payload.get("post_prune_step_names") or [])
-        if isinstance(n, str)
-    ]
-    skeleton = extract_step_skeleton(
-        step_names,
-        routing_edges_by_step={},
-        step_summaries={name: f"summary-{name}" for name in step_names},
+    generation = persist_recipe_artifact(
+        tmp_path,
+        kitchen_id="fitness-kitchen",
+        producer_tool="open_kitchen",
+        recipe_name=recipe_name,
+        payload=payload,
     )
-    artifact_path = tmp_path / f"{recipe_name}.log"
-    sha256 = "0" * 64
 
     caps = _backend_capabilities()[backend_name]
-    bound_tokens = resolve_effective_delivery_bound(caps)
+    bound_tokens = resolve_general_output_token_limit(caps)
     bound_bytes = _effective_bound_bytes(bound_tokens)
+    recipe_info = find_recipe_by_name(recipe_name, _PROJECT_ROOT)
+    assert recipe_info is not None
+    recipe = load_recipe(recipe_info.path)
     envelope = build_recipe_envelope(
         payload,
         recipe_name=recipe_name,
-        artifact_path=str(artifact_path),
-        artifact_sha256=sha256,
-        skeleton=skeleton,
+        generation=generation,
+        skeleton_source=cast(
+            "ToolContext",
+            SimpleNamespace(recipe_name=recipe_name, active_recipe_steps=recipe.steps),
+        ),
         bound_bytes=bound_bytes,
     )
-    serialized = json.dumps(envelope, ensure_ascii=False)
+    serialized = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
     assert len(serialized.encode("utf-8")) <= bound_bytes, (
         f"{backend_name}: envelope for {recipe_name} exceeds "
         f"{bound_bytes} bytes (effective delivery bound)"
     )
     assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
+    skeleton_steps = envelope["step_flow_skeleton"]["steps"]
+    expected_step_names = set(payload.get("post_prune_step_names") or [])
+    assert {step["name"] for step in skeleton_steps} == expected_step_names
+    if expected_step_names:
+        assert any(step.get("summary") or step["edges"] for step in skeleton_steps)
+    else:
+        assert not recipe.steps, "step-bearing recipes must expose production skeleton metadata"
 
 
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
@@ -151,7 +173,7 @@ def test_bundled_recipe_open_kitchen_raw_spill_projection_fits_per_backend(
     serialized = json.dumps(payload)
     serialized_bytes = len(serialized.encode("utf-8"))
     for backend_name, caps in _backend_capabilities().items():
-        bound_tokens = resolve_effective_delivery_bound(caps)
+        bound_tokens = resolve_general_output_token_limit(caps)
         bound_bytes = _effective_bound_bytes(bound_tokens)
         if serialized_bytes <= bound_bytes:
             continue
@@ -160,7 +182,7 @@ def test_bundled_recipe_open_kitchen_raw_spill_projection_fits_per_backend(
             tool_name="open_kitchen",
             artifact_dir=tmp_path / backend_name,
             config=OutputBudgetConfig(),
-            effective_delivery_token_limit=bound_tokens,
+            selected_result_token_limit=bound_tokens,
         )
         assert isinstance(result, str), (
             f"{backend_name}: expected str result for {recipe_name} payload"
@@ -183,7 +205,7 @@ def test_non_exempted_oversized_payload_spills_within_delivery_bound(tmp_path) -
     serialized = json.dumps(payload)
     config = OutputBudgetConfig()
     for backend_name, caps in _backend_capabilities().items():
-        bound_tokens = resolve_effective_delivery_bound(caps)
+        bound_tokens = resolve_general_output_token_limit(caps)
         bound_bytes = _effective_bound_bytes(bound_tokens)
         assert len(serialized.encode("utf-8")) > bound_bytes, (
             f"{backend_name}: payload does not exceed bound ({bound_bytes} bytes)"
@@ -193,7 +215,7 @@ def test_non_exempted_oversized_payload_spills_within_delivery_bound(tmp_path) -
             tool_name="run_skill",
             artifact_dir=tmp_path / backend_name,
             config=config,
-            effective_delivery_token_limit=bound_tokens,
+            selected_result_token_limit=bound_tokens,
         )
         assert isinstance(result, str)
         assert len(result.encode("utf-8")) <= bound_bytes, (
@@ -244,7 +266,7 @@ def test_delivery_bound_summary_carries_all_step_names(
         str(name) for name in cast(list[object], step_names_raw or []) if isinstance(name, str)
     ]
     for backend_name, caps in _backend_capabilities().items():
-        bound_tokens = resolve_effective_delivery_bound(caps)
+        bound_tokens = resolve_general_output_token_limit(caps)
         bound_bytes = _effective_bound_bytes(bound_tokens)
         if serialized_bytes <= bound_bytes:
             continue
@@ -253,7 +275,7 @@ def test_delivery_bound_summary_carries_all_step_names(
             tool_name="open_kitchen",
             artifact_dir=tmp_path / backend_name,
             config=OutputBudgetConfig(),
-            effective_delivery_token_limit=bound_tokens,
+            selected_result_token_limit=bound_tokens,
         )
         assert isinstance(result, str), (
             f"{backend_name}: expected str result for {recipe_name} payload"
@@ -322,43 +344,46 @@ def test_delivery_bound_summary_carries_all_step_names(
             )
 
 
-def test_codex_configured_limit_not_less_than_effective_delivery_bound() -> None:
-    """Cross-relational invariant: the configured Codex tool-output token
-    limit must not drift below the operative delivery bound, and must not
-    drift below the upstream Codex code-mode default output bound (~10,000
-    tokens, per issue #4300)."""
+def test_codex_history_retention_not_less_than_unnegotiated_result_limit() -> None:
+    """History retention must accommodate the ordinary outer-result default.
+
+    This comparison is a storage-safety relation only; it does not authorize
+    the retention value as the selected outer result.
+    """
     codex_caps = BACKEND_REGISTRY["codex"]().capabilities
-    codex_effective = resolve_effective_delivery_bound(codex_caps)
-    assert codex_effective > 0
-    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT >= codex_effective, (
-        f"CODEX_TOOL_OUTPUT_TOKEN_LIMIT ({CODEX_TOOL_OUTPUT_TOKEN_LIMIT}) is "
-        f"below Codex effective delivery bound ({codex_effective}); config "
+    codex_unnegotiated = resolve_general_output_token_limit(codex_caps)
+    assert codex_unnegotiated > 0
+    assert CODEX_HISTORY_RETENTION_TOKEN_LIMIT >= codex_unnegotiated, (
+        "CODEX_HISTORY_RETENTION_TOKEN_LIMIT "
+        f"({CODEX_HISTORY_RETENTION_TOKEN_LIMIT}) is below Codex unnegotiated "
+        f"result limit ({codex_unnegotiated}); config "
         f"and capability field have drifted apart"
     )
     # Upstream floor: Codex code-mode default ~10,000 tokens.
-    assert CODEX_TOOL_OUTPUT_TOKEN_LIMIT >= 10_000, (
-        f"CODEX_TOOL_OUTPUT_TOKEN_LIMIT ({CODEX_TOOL_OUTPUT_TOKEN_LIMIT}) is "
+    assert CODEX_HISTORY_RETENTION_TOKEN_LIMIT >= 10_000, (
+        "CODEX_HISTORY_RETENTION_TOKEN_LIMIT "
+        f"({CODEX_HISTORY_RETENTION_TOKEN_LIMIT}) is "
         f"below the upstream Codex code-mode default output bound (10,000); "
         f"config value must not drift below this floor"
     )
 
 
 def test_capability_default_uses_conservative_bound() -> None:
-    """BackendCapabilities() with no effective_delivery_token_limit set must
+    """BackendCapabilities() with no unnegotiated_tool_result_token_limit set must
     default to a conservative worst-case bound (the smallest registered
     backend bound). The historical 0-sentinel silently disabled delivery
     bounding for any future backend that omitted the field, leading to
     unbounded transport delivery."""
     caps = BackendCapabilities()
-    bound = caps.effective_delivery_token_limit
+    bound = caps.unnegotiated_tool_result_token_limit
     assert bound > 0, (
-        f"BackendCapabilities() default effective_delivery_token_limit must "
+        f"BackendCapabilities() default unnegotiated_tool_result_token_limit must "
         f"be conservative (non-zero); got {bound}"
     )
     # The default must be at most the smallest registered backend bound,
     # so the worst-case delivery is bounded to the strictest transport.
     min_registered = min(
-        resolve_effective_delivery_bound(cls().capabilities) for cls in BACKEND_REGISTRY.values()
+        resolve_general_output_token_limit(cls().capabilities) for cls in BACKEND_REGISTRY.values()
     )
     assert bound <= min_registered, (
         f"BackendCapabilities() default ({bound}) must be at most the "
@@ -389,7 +414,7 @@ def test_non_exempted_delivery_bound_preserves_result_field(tmp_path: Path) -> N
         tool_name="run_skill",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=bound_tokens,
+        selected_result_token_limit=bound_tokens,
     )
     assert isinstance(result, str)
     assert len(result.encode("utf-8")) <= bound_bytes, (
@@ -420,7 +445,7 @@ def test_non_exempted_delivery_bound_preserves_non_string_result(tmp_path: Path)
         tool_name="run_skill",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=bound_tokens,
+        selected_result_token_limit=bound_tokens,
     )
     assert isinstance(result, str)
     assert len(result.encode("utf-8")) <= bound_tokens * 4
@@ -437,7 +462,7 @@ def test_non_exempted_delivery_bound_finds_multibyte_result_prefix(tmp_path: Pat
         tool_name="run_skill",
         artifact_dir=tmp_path,
         config=OutputBudgetConfig(),
-        effective_delivery_token_limit=bound_tokens,
+        selected_result_token_limit=bound_tokens,
     )
     assert isinstance(result, str)
     assert len(result.encode("utf-8")) <= bound_tokens * 4

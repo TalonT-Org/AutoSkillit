@@ -235,6 +235,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
     "_type_backend": frozenset({"core", "execution", "cli", "recipe", "server", "workspace"}),
+    "_type_recipe_delivery": frozenset({"core", "execution", "server"}),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli"}),
@@ -787,7 +788,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_admission_dispatch_agreement.py",
             "server/test_pipeline_deps_derivation.py",
             "server/test_pipeline_tracker.py",
-            "server/test_tools_recipe_pull.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",
@@ -943,6 +943,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         }
     ),
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
+    "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
     "smoke_utils": frozenset({"test_smoke_utils.py", "recipe", "smoke_utils"}),
     "version": frozenset({"test_version.py", "server", "cli"}),
@@ -1046,6 +1047,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "hook_registry": frozenset({"hooks"}),
     "planner": frozenset({"planner"}),
     "_llm_triage": frozenset({"test_llm_triage.py"}),
+    "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),
     "smoke_utils": frozenset({"test_smoke_utils.py"}),
     "version": frozenset({"test_version.py"}),
     "_test_filter": frozenset({"arch", "contracts"}),

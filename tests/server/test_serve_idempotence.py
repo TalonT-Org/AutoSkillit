@@ -13,8 +13,9 @@ import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from autoskillit.core import SERVE_SURFACES
+from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
 from autoskillit.pipeline.context import ToolContext
+from tests.server._helpers import _resolve_recipe_content
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
@@ -27,11 +28,12 @@ _RECIPE = "remediation"
 
 
 def test_re_serve_surfaces_in_sync_with_serve_surfaces() -> None:
-    """_RE_SERVE_SURFACES must exactly match SERVE_SURFACES - {"open_kitchen"}."""
-    assert set(_RE_SERVE_SURFACES) == SERVE_SURFACES - {"open_kitchen"}, (
-        f"_RE_SERVE_SURFACES out of sync with SERVE_SURFACES. "
-        f"Missing: {(SERVE_SURFACES - {'open_kitchen'}) - set(_RE_SERVE_SURFACES)}. "
-        f"Extra: {set(_RE_SERVE_SURFACES) - (SERVE_SURFACES - {'open_kitchen'})}."
+    """Re-serve cases stay derived from the delivery-surface registry."""
+    expected = set(RECIPE_DELIVERY_SURFACE_REGISTRY) - {"open_kitchen"}
+    assert set(_RE_SERVE_SURFACES) == expected, (
+        f"_RE_SERVE_SURFACES out of sync with RECIPE_DELIVERY_SURFACE_REGISTRY. "
+        f"Missing: {expected - set(_RE_SERVE_SURFACES)}. "
+        f"Extra: {set(_RE_SERVE_SURFACES) - expected}."
     )
 
 
@@ -83,11 +85,10 @@ async def test_load_recipe_after_open_kitchen_with_overrides_serves_identical_co
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = await _resolve_recipe_content(ok_result)
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-    assert "content" in lr_result, f"load_recipe missing content: {lr_result}"
-    lr_content = lr_result["content"]
+    lr_content = await _resolve_recipe_content(lr_result)
 
     assert ok_content == lr_content, (
         "load_recipe content diverges from open_kitchen content — "
@@ -123,27 +124,12 @@ async def test_load_recipe_after_open_kitchen_without_overrides_serves_identical
     )
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-
-    if "content" in ok_result and "content" in lr_result:
-        assert ok_result["content"] == lr_result["content"], (
-            "load_recipe content diverges from open_kitchen content (no-override path) — "
-            "session_serve_overrides baseline not applied"
-        )
-    else:
-        # The unresolved (no-overrides) serving of this recipe is large enough
-        # that one or both surfaces substitute the bounded step-flow-skeleton
-        # envelope for full content (server/_serve_helpers.py
-        # build_recipe_envelope) — open_kitchen's pre-envelope payload carries
-        # extra routing metadata (build_open_kitchen_recipe_payload) that
-        # load_recipe's doesn't, so the two surfaces can cross the delivery
-        # bound independently. Prove idempotence via the recipe-derived
-        # routing fields populated identically in both representations.
-        assert ok_result.get("post_prune_step_names") == lr_result.get("post_prune_step_names"), (
-            "load_recipe post_prune_step_names diverges from open_kitchen (no-override path)"
-        )
-        assert ok_result.get("post_prune_routing_edges") == lr_result.get(
-            "post_prune_routing_edges"
-        ), "load_recipe post_prune_routing_edges diverges from open_kitchen (no-override path)"
+    ok_content = await _resolve_recipe_content(ok_result)
+    lr_content = await _resolve_recipe_content(lr_result)
+    assert ok_content == lr_content, (
+        "load_recipe content diverges from open_kitchen content (no-override path) — "
+        "session_serve_overrides baseline not applied"
+    )
 
 
 async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
@@ -165,7 +151,7 @@ async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
         monkeypatch,
     )
     assert first_result.get("success") is True, f"first open_kitchen failed: {first_result}"
-    first_content = first_result["content"]
+    first_content = await _resolve_recipe_content(first_result)
 
     deferred_result = await _open_kitchen_patched(
         _RECIPE,
@@ -175,7 +161,7 @@ async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
     assert deferred_result.get("success") is True, (
         f"deferred-recall open_kitchen failed: {deferred_result}"
     )
-    deferred_content = deferred_result["content"]
+    deferred_content = await _resolve_recipe_content(deferred_result)
 
     assert first_content == deferred_content, (
         "Deferred-recall open_kitchen content diverges from first serving — "
@@ -247,17 +233,26 @@ async def test_explicit_load_recipe_overrides_layer_on_top_of_session_baseline(
     lr_result = json.loads(
         await load_recipe(name=_RECIPE, overrides={"extra_ingredient": "extra_value"})
     )
-    assert "content" in lr_result, f"load_recipe missing content: {lr_result}"
+    lr_content = await _resolve_recipe_content(lr_result)
 
     from autoskillit.core.io import load_yaml
 
-    parsed = load_yaml(lr_result["content"])
+    parsed = load_yaml(lr_content)
     assert parsed["steps"]["clone"]["on_success"] == "claim_and_resolve", (
         "issue_url session baseline must still be active when load_recipe passes extra_ingredient"
     )
 
 
 # ── New tests (Part B: get_recipe surface fix + parametric guard) ─────────────
+
+
+async def _get_recipe_resource_content(recipe_name: str) -> str:
+    """Resolve either an inline resource payload or its immutable pull generation."""
+    from autoskillit.server.tools.tools_kitchen import get_recipe
+
+    resource = json.loads(get_recipe(recipe_name))
+    assert "error" not in resource, f"get_recipe returned error: {resource}"
+    return await _resolve_recipe_content(resource)
 
 
 async def test_get_recipe_content_matches_open_kitchen_with_overrides(
@@ -273,7 +268,6 @@ async def test_get_recipe_content_matches_open_kitchen_with_overrides(
     monkeypatch.chdir(tmp_path)
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server.tools.tools_kitchen import get_recipe
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
@@ -283,14 +277,9 @@ async def test_get_recipe_content_matches_open_kitchen_with_overrides(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = await _resolve_recipe_content(ok_result)
 
-    gr_content = get_recipe(_RECIPE)
-    try:
-        _err = json.loads(gr_content)
-        pytest.fail(f"get_recipe returned error: {_err}")
-    except json.JSONDecodeError:
-        pass
+    gr_content = await _get_recipe_resource_content(_RECIPE)
 
     assert ok_content == gr_content, (
         "get_recipe content diverges from open_kitchen content — "
@@ -321,22 +310,13 @@ async def _call_re_serve_surface(
         from autoskillit.server.tools.tools_recipe import load_recipe
 
         result = json.loads(await load_recipe(name=recipe_name))
-        assert "content" in result, f"load_recipe returned no content: {result}"
-        return result["content"]
+        return await _resolve_recipe_content(result)
     elif surface == "get_recipe":
-        from autoskillit.server.tools.tools_kitchen import get_recipe
-
-        content = get_recipe(recipe_name)
-        try:
-            _err = json.loads(content)
-            pytest.fail(f"get_recipe returned error: {_err}")
-        except json.JSONDecodeError:
-            pass
-        return content
+        return await _get_recipe_resource_content(recipe_name)
     elif surface == "open_kitchen_deferred_recall":
         result = await _open_kitchen_patched(recipe_name, None, monkeypatch)
         assert result.get("success") is True, f"deferred-recall failed: {result}"
-        return result["content"]
+        return await _resolve_recipe_content(result)
     else:
         raise ValueError(f"Unknown surface: {surface!r}")
 
@@ -352,7 +332,7 @@ async def test_serve_surfaces_parametric_content_identity(
 
     Parametrized across _RE_SERVE_SURFACES (load_recipe, get_recipe,
     open_kitchen_deferred_recall). Collection-time guard at module level ensures
-    _RE_SERVE_SURFACES stays in sync with SERVE_SURFACES.
+    _RE_SERVE_SURFACES stays in sync with RECIPE_DELIVERY_SURFACE_REGISTRY.
     """
     monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
     from autoskillit.recipe import _api_cache
@@ -366,7 +346,7 @@ async def test_serve_surfaces_parametric_content_identity(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = await _resolve_recipe_content(ok_result)
 
     re_served_content = await _call_re_serve_surface(surface, _RECIPE, monkeypatch)
 
@@ -386,7 +366,6 @@ async def test_get_recipe_snapshot_lifecycle(
     from autoskillit.core.io import load_yaml
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server.tools.tools_kitchen import get_recipe
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
@@ -396,14 +375,9 @@ async def test_get_recipe_snapshot_lifecycle(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = ok_result["content"]
+    ok_content = await _resolve_recipe_content(ok_result)
 
-    gr_content = get_recipe(_RECIPE)
-    try:
-        _err = json.loads(gr_content)
-        pytest.fail(f"get_recipe returned error: {_err}")
-    except json.JSONDecodeError:
-        pass
+    gr_content = await _get_recipe_resource_content(_RECIPE)
 
     parsed_ok = load_yaml(ok_content)
     parsed_gr = load_yaml(gr_content)
@@ -477,25 +451,11 @@ async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
         assume(False)  # discard: open_kitchen failed (e.g. invalid combos)
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-    if "content" not in lr_result:
+    if lr_result.get("success") is False:
         assume(False)  # discard: load_recipe failed
-
-    if "content" in ok_result:
-        assert lr_result["content"] == ok_result["content"], (
-            f"Routing divergence for overrides={overrides!r}: "
-            "load_recipe content must match open_kitchen content"
-        )
-    else:
-        # open_kitchen's pre-envelope payload carries extra routing metadata
-        # (build_open_kitchen_recipe_payload) that load_recipe's doesn't, so
-        # for a recipe near the delivery bound the two surfaces can cross
-        # independently and open_kitchen may substitute the bounded
-        # step-flow-skeleton envelope while load_recipe still serves full
-        # content. Prove idempotence via the recipe-derived routing fields
-        # populated identically in both representations.
-        assert ok_result.get("post_prune_step_names") == lr_result.get("post_prune_step_names"), (
-            f"Routing divergence for overrides={overrides!r}: post_prune_step_names mismatch"
-        )
-        assert ok_result.get("post_prune_routing_edges") == lr_result.get(
-            "post_prune_routing_edges"
-        ), f"Routing divergence for overrides={overrides!r}: post_prune_routing_edges mismatch"
+    ok_content = await _resolve_recipe_content(ok_result)
+    lr_content = await _resolve_recipe_content(lr_result)
+    assert lr_content == ok_content, (
+        f"Routing divergence for overrides={overrides!r}: "
+        "load_recipe content must match open_kitchen content"
+    )

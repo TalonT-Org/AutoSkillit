@@ -98,6 +98,7 @@ jobs:
           .venv/bin/python -m pytest \
             tests/execution/test_smoke_codex.py \
             tests/execution/backends/test_cli_conformance_probes.py \
+            tests/execution/backends/test_codex_recipe_delivery_conformance.py \
             tests/server/test_output_budget_e2e.py \
             -m smoke -v --tb=short -o "addopts=" \
             --basetemp="$TMPDIR/basetemp" \

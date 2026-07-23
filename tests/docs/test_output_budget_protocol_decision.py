@@ -29,7 +29,7 @@ def test_output_budget_decision_is_indexed(decision_text: str) -> None:
 
 def test_decision_owns_independent_backend_limits(decision_text: str) -> None:
     assert "MAX_MCP_OUTPUT_TOKENS" in decision_text
-    assert "CODEX_TOOL_OUTPUT_TOKEN_LIMIT" in decision_text
+    assert "CODEX_HISTORY_RETENTION_TOKEN_LIMIT" in decision_text
     assert "no shared source of truth" in decision_text
 
 
@@ -49,14 +49,12 @@ def test_decision_names_all_four_layers(decision_text: str, required: str) -> No
 @pytest.mark.parametrize(
     "required",
     [
-        "max_chars = 188_000",
-        "max_utf8_bytes = 188_000",
-        "186,621 characters and UTF-8 bytes",
-        "max_chars = 188_000",
-        "max_utf8_bytes = 188_000",
-        "186,680 characters and UTF-8 bytes",
-        "((188_000 + 3) // 4) + 8_000",
-        "CODEX_TOOL_OUTPUT_TOKEN_LIMIT = 55_000",
+        "max_chars = 195_000",
+        "max_utf8_bytes = 195_000",
+        "ordinary_omitted_result_token_limit = 10_000",
+        "((195_000 + 3) // 4) + 8_000",
+        "authoritative_attested_recipe_result_token_limit = 56_750",
+        "CODEX_HISTORY_RETENTION_TOKEN_LIMIT = 56_750",
         "CODEX_AUTO_COMPACT_LIMIT = 999_999_999",
         "inline_max_chars = 5_000",
         "response_max_bytes = 90_000",
@@ -72,14 +70,14 @@ def test_decision_pins_ceiling_backstop_pair(decision_text: str) -> None:
     assert "44918ea10c0f99151c6710411b4322c2f5c96bea" in decision_text
     assert "codex-rs/utils/string/src/truncate.rs" in decision_text
     assert "one-token-per-four-UTF-8-bytes" in decision_text
-    assert "response_max_bytes // 3 < CODEX_TOOL_OUTPUT_TOKEN_LIMIT" in decision_text
+    assert "response_max_bytes // 3 < ordinary_omitted_result_token_limit" in decision_text
     assert "open_kitchen" in decision_text
     assert "load_recipe" in decision_text
     assert "live large-output probe" in decision_text
     assert "RESPONSE_BACKSTOP_EXEMPTION_REGISTRY" in decision_text
     assert "canonical digest" in decision_text
-    assert "bundled-recipes-all-modes-2026-07-21/load-recipe" in decision_text
-    assert "bundled-recipes-all-modes-2026-07-21/open-kitchen" in decision_text
+    assert "bundled-recipes-all-modes-2026-07-22/load-recipe" in decision_text
+    assert "bundled-recipes-all-modes-2026-07-22/open-kitchen" in decision_text
 
 
 def test_decision_records_both_corrections(decision_text: str) -> None:
@@ -119,18 +117,18 @@ def test_decision_limits_operational_signal_claims(decision_text: str) -> None:
         "measured exemption use",
         "spill failures grouped by bounded cause code",
         "must never contain artifact paths, hashes, or output content",
-        "artifact quota",
-        "artifact cleanup",
-        "cumulative reserve accounting",
+        "recipe delivery decision mode",
+        "receipt reservation outcomes",
+        "one-high-insertion receipt",
     ]:
         assert required in signals
 
 
 def test_adr_0005_contains_per_repo_ceiling_and_upgrade_tracking(decision_text: str) -> None:
     for required in [
-        "codex -c tool_output_token_limit=10000",
-        "CODEX_HOME",
-        "40 KB",
+        "CODEX_HISTORY_RETENTION_TOKEN_LIMIT",
+        "ordinary_omitted_result_token_limit",
+        "history-retained tokens",
         "372,000",
         "CODEX_LIMITS_LAST_VERIFIED_VERSION",
         "codex_limits_verified",

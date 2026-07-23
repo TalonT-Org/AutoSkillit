@@ -884,11 +884,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
             logic on DispatchRecord.from_dict. Exempt at 15 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 14,
+        "server": 15,  # +_recipe_delivery unified finalizer and immutable generation store
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 25,  # +_delivery_bounds (resolve_effective_delivery_bound)
-        "core/types": 32,  # +invariant_registry (INVARIANT_REGISTRY) +closure_report
+        "core": 25,  # +_delivery_bounds (resolve_general_output_token_limit)
+        "core/types": 33,  # +recipe_delivery typed budget/provenance contracts
         "cli": 21,
         "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_cleanup.py  # noqa: E501
         "pipeline": 12,
@@ -899,7 +899,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
         "hooks/guards": 32,  # -output_budget_guard (#4286)
-        "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
+        "execution/backends": 13,  # +_codex_recipe_delivery protected attestation broker
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []
@@ -1035,7 +1035,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "fresh-open and deferred-recall open_kitchen paths, plus overlay lock sidecar "
         "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)"
         "; envelope integration on both deferred-recall and normal open_kitchen paths: "
-        "resolve_effective_delivery_bound + BackendCapabilities isinstance guard + "
+        "resolve_general_output_token_limit + BackendCapabilities isinstance guard + "
         "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)",
     ),
     "tools_execution.py": (

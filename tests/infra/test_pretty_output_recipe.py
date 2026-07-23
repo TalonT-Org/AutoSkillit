@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
 
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
 )
+from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.hooks.formatters.pretty_output_hook import _format_response
+from autoskillit.server._recipe_delivery import _attested_render, persist_recipe_artifact
 from tests.infra._pretty_output_helpers import (
     REALISTIC_RECIPE_YAML,
     _make_event,
@@ -441,7 +448,32 @@ def test_fmt_open_kitchen_plain_text():
     )
     assert formatted is not None
     assert "open_kitchen" in formatted
-    assert "Kitchen is open" in formatted
+    assert "Kitchen is open. AutoSkillit 1.2.3." in formatted
+
+
+@pytest.mark.parametrize("tool_name", ["open_kitchen", "load_recipe"])
+def test_attested_recipe_delivery_region_is_preserved_byte_for_byte(
+    tmp_path: Path, tool_name: str
+) -> None:
+    payload = {
+        "success": True,
+        "content": "steps:\n  impl:\n    action: stop\n",
+    }
+    generation = persist_recipe_artifact(
+        tmp_path,
+        kitchen_id="formatter-contract",
+        producer_tool=tool_name,
+        recipe_name="remediation",
+        payload=payload,
+    )
+    protected = _attested_render(
+        payload,
+        generation,
+        budget=CODEX_RECIPE_DELIVERY_BUDGET,
+        evidence_identity="formatter-contract-v1",
+    )
+    wrapped = json.dumps({"result": protected})
+    assert _format_response(f"mcp__autoskillit__{tool_name}", wrapped, False) == protected
 
 
 # PHK-42/43/44: _fmt_load_recipe tests
@@ -1074,15 +1106,12 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     Ceiling accommodates growth from issue #4274 Part B (the new
     ``inter_part_push_pre_remediation`` / ``verify_ref_push_exhaustion`` steps in
     ``remediation.yaml`` legitimately grew the rendered payload)."""
-    from autoskillit.core import resolve_effective_delivery_bound
+    from autoskillit.core import resolve_general_output_token_limit
     from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
     from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server.tools._serve_helpers import (
-        build_recipe_envelope,
-        extract_step_skeleton,
-    )
+    from autoskillit.server._recipe_delivery import build_recipe_envelope, persist_recipe_artifact
 
     project_root = Path(__file__).resolve().parent.parent.parent
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
@@ -1094,11 +1123,11 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     # and does not have a full `ToolContext` fixture available; replicates the
     # fits/build-envelope decision directly rather than depending on
     # `maybe_envelope_recipe_response`, which receives its bound as a
-    # caller-supplied parameter (effective_delivery_token_limit) derived from
+    # caller-supplied parameter (selected_result_token_limit) derived from
     # the single active session's backend, not computed via `min()`.
     backend_caps = {name: cls().capabilities for name, cls in BACKEND_REGISTRY.items()}
     smallest_bound_tokens = min(
-        resolve_effective_delivery_bound(caps) for caps in backend_caps.values()
+        resolve_general_output_token_limit(caps) for caps in backend_caps.values()
     )
     smallest_bound_bytes = smallest_bound_tokens * 4
     over_budget: list[str] = []
@@ -1113,21 +1142,20 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
                 ingredient_overrides=dict(overrides, source_dir=str(project_root)),
                 temp_dir=tmp_path,
             )
-            post_prune_raw = result.get("post_prune_step_names") or []
-            step_names = [str(n) for n in post_prune_raw if isinstance(n, str)]
-            skeleton = extract_step_skeleton(
-                step_names,
-                routing_edges_by_step={},
-                step_summaries={name: f"summary-{name}" for name in step_names},
+            generation = persist_recipe_artifact(
+                tmp_path,
+                kitchen_id="pretty-output",
+                producer_tool="open_kitchen",
+                recipe_name=recipe_name,
+                payload=dict(result),
             )
-            artifact_path = tmp_path / f"{recipe_name}.log"
-            sha256 = "0" * 64
             envelope = build_recipe_envelope(
                 dict(result),
                 recipe_name=recipe_name,
-                artifact_path=str(artifact_path),
-                artifact_sha256=sha256,
-                skeleton=skeleton,
+                generation=generation,
+                skeleton_source=cast(
+                    "ToolContext", SimpleNamespace(recipe_name="", active_recipe_steps=None)
+                ),
                 bound_bytes=smallest_bound_bytes,
             )
             rendered = _fmt_open_kitchen(envelope, pipeline=False)

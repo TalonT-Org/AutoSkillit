@@ -106,18 +106,70 @@ def test_intake_digest_is_safe_for_agent_toml_multiline_literal() -> None:
     assert "'''" not in CODEX_INTAKE_DISCIPLINE_DIGEST
 
 
-def test_intake_digest_numeric_rule_matches_codex_effective_delivery_bound() -> None:
-    """The intake digest's ``max_output_tokens`` numeric rule must be at least
-    the Codex backend's effective delivery bound — the operative bound the
-    server-side response backstop applies. If the bound changes, the digest
-    text must be updated to reflect it (this is the regression guard)."""
+def test_intake_digest_numeric_rule_matches_codex_unnegotiated_result_limit() -> None:
+    """The ordinary intake rule must name Codex's omitted outer-result limit.
+
+    History retention is deliberately a separate domain and must not select
+    the outer result delivered by Code Mode.
+    """
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     codex_caps = BACKEND_REGISTRY["codex"]().capabilities
-    codex_effective_bound = codex_caps.effective_delivery_token_limit
-    assert codex_effective_bound > 0
-    assert f"max_output_tokens above {codex_effective_bound}" in CODEX_INTAKE_DISCIPLINE_DIGEST, (
+    codex_unnegotiated_limit = codex_caps.unnegotiated_tool_result_token_limit
+    assert codex_unnegotiated_limit > 0
+    assert (
+        f"max_output_tokens above {codex_unnegotiated_limit}" in CODEX_INTAKE_DISCIPLINE_DIGEST
+    ), (
         "CODEX_INTAKE_DISCIPLINE_DIGEST numeric rule must reference the Codex "
-        f"effective_delivery_token_limit ({codex_effective_bound}); update "
+        "unnegotiated_tool_result_token_limit "
+        f"({codex_unnegotiated_limit}); update "
         "the digest if the bound changed."
     )
+
+
+def test_codex_recipe_delivery_contract_is_generated_from_static_budget() -> None:
+    from autoskillit.execution import (
+        CODEX_RECIPE_DELIVERY_BUDGET,
+        CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
+    )
+
+    budget = CODEX_RECIPE_DELIVERY_BUDGET
+    contract = CODEX_RECIPE_DELIVERY_CALLING_CONTRACT
+    assert (
+        f'// @exec: {{"max_output_tokens": '
+        f"{budget.authoritative_attested_recipe_result_token_limit}" + "}"
+    ) in contract
+    assert f"contract_version={budget.contract_version}" in contract
+    assert f"contract_digest={budget.contract_digest}" in contract
+    assert (
+        f"caller_requested_outer_tokens={budget.authoritative_attested_recipe_result_token_limit}"
+    ) in contract
+    for field in (
+        "audience",
+        "delivery_call_id",
+        "contract_version",
+        "contract_digest",
+        "caller_requested_outer_tokens",
+        "code_digest",
+    ):
+        assert field in contract
+    assert "Never synthesize, infer, alter, or replay" in contract
+    assert "bounded recipe_pull path" in contract
+
+
+def test_codex_recipe_delivery_contract_reaches_all_prompt_families() -> None:
+    from autoskillit.cli._prompts import (
+        _build_open_kitchen_prompt,
+        _build_orchestrator_prompt,
+    )
+    from autoskillit.execution import (
+        CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
+        codex_recipe_delivery_calling_contract,
+    )
+    from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
+
+    assert CODEX_RECIPE_DELIVERY_CALLING_CONTRACT in codex_discipline_suffix()
+    prefix = "mcp__autoskillit__"
+    expected = codex_recipe_delivery_calling_contract(mcp_prefix=prefix)
+    assert expected in _build_orchestrator_prompt("remediation", prefix)
+    assert expected in _build_open_kitchen_prompt(prefix)

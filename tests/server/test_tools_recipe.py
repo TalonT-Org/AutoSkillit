@@ -293,6 +293,18 @@ class TestDocstringSemantics:
         return {t.name: t for t in tools}
 
     @pytest.mark.anyio
+    async def test_recipe_tool_schemas_include_generated_codex_delivery_contract(
+        self, kitchen_enabled
+    ):
+        from autoskillit.execution import CODEX_RECIPE_DELIVERY_CALLING_CONTRACT
+
+        tools = await self._get_tools()
+        for tool_name in ("open_kitchen", "load_recipe"):
+            description = tools[tool_name].description or ""
+            assert CODEX_RECIPE_DELIVERY_CALLING_CONTRACT in description
+            assert "delivery_request" in description
+
+    @pytest.mark.anyio
     async def test_load_recipe_action_protocol_routes_through_skill(self, kitchen_enabled):
         """After loading section must route modifications through write-recipe."""
         tools = await self._get_tools()

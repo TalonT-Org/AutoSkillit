@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from autoskillit.core import SkillResult
@@ -9,6 +10,39 @@ from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
+
+
+async def _resolve_recipe_content(result: dict[str, Any]) -> str:
+    """Return exact recipe content from either inline or pull delivery."""
+    assert result.get("success") is True, f"recipe response was not successful: {result}"
+    inline_content = result.get("content")
+    if isinstance(inline_content, str):
+        return inline_content
+
+    pull = result.get("recipe_pull")
+    assert isinstance(pull, dict), f"recipe response has neither content nor pull: {result}"
+    assert pull.get("pull_tool") == "get_recipe_section"
+
+    from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+    identity = {key: value for key, value in pull.items() if key != "pull_tool"}
+    chunks: list[str] = []
+    part = 0
+    expected_byte_start = 0
+    while True:
+        response = json.loads(await get_recipe_section(section="content", part=part, **identity))
+        assert response.get("success") is not False, (
+            f"get_recipe_section returned error: {response}"
+        )
+        chunk = response.get("content")
+        assert isinstance(chunk, str)
+        assert response["byte_start"] == expected_byte_start
+        expected_byte_start = response["byte_end"]
+        chunks.append(chunk)
+        if not response.get("has_more", False):
+            assert expected_byte_start == response["byte_total"]
+            return "".join(chunks)
+        part = response["next_part"]
 
 
 def _write_registry(monkeypatch: Any, tmp_path: Any, entries: list[dict[str, Any]]) -> Any:

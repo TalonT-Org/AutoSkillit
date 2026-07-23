@@ -10,14 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import (
-    CODEX_INTAKE_DISCIPLINE_DIGEST,
-    OUTPUT_DISCIPLINE_DIGEST,
-    BareResume,
-    CmdSpec,
-    NamedResume,
-    NoResume,
-)
+from autoskillit.core import BareResume, CmdSpec, NamedResume, NoResume
+from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -98,10 +92,7 @@ class TestCodexInteractiveCmdSystemPrompt:
             system_prompt="do stuff",
             resume_spec=NoResume(),
         )
-        assert (
-            _developer_instructions(spec)
-            == f"do stuff\n\n{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
-        )
+        assert _developer_instructions(spec) == f"do stuff\n\n{codex_discipline_suffix()}"
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
@@ -134,10 +125,7 @@ class TestCodexInteractiveCmdSystemPrompt:
         overrides = [
             spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
         ]
-        assert (
-            _developer_instructions(spec)
-            == f"{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
-        )
+        assert _developer_instructions(spec) == codex_discipline_suffix()
         assert "features.image_generation=false" in overrides
 
     def test_system_prompt_override_is_valid_toml_with_quotes_and_newlines(self) -> None:
@@ -146,9 +134,7 @@ class TestCodexInteractiveCmdSystemPrompt:
             system_prompt=caller_prompt,
             resume_spec=NoResume(),
         )
-        assert _developer_instructions(spec) == (
-            f"{caller_prompt}\n\n{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
-        )
+        assert _developer_instructions(spec) == (f"{caller_prompt}\n\n{codex_discipline_suffix()}")
 
     def test_installed_codex_parses_exact_fresh_config_overrides(self, tmp_path: Path) -> None:
         binary = shutil.which("codex")

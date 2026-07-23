@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from fastmcp import Context
@@ -19,10 +18,11 @@ from autoskillit.config import (
 )
 from autoskillit.core import (
     BackendCapabilities,
+    RecipeDeliveryRequest,
     fast_dumps,
     get_logger,
     load_yaml,
-    resolve_effective_delivery_bound,
+    resolve_general_output_token_limit,
     temp_dir_display_str,
 )  # noqa: F401
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
@@ -34,6 +34,16 @@ from autoskillit.server._misc import (
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._recipe_delivery import (
+    RecipeArtifactError,
+    RecipeArtifactGeneration,
+    document_recipe_delivery_contract,
+    finalize_recipe_delivery,
+    load_recipe_artifact,
+    persist_recipe_artifact,
+    recipe_pull_producers,
+    recipe_recreation_producers,
+)
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import (
@@ -45,8 +55,6 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
-    maybe_envelope_recipe_response,
-    persist_recipe_artifact,
     render_served_response,
     response_backstop_tool_meta,
     serve_recipe,
@@ -65,7 +73,12 @@ class _RecipeSectionError(Exception):
 
 
 def _bounded_recipe_section_response(
-    section: str, content: str, *, part: int, bound_bytes: int
+    section: str,
+    content: str,
+    *,
+    part: int,
+    bound_bytes: int,
+    generation: RecipeArtifactGeneration,
 ) -> str:
     """Render one continuation chunk whose serialized UTF-8 size fits the bound."""
 
@@ -76,10 +89,14 @@ def _bounded_recipe_section_response(
             "section": section,
             "content": content[start:end],
             "has_more": has_more,
+            "byte_start": len(content[:start].encode("utf-8")),
+            "byte_end": len(content[:end].encode("utf-8")),
+            "byte_total": len(content.encode("utf-8")),
+            "payload_sha256": generation.payload_sha256,
+            "body_sha256": generation.body_sha256,
         }
         if has_more:
             response["next_part"] = chunk_index + 1
-            response["total_size"] = len(content)
         return json.dumps(response, ensure_ascii=False)
 
     start = 0
@@ -108,14 +125,7 @@ def _bounded_recipe_section_response(
             return rendered
         start = end
         if start >= len(content):
-            return json.dumps(
-                {
-                    "success": True,
-                    "section": section,
-                    "content": "",
-                    "has_more": False,
-                }
-            )
+            return _render(start, start)
     raise AssertionError("continuation loop must return")
 
 
@@ -164,10 +174,14 @@ async def list_recipes() -> str:
     annotations={"readOnlyHint": True},
     meta=response_backstop_tool_meta("load_recipe"),
 )
+@document_recipe_delivery_contract
 @_cancellation_shield()
 @track_response_size("load_recipe")
 async def load_recipe(
-    name: str, overrides: dict[str, str] | None = None, ingredients_only: bool = False
+    name: str,
+    overrides: dict[str, str] | None = None,
+    ingredients_only: bool = False,
+    delivery_request: RecipeDeliveryRequest | None = None,
 ) -> str:
     """Load a recipe by name and return its raw YAML content.
 
@@ -400,26 +414,15 @@ async def load_recipe(
                 )
                 return _validation_err
             if not ingredients_only:
-                _lr_backend_caps = (
-                    tool_ctx.backend.capabilities
-                    if tool_ctx.backend is not None
-                    and isinstance(
-                        getattr(tool_ctx.backend, "capabilities", None),
-                        BackendCapabilities,
-                    )
-                    else None
-                )
-                _lr_edtl = (
-                    resolve_effective_delivery_bound(_lr_backend_caps)
-                    if _lr_backend_caps is not None
-                    else None
-                )
-                result = maybe_envelope_recipe_response(
-                    result,
-                    tool_name="load_recipe",
-                    recipe_name=name,
-                    tool_ctx=tool_ctx,
-                    effective_delivery_token_limit=_lr_edtl,
+                return cast(
+                    str,
+                    finalize_recipe_delivery(
+                        result,
+                        surface="load_recipe",
+                        recipe_name=name,
+                        tool_ctx=tool_ctx,
+                        delivery_request=delivery_request,
+                    ),
                 )
             return render_served_response(result)
     except Exception as exc:
@@ -432,11 +435,16 @@ async def load_recipe(
 @track_response_size("get_recipe_section")
 async def get_recipe_section(
     section: str,
+    recipe_name: str,
+    producer_tool: str,
+    descriptor_version: int,
+    schema_version: int,
+    payload_sha256: str,
+    artifact_blob_sha256: str,
+    artifact_blob_size_bytes: int,
+    body_sha256: str,
+    body_size_bytes: int,
     part: int = 0,
-    recipe_name: str | None = None,
-    producer_tool: str | None = None,
-    artifact_path: str | None = None,
-    artifact_sha256: str | None = None,
 ) -> str:
     """Retrieve a recipe step or section from the persisted recipe artifact.
 
@@ -461,9 +469,11 @@ async def get_recipe_section(
             ``recipe_pull.recipe_name`` field.
         producer_tool: Producer identity copied from the envelope's
             ``recipe_pull.producer_tool`` field.
-        artifact_sha256: Artifact digest copied from the envelope's
-            ``recipe_pull.sha256`` field. Required to bind the pull to
-            the exact composition that produced the envelope.
+        payload_sha256: Domain-labelled semantic payload identity.
+        artifact_blob_sha256: Digest of the exact persisted blob bytes.
+        artifact_blob_size_bytes: Exact persisted blob byte size.
+        body_sha256: Digest of the recipe body bytes.
+        body_size_bytes: Exact recipe body byte size.
 
     Returns:
         JSON with ``success``, ``section``, ``content``, ``has_more``,
@@ -481,30 +491,39 @@ async def get_recipe_section(
             if tool_ctx is None or tool_ctx.recipes is None:
                 return json.dumps({"success": False, "error": "kitchen not open"})
 
-            if not recipe_name or producer_tool is None or not artifact_sha256:
+            if not recipe_name or not producer_tool:
                 return json.dumps({"success": False, "error": "recipe_artifact_identity_required"})
             requested_recipe_name = recipe_name
 
-            if producer_tool not in {"open_kitchen", "load_recipe"}:
+            if producer_tool not in recipe_pull_producers():
                 return json.dumps({"success": False, "error": "invalid_recipe_artifact_identity"})
 
             artifact_dir = getattr(tool_ctx, "temp_dir", None)
             if not isinstance(artifact_dir, Path):
                 return json.dumps({"success": False, "error": "kitchen temp_dir not available"})
 
-            from autoskillit.server._response_budget import _recipe_artifact_path  # circular-break
-
-            resolved_artifact_path = _recipe_artifact_path(
-                artifact_dir, producer_tool, requested_recipe_name
+            identity = RecipeArtifactGeneration(
+                producer_tool=producer_tool,
+                recipe_name=requested_recipe_name,
+                descriptor_version=descriptor_version,
+                schema_version=schema_version,
+                payload_sha256=payload_sha256,
+                artifact_blob_sha256=artifact_blob_sha256,
+                artifact_blob_size_bytes=artifact_blob_size_bytes,
+                body_sha256=body_sha256,
+                body_size_bytes=body_size_bytes,
             )
-            if (
-                artifact_path is not None
-                and Path(artifact_path).resolve() != resolved_artifact_path.resolve()
-            ):
+            if not identity.has_valid_read_bounds():
                 return json.dumps({"success": False, "error": "invalid_recipe_artifact_identity"})
 
-            if not resolved_artifact_path.exists():
-                if producer_tool != "open_kitchen":
+            try:
+                persisted = load_recipe_artifact(
+                    artifact_dir,
+                    kitchen_id=tool_ctx.kitchen_id,
+                    identity=identity,
+                )
+            except RecipeArtifactError:
+                if producer_tool not in recipe_recreation_producers():
                     return json.dumps({"success": False, "error": "recipe_artifact_unavailable"})
                 # Recreation path: re-invoke the same serve pipeline that
                 # built the artifact originally. This handles the case
@@ -547,21 +566,32 @@ async def get_recipe_section(
                                 "detail": "recreation returned invalid recipe",
                             }
                         )
-                    _recreate = build_open_kitchen_recipe_payload(_recreate, version=__version__)
+                    if producer_tool == "open_kitchen":
+                        _recreate = build_open_kitchen_recipe_payload(
+                            _recreate, version=__version__
+                        )
 
                     try:
-                        persist_recipe_artifact(
+                        recreated_generation = persist_recipe_artifact(
                             artifact_dir,
-                            tool_name=producer_tool,
+                            kitchen_id=tool_ctx.kitchen_id,
+                            producer_tool=producer_tool,
                             recipe_name=requested_recipe_name,
                             payload=_recreate,
                         )
-                    except OSError:
+                    except (OSError, RecipeArtifactError):
                         return json.dumps(
                             {
                                 "success": False,
                                 "error": "recipe_artifact_unavailable",
                                 "detail": "recreation write failed",
+                            }
+                        )
+                    if recreated_generation != identity:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "error": "invalid_recipe_artifact_identity",
                             }
                         )
                 except Exception as exc:
@@ -580,31 +610,20 @@ async def get_recipe_section(
                         }
                     )
 
-            # Read the persisted full payload. The pull tool returns a
-            # bounded chunk from the requested section of the recipe YAML.
-            try:
-                persisted_raw = resolved_artifact_path.read_text(encoding="utf-8")
-                if hashlib.sha256(persisted_raw.encode("utf-8")).hexdigest() != artifact_sha256:
-                    return json.dumps(
-                        {"success": False, "error": "invalid_recipe_artifact_identity"}
+                try:
+                    persisted = load_recipe_artifact(
+                        artifact_dir,
+                        kitchen_id=tool_ctx.kitchen_id,
+                        identity=identity,
                     )
-                persisted = json.loads(persisted_raw)
-            except (OSError, json.JSONDecodeError) as exc:
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": "recipe_artifact_unavailable",
-                        "detail": f"{type(exc).__name__}: {exc}",
-                    }
-                )
-            if not isinstance(persisted, dict):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": "recipe_artifact_unavailable",
-                        "detail": "persisted recipe artifact is not a mapping",
-                    }
-                )
+                except RecipeArtifactError as exc:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": "recipe_artifact_unavailable",
+                            "detail": str(exc),
+                        }
+                    )
 
             content = ""
             if section == "content":
@@ -669,16 +688,27 @@ async def get_recipe_section(
                 else None
             )
             bound_tokens = (
-                resolve_effective_delivery_bound(_backend_caps)
+                resolve_general_output_token_limit(_backend_caps)
                 if _backend_caps is not None
                 else 10_000
             )
-            bound_bytes = bound_tokens * 4
+            bound_bytes = bound_tokens
+            configured_response_max = getattr(
+                getattr(tool_ctx.config, "output_budget", None),
+                "response_max_bytes",
+                None,
+            )
+            if isinstance(configured_response_max, int) and configured_response_max > 0:
+                bound_bytes = min(bound_bytes, configured_response_max)
 
             if part < 0:
                 part = 0
             return _bounded_recipe_section_response(
-                section, content, part=part, bound_bytes=bound_bytes
+                section,
+                content,
+                part=part,
+                bound_bytes=bound_bytes,
+                generation=identity,
             )
     except Exception as exc:
         logger.error("get_recipe_section unhandled exception", exc_info=True)

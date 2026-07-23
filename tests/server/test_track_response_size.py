@@ -14,6 +14,31 @@ from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+def _finalized_recipe_response():
+    from autoskillit.server._recipe_delivery import FinalizedRecipeResponse
+
+    ledger = MagicMock()
+    ledger.commit.return_value = True
+    ledger.abort.return_value = True
+    finalized = FinalizedRecipeResponse(
+        rendered="attested recipe response",
+        decision=MagicMock(selected_result_token_limit=56_750),
+        receipt_handle=MagicMock(),
+        receipt_ledger=ledger,
+    )
+    return finalized, ledger
+
+
+def _tracking_ctx():
+    return MagicMock(
+        response_log=MagicMock(record=MagicMock(return_value=False)),
+        config=MagicMock(
+            mcp_response=MagicMock(alert_threshold_tokens=0),
+            output_budget=OutputBudgetConfig(),
+        ),
+    )
+
+
 class TestTrackResponseSize:
     @pytest.mark.anyio
     async def test_decorator_records_str_response(self):
@@ -244,3 +269,91 @@ class TestTrackResponseSize:
         )
         assert event.kwargs["cause"] == "internal_invariant_failed"
         assert event.kwargs["original_utf8_bytes"] == len(b"small")
+
+    @pytest.mark.anyio
+    async def test_finalized_recipe_exact_response_commits_through_decorator(self):
+        from autoskillit.server._notify import track_response_size
+
+        finalized, ledger = _finalized_recipe_response()
+
+        @track_response_size("open_kitchen")
+        async def fake_handler():
+            return finalized
+
+        with (
+            patch(
+                "autoskillit.server._notify._get_ctx_or_none",
+                return_value=_tracking_ctx(),
+            ),
+            patch(
+                "autoskillit.server._notify.enforce_response_budget",
+                return_value=finalized.rendered,
+            ) as enforce,
+        ):
+            result = await fake_handler()
+
+        assert result == finalized.rendered
+        assert enforce.call_args.kwargs["selected_result_token_limit"] == 56_750
+        ledger.commit.assert_called_once()
+        ledger.abort.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "enforced",
+        ["transformed response", {"success": True, "artifact_path": "response.txt"}],
+    )
+    @pytest.mark.anyio
+    async def test_finalized_recipe_transformation_aborts_through_decorator(self, enforced):
+        from autoskillit.server._notify import track_response_size
+
+        finalized, ledger = _finalized_recipe_response()
+
+        @track_response_size("load_recipe")
+        async def fake_handler():
+            return finalized
+
+        with (
+            patch(
+                "autoskillit.server._notify._get_ctx_or_none",
+                return_value=_tracking_ctx(),
+            ),
+            patch(
+                "autoskillit.server._notify.enforce_response_budget",
+                return_value=enforced,
+            ),
+        ):
+            result = await fake_handler()
+
+        assert result == enforced
+        ledger.commit.assert_not_called()
+        ledger.abort.assert_called_once_with(finalized.receipt_handle)
+
+    @pytest.mark.anyio
+    async def test_finalized_recipe_enforcement_failure_aborts_through_decorator(self):
+        from autoskillit.server._notify import track_response_size
+
+        finalized, ledger = _finalized_recipe_response()
+        bounded = {"success": False, "error": "response_budget_exceeded"}
+
+        @track_response_size("open_kitchen")
+        async def fake_handler():
+            return finalized
+
+        with (
+            patch(
+                "autoskillit.server._notify._get_ctx_or_none",
+                return_value=_tracking_ctx(),
+            ),
+            patch(
+                "autoskillit.server._notify.enforce_response_budget",
+                side_effect=RuntimeError("enforcement failed"),
+            ),
+            patch(
+                "autoskillit.server._notify.bounded_response_budget_failure",
+                return_value=bounded,
+            ),
+        ):
+            result = await fake_handler()
+
+        assert result == bounded
+        ledger.commit.assert_not_called()
+        ledger.abort.assert_called_once_with(finalized.receipt_handle)

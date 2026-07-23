@@ -427,9 +427,12 @@ def test_recipe_resource_returns_composed_content():
         backend_capabilities_map={},
         backend_origin_map={},
     )
-    assert result == ("name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n")
-    assert "optional: true" not in result
-    assert "skip_when_false:" not in result
+    parsed = json.loads(result)
+    assert parsed["content"] == (
+        "name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n"
+    )
+    assert "optional: true" not in parsed["content"]
+    assert "skip_when_false:" not in parsed["content"]
 
 
 # 1h: get_recipe resource returns error for invalid recipe

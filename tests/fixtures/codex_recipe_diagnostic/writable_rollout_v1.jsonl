@@ -1,0 +1,2 @@
+{"caller_writable":true,"schema_version":1,"thread_id":"thread-diagnostic-001","type":"thread.started"}
+{"call_id":"functions-exec-diagnostic-001","code_mode_cell_id":"cell-diagnostic-001","delivery_call_id":"delivery-diagnostic-001","host_observed_requested_outer_tokens":56750,"pragma":"// @exec: {\"max_output_tokens\": 56750}","schema_version":1,"selected_result_token_limit":56750,"thread_id":"thread-diagnostic-001","turn_id":"turn-diagnostic-001","type":"functions.exec"}

@@ -37,8 +37,10 @@ from typing import Any
 # resolve the helpers to the same top-level modules so identity stays
 # consistent across both invocation modes.
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
-if _HOOKS_DIR not in sys.path:
-    sys.path.insert(0, _HOOKS_DIR)
+_PACKAGE_ROOT = str(Path(__file__).resolve().parents[2])
+for _import_dir in (_HOOKS_DIR, _PACKAGE_ROOT):
+    if _import_dir not in sys.path:
+        sys.path.insert(0, _import_dir)
 
 from _fmt_dispatch import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _FMT_DISPATCH_FOOD_TRUCK_RENDERED,

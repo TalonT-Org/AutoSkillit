@@ -16,6 +16,7 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 | `_codex_config.py` | TOML serialization with `[[key]]` array-of-tables support, MCP registration (`ensure_codex_mcp_registered`, `_serialize_toml`) |
 | `_codex_hooks.py` | Codex config.toml hook generation, sync, and upsert (`generate_codex_hooks_config`, `sync_hooks_to_codex_config`) |
 | `_codex_parse.py` | `CodexStreamParser`, `CodexResultParser`, `_scan_codex_ndjson`, `_CodexParseAccumulator` |
+| `_codex_recipe_delivery.py` | Protected outer-budget provider seam, bounded diagnostic correlation, and durable consumed-call/receipt ledger |
 | `codex_scenario_player.py` | `CodexScenarioPlayer`, `make_codex_scenario_player`, `CodexStepRecord`, `CodexScenario`, `_load_manifest`, `_FakeCodexCLI`, `_write_shim_script` — scenario replay data layer for Codex backend |
 | `_cmd_builder.py` | `CmdBuilder`, `CmdOrderingError` — typed builder that enforces positional-before-variadic ordering by construction |
 

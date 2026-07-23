@@ -10,6 +10,7 @@ from autoskillit.cli._prompts import (
     _read_full_sous_chef,
 )
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, ROUTING_AUTHORITY_CLAUSE
+from autoskillit.execution import codex_recipe_delivery_calling_contract
 
 __all__ = [
     "_build_open_kitchen_prompt",
@@ -67,7 +68,13 @@ def _build_open_kitchen_prompt(
         f"call {mcp_prefix}get_recipe_section(section='<step_name>', "
         "recipe_name=recipe_pull.recipe_name, "
         "producer_tool=recipe_pull.producer_tool, "
-        "artifact_sha256=recipe_pull.sha256). "
+        "descriptor_version=recipe_pull.descriptor_version, "
+        "schema_version=recipe_pull.schema_version, "
+        "payload_sha256=recipe_pull.payload_sha256, "
+        "artifact_blob_sha256=recipe_pull.artifact_blob_sha256, "
+        "artifact_blob_size_bytes=recipe_pull.artifact_blob_size_bytes, "
+        "body_sha256=recipe_pull.body_sha256, "
+        "body_size_bytes=recipe_pull.body_size_bytes). "
         "Do not read recipe YAML files directly.\n\n"
         "OPTIONAL STEP SEMANTICS:\n"
         "- optional: true means the step is SKIPPED when its skip_when_false ingredient\n"
@@ -95,7 +102,12 @@ def _build_open_kitchen_prompt(
             "to migrate automatically, or ask me to do it for you."
         )
 
-    return text + _backend_supplement(has_unguarded_filesystem_access)
+    return (
+        text
+        + _backend_supplement(has_unguarded_filesystem_access)
+        + "\n\n"
+        + codex_recipe_delivery_calling_contract(mcp_prefix=mcp_prefix)
+    )
 
 
 def _build_fleet_dispatch_prompt(

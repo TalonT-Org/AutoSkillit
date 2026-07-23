@@ -156,6 +156,12 @@ tests/fixtures/codex/*.ndjson:
 tests/fixtures/codex/*.jsonl:
   - hooks/
 
+tests/fixtures/codex_recipe_diagnostic/*:
+  - execution/
+
+tests/fixtures/codex_recipe_protected/*:
+  - execution/
+
 tests/execution/backends/fixtures/codex_ndjson/*.json:
   - execution/
 

@@ -7,7 +7,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import OutputBudgetConfig, QuotaGuardConfig
@@ -27,9 +27,9 @@ from autoskillit.config import (
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
-    BackendCapabilities,
     CapabilityResolutionDetail,
     ProcessStaleError,
+    RecipeDeliveryRequest,
     _collect_disabled_feature_tags,
     atomic_write,
     clear_kitchens_for_pid,
@@ -43,7 +43,6 @@ from autoskillit.core import (
     read_active_kitchens_registry,
     read_marker,
     register_active_kitchen,
-    resolve_effective_delivery_bound,
     resolve_kitchen_id,
     sweep_stale_markers,
     unregister_active_kitchen,
@@ -69,6 +68,12 @@ from autoskillit.server._misc import (
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._recipe_delivery import (
+    document_recipe_delivery_contract,
+    enforce_recipe_resource_response,
+    finalize_recipe_delivery,
+    retire_recipe_artifacts,
+)
 from autoskillit.server.tools._authority_feedback import (
     build_authority_clobber_warnings,
     build_authority_rejection_envelope,
@@ -87,7 +92,6 @@ from autoskillit.server.tools._preflight import (
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
-    maybe_envelope_recipe_response,
     render_served_response,
     response_backstop_tool_meta,
     serve_recipe,
@@ -575,6 +579,13 @@ def _close_kitchen_handler() -> None:
         unregister_active_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("close_kitchen_registry_failed", exc_info=True)
+    if (
+        isinstance(ctx.temp_dir, Path)
+        and isinstance(ctx.kitchen_id, str)
+        and ctx.kitchen_id
+        and not retire_recipe_artifacts(ctx.temp_dir, kitchen_id=ctx.kitchen_id)
+    ):
+        logger.warning("close_kitchen_recipe_artifact_retirement_failed")
     ctx.active_recipe_packs = None
     ctx.active_recipe_features = None
     ctx.active_recipe_steps = None
@@ -730,7 +741,13 @@ def get_recipe(name: str) -> str:
                 "infeasible_steps": result.get("infeasible_steps", []),
             }
         )
-    return result.get("content", json.dumps({"error": "Recipe composition failed."}))
+    finalized = finalize_recipe_delivery(
+        result,
+        surface="get_recipe",
+        recipe_name=name,
+        tool_ctx=ctx,
+    )
+    return enforce_recipe_resource_response(finalized, tool_ctx=ctx)
 
 
 def _build_tool_category_listing(
@@ -770,12 +787,14 @@ def _check_override_keys(
     annotations={"readOnlyHint": True},
     meta=response_backstop_tool_meta("open_kitchen", always_load=True),
 )
+@document_recipe_delivery_contract
 @_cancellation_shield()
 @track_response_size("open_kitchen")
 async def open_kitchen(
     name: str | None = None,
     overrides: dict[str, str] | None = None,
     ingredients_only: bool = False,
+    delivery_request: RecipeDeliveryRequest | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Open the AutoSkillit kitchen for service.
@@ -1063,26 +1082,15 @@ async def open_kitchen(
                     tool_ctx.session_serve_overrides = dict(overrides)
                     tool_ctx.session_serve_defer_unresolved = not bool(overrides)
                 if not ingredients_only:
-                    _backend_caps = (
-                        tool_ctx.backend.capabilities
-                        if tool_ctx.backend is not None
-                        and isinstance(
-                            getattr(tool_ctx.backend, "capabilities", None),
-                            BackendCapabilities,
-                        )
-                        else None
-                    )
-                    _edtl = (
-                        resolve_effective_delivery_bound(_backend_caps)
-                        if _backend_caps is not None
-                        else None
-                    )
-                    result = maybe_envelope_recipe_response(
-                        result,
-                        tool_name="open_kitchen",
-                        recipe_name=name,
-                        tool_ctx=tool_ctx,
-                        effective_delivery_token_limit=_edtl,
+                    return cast(
+                        str,
+                        finalize_recipe_delivery(
+                            result,
+                            surface="open_kitchen_deferred_recall",
+                            recipe_name=name,
+                            tool_ctx=tool_ctx,
+                            delivery_request=delivery_request,
+                        ),
                     )
                 return render_served_response(result)
             try:
@@ -1237,26 +1245,15 @@ async def open_kitchen(
                 return _validation_err
 
             if not ingredients_only:
-                _backend_caps_normal = (
-                    tool_ctx.backend.capabilities
-                    if tool_ctx.backend is not None
-                    and isinstance(
-                        getattr(tool_ctx.backend, "capabilities", None),
-                        BackendCapabilities,
-                    )
-                    else None
-                )
-                _edtl_normal = (
-                    resolve_effective_delivery_bound(_backend_caps_normal)
-                    if _backend_caps_normal is not None
-                    else None
-                )
-                result = maybe_envelope_recipe_response(
-                    result,
-                    tool_name="open_kitchen",
-                    recipe_name=name,
-                    tool_ctx=tool_ctx,
-                    effective_delivery_token_limit=_edtl_normal,
+                return cast(
+                    str,
+                    finalize_recipe_delivery(
+                        result,
+                        surface="open_kitchen",
+                        recipe_name=name,
+                        tool_ctx=tool_ctx,
+                        delivery_request=delivery_request,
+                    ),
                 )
 
             return render_served_response(result)

@@ -33,5 +33,6 @@ multi-level orchestrator. The bundled recipes implement issue → plan → workt
 - [research/experiment-type-rationale.md](research/experiment-type-rationale.md) — dimension-weight rationale for experiment types
 - [research/silent-type-convention.md](research/silent-type-convention.md) — silent type detection and advisory convention
 - [research/audit-trail-format.md](research/audit-trail-format.md) — audit/ artifact structure and lifecycle
+- [research/codex-delivery-conformance.md](research/codex-delivery-conformance.md) — Codex recipe envelope/pull conformance and protected-host blocker
 - [audit/surface-freeze-checklist.md](audit/surface-freeze-checklist.md) — commands.py public import surface freeze checklist
 - [phoropter/](phoropter/README.md) — phoropter lens framework: execution contracts, recipe blocks, synthesis strategies, and authoring guide

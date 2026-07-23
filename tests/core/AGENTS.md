@@ -46,6 +46,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_input_spec_type.py` | InputSpec type system tests — closed type vocabulary validation |
 | `test_parse_plan_paths.py` | parse_plan_paths unit tests — comma/newline splitter used by file_path_list gate |
 | `test_backend_capabilities.py` | Tests for BackendCapabilities frozen invariants and CLAUDE_CODE_CAPABILITIES field values |
+| `test_recipe_delivery_contract.py` | Typed recipe budget, request, attestation, and static decision resolver contracts |
 | `test_backend_event_kind.py` | Tests for BackendEventKind StrEnum — member exhaustiveness, values, importability |
 | `test_backend_dataclasses.py` | Tests for CmdSpec, SkillSessionConfig, ClaudeEventData, CodexEventData, SessionEvent, AgentSessionResult — frozen invariants, field types, defaults |
 | `test_backend_protocols.py` | Tests for StreamParser, ResultParser, EnvPolicy, SessionLocator, CodingAgentBackend — @runtime_checkable, isinstance conformance, IL-0 compliance |

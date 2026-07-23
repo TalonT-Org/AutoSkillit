@@ -33,7 +33,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.execution.backends._codex_config import (
-    CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+    CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
@@ -837,7 +837,7 @@ class TestCodexShellCaptureRoundTrip:
 
 
 _SOURCE_SPILL_THRESHOLD = OutputBudgetConfig().inline_max_chars
-_CODEX_HEURISTIC_BYTES = CODEX_TOOL_OUTPUT_TOKEN_LIMIT * 4
+_CODEX_HEURISTIC_BYTES = CODEX_HISTORY_RETENTION_TOKEN_LIMIT * 4
 _SERIALIZED_ENVELOPE_SLACK_BYTES = 4096
 _LARGE_OUTPUT_CASE_BYTES = tuple(
     sorted(
@@ -1038,7 +1038,7 @@ def _assert_large_output_probe(output: _LargeOutputProbe) -> None:
         spill_by_size[size] = spilled
         assert_inline_within_byte_budget(
             json.dumps(entry),
-            CODEX_TOOL_OUTPUT_TOKEN_LIMIT * 4,
+            CODEX_HISTORY_RETENTION_TOKEN_LIMIT * 4,
             envelope_slack_bytes=_SERIALIZED_ENVELOPE_SLACK_BYTES,
         )
         if spilled:

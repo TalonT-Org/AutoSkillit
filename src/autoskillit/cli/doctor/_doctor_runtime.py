@@ -105,8 +105,10 @@ def _check_codex_limits_verified(*, backend: CodingAgentBackend | None = None) -
             Severity.WARNING,
             check_name,
             f"Codex CLI {cur_str} is newer than verified pin {pin_str}; "
-            f"re-verify CODEX_TOOL_OUTPUT_TOKEN_LIMIT and CODEX_AUTO_COMPACT_LIMIT "
-            f"against upstream registry, then bump CODEX_LIMITS_LAST_VERIFIED_VERSION",
+            "re-verify the recipe outer-result parser/protected evidence contract, "
+            "CODEX_HISTORY_RETENTION_TOKEN_LIMIT (later history only), and "
+            "CODEX_AUTO_COMPACT_LIMIT against upstream behavior, then bump "
+            "CODEX_LIMITS_LAST_VERIFIED_VERSION",
         )
     cur_str = ".".join(str(v) for v in ver.parsed)
     return DoctorResult(Severity.OK, check_name, f"Codex CLI {cur_str} at or below verified pin")

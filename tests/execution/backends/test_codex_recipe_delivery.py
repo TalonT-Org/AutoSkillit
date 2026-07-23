@@ -230,6 +230,27 @@ def test_marker_enumeration_fails_closed_above_candidate_ceiling(tmp_path: Path)
     assert enumerate_fresh_codex_marker_ids(tmp_path, now_unix=_NOW) == ()
 
 
+@pytest.mark.parametrize("campaign_id", [".", ".."])
+def test_marker_enumeration_rejects_dot_campaign_components(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, campaign_id: str
+) -> None:
+    base = tmp_path / ".autoskillit" / "temp" / "kitchen_state"
+    marker_dir = base if campaign_id == "." else base.parent
+    marker_dir.mkdir(parents=True)
+    (marker_dir / "thread-outside-campaign.json").write_text(
+        json.dumps(
+            {
+                "session_id": "thread-outside-campaign",
+                "opened_at": datetime.fromtimestamp(_NOW - 10, tz=UTC).isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", campaign_id)
+
+    assert enumerate_fresh_codex_marker_ids(tmp_path, now_unix=_NOW) == ()
+
+
 def _attestor(
     project_dir: Path,
     provider: _FixtureProtectedProvider | NullProtectedHostAttestationProvider,

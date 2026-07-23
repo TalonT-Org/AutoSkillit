@@ -133,7 +133,7 @@ def _marker_state_dir(project_dir: Path) -> Path:
     base = project_dir / ".autoskillit" / "temp" / "kitchen_state"
     campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
     if campaign_id:
-        if "/" in campaign_id or os.sep in campaign_id:
+        if campaign_id in {".", ".."} or "/" in campaign_id or os.sep in campaign_id:
             return base / "__invalid_campaign__"
         return base / campaign_id
     return base

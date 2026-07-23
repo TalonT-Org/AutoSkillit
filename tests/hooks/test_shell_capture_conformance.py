@@ -312,6 +312,7 @@ def test_main_generated_wrapper_rejects_symlinked_capture_components(
         capture_output=True,
         text=True,
         check=False,
+        timeout=_TIMEOUT,
     )
 
     assert completed.returncode == 1
@@ -337,6 +338,7 @@ def test_main_generated_wrapper_accepts_symlinked_cwd(
         cwd=supplied_cwd,
         capture_output=True,
         check=False,
+        timeout=_TIMEOUT,
     )
 
     assert completed.returncode == 0
@@ -381,6 +383,7 @@ def test_main_generated_wrapper_rejects_final_artifact_collisions(
         cwd=project,
         capture_output=True,
         check=False,
+        timeout=_TIMEOUT,
     )
 
     assert completed.returncode == 1
@@ -416,6 +419,7 @@ def test_capture_directory_replacement_uses_open_fds_and_hides_path(
         cwd=project,
         capture_output=True,
         check=False,
+        timeout=_TIMEOUT,
     )
 
     assert completed.returncode == 0
@@ -464,6 +468,7 @@ def test_capture_artifact_replacement_uses_open_fd_and_hides_path(
         cwd=project,
         capture_output=True,
         check=False,
+        timeout=_TIMEOUT,
     )
 
     assert completed.returncode == 0

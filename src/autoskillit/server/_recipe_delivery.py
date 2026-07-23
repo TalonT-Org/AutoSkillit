@@ -231,6 +231,8 @@ def persist_recipe_artifact(
 ) -> RecipeArtifactGeneration:
     """Publish an immutable canonical payload and its generation descriptor."""
     blob = _canonical_payload(payload)
+    if len(blob) > RECIPE_ARTIFACT_MAX_BLOB_BYTES:
+        raise RecipeArtifactError("recipe artifact blob exceeds persistence limit")
     generation = _generation_from_payload(
         producer_tool=producer_tool,
         recipe_name=recipe_name,

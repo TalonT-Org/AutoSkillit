@@ -27,6 +27,7 @@ from autoskillit.execution import (
 )
 from autoskillit.execution.backends import CodexBackend
 from autoskillit.server._recipe_delivery import (
+    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_BODY_END,
     RECIPE_BODY_START,
     RECIPE_COMPLETION_SENTINEL,
@@ -87,6 +88,13 @@ def test_artifact_namespace_rejects_colliding_kitchen_ids(tmp_path: Path, kitche
             recipe_name="remediation",
             payload=_payload(),
         )
+
+
+def test_artifact_persistence_rejects_blob_above_read_ceiling(tmp_path: Path) -> None:
+    oversized = _payload("x" * (RECIPE_ARTIFACT_MAX_BLOB_BYTES + 1))
+
+    with pytest.raises(RecipeArtifactError, match="exceeds persistence limit"):
+        _persist(tmp_path, oversized)
 
 
 def _remove_persisted_namespace(temp_dir: Path, *, kitchen_id: str) -> None:

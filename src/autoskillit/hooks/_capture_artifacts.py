@@ -678,7 +678,9 @@ def _capture_failure_return(detail: str, returncode: int | None) -> int:
         _emit_failure(detail)
     except _CAPTURE_RUNTIME_ERRORS:
         return _CAPTURE_FAILURE_RETURN_CODE
-    return returncode if returncode is not None else _CAPTURE_FAILURE_RETURN_CODE
+    if returncode is None or returncode == 0:
+        return _CAPTURE_FAILURE_RETURN_CODE
+    return returncode
 
 
 def _encode_marker_path(path: str) -> str:

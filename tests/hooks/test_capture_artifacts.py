@@ -1095,7 +1095,7 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
     monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
 
-    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
     assert "CAPTURE_FAILED" in captured.err
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
@@ -1134,7 +1134,7 @@ def test_capture_readback_failure_after_partial_output_closes_runtime_fds(
     process.stdout = PartialReadbackStream()
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
 
-    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
 
     captured = capfd.readouterr()
     artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
@@ -1171,7 +1171,7 @@ def test_digest_failure_emits_failure_and_closes_runtime_resources(
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(capture_artifacts.hashlib, "sha256", BrokenDigest)
 
-    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
     assert "CAPTURE_FAILED" in captured.err
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
@@ -1204,7 +1204,7 @@ def test_artifact_content_tampering_prevents_capture_publication(
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(capture_artifacts, "_drain_capture", tamper_after_drain)
 
-    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
     assert "CAPTURE_FAILED" in captured.err
     assert "capture artifact integrity verification failed" in captured.err
@@ -1228,7 +1228,7 @@ def test_success_marker_emission_failure_closes_resources_without_success(
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(capture_artifacts, "_emit_capture", fail_success_marker)
 
-    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
     assert "CAPTURE_FAILED" in captured.err
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
@@ -1275,7 +1275,7 @@ def test_artifact_write_failure_emits_failure_marker(
 
     monkeypatch.setattr(capture_artifacts, "_write_all", fail_write)
 
-    assert run_capture("printf ran > command_ran; printf output", str(project), _CAPTURE_ID) == 0
+    assert run_capture("printf ran > command_ran; printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
     assert (project / "command_ran").read_text() == "ran"
     assert "CAPTURE_FAILED" in captured.err
@@ -1300,7 +1300,7 @@ def test_marker_verification_failure_emits_failure_marker(
         fail_verification,
     )
 
-    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
     assert "CAPTURE_FAILED" in captured.err
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err

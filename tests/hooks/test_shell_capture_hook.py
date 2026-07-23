@@ -19,6 +19,7 @@ from autoskillit.hooks._capture_contract import _MAX_COMMAND_BYTES
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _SENTINEL = "# autoskillit-shell-capture v1"
+_TIMEOUT = 30
 
 
 def _build_event(command, cwd: str = "/abs/project") -> dict:
@@ -138,6 +139,7 @@ def test_verified_disabled_policy_is_runner_owned(monkeypatch, tmp_path):
         capture_output=True,
         text=True,
         check=False,
+        timeout=_TIMEOUT,
     )
 
     assert completed.returncode == 0
@@ -231,6 +233,7 @@ def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
         capture_output=True,
         text=True,
         check=False,
+        timeout=_TIMEOUT,
     )
     assert completed.returncode == 0
     assert "AutoSkillit hook shell_capture_hook" in completed.stdout

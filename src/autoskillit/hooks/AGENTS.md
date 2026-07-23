@@ -23,6 +23,7 @@ Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS
 | `ingredient_lock_guard.py` | PreToolUse guard script (see guards/AGENTS.md) |
 | `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`, `STEP_SUFFIX_RE`) |
 | `_command_classification.py` | Shared stdlib-only command classification primitives for guard scripts (interpreter/wrapper detection, git command classification) |
+| `_capture_contract.py` | Shared stdlib-only shell-capture transport limits and identifier validation |
 | `_policy_event.py` | Typed policy-event formatter for hook provenance messages (stdlib-only) |
 | `_capture_artifacts.py` | Stdlib-only descriptor-anchored shell-capture authority, runner, and cleanup classifier used by `session_start_hook.py` |
 | `shell_capture_hook.py` | `PreToolUse`: input-rewrite hook for Codex shell capture — wraps commands in a lossless capture harness (#4286 / ADR-0006) |

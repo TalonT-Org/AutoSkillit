@@ -14,16 +14,22 @@ from __future__ import annotations
 import base64
 import json
 import os
-import re
 import shlex
 import struct
 import sys
 from pathlib import Path
 from uuid import uuid4
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _capture_contract import (  # type: ignore[import-not-found]  # noqa: E402
+    _CAPTURE_ID_RE,
+    _MAX_COMMAND_BYTES,
+)
+
 _HARNESS_SENTINEL = "# autoskillit-shell-capture v1"
-_CAPTURE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
-_MAX_COMMAND_BYTES = 64 * 1024
 _ARG_MAX_FALLBACK_BYTES = 128 * 1024
 _ARG_MAX_HEADROOM_BYTES = 32 * 1024
 _RUNNER_BASENAME = "_capture_artifacts.py"

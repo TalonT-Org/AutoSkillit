@@ -27,6 +27,11 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _capture_contract import (  # type: ignore[import-not-found]  # noqa: E402
+    _CAPTURE_ID_RE,
+    _MAX_COMMAND_BYTES,
+)
+
 if TYPE_CHECKING:
     from autoskillit.hooks._hook_settings import (
         HOOK_CONFIG_FILENAME,
@@ -61,12 +66,10 @@ __all__ = [
 
 CAPTURE_PATH_COMPONENTS = (".autoskillit", "temp", "shell_capture")
 _CAPTURE_FILENAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
-_CAPTURE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
 
 _DEFAULT_INLINE_BYTES = 12_000
 _MAX_INLINE_BYTES = 1_000_000
 _MAX_POLICY_FILE_BYTES = 64 * 1024
-_MAX_COMMAND_BYTES = 64 * 1024
 _MAX_ENCODED_COMMAND_BYTES = ((_MAX_COMMAND_BYTES + 2) // 3) * 4
 _DRAIN_CHUNK_BYTES = 64 * 1024
 _CAPTURE_FAILURE_RETURN_CODE = 1

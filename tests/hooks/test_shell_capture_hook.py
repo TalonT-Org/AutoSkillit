@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.hooks._capture_contract import _MAX_COMMAND_BYTES
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _SENTINEL = "# autoskillit-shell-capture v1"
@@ -161,7 +163,7 @@ def test_non_string_command_fails_open(monkeypatch):
     assert _run_hook(event, monkeypatch, env_backend="codex") == ""
 
 
-@pytest.mark.parametrize("command", ["x" * (64 * 1024 + 1), "printf bad\x00command"])
+@pytest.mark.parametrize("command", ["x" * (_MAX_COMMAND_BYTES + 1), "printf bad\x00command"])
 def test_invalid_command_transport_builds_nonexecuting_rejection(command):
     from autoskillit.hooks.shell_capture_hook import _build_harness
 

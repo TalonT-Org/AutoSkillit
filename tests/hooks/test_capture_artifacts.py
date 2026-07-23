@@ -75,7 +75,8 @@ class _FakeCaptureProcess:
     def kill(self) -> None:
         self.killed = True
 
-    def wait(self) -> int:
+    def wait(self, timeout: float | None = None) -> int:
+        del timeout
         self.wait_calls += 1
         return 0
 
@@ -91,6 +92,29 @@ def _record_artifact_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
     monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
     return observed_fds
+
+
+def test_settle_failed_capture_escalates_after_terminate_timeout() -> None:
+    class StubbornProcess(_FakeCaptureProcess):
+        def __init__(self) -> None:
+            super().__init__(b"")
+            self.wait_timeouts: list[float | None] = []
+
+        def wait(self, timeout: float | None = None) -> int:
+            self.wait_timeouts.append(timeout)
+            if len(self.wait_timeouts) == 1:
+                raise subprocess.TimeoutExpired("capture", timeout)
+            return -9
+
+    process = StubbornProcess()
+
+    assert capture_artifacts._settle_failed_capture(process) == 137
+    assert process.terminated
+    assert process.killed
+    assert process.wait_timeouts == [
+        capture_artifacts._PROCESS_SETTLE_TIMEOUT_SECONDS,
+        capture_artifacts._PROCESS_SETTLE_TIMEOUT_SECONDS,
+    ]
 
 
 def _record_runtime_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
@@ -1015,7 +1039,8 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
         def terminate(self):
             self.terminated = True
 
-        def wait(self):
+        def wait(self, timeout=None):
+            del timeout
             return 0
 
     process = FailingProcess()

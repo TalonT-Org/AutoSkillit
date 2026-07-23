@@ -70,6 +70,7 @@ _MAX_COMMAND_BYTES = 64 * 1024
 _MAX_ENCODED_COMMAND_BYTES = ((_MAX_COMMAND_BYTES + 2) // 3) * 4
 _DRAIN_CHUNK_BYTES = 64 * 1024
 _CAPTURE_FAILURE_RETURN_CODE = 1
+_PROCESS_SETTLE_TIMEOUT_SECONDS = 2
 _TRUSTED_BASH_CANDIDATES = ("/bin/bash", "/usr/bin/bash")
 _EXECUTABLE_MODE_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
 _UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
@@ -696,7 +697,16 @@ def _settle_failed_capture(process: subprocess.Popen[bytes]) -> int | None:
             except _CAPTURE_RUNTIME_ERRORS:
                 pass
     try:
-        return _normalized_returncode(process.wait())
+        return _normalized_returncode(process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS))
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except _CAPTURE_RUNTIME_ERRORS:
+            pass
+        try:
+            return _normalized_returncode(process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS))
+        except _CAPTURE_RUNTIME_ERRORS:
+            return None
     except _CAPTURE_RUNTIME_ERRORS:
         return None
 

@@ -228,6 +228,7 @@ def _require_capabilities() -> _CleanupDeletionMode:
         any(getattr(os, flag, 0) == 0 for flag in required_flags)
         or not hasattr(os, "fchdir")
         or not hasattr(os, "fstat")
+        or not hasattr(os, "pread")
         or any(function not in os.supports_dir_fd for function in required_dir_fd)
         or os.stat not in getattr(os, "supports_follow_symlinks", ())
         or os.listdir not in getattr(os, "supports_fd", ())
@@ -624,6 +625,34 @@ def _drain_capture(
     )
 
 
+def _verify_capture_artifact(artifact: CaptureArtifact, result: _DrainResult) -> None:
+    """Verify persisted bytes through the retained artifact descriptor."""
+
+    value = os.fstat(artifact.fd)
+    if (
+        FileIdentity.from_stat(value) != artifact.identity
+        or not stat.S_ISREG(value.st_mode)
+        or value.st_nlink != 1
+        or value.st_size != result.total_bytes
+    ):
+        raise CaptureSetupError("capture artifact metadata changed")
+
+    digest = hashlib.sha256()
+    offset = 0
+    while offset < result.total_bytes:
+        chunk = os.pread(
+            artifact.fd,
+            min(_DRAIN_CHUNK_BYTES, result.total_bytes - offset),
+            offset,
+        )
+        if not chunk:
+            raise CaptureSetupError("capture artifact readback ended early")
+        digest.update(chunk)
+        offset += len(chunk)
+    if digest.hexdigest() != result.sha256:
+        raise CaptureSetupError("capture artifact content changed")
+
+
 def _normalized_returncode(returncode: int) -> int:
     return 128 + (-returncode) if returncode < 0 else returncode
 
@@ -772,6 +801,8 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             returncode = _normalized_returncode(process.wait())
             if result.write_error is not None:
                 return _capture_failure_return("capture artifact write failed", returncode)
+            failure_stage = "capture artifact integrity verification"
+            _verify_capture_artifact(artifact, result)
             failure_stage = "capture marker verification"
             artifact_path = current_artifact_path_if_bound(anchor, root, artifact)
             failure_stage = "capture replay emission"

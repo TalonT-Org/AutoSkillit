@@ -1184,6 +1184,34 @@ def test_digest_failure_emits_failure_and_closes_runtime_resources(
             os.fstat(fd)
 
 
+def test_artifact_content_tampering_prevents_capture_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"captured-output")
+    real_drain = capture_artifacts._drain_capture
+
+    def tamper_after_drain(process, artifact_writer_fd, inline_bytes):
+        result = real_drain(process, artifact_writer_fd, inline_bytes)
+        os.ftruncate(artifact_writer_fd, 0)
+        os.lseek(artifact_writer_fd, 0, os.SEEK_SET)
+        capture_artifacts._write_all(artifact_writer_fd, b"tampered")
+        return result
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_artifacts, "_drain_capture", tamper_after_drain)
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    assert "CAPTURE_FAILED" in captured.err
+    assert "capture artifact integrity verification failed" in captured.err
+    assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
+    assert captured.out == ""
+
+
 def test_success_marker_emission_failure_closes_resources_without_success(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

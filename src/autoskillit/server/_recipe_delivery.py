@@ -141,6 +141,8 @@ def _safe_component(value: str) -> str:
     safe = "".join(
         character if character.isalnum() or character in "._-" else "_" for character in value
     )
+    if safe in {".", ".."}:
+        raise RecipeArtifactError("unsafe recipe artifact path component")
     return safe or "unknown"
 
 

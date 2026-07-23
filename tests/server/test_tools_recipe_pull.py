@@ -226,6 +226,15 @@ def test_kitchen_retirement_removes_only_that_namespace(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("kitchen_id", [".", ".."])
+def test_kitchen_retirement_rejects_dot_path_components(tmp_path: Path, kitchen_id: str) -> None:
+    sentinel = tmp_path / "unrelated-temp-data"
+    sentinel.write_text("preserve me", encoding="utf-8")
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id=kitchen_id) is False
+    assert sentinel.read_text(encoding="utf-8") == "preserve me"
+
+
 def test_codex_without_supported_host_evidence_uses_bounded_envelope(tool_ctx) -> None:
     tool_ctx.backend = CodexBackend()
     tool_ctx.kitchen_id = "codex-envelope"

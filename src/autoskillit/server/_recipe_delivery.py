@@ -353,8 +353,20 @@ def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
     return True
 
 
+def _validate_producer_authorization_policies() -> None:
+    policies: dict[str, tuple[bool, bool]] = {}
+    for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values():
+        policy = (definition.pull_eligible, definition.recreation_eligible)
+        existing = policies.setdefault(definition.producer_tool, policy)
+        if existing != policy:
+            raise RecipeArtifactError(
+                "recipe delivery surfaces sharing a producer must share pull policies"
+            )
+
+
 def recipe_pull_producers() -> frozenset[str]:
     """Return public producers authorized to resolve immutable pull generations."""
+    _validate_producer_authorization_policies()
     return frozenset(
         definition.producer_tool
         for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
@@ -364,6 +376,7 @@ def recipe_pull_producers() -> frozenset[str]:
 
 def recipe_recreation_producers() -> frozenset[str]:
     """Return producers whose missing generations may be rebuilt in-session."""
+    _validate_producer_authorization_policies()
     return frozenset(
         definition.producer_tool
         for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()

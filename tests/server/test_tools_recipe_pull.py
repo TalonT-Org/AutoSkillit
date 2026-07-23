@@ -14,6 +14,7 @@ import pytest
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    RECIPE_DELIVERY_SURFACE_REGISTRY,
     RecipeDeliveryAttestation,
     RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
@@ -95,6 +96,24 @@ def test_artifact_persistence_rejects_blob_above_read_ceiling(tmp_path: Path) ->
 
     with pytest.raises(RecipeArtifactError, match="exceeds persistence limit"):
         _persist(tmp_path, oversized)
+
+
+def test_shared_producer_surfaces_require_identical_pull_policies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conflicting = dict(RECIPE_DELIVERY_SURFACE_REGISTRY)
+    conflicting["conflicting_open_kitchen"] = conflicting["open_kitchen"]._replace(
+        pull_eligible=False
+    )
+    monkeypatch.setattr(
+        "autoskillit.server._recipe_delivery.RECIPE_DELIVERY_SURFACE_REGISTRY",
+        conflicting,
+    )
+
+    with pytest.raises(RecipeArtifactError, match="must share pull policies"):
+        recipe_pull_producers()
+    with pytest.raises(RecipeArtifactError, match="must share pull policies"):
+        recipe_recreation_producers()
 
 
 def _remove_persisted_namespace(temp_dir: Path, *, kitchen_id: str) -> None:

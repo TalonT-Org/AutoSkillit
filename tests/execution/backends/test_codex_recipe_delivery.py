@@ -188,8 +188,16 @@ def _write_marker_and_rollout(project_dir: Path, thread_id: str) -> Path:
 def test_marker_validation_uses_one_bounded_file_descriptor(tmp_path: Path) -> None:
     _write_marker_and_rollout(tmp_path, "thread-single-descriptor")
     marker = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "thread-single-descriptor.json"
+    open_count = 0
 
     class _GuardedMarkerPath(type(marker)):
+        def open(self, *args: Any, **kwargs: Any) -> Any:
+            nonlocal open_count
+            open_count += 1
+            if open_count > 1:
+                raise AssertionError("marker validation opened the marker more than once")
+            return super().open(*args, **kwargs)
+
         def stat(self, *_args: Any, **_kwargs: Any) -> Any:
             raise AssertionError("marker validation performed a separate stat")
 
@@ -207,6 +215,7 @@ def test_marker_validation_uses_one_bounded_file_descriptor(tmp_path: Path) -> N
         )
         == "thread-single-descriptor"
     )
+    assert open_count == 1
 
 
 def test_oversized_marker_fails_closed_without_unbounded_read(tmp_path: Path) -> None:

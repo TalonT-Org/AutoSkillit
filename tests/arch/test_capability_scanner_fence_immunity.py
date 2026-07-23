@@ -1,40 +1,33 @@
-"""AST regression guard: capability scanners must import and call _strip_doc_fenced_blocks."""
+"""Regression guards for production capability-scanner fence immunity."""
 
 from __future__ import annotations
 
-import ast
-from pathlib import Path
-
 import pytest
+
+from autoskillit.workspace import classify_skill_capability_evidence, detect_skill_capabilities
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_SCANNER_PATHS = (
-    "tests/arch/test_skill_backend_annotations.py",
-    "tests/skills/test_skill_commit_discipline.py",
-    "tests/arch/test_skill_backend_annotation_accuracy.py",
-)
+
+def test_documentary_fence_is_artifact_not_genuine_evidence() -> None:
+    content = "## Requirements\n```bash\ngit commit -m 'example'\n```\n"
+    evidence = classify_skill_capability_evidence(content)
+    commit_evidence = [item for item in evidence if item.capability == "git_metadata_write"]
+    assert commit_evidence
+    assert all(item.artifact for item in commit_evidence)
+    assert "git_metadata_write" not in detect_skill_capabilities(content)
 
 
-def _file_has_import_and_call(path: Path) -> bool:
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    has_import = False
-    has_call = False
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            names = [alias.name for alias in node.names]
-            if "_strip_doc_fenced_blocks" in names:
-                has_import = True
-        elif isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "_strip_doc_fenced_blocks":
-                has_call = True
-    return has_import and has_call
-
-
-def test_capability_scanners_use_doc_fence_filter():
-    for rel_path in _SCANNER_PATHS:
-        full_path = Path(__file__).resolve().parent.parent.parent / rel_path
-        assert _file_has_import_and_call(full_path), (
-            f"{rel_path} must import and call _strip_doc_fenced_blocks from tests.arch._helpers"
-        )
+def test_nested_executable_fence_is_genuine_evidence() -> None:
+    content = (
+        "### Step 2: Inspect history\n"
+        "#### Part A — Read session artifacts\n"
+        "```bash\n"
+        'find "$PROJECT_ROOT/.claude/projects" -name "*.jsonl"\n'
+        "```\n"
+    )
+    evidence = classify_skill_capability_evidence(content)
+    claude_evidence = [item for item in evidence if item.capability == "claude_dir"]
+    assert claude_evidence
+    assert all(item.executable for item in claude_evidence)
+    assert "claude_dir" in detect_skill_capabilities(content)

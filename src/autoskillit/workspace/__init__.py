@@ -44,6 +44,14 @@ from autoskillit.workspace.session_skills import (
     resolve_closure_write_dirs,
     resolve_ephemeral_root,
 )
+from autoskillit.workspace.skill_capabilities import (
+    SkillCapabilityEvidence,
+    SkillCapabilityValidation,
+    classify_skill_capability_evidence,
+    detect_skill_capabilities,
+    validate_skill_capability_authenticity,
+    validate_skill_capability_declarations,
+)
 from autoskillit.workspace.skill_format import (
     SkillFrontmatterParseError,
     SkillFrontmatterParseResult,
@@ -85,6 +93,7 @@ __all__ = [
     "cleanup_candidates",
     "delete_directory_contents",
     "classify_remote_url",
+    "classify_skill_capability_evidence",
     "DefaultCloneManager",
     "DefaultWorkspaceManager",
     "DefaultSessionSkillManager",
@@ -100,6 +109,8 @@ __all__ = [
     "EffectiveSkillInvocation",
     "SkillResolver",
     "SkillInfo",
+    "SkillCapabilityEvidence",
+    "SkillCapabilityValidation",
     "SkillFrontmatterParseError",
     "SkillFrontmatterParseResult",
     "SkillProjectionContext",
@@ -114,6 +125,7 @@ __all__ = [
     "collect_closure_write_paths",
     "resolve_closure_write_dirs",
     "detect_branch",
+    "detect_skill_capabilities",
     "detect_source_dir",
     "detect_uncommitted_changes",
     "detect_unpublished_branch",
@@ -125,5 +137,7 @@ __all__ = [
     "project_agent_skill_document",
     "read_skill_frontmatter",
     "validate_skill_tier_roles",
+    "validate_skill_capability_authenticity",
+    "validate_skill_capability_declarations",
     "validate_skill_frontmatter",
 ]

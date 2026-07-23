@@ -7,363 +7,18 @@ Derivation: backend_requirements remains runtime-only.
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
-from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
+from autoskillit.workspace import (
+    detect_skill_capabilities,
+    validate_skill_capability_declarations,
+)
 from autoskillit.workspace.skills import _read_skill_frontmatter
-from tests.arch._helpers import _iter_skill_dirs, _strip_doc_fenced_blocks, _strip_frontmatter
+from tests.arch._helpers import _iter_skill_dirs, _strip_frontmatter
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
-    "agent_subagent": [re.compile(r"Agent\(\s*subagent_type\s*=")],
-    "agent_model": [re.compile(r"Agent\(\s*model\s*=")],
-    "open_kitchen": [],
-    "run_skill": [],
-    "test_check": [],
-    "claude_dir": [re.compile(r"\.claude/")],
-    "commit_files": [re.compile(r"\bcommit_files\s*\(")],
-    "git_metadata_write": [
-        re.compile(r"create_impl_worktree\.sh|git worktree add\b[ \t]+\S|git checkout -b"),
-        re.compile(r"git\s+(?:-C\s+\S+\s+)?commit\s+-m"),
-        re.compile(r'\bgit\s+(?:-C\s+\S+\s+)?rebase\s+(?:--\w|[$"\{])'),
-    ],
-    "github_api_write": [
-        re.compile(
-            r"gh api[^\n]*(?:--method\s+(?:POST|PATCH|PUT|DELETE))"
-            r"|gh pr (?:review|create|merge)\b"
-            r"|gh issue (?:create|edit|close)\b"
-            r"|gh release create\b"
-        ),
-    ],
-}
-
-_SELF_INITIATED_TOOL_CAPABILITIES: dict[str, tuple[str, ...]] = {
-    "open_kitchen": ("open_kitchen", "close_kitchen"),
-    "run_skill": ("run_skill",),
-    "test_check": ("test_check",),
-}
-
-_NON_OPERATION_CONTEXT = re.compile(
-    r"\b(?:"
-    r"called by|calls this via|invoked by|launched by|"
-    r"do not|don't|never|must not|cannot|can't|without|skip|"
-    r"returns?|returned|result|output|response|warning|denied|blocked|"
-    r"configuration|config key|frontmatter|documentation|artifact|"
-    r"gated behind|generated recipe"
-    r")\b",
-    re.IGNORECASE,
-)
-
-
-def _has_self_initiated_tool_operation(filtered: str, tool_name: str) -> bool:
-    """Detect an outbound tool operation, excluding transport and documentary prose."""
-    tool = re.escape(tool_name)
-    direct_call = re.compile(rf"\b{tool}\s*\(")
-    imperative = re.compile(
-        rf"\b(?:call|run|invoke|use|execute|retry|re-run|test it)\b"
-        rf"[^\n]{{0,100}}\b{tool}\b",
-        re.IGNORECASE,
-    )
-    configuration = re.compile(
-        rf"(?:\buses_capabilities\s*:|\btool\s*:|\b{tool}\.(?:command|commands)\b)",
-        re.IGNORECASE,
-    )
-
-    for raw_line in filtered.splitlines():
-        line = raw_line.strip().strip("`")
-        if not line or line.startswith("#"):
-            continue
-        if configuration.search(line) or _NON_OPERATION_CONTEXT.search(line):
-            continue
-        if direct_call.search(line) or imperative.search(line):
-            return True
-    return False
-
-
-def _has_graphql_mutation_operation(filtered: str) -> bool:
-    """Default-POST ``gh api graphql`` is a write when its query is a mutation."""
-    return bool(
-        re.search(r"\bgh\s+api\s+graphql\b", filtered)
-        and re.search(r"\bmutation\b", filtered, re.IGNORECASE)
-    )
-
-
-_EXCLUDED_SECTION_HEADINGS = (
-    "Related Skills",
-    "See also",
-    "See Also",
-)
-
-_EXCLUDED_PROSE_PHRASES = (
-    "consider running",
-    "you may want to",
-    "you could run",
-    "produced by",
-    "consumed by",
-    "called by",
-    "written by",
-)
-
-
-_NAMING_EXCLUSION_WORDS: frozenset[str] = frozenset(
-    {"prefix", "convention", "when", "format", "syntax", "naming"}
-)
-
-_IMPERATIVE_VERBS = (
-    "use",
-    "run",
-    "invoke",
-    "load",
-    "spawn",
-    "call",
-    "dispatch",
-    "execute",
-    "launch",
-    "trigger",
-)
-
-
-def _has_imperative_cross_skill_invocation(stripped: str) -> bool:
-    """Return True if stripped line begins with an imperative verb + `/autoskillit:`.
-
-    Matches instruction-style lines like:
-      - "Use `/autoskillit:mermaid` skill ..."
-      - "Run `/autoskillit:dry-walkthrough` on the file ..."
-      - "Invoke the /autoskillit:rectify skill to repair ..."
-      - "Spawn all subagents via `/autoskillit:foo`"
-      - "- Use `/autoskillit:retry-worktree` ..."
-
-    Excludes Agent() subagent dispatch (subagent_type:) and prose-only mentions
-    of siblings that do not require skill-tool invocation.
-    """
-    if "subagent_type:" in stripped:
-        return False
-    core = stripped.lstrip("-* ").strip()
-    lower = core.lower()
-    if "skill tool" in lower:
-        return False  # handled by the explicit "skill tool" detector
-    has_skill_word = (
-        " skill " in lower
-        or lower.endswith(" skill")
-        or " skill." in lower
-        or " skill," in lower
-        or " skill;" in lower
-        or " skill:" in lower
-        or " skill/" in lower
-        or " skill (" in lower
-        or "/skill" in lower
-        or "skill `" in lower
-    )
-    has_run_skill_invocation = "run_skill" in lower and "/autoskillit:" in lower
-    for verb in _IMPERATIVE_VERBS:
-        if (
-            lower.startswith(verb + " ")
-            or lower.startswith(verb + " the ")
-            or lower.startswith(verb + " all ")
-        ):
-            if "/autoskillit:" in lower and (has_skill_word or has_run_skill_invocation):
-                after_verb = lower.split(verb + " ", 1)[1] if verb + " " in lower else ""
-                if after_verb.startswith("`/autoskillit:"):
-                    rest = (
-                        after_verb.split("`/autoskillit:", 1)[1]
-                        if "`/autoskillit:" in after_verb
-                        else ""
-                    )
-                    if not rest or rest.startswith("open-") or rest.startswith("close-"):
-                        pass  # fall through
-                    else:
-                        first_word = (
-                            rest.lstrip("` ").split()[0].rstrip(",.;:`'\"") if rest.split() else ""
-                        )
-                        if first_word in _NAMING_EXCLUSION_WORDS:
-                            return False
-                return True
-            if "/autoskillit:" in lower and verb in {
-                "use",
-                "run",
-                "invoke",
-                "spawn",
-                "call",
-                "execute",
-            }:
-                after_prefix = lower.split(verb + " ", 1)[1] if verb + " " in lower else ""
-                if after_prefix.startswith("`/autoskillit:") or after_prefix.startswith(
-                    "the `/autoskillit:"
-                ):
-                    rest = (
-                        after_prefix.split("`/autoskillit:", 1)[1]
-                        if "`/autoskillit:" in after_prefix
-                        else ""
-                    )
-                    if not rest:
-                        return True
-                    if rest.startswith("open-") or rest.startswith("close-"):
-                        return False
-                    first_word = (
-                        rest.lstrip("` ").split()[0].rstrip(",.;:`'\"") if rest.split() else ""
-                    )
-                    if first_word in _NAMING_EXCLUSION_WORDS:
-                        return False
-                    return True
-    return False
-
-
-def _has_slash_command_invocation(stripped: str) -> bool:
-    """Detect pure `/autoskillit:<name>` slash-command invocation patterns.
-
-    Matches directive lines like:
-      - "/autoskillit:vis-lens-{slug1} {source_dir} {ctx_path}"
-      - "/autoskillit:issue-splitter --issue {N} --repo {owner}"
-      - "/autoskillit:build-execution-map --assess-review-approach"
-
-    Excludes example/wrong/related contexts and parenthetical references.
-    """
-    if not stripped.startswith("/autoskillit:"):
-        return False
-    if stripped.startswith("/autoskillit:{"):
-        return False
-    lower = stripped.lower()
-    if " e.g." in lower or lower.startswith("e.g.") or "(e.g." in lower:
-        return False
-    if "wrong" in lower and (
-        "**wrong" in lower or "wrong:**" in lower or "wrong example" in lower
-    ):
-        return False
-    if "right" in lower and ("**right" in lower or "right:**" in lower or "correct:" in lower):
-        return False
-    if stripped.startswith("`") and (
-        stripped.endswith("`)")
-        or stripped.endswith("`)")
-        or stripped.endswith("`,")
-        or stripped.endswith("`).")
-        or stripped.endswith("`;")
-    ):
-        return False
-    if stripped.startswith("`") and stripped.endswith("`"):
-        return False
-    return True
-
-
-def _is_genuine_cross_skill_ref_line(line: str, skill_name: str) -> bool:
-    """Return True if a line contains a genuine Skill-tool invocation of a sibling skill.
-
-    Excludes self-references, advisory prose, pipeline lineage, See-Also footers,
-    and Agent() subagent dispatch (which is covered by agent_subagent).
-    """
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
-        return False
-    if "autoskillit:" not in stripped:
-        return False
-    if f"autoskillit:{skill_name}" in stripped:
-        return False
-    if "Agent(subagent_type=" in stripped:
-        return False
-    lower = stripped.lower()
-    for phrase in _EXCLUDED_PROSE_PHRASES:
-        if phrase in lower:
-            return False
-    if "load" in lower and "skill tool" in lower:
-        return True
-    if "invoke" in lower and "skill tool" in lower:
-        return True
-    if 'run_skill("/autoskillit:' in stripped or "run_skill('/autoskillit:" in stripped:
-        return True
-    if 'Skill("/autoskillit:' in stripped or "Skill('/autoskillit:" in stripped:
-        return True
-    if _has_imperative_cross_skill_invocation(stripped):
-        return True
-    if _has_slash_command_invocation(stripped):
-        return True
-    if "run_skill" in lower and "/autoskillit:" in lower:
-        return True
-    return False
-
-
-def _detect_cross_skill_ref(filtered: str, skill_name: str) -> bool:
-    """Detect genuine cross_skill_ref by scanning lines with heading context.
-
-    Returns True if at least one line under a non-excluded heading contains a
-    genuine Skill-tool invocation pattern AND the line is not under a heading
-    that is a See-Also / Related-Skills footer.
-    """
-    current_section_is_excluded = False
-    in_skill_table_header = False
-    lines = filtered.splitlines()
-    for idx, raw_line in enumerate(lines):
-        stripped = raw_line.strip()
-        if stripped.startswith("#"):
-            heading_text = stripped.lstrip("#").strip()
-            current_section_is_excluded = any(
-                h.lower() == heading_text.lower() for h in _EXCLUDED_SECTION_HEADINGS
-            )
-            in_skill_table_header = False
-            continue
-        if stripped.startswith("|"):
-            if "skill" in stripped.lower():
-                in_skill_table_header = True
-            continue
-        if current_section_is_excluded:
-            continue
-        if stripped.startswith("|") and not in_skill_table_header:
-            continue
-        lower = stripped.lower()
-        if (
-            "skill tool" in lower
-            and ("load" in lower or "call" in lower or "use" in lower or "invoke" in lower)
-            and "/autoskillit:" not in stripped
-        ):
-            for jdx in range(idx + 1, min(idx + 4, len(lines))):
-                next_stripped = lines[jdx].strip()
-                if not next_stripped:
-                    continue
-                if next_stripped.startswith("#"):
-                    break
-                if (
-                    "/autoskillit:" in next_stripped
-                    and f"autoskillit:{skill_name}" not in next_stripped
-                ):
-                    return True
-                if "skill tool" in next_stripped.lower():
-                    break
-                break
-        if _is_genuine_cross_skill_ref_line(raw_line, skill_name):
-            return True
-    return False
-
-
-def _detect_capabilities(body: str, skill_name: str) -> set[str]:
-    filtered = _strip_doc_fenced_blocks(body)
-    # Collapse shell line continuations so multi-line gh api calls are detected
-    filtered = re.sub(r"\\\n\s*", " ", filtered)
-    detected: set[str] = set()
-    for cap_name, patterns in _CAPABILITY_PATTERNS.items():
-        for pat in patterns:
-            if pat.search(filtered):
-                detected.add(cap_name)
-                break
-    for cap_name, tool_names in _SELF_INITIATED_TOOL_CAPABILITIES.items():
-        if any(_has_self_initiated_tool_operation(filtered, tool) for tool in tool_names):
-            detected.add(cap_name)
-    if _has_graphql_mutation_operation(filtered):
-        detected.add("github_api_write")
-    if _detect_cross_skill_ref(filtered, skill_name):
-        detected.add("cross_skill_ref")
-    return detected
-
-
-_INLINE_DETECTED_CAPS = {"cross_skill_ref"}
-
-_pattern_keys = set(_CAPABILITY_PATTERNS) | _INLINE_DETECTED_CAPS
-_registry_keys = set(SKILL_CAPABILITY_REGISTRY)
-assert _pattern_keys == _registry_keys, (
-    f"_CAPABILITY_PATTERNS + inline caps must match registry. "
-    f"Missing: {_registry_keys - _pattern_keys}, "
-    f"Extra: {_pattern_keys - _registry_keys}"
-)
+_detect_capabilities = detect_skill_capabilities
 
 
 def test_forward_check_capabilities_declared():
@@ -371,15 +26,17 @@ def test_forward_check_capabilities_declared():
     violations: list[str] = []
     for name, skill_md in _iter_skill_dirs():
         content = skill_md.read_text(encoding="utf-8")
-        body = _strip_frontmatter(content)
-        detected = _detect_capabilities(body, name)
-        if not detected:
-            continue
         fm = _read_skill_frontmatter(skill_md)
-        declared = set(fm.get("uses_capabilities", []))
-        missing = detected - declared
-        if missing:
-            violations.append(f"{name}: detected={sorted(detected)}, missing={sorted(missing)}")
+        validation = validate_skill_capability_declarations(
+            content,
+            name,
+            fm.get("uses_capabilities", []),
+        )
+        if validation.missing:
+            violations.append(
+                f"{name}: detected={sorted(validation.detected)}, "
+                f"missing={sorted(validation.missing)}"
+            )
     assert not violations, (
         f"{len(violations)} skill(s) use capabilities but don't declare them:\n"
         + "\n".join(f"  {v}" for v in violations)
@@ -391,14 +48,16 @@ def test_reverse_check_capability_declarations_are_genuine():
     violations: list[str] = []
     for name, skill_md in _iter_skill_dirs():
         content = skill_md.read_text(encoding="utf-8")
-        body = _strip_frontmatter(content)
-        detected = _detect_capabilities(body, name)
         fm = _read_skill_frontmatter(skill_md)
-        declared = set(fm.get("uses_capabilities", []))
-        unsupported = declared - detected
-        if unsupported:
+        validation = validate_skill_capability_declarations(
+            content,
+            name,
+            fm.get("uses_capabilities", []),
+        )
+        if validation.unsupported:
             violations.append(
-                f"{name}: declared={sorted(declared)}, without_evidence={sorted(unsupported)}"
+                f"{name}: declared={sorted(validation.declared)}, "
+                f"without_evidence={sorted(validation.unsupported)}"
             )
     assert not violations, (
         f"{len(violations)} skill(s) declare capabilities without genuine evidence:\n"
@@ -494,8 +153,7 @@ def test_derivation_backend_requirements_match_capabilities():
 
 
 def test_github_api_write_pattern_detected() -> None:
-    """_CAPABILITY_PATTERNS["github_api_write"] matches GitHub write CLI patterns."""
-    patterns = _CAPABILITY_PATTERNS["github_api_write"]
+    """The production classifier recognizes GitHub write CLI operations."""
     should_match = [
         "gh pr review --approve",
         "gh api /repos/foo/bar --method POST",
@@ -509,13 +167,9 @@ def test_github_api_write_pattern_detected() -> None:
         "gh issue list",
     ]
     for text in should_match:
-        assert any(p.search(text) for p in patterns), (
-            f"github_api_write pattern should match: {text!r}"
-        )
+        assert "github_api_write" in _detect_capabilities(text, "test-skill")
     for text in should_not_match:
-        assert not any(p.search(text) for p in patterns), (
-            f"github_api_write pattern should NOT match: {text!r}"
-        )
+        assert "github_api_write" not in _detect_capabilities(text, "test-skill")
 
 
 def test_review_pr_declares_github_api_write() -> None:
@@ -562,8 +216,7 @@ def test_cross_skill_ref_declarations_are_genuine():
         if name in _CROSS_SKILL_REF_ALLOWLIST:
             continue
         content = skill_md.read_text(encoding="utf-8")
-        body = _strip_frontmatter(content)
-        if not _detect_cross_skill_ref(_strip_doc_fenced_blocks(body), name):
+        if "cross_skill_ref" not in _detect_capabilities(content, name):
             violations.append(name)
     assert not violations, (
         f"{len(violations)} skill(s) declare cross_skill_ref without genuine "

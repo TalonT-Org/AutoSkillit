@@ -24,6 +24,7 @@ from uuid import uuid4
 
 import pytest
 
+import autoskillit.hooks._capture_artifacts as capture_artifacts
 import autoskillit.hooks.shell_capture_hook as shell_capture_hook
 from autoskillit.hooks._capture_artifacts import (
     _CAPTURE_FILENAME_RE,
@@ -593,22 +594,29 @@ def test_stale_candidate_classifier_enforces_filename_allowlist(tmp_path: Path) 
         anchor.close()
 
 
-def test_classify_stale_captures_uses_wall_clock_not_directory_mtime(tmp_path: Path) -> None:
-    """Staleness must be measured against real elapsed time, not the capture
-    directory's own mtime (which only advances when its contents change)."""
+def test_stale_capture_classifier_uses_wall_clock_threshold(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _make_project_dirs(tmp_path)
     capture = _capture_dir(tmp_path)
-
     stale = capture / f"shell_{uuid4().hex[:16]}.log"
     stale.write_text("x")
+    os.utime(stale, (300, 300))
+    os.utime(capture, (499, 499))
 
-    backdated = time.time() - 200
-    os.utime(stale, (backdated, backdated))
-    os.utime(capture, (backdated, backdated))
+    observed_thresholds: list[float] = []
+    real_classifier = capture_artifacts._open_stale_candidate
 
-    deleted = classify_stale_captures(tmp_path, max_age_seconds=100)
-    assert deleted == 0
-    assert stale.exists()
+    def observe_threshold(root, name, *, mtime_threshold):
+        observed_thresholds.append(mtime_threshold)
+        return real_classifier(root, name, mtime_threshold=mtime_threshold)
+
+    monkeypatch.setattr(capture_artifacts.time, "time", lambda: 500)
+    monkeypatch.setattr(capture_artifacts, "_open_stale_candidate", observe_threshold)
+
+    assert classify_stale_captures(tmp_path, max_age_seconds=100) == 0
+    assert observed_thresholds == [400]
 
 
 def test_capture_filename_regex_consistency() -> None:

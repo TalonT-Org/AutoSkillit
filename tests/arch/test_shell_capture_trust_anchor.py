@@ -65,6 +65,100 @@ def _render_string_node(node: ast.Constant | ast.JoinedStr) -> str:
     return "".join(parts)
 
 
+def _called_operation_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "getattr"
+        and len(node.args) >= 2
+        and isinstance(node.args[1], ast.Constant)
+        and isinstance(node.args[1].value, str)
+    ):
+        return node.args[1].value
+    return None
+
+
+def _pathname_operation_calls(source: str) -> list[str]:
+    tree = ast.parse(source)
+    imported_aliases = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module in {"os", "pathlib", "shutil"}
+        for alias in node.names
+        if alias.name in {"unlink", "rmtree"}
+    }
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        operation = _called_operation_name(node.func)
+        if operation in {"unlink", "rmtree"} or operation in imported_aliases:
+            violations.append(ast.unparse(node.func))
+    return violations
+
+
+def _shell_mkdir_calls(source: str) -> list[str]:
+    return [
+        node.value
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and re.search(r"(?:^|[\s;&|])mkdir\s+-p(?:\s|$)", node.value)
+    ]
+
+
+def _imports_symbol(tree: ast.Module, module: str, symbol: str) -> bool:
+    return any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == module
+        and any(alias.name == symbol for alias in node.names)
+        for node in tree.body
+    )
+
+
+def _is_path_cwd_call(node: ast.expr) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "Path"
+        and node.func.attr == "cwd"
+        and not node.args
+        and not node.keywords
+    )
+
+
+def _main_directly_classifies_captures(tree: ast.Module) -> bool:
+    main = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "main"
+        ),
+        None,
+    )
+    if main is None:
+        return False
+    for statement in main.body:
+        if not isinstance(statement, ast.Try):
+            continue
+        for guarded in statement.body:
+            if (
+                isinstance(guarded, ast.Expr)
+                and isinstance(guarded.value, ast.Call)
+                and isinstance(guarded.value.func, ast.Name)
+                and guarded.value.func.id == "classify_stale_captures"
+                and len(guarded.value.args) == 1
+                and _is_path_cwd_call(guarded.value.args[0])
+            ):
+                return True
+    return False
+
+
 def _capture_path_redirections(source: str) -> list[str]:
     tree = ast.parse(source)
     capture_path_names = {
@@ -109,9 +203,16 @@ def _capture_path_redirections(source: str) -> list[str]:
 
 def test_session_start_calls_canonical_capture_classification() -> None:
     source = _source("hooks/session_start_hook.py")
-    assert "from _capture_artifacts import" in source
-    assert "classify_stale_captures(Path.cwd())" in source
-    assert "shell_capture" not in source
+    tree = ast.parse(source)
+    assert _imports_symbol(tree, "_capture_artifacts", "classify_stale_captures")
+    assert _main_directly_classifies_captures(tree)
+    imported_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module is not None:
+            imported_modules.add(node.module)
+        elif isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+    assert not any("shell_capture" in module for module in imported_modules)
 
 
 def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
@@ -122,20 +223,44 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
             "hooks/_capture_artifacts.py",
         )
     }
-    combined = "\n".join(sources.values())
-    for forbidden in (
-        "mkdir -p",
-        ".unlink(",
-        "os.unlink(",
-        "shutil.rmtree(",
-    ):
-        assert forbidden not in combined, f"pathname capture operation reintroduced: {forbidden}"
     violations = {}
+    for relative, source in sources.items():
+        detected = _pathname_operation_calls(source) + _shell_mkdir_calls(source)
+        if detected:
+            violations[relative] = detected
+    assert not violations, f"pathname capture operation reintroduced: {violations}"
+    redirection_violations = {}
     for relative, source in sources.items():
         detected = _capture_path_redirections(source)
         if detected:
-            violations[relative] = detected
-    assert not violations, f"capture-root pathname redirection reintroduced: {violations}"
+            redirection_violations[relative] = detected
+    assert not redirection_violations, (
+        f"capture-root pathname redirection reintroduced: {redirection_violations}"
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import os as filesystem\nfilesystem.unlink('artifact')",
+        "from os import unlink as remove\nremove('artifact')",
+        "from pathlib import Path\ngetattr(Path('artifact'), 'unlink')()",
+        "import shutil as cleanup\ncleanup.rmtree('capture-root')",
+    ],
+)
+def test_pathname_operation_guard_rejects_aliases_and_getattr(source: str) -> None:
+    assert _pathname_operation_calls(source)
+
+
+def test_canonical_classification_guard_rejects_dead_branch() -> None:
+    tree = ast.parse(
+        "from _capture_artifacts import classify_stale_captures\n"
+        "from pathlib import Path\n"
+        "def main():\n"
+        "    if False:\n"
+        "        classify_stale_captures(Path.cwd())\n"
+    )
+    assert not _main_directly_classifies_captures(tree)
 
 
 @pytest.mark.parametrize(

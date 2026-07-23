@@ -90,7 +90,9 @@ hook can be retired in favor of that mechanism.
 9. Portable Linux/macOS Python exposes descriptor-relative unlink but no
    expected-inode conditional unlink. SessionStart therefore retains stale
    candidates rather than making a security claim across a validation/deletion
-   race. Artifact quota and lifecycle reclamation remain follow-up work.
+   race. Artifact quota and lifecycle reclamation remain follow-up work tracked
+   by [#4327](https://github.com/TalonT-Org/AutoSkillit/issues/4327) and
+   [#4320](https://github.com/TalonT-Org/AutoSkillit/issues/4320), respectively.
 
 ## Consequences
 

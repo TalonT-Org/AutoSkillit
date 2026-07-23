@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.cli._prompts import (
     _MCP_RETRY_INSTRUCTION,
@@ -12,6 +13,9 @@ from autoskillit.cli._prompts import (
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, ROUTING_AUTHORITY_CLAUSE
 from autoskillit.execution import codex_recipe_delivery_calling_contract
 
+if TYPE_CHECKING:
+    from autoskillit.workspace import EffectiveSkillCatalog
+
 __all__ = [
     "_build_open_kitchen_prompt",
     "_build_fleet_dispatch_prompt",
@@ -19,10 +23,18 @@ __all__ = [
 
 
 def _build_open_kitchen_prompt(
-    mcp_prefix: str, has_unguarded_filesystem_access: bool = False
+    mcp_prefix: str,
+    has_unguarded_filesystem_access: bool = False,
+    skill_catalog: EffectiveSkillCatalog | None = None,
+    project_dir: Path | None = None,
+    backend: object | None = None,
 ) -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
-    raw = _read_full_sous_chef()
+    raw = _read_full_sous_chef(
+        skill_catalog,
+        project_dir=project_dir,
+        backend=backend,
+    )
     sous_chef_content = "\n\n" + raw if raw else ""
 
     _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
@@ -126,12 +138,6 @@ def _build_fleet_dispatch_prompt(
     has_unguarded_filesystem_access: bool = False,
 ) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
-    from autoskillit.fleet import _build_admiral_dispatch_block  # noqa: PLC0415
-
-    admiral_block = _build_admiral_dispatch_block()
-    admiral_section = (
-        f"\n## ADMIRAL DISCIPLINE (DISPATCH SUBSET)\n\n{admiral_block}\n" if admiral_block else ""
-    )
     _food_truck_section = ""
     if recipe_table:
         _food_truck_section = (
@@ -157,7 +163,7 @@ TOOL SURFACE — these 11 tools are available in this session:
 - {mcp_prefix}fetch_github_issue      — retrieve issue context when dispatching issue work
 - {mcp_prefix}get_issue_title         — get the title of a GitHub issue
 - {mcp_prefix}reset_dispatch          — reset a failed dispatch and clean stale artifacts
-{_food_truck_section}{admiral_section}
+{_food_truck_section}
 ## ROUTING AUTHORITY
 
 {ROUTING_AUTHORITY_CLAUSE}

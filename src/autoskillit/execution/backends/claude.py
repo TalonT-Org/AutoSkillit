@@ -275,6 +275,14 @@ class ClaudeResultParser:
 
 @dataclass(frozen=True, slots=True)
 class ClaudeCodeBackend(BackendCmdBuilderBase):
+    def _plugin_dir_arg(self, plugin_dir: Path) -> str:
+        if plugin_dir.resolve() == pkg_root().resolve():
+            raise ValueError(
+                "DirectInstall must be projected before Claude command construction; "
+                "refusing to expose the canonical package root"
+            )
+        return str(plugin_dir)
+
     def _binary(self) -> str:
         return "claude"
 
@@ -398,8 +406,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             Optional model override.
         plugin_source
             When provided, determines the ``--plugin-dir`` flag. DirectInstall uses
-            the plugin_dir path; MarketplaceInstall omits the flag (parent session
-            already has it loaded).
+            a generated model-safe projection of plugin_dir; MarketplaceInstall
+            omits the flag (parent session already has it loaded).
         add_dirs
             Each entry is appended as ``--add-dir <path>``.
         resume_spec
@@ -441,7 +449,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             builder.kv_flag(ClaudeFlags.MODEL, self.translate_model(model))
         match plugin_source:
             case DirectInstall(plugin_dir=p):
-                builder.kv_flag(ClaudeFlags.PLUGIN_DIR, str(p))
+                builder.kv_flag(ClaudeFlags.PLUGIN_DIR, self._plugin_dir_arg(p))
             case MarketplaceInstall():
                 pass
             case None:
@@ -488,7 +496,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         _apply_output_format(cmd, output_format)
         match plugin_source:
             case DirectInstall(plugin_dir=p):
-                cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
+                cmd += [ClaudeFlags.PLUGIN_DIR, self._plugin_dir_arg(p)]
             case MarketplaceInstall():
                 pass
             case None:
@@ -615,7 +623,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         cmd: list[str] = [*spec.cmd]
         match plugin_source:
             case DirectInstall(plugin_dir=p):
-                cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
+                cmd += [ClaudeFlags.PLUGIN_DIR, self._plugin_dir_arg(p)]
             case MarketplaceInstall():
                 pass
             case None:
@@ -705,7 +713,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         cmd: list[str] = [*spec.cmd]
         match plugin_source:
             case DirectInstall(plugin_dir=p):
-                cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
+                cmd += [ClaudeFlags.PLUGIN_DIR, self._plugin_dir_arg(p)]
             case MarketplaceInstall(cache_path=cp):
                 cmd += [ClaudeFlags.PLUGIN_DIR, str(cp)]
         _apply_output_format(cmd, output_format)

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
@@ -11,15 +14,29 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
+    ValidatedAddDir,
     extract_skill_name,
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,
     check_hard_capability_feasibility,
 )
+from autoskillit.workspace import SkillProjectionContext
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
+
+
+@dataclass(frozen=True)
+class DirectSkillDispatch:
+    """Projected materialization retained for one direct headless dispatch."""
+
+    add_dirs: tuple[ValidatedAddDir, ...]
+    session_id: str
+
+    def cleanup(self, tool_ctx: ToolContext) -> None:
+        if tool_ctx.session_skill_manager is not None:
+            tool_ctx.session_skill_manager.cleanup_session(self.session_id)
 
 
 def _is_backend_incompatible(skill_invocation: object, effective_backend: str) -> bool:
@@ -138,3 +155,84 @@ def _resolve_and_check_backend_compat(
         effective_backend_obj=tool_ctx.backend,
         skill_resolver=tool_ctx.skill_resolver,
     )
+
+
+def _prepare_direct_skill_dispatch(
+    skill_command: str,
+    cwd: str | Path,
+    tool_ctx: ToolContext,
+) -> tuple[DirectSkillDispatch | None, str | None]:
+    """Resolve policy once, then materialize its agent-safe projection."""
+    target_name = extract_skill_name(skill_command)
+    order_id = os.environ.get(DISPATCH_ID_ENV_VAR, "")
+    if target_name is None:
+        return None, SkillResult.crashed(
+            exception=SkillContractError("Direct dispatch requires a skill command"),
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+    if tool_ctx.skill_resolver is None:
+        return None, SkillResult.crashed(
+            exception=SkillContractError(
+                f"Cannot resolve direct skill {target_name!r}: skill resolver is unavailable"
+            ),
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+    if tool_ctx.session_skill_manager is None:
+        return None, SkillResult.crashed(
+            exception=SkillContractError(
+                f"Cannot materialize direct skill {target_name!r}: "
+                "session skill manager is unavailable"
+            ),
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+    try:
+        invocation = tool_ctx.skill_resolver.resolve_invocation(
+            target_name,
+            tool_ctx.project_dir,
+            SkillExecutionRole.SESSION,
+        )
+    except SkillContractError as exc:
+        return None, SkillResult.crashed(
+            exception=exc,
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+
+    compatibility_error = _check_backend_compat(
+        skill_command=skill_command,
+        resolved_command=skill_command,
+        effective_order_id=order_id,
+        target_name=target_name,
+        skill_info=invocation,
+        effective_backend_obj=tool_ctx.backend,
+        skill_resolver=tool_ctx.skill_resolver,
+    )
+    if compatibility_error is not None:
+        return None, compatibility_error
+
+    execution_cwd = Path(cwd).resolve()
+    backend = tool_ctx.backend
+    projection_context = SkillProjectionContext(
+        execution_cwd=execution_cwd,
+        backend=backend,
+        conventions=backend.conventions if backend is not None else None,
+        substitutions={"{{AUTOSKILLIT_TEMP}}": str(execution_cwd / ".autoskillit" / "temp")},
+    )
+    session_id = f"direct-{uuid4().hex[:12]}"
+    try:
+        add_dir = tool_ctx.session_skill_manager.materialize_invocation(
+            session_id,
+            invocation,
+            projection_context,
+        )
+    except (OSError, RuntimeError, ValueError, SkillContractError) as exc:
+        tool_ctx.session_skill_manager.cleanup_session(session_id)
+        return None, SkillResult.crashed(
+            exception=exc,
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+    return DirectSkillDispatch(add_dirs=(add_dir,), session_id=session_id), None

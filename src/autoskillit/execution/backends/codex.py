@@ -514,51 +514,6 @@ def _register_agent_tomls(session_dir: Path) -> int:
     return len(registrations) // 4
 
 
-def _materialize_profile_skills(session_dir: Path) -> int:
-    """Symlink ~/.codex/skills/<name> dirs into session_dir/skills/<name>.
-
-    Scans Path.home() / ".codex" / "skills" for subdirectories containing
-    SKILL.md. Each is symlinked into session_dir/skills/<name>. Falls back
-    to shutil.copytree if symlink creation fails. Subdirectories without
-    SKILL.md are skipped. Returns the number of skills materialized.
-    """
-    profile_skills_root = Path.home() / ".codex" / "skills"
-    if not profile_skills_root.is_dir():
-        return 0
-    count = 0
-    skills_base = session_dir / "skills"
-    skills_base.mkdir(parents=True, exist_ok=True)
-    try:
-        entries = list(profile_skills_root.iterdir())
-    except OSError:
-        return 0
-    for entry in entries:
-        if not entry.is_dir() or not (entry / "SKILL.md").is_file():
-            continue
-        target = skills_base / entry.name
-        if target.exists() or target.is_symlink():
-            continue
-        try:
-            target.symlink_to(entry.resolve())
-        except OSError:
-            logger.debug(
-                "codex_profile_skill_symlink_failed_using_copytree",
-                skill=entry.name,
-                exc_info=True,
-            )
-            try:
-                shutil.copytree(entry, target)
-            except OSError:
-                logger.warning(
-                    "codex_profile_skill_copy_failed",
-                    skill=entry.name,
-                    exc_info=True,
-                )
-                continue
-        count += 1
-    return count
-
-
 @dataclass(frozen=True, slots=True)
 class CodexBackend(BackendCmdBuilderBase):
     def _binary(self) -> str:
@@ -1156,11 +1111,6 @@ class CodexBackend(BackendCmdBuilderBase):
             logger.debug("codex_agents_registered", count=registered)
         except Exception:
             logger.warning("codex_agent_toml_generation_failed", exc_info=True)
-
-        try:
-            _materialize_profile_skills(session_dir)
-        except Exception:
-            logger.warning("codex_profile_skills_materialization_failed", exc_info=True)
 
     def validate_skill_content(self, content: str) -> list[str]:
         return []

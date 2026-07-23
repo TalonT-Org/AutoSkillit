@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -374,6 +375,50 @@ async def test_enrich_issues_success(tool_ctx_kitchen_open) -> None:
     result = json.loads(await enrich_issues())
     assert result["success"] is True
     assert result["enriched"] == [42]
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_dispatches_only_projected_skill_documents(
+    tool_ctx_kitchen_open,
+) -> None:
+    """Direct lifecycle sessions receive a sanitized ephemeral skill tree."""
+    captured: dict[str, object] = {}
+    output = (
+        "---prepare-issue-result---\n"
+        '{"issue_number": 42, "url": "https://example.test/42"}\n'
+        "---/prepare-issue-result---\n"
+    )
+
+    async def _run_with_projection(
+        _command: str,
+        _cwd: str,
+        *,
+        add_dirs=(),
+        **_kwargs,
+    ) -> SkillResult:
+        assert len(add_dirs) == 1
+        session_root = Path(add_dirs[0].path)
+        documents = list(session_root.rglob("SKILL.md"))
+        assert documents
+        captured["root"] = session_root
+        captured["documents"] = [path.read_text() for path in documents]
+        return _make_skill_result(success=True, result=output)
+
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(side_effect=_run_with_projection)
+
+    result = json.loads(await prepare_issue("Title", "Body"))
+
+    assert result["success"] is True
+    documents = captured["documents"]
+    assert isinstance(documents, list)
+    for content in documents:
+        assert "uses_capabilities:" not in content
+        assert "execution_role:" not in content
+        assert "backend_requirements:" not in content
+    root = captured["root"]
+    assert isinstance(root, Path)
+    assert not root.exists()
 
 
 @pytest.mark.anyio

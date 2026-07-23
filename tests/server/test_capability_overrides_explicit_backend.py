@@ -41,8 +41,12 @@ def _make_resolver(caps_per_skill: dict[str, tuple[str, ...]] | None = None):
         caps = caps_per_skill.get(name, ())
         return MagicMock(uses_capabilities=frozenset(caps))
 
-    table["resolve"] = _resolve
-    return MagicMock(**table)
+    resolver = MagicMock(**table)
+    resolver.resolve.side_effect = _resolve
+    resolver.resolve_invocation.side_effect = lambda name, *_args: SimpleNamespace(
+        capability_union=frozenset(caps_per_skill.get(name, ()))
+    )
+    return resolver
 
 
 class TestExplicitClaudePinFlipsGitWriteIngredient:

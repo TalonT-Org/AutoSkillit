@@ -116,7 +116,8 @@ def test_codex_init_session_raises_when_pre_launch_fails(
 def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) -> None:
     """Codex profile skills are copied as projections, never linked to raw sources."""
     from autoskillit.core.io import load_yaml
-    from autoskillit.execution.backends.codex import _materialize_profile_skills
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import materialize_codex_profile_skills
 
     fake_home = tmp_path / "fake_home"
     profile_skill = fake_home / ".codex" / "skills" / "my-skill"
@@ -136,7 +137,7 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
     (session_dir / "skills").mkdir(parents=True)
 
     monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
-    count = _materialize_profile_skills(session_dir)
+    count = materialize_codex_profile_skills(session_dir, CodexBackend())
 
     target = session_dir / "skills" / "my-skill"
     assert target.is_dir()
@@ -154,8 +155,9 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
 
 
 def test_missing_profile_skills_dir_does_not_raise(tmp_path, monkeypatch) -> None:
-    """_materialize_profile_skills returns 0 when ~/.codex/skills is absent."""
-    from autoskillit.execution.backends.codex import _materialize_profile_skills
+    """Profile projection returns 0 when ~/.codex/skills is absent."""
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import materialize_codex_profile_skills
 
     fake_home = tmp_path / "fake_home"
     fake_home.mkdir()
@@ -164,7 +166,7 @@ def test_missing_profile_skills_dir_does_not_raise(tmp_path, monkeypatch) -> Non
     (session_dir / "skills").mkdir(parents=True)
 
     monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
-    count = _materialize_profile_skills(session_dir)
+    count = materialize_codex_profile_skills(session_dir, CodexBackend())
 
     assert count == 0
 

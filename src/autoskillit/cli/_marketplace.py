@@ -15,12 +15,19 @@ import autoskillit.cli._hooks as _hooks_mod
 from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
 from autoskillit.core import (
     DIRECT_INSTALL_CACHE_SUBDIR,
+    SkillSource,
     atomic_write,
     get_logger,
     is_git_worktree,
     pkg_root,
 )
 from autoskillit.hooks import generate_hooks_json
+from autoskillit.workspace import (
+    DefaultSkillResolver,
+    SkillProjectionContext,
+    materialize_sanitized_plugin_root,
+    validate_sanitized_plugin_artifact,
+)
 
 logger = get_logger(__name__)
 
@@ -61,16 +68,14 @@ def _ensure_marketplace() -> Path:
 
     pkg_dir = pkg_root()
 
-    # Guard: refuse to create the symlink when the package is installed
-    # from a git worktree. The symlink target must outlive the Python
-    # process that creates it — transient worktree paths will break it.
+    # Guard: a transient worktree is not a valid canonical source for a
+    # persistent marketplace artifact.
     if is_git_worktree(pkg_dir):
         raise SystemExit(
             "ERROR: 'autoskillit install' cannot be run when the package\n"
             "is installed from a git worktree.\n\n"
             f"  Detected worktree path: {pkg_dir}\n\n"
-            "The marketplace symlink would point to this transient path and\n"
-            "break when the worktree is deleted.\n\n"
+            "The marketplace projection would be sourced from this transient path.\n\n"
             "Fix: run 'autoskillit install' from the main project checkout:\n"
             "  cd /path/to/main/repo && autoskillit install"
         )
@@ -95,12 +100,30 @@ def _ensure_marketplace() -> Path:
     }
     atomic_write(plugin_dir / "marketplace.json", json.dumps(manifest, indent=2) + "\n")
 
-    # Symlink to the live package directory
-    link_path = marketplace_dir / "plugins" / "autoskillit"
-    link_path.parent.mkdir(parents=True, exist_ok=True)
-    if link_path.is_symlink() or link_path.exists():
-        link_path.unlink()
-    link_path.symlink_to(pkg_dir)
+    public_plugin_root = marketplace_dir / "plugins" / "autoskillit"
+    catalog = tuple(
+        skill for skill in DefaultSkillResolver().list_all() if skill.source is SkillSource.BUNDLED
+    )
+    private_manifest = materialize_sanitized_plugin_root(
+        pkg_dir,
+        public_plugin_root,
+        catalog,
+        SkillProjectionContext(execution_cwd=Path.cwd().resolve()),
+    )
+    atomic_write(
+        public_plugin_root / "hooks" / "hooks.json",
+        json.dumps(generate_hooks_json(), indent=2) + "\n",
+    )
+    errors = validate_sanitized_plugin_artifact(
+        pkg_dir,
+        public_plugin_root,
+        private_manifest,
+        catalog,
+    )
+    if errors:
+        raise RuntimeError(
+            "refusing to publish invalid marketplace artifact: " + "; ".join(errors)
+        )
 
     return marketplace_dir
 
@@ -186,10 +209,6 @@ def install(*, scope: str = "user") -> bool:
 
     with _InstallLock():
         _clear_plugin_cache()
-
-        # Regenerate hooks.json from the canonical registry with absolute paths
-        hooks_json_path = pkg_root() / "hooks" / "hooks.json"
-        atomic_write(hooks_json_path, json.dumps(generate_hooks_json(), indent=2) + "\n")
 
         # Register the marketplace (idempotent)
         result = subprocess.run(

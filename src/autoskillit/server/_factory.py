@@ -74,6 +74,7 @@ from autoskillit.workspace import (
     DefaultSessionSkillManager,
     DefaultWorkspaceManager,
     SkillsDirectoryProvider,
+    project_plugin_source,
     resolve_ephemeral_root,
     validate_skill_tier_roles,
 )
@@ -307,10 +308,20 @@ def make_context(
             resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
     else:
         resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
-    plugin_source = resolved_plugin_source
     gate = DefaultGateState(enabled=False)
 
     project_dir = project_dir if project_dir is not None else _resolve_project_dir()
+    if (
+        isinstance(resolved_plugin_source, DirectInstall)
+        and resolved_plugin_source.plugin_dir.resolve() == _default_plugin_dir().resolve()
+    ):
+        plugin_source = project_plugin_source(
+            resolved_plugin_source,
+            cwd=project_dir,
+            backend=backend,
+        )
+    else:
+        plugin_source = resolved_plugin_source
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 

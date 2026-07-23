@@ -18,7 +18,10 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
-from autoskillit.server.tools._backend_compat import _resolve_and_check_backend_compat
+from autoskillit.server.tools._backend_compat import (
+    DirectSkillDispatch,
+    _prepare_direct_skill_dispatch,
+)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 if TYPE_CHECKING:
@@ -270,10 +273,6 @@ async def report_bug(
                 f"Report output path: {report_path}"
             )
 
-            # Backend compatibility gate — must precede executor dispatch.
-            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
-                return _compat_err
-
             log_dir = config.linux_tracing.log_dir if config.linux_tracing is not None else ""
 
             expected_output_patterns: list[str] = []
@@ -285,6 +284,15 @@ async def report_bug(
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
             if severity == "blocking":
+                dispatch, dispatch_error = _prepare_direct_skill_dispatch(
+                    skill_command,
+                    cwd,
+                    tool_ctx,
+                )
+                if dispatch_error is not None or dispatch is None:
+                    return dispatch_error or json.dumps(
+                        {"success": False, "error": "Direct skill dispatch preparation failed"}
+                    )
                 result = await _run_report_session(
                     skill_command,
                     cwd,
@@ -301,6 +309,8 @@ async def report_bug(
                     provider_extras=report_provider_extras,
                     profile_name=report_profile_name,
                     provider_name=report_profile_name,
+                    direct_dispatch=dispatch,
+                    tool_ctx=tool_ctx,
                 )
                 if not result["success"]:
                     await _notify(
@@ -314,17 +324,27 @@ async def report_bug(
 
             # Non-blocking: supervised background dispatch, return immediately.
             status_path = report_path.with_suffix(".status.json")
-            atomic_write(
-                status_path,
-                json.dumps(
-                    {"status": "pending", "dispatched_at": datetime.now(UTC).isoformat()},
-                    indent=2,
-                ),
-            )
             if tool_ctx.background is None:  # always set by ToolContext.__post_init__
                 raise RuntimeError("ToolContext.background not initialized")
-            tool_ctx.background.submit(
-                _run_report_session(
+            dispatch, dispatch_error = _prepare_direct_skill_dispatch(
+                skill_command,
+                cwd,
+                tool_ctx,
+            )
+            if dispatch_error is not None or dispatch is None:
+                return dispatch_error or json.dumps(
+                    {"success": False, "error": "Direct skill dispatch preparation failed"}
+                )
+            report_session = None
+            try:
+                atomic_write(
+                    status_path,
+                    json.dumps(
+                        {"status": "pending", "dispatched_at": datetime.now(UTC).isoformat()},
+                        indent=2,
+                    ),
+                )
+                report_session = _run_report_session(
                     skill_command,
                     cwd,
                     report_path,
@@ -341,9 +361,18 @@ async def report_bug(
                     provider_extras=report_provider_extras,
                     profile_name=report_profile_name,
                     provider_name=report_profile_name,
-                ),
-                label=step_name or "report_bug",
-            )
+                    direct_dispatch=dispatch,
+                    tool_ctx=tool_ctx,
+                )
+                tool_ctx.background.submit(
+                    report_session,
+                    label=step_name or "report_bug",
+                )
+            except Exception:
+                if report_session is not None:
+                    report_session.close()
+                dispatch.cleanup(tool_ctx)
+                raise
             return json.dumps(
                 {
                     "success": True,
@@ -625,6 +654,8 @@ async def _run_report_session(
     provider_extras: dict[str, str] | None = None,
     profile_name: str = "",
     provider_name: str = "",
+    direct_dispatch: DirectSkillDispatch | None = None,
+    tool_ctx: Any = None,
 ) -> dict[str, Any]:
     """Run the headless session, write the report, and handle GitHub filing.
 
@@ -644,6 +675,7 @@ async def _run_report_session(
             provider_extras=provider_extras,
             profile_name=profile_name,
             provider_name=provider_name,
+            add_dirs=direct_dispatch.add_dirs if direct_dispatch is not None else (),
         )
 
         report_text = skill_result.result or skill_result.stderr or "No report generated."
@@ -697,3 +729,6 @@ async def _run_report_session(
             "error": str(exc),
             "report_path": str(report_path),
         }
+    finally:
+        if direct_dispatch is not None and tool_ctx is not None:
+            direct_dispatch.cleanup(tool_ctx)

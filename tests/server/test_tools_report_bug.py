@@ -320,6 +320,49 @@ async def test_report_bug_blocking_success(tool_ctx_kitchen_open, tmp_path):
 
 
 @pytest.mark.anyio
+async def test_report_bug_dispatches_projected_skill_and_cleans_session(
+    tool_ctx_kitchen_open,
+    tmp_path,
+) -> None:
+    """Report sessions never expose canonical machine-contract frontmatter."""
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
+    captured: dict[str, object] = {}
+
+    async def _run_with_projection(
+        _command: str,
+        _cwd: str,
+        *,
+        add_dirs=(),
+        **_kwargs,
+    ) -> SkillResult:
+        assert len(add_dirs) == 1
+        session_root = Path(add_dirs[0].path)
+        documents = list(session_root.rglob("SKILL.md"))
+        assert documents
+        captured["root"] = session_root
+        captured["documents"] = [path.read_text() for path in documents]
+        return _skill_ok("# Report")
+
+    mock_executor = AsyncMock()
+    mock_executor.run = AsyncMock(side_effect=_run_with_projection)
+    tool_ctx_kitchen_open.executor = mock_executor
+
+    result = json.loads(await report_bug("error", str(tmp_path), severity="blocking"))
+
+    assert result["success"] is True
+    documents = captured["documents"]
+    assert isinstance(documents, list)
+    for content in documents:
+        assert "uses_capabilities:" not in content
+        assert "execution_role:" not in content
+        assert "backend_requirements:" not in content
+    root = captured["root"]
+    assert isinstance(root, Path)
+    assert not root.exists()
+
+
+@pytest.mark.anyio
 async def test_report_bug_blocking_failure_propagated(tool_ctx_kitchen_open, tmp_path):
     """If the headless session fails, status=failed is returned."""
     tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")

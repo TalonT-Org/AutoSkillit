@@ -385,8 +385,9 @@ class TestOpenKitchenSousChef:
         assert "retry-worktree" in text.lower()
 
     @pytest.mark.anyio
-    async def test_open_kitchen_degrades_gracefully_without_sous_chef(self, monkeypatch, tmp_path):
-        """open_kitchen must not raise when sous-chef/SKILL.md is absent."""
+    async def test_open_kitchen_degrades_gracefully_without_sous_chef(self, tool_ctx):
+        """open_kitchen must not raise when the effective catalog omits sous-chef."""
+        from types import SimpleNamespace
         from unittest.mock import AsyncMock, MagicMock
 
         import autoskillit.server.tools.tools_kitchen as tools_kitchen_mod
@@ -394,7 +395,8 @@ class TestOpenKitchenSousChef:
 
         mock_ctx = MagicMock()
         mock_ctx.enable_components = AsyncMock()
-        monkeypatch.setattr(tools_kitchen_mod, "pkg_root", lambda: tmp_path)
+        tool_ctx.skill_resolver = MagicMock()
+        tool_ctx.skill_resolver.list_effective.return_value = SimpleNamespace(skills=())
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(tools_kitchen_mod, "_write_hook_config"):
                 result = await open_kitchen(ctx=mock_ctx)  # must not raise

@@ -56,9 +56,10 @@ async def _execute_fleet_run(
 ) -> DispatchResult:
     import functools
 
-    from autoskillit.core import detect_autoskillit_mcp_prefix
+    from autoskillit.core import SkillExecutionRole, detect_autoskillit_mcp_prefix
     from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
     from autoskillit.server import make_context
+    from autoskillit.workspace import SkillProjectionContext, project_agent_skill_document
 
     ctx = make_context(cfg, project_dir=Path.cwd())
 
@@ -80,6 +81,7 @@ async def _execute_fleet_run(
         _raw_steps,
         skill_resolver=ctx.skill_resolver,
         config_backend=ctx.config.agent_backend,
+        project_root=ctx.project_dir,
     )
     _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
         _raw_steps,
@@ -88,6 +90,7 @@ async def _execute_fleet_run(
         recipe,
         skill_resolver=ctx.skill_resolver,
         config_backend=ctx.config.agent_backend,
+        project_root=ctx.project_dir,
     )
 
     effective_backend = dispatch_backend or ctx.backend
@@ -96,10 +99,36 @@ async def _execute_fleet_run(
         if effective_backend
         else False
     )
+    sous_chef = None
+    if ctx.skill_resolver is not None:
+        orchestrator_catalog = ctx.skill_resolver.list_effective(
+            ctx.project_dir,
+            SkillExecutionRole.ORCHESTRATOR,
+        )
+        sous_chef = next(
+            (skill for skill in orchestrator_catalog.skills if skill.name == "sous-chef"),
+            None,
+        )
+    projected_sous_chef = (
+        project_agent_skill_document(
+            sous_chef,
+            SkillProjectionContext(
+                execution_cwd=ctx.project_dir.resolve(),
+                backend=effective_backend,
+                conventions=(
+                    effective_backend.conventions if effective_backend is not None else None
+                ),
+                gating=False,
+            ),
+        ).content
+        if sous_chef is not None
+        else ""
+    )
     prompt_builder = functools.partial(
         _build_food_truck_prompt,
         mcp_prefix=detect_autoskillit_mcp_prefix(),
         has_unguarded_filesystem_access=has_ufa,
+        projected_sous_chef=projected_sous_chef,
     )
 
     if disable_quota_guard:

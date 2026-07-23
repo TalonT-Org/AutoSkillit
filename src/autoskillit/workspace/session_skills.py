@@ -19,12 +19,15 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from autoskillit.core import (
+    ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
     FEATURE_REGISTRY,
     PACK_REGISTRY,
     ClaudeDirectoryConventions,
     PackDef,
+    SkillExecutionRole,
     SkillResolver,
     SkillSource,
+    SkillSourceRef,
     ValidatedAddDir,
     atomic_write,
     get_logger,
@@ -37,6 +40,7 @@ from autoskillit.workspace.skill_format import (
 )
 from autoskillit.workspace.skill_projection import (
     SkillProjectionContext,
+    materialize_agent_skill_tree,
     project_agent_skill_document,
 )
 from autoskillit.workspace.skills import (
@@ -44,6 +48,7 @@ from autoskillit.workspace.skills import (
     EffectiveSkillInvocation,
     ProjectLocalOverride,
     SkillInfo,
+    _skill_info_from_frontmatter,
     detect_project_local_overrides,
     override_names,
 )
@@ -62,6 +67,82 @@ _CANDIDATE_ROOTS: list[Path] = [
 _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
 
 logger = get_logger(__name__)
+
+
+def _codex_profile_skill_infos(
+    backend: CodingAgentBackend,
+) -> tuple[SkillInfo, ...]:
+    profile_skills_root = Path.home() / ".codex" / "skills"
+    if not profile_skills_root.is_dir():
+        return ()
+    result: list[SkillInfo] = []
+    for entry in sorted(profile_skills_root.iterdir(), key=lambda item: item.name):
+        skill_md = entry / "SKILL.md"
+        if (
+            entry.is_symlink()
+            or skill_md.is_symlink()
+            or not entry.is_dir()
+            or not skill_md.is_file()
+        ):
+            continue
+        info = _skill_info_from_frontmatter(
+            entry.name,
+            SkillSource.THIRD_PARTY,
+            skill_md,
+            source_ref=SkillSourceRef(
+                origin=SkillSource.THIRD_PARTY,
+                logical_name=entry.name,
+                skill_path=skill_md,
+                search_dir=str(profile_skills_root),
+            ),
+        )
+        if (
+            info.invalid_reason is not None
+            or info.execution_role is not SkillExecutionRole.SESSION
+        ):
+            logger.warning(
+                "codex_profile_skill_contract_rejected",
+                skill=entry.name,
+                reason=info.invalid_reason or "non-session execution role",
+            )
+            continue
+        if info.backend_requirements and backend.name not in info.backend_requirements:
+            logger.debug(
+                "codex_profile_skill_backend_skip",
+                skill=entry.name,
+                backend=backend.name,
+            )
+            continue
+        result.append(info)
+    return tuple(result)
+
+
+def _materialize_codex_profile_skill_infos(
+    session_dir: Path,
+    backend: CodingAgentBackend,
+) -> tuple[SkillInfo, ...]:
+    profile_skills_root = Path.home() / ".codex" / "skills"
+    if not profile_skills_root.is_dir():
+        return ()
+    infos = _codex_profile_skill_infos(backend)
+    materialize_agent_skill_tree(
+        session_dir / backend.conventions.skills_subdir,
+        infos,
+        SkillProjectionContext(
+            execution_cwd=Path.cwd().resolve(),
+            backend=backend,
+            conventions=backend.conventions,
+        ),
+    )
+    return infos
+
+
+def materialize_codex_profile_skills(
+    session_dir: Path,
+    backend: CodingAgentBackend,
+) -> int:
+    """Project profile skills into a Codex session without exposing machine fields."""
+    return len(_materialize_codex_profile_skill_infos(session_dir, backend))
 
 
 def resolve_ephemeral_root() -> Path:
@@ -297,6 +378,11 @@ def _should_inject_skill(
     2. Effective disable filtering (already accounts for cook session, packs, recipe).
     """
     if (
+        skill_info.invalid_reason is not None
+        or skill_info.execution_role is not SkillExecutionRole.SESSION
+    ):
+        return False
+    if (
         skill_info.backend_requirements
         and backend_name is not None
         and backend_name not in skill_info.backend_requirements
@@ -352,12 +438,13 @@ def compute_skill_closure(
         info = provider.resolver.resolve(name)
         if info is None:
             continue
-        try:
-            content = info.path.read_text()
-        except OSError:
+        if (
+            info.invalid_reason is not None
+            or info.execution_role is not SkillExecutionRole.SESSION
+        ):
             continue
         resolved.add(name)
-        for dep in _parse_activate_deps(content):
+        for dep in info.activate_deps:
             if dep in PACK_REGISTRY:
                 if pack_index is None:
                     pack_index = _build_pack_index(provider)
@@ -385,11 +472,12 @@ def collect_closure_write_paths(
         info = resolver.resolve(name)
         if info is None:
             continue
-        try:
-            content = info.path.read_text()
-        except OSError:
+        if (
+            info.invalid_reason is not None
+            or info.execution_role is not SkillExecutionRole.SESSION
+        ):
             continue
-        for wp in _parse_write_paths(content):
+        for wp in _parse_write_paths(info.canonical_content):
             if wp not in seen:
                 seen.add(wp)
                 paths.append(wp)
@@ -460,18 +548,49 @@ class SkillsDirectoryProvider:
         skill_info = self._resolver.resolve(name)
         if skill_info is None:
             raise FileNotFoundError(f"Skill not found: {name}")
-        projection_context = SkillProjectionContext(
+        return self.project_skill_info(
+            skill_info,
             execution_cwd=Path.cwd(),
+            gating=True if gated else None,
+        )
+
+    def projection_context(
+        self,
+        execution_cwd: Path,
+        *,
+        gating: bool | None = None,
+        backend: CodingAgentBackend | None = None,
+    ) -> SkillProjectionContext:
+        """Build the shared execution-local projection context."""
+        return SkillProjectionContext(
+            execution_cwd=execution_cwd,
+            backend=backend,
+            conventions=backend.conventions if backend is not None else None,
             substitutions={
                 "{{AUTOSKILLIT_TEMP}}": self._temp_dir_relpath,
                 "{{AUTOSKILLIT_SCRIPTS}}": str(pkg_root() / "recipes" / "scripts"),
                 "{{DEFAULT_BASE_BRANCH}}": self._default_base_branch,
             },
-            # ``False`` means remove gating. Legacy gated=False preserves an
-            # at-rest public gate; the invocation materializer explicitly ungates.
-            gating=True if gated else None,
+            gating=gating,
         )
-        return project_agent_skill_document(skill_info, projection_context).content
+
+    def project_skill_info(
+        self,
+        skill_info: SkillInfo,
+        *,
+        execution_cwd: Path,
+        gating: bool | None = None,
+        backend: CodingAgentBackend | None = None,
+    ) -> str:
+        """Project one already-resolved exact skill contract."""
+        return project_agent_skill_document(
+            skill_info,
+            self.projection_context(
+                execution_cwd,
+                gating=gating,
+                backend=backend,
+            ),
+        ).content
 
 
 class DefaultSessionSkillManager:
@@ -488,6 +607,7 @@ class DefaultSessionSkillManager:
         self._root = ephemeral_root
         self._codex_root = codex_root
         self._session_roots: dict[str, Path] = {}
+        self._session_skill_infos: dict[str, dict[str, SkillInfo]] = {}
         self._skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
     def compute_skill_closure(self, skill_name: str) -> frozenset[str]:
@@ -538,19 +658,12 @@ class DefaultSessionSkillManager:
         self._skills_subdir = skills_subdir
         session_dir = effective_root / session_id
         skills_base = session_dir / skills_subdir
-        shutil.rmtree(skills_base, ignore_errors=True)
-        skills_base.mkdir(parents=True, exist_ok=True)
 
         ungated_context = replace(projection_context, gating=False)
-        written: set[str] = set()
-        for member in invocation.closure:
-            if member.name in written:
-                raise ValueError(f"Duplicate skill in effective closure: {member.name!r}")
-            written.add(member.name)
-            document = project_agent_skill_document(member, ungated_context)
-            skill_dir = skills_base / member.name
-            skill_dir.mkdir(parents=True, exist_ok=False)
-            atomic_write(skill_dir / "SKILL.md", document.content)
+        materialize_agent_skill_tree(skills_base, invocation.closure, ungated_context)
+        self._session_skill_infos[session_id] = {
+            member.name: member for member in invocation.closure
+        }
 
         return ValidatedAddDir(path=str(session_dir))
 
@@ -680,7 +793,9 @@ class DefaultSessionSkillManager:
 
         session_skills_dir = effective_root / session_id
         skills_base = session_skills_dir / self._skills_subdir
+        shutil.rmtree(skills_base, ignore_errors=True)
         skills_base.mkdir(parents=True, exist_ok=True)
+        self._session_skill_infos[session_id] = {}
 
         if backend is not None and backend.capabilities.mcp_config_capable:
             pre_launch_errors = backend.ensure_pre_launch()
@@ -690,6 +805,14 @@ class DefaultSessionSkillManager:
 
         if backend is not None:
             backend.setup_session_dir(session_skills_dir)
+            if backend.name == "codex":
+                profile_infos = _materialize_codex_profile_skill_infos(
+                    session_skills_dir,
+                    backend,
+                )
+                self._session_skill_infos[session_id].update(
+                    (info.name, info) for info in profile_infos
+                )
         format_rejected: set[str] = set()
         for skill_info in self._provider.list_skills():
             if allow_only is not None and skill_info.name not in allow_only:
@@ -732,11 +855,11 @@ class DefaultSessionSkillManager:
             if gated and (allow_only is None or skill_info.name not in allow_only):
                 logger.debug("init_session_tier2_omit", skill=skill_info.name)
                 continue
-            try:
-                content = self._provider.get_skill_content(skill_info.name, gated=False)
-            except FileNotFoundError:
-                logger.warning("init_session_skill_content_missing", skill=skill_info.name)
-                continue
+            content = self._provider.project_skill_info(
+                skill_info,
+                execution_cwd=project_dir or Path.cwd(),
+                backend=backend,
+            )
             parsed = parse_frontmatter_content(content)
             fm_errors = (
                 [f"frontmatter parse failed: {parsed.error}"]
@@ -757,23 +880,80 @@ class DefaultSessionSkillManager:
             skill_dir = skills_base / skill_info.name
             skill_dir.mkdir(exist_ok=True)
             atomic_write(skill_dir / "SKILL.md", content)
-        for override in overrides:
+            self._session_skill_infos[session_id][skill_info.name] = skill_info
+        active_search_dirs = (
+            _search_dirs if _search_dirs is not None else ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+        )
+        for override in sorted(overrides, key=lambda item: item.name):
             if allow_only is not None and allow_only and override.name not in allow_only:
                 logger.debug("init_session_override_allow_only_skip", skill=override.name)
                 continue
-            dest_dir = skills_base / override.name
-            dest_dir.mkdir(parents=True, exist_ok=True)
             try:
-                shutil.copy2(override.skill_path, dest_dir / "SKILL.md")
-            except OSError:
+                precedence = active_search_dirs.index(override.search_dir)
+            except ValueError:
+                precedence = None
+            override_info = _skill_info_from_frontmatter(
+                override.name,
+                SkillSource.PROJECT_LOCAL,
+                override.skill_path,
+                source_ref=SkillSourceRef(
+                    origin=SkillSource.PROJECT_LOCAL,
+                    logical_name=override.name,
+                    skill_path=override.skill_path,
+                    search_dir=override.search_dir,
+                    precedence=precedence,
+                ),
+            )
+            if (
+                override_info.invalid_reason is not None
+                or override_info.execution_role is not SkillExecutionRole.SESSION
+            ):
                 logger.warning(
-                    "init_session_project_local_copy_failed",
+                    "init_session_project_local_contract_rejected",
                     skill=override.name,
-                    source=str(override.skill_path),
+                    reason=override_info.invalid_reason or "non-session execution role",
+                )
+                format_rejected.add(override.name)
+                continue
+            if (
+                override_info.backend_requirements
+                and backend is not None
+                and backend.name not in override_info.backend_requirements
+            ):
+                logger.debug(
+                    "init_session_project_local_backend_skip",
+                    skill=override.name,
+                    backend=backend.name,
                 )
                 continue
+            content = self._provider.project_skill_info(
+                override_info,
+                execution_cwd=project_dir or Path.cwd(),
+                backend=backend,
+            )
+            content = _rewrite_skill_namespace_refs(content, self._provider.resolver)
+            parsed = parse_frontmatter_content(content)
+            fm_errors = (
+                [f"frontmatter parse failed: {parsed.error}"]
+                if not parsed.is_valid or parsed.data is None
+                else validate_skill_frontmatter(parsed.data, override.name)
+            )
+            if fm_errors:
+                for err in fm_errors:
+                    logger.warning(
+                        "skill_format_validation",
+                        skill=override.name,
+                        error=err,
+                        backend=backend.name if backend is not None else "unknown",
+                    )
+                format_rejected.add(override.name)
+                continue
+            dest_dir = skills_base / override.name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            atomic_write(dest_dir / "SKILL.md", content)
+            self._session_skill_infos[session_id][override.name] = override_info
             logger.debug(
-                "init_session_project_local_copy",
+                "init_session_project_local_projection",
                 skill=override.name,
                 source=str(override.skill_path),
                 search_dir=override.search_dir,
@@ -839,11 +1019,27 @@ class DefaultSessionSkillManager:
             / skill_name
         )
         skill_md = skill_dir / "SKILL.md"
+        exact_info = self._session_skill_infos.get(session_id, {}).get(skill_name)
         if not skill_md.exists():
-            try:
-                fetched = self._provider.get_skill_content(skill_name, gated=False)
-            except FileNotFoundError:
-                return False
+            if isinstance(self._provider, SkillsDirectoryProvider):
+                exact_info = self._provider.resolver.resolve(skill_name)
+                if (
+                    exact_info is None
+                    or exact_info.invalid_reason is not None
+                    or exact_info.execution_role is not SkillExecutionRole.SESSION
+                ):
+                    return False
+                fetched = self._provider.project_skill_info(
+                    exact_info,
+                    execution_cwd=Path.cwd(),
+                    gating=False,
+                )
+            else:
+                # Compatibility for protocol-like providers used by embedders.
+                try:
+                    fetched = self._provider.get_skill_content(skill_name, gated=False)
+                except FileNotFoundError:
+                    return False
             parsed = parse_frontmatter_content(fetched)
             fm_errors = (
                 [f"frontmatter parse failed: {parsed.error}"]
@@ -862,6 +1058,8 @@ class DefaultSessionSkillManager:
             skill_dir.mkdir(parents=True, exist_ok=True)
             fetched = _rewrite_skill_namespace_refs(fetched, self._provider.resolver)
             atomic_write(skill_md, fetched)
+            if exact_info is not None:
+                self._session_skill_infos.setdefault(session_id, {})[skill_name] = exact_info
             logger.debug("activate_deps_materialise", skill=skill_name)
 
         content = skill_md.read_text()
@@ -871,7 +1069,9 @@ class DefaultSessionSkillManager:
         if new_content != content:
             atomic_write(skill_md, new_content)
 
-        deps = _parse_activate_deps(content)
+        deps = (
+            exact_info.activate_deps if exact_info is not None else _parse_activate_deps(content)
+        )
         for dep in deps:
             if dep in PACK_REGISTRY:
                 self._activate_pack_deps(session_id, dep, activated)
@@ -894,11 +1094,22 @@ class DefaultSessionSkillManager:
                 on_disk.add(name)
                 if name in activated:
                     continue
-                info = self._provider.resolver.resolve(name)
-                if info and pack_name in info.categories:
+                info = self._session_skill_infos.get(session_id, {}).get(name)
+                if info is None:
+                    info = self._provider.resolver.resolve(name)
+                if (
+                    info
+                    and info.invalid_reason is None
+                    and info.execution_role is SkillExecutionRole.SESSION
+                    and pack_name in info.categories
+                ):
                     self._activate_with_deps(session_id, name, activated, _is_root=False)
         for info in self._provider.list_skills():
-            if pack_name not in info.categories:
+            if (
+                info.invalid_reason is not None
+                or info.execution_role is not SkillExecutionRole.SESSION
+                or pack_name not in info.categories
+            ):
                 continue
             if info.name in on_disk or info.name in activated:
                 continue
@@ -910,6 +1121,7 @@ class DefaultSessionSkillManager:
         Returns True if the directory was found and removed, False otherwise.
         """
         effective_root = self._session_roots.pop(session_id, None)
+        self._session_skill_infos.pop(session_id, None)
         if effective_root is not None:
             session_dir = effective_root / session_id
             if session_dir.is_dir():

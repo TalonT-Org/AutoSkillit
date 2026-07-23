@@ -4,17 +4,50 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import regex as re
 
-from autoskillit.core import ValidatedAddDir, write_versioned_json
+from autoskillit.core import ValidatedAddDir, load_yaml, write_versioned_json
 
 SKILLS_SNAPSHOT_DIR = "skill-snapshots"
 _EPHEMERAL_SESSION_PATTERN = "autoskillit-sessions"
 _GATED_PATTERN = re.compile(r"disable-model-invocation\s*:\s*true", re.IGNORECASE)
+_FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL)
+_MACHINE_ONLY_KEYS = frozenset({"uses_capabilities", "execution_role", "backend_requirements"})
+
+
+def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
+    """Reject snapshots that could restore machine-only authority to an agent."""
+    for entry in skills_dir.rglob("*"):
+        if entry.is_symlink():
+            raise ValueError(f"agent-safe skill snapshots must not contain symlinks: {entry}")
+    for skill_md in sorted(skills_dir.rglob("SKILL.md")):
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError(f"agent-safe SKILL.md is unreadable: {skill_md}") from exc
+        match = _FRONTMATTER_PATTERN.match(content)
+        if match is None:
+            if content.startswith("---"):
+                raise ValueError(f"agent-safe SKILL.md has malformed frontmatter: {skill_md}")
+            continue
+        try:
+            frontmatter = load_yaml(match.group(1))
+        except Exception as exc:
+            raise ValueError(f"agent-safe SKILL.md has invalid YAML: {skill_md}") from exc
+        if frontmatter is None:
+            frontmatter = {}
+        if not isinstance(frontmatter, Mapping):
+            raise ValueError(f"agent-safe SKILL.md frontmatter must be a mapping: {skill_md}")
+        leaked = sorted(_MACHINE_ONLY_KEYS & frontmatter.keys())
+        if leaked:
+            raise ValueError(
+                f"agent-safe SKILL.md contains machine-only fields {leaked!r}: {skill_md}"
+            )
 
 
 def _extract_ephemeral_add_dir(cmd: list[str]) -> Path | None:
@@ -40,6 +73,7 @@ def build_skills_manifest(skills_dir: Path) -> dict[str, Any]:
             "skill_count": 0,
             "skills": {},
         }
+    _assert_agent_safe_skill_tree(skills_dir)
     skills: dict[str, Any] = {}
     for skill_dir in sorted(skills_dir.iterdir()):
         if not skill_dir.is_dir():
@@ -80,6 +114,7 @@ def snapshot_skill_dir(scenario_dir: Path, step_name: str, add_dir_path: Path) -
     skill_subdirs = [d for d in skills_src.iterdir() if d.is_dir()]
     if not skill_subdirs:
         return None
+    _assert_agent_safe_skill_tree(skills_src)
 
     snapshot_dir = scenario_dir / SKILLS_SNAPSHOT_DIR / step_name
     snapshot_dir.mkdir(parents=True, exist_ok=True)
@@ -89,11 +124,12 @@ def snapshot_skill_dir(scenario_dir: Path, step_name: str, add_dir_path: Path) -
         shutil.rmtree(dest_skills)
     try:
         shutil.copytree(skills_src, dest_skills)
+        _assert_agent_safe_skill_tree(dest_skills)
     except Exception:
         shutil.rmtree(snapshot_dir, ignore_errors=True)
         raise
 
-    manifest = build_skills_manifest(skills_src)
+    manifest = build_skills_manifest(dest_skills)
     write_versioned_json(snapshot_dir / "manifest.json", manifest, 1)
 
     return snapshot_dir
@@ -111,6 +147,7 @@ def restore_skill_snapshot(
     skills_src = snapshot_path / ".claude" / "skills"
     if not skills_src.exists():
         return None
+    _assert_agent_safe_skill_tree(skills_src)
 
     session_dir = ephemeral_root / session_id
     dest_skills = session_dir / ".claude" / "skills"
@@ -119,6 +156,7 @@ def restore_skill_snapshot(
 
     try:
         shutil.copytree(skills_src, dest_skills)
+        _assert_agent_safe_skill_tree(dest_skills)
     except Exception:
         shutil.rmtree(dest_skills, ignore_errors=True)
         raise

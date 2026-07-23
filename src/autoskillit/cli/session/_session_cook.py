@@ -77,7 +77,9 @@ def cook(
     from autoskillit.execution import get_backend
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
+        DefaultSkillResolver,
         SkillsDirectoryProvider,
+        project_plugin_source,
         resolve_ephemeral_root,
     )
 
@@ -159,6 +161,7 @@ def cook(
         NamedResume,
         NoResume,
         SessionType,
+        SkillExecutionRole,
         _get_autoskillit_install_path,
         configure_logging,
         get_logger,
@@ -184,12 +187,17 @@ def cook(
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     session_mgr.cleanup_stale()
+    session_catalog = DefaultSkillResolver().list_effective(
+        project_dir,
+        SkillExecutionRole.SESSION,
+    )
     skills_dir = session_mgr.init_session(
         session_id_local,
         cook_session=True,
         config=config,
         project_dir=project_dir,
         backend=backend,
+        allow_only=frozenset(skill.name for skill in session_catalog.skills),
     )
 
     plugin_source: MarketplaceInstall | DirectInstall
@@ -204,6 +212,11 @@ def cook(
             plugin_source = DirectInstall(plugin_dir=pkg_root())
     else:
         plugin_source = DirectInstall(plugin_dir=pkg_root())
+    plugin_source = project_plugin_source(
+        plugin_source,
+        cwd=project_dir,
+        backend=backend,
+    )
 
     if isinstance(resume_spec, BareResume):
         from autoskillit.cli.session._session_picker import pick_session

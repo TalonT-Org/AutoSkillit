@@ -12,7 +12,16 @@ statements continue to work unchanged.
 
 from __future__ import annotations
 
-from autoskillit.core import pkg_root
+from pathlib import Path
+from typing import Any
+
+from autoskillit.core import SkillExecutionRole
+from autoskillit.workspace import (
+    DefaultSkillResolver,
+    EffectiveSkillCatalog,
+    SkillProjectionContext,
+    project_agent_skill_document,
+)
 
 # ── Shared helpers (used by sibling _prompts_*.py modules) ──────────────
 
@@ -26,18 +35,36 @@ _MCP_RETRY_INSTRUCTION: str = (
 )
 
 
-def _read_full_sous_chef() -> str:
-    """Read the full sous-chef SKILL.md for injection into L1/L2 orchestration sessions."""
-    path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    try:
-        content = path.read_text()
-    except OSError:
+def _read_full_sous_chef(
+    skill_catalog: EffectiveSkillCatalog | None = None,
+    *,
+    project_dir: Path | None = None,
+    backend: Any | None = None,
+) -> str:
+    """Project the effective sous-chef contract for an orchestrator prompt."""
+    effective_root = (
+        project_dir
+        or (skill_catalog.project_root if skill_catalog is not None else None)
+        or Path.cwd()
+    ).resolve()
+    catalog = skill_catalog or DefaultSkillResolver().list_effective(
+        effective_root,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    if catalog.execution_role is not SkillExecutionRole.ORCHESTRATOR:
+        raise ValueError("sous-chef projection requires an orchestrator skill catalog")
+    sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
+    if sous_chef is None:
         return ""
-    if content.startswith("---"):
-        end = content.find("\n---\n", 3)
-        if end != -1:
-            content = content[end + 5 :].lstrip("\n")
-    return content
+    return project_agent_skill_document(
+        sous_chef,
+        SkillProjectionContext(
+            execution_cwd=effective_root,
+            backend=backend,
+            conventions=getattr(backend, "conventions", None),
+            gating=False,
+        ),
+    ).content
 
 
 def _ingredient_table_display_instruction(source: str) -> str:

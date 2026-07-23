@@ -59,12 +59,15 @@ class TestCLIInstall:
 
         marketplace_dir = _ensure_marketplace()
         assert (marketplace_dir / ".claude-plugin" / "marketplace.json").is_file()
-        assert (marketplace_dir / "plugins" / "autoskillit").is_symlink()
+        public_plugin = marketplace_dir / "plugins" / "autoskillit"
+        assert public_plugin.is_dir()
+        assert not public_plugin.is_symlink()
+        assert (marketplace_dir / "plugins" / ".autoskillit.autoskillit-projection.json").is_file()
 
-    def test_install_symlink_target_is_independent_of_test_file_location(
+    def test_install_projection_is_independent_of_test_file_location(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Symlink target verified using importlib.resources, not __file__ depth-counting."""
+        """Published plugin metadata is projected from the installed package."""
         import importlib.resources as ir
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -75,9 +78,12 @@ class TestCLIInstall:
         from autoskillit.cli._marketplace import _ensure_marketplace
 
         marketplace_dir = _ensure_marketplace()
-        link = marketplace_dir / "plugins" / "autoskillit"
+        published = marketplace_dir / "plugins" / "autoskillit"
         expected = Path(ir.files("autoskillit"))
-        assert link.resolve() == expected.resolve()
+        assert published.resolve() != expected.resolve()
+        assert (published / ".claude-plugin" / "plugin.json").read_bytes() == (
+            expected / ".claude-plugin" / "plugin.json"
+        ).read_bytes()
 
     def test_install_marketplace_json_content(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -451,12 +457,12 @@ class TestInstallCommand:
         result = _ensure_marketplace()
         assert result == tmp_path / ".autoskillit" / "marketplace"
 
-    def test_install_symlink_target_is_not_inside_git_worktree(
+    def test_install_projection_is_not_inside_git_worktree(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """After install, the symlink target must not be inside a git worktree.
+        """After install, the public projection must not be inside a git worktree.
 
-        This is the regression test for the broken-symlink-after-cleanup bug.
+        This is the regression test for transient source paths after cleanup.
         Skipped when running from a worktree install (which is the expected
         dev environment during worktree-based implementation).
         """
@@ -475,13 +481,14 @@ class TestInstallCommand:
         from autoskillit.cli._marketplace import _ensure_marketplace
 
         marketplace_dir = _ensure_marketplace()
-        link = marketplace_dir / "plugins" / "autoskillit"
+        published = marketplace_dir / "plugins" / "autoskillit"
 
-        target = link.resolve()
-        assert target.is_dir(), "Symlink target must exist and be a directory"
+        target = published.resolve()
+        assert target.is_dir(), "Published plugin must exist and be a directory"
+        assert not published.is_symlink()
         assert not is_git_worktree(target), (
-            f"Symlink target {target} is inside a git worktree — "
-            "it will break when the worktree is deleted."
+            f"Published plugin {target} is inside a git worktree — "
+            "it will not survive source cleanup."
         )
 
 

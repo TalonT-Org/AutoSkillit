@@ -30,6 +30,7 @@ from autoskillit.core import (
     CapabilityResolutionDetail,
     ProcessStaleError,
     RecipeDeliveryRequest,
+    SkillExecutionRole,
     _collect_disabled_feature_tags,
     atomic_write,
     clear_kitchens_for_pid,
@@ -39,7 +40,6 @@ from autoskillit.core import (
     get_state_dir,
     is_marker_fresh,
     kitchen_entry_alive,
-    pkg_root,
     read_active_kitchens_registry,
     read_marker,
     register_active_kitchen,
@@ -97,6 +97,7 @@ from autoskillit.server.tools._serve_helpers import (
     serve_recipe,
 )
 from autoskillit.server.tools._types import _validate_result
+from autoskillit.workspace import SkillProjectionContext, project_agent_skill_document
 
 logger = get_logger(__name__)
 
@@ -691,6 +692,7 @@ def get_recipe(name: str) -> str:
             _raw_recipe.steps,
             skill_resolver=ctx.skill_resolver,
             config_backend=ctx.config.agent_backend,
+            project_root=ctx.project_dir,
         )
         _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
             _raw_recipe.steps,
@@ -699,6 +701,7 @@ def get_recipe(name: str) -> str:
             name,
             skill_resolver=ctx.skill_resolver,
             config_backend=ctx.config.agent_backend,
+            project_root=ctx.project_dir,
         )
         _backend_capabilities_map = build_backend_capabilities_map(
             _effective_backend_map, ctx.backend
@@ -941,6 +944,7 @@ async def open_kitchen(
                 _raw_recipe.steps if _raw_recipe is not None else None,
                 skill_resolver=tool_ctx.skill_resolver,
                 config_backend=tool_ctx.config.agent_backend,
+                project_root=tool_ctx.project_dir,
             )
             _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
@@ -953,6 +957,7 @@ async def open_kitchen(
                 name,
                 skill_resolver=tool_ctx.skill_resolver,
                 config_backend=tool_ctx.config.agent_backend,
+                project_root=tool_ctx.project_dir,
             )
             _backend_capabilities_map = build_backend_capabilities_map(
                 _effective_backend_map, tool_ctx.backend
@@ -1049,6 +1054,7 @@ async def open_kitchen(
                         recipe_name=name,
                         config_backend=tool_ctx.config.agent_backend,
                         skill_resolver=tool_ctx.skill_resolver,
+                        project_root=tool_ctx.project_dir,
                     )
                     if _preflight_err is not None:
                         tool_ctx.gate.disable()
@@ -1194,6 +1200,7 @@ async def open_kitchen(
                     recipe_name=name,
                     config_backend=tool_ctx.config.agent_backend,
                     skill_resolver=tool_ctx.skill_resolver,
+                    project_root=tool_ctx.project_dir,
                 )
                 if _preflight_err is not None:
                     tool_ctx.gate.disable()
@@ -1270,14 +1277,33 @@ async def open_kitchen(
             "and let the downstream skill handle diagnosis."
         )
 
-        # Inject sous-chef global orchestration rules (graceful degradation if absent)
-        _sous_chef_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+        # Anonymous opens receive the projected orchestrator discipline. Named opens
+        # returned above and preserve their attested recipe-delivery bytes unchanged.
         try:
-            if _sous_chef_path.exists():
-                text += "\n\n" + _sous_chef_path.read_text()
+            if _ctx.skill_resolver is not None:
+                _catalog = _ctx.skill_resolver.list_effective(
+                    _ctx.project_dir,
+                    SkillExecutionRole.ORCHESTRATOR,
+                )
+                _sous_chef = next(
+                    (skill for skill in _catalog.skills if skill.name == "sous-chef"),
+                    None,
+                )
+                if _sous_chef is not None:
+                    _backend = _ctx.backend
+                    _document = project_agent_skill_document(
+                        _sous_chef,
+                        SkillProjectionContext(
+                            execution_cwd=_ctx.project_dir,
+                            backend=_backend,
+                            conventions=(_backend.conventions if _backend is not None else None),
+                            gating=False,
+                        ),
+                    )
+                    text += "\n\n" + _document.content
         except Exception as exc:
-            logger.warning("open_kitchen_failure", stage="read_sous_chef", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="read_sous_chef")
+            logger.warning("open_kitchen_failure", stage="project_sous_chef", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="project_sous_chef")
 
         # Check if the project needs an upgrade
         scripts_dir = _ctx.project_dir / ".autoskillit" / "scripts"

@@ -16,11 +16,13 @@ from autoskillit.cli.session._session_launch import _launch_cook_session, _write
 from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
     RecipeSource,
+    SkillExecutionRole,
     atomic_write,
     get_logger,
     pkg_root,
     resume_spec_from_cli,
 )
+from autoskillit.workspace import DefaultSkillResolver
 
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
@@ -165,6 +167,11 @@ def order(
         return
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
+    project_dir = Path.cwd()
+    skill_catalog = DefaultSkillResolver().list_effective(
+        project_dir,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
 
     from autoskillit.cli.ui._timed_input import timed_prompt
 
@@ -197,11 +204,15 @@ def order(
             from autoskillit.execution import get_backend as _get_backend_early
 
             _cfg_early = _load_config_early(Path.cwd())
-            _caps_early = _get_backend_early(_cfg_early.agent_backend.backend).capabilities
+            _backend_early = _get_backend_early(_cfg_early.agent_backend.backend)
+            _caps_early = _backend_early.capabilities
             _launch_cook_session(
                 _build_open_kitchen_prompt(
                     mcp_prefix=mcp_prefix,
                     has_unguarded_filesystem_access=_caps_early.has_unguarded_filesystem_access,
+                    skill_catalog=skill_catalog,
+                    project_dir=project_dir,
+                    backend=_backend_early,
                 ),
                 initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
                 resume_spec=resume_spec,
@@ -325,13 +336,17 @@ def order(
     _extra_env |= _write_order_entry(Path.cwd(), recipe)
     from autoskillit.execution import get_backend
 
-    _backend_caps = get_backend(_cfg.agent_backend.backend).capabilities
+    _backend = get_backend(_cfg.agent_backend.backend)
+    _backend_caps = _backend.capabilities
     _launch_cook_session(
         _build_orchestrator_prompt(
             recipe,
             mcp_prefix=mcp_prefix,
             ingredients_table=_itable,
             has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
+            skill_catalog=skill_catalog,
+            project_dir=project_dir,
+            backend=_backend,
         ),
         initial_message=greeting,
         extra_env=_extra_env,

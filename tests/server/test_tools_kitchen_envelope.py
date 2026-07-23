@@ -890,22 +890,21 @@ async def test_open_kitchen_enable_components_raises_returns_failure_envelope(
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_sous_chef_read_raises_returns_failure_envelope(tmp_path, monkeypatch):
-    """Path.read_text raising OSError → failure envelope with stage=read_sous_chef."""
+async def test_open_kitchen_sous_chef_projection_raises_returns_failure_envelope(
+    tmp_path,
+    monkeypatch,
+):
+    """Projection failure returns the project_sous_chef failure envelope."""
+    from autoskillit.workspace import DefaultSkillResolver
+
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.backend = None
+    mock_ctx.skill_resolver = DefaultSkillResolver()
 
     import autoskillit.server.tools.tools_kitchen as tk_mod
-
-    def fake_pkg_root():
-        root = tmp_path / "fake_pkg"
-        sc_path = root / "skills" / "sous-chef"
-        sc_path.mkdir(parents=True, exist_ok=True)
-        skill_md = sc_path / "SKILL.md"
-        skill_md.write_text("dummy")
-        skill_md.chmod(0o000)
-        return root
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -913,18 +912,18 @@ async def test_open_kitchen_sous_chef_read_raises_returns_failure_envelope(tmp_p
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
             ):
                 with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch.object(tk_mod, "pkg_root", fake_pkg_root):
+                    with patch.object(
+                        tk_mod,
+                        "project_agent_skill_document",
+                        side_effect=OSError("projection failed"),
+                    ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                         result_str = await open_kitchen(ctx=mock_ctx)
 
-    # Restore permissions for cleanup
-    for p in tmp_path.rglob("SKILL.md"):
-        p.chmod(0o644)
-
     parsed = json.loads(result_str)
     assert parsed["success"] is False
-    assert parsed["stage"] == "read_sous_chef"
+    assert parsed["stage"] == "project_sous_chef"
 
 
 # Parametrized: every failure envelope has user_visible_message

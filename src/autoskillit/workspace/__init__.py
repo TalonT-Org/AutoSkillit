@@ -41,6 +41,7 @@ from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     collect_closure_write_paths,
+    materialize_codex_profile_skills,
     resolve_closure_write_dirs,
     resolve_ephemeral_root,
 )
@@ -62,7 +63,12 @@ from autoskillit.workspace.skill_format import (
 from autoskillit.workspace.skill_projection import (
     AgentSkillDocument,
     SkillProjectionContext,
+    materialize_agent_skill_tree,
+    materialize_sanitized_plugin_root,
     project_agent_skill_document,
+    project_direct_install,
+    project_plugin_source,
+    validate_sanitized_plugin_artifact,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -115,6 +121,10 @@ __all__ = [
     "SkillFrontmatterParseResult",
     "SkillProjectionContext",
     "SkillsDirectoryProvider",
+    "materialize_agent_skill_tree",
+    "materialize_codex_profile_skills",
+    "materialize_sanitized_plugin_root",
+    "validate_sanitized_plugin_artifact",
     "bundled_skills_dir",
     "bundled_skills_extended_dir",
     "detect_project_local_overrides",
@@ -135,6 +145,8 @@ __all__ = [
     "WORKTREES_DIR",
     "parse_frontmatter_content",
     "project_agent_skill_document",
+    "project_direct_install",
+    "project_plugin_source",
     "read_skill_frontmatter",
     "validate_skill_tier_roles",
     "validate_skill_capability_authenticity",

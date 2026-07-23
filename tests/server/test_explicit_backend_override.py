@@ -34,7 +34,9 @@ def _make_resolver(skill_name: str, caps=("agent_model",)):
     cap_reg = MagicMock()
     cap_reg.get = lambda c: MagicMock(worker_routable=True) if c in caps else None
     resolved = MagicMock(uses_capabilities=frozenset(caps))
-    return MagicMock(resolve=MagicMock(return_value=resolved))
+    resolver = MagicMock(resolve=MagicMock(return_value=resolved))
+    resolver.resolve_invocation.return_value = SimpleNamespace(capability_union=frozenset(caps))
+    return resolver
 
 
 class TestExplicitBackendOverrideAdmissionDispatchAgreement:

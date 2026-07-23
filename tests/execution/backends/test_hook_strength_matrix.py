@@ -1,9 +1,9 @@
 """Meta-tests for the PreToolUse deny-mechanism strength matrix.
 
 The matrix is written to ``.autoskillit/temp/hook_deny_strength_matrix.json``
-by the probe harness conftest once probes complete. When the JSON is absent
-(e.g., when only these meta-tests are collected), all three tests skip
-gracefully — the probe suite must be run first to populate the matrix.
+by the probe harness conftest once probes complete. The conftest validates the
+completed matrix at session finish, including normal xdist runs; these tests
+also validate an artifact from a prior probe-only run when one is available.
 """
 
 from __future__ import annotations
@@ -14,7 +14,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hook_registry import HOOK_REGISTRY
-from tests.execution.backends.conftest import EXPECTED_NON_INERT_COMBINATIONS
+from tests.execution.backends.conftest import (
+    EXPECTED_NON_INERT_COMBINATIONS,
+    validate_strength_matrix,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -27,24 +30,18 @@ _MATRIX_PATH = (
 )
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _require_completed_probe_session(request: pytest.FixtureRequest) -> None:
-    probe_is_collected = any(
-        Path(str(item.path)).name == "test_hook_deny_efficacy_probe.py"
-        for item in request.session.items
-    )
-    if probe_is_collected:
-        pytest.skip(
-            "strength matrix is serialized at session finish; "
-            "run matrix tests separately after the probe suite"
-        )
-
-
 def _load_matrix() -> dict:
     """Load the serialized strength matrix, skipping if absent."""
     if not _MATRIX_PATH.exists():
         pytest.skip("probe suite was not run — matrix JSON absent")
     return json.loads(_MATRIX_PATH.read_text(encoding="utf-8"))
+
+
+def test_completed_matrix_validator_rejects_missing_rows() -> None:
+    failures = validate_strength_matrix([])
+
+    assert any("combinations" in failure for failure in failures)
+    assert any("works-as-is hooks" in failure for failure in failures)
 
 
 def test_matrix_combination_count() -> None:

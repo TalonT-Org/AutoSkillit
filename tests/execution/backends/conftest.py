@@ -109,6 +109,7 @@ EXPECTED_NON_INERT_COMBINATIONS: int = _compute_expected_non_inert()
 
 _probe_rows: list[dict] = []
 _controller_rows: list[dict] = []
+_controller_probe_suite_collected = False
 
 
 def record_probe_row(row: dict) -> None:
@@ -116,11 +117,55 @@ def record_probe_row(row: dict) -> None:
     _probe_rows.append(row)
 
 
+def validate_strength_matrix(rows: list[dict]) -> list[str]:
+    """Return invariant failures for a completed deny-strength matrix."""
+
+    failures: list[str] = []
+    if len(rows) != EXPECTED_NON_INERT_COMBINATIONS:
+        failures.append(
+            f"expected {EXPECTED_NON_INERT_COMBINATIONS} combinations, got {len(rows)}"
+        )
+
+    works_as_is = {
+        Path(script).stem
+        for hook in HOOK_REGISTRY
+        if hook.event_type == "PreToolUse"
+        and hook.mechanism == "deny"
+        and hook.codex_status == "works-as-is"
+        for script in hook.scripts
+    }
+    effective = {
+        row["hook"]
+        for row in rows
+        if row["hook"] in works_as_is and row["strength"] in {"soft", "hard"}
+    }
+    if missing := works_as_is - effective:
+        failures.append(f"works-as-is hooks missing soft/hard rows: {sorted(missing)}")
+
+    not_applicable = {
+        Path(script).stem
+        for hook in HOOK_REGISTRY
+        if hook.codex_status == "not-applicable"
+        for script in hook.scripts
+    }
+    if leaked := not_applicable & {row["hook"] for row in rows}:
+        failures.append(f"not-applicable hooks appeared in matrix: {sorted(leaked)}")
+    return failures
+
+
+def _full_probe_suite_collected(items: list[pytest.Item]) -> bool:
+    probe_count = sum(getattr(item, "originalname", "") == "test_probe" for item in items)
+    return probe_count == EXPECTED_TOTAL_PROBE_COUNT
+
+
 def pytest_testnodedown(node, error):
     """Controller-side: harvest rows from a finishing worker."""
+    global _controller_probe_suite_collected
+
     wo = getattr(node, "workeroutput", {})
     rows = wo.get("hook_probe_rows", [])
     _controller_rows.extend(rows)
+    _controller_probe_suite_collected |= bool(wo.get("hook_probe_suite_collected", False))
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -128,6 +173,9 @@ def pytest_sessionfinish(session, exitstatus):
     if hasattr(session.config, "workerinput"):
         # xdist worker: send accumulated rows to controller via workeroutput IPC.
         session.config.workeroutput["hook_probe_rows"] = _probe_rows
+        session.config.workeroutput["hook_probe_suite_collected"] = _full_probe_suite_collected(
+            session.items
+        )
         return
     # Controller (or non-xdist run): write matrix JSON.
     all_rows = _controller_rows or _probe_rows
@@ -141,3 +189,13 @@ def pytest_sessionfinish(session, exitstatus):
         json.dumps({"combinations": all_rows}, indent=2),
         encoding="utf-8",
     )
+    full_probe_suite = _controller_probe_suite_collected or _full_probe_suite_collected(
+        session.items
+    )
+    if full_probe_suite and (failures := validate_strength_matrix(all_rows)):
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        if reporter is not None:
+            reporter.write_sep("=", "hook deny strength matrix validation failed")
+            for failure in failures:
+                reporter.write_line(failure)
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED

@@ -57,8 +57,6 @@ __all__ = [
     "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
     "RecipeSectionContentFormatDef",
     "RECIPE_SECTION_CONTENT_FORMAT_REGISTRY",
-    "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
-    "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
     "SkillCapabilityDef",
     "HardCapabilityMismatch",
     "SKILL_CAPABILITY_REGISTRY",
@@ -564,32 +562,6 @@ _RECIPE_SECTION_PAGINATION_POLICY = {
 }
 RECIPE_SECTION_PAGINATION_POLICY_DIGEST = _qualified_registry_digest(
     _RECIPE_SECTION_PAGINATION_POLICY
-)
-
-RECIPE_SECTION_MANDATORY_FAILURE_CODES: tuple[str, ...] = (
-    "invalid_recipe_artifact_identity",
-    "invalid_recipe_section_part",
-    "recipe_artifact_identity_required",
-    "recipe_artifact_parse_failed",
-    "recipe_artifact_schema_mismatch",
-    "recipe_artifact_unavailable",
-    "recipe_section_bound_too_small",
-    "recipe_section_cancelled",
-    "recipe_section_internal_error",
-    "recipe_section_pagination_nonconvergent",
-    "recipe_section_serialization_failed",
-    "section_not_found",
-)
-RECIPE_SECTION_RESPONSE_FLOOR_BYTES = max(
-    len(
-        json.dumps(
-            {"error": code, "success": False},
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    )
-    for code in RECIPE_SECTION_MANDATORY_FAILURE_CODES
 )
 
 RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: Mapping[str, ResponseBackstopExemptionDef] = (

@@ -22,6 +22,7 @@ from autoskillit.core import (
     recipe_section_digest,
     recipe_section_element_digest,
     recipe_section_plan_digest,
+    render_recipe_section_failure,
 )
 from autoskillit.server._recipe_delivery import (
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
@@ -240,31 +241,6 @@ def resolve_recipe_section_bound_bytes(
 ) -> int:
     """Resolve the deliberately conservative ordinary recipe-pull ceiling."""
     return min(response_max_bytes, conservative_general_result_limit)
-
-
-def render_recipe_section_failure(
-    code: str,
-    *,
-    bound_bytes: int,
-    context: Mapping[str, object] | None = None,
-) -> str:
-    """Render an atomic bounded failure, dropping context rather than truncating it."""
-    base: dict[str, object] = {"error": code, "success": False}
-    compact = lambda value: json.dumps(  # noqa: E731
-        value,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    if context:
-        candidate = dict(base)
-        candidate.update(
-            {name: value for name, value in context.items() if name not in {"error", "success"}}
-        )
-        rendered = compact(candidate)
-        if len(rendered.encode("utf-8")) <= bound_bytes:
-            return rendered
-    return compact(base)
 
 
 def resolve_recipe_section_definition(

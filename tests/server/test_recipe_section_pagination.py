@@ -16,6 +16,8 @@ from typing import Any
 import pytest
 
 from autoskillit.core import (
+    RECIPE_SECTION_MANDATORY_FAILURE_CODES,
+    RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     recipe_section_digest,
     recipe_section_element_digest,
     recipe_section_plan_digest,
@@ -31,6 +33,7 @@ from autoskillit.server._recipe_section_pagination import (
     RecipeSectionPaginationError,
     build_recipe_section_page_plan,
     get_or_build_recipe_section_page_plan,
+    render_recipe_section_failure,
     render_recipe_section_page,
     select_recipe_section,
 )
@@ -213,6 +216,25 @@ def test_select_recipe_section_loads_only_recognized_dynamic_content() -> None:
     assert dynamic.value == "first:\n  action: stop\n"
     assert unknown.present is False
     assert loaded_sections == ["first"]
+
+
+def test_failure_floor_is_derived_from_the_registered_renderer() -> None:
+    rendered_failures = [
+        render_recipe_section_failure(
+            code,
+            bound_bytes=RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+        )
+        for code in RECIPE_SECTION_MANDATORY_FAILURE_CODES
+    ]
+
+    assert max(len(rendered.encode("utf-8")) for rendered in rendered_failures) == (
+        RECIPE_SECTION_RESPONSE_FLOOR_BYTES
+    )
+    with pytest.raises(ValueError, match="unregistered recipe section failure code"):
+        render_recipe_section_failure(
+            "unregistered_failure",
+            bound_bytes=RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+        )
 
 
 def _rendered_pages(plan: Any) -> list[str]:

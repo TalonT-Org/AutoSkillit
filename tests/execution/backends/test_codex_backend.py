@@ -595,6 +595,7 @@ class TestCodexBuildSkillSessionCmd:
         """CodexBackend declares session_dir_persistent=True for persistent roots."""
         caps = CodexBackend().capabilities
         assert caps.session_dir_persistent is True
+        assert caps.cook_startup_observer_capable is True
 
     def test_codex_home_not_set_by_default(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)

@@ -160,6 +160,8 @@ class BackendCapabilities:
     # This is necessary when subagents inherit the session directory path as an
     # environment variable and may access it after the parent process exits.
     session_dir_persistent: bool = False
+    # True when interactive cook launches support the guarded startup observer.
+    cook_startup_observer_capable: bool = False
     # True when backend honors the disable-model-invocation SKILL.md frontmatter
     # key. When False, tier-2 skills are structurally omitted from the session
     # directory rather than written with gating frontmatter that the backend

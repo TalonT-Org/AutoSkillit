@@ -70,6 +70,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "replay_capable": "OPTIONAL",
     "required_session_files": "OPTIONAL",
     "required_skill_fields": "REQUIRED",
+    "cook_startup_observer_capable": "OPTIONAL",
     "session_dir_persistent": "OPTIONAL",
     "session_dir_symlinks": "OPTIONAL",
     "session_record_types": "REQUIRED",
@@ -119,7 +120,8 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         Fields cited: applicable_guards, default_skill_sandbox_mode,
         unnegotiated_tool_result_token_limit, git_metadata_writable,
         has_unguarded_filesystem_access, process_name_aliases,
-        record_capable, replay_capable, session_dir_persistent,
+        record_capable, replay_capable,
+        cook_startup_observer_capable, session_dir_persistent,
         supports_context_window_suffix,
         supports_tool_list_changed, triage_capable, write_detection_strategy.
         """

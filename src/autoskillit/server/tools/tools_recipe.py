@@ -20,7 +20,6 @@ from autoskillit.config import (
     resolve_ingredient_defaults,
 )
 from autoskillit.core import (
-    RECIPE_SECTION_REGISTRY,
     BackendCapabilities,
     RecipeDeliveryRequest,
     fast_dumps,
@@ -666,28 +665,16 @@ async def get_recipe_section(
                         context={"detail": "post-recreation reload failed"},
                     )
 
-            if section in RECIPE_SECTION_REGISTRY:
-                selected = select_recipe_section(persisted, section)
-            else:
-                if not _is_post_prune_step(persisted, section):
-                    return _recipe_section_failure(
-                        "section_not_found",
-                        context={"section": section},
-                    )
-                try:
-                    dynamic_content = _extract_step_body_from_persisted(persisted, section)
-                except _RecipeSectionError as exc:
-                    return _recipe_section_failure(exc.code)
-                if not dynamic_content:
-                    return _recipe_section_failure(
-                        "section_not_found",
-                        context={"section": section},
-                    )
+            try:
                 selected = select_recipe_section(
                     persisted,
                     section,
-                    dynamic_content=dynamic_content,
+                    dynamic_content_loader=lambda step_name: _extract_step_body_from_persisted(
+                        persisted, step_name
+                    ),
                 )
+            except _RecipeSectionError as exc:
+                return _recipe_section_failure(exc.code)
             if not selected.present:
                 return _recipe_section_failure(
                     "section_not_found",
@@ -717,14 +704,6 @@ async def get_recipe_section(
     except Exception:
         logger.error("get_recipe_section unhandled exception", exc_info=True)
         return _recipe_section_failure("recipe_section_internal_error")
-
-
-def _is_post_prune_step(persisted: dict[str, Any], section: str) -> bool:
-    """Return whether ``section`` is an executable step in the persisted payload."""
-    post_prune_step_names = persisted.get("post_prune_step_names")
-    if not isinstance(post_prune_step_names, list):
-        return False
-    return any(name == section for name in post_prune_step_names if isinstance(name, str))
 
 
 def _extract_step_body_from_persisted(persisted: dict[str, Any], step_name: str) -> str:

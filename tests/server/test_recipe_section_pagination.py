@@ -181,6 +181,38 @@ def _build(
     )
 
 
+def test_select_recipe_section_loads_only_recognized_dynamic_content() -> None:
+    loaded_sections: list[str] = []
+
+    def _load_dynamic_content(section: str) -> str:
+        loaded_sections.append(section)
+        return "first:\n  action: stop\n"
+
+    payload = _payload()
+
+    fixed = select_recipe_section(
+        payload,
+        "content",
+        dynamic_content_loader=_load_dynamic_content,
+    )
+    dynamic = select_recipe_section(
+        payload,
+        "first",
+        dynamic_content_loader=_load_dynamic_content,
+    )
+    unknown = select_recipe_section(
+        payload,
+        "unknown",
+        dynamic_content_loader=_load_dynamic_content,
+    )
+
+    assert fixed.present is True
+    assert dynamic.present is True
+    assert dynamic.value == "first:\n  action: stop\n"
+    assert unknown.present is False
+    assert loaded_sections == ["first"]
+
+
 def _rendered_pages(plan: Any) -> list[str]:
     return [render_recipe_section_page(plan, part) for part in range(plan.total_parts)]
 

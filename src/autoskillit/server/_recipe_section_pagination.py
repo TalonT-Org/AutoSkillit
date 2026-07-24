@@ -6,7 +6,7 @@ import hashlib
 import json
 from bisect import bisect_right
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from threading import Lock, RLock
 
@@ -75,6 +75,7 @@ __all__ = [
     "get_or_build_recipe_section_page_plan",
     "render_recipe_section_failure",
     "render_recipe_section_page",
+    "resolve_recipe_section_definition",
     "resolve_recipe_section_bound_bytes",
     "select_recipe_section",
 ]
@@ -208,15 +209,41 @@ def render_recipe_section_failure(
     return compact(base)
 
 
+def resolve_recipe_section_definition(
+    payload: Mapping[str, object],
+    section: str,
+) -> RecipeSectionDef | None:
+    """Resolve the sole fixed-or-dynamic definition for a pullable section."""
+    definition = RECIPE_SECTION_REGISTRY.get(section)
+    if definition is not None:
+        return definition
+    step_names = payload.get("post_prune_step_names")
+    if (
+        type(step_names) is list
+        and type(section) is str
+        and any(type(name) is str and name == section for name in step_names)
+    ):
+        return DYNAMIC_RECIPE_SECTION_DEF
+    return None
+
+
 def select_recipe_section(
     payload: Mapping[str, object],
     section: str,
     *,
     dynamic_content: str | None = None,
+    dynamic_content_loader: Callable[[str], str | None] | None = None,
 ) -> SelectedRecipeSection:
     """Select a fixed or validated dynamic section without pre-serializing its value."""
-    definition = RECIPE_SECTION_REGISTRY.get(section)
-    if definition is not None:
+    definition = resolve_recipe_section_definition(payload, section)
+    if definition is None:
+        return SelectedRecipeSection(
+            section=section,
+            definition=DYNAMIC_RECIPE_SECTION_DEF,
+            value=None,
+            present=False,
+        )
+    if definition is not DYNAMIC_RECIPE_SECTION_DEF:
         if section not in payload:
             if definition.missing_behavior == "default":
                 return SelectedRecipeSection(
@@ -231,17 +258,13 @@ def select_recipe_section(
             return SelectedRecipeSection(section, definition, None, False)
         return SelectedRecipeSection(section, definition, value, True)
 
-    step_names = payload.get("post_prune_step_names")
-    is_dynamic = (
-        type(step_names) is list
-        and type(section) is str
-        and any(type(name) is str and name == section for name in step_names)
-    )
+    if dynamic_content_loader is not None:
+        dynamic_content = dynamic_content_loader(section)
     return SelectedRecipeSection(
         section=section,
         definition=DYNAMIC_RECIPE_SECTION_DEF,
         value=dynamic_content,
-        present=is_dynamic and dynamic_content is not None,
+        present=dynamic_content is not None,
     )
 
 

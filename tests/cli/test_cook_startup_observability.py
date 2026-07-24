@@ -370,6 +370,134 @@ def test_observer_matching_window_and_retained_output_are_hard_capped() -> None:
     assert len(observer.normalized_window.encode("utf-8")) <= _WINDOW_LIMIT
 
 
+def test_observer_latches_ready_status() -> None:
+    _, ObserverStatus, PtyObserver = _observer_api()
+
+    class Probe:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def check(self):
+            self.calls += 1
+            return ObserverStatus.READY if self.calls == 1 else ObserverStatus.INCOMPLETE
+
+    probe = Probe()
+    observer = PtyObserver(readiness_probe=probe)  # type: ignore[arg-type]
+
+    assert observer.check_readiness() is ObserverStatus.READY
+    assert observer.check_readiness() is ObserverStatus.READY
+    assert probe.calls == 1
+
+
+def test_relay_copies_both_directions_and_restores_terminal_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.session.pty import _observer as observer_module
+
+    _, ObserverStatus, PtyObserver = _observer_api()
+    master_fd = 10
+    stdin_fd = 11
+    stdout_fd = 12
+    terminal_attributes = [1, 2, 3]
+    writes: list[tuple[int, bytes]] = []
+    signal_calls: list[tuple[int, object]] = []
+    terminal_calls: list[tuple[int, int, list[int]]] = []
+    closed_fds: list[int] = []
+    selector_closed: list[bool] = []
+    read_counts = {master_fd: 0, stdin_fd: 0}
+
+    class Probe:
+        def __init__(self) -> None:
+            self.statuses = iter(
+                (
+                    ObserverStatus.ABSENT,
+                    ObserverStatus.INCOMPLETE,
+                    ObserverStatus.SCHEMA_CHANGED,
+                    ObserverStatus.READY,
+                )
+            )
+
+        def check(self):
+            return next(self.statuses)
+
+    class Key:
+        def __init__(self, fd: int, data: str) -> None:
+            self.fd = fd
+            self.data = data
+
+    class Selector:
+        def __init__(self) -> None:
+            self.events = iter(
+                (
+                    [(Key(stdin_fd, "stdin"), 0)],
+                    [(Key(master_fd, "master"), 0)],
+                    [(Key(master_fd, "master"), 0)],
+                )
+            )
+
+        def register(self, _fd: int, _events: int, _data: str) -> None:
+            return None
+
+        def unregister(self, _fd: int) -> None:
+            return None
+
+        def select(self, _timeout: float):
+            return next(self.events)
+
+        def close(self) -> None:
+            selector_closed.append(True)
+
+    def fake_read(fd: int, _size: int) -> bytes:
+        read_counts[fd] += 1
+        if fd == stdin_fd:
+            return b"to-child"
+        return b"to-user" if read_counts[fd] == 1 else b""
+
+    def fake_write(fd: int, payload: bytes | memoryview) -> int:
+        data = bytes(payload)
+        writes.append((fd, data))
+        return len(data)
+
+    previous_handler = object()
+    monkeypatch.setattr(observer_module.selectors, "DefaultSelector", Selector)
+    monkeypatch.setattr(observer_module.os, "isatty", lambda _fd: True)
+    monkeypatch.setattr(observer_module.os, "read", fake_read)
+    monkeypatch.setattr(observer_module.os, "write", fake_write)
+    monkeypatch.setattr(observer_module.os, "close", closed_fds.append)
+    monkeypatch.setattr(observer_module.fcntl, "ioctl", lambda *_args: b"\0" * 8)
+    monkeypatch.setattr(
+        observer_module.termios,
+        "tcgetattr",
+        lambda _fd: terminal_attributes,
+    )
+    monkeypatch.setattr(
+        observer_module.termios,
+        "tcsetattr",
+        lambda fd, when, attrs: terminal_calls.append((fd, when, attrs)),
+    )
+    monkeypatch.setattr(observer_module.tty, "setraw", lambda _fd: None)
+    monkeypatch.setattr(
+        observer_module.signal,
+        "getsignal",
+        lambda _signal: previous_handler,
+    )
+    monkeypatch.setattr(
+        observer_module.signal,
+        "signal",
+        lambda signum, handler: signal_calls.append((signum, handler)),
+    )
+
+    observer = PtyObserver(readiness_probe=Probe())  # type: ignore[arg-type]
+    observer.relay(master_fd, stdin_fd=stdin_fd, stdout_fd=stdout_fd)
+
+    assert writes == [(master_fd, b"to-child"), (stdout_fd, b"to-user")]
+    assert observer.readiness_status is ObserverStatus.READY
+    assert terminal_calls == [(stdin_fd, observer_module.termios.TCSADRAIN, terminal_attributes)]
+    assert signal_calls[-1] == (observer_module.signal.SIGWINCH, previous_handler)
+    assert selector_closed == [True]
+    assert closed_fds == [master_fd]
+
+
 def _make_state_db(sqlite_home: Path, status: str = "complete") -> Path:
     sqlite_home.mkdir(parents=True, exist_ok=True)
     path = sqlite_home / "state_5.sqlite"

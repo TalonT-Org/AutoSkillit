@@ -225,6 +225,8 @@ class PtyObserver:
         """Observe readiness once and emit each changed status at most once."""
         if self.readiness_probe is None:
             return None
+        if self.readiness_status is ObserverStatus.READY:
+            return ObserverStatus.READY
         status = self.readiness_probe.check()
         if status is not self.readiness_status:
             self.readiness_status = status
@@ -241,6 +243,8 @@ class PtyObserver:
         """Delegate a bounded readiness wait and publish its terminal status."""
         if self.readiness_probe is None:
             return None
+        if self.readiness_status is ObserverStatus.READY:
+            return ObserverStatus.READY
         status = self.readiness_probe.wait(
             timeout_seconds=timeout_seconds,
             cancelled=cancelled,
@@ -267,6 +271,7 @@ class PtyObserver:
         selector = selector_factory()
         previous_winch: Callable[[int, FrameType | None], Any] | int | None = None
         installed_winch = False
+        terminal_attributes: list[Any] | None = None
 
         def copy_window_size() -> None:
             if not os.isatty(stdin_fd):
@@ -282,6 +287,7 @@ class PtyObserver:
 
         try:
             if os.isatty(stdin_fd):
+                terminal_attributes = termios.tcgetattr(stdin_fd)
                 tty.setraw(stdin_fd)
                 copy_window_size()
                 try:
@@ -319,10 +325,17 @@ class PtyObserver:
                     else:
                         self._write_all(master_fd, chunk)
         finally:
-            if installed_winch and previous_winch is not None:
-                signal.signal(signal.SIGWINCH, previous_winch)  # noqa: TID251
-            selector.close()
-            self.close_master(master_fd)
+            try:
+                self.check_readiness()
+            finally:
+                if installed_winch and previous_winch is not None:
+                    with contextlib.suppress(ValueError):
+                        signal.signal(signal.SIGWINCH, previous_winch)  # noqa: TID251
+                if terminal_attributes is not None:
+                    with contextlib.suppress(OSError):
+                        termios.tcsetattr(stdin_fd, termios.TCSADRAIN, terminal_attributes)
+                selector.close()
+                self.close_master(master_fd)
 
     def close_master(self, master_fd: int) -> None:
         """Close a PTY master descriptor exactly once."""

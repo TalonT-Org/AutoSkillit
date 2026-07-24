@@ -311,6 +311,9 @@ def test_select_recipe_section_rejects_empty_dynamic_content() -> None:
 
 
 def test_failure_floor_is_derived_from_the_registered_renderer() -> None:
+    assert (
+        render_recipe_section_failure.__module__ == "autoskillit.server.recipe_section._rendering"
+    )
     rendered_failures = [
         render_recipe_section_failure(
             code,

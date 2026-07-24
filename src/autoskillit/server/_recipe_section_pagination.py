@@ -22,7 +22,6 @@ from autoskillit.core import (
     recipe_section_digest,
     recipe_section_element_digest,
     recipe_section_plan_digest,
-    render_recipe_section_failure,
 )
 from autoskillit.server._recipe_delivery import (
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
@@ -40,6 +39,7 @@ from autoskillit.server.recipe_section._contracts import (
     SelectedRecipeSection,
 )
 from autoskillit.server.recipe_section._lifecycle import register_kitchen_retirement_callback
+from autoskillit.server.recipe_section._rendering import render_recipe_section_failure
 from autoskillit.server.recipe_section._verification import (
     verify_finalized_recipe_section_plan,
 )

@@ -445,7 +445,6 @@ from .types import parse_plan_paths as parse_plan_paths
 from .types import recipe_section_digest as recipe_section_digest
 from .types import recipe_section_element_digest as recipe_section_element_digest
 from .types import recipe_section_plan_digest as recipe_section_plan_digest
-from .types import render_recipe_section_failure as render_recipe_section_failure
 from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill

@@ -1313,6 +1313,20 @@ def test_direct_install_projection_cache_identity_and_reuse(
 
     assert second.plugin_dir == first.plugin_dir
     assert second.plugin_dir.stat().st_ino == first_inode
+    manifest_path = first.plugin_dir.parent / (
+        f".{first.plugin_dir.name}.autoskillit-projection.json"
+    )
+    manifest_path.unlink()
+    recovered = project_direct_install(
+        source,
+        cwd=tmp_path,
+        backend=backend,
+        default_base_branch="develop",
+        skill_catalog=catalog,
+    )
+    assert recovered.plugin_dir == first.plugin_dir
+    assert manifest_path.is_file()
+
     main_projection = project_direct_install(
         source,
         cwd=tmp_path,

@@ -729,6 +729,27 @@ def project_direct_install(
             require_sources_within_root=bool(source_infos),
         )
         if errors:
+            shutil.rmtree(destination)
+            if manifest_path.is_symlink() or manifest_path.is_file():
+                manifest_path.unlink()
+            elif manifest_path.exists():
+                raise SkillContractError(
+                    f"direct plugin projection manifest is not a file: {manifest_path}"
+                )
+            manifest_path = materialize_sanitized_plugin_root(
+                source_root,
+                destination,
+                catalog,
+                context,
+            )
+            errors = validate_sanitized_plugin_artifact(
+                source_root,
+                destination,
+                manifest_path,
+                source_infos if source_infos else catalog,
+                require_sources_within_root=bool(source_infos),
+            )
+        if errors:
             raise SkillContractError(
                 "direct plugin projection validation failed: " + "; ".join(errors)
             )

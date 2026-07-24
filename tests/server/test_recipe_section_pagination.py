@@ -526,6 +526,66 @@ def test_final_digest_injection_revalidates_descriptor_boundaries(
         _build(_payload(content="boundary-check-" * 500), "content", bound=1_000)
 
 
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("fragment_count", "fragment identity changed"),
+        ("element_digest", "fragment identity changed"),
+        ("fragment_range", "fragment range does not match its content"),
+        ("reconstruction", "do not reconstruct their element"),
+        ("page_content_digest", "page content digest changed"),
+    ],
+)
+def test_final_verifier_rejects_fragment_descriptor_and_content_corruption(
+    mutation: str,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_verify = pagination.verify_finalized_recipe_section_plan
+
+    def _verify_corrupted(**kwargs: Any) -> None:
+        pages = list(kwargs["pages"])
+        first = pages[0]
+        descriptor = first.descriptor
+        if mutation == "fragment_count":
+            assert descriptor.fragment_count is not None
+            descriptor = replace(
+                descriptor,
+                fragment_count=descriptor.fragment_count + 1,
+            )
+        elif mutation == "element_digest":
+            descriptor = replace(descriptor, element_sha256=f"sha256:{'f' * 64}")
+        elif mutation == "fragment_range":
+            assert descriptor.fragment_byte_end is not None
+            descriptor = replace(
+                descriptor,
+                fragment_byte_end=descriptor.fragment_byte_end - 1,
+            )
+        elif mutation == "reconstruction":
+            decoded = json.loads(first.content)
+            first = replace(
+                first,
+                content=json.dumps(
+                    "x" + decoded[1:],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            )
+        else:
+            descriptor = replace(descriptor, page_content_sha256=f"sha256:{'f' * 64}")
+        pages[0] = replace(first, descriptor=descriptor)
+        original_verify(**{**kwargs, "pages": pages})
+
+    monkeypatch.setattr(
+        pagination,
+        "verify_finalized_recipe_section_plan",
+        _verify_corrupted,
+    )
+
+    with pytest.raises(RecipeSectionPaginationError, match=message):
+        _build(_payload(warnings=["\\" * 5_000]), "warnings", bound=1_000)
+
+
 def test_page_and_fragment_indices_cross_two_digit_boundaries() -> None:
     raw_plan = _build(_payload(content="r" * 120_000), "content", bound=1_000)
     assert raw_plan.total_parts > 100

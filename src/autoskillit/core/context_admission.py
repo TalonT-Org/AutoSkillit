@@ -901,7 +901,10 @@ def _reserve(
         return _reject(state, event, "epoch-uninitialized")
     if event.snapshot_sequence != state.snapshot.snapshot_sequence:
         return _reject(state, event, "snapshot-sequence-mismatch")
-    if _batch_record(state, event.batch.batch_id) is not None:
+    if (
+        _batch_record(state, event.batch.batch_id) is not None
+        or _closed_batch_location(state, event.batch.batch_id) is not None
+    ):
         return _reject(state, event, "batch-already-reserved")
     reservation = event.input_reservations[0]
     if any(

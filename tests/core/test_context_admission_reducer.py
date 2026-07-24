@@ -1389,6 +1389,26 @@ def test_rollover_invalidates_undispatched_work_and_preserves_closed_audits() ->
     assert rerolled.next_state.closed_epochs[0] == rolled.next_state.closed_epochs[0]
 
 
+def test_reserve_rejects_batch_id_retained_in_closed_epoch() -> None:
+    state, batch, _, _ = _reserved_batch(name="closed-batch-id")
+    rolled = _rollover_with_receiver_fence(state, batch, name="closed-batch-id")
+    occurrence = _occurrence("closed-batch-id-new", maximum=5, epoch=2)
+    rolled, _ = _propose(rolled, occurrence)
+    reused_batch = _batch(batch.batch_id.value, (occurrence,))
+
+    rejected, _ = _reserve(
+        rolled,
+        reused_batch,
+        (occurrence,),
+        input_count=5,
+    )
+
+    assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+    assert rejected.decision.reason_code == "batch-already-reserved"
+    assert isinstance(rejected.next_state, ActiveContextAdmissionState)
+    _assert_rejection_unchanged(rolled, rejected.next_state)
+
+
 def test_closed_epoch_occurrence_identity_is_immutable_and_exact_retry_is_idempotent() -> None:
     state, batch, occurrences, _ = _reserved_batch(name="closed-occurrence")
     rolled = _rollover_with_receiver_fence(

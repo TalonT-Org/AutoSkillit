@@ -50,12 +50,12 @@ def test_remediation_depth_ingredient_is_string_type(remediation_recipe: Recipe)
 
 
 def test_remediation_investigate_step_has_depth_conditional(remediation_recipe: Recipe) -> None:
-    """The investigate step skill_command must include the --depth deep conditional."""
+    """The investigate step topic must include the --depth deep conditional."""
     step = remediation_recipe.steps.get("investigate")
     assert step is not None, "remediation.yaml must contain an 'investigate' step"
-    skill_command = step.with_args.get("skill_command", "")
-    assert "--depth deep" in skill_command, (
-        "remediation.yaml investigate step skill_command must contain '--depth deep' "
+    topic = step.with_args["skill_inputs"]["topic"]
+    assert "--depth deep" in topic, (
+        "remediation.yaml investigate step topic must contain '--depth deep' "
         "conditional expression for when inputs.depth == 'deep'"
     )
 

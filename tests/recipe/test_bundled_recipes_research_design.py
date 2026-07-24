@@ -158,8 +158,9 @@ class TestResearchDesignRecipeStructure:
     def test_apply_receives_scope_report(self, recipe) -> None:
         """apply step must pass scope_report as a second argument."""
         step = recipe.steps["apply"]
-        cmd = step.with_args["skill_command"]
-        assert "${{ context.scope_report }}" in cmd
+        assert step.with_args["skill_inputs"]["scope_report_path"] == (
+            "${{ context.scope_report }}"
+        )
 
     def test_apply_captures(self, recipe) -> None:
         capture = recipe.steps["apply"].capture

@@ -105,24 +105,22 @@ def test_dial_captures_methodology_tradition(research_recipe):
 
 
 def test_generate_report_receives_experiment_type_arg(research_recipe):
-    skill_cmd = research_recipe.steps["generate_report"].with_args.get("skill_command", "")
-    assert "--experiment-type" in skill_cmd
+    inputs = research_recipe.steps["generate_report"].with_args["skill_inputs"]
+    assert inputs["experiment_type"] == "${{ context.experiment_type }}"
 
 
 def test_generate_report_receives_methodology_traditions_arg(research_recipe):
-    skill_cmd = research_recipe.steps["generate_report"].with_args.get("skill_command", "")
-    assert "--methodology-traditions" in skill_cmd
+    inputs = research_recipe.steps["generate_report"].with_args["skill_inputs"]
+    assert inputs["methodology_traditions"] == "${{ context.methodology_tradition }}"
 
 
 def test_generate_report_inconclusive_receives_same_args(research_recipe):
-    skill_cmd = research_recipe.steps["generate_report_inconclusive"].with_args.get(
-        "skill_command", ""
-    )
-    assert "--experiment-type" in skill_cmd
-    assert "--methodology-traditions" in skill_cmd
+    inputs = research_recipe.steps["generate_report_inconclusive"].with_args["skill_inputs"]
+    assert inputs["experiment_type"] == "${{ context.experiment_type }}"
+    assert inputs["methodology_traditions"] == "${{ context.methodology_tradition }}"
 
 
 def test_re_generate_report_receives_same_args(research_recipe):
-    skill_cmd = research_recipe.steps["re_generate_report"].with_args.get("skill_command", "")
-    assert "--experiment-type" in skill_cmd
-    assert "--methodology-traditions" in skill_cmd
+    inputs = research_recipe.steps["re_generate_report"].with_args["skill_inputs"]
+    assert inputs["experiment_type"] == "${{ context.experiment_type }}"
+    assert inputs["methodology_traditions"] == "${{ context.methodology_tradition }}"

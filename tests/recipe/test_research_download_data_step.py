@@ -37,7 +37,7 @@ def test_download_data_skill_command_references_download_data_skill(recipe: Reci
 def test_download_data_skill_command_passes_experiment_plan(recipe: Recipe) -> None:
     """download_data skill_command must reference experiment_plan."""
     step = recipe.steps["download_data"]
-    assert "experiment_plan" in step.with_args["skill_command"]
+    assert step.with_args["skill_inputs"]["experiment_plan"] == "${{ context.experiment_plan }}"
 
 
 def test_download_data_cwd_is_worktree_path(recipe: Recipe) -> None:

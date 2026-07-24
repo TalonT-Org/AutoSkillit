@@ -35,7 +35,7 @@ Called by the `research` recipe on `implement_phase` failure before routing to
 **NEVER:**
 - Modify any source code files
 - Run tests
-- Write files outside `{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/`
+- Write files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment}`
 - Fabricate or invent causes for failures when log data is insufficient to determine a root cause — state "cause undetermined from available logs" rather than inferring probable causes
 - Abort when session data is missing — emit `failure_type=unknown`, `is_fixable=false` and exit cleanly
 
@@ -96,10 +96,14 @@ When `failure_type=transient_api`, the output MUST include `retry_delay = 120`. 
 
 ### Step 5: Write Diagnosis Report
 
-Create directory `{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/` if it does not exist.
+```bash
+TROUBLESHOOT_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment}"
+mkdir -p "${TROUBLESHOOT_OUTPUT_DIR}"
+```
+
 Write the diagnosis file to:
 
-`{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/diagnosis_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+`${TROUBLESHOOT_OUTPUT_DIR}/diagnosis_{YYYY-MM-DD_HHMMSS}.md`
 
 ```markdown
 # Experiment Failure Diagnosis

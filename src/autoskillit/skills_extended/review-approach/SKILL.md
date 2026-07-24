@@ -38,7 +38,7 @@ failure, not something to work around.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Modify any source code files
-- Create files outside `{{AUTOSKILLIT_TEMP}}/review-approach/` directory
+- Create files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-approach}`
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
@@ -92,7 +92,14 @@ Drop anything that doesn't meaningfully inform the decision.
 
 ### Step 4: Write Review
 
-Save to: `{{AUTOSKILLIT_TEMP}}/review-approach/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+Set the recipe-scoped output directory:
+
+```bash
+REVIEW_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-approach}"
+mkdir -p "${REVIEW_OUTPUT_DIR}"
+```
+
+Save to: `${REVIEW_OUTPUT_DIR}/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md`.
 
 ```markdown
 # Approach Review: {Topic}

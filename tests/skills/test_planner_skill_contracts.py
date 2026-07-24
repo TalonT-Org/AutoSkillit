@@ -147,8 +147,8 @@ def test_all_planner_recipe_skills_registered_in_contract_card() -> None:
     )
 
 
-def test_planner_contract_card_records_positional_args_for_generate_phases() -> None:
-    """T1b: the generate_phases dataflow entry must record positional_args > 0."""
+def test_planner_contract_card_records_structured_inputs_for_generate_phases() -> None:
+    """The generate_phases dataflow entry records its bound named inputs."""
     card_path = RECIPES_ROOT / "contracts" / "planner.yaml"
     assert card_path.is_file(), "planner contract card not found — run generate_recipe_card"
     card = load_yaml(card_path)
@@ -160,9 +160,13 @@ def test_planner_contract_card_records_positional_args_for_generate_phases() -> 
     assert generate_phases_entry is not None, (
         "generate_phases step not found in planner contract card dataflow"
     )
-    assert generate_phases_entry.get("positional_args", 0) > 0, (
-        "generate_phases step should record positional_args > 0 in the contract card"
-    )
+    assert generate_phases_entry.get("structured_inputs") == [
+        "analysis_path",
+        "domain_knowledge_path",
+        "task_file_path",
+    ]
+    assert "positional_args" not in generate_phases_entry
+    assert generate_phases_entry.get("required") == []
 
 
 @pytest.mark.parametrize("skill_name", ALL_PLANNER_SKILLS)

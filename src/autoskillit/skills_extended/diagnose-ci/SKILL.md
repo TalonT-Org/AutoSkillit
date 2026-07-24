@@ -14,7 +14,8 @@ hooks:
 # diagnose-ci Skill
 
 Fetch CI logs for a failing branch, classify the failure type, and write a structured
-diagnosis report to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/`. Called by the orchestrator on `ci_watch` failure
+diagnosis report under `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/diagnose-ci}`.
+Called by the orchestrator on `ci_watch` failure
 before routing to `resolve-failures`.
 
 ## Invocation
@@ -37,7 +38,7 @@ before routing to `resolve-failures`.
 
 - Modify any source code files
 - Run the test suite
-- Write files outside `{{AUTOSKILLIT_TEMP}}/diagnose-ci/`
+- Write files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/diagnose-ci}`
 - Block on missing `gh` CLI — write a minimal `failure_type=unknown` diagnosis instead
 
 **ALWAYS:**
@@ -147,7 +148,14 @@ Determine `is_fixable`:
 
 ### Step 5: Write Diagnosis Report
 
-Create directory `{{AUTOSKILLIT_TEMP}}/diagnose-ci/` if it doesn't exist. Write the diagnosis file:
+Set the recipe-scoped output directory and create it if it does not exist:
+
+```bash
+DIAGNOSIS_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/diagnose-ci}"
+mkdir -p "${DIAGNOSIS_OUTPUT_DIR}"
+```
+
+Write the diagnosis file:
 
 ```markdown
 # CI Diagnosis: {branch}
@@ -175,7 +183,7 @@ failure_subtype = {failure_subtype}
 **Suggested Starting Verdict:** {suggested starting verdict from the subtype table above}
 ```
 
-Save to `{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md`. (relative to the current working directory)
+Save to `${DIAGNOSIS_OUTPUT_DIR}/diagnosis_{timestamp}.md`.
 
 ### Step 6: Emit Output Tokens
 
@@ -188,7 +196,7 @@ Emit these tokens on their own lines at the end of your response:
 > code fences cause match failure.
 
 ```
-diagnosis_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md
+diagnosis_path = /absolute/path/to/${DIAGNOSIS_OUTPUT_DIR}/diagnosis_{timestamp}.md
 failure_type = test|lint|build|type_check|env|unknown|no_failure
 failure_subtype = flaky|timing_race|deterministic|fixture|import|env|unknown|no_failure
 is_fixable = true|false

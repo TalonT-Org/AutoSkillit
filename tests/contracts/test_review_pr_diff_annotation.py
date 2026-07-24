@@ -231,7 +231,7 @@ _SKILL_TOOLS = frozenset({"run_skill", "run_skill_on_context_limit"})
 def test_review_skill_command_passes_diff_annotation_paths(
     skill_name: str, recipe_name: str
 ) -> None:
-    """Skill command must forward hunk_ranges_path= and valid_lines_path= inline."""
+    """Skill invocation must bind hunk and valid-line artifacts."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     review_steps = [
         (name, step)
@@ -240,12 +240,10 @@ def test_review_skill_command_passes_diff_annotation_paths(
     ]
     assert review_steps, f"No {skill_name} step in {recipe_name}.yaml"
     for step_name, step in review_steps:
-        cmd = step.with_args.get("skill_command", "")
-        assert "hunk_ranges_path=" in cmd, (
-            f"{recipe_name}.yaml step '{step_name}' calls {skill_name} "
-            f"without hunk_ranges_path= in skill_command"
+        skill_inputs = step.with_args["skill_inputs"]
+        assert "hunk_ranges_path" in skill_inputs, (
+            f"{recipe_name}.yaml step '{step_name}' calls {skill_name} without hunk_ranges_path"
         )
-        assert "valid_lines_path=" in cmd, (
-            f"{recipe_name}.yaml step '{step_name}' calls {skill_name} "
-            f"without valid_lines_path= in skill_command"
+        assert "valid_lines_path" in skill_inputs, (
+            f"{recipe_name}.yaml step '{step_name}' calls {skill_name} without valid_lines_path"
         )

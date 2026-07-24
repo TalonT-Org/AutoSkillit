@@ -212,7 +212,9 @@ def test_output_path_tokens_synchronized() -> None:
     # Update this set when adding new path-bearing structured output tokens.
     expected_path_tokens = frozenset(
         {
+            "audit_cycle_path",
             "plan_path",
+            "plan_disposition_path",
             "plan_parts",
             "investigation_path",
             "diagnosis_path",

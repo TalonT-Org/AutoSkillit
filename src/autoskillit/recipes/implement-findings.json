@@ -97,7 +97,11 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:build-execution-map ${{ context.remaining_urls_json }} ${{ inputs.base_branch }}",
+        "skill_command": "/autoskillit:build-execution-map",
+        "skill_inputs": {
+          "issue_numbers": "${{ context.remaining_urls_json }}",
+          "base_ref": "${{ inputs.base_branch }}"
+        },
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "run_bem_internally",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/build-execution-map"

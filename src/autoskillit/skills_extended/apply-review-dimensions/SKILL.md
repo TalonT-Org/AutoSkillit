@@ -49,7 +49,7 @@ invoked standalone — the recipe step named `apply` with
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 - Emit verdict (verdict is computed by `aggregate_review_verdict` in the synthesize step)
 - Spawn background subagents (`run_in_background: true` is prohibited)
-- Write outside `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/`
+- Write outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}`
 - Proceed past L1 when any STRUCTURAL critical finding is present
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
@@ -57,21 +57,26 @@ invoked standalone — the recipe step named `apply` with
 - Use `Agent(model="sonnet")` for all subagents
 - Write `findings_manifest` and `evaluation_dashboard` before emitting tokens
 - Emit both output tokens as absolute paths
-- Write output to `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/`
+- Write output to `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}`
 - Issue all subagent calls in a single message to maximize parallel execution
 
 ## Workflow
 
 ### Step 0: Setup
 
-1. Create `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/` if absent.
+```bash
+APPLY_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}"
+mkdir -p "${APPLY_OUTPUT_DIR}"
+```
+
+1. Use `APPLY_OUTPUT_DIR` for every output path.
 2. Load dimensions_manifest JSON from `dimensions_manifest_path`.
 3. **Empty / all-silent detection:** If all dimension weights are `S` (SILENT) or
    the dimension list is empty:
    - Write an empty `findings_manifest` JSON (empty array) to
-     `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
+     `${APPLY_OUTPUT_DIR}/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
    - Write a "Scope Advisory" `evaluation_dashboard` to
-     `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
+     `${APPLY_OUTPUT_DIR}/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
    - Emit output tokens and return without spawning any subagents.
 
 ### Step 1: L1 Fail-Fast Gate (Level 1)
@@ -194,7 +199,7 @@ Merge all red-team findings into the finding pool with
 ### Step 6: Write Findings Manifest
 
 Write
-`{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`.
+`${APPLY_OUTPUT_DIR}/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`.
 
 **Explicit JSON schema (machine contract):**
 
@@ -237,7 +242,7 @@ sub-array.
 ### Step 7: Write Evaluation Dashboard
 
 Write
-`{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
+`${APPLY_OUTPUT_DIR}/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
 always (full-analysis path or STRUCTURAL halt path).
 
 **Full-analysis path contents:**
@@ -278,8 +283,8 @@ NOTE: NO `verdict` field in this YAML block — verdict is computed by
 ### Step 8: Emit Structured Output Tokens
 
 ```
-findings_manifest_path = {{AUTOSKILLIT_TEMP}}/apply-review-dimensions/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json
-evaluation_dashboard_path = {{AUTOSKILLIT_TEMP}}/apply-review-dimensions/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
+findings_manifest_path = ${APPLY_OUTPUT_DIR}/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json
+evaluation_dashboard_path = ${APPLY_OUTPUT_DIR}/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
@@ -294,11 +299,11 @@ No `verdict` token. No `revision_guidance` token.
 
 Output tokens (relative to the current working directory):
 
-- `findings_manifest_path` — `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
-- `evaluation_dashboard_path` — `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
+- `findings_manifest_path` — `${APPLY_OUTPUT_DIR}/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
+- `evaluation_dashboard_path` — `${APPLY_OUTPUT_DIR}/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
 
 ```
-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/
+${APPLY_OUTPUT_DIR}/
 ├── findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json   (always)
 └── evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md  (always)
 ```
@@ -315,7 +320,7 @@ Output tokens (relative to the current working directory):
 ## Context Limit Behavior
 
 When context is exhausted mid-execution, the `findings_manifest_path` and
-`evaluation_dashboard_path` in `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/`
+`evaluation_dashboard_path` in `${APPLY_OUTPUT_DIR}/`
 may be partially written but missing the deeper L3/L4 review findings. The
 recipe's `on_context_limit` route triggers `create_worktree`, preserving
 whatever findings were captured so the downstream synthesis step can still

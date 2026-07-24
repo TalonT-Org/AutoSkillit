@@ -48,58 +48,41 @@ class TestResearchRecipesAuditImpl:
         assert step.with_args.get("cwd") == "${{ context.worktree_path }}"
 
     def test_research_audit_impl_uses_impl_base_sha(self, research_recipe) -> None:
-        """research.yaml audit_impl skill_command must reference context.impl_base_sha."""
+        """research.yaml audit_impl must bind context.impl_base_sha."""
         step = research_recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.impl_base_sha" in skill_cmd
+        assert step.with_args["skill_inputs"]["branch_name"] == "${{ context.impl_base_sha }}"
 
     def test_research_implement_audit_impl_has_impl_base_sha(
         self, research_implement_recipe
     ) -> None:
-        """research-implement.yaml audit_impl must reference context.impl_base_sha."""
+        """research-implement.yaml audit_impl must bind context.impl_base_sha."""
         step = research_implement_recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.impl_base_sha" in skill_cmd
+        assert step.with_args["skill_inputs"]["branch_name"] == "${{ context.impl_base_sha }}"
 
     def test_research_implement_audit_impl_passes_three_positional_args(
         self, research_implement_recipe
     ) -> None:
-        """research-implement.yaml audit_impl must pass at least 3 positional args.
-
-        Arg order: plans_input, implementation_ref, base_branch. Passing only 2 args
-        mis-binds base_branch to the implementation_ref parameter.
-        """
+        """research-implement.yaml audit_impl must bind its three required inputs."""
         step = research_implement_recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        parts = skill_cmd.split()
-        assert len(parts) >= 4, (
-            "audit-impl skill_command must have at least 3 positional arguments "
-            "(plans_input, implementation_ref, base_branch) plus the skill name itself. "
-            f"Got {len(parts) - 1} args in: {skill_cmd!r}"
-        )
+        skill_inputs = step.with_args["skill_inputs"]
+        assert {"all_plan_paths", "branch_name", "base_branch"} <= skill_inputs.keys()
 
     def test_research_implement_audit_impl_uses_base_branch(
         self, research_implement_recipe
     ) -> None:
-        """research-implement.yaml audit_impl skill_command must reference inputs.base_branch."""
+        """research-implement.yaml audit_impl must bind inputs.base_branch."""
         step = research_implement_recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "inputs.base_branch" in skill_cmd
+        assert step.with_args["skill_inputs"]["base_branch"] == "${{ inputs.base_branch }}"
 
     def test_audit_impl_uses_group_files(self, recipe) -> None:
-        """audit_impl skill_command must reference context.group_files."""
+        """audit_impl must bind context.group_files."""
         step = recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.group_files" in skill_cmd
+        assert step.with_args["skill_inputs"]["all_plan_paths"] == "${{ context.group_files }}"
 
     def test_audit_impl_group_files_is_quoted(self, recipe) -> None:
-        """context.group_files interpolation must be wrapped in double quotes.
-
-        Newline-separated values must remain one logical argument after shlex tokenization.
-        """
+        """Structured binding keeps newline-separated group files one logical value."""
         step = recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert '"${{ context.group_files }}"' in skill_cmd
+        assert step.with_args["skill_inputs"]["all_plan_paths"] == "${{ context.group_files }}"
 
     def test_audit_impl_go_routes_to_run_experiment(self, recipe) -> None:
         """audit_impl on_result GO verdict must route to run_experiment."""
@@ -203,10 +186,9 @@ class TestResearchImplementRemediationLoop:
         assert "remediate" in recipe.steps
         assert recipe.steps["remediate"].action == "route"
 
-    def test_remediate_carries_remediation_path(self, recipe) -> None:
+    def test_remediate_carries_audit_cycle_path(self, recipe) -> None:
         step = recipe.steps["remediate"]
-        assert "remediation_path" in step.with_args
-        assert "context.remediation_path" in step.with_args["remediation_path"]
+        assert step.with_args["audit_cycle_path"] == "${{ context.audit_cycle_path }}"
 
     def test_remediate_routes_to_check_audit_retry_loop(self, recipe) -> None:
         step = recipe.steps["remediate"]
@@ -273,9 +255,9 @@ class TestResearchRemediationLoop:
         assert "remediate" in recipe.steps
         assert recipe.steps["remediate"].action == "route"
 
-    def test_remediate_carries_remediation_path(self, recipe) -> None:
+    def test_remediate_carries_audit_cycle_path(self, recipe) -> None:
         step = recipe.steps["remediate"]
-        assert "context.remediation_path" in step.with_args["remediation_path"]
+        assert step.with_args["audit_cycle_path"] == "${{ context.audit_cycle_path }}"
 
     def test_remediate_routes_to_check_audit_retry_loop(self, recipe) -> None:
         step = recipe.steps["remediate"]

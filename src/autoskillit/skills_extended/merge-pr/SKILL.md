@@ -41,7 +41,7 @@ conflicts from earlier merges in the queue.
 - Use `git merge` to merge the PR into the integration branch — always use `gh pr merge --squash --auto` (when `autoMergeAllowed=true`) or `gh pr merge --squash` (when `autoMergeAllowed=false`)
 - Close or comment on the PR
 - Leave the git working tree in a dirty state
-- Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
+- Create files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/merge-prs}`
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
@@ -298,7 +298,14 @@ Extract the `## Requirements` section if present — set `requirements_section =
 
 Compute timestamp: `YYYY-MM-DD_HHMMSS`.
 
-Write `{{AUTOSKILLIT_TEMP}}/merge-prs/conflict_pr{pr_number}_plan_{ts}.md`:
+Set the recipe-scoped output directory:
+
+```bash
+MERGE_PR_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/merge-prs}"
+mkdir -p "${MERGE_PR_OUTPUT_DIR}"
+```
+
+Write `${MERGE_PR_OUTPUT_DIR}/conflict_pr{pr_number}_plan_{ts}.md`:
 
 ```markdown
 # Conflict Resolution Plan: PR #{pr_number} — "{pr_title}"
@@ -420,7 +427,7 @@ Print a JSON result block to stdout for recipe capture:
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
     "pr_title": "Refactor database layer",
-    "conflict_report_path": "{{AUTOSKILLIT_TEMP}}/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "${MERGE_PR_OUTPUT_DIR}/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -439,7 +446,7 @@ with `conflict_report_path` set. The pipeline then routes to make-plan → imple
     "pr_number": 47,
     "pr_branch": "feature/stale-branch",
     "pr_title": "Feature from stale branch",
-    "conflict_report_path": "{{AUTOSKILLIT_TEMP}}/merge-prs/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "${MERGE_PR_OUTPUT_DIR}/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
 }
 ```
 
@@ -569,7 +576,7 @@ written. Omit the line entirely on a successful direct merge or when `escalation
 ## Output Location
 
 ```
-{{AUTOSKILLIT_TEMP}}/merge-prs/
+${MERGE_PR_OUTPUT_DIR}/
 └── conflict_pr{N}_plan_{ts}.md    (written only when needs_plan=true)
 ```
 

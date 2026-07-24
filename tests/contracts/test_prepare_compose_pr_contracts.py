@@ -82,29 +82,21 @@ RECIPES_DIR = Path(__file__).parents[2] / "src" / "autoskillit" / "recipes"
 
 
 def test_compose_pr_skill_command_includes_issue_number() -> None:
-    """compose_pr skill_command must structurally include context.issue_number."""
+    """compose_pr must structurally bind context.issue_number."""
     from autoskillit.core.io import load_yaml
 
     data = load_yaml(RECIPES_DIR / "implementation.yaml")
-    skill_command = data["steps"]["compose_pr"]["with"]["skill_command"]
-    assert "${{ context.issue_number }}" in skill_command, (
-        f"compose_pr skill_command must include"
-        f" ${{{{ context.issue_number }}}} as a positional arg, "
-        f"not rely on with: metadata. Got: {skill_command!r}"
-    )
+    skill_inputs = data["steps"]["compose_pr"]["with"]["skill_inputs"]
+    assert skill_inputs["closing_issue"] == "${{ context.issue_number }}"
 
 
 def test_prepare_pr_skill_command_includes_issue_number() -> None:
-    """prepare_pr skill_command must structurally include context.issue_number."""
+    """prepare_pr must structurally bind context.issue_number."""
     from autoskillit.core.io import load_yaml
 
     data = load_yaml(RECIPES_DIR / "implementation.yaml")
-    skill_command = data["steps"]["prepare_pr"]["with"]["skill_command"]
-    assert "${{ context.issue_number }}" in skill_command, (
-        f"prepare_pr skill_command must include"
-        f" ${{{{ context.issue_number }}}} as a positional arg, "
-        f"not rely on with: metadata. Got: {skill_command!r}"
-    )
+    skill_inputs = data["steps"]["prepare_pr"]["with"]["skill_inputs"]
+    assert skill_inputs["closing_issue"] == "${{ context.issue_number }}"
 
 
 def test_prepare_pr_title_source_attribution():
@@ -235,20 +227,13 @@ def test_prepare_pr_skips_lens_work_when_arch_lenses_false():
     ],
 )
 def test_recipe_prepare_pr_passes_arch_lenses(recipe_name: str) -> None:
-    """Every recipe's prepare_pr step must pass arch_lenses and issue_number in skill_command."""
+    """Every recipe's prepare_pr step binds arch_lenses and issue_number."""
     from autoskillit.core.io import load_yaml
 
     data = load_yaml(RECIPES_DIR / recipe_name)
-    skill_command = data["steps"]["prepare_pr"]["with"]["skill_command"]
-    assert "${{ inputs.arch_lenses }}" in skill_command, (
-        f"{recipe_name}: prepare_pr skill_command must include "
-        "${{ inputs.arch_lenses }} as a positional argument"
-    )
-    assert "${{ context.issue_number }}" in skill_command, (
-        f"{recipe_name}: prepare_pr skill_command must include "
-        "${{ context.issue_number }} as a positional argument, "
-        "not in a separate with: key (ADR-0003)"
-    )
+    skill_inputs = data["steps"]["prepare_pr"]["with"]["skill_inputs"]
+    assert skill_inputs["arch_lenses"] == "${{ inputs.arch_lenses }}"
+    assert skill_inputs["closing_issue"] == "${{ context.issue_number }}"
 
 
 def test_prepare_pr_contract_includes_arch_lenses_input() -> None:

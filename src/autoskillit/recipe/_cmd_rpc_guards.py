@@ -10,7 +10,19 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import atomic_write, get_logger, is_generated_path, run_git
+from autoskillit.core import (
+    AUDIT_CYCLE_SCHEMA_VERSION,
+    ArtifactRef,
+    AuditCycleVerifier,
+    AuditVerdict,
+    atomic_write,
+    compute_canonical_hash,
+    decode_versioned_json_bytes,
+    get_logger,
+    is_generated_path,
+    read_stable_contained_bytes,
+    run_git,
+)
 
 logger = get_logger(__name__)
 
@@ -202,14 +214,118 @@ def _normalize_plan_parts(plan_parts: str) -> list[str] | None:
     return items
 
 
-def verify_plan_artifacts(plan_parts: str) -> dict[str, str]:
+_PLAN_ASSOCIATION_DOMAIN = "autoskillit:audit-cycle:plan-association:v1:sha256"
+_PLAN_ASSOCIATION_KEYS = frozenset(
+    {
+        "schema_version",
+        "plan_ref",
+        "disposition_ref",
+        "parent_authority_digest",
+        "association_digest",
+    }
+)
+_MAX_ASSOCIATION_FILES = 256
+
+
+def _resolve_plan_disposition(*, audit_cycle_path: str, current_plan_path: Path) -> str | None:
+    authority_path = Path(audit_cycle_path)
+    if not authority_path.is_absolute() or not current_plan_path.is_absolute():
+        return None
+    cycle_dir = authority_path.parent
+    try:
+        authority = AuditCycleVerifier(cycle_dir).load_authority(authority_path)
+    except (OSError, ValueError):
+        return None
+    if authority.verdict is not AuditVerdict.NO_GO:
+        return None
+
+    try:
+        plan_ref_candidates: list[ArtifactRef] = []
+        associations_dir = cycle_dir / "associations"
+        candidates = tuple(sorted(associations_dir.glob("*.json")))
+        if len(candidates) > _MAX_ASSOCIATION_FILES:
+            return None
+        records: list[tuple[Path, dict[str, object]]] = []
+        for candidate in candidates:
+            _, association_bytes = read_stable_contained_bytes(
+                candidate,
+                associations_dir,
+                max_size_bytes=1_000_000,
+            )
+            raw = decode_versioned_json_bytes(
+                association_bytes,
+                expected_version=AUDIT_CYCLE_SCHEMA_VERSION,
+                require_canonical=True,
+            )
+            if raw is None or frozenset(raw) != _PLAN_ASSOCIATION_KEYS:
+                continue
+            try:
+                plan_ref = ArtifactRef.from_dict(raw["plan_ref"])
+            except (TypeError, ValueError):
+                continue
+            if Path(plan_ref.locator) == current_plan_path:
+                plan_ref_candidates.append(plan_ref)
+                records.append((candidate, raw))
+        if len(plan_ref_candidates) != 1 or len(records) != 1:
+            return None
+
+        plan_ref = plan_ref_candidates[0]
+        association_path, association = records[0]
+        if association_path.name != f"{plan_ref.content_digest}.json":
+            return None
+        if (
+            association["schema_version"] != AUDIT_CYCLE_SCHEMA_VERSION
+            or association["parent_authority_digest"] != authority.authority_digest
+        ):
+            return None
+        association_payload = {
+            key: value for key, value in association.items() if key != "association_digest"
+        }
+        if association["association_digest"] != compute_canonical_hash(
+            association_payload,
+            domain=_PLAN_ASSOCIATION_DOMAIN,
+        ):
+            return None
+
+        AuditCycleVerifier(current_plan_path.parent).verify_artifact_ref(plan_ref)
+        disposition_data = association["disposition_ref"]
+        if not isinstance(disposition_data, dict):
+            return None
+        disposition_ref = ArtifactRef.from_dict(disposition_data)
+        cycle_verifier = AuditCycleVerifier(cycle_dir)
+        cycle_verifier.verify_artifact_ref(disposition_ref)
+        report = cycle_verifier.load_report(disposition_ref.locator)
+    except (KeyError, OSError, TypeError, ValueError):
+        return None
+
+    identity_matches = (
+        report.execution_generation == authority.execution_generation
+        and report.cycle_id == authority.cycle_id
+        and report.plan_set_id == authority.plan_set_id
+        and report.scope_id == authority.scope_id
+        and report.part_id == authority.part_id
+        and report.audit_round == authority.audit_round
+        and report.parent_authority_digest == authority.authority_digest
+        and report.inventory_digest == authority.inventory_ref.content_digest
+        and report.findings_digest == authority.findings_digest
+        and report.current_plan_ref == plan_ref
+        and Path(report.current_plan_ref.locator) == current_plan_path
+    )
+    return disposition_ref.locator if identity_matches else None
+
+
+def verify_plan_artifacts(
+    plan_parts: str,
+    audit_cycle_path: str = "",
+) -> dict[str, str]:
     """Deterministically verify captured plan_parts artifacts for context-limit salvage.
 
     Verdict is 'salvaged' iff the normalized plan_parts list is non-empty and
     every listed path exists as a non-empty regular file; 'unsalvageable'
-    otherwise. On salvage, echoes the normalized plan_parts (newline-joined) and
-    the derived plan_path (first part) so downstream context is populated
-    identically to the plan step's success path.
+    otherwise. Under an explicit audit cycle, salvage additionally requires exactly
+    one canonical plan-digest-keyed association matching the current NO GO
+    authority, recovered plan, and disposition report. No latest-file discovery or
+    report synthesis is permitted.
     """
     items = _normalize_plan_parts(plan_parts)
     if not items:
@@ -221,11 +337,20 @@ def verify_plan_artifacts(plan_parts: str) -> dict[str, str]:
                 return {"verdict": "unsalvageable"}
         except OSError:
             return {"verdict": "unsalvageable"}
-    return {
+    result = {
         "verdict": "salvaged",
         "plan_parts": "\n".join(items),
         "plan_path": items[0],
     }
+    if audit_cycle_path:
+        disposition_path = _resolve_plan_disposition(
+            audit_cycle_path=audit_cycle_path,
+            current_plan_path=Path(items[0]),
+        )
+        if disposition_path is None:
+            return {"verdict": "unsalvageable"}
+        result["plan_disposition_path"] = disposition_path
+    return result
 
 
 def _count_numstat_net(numstat_output: str) -> int:

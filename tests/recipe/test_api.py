@@ -400,6 +400,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         "backend_name": 10,
         "effective_backend_map": 11,
         "backend_capabilities_map": 12,
+        "include_compiled_bindings": 13,
     }
 
     missing_params: list[str] = []
@@ -520,6 +521,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         backend_name=None,
         effective_backend_map=None,
         backend_origin_map=None,
+        include_compiled_bindings=False,
     ):
         captured["recipe_info"] = recipe_info
         captured["backend_capabilities_map"] = locals().get("backend_capabilities_map")
@@ -539,6 +541,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             effective_backend_map=effective_backend_map,
             backend_capabilities_map=backend_capabilities_map,
             backend_origin_map=backend_origin_map,
+            include_compiled_bindings=include_compiled_bindings,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)

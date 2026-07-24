@@ -82,8 +82,9 @@ class TestResearchRecipeStructure:
     def test_dial_receives_scope_report(self, recipe) -> None:
         """dial step must pass scope_report as a second argument."""
         step = recipe.steps["dial"]
-        cmd = step.with_args["skill_command"]
-        assert "${{ context.scope_report }}" in cmd
+        assert step.with_args["skill_inputs"]["scope_report_path"] == (
+            "${{ context.scope_report }}"
+        )
 
     def test_plan_experiment_routes_to_dial(self, recipe) -> None:
         step = recipe.steps["plan_experiment"]
@@ -202,7 +203,7 @@ class TestResearchRecipeStructure:
         assert "re_run_experiment" in recipe.steps
         step = recipe.steps["re_run_experiment"]
         assert step.tool == "run_skill"
-        assert "--adjust" in step.with_args.get("skill_command", "")
+        assert step.with_args["skill_inputs"]["adjust"] is True
         assert step.on_result is not None, (
             "re_run_experiment must use on_result for verdict routing"
         )
@@ -526,12 +527,12 @@ class TestResearchRecipeStructure:
         assert recipe.steps["select_directions"].on_failure == "escalate_stop"
 
     def test_plan_experiment_skill_command_uses_selected_directions(self, recipe) -> None:
-        cmd = recipe.steps["plan_experiment"].with_args.get("skill_command", "")
-        assert "selected_directions" in cmd
+        skill_inputs = recipe.steps["plan_experiment"].with_args["skill_inputs"]
+        assert skill_inputs["scope_directions_path"] == "${{ context.selected_directions }}"
 
     def test_plan_experiment_skill_command_no_longer_uses_scope_directions(self, recipe) -> None:
-        cmd = recipe.steps["plan_experiment"].with_args.get("skill_command", "")
-        assert "scope_directions" not in cmd
+        skill_inputs = recipe.steps["plan_experiment"].with_args["skill_inputs"]
+        assert "${{ context.scope_directions }}" not in skill_inputs.values()
 
     def test_research_has_min_breadth_ingredient(self, recipe) -> None:
         assert "min_breadth" in recipe.ingredients

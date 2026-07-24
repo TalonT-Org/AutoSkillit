@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -38,152 +40,301 @@ def _write_sentinel(project_dir: Path, session_id: str) -> Path:
     return sentinel
 
 
-# ---------------------------------------------------------------------------
-# RL-1 — _run_cook_session returns None on normal exit (no sentinel)
-# ---------------------------------------------------------------------------
-
-
-def test_cook_session_no_sentinel_returns_none(
+def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attempt_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook.terminal_guard", _noop_terminal_guard
+    from autoskillit.core import (
+        BackendConventions,
+        CmdSpec,
+        CookSessionHandle,
+        EffectiveSkillCatalogAuthority,
+        HookTrustPolicy,
+        ManagedSessionHome,
+        NamedResume,
+        NoResume,
+        SkillProjectionContextAuthority,
+        ValidatedAddDir,
     )
 
-    from autoskillit.cli.session._session_cook import _run_cook_session
+    events: list[tuple[object, ...]] = []
+    generated_home = tmp_path / "managed-home"
+    skills_dir = generated_home / "skills"
+    skills_dir.mkdir(parents=True)
+    manager = MagicMock()
 
-    result = _run_cook_session(
-        cmd=["claude"],
-        env={},
-        _first_run=False,
-        initial_prompt=None,
-        project_dir=tmp_path,
-    )
-    assert result is None
+    @contextmanager
+    def managed_session(
+        launch_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ):
+        assert projection_context.catalog == catalog
+        events.append(("managed-enter", launch_id, projection_context))
+        try:
+            yield ManagedSessionHome(
+                launch_id=launch_id,
+                generated_home=generated_home,
+                skills_dir=ValidatedAddDir(str(skills_dir)),
+                pass_fds=(7,),
+            )
+        finally:
+            events.append(("managed-exit", launch_id))
 
-
-# ---------------------------------------------------------------------------
-# RL-2 — _run_cook_session returns session_id when sentinel file exists
-# ---------------------------------------------------------------------------
-
-
-def test_cook_session_with_sentinel_returns_session_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _write_sentinel(tmp_path, "sess-001")
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook.terminal_guard", _noop_terminal_guard
-    )
-
-    from autoskillit.cli.session._session_cook import _run_cook_session
-
-    result = _run_cook_session(
-        cmd=["claude"],
-        env={},
-        _first_run=False,
-        initial_prompt=None,
-        project_dir=tmp_path,
-    )
-    assert result == "sess-001"
-
-
-# ---------------------------------------------------------------------------
-# RL-3 — _run_cook_session deletes sentinel after reading it
-# ---------------------------------------------------------------------------
-
-
-def test_cook_session_sentinel_consumed_after_reload(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    sentinel = _write_sentinel(tmp_path, "sess-del")
-    assert sentinel.exists()
-
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook.terminal_guard", _noop_terminal_guard
-    )
-
-    from autoskillit.cli.session._session_cook import _run_cook_session
-
-    _run_cook_session(
-        cmd=["claude"],
-        env={},
-        _first_run=False,
-        initial_prompt=None,
-        project_dir=tmp_path,
-    )
-    assert not sentinel.exists()
-
-
-# ---------------------------------------------------------------------------
-# RL-4 — cook() reload loop rebuilds with NamedResume on reload
-# ---------------------------------------------------------------------------
-
-
-def test_cook_reload_loop_uses_named_resume(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from autoskillit.core import BackendConventions, CmdSpec
-
-    run_count = [0]
-    captured_resume_specs: list = []
-
-    def fake_run_cook_session(*, cmd, env, _first_run, initial_prompt, project_dir):
-        run_count[0] += 1
-        if run_count[0] == 1:
-            return "sess-001"
-        return None
+    manager.managed_session.side_effect = managed_session
 
     class _MockBackend:
         name = "claude-code"
         conventions = BackendConventions()
+        capabilities = SimpleNamespace(
+            hook_trust_policy=HookTrustPolicy.AUTOMATED,
+            session_dir_persistent=False,
+        )
 
         def binary_name(self) -> str:
             return "claude"
 
+        def recover_cook_history(self) -> None:
+            events.append(("recover",))
+
         def build_interactive_cmd(self, **kwargs):
-            captured_resume_specs.append(kwargs.get("resume_spec"))
-            return CmdSpec(cmd=("claude",), env={})
+            resume_spec = kwargs["resume_spec"]
+            events.append(("build", resume_spec))
+            return CmdSpec(cmd=("claude",), env={"ATTEMPT": str(len(events))})
+
+        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+            events.append(("validate", spec))
+            return []
+
+        @contextmanager
+        def cook_session_context(
+            self,
+            *,
+            session_home: Path,
+            project_dir: Path,
+            launch_id: str,
+            attempt: int,
+            current_resume_spec: object,
+        ):
+            events.append(
+                (
+                    "attempt-enter",
+                    attempt,
+                    current_resume_spec,
+                    session_home,
+                    project_dir,
+                    launch_id,
+                )
+            )
+            try:
+                yield CookSessionHandle(
+                    view_id=f"{launch_id}-{attempt}",
+                    pass_fds=(11,),
+                    _record_spawn=lambda pid, pgid: events.append(("spawn", attempt, pid, pgid)),
+                    _record_reaped=lambda pid, pgid: events.append(("reaped", attempt, pid, pgid)),
+                )
+            finally:
+                events.append(("attempt-exit", attempt, current_resume_spec))
+
+    results = iter(
+        (
+            SimpleNamespace(pid=101, pgid=101, returncode=17),
+            SimpleNamespace(pid=102, pgid=102, returncode=42),
+        )
+    )
+
+    def fake_run_cook_attempt(
+        spec: CmdSpec,
+        *,
+        pass_fds: tuple[int, ...],
+        on_spawn,
+        on_reaped,
+        **_: object,
+    ) -> object:
+        attempt = sum(event[0] == "run" for event in events) + 1
+        events.append(("run", attempt, spec, pass_fds))
+        on_spawn(100 + attempt, 100 + attempt)
+        on_reaped(100 + attempt, 100 + attempt)
+        return next(results)
+
+    sentinels = iter(("sess-001", None))
+    onboarded: list[Path] = []
+
+    def consume_sentinel(project_dir: Path) -> str | None:
+        value = next(sentinels)
+        events.append(("sentinel", value, project_dir))
+        return value
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook._run_cook_session", fake_run_cook_session
+        "autoskillit.cli._onboarding.run_onboarding_menu",
+        lambda *args, **kwargs: "/autoskillit:setup-project",
     )
-
-    from autoskillit.workspace.session_skills import DefaultSessionSkillManager
-
-    fake_skills_dir = tmp_path / "fake-skills"
-    fake_skills_dir.mkdir()
-
-    def fake_init_session(
-        self,
-        sid,
-        catalog,
-        projection_context,
-    ):
-        return fake_skills_dir
-
     monkeypatch.setattr(
-        DefaultSessionSkillManager,
-        "init_session",
-        fake_init_session,
+        "autoskillit.cli._onboarding.mark_onboarded",
+        lambda project_dir: onboarded.append(project_dir),
+    )
+    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *args, **kwargs: "")
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt", fake_run_cook_attempt
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_reload.consume_reload_sentinel", consume_sentinel
     )
 
     from autoskillit import cli
-    from autoskillit.core import NamedResume
 
-    cli.cook(backend=_MockBackend())
+    with pytest.raises(SystemExit) as exc_info:
+        cli.cook(backend=_MockBackend())
+    assert exc_info.value.code == 42
 
-    assert run_count[0] == 2
-    assert len(captured_resume_specs) == 2
-    assert isinstance(captured_resume_specs[1], NamedResume)
-    assert captured_resume_specs[1].session_id == "sess-001"
+    managed_enters = [event for event in events if event[0] == "managed-enter"]
+    managed_exits = [event for event in events if event[0] == "managed-exit"]
+    assert len(managed_enters) == len(managed_exits) == 1
+
+    attempt_enters = [event for event in events if event[0] == "attempt-enter"]
+    assert [event[1] for event in attempt_enters] == [1, 2]
+    assert all(event[3] == generated_home for event in attempt_enters)
+    assert isinstance(attempt_enters[0][2], NoResume)
+    assert isinstance(attempt_enters[1][2], NamedResume)
+    assert attempt_enters[1][2].session_id == "sess-001"
+
+    first_sentinel = events.index(
+        next(event for event in events if event[:2] == ("sentinel", "sess-001"))
+    )
+    first_reaped = events.index(next(event for event in events if event[:2] == ("reaped", 1)))
+    first_exit = events.index(next(event for event in events if event[:2] == ("attempt-exit", 1)))
+    second_build = events.index(
+        next(
+            event for event in events if event[0] == "build" and isinstance(event[1], NamedResume)
+        )
+    )
+    assert first_reaped < first_sentinel < first_exit < second_build
+
+    run_events = [event for event in events if event[0] == "run"]
+    assert [event[3] for event in run_events] == [(7, 11), (7, 11)]
+    assert events.index(managed_exits[0]) > events.index(
+        next(event for event in events if event[:2] == ("attempt-exit", 2))
+    )
+    assert onboarded == []
+    assert ("recover",) not in events
+
+
+@pytest.mark.parametrize(
+    ("reload_ids", "expected_attempts", "message"),
+    [
+        (("same", "same"), 2, "Repeated reload_id"),
+        (tuple(f"reload-{index}" for index in range(11)), 11, "Too many reloads"),
+    ],
+)
+def test_cook_rejects_repeated_and_excessive_reload_requests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reload_ids: tuple[str, ...],
+    expected_attempts: int,
+    message: str,
+) -> None:
+    from autoskillit.core import (
+        BackendConventions,
+        CmdSpec,
+        CookSessionHandle,
+        EffectiveSkillCatalogAuthority,
+        HookTrustPolicy,
+        ManagedSessionHome,
+        SkillProjectionContextAuthority,
+        ValidatedAddDir,
+    )
+
+    generated_home = tmp_path / "managed-home"
+    skills_dir = generated_home / "skills"
+    skills_dir.mkdir(parents=True)
+    manager = MagicMock()
+    managed_exits: list[str] = []
+    attempts: list[int] = []
+
+    @contextmanager
+    def managed_session(
+        launch_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ):
+        assert projection_context.catalog == catalog
+        try:
+            yield ManagedSessionHome(
+                launch_id=launch_id,
+                generated_home=generated_home,
+                skills_dir=ValidatedAddDir(str(skills_dir)),
+                pass_fds=(),
+            )
+        finally:
+            managed_exits.append(launch_id)
+
+    manager.managed_session.side_effect = managed_session
+
+    class _Backend:
+        name = "claude-code"
+        conventions = BackendConventions()
+        capabilities = SimpleNamespace(
+            hook_trust_policy=HookTrustPolicy.AUTOMATED,
+            session_dir_persistent=False,
+        )
+
+        def binary_name(self) -> str:
+            return "claude"
+
+        def recover_cook_history(self) -> None:
+            return None
+
+        def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
+            return CmdSpec(cmd=("claude",), env={})
+
+        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+            return []
+
+        @contextmanager
+        def cook_session_context(self, *, attempt: int, **kwargs: object):
+            attempts.append(attempt)
+            yield CookSessionHandle(
+                view_id=f"view-{attempt}",
+                pass_fds=(),
+                _record_spawn=lambda _pid, _pgid: None,
+                _record_reaped=lambda _pid, _pgid: None,
+            )
+
+    sentinel_values = iter(reload_ids)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/claude")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.ui._timed_input.timed_prompt",
+        lambda *args, **kwargs: "",
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager",
+        lambda *args, **kwargs: manager,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt",
+        lambda *args, **kwargs: SimpleNamespace(pid=1, pgid=1, returncode=0),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        lambda _project: next(sentinel_values),
+    )
+
+    from autoskillit import cli
+
+    with pytest.raises(SystemExit, match=message):
+        cli.cook(backend=_Backend())
+
+    assert attempts == list(range(1, expected_attempts + 1))
+    assert len(managed_exits) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -260,29 +411,3 @@ def test_fleet_reload_relaunches_without_resume(
     assert isinstance(captured_resume_specs[0], NoResume)
     assert isinstance(captured_resume_specs[1], NamedResume)
     assert captured_resume_specs[1].session_id == "franchise-sess"
-
-
-# ---------------------------------------------------------------------------
-# RL-7 — Non-zero exit without sentinel raises SystemExit
-# ---------------------------------------------------------------------------
-
-
-def test_non_zero_exit_without_sentinel_raises_system_exit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(42))
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook.terminal_guard", _noop_terminal_guard
-    )
-
-    from autoskillit.cli.session._session_cook import _run_cook_session
-
-    with pytest.raises(SystemExit) as exc_info:
-        _run_cook_session(
-            cmd=["claude"],
-            env={},
-            _first_run=False,
-            initial_prompt=None,
-            project_dir=tmp_path,
-        )
-    assert exc_info.value.code == 42

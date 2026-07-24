@@ -185,6 +185,95 @@ def test_agent_session_result_raw_default():
     assert r.raw == {}
 
 
+def test_session_summary_frozen_slots_and_exact_fields():
+    from autoskillit.core import SessionSummary
+
+    summary = SessionSummary(
+        backend_name="codex",
+        session_id="thread-1",
+        launch_id="launch-1",
+        cwd="/tmp/project",
+        first_prompt="Fix the race",
+        summary="Codex history isolation",
+        git_branch="feature/history",
+        modified="2026-07-23T10:00:00Z",
+        is_sidechain=False,
+        session_type_hint="cook",
+    )
+
+    assert tuple(field.name for field in dataclasses.fields(SessionSummary)) == (
+        "backend_name",
+        "session_id",
+        "launch_id",
+        "cwd",
+        "first_prompt",
+        "summary",
+        "git_branch",
+        "modified",
+        "is_sidechain",
+        "session_type_hint",
+    )
+    assert typing.get_type_hints(SessionSummary) == {
+        "backend_name": str,
+        "session_id": str,
+        "launch_id": str | None,
+        "cwd": str,
+        "first_prompt": str,
+        "summary": str,
+        "git_branch": str | None,
+        "modified": str | None,
+        "is_sidechain": bool,
+        "session_type_hint": str | None,
+    }
+    assert not hasattr(summary, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        summary.summary = "changed"  # type: ignore[misc]
+
+
+def test_cook_session_handle_contract_and_callback_delegation():
+    from collections.abc import Callable
+
+    from autoskillit.core import CookSessionHandle
+
+    calls: list[tuple[str, int, int]] = []
+    handle = CookSessionHandle(
+        view_id="launch-1-attempt-2",
+        pass_fds=(7, 11),
+        _record_spawn=lambda pid, pgid: calls.append(("spawn", pid, pgid)),
+        _record_reaped=lambda pid, pgid: calls.append(("reaped", pid, pgid)),
+    )
+
+    assert tuple(field.name for field in dataclasses.fields(CookSessionHandle)) == (
+        "view_id",
+        "pass_fds",
+        "_record_spawn",
+        "_record_reaped",
+    )
+    hints = typing.get_type_hints(CookSessionHandle)
+    assert hints == {
+        "view_id": str,
+        "pass_fds": tuple[int, ...],
+        "_record_spawn": Callable[[int, int], None],
+        "_record_reaped": Callable[[int, int], None],
+    }
+    assert not hasattr(handle, "__dict__")
+    assert repr(handle) == "CookSessionHandle(view_id='launch-1-attempt-2', pass_fds=(7, 11))"
+
+    equivalent = CookSessionHandle(
+        view_id=handle.view_id,
+        pass_fds=handle.pass_fds,
+        _record_spawn=lambda _pid, _pgid: None,
+        _record_reaped=lambda _pid, _pgid: None,
+    )
+    assert equivalent == handle
+
+    handle.record_spawn(101, 202)
+    handle.record_reaped(101, 202)
+    assert calls == [("spawn", 101, 202), ("reaped", 101, 202)]
+    with pytest.raises(FrozenInstanceError):
+        handle.view_id = "other"  # type: ignore[misc]
+
+
 def test_backend_module_all_exhaustive():
     from autoskillit.core.types._type_backend import __all__
 
@@ -200,7 +289,9 @@ def test_backend_module_all_exhaustive():
         "CODEX_VALID_MODEL_IDS",
         "CmdOrigin",
         "CmdSpec",
+        "CookSessionHandle",
         "ModelTranslation",
+        "SessionSummary",
         "SkillSessionConfig",
         "ClaudeEventData",
         "CodexEventData",

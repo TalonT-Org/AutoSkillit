@@ -133,6 +133,27 @@ class TestBackendCompliance:
                 f"{type(locator).__name__}.session_log_path must return Path or None"
             )
 
+    def test_all_backends_session_locator_has_typed_listing(self):
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            locator = cls().session_locator()
+            assert callable(locator.list_sessions)
+
+    def test_all_backends_have_cook_lifecycle_methods(self):
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            backend = cls()
+            for method_name in (
+                "validate_interactive_invocation",
+                "recover_cook_history",
+                "cook_session_context",
+            ):
+                assert callable(getattr(backend, method_name))
+
     def test_all_backends_capabilities_is_backend_capabilities(self):
         from autoskillit.core import BackendCapabilities
         from autoskillit.execution.backends import BACKEND_REGISTRY
@@ -146,7 +167,10 @@ class TestBackendCompliance:
         from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
 
         for cls in BACKEND_REGISTRY.values():
-            assert isinstance(cls().validate_session_layout(tmp_path), list)
+            assert isinstance(
+                cls().validate_session_layout(tmp_path, project_dir=tmp_path),
+                list,
+            )
 
     def test_all_backends_conventions_is_backend_conventions(self):
         from autoskillit.core import BackendConventions

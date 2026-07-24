@@ -120,6 +120,46 @@ def test_codex_backend_env_policy_satisfies_protocol():
     assert isinstance(CodexBackend().env_policy(), EnvPolicy)
 
 
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+def test_backend_implementations_expose_cook_lifecycle_protocol_methods(backend_name):
+    import inspect
+
+    from autoskillit.core import CodingAgentBackend
+    from autoskillit.execution.backends import get_backend
+
+    backend_cls = type(get_backend(backend_name))
+    method_names = (
+        "validate_session_layout",
+        "validate_interactive_invocation",
+        "ensure_pre_launch",
+        "recover_cook_history",
+        "cook_session_context",
+    )
+    for method_name in method_names:
+        protocol_method = getattr(CodingAgentBackend, method_name)
+        implementation_method = getattr(backend_cls, method_name)
+        protocol_signature = inspect.signature(protocol_method)
+        implementation_signature = inspect.signature(implementation_method)
+        assert tuple(implementation_signature.parameters) == tuple(
+            protocol_signature.parameters
+        ), f"{backend_name}.{method_name} parameter names differ from protocol"
+        assert [parameter.kind for parameter in implementation_signature.parameters.values()] == [
+            parameter.kind for parameter in protocol_signature.parameters.values()
+        ], f"{backend_name}.{method_name} parameter kinds differ from protocol"
+
+
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+def test_backend_locator_implementation_exposes_typed_listing(backend_name):
+    import inspect
+
+    from autoskillit.execution.backends import get_backend
+
+    locator = get_backend(backend_name).session_locator()
+    signature = inspect.signature(type(locator).list_sessions)
+    assert tuple(signature.parameters) == ("self", "cwd")
+    assert callable(locator.list_sessions)
+
+
 # -- Signature conformance: EnvPolicy.build_env -------------------------------
 
 

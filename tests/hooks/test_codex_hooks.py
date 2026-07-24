@@ -222,3 +222,55 @@ class TestHookSyncCorruptFilePreservation:
         content = p.read_text(encoding="utf-8")
         assert "[projects./home/user/repo]" in content
         assert "[[hooks.PreToolUse]]" in content
+
+
+def test_hook_writer_facade_owns_the_shared_config_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.backends._codex_hooks as hooks_module
+
+    config_path = tmp_path / "source-home" / "config.toml"
+    events: list[tuple[str, Path]] = []
+    lock_held = False
+
+    class RecordingLock:
+        def __init__(self, path: Path) -> None:
+            self.path = Path(path)
+
+        def __enter__(self) -> None:
+            nonlocal lock_held
+            assert lock_held is False
+            lock_held = True
+            events.append(("lock-enter", self.path))
+
+        def __exit__(self, *exc_info: object) -> None:
+            nonlocal lock_held
+            assert lock_held is True
+            events.append(("lock-exit", self.path))
+            lock_held = False
+
+    def fake_unlocked(*, config_path: Path, **_: object) -> bool:
+        assert lock_held is True
+        events.append(("hooks", config_path))
+        return True
+
+    monkeypatch.setattr(hooks_module, "CodexConfigLock", RecordingLock)
+    monkeypatch.setattr(
+        hooks_module,
+        "_sync_hooks_to_codex_config_unlocked",
+        fake_unlocked,
+    )
+
+    assert hooks_module.sync_hooks_to_codex_config(config_path=config_path) is True
+    assert events == [
+        ("lock-enter", config_path),
+        ("hooks", config_path),
+        ("lock-exit", config_path),
+    ]
+
+
+def test_cli_hook_bridge_exports_the_lock_owning_facade() -> None:
+    import autoskillit.cli._hooks_codex as cli_bridge
+    import autoskillit.execution.backends._codex_hooks as hooks_module
+
+    assert cli_bridge.sync_hooks_to_codex_config is hooks_module.sync_hooks_to_codex_config

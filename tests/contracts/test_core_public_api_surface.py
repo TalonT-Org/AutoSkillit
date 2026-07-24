@@ -27,17 +27,39 @@ def test_new_coding_agent_backend_names_importable() -> None:
     from autoskillit.core import (
         CmdSpec,
         CodingAgentBackend,
+        CookSessionHandle,
         EnvPolicy,
+        HookTrustPolicy,
+        ManagedSessionHome,
         ResultParser,
         SessionEvent,
         SessionLocator,
+        SessionSummary,
         StreamParser,
     )
 
-    assert inspect.isclass(CmdSpec)
-    assert inspect.isclass(CodingAgentBackend)
-    assert inspect.isclass(EnvPolicy)
-    assert inspect.isclass(ResultParser)
-    assert inspect.isclass(SessionEvent)
-    assert inspect.isclass(SessionLocator)
-    assert inspect.isclass(StreamParser)
+    for public_type in (
+        CmdSpec,
+        CodingAgentBackend,
+        CookSessionHandle,
+        EnvPolicy,
+        HookTrustPolicy,
+        ManagedSessionHome,
+        ResultParser,
+        SessionEvent,
+        SessionLocator,
+        SessionSummary,
+        StreamParser,
+    ):
+        assert inspect.isclass(public_type)
+
+
+def test_cook_lifecycle_contracts_are_in_core_all() -> None:
+    import autoskillit.core as core
+
+    assert {
+        "CookSessionHandle",
+        "HookTrustPolicy",
+        "ManagedSessionHome",
+        "SessionSummary",
+    } <= set(core.__all__)

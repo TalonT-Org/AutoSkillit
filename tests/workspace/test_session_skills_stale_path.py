@@ -3,16 +3,28 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from autoskillit.core import ClaudeDirectoryConventions
+from tests.workspace._helpers import _CODEX_CAPABILITIES
+
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
-def _materialize(manager, session_id: str) -> None:
-    from pathlib import Path
+def _codex_backend() -> MagicMock:
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities = _CODEX_CAPABILITIES
+    backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    backend.ensure_pre_launch.return_value = []
+    backend.validate_session_layout.return_value = []
+    return backend
 
+
+def _catalog_context(manager, *, backend=None):
     from autoskillit.core import SkillExecutionRole
     from autoskillit.workspace import DefaultSkillResolver
 
@@ -21,8 +33,22 @@ def _materialize(manager, session_id: str) -> None:
         project_root,
         SkillExecutionRole.SESSION,
     )
-    context = manager._provider.catalog_projection_context(catalog, project_root)
-    manager.init_session(session_id, catalog, context)
+    context = manager._provider.catalog_projection_context(
+        catalog,
+        project_root,
+        backend=backend,
+    )
+    return catalog, context
+
+
+def _materialize(manager, session_id: str, *, backend=None):
+    catalog, context = _catalog_context(manager, backend=backend)
+    return manager.init_session(session_id, catalog, context)
+
+
+def _managed(manager, session_id: str, *, backend):
+    catalog, context = _catalog_context(manager, backend=backend)
+    return manager.managed_session(session_id, catalog, context)
 
 
 def test_validate_session_exists_true_for_live_session(make_session_skill_manager) -> None:
@@ -53,12 +79,11 @@ def test_cleanup_stale_emits_log_event(make_session_skill_manager, monkeypatch) 
     import autoskillit.workspace.session_skills as skills_mod
 
     mgr = make_session_skill_manager()
-    _materialize(mgr, "sess-stale")
+    session_dir = mgr._root / "sess-stale"  # type: ignore[attr-defined]
+    session_dir.mkdir(parents=True)
+    (session_dir / "orphaned-session-marker").touch()
 
-    session_dir = mgr._session_roots["sess-stale"] / "sess-stale"  # type: ignore[attr-defined]
-    assert session_dir.is_dir()
-
-    # Backdate access time so the session qualifies as stale.
+    # Backdate an unowned generated home so the session qualifies as stale.
     old_time = 1_000_000.0
     os.utime(session_dir, (old_time, old_time))
 
@@ -82,3 +107,38 @@ def test_cleanup_stale_emits_log_event(make_session_skill_manager, monkeypatch) 
     assert "path" in kwargs
     assert "age_seconds" in kwargs
     assert kwargs["path"] == str(session_dir)
+
+
+def test_cleanup_stale_does_not_remove_a_leased_generated_home(
+    make_session_skill_manager, tmp_path: Path
+) -> None:
+    codex_root = tmp_path / "persistent" / "codex-sessions"
+    mgr = make_session_skill_manager(codex_root=codex_root)
+    with _managed(mgr, "0123456789abcdef", backend=_codex_backend()) as managed:
+        old_time = 1_000_000.0
+        os.utime(managed.generated_home, (old_time, old_time))
+
+        assert mgr.cleanup_stale(max_age_seconds=1) == 0
+        assert managed.generated_home.is_dir()
+        assert "0123456789abcdef" in mgr._session_leases
+
+    assert not (codex_root / "0123456789abcdef").exists()
+
+
+def test_init_session_retains_lease_until_cleanup_session(
+    make_session_skill_manager, tmp_path: Path
+) -> None:
+    codex_root = tmp_path / "persistent" / "codex-sessions"
+    mgr = make_session_skill_manager(codex_root=codex_root)
+
+    generated_home = _materialize(
+        mgr,
+        "0123456789abcdef",
+        backend=_codex_backend(),
+    )
+
+    assert Path(str(generated_home)).is_dir()
+    assert "0123456789abcdef" in mgr._session_leases
+    assert mgr.cleanup_session("0123456789abcdef") is True
+    assert "0123456789abcdef" not in mgr._session_leases
+    assert not Path(str(generated_home)).exists()

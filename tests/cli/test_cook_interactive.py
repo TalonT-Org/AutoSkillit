@@ -3,982 +3,489 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
 from autoskillit import cli
-from autoskillit.core import BackendConventions
-from autoskillit.workspace.session_skills import DefaultSessionSkillManager
+from autoskillit.core import (
+    CODEX_COOK_RESERVED_ENV_VARS,
+    CODEX_STARTUP_TRACE_ENV_VAR,
+    LAUNCH_ID_ENV_VAR,
+    SESSION_TYPE_ENV_VAR,
+    BackendConventions,
+    CmdSpec,
+    CookSessionHandle,
+    EffectiveSkillCatalogAuthority,
+    HookTrustPolicy,
+    ManagedSessionHome,
+    NamedResume,
+    NoResume,
+    SkillProjectionContextAuthority,
+    ValidatedAddDir,
+)
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
-class _ProjectionBackendStub:
-    """Minimum projection-facing contract shared by local backend doubles."""
-
+class _Backend:
     name = "claude-code"
     conventions = BackendConventions()
+    capabilities = SimpleNamespace(
+        hook_trust_policy=HookTrustPolicy.AUTOMATED,
+        session_dir_persistent=False,
+    )
 
+    def __init__(self) -> None:
+        self.build_calls: list[dict[str, object]] = []
+        self.context_calls: list[dict[str, object]] = []
+        self.validated: list[CmdSpec] = []
+        self.recover_count = 0
 
-class TestCookInteractive:
-    @pytest.fixture(autouse=True)
-    def _no_first_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
-        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-        # cook() derives project_dir via the same git-toplevel helper the MCP
-        # server uses. These tests patch subprocess.run globally, which would
-        # otherwise intercept that git call too — pin the helper instead.
-        monkeypatch.setattr("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd)
+    def binary_name(self) -> str:
+        return "claude"
 
-    # CH-1
-    def test_cook_init_session_cook(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """cook calls init_session with cook_session=True."""
-        captured: dict = {}
-        fake_skills_dir = tmp_path / "fake-skills"
-        fake_skills_dir.mkdir()
+    def recover_cook_history(self) -> None:
+        self.recover_count += 1
 
-        def fake_init_session(
-            self,
-            session_id: str,
-            catalog,
-            projection_context,
-        ) -> Path:
-            captured["catalog"] = catalog
-            captured["projection_context"] = projection_context
-            return fake_skills_dir
+    def session_locator(self) -> object:
+        return SimpleNamespace()
 
-        monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
-        monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        cli.cook()
-        assert captured["projection_context"].catalog == captured["catalog"]
-
-    # CH-2
-    def test_cook_launches_claude_add_dir(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """cook passes --add-dir <skills_dir> to the subprocess."""
-        captured_cmd: list = []
-        fake_skills_dir = tmp_path / "fake-skills-ch2"
-        fake_skills_dir.mkdir()
-
-        def fake_init_session(
-            self,
-            session_id: str,
-            catalog,
-            projection_context,
-        ) -> Path:
-            return fake_skills_dir
-
-        def fake_run(cmd, **kw):
-            captured_cmd.extend(cmd)
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        cli.cook()
-        assert "--add-dir" in captured_cmd
-        assert str(fake_skills_dir) in captured_cmd
-
-    # CH-3
-    def test_cook_alias_c(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """'c' alias invokes the cook behavior via the CLI."""
-        from autoskillit.cli.app import app
-
-        captured_cmd: list = []
-        fake_skills_dir = tmp_path / "fake-skills-ch3"
-        fake_skills_dir.mkdir()
-
-        def fake_init_session(
-            self,
-            session_id: str,
-            catalog,
-            projection_context,
-        ) -> Path:
-            return fake_skills_dir
-
-        def fake_run(cmd, **kw):
-            captured_cmd.extend(cmd)
-            return type("R", (), {"returncode": 0})()
-
-        monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        with pytest.raises(SystemExit) as exc_info:
-            app(["c"])
-        assert exc_info.value.code == 0
-        assert "--add-dir" in captured_cmd
-
-    # CH-5
-    def test_cook_exits_when_claude_not_on_path(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """cook exits 1 with a message if claude is not on PATH."""
-        monkeypatch.setattr(shutil, "which", lambda x: None)
-        with pytest.raises(SystemExit) as exc_info:
-            cli.cook()
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "claude" in captured.out.lower() or "PATH" in captured.out
-
-    # CH-6
-    def test_cook_passes_plugin_dir(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """cook passes a sanitized plugin projection instead of the package root."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        mock_mgr.init_session.assert_called_once()
-        args = mock_run.call_args[0][0]
-        assert "--plugin-dir" in args
-        idx = args.index("--plugin-dir")
-        projected_plugin = Path(args[idx + 1])
-        assert projected_plugin.is_dir()
-        assert projected_plugin.parent.name == "plugin-projections"
-        assert (projected_plugin / ".claude-plugin" / "plugin.json").is_file()
-
-    # CH-7
-    def test_cook_includes_dangerously_skip_permissions(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """cook subprocess cmd includes --dangerously-skip-permissions (REQ-TIER-012)."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        args = mock_run.call_args[0][0]
-        assert "--dangerously-skip-permissions" in args
-
-    # CH-8
-    def test_cook_calls_onboarding_menu_on_first_run(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """When is_first_run() returns True, run_onboarding_menu is called once."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        menu_called: list[bool] = []
-
-        # Override the autouse fixture's patch with True for this test
-        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
-        monkeypatch.setattr(
-            "autoskillit.cli._onboarding.run_onboarding_menu",
-            lambda *a, **kw: menu_called.append(True) or None,
+    def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
+        self.build_calls.append(kwargs)
+        command = ["claude", "--dangerously-skip-permissions"]
+        plugin_source = kwargs["plugin_source"]
+        plugin_dir = getattr(plugin_source, "plugin_dir", None)
+        if plugin_dir is not None:
+            command.extend(("--plugin-dir", str(plugin_dir)))
+        for add_dir in kwargs["add_dirs"]:  # type: ignore[union-attr]
+            command.extend(("--add-dir", str(add_dir)))
+        return CmdSpec(
+            cmd=tuple(command),
+            env=dict(kwargs["env_extras"]),  # type: ignore[arg-type]
         )
 
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-        ):
-            import autoskillit.cli.session._session_cook as module
+    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+        self.validated.append(spec)
+        return []
 
-            module.cook()
-
-        assert menu_called == [True]
-
-    # CH-9
-    def test_cook_skips_onboarding_if_not_first_run(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """When is_first_run() returns False, run_onboarding_menu is NOT called."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        menu_called: list[bool] = []
-
-        monkeypatch.setattr(
-            "autoskillit.cli._onboarding.run_onboarding_menu",
-            lambda *a, **kw: menu_called.append(True) or None,
+    @contextmanager
+    def cook_session_context(self, **kwargs: object):
+        self.context_calls.append(kwargs)
+        yield CookSessionHandle(
+            view_id="test-view",
+            pass_fds=(9,),
+            _record_spawn=lambda _pid, _pgid: None,
+            _record_reaped=lambda _pid, _pgid: None,
         )
 
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-        ):
-            import autoskillit.cli.session._session_cook as module
 
-            module.cook()
+def _install_harness(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    first_run: bool = False,
+    onboarding_prompt: str | None = None,
+    confirm: str = "",
+    returncode: int = 0,
+    picked_session: str | None = None,
+) -> dict[str, object]:
+    generated_home = tmp_path / "managed-home"
+    skills_dir = generated_home / "skills"
+    skills_dir.mkdir(parents=True)
+    manager = MagicMock()
+    events: list[tuple[object, ...]] = []
+    captured: dict[str, object] = {"events": events, "manager": manager}
 
-        assert menu_called == []
-
-    # CH-10
-    def test_cook_forwards_initial_prompt_to_build_cmd(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """When run_onboarding_menu returns a non-None string, it appears in subprocess cmd."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        prompt_text = "/autoskillit:setup-project"
-
-        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
-        monkeypatch.setattr(
-            "autoskillit.cli._onboarding.run_onboarding_menu",
-            lambda *a, **kw: prompt_text,
-        )
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        args = mock_run.call_args[0][0]
-        assert prompt_text in args
-
-    # CH-11
-    def test_cook_marks_onboarded_in_finally_when_prompt_set(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """When run_onboarding_menu returns non-None and session completes, mark called."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        marked: list[bool] = []
-
-        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
-        monkeypatch.setattr(
-            "autoskillit.cli._onboarding.run_onboarding_menu",
-            lambda *a, **kw: "/autoskillit:setup-project",
-        )
-        monkeypatch.setattr(
-            "autoskillit.cli._onboarding.mark_onboarded",
-            lambda _p: marked.append(True),
-        )
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        assert marked == [True]
-
-    # CH-12
-    def test_cook_does_not_mark_onboarded_when_prompt_is_none(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """When run_onboarding_menu returns None, mark_onboarded is NOT called from finally."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        marked: list[bool] = []
-
-        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: True)
-        monkeypatch.setattr(
-            "autoskillit.cli._onboarding.run_onboarding_menu",
-            lambda *a, **kw: None,
-        )
-        monkeypatch.setattr(
-            "autoskillit.cli._onboarding.mark_onboarded",
-            lambda _p: marked.append(True),
-        )
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        assert marked == []
-
-    # REQ-EPH-001
-    def test_cook_does_not_rmtree_skills_dir(self, monkeypatch, tmp_path):
-        """shutil.rmtree must NOT be called on skills_dir after session exits."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-
-        rmtree_calls = []
-        original_rmtree = shutil.rmtree
-
-        def tracking_rmtree(path, **kw):
-            if Path(str(path)) == fake_skills_dir:
-                rmtree_calls.append(path)
-            else:
-                original_rmtree(path, **kw)
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("shutil.rmtree", side_effect=tracking_rmtree),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        assert not rmtree_calls, "cook() must not rmtree skills_dir on exit"
-
-    # REQ-CLI-001 + REQ-CLI-002
-    def test_cook_resume_bare_flag_produces_bare_resume_and_skips_discovery(
-        self, monkeypatch, tmp_path
+    @contextmanager
+    def managed_session(
+        launch_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
     ):
-        """cook(resume=True) invokes picker; UUID from picker passed as --resume; no discovery."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        discovery_calls: list = []
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-            patch(
-                "autoskillit.core.find_latest_session_id",
-                side_effect=lambda *a, **kw: discovery_calls.append(1) or "latest",
-            ),
-            patch(
-                "autoskillit.cli.session._session_picker.pick_session",
-                return_value="picker-uuid-abc",
-            ),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(resume=True)
-
-        args = mock_run.call_args[0][0]
-        assert "--resume" in args
-        idx = args.index("--resume")
-        assert args[idx + 1] == "picker-uuid-abc", (
-            "--resume must be followed by the UUID returned by pick_session"
-        )
-        assert not discovery_calls, "find_latest_session_id must not be called for bare --resume"
-
-    # REQ-CLI-002
-    def test_cook_resume_explicit_session_id(self, monkeypatch, tmp_path):
-        """cook(resume=True, session_id='abc') uses the explicit id, skips discovery."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        discovery_calls = []
-
-        def fake_discover(cwd=None):
-            discovery_calls.append(cwd)
-            return "should-not-be-used"
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-            patch("autoskillit.core.find_latest_session_id", side_effect=fake_discover),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(resume=True, session_id="explicit-abc")
-
-        args = mock_run.call_args[0][0]
-        assert "--resume" in args
-        assert args[args.index("--resume") + 1] == "explicit-abc"
-        assert not discovery_calls, "discovery must not be called when session_id is explicit"
-
-    # REQ-CLI-002 — when picker returns None (no sessions), cook launches a fresh session
-    def test_cook_resume_bare_flag_no_sessions_starts_fresh(self, monkeypatch, tmp_path):
-        """cook(resume=True) with picker returning None starts a fresh session (no --resume)."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
-            patch("autoskillit.cli.session._session_picker.pick_session", return_value=None),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(resume=True)
-
-        args = mock_run.call_args[0][0]
-        assert "--resume" not in args, (
-            "when picker returns None (no sessions), cook must launch fresh (no --resume)"
-        )
-
-    # REQ-CLI-003
-    def test_cook_cmd_resume_with_session_id_no_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """cook --resume <uuid> must not raise UnusedCliTokensError — REQ-CLI-003."""
-        import sys
-        from unittest.mock import patch
-
-        app_mod = sys.modules["autoskillit.cli.app"]
-
-        captured: dict = {}
-
-        def fake_cook(
-            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
-        ) -> None:
-            captured["resume"] = resume
-            captured["session_id"] = session_id
-
-        with patch.object(app_mod, "cook_interactive", fake_cook):
-            # This MUST NOT raise UnusedCliTokensError (exit 0, not exit 1)
-            with pytest.raises(SystemExit) as exc_info:
-                app_mod.app(["cook", "--resume", "fa910a41-d1ca-4cae-b878-01028a0c7c1c"])
-            assert exc_info.value.code == 0
-
-        assert captured["session_id"] == "fa910a41-d1ca-4cae-b878-01028a0c7c1c"
-        assert captured["resume"] is True
-
-    # REQ-CLI-003
-    def test_cook_cmd_resume_without_session_id_still_works(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """app(['cook', '--resume']) with no uuid must still work — REQ-CLI-003."""
-        import sys
-        from unittest.mock import patch
-
-        app_mod = sys.modules["autoskillit.cli.app"]
-
-        captured: dict = {}
-
-        def fake_cook(
-            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
-        ) -> None:
-            captured["resume"] = resume
-            captured["session_id"] = session_id
-
-        with patch.object(app_mod, "cook_interactive", fake_cook):
-            with pytest.raises(SystemExit) as exc_info:
-                app_mod.app(["cook", "--resume"])
-            assert exc_info.value.code == 0
-
-        assert captured["resume"] is True
-        assert captured["session_id"] is None
-
-    # REQ-CLI-003
-    def test_cook_cmd_positional_session_id_implies_resume(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """app(['cook', '<uuid>']) without --resume must imply resume=True — REQ-CLI-003."""
-        import sys
-        from unittest.mock import patch
-
-        app_mod = sys.modules["autoskillit.cli.app"]
-
-        captured: dict = {}
-
-        def fake_cook(
-            *, resume: bool = False, session_id: str | None = None, profile: str | None = None
-        ) -> None:
-            captured["resume"] = resume
-            captured["session_id"] = session_id
-
-        with patch.object(app_mod, "cook_interactive", fake_cook):
-            with pytest.raises(SystemExit) as exc_info:
-                app_mod.app(["cook", "fa910a41-d1ca-4cae-b878-01028a0c7c1c"])
-            assert exc_info.value.code == 0
-
-        assert captured["session_id"] == "fa910a41-d1ca-4cae-b878-01028a0c7c1c"
-        assert captured["resume"] is True
-
-    def test_bare_resume_invokes_picker(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """cook(resume=True, session_id=None) intercepts BareResume via pick_session."""
-        from unittest.mock import MagicMock, patch
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        picker_calls: list = []
-
-        def fake_pick_session(session_type: str, project_dir, project_log_dir) -> str | None:
-            picker_calls.append((session_type, project_dir))
-            return None
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.cli.session._session_picker.pick_session", fake_pick_session),
-            patch("autoskillit.core.write_registry_entry"),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(resume=True)
-
-        assert picker_calls, "pick_session must be called for BareResume"
-        assert picker_calls[0][0] == "cook", f"Expected 'cook', got {picker_calls[0][0]!r}"
-
-    def test_cook_launch_sets_session_type_env(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """cook() passes AUTOSKILLIT_SESSION_TYPE=cook in env_extras."""
-        from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import CmdSpec
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        captured_env_extras: list = []
-
-        class _MockBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "claude"
-
-            def build_interactive_cmd(self, **kwargs):
-                captured_env_extras.append(kwargs.get("env_extras", {}))
-                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-            def ensure_pre_launch(self) -> list[str]:
-                return []
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.core.write_registry_entry"),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(backend=_MockBackend())
-
-        assert captured_env_extras, "build_interactive_cmd must have been called"
-        env_extras = captured_env_extras[0]
-        assert env_extras.get("AUTOSKILLIT_SESSION_TYPE") == "skill"
-
-    def test_cook_launch_sets_launch_id_env(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """cook() passes AUTOSKILLIT_LAUNCH_ID in env_extras."""
-        from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import CmdSpec
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        captured_env_extras: list = []
-
-        class _MockBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "claude"
-
-            def build_interactive_cmd(self, **kwargs):
-                captured_env_extras.append(kwargs.get("env_extras", {}))
-                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-            def ensure_pre_launch(self) -> list[str]:
-                return []
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.core.write_registry_entry"),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(backend=_MockBackend())
-
-        assert captured_env_extras, "build_interactive_cmd must have been called"
-        assert "AUTOSKILLIT_LAUNCH_ID" in captured_env_extras[0]
-
-    def test_cook_uses_backend_binary_name(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """cook() calls shutil.which with the backend's binary_name()."""
-        from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import CmdSpec
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        captured_which: list = []
-
-        class _CustomBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "my-test-claude"
-
-            def build_interactive_cmd(self, **kwargs):
-                return CmdSpec(cmd=("my-test-claude", "--dangerously-skip-permissions"), env={})
-
-            def ensure_pre_launch(self) -> list[str]:
-                return []
-
-        def tracking_which(binary):
-            captured_which.append(binary)
-            return "/usr/bin/my-test-claude" if binary == "my-test-claude" else None
-
-        with (
-            patch("shutil.which", side_effect=tracking_which),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.core.write_registry_entry"),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(backend=_CustomBackend())
-
-        assert "my-test-claude" in captured_which
-
-    def test_cook_calls_backend_build_interactive_cmd_with_expected_kwargs(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """cook() calls backend.build_interactive_cmd() with expected kwargs."""
-        from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import CmdSpec
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        captured_kwargs: list = []
-
-        class _CapturingBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "claude"
-
-            def build_interactive_cmd(self, **kwargs):
-                captured_kwargs.append(kwargs)
-                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-            def ensure_pre_launch(self) -> list[str]:
-                return []
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.core.write_registry_entry"),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(backend=_CapturingBackend())
-
-        assert len(captured_kwargs) == 1, "build_interactive_cmd must have been called"
-        call_kwargs = captured_kwargs[0]
-        assert "plugin_source" in call_kwargs
-        assert "add_dirs" in call_kwargs
-        assert "initial_prompt" in call_kwargs
-        assert "resume_spec" in call_kwargs
-        assert "env_extras" in call_kwargs
-
-    def test_cook_uses_injected_backend(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """When backend= is passed, cook() uses it directly without calling get_backend()."""
-        from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import CmdSpec
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        build_called: list[dict] = []
-
-        class _InjectedBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "claude"
-
-            def build_interactive_cmd(self, **kwargs):
-                build_called.append(kwargs)
-                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-            def ensure_pre_launch(self) -> list[str]:
-                return []
-
-        get_backend_called: list = []
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.core.write_registry_entry"),
-            patch(
-                "autoskillit.execution.get_backend",
-                side_effect=lambda name: get_backend_called.append(name),
-            ),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook(backend=_InjectedBackend())
-
-        assert build_called, "Injected backend's build_interactive_cmd must be called"
-        assert not get_backend_called, "get_backend must NOT be called when backend is injected"
-
-    def test_cook_default_backend_calls_get_backend(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """When backend= is not passed, cook() calls get_backend() with the config backend name."""
-        from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import CmdSpec
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        get_backend_called: list = []
-
-        class _FakeBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "claude"
-
-            def build_interactive_cmd(self, **kwargs):
-                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-            def ensure_pre_launch(self) -> list[str]:
-                return []
-
-        mock_config = MagicMock()
-        mock_config.agent_backend.backend = "claude-code"
-        mock_config.features = {}
-        mock_config.experimental_enabled = False
-        mock_config.providers.profiles = {}
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.core.write_registry_entry"),
-            patch("autoskillit.config.load_config", return_value=mock_config),
-            patch(
-                "autoskillit.execution.get_backend",
-                side_effect=lambda name: (get_backend_called.append(name), _FakeBackend())[1],
-            ),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        assert get_backend_called, "get_backend must be called when backend is not injected"
-        assert get_backend_called[0] == "claude-code"
-
-    @pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
-    def test_cook_routes_through_get_backend(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backend_name: str
-    ) -> None:
-        """cook() calls get_backend with config.agent_backend.backend value."""
-        from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import CmdSpec
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        get_backend_calls: list = []
-
-        class _StubBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "claude"
-
-            def build_interactive_cmd(self, **kwargs):
-                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-            def ensure_pre_launch(self) -> list[str]:
-                return []
-
-        mock_config = MagicMock()
-        mock_config.agent_backend.backend = backend_name
-        mock_config.features = {}
-        mock_config.experimental_enabled = False
-        mock_config.providers.profiles = {}
-
-        def fake_get_backend(name: str):
-            get_backend_calls.append(name)
-            return _StubBackend()
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.core.write_registry_entry"),
-            patch("autoskillit.config.load_config", return_value=mock_config),
-            patch("autoskillit.execution.get_backend", side_effect=fake_get_backend),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        assert len(get_backend_calls) == 1, "get_backend must be called exactly once"
-        assert get_backend_calls[0] == backend_name
-
-    def test_cook_get_backend_called_not_hardcoded(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """ClaudeCodeBackend is never instantiated when get_backend is the DI path."""
-        from unittest.mock import MagicMock, patch
-
-        from autoskillit.core import CmdSpec
-
-        fake_skills_dir = tmp_path / "skills"
-        fake_skills_dir.mkdir()
-        mock_mgr = MagicMock()
-        mock_mgr.init_session.return_value = fake_skills_dir
-        hardcoded_calls: list = []
-
-        class _StubBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "claude"
-
-            def build_interactive_cmd(self, **kwargs):
-                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-            def ensure_pre_launch(self) -> list[str]:
-                return []
-
-        mock_config = MagicMock()
-        mock_config.agent_backend.backend = "claude-code"
-        mock_config.features = {}
-        mock_config.experimental_enabled = False
-        mock_config.providers.profiles = {}
-
-        def tracking_claude_code_backend(*args, **kwargs):
-            hardcoded_calls.append(True)
-            return MagicMock()
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
-            patch("builtins.input", return_value=""),
-            patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
-            patch("subprocess.run", return_value=MagicMock(returncode=0)),
-            patch("autoskillit.core.write_registry_entry"),
-            patch("autoskillit.config.load_config", return_value=mock_config),
-            patch("autoskillit.execution.get_backend", return_value=_StubBackend()),
-            patch(
-                "autoskillit.execution.backends.claude.ClaudeCodeBackend",
-                side_effect=tracking_claude_code_backend,
-            ),
-        ):
-            import autoskillit.cli.session._session_cook as module
-
-            module.cook()
-
-        assert not hardcoded_calls, (
-            "ClaudeCodeBackend must never be instantiated when get_backend is patched"
+        events.append(("managed-enter", launch_id, catalog, projection_context))
+        assert projection_context.catalog == catalog
+        try:
+            yield ManagedSessionHome(
+                launch_id=launch_id,
+                generated_home=generated_home,
+                skills_dir=ValidatedAddDir(str(skills_dir)),
+                pass_fds=(7,),
+            )
+        finally:
+            events.append(("managed-exit", launch_id))
+
+    manager.managed_session.side_effect = managed_session
+
+    def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
+        captured["spec"] = spec
+        captured["run_kwargs"] = kwargs
+        events.append(("run",))
+        kwargs["on_spawn"](101, 101)  # type: ignore[operator]
+        kwargs["trace"].record_spawn()  # type: ignore[union-attr]
+        kwargs["on_reaped"](101, 101)  # type: ignore[operator]
+        return SimpleNamespace(pid=101, pgid=101, returncode=returncode)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/claude")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager",
+        lambda *args, **kwargs: manager,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._installed_plugins.InstalledPluginsFile.contains",
+        lambda self, key: False,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._onboarding.is_first_run",
+        lambda _project: first_run,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._onboarding.run_onboarding_menu",
+        lambda *args, **kwargs: onboarding_prompt,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._onboarding.mark_onboarded",
+        lambda project: events.append(("onboarded", project)),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.ui._timed_input.timed_prompt",
+        lambda *args, **kwargs: confirm,
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.write_registry_entry",
+        lambda project, launch_id, session_type, session_id: events.append(
+            ("registry", launch_id)
+        ),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt",
+        run_attempt,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        lambda _project: None,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_picker.pick_session",
+        lambda *args, **kwargs: picked_session,
+    )
+    captured["generated_home"] = generated_home
+    captured["skills_dir"] = skills_dir
+    return captured
+
+
+def test_cook_uses_managed_home_for_final_child_context(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    captured = _install_harness(monkeypatch, tmp_path)
+
+    cli.cook(backend=backend)
+
+    generated_home = captured["generated_home"]
+    skills_dir = captured["skills_dir"]
+    build = backend.build_calls[0]
+    assert build["generated_home"] == generated_home
+    assert build["add_dirs"] == [ValidatedAddDir(str(skills_dir))]
+    assert build["resume_spec"] == NoResume()
+    assert backend.recover_count == 0
+    assert backend.context_calls[0]["session_home"] == generated_home
+    assert backend.context_calls[0]["project_dir"] == tmp_path
+    spec = captured["spec"]
+    assert isinstance(spec, CmdSpec)
+    assert spec is backend.validated[0]
+    assert spec.cwd == str(tmp_path)
+    assert spec.env[SESSION_TYPE_ENV_VAR] == "skill"
+    assert len(spec.env[LAUNCH_ID_ENV_VAR]) == 16
+    assert captured["run_kwargs"]["pass_fds"] == (7, 9)  # type: ignore[index]
+
+
+def test_cook_real_claude_builder_receives_plugin_and_skills(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+    captured = _install_harness(monkeypatch, tmp_path)
+    cli.cook(backend=ClaudeCodeBackend())
+
+    spec = captured["spec"]
+    assert isinstance(spec, CmdSpec)
+    assert "--plugin-dir" in spec.cmd
+    plugin_index = spec.cmd.index("--plugin-dir")
+    projected_plugin = Path(spec.cmd[plugin_index + 1])
+    assert projected_plugin.is_dir()
+    assert projected_plugin.parent.name == "plugin-projections"
+    assert (projected_plugin / ".claude-plugin" / "plugin.json").is_file()
+    assert "--add-dir" in spec.cmd
+    assert str(captured["skills_dir"]) in spec.cmd
+    assert "--dangerously-skip-permissions" in spec.cmd
+
+
+def test_cook_bare_resume_recovers_then_uses_picker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    _install_harness(monkeypatch, tmp_path, picked_session="thread-123")
+
+    cli.cook(backend=backend, resume=True)
+
+    assert backend.recover_count == 1
+    assert backend.build_calls[0]["resume_spec"] == NamedResume("thread-123")
+
+
+def test_cook_bare_resume_without_selection_starts_fresh(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    _install_harness(monkeypatch, tmp_path)
+
+    cli.cook(backend=backend, resume=True)
+
+    assert backend.recover_count == 1
+    assert backend.build_calls[0]["resume_spec"] == NoResume()
+
+
+def test_cook_explicit_resume_does_not_run_recovery(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    _install_harness(monkeypatch, tmp_path)
+
+    cli.cook(backend=backend, session_id="thread-explicit")
+
+    assert backend.recover_count == 0
+    assert backend.build_calls[0]["resume_spec"] == NamedResume("thread-explicit")
+
+
+def test_cook_marks_onboarded_only_after_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    captured = _install_harness(
+        monkeypatch,
+        tmp_path,
+        first_run=True,
+        onboarding_prompt="start here",
+    )
+
+    cli.cook(backend=backend)
+
+    assert backend.build_calls[0]["initial_prompt"] == "start here"
+    event_names = [event[0] for event in captured["events"]]
+    assert event_names.index("run") < event_names.index("onboarded")
+
+
+def test_cook_does_not_mark_onboarded_without_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    captured = _install_harness(monkeypatch, tmp_path, first_run=True)
+
+    cli.cook(backend=backend)
+
+    assert not any(event[0] == "onboarded" for event in captured["events"])
+
+
+def test_cook_nonzero_exit_propagates_after_managed_cleanup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    backend = _Backend()
+    captured = _install_harness(monkeypatch, tmp_path, returncode=7)
+
+    with pytest.raises(SystemExit, match="7"):
+        cli.cook(backend=backend)
+
+    assert captured["events"][-1][0] == "managed-exit"
+
+
+def test_cook_resolves_default_backend(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    backend = _Backend()
+    _install_harness(monkeypatch, tmp_path)
+    requested: list[str] = []
+    monkeypatch.setattr(
+        "autoskillit.execution.get_backend",
+        lambda name: requested.append(name) or backend,
+    )
+
+    cli.cook()
+
+    assert requested
+    assert backend.build_calls
+
+
+def test_cook_missing_backend_binary_exits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    backend = _Backend()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+
+    with pytest.raises(SystemExit, match="1"):
+        cli.cook(backend=backend)
+
+    assert "not found" in capsys.readouterr().out
+
+
+def test_cook_final_confirmation_precedes_registry_and_attempt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A declined final prompt must not leave a registry row or enter an attempt."""
+    from autoskillit.core import (
+        CmdSpec,
+        CookSessionHandle,
+        HookTrustPolicy,
+        ManagedSessionHome,
+        ValidatedAddDir,
+    )
+
+    events: list[tuple[object, ...]] = []
+    generated_home = tmp_path / "managed-home"
+    skills_dir = generated_home / "skills"
+    skills_dir.mkdir(parents=True)
+    manager = MagicMock()
+
+    @contextmanager
+    def managed_session(
+        launch_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ):
+        assert projection_context.catalog == catalog
+        events.append(("managed-enter", launch_id))
+        try:
+            yield ManagedSessionHome(
+                launch_id=launch_id,
+                generated_home=generated_home,
+                skills_dir=ValidatedAddDir(str(skills_dir)),
+                pass_fds=(),
+            )
+        finally:
+            events.append(("managed-exit", launch_id))
+
+    manager.managed_session.side_effect = managed_session
+
+    class _Backend:
+        name = "claude-code"
+        conventions = BackendConventions()
+        capabilities = SimpleNamespace(
+            hook_trust_policy=HookTrustPolicy.AUTOMATED,
+            session_dir_persistent=False,
         )
 
-    def test_cook_init_session_passes_backend(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """cook() forwards backend to init_session()."""
-        captured: dict = {}
-        fake_skills_dir = tmp_path / "fake-skills-backend"
-        fake_skills_dir.mkdir()
+        def binary_name(self) -> str:
+            return "claude"
 
-        def fake_init_session(
-            self,
-            session_id: str,
-            catalog,
-            projection_context,
-        ) -> Path:
-            captured["backend"] = projection_context.backend
-            return fake_skills_dir
+        def recover_cook_history(self) -> None:
+            events.append(("recover",))
 
-        class _FakeBackend(_ProjectionBackendStub):
-            def binary_name(self) -> str:
-                return "claude"
+        def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
+            events.append(("build",))
+            return CmdSpec(cmd=("claude",), env={})
 
-            def build_interactive_cmd(self, **kwargs):
-                from autoskillit.core import CmdSpec
+        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+            events.append(("validate", spec))
+            return []
 
-                return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+        @contextmanager
+        def cook_session_context(self, **kwargs: object):
+            events.append(("attempt-enter",))
+            yield CookSessionHandle(
+                view_id="view-1",
+                pass_fds=(),
+                _record_spawn=lambda _pid, _pgid: None,
+                _record_reaped=lambda _pid, _pgid: None,
+            )
 
-            def ensure_pre_launch(self) -> list[str]:
-                return []
+    def run_once(answer: str) -> None:
+        events.clear()
+        monkeypatch.setattr(
+            "autoskillit.cli.ui._timed_input.timed_prompt",
+            lambda *args, **kwargs: events.append(("confirm", answer)) or answer,
+        )
+        monkeypatch.setattr(
+            "autoskillit.core.write_registry_entry",
+            lambda project, launch_id, session_type, claude_id: events.append(
+                ("registry", launch_id)
+            ),
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_process.run_cook_attempt",
+            lambda *args, **kwargs: (
+                events.append(("run",)) or SimpleNamespace(pid=1, pgid=1, returncode=0)
+            ),
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+            lambda _project: None,
+        )
+        cli.cook(backend=_Backend())
 
-        monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())
-        monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        cli.cook(backend=_FakeBackend())
-        assert captured["backend"] is not None
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/claude")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
+    )
+
+    run_once("n")
+    assert [event[0] for event in events] == [
+        "managed-enter",
+        "confirm",
+        "managed-exit",
+    ]
+
+    run_once("")
+    names = [event[0] for event in events]
+    assert "recover" not in names
+    assert names.index("confirm") < names.index("registry")
+    assert names.index("registry") < names.index("attempt-enter")
+    launch_id = next(event[1] for event in events if event[0] == "managed-enter")
+    assert next(event[1] for event in events if event[0] == "registry") == launch_id
+
+
+def test_cook_does_not_treat_persistent_sessions_as_codex(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Persistent storage alone must not activate Codex runtime behavior."""
+    from autoskillit.execution.backends import _codex_session_storage as storage
+
+    backend = _Backend()
+    backend.name = "persistent-non-codex"
+    backend.conventions = BackendConventions(
+        persistent_session_root_subdir=Path("persistent-non-codex")
+    )
+    backend.capabilities = SimpleNamespace(
+        hook_trust_policy=HookTrustPolicy.AUTOMATED,
+        session_dir_persistent=True,
+        cook_startup_observer_capable=False,
+    )
+    captured = _install_harness(monkeypatch, tmp_path)
+
+    def fail_codex_runtime(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("persistent non-Codex backend entered Codex runtime")
+
+    monkeypatch.setenv(CODEX_STARTUP_TRACE_ENV_VAR, "1")
+    monkeypatch.setattr(
+        "autoskillit.execution.CodexStateReadinessProbe",
+        fail_codex_runtime,
+    )
+    monkeypatch.setattr(
+        storage.CodexSessionStore,
+        "prepare_attempt",
+        fail_codex_runtime,
+    )
+
+    cli.cook(backend=backend)
+
+    spec = captured["spec"]
+    assert isinstance(spec, CmdSpec)
+    assert CODEX_COOK_RESERVED_ENV_VARS.isdisjoint(spec.env)
+    assert CODEX_STARTUP_TRACE_ENV_VAR not in spec.env
+    assert backend.context_calls[0]["session_home"] == captured["generated_home"]

@@ -1,6 +1,7 @@
 """Tests that the FastMCP lifespan calls recorder.finalize() on server shutdown."""
 
 import asyncio
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -200,12 +201,14 @@ def test_lifespan_boot_registry_covers_all_session_types() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lifespan_launches_codex_registration_for_codex_backend():
+async def test_lifespan_launches_codex_registration_for_codex_backend(tmp_path: Path):
     from autoskillit.server import _autoskillit_lifespan
 
     mock_ctx = MagicMock()
     mock_ctx.backend.name = "codex"
+    mock_ctx.backend.source_codex_home = tmp_path / "immutable-codex-source"
     mock_ctx.backend.capabilities.mcp_config_capable = True
+    mock_ctx.backend.capabilities.hook_config_format = "toml_nested"
     mock_ctx.runner = MagicMock()
 
     reg_mock = AsyncMock()
@@ -220,7 +223,46 @@ async def test_lifespan_launches_codex_registration_for_codex_backend():
         async with _autoskillit_lifespan(MagicMock()):
             pass
 
-    reg_mock.assert_called_once()
+    reg_mock.assert_called_once_with(
+        tmp_path / "immutable-codex-source",
+        hook_config_format="toml_nested",
+    )
+
+
+@pytest.mark.asyncio
+async def test_codex_registration_uses_one_composed_transaction_without_reacquisition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server._lifespan as lifespan
+
+    source_home = tmp_path / "immutable-codex-source"
+    ambient_home = tmp_path / "ambient-home"
+    calls: list[dict[str, object]] = []
+
+    @contextmanager
+    def record_transaction(**kwargs):
+        calls.append(kwargs)
+        yield source_home / "config.toml"
+
+    monkeypatch.setattr(lifespan, "codex_prelaunch_transaction", record_transaction)
+    monkeypatch.setattr(
+        lifespan,
+        "ensure_codex_mcp_registered",
+        lambda **kwargs: pytest.fail(f"nested public facade call: {kwargs}"),
+    )
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: ambient_home))
+
+    await lifespan._run_codex_mcp_registration_async(
+        source_home,
+        hook_config_format="toml_nested",
+    )
+
+    assert calls == [
+        {
+            "source_codex_home": source_home,
+            "hook_config_format": "toml_nested",
+        }
+    ]
 
 
 @pytest.mark.asyncio

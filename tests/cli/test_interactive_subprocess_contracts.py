@@ -129,3 +129,146 @@ def test_interactive_subprocess_calls_wrapped_in_terminal_guard(py_file: Path) -
         f"`autoskillit.cli.ui._terminal`.\n\n"
         f"See: tests/cli/test_input_tty_contracts.py for the analogous pattern."
     )
+
+
+def _calls_in(node: ast.AST, *, owner: str, attr: str) -> list[ast.Call]:
+    return [
+        call
+        for call in ast.walk(node)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == owner
+        and call.func.attr == attr
+    ]
+
+
+def _function(tree: ast.Module, name: str) -> ast.FunctionDef:
+    matches = [
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name
+    ]
+    assert len(matches) == 1, f"expected exactly one {name}() definition"
+    return matches[0]
+
+
+def _popen_outside_terminal_guard(node: ast.AST) -> list[int]:
+    violations: list[int] = []
+
+    class GuardTracker(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.guard_depth = 0
+
+        def visit_With(self, with_node: ast.With) -> None:
+            entered = any(
+                isinstance(item.context_expr, ast.Call)
+                and isinstance(item.context_expr.func, ast.Name)
+                and item.context_expr.func.id == "terminal_guard"
+                for item in with_node.items
+            )
+            if entered:
+                self.guard_depth += 1
+            self.generic_visit(with_node)
+            if entered:
+                self.guard_depth -= 1
+
+        def visit_Call(self, call: ast.Call) -> None:
+            if (
+                isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "subprocess"
+                and call.func.attr == "Popen"
+                and self.guard_depth == 0
+            ):
+                violations.append(call.lineno)
+            self.generic_visit(call)
+
+    GuardTracker().visit(node)
+    return violations
+
+
+def test_cook_attempt_popen_is_owned_only_by_the_shared_process_owner() -> None:
+    session_dir = CLI_DIR / "session"
+    violations: list[str] = []
+    for path in sorted(session_dir.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if path.name != "_session_process.py" and _calls_in(
+            tree, owner="subprocess", attr="Popen"
+        ):
+            violations.append(path.name)
+
+    assert violations == []
+    process_path = session_dir / "_session_process.py"
+    process_tree = ast.parse(process_path.read_text(encoding="utf-8"), filename=str(process_path))
+    run_attempt = _function(process_tree, "run_cook_attempt")
+    popen_calls = _calls_in(run_attempt, owner="subprocess", attr="Popen")
+    assert popen_calls, "run_cook_attempt() must own every cook-attempt Popen"
+    assert _popen_outside_terminal_guard(run_attempt) == []
+
+    cook_source = (session_dir / "_session_cook.py").read_text(encoding="utf-8")
+    assert "run_cook_attempt(" in cook_source
+    assert "subprocess.run(" not in cook_source
+    assert "subprocess.Popen(" not in cook_source
+
+
+def test_cook_popen_returns_before_the_single_spawn_callback() -> None:
+    process_path = CLI_DIR / "session" / "_session_process.py"
+    tree = ast.parse(process_path.read_text(encoding="utf-8"), filename=str(process_path))
+    run_attempt = _function(tree, "run_cook_attempt")
+    popen_calls = _calls_in(run_attempt, owner="subprocess", attr="Popen")
+    on_spawn_calls = [
+        call
+        for call in ast.walk(run_attempt)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "on_spawn"
+    ]
+
+    assert len(on_spawn_calls) == 1
+    assert max(call.lineno for call in popen_calls) < on_spawn_calls[0].lineno
+
+
+def test_cook_pty_path_has_no_unsafe_post_fork_python_setup() -> None:
+    session_dir = CLI_DIR / "session"
+    paths = [
+        session_dir / "_session_cook.py",
+        session_dir / "_session_process.py",
+        session_dir / "pty" / "_observer.py",
+        session_dir / "pty" / "_exec.py",
+    ]
+    violations: list[str] = []
+    for path in paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for call in (node for node in ast.walk(tree) if isinstance(node, ast.Call)):
+            if any(keyword.arg == "preexec_fn" for keyword in call.keywords):
+                violations.append(f"{path.name}:{call.lineno}:preexec_fn")
+            if (
+                isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "pty"
+                and call.func.attr == "fork"
+            ):
+                violations.append(f"{path.name}:{call.lineno}:pty.fork")
+
+    exec_source = paths[-1].read_text(encoding="utf-8")
+    assert "setsid(" not in exec_source
+    assert "login_tty(" not in exec_source
+    assert violations == []
+
+
+def test_terminal_and_lease_ownership_are_not_duplicated_across_pty_layers() -> None:
+    session_dir = CLI_DIR / "session"
+    process_source = (session_dir / "_session_process.py").read_text(encoding="utf-8")
+    observer_source = (session_dir / "pty" / "_observer.py").read_text(encoding="utf-8")
+
+    assert "terminal_guard" in process_source
+    assert "tcsetpgrp" in process_source
+    assert "LOCK_UN" not in process_source
+    assert "tcsetpgrp" not in observer_source
+    assert "subprocess.Popen" not in observer_source
+
+
+def test_unchanged_order_fleet_launch_path_retains_its_separate_run_owner() -> None:
+    launch_source = (CLI_DIR / "session" / "_session_launch.py").read_text(encoding="utf-8")
+
+    assert "subprocess.run(" in launch_source
+    assert "subprocess.Popen(" not in launch_source

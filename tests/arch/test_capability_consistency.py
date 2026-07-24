@@ -145,3 +145,15 @@ class TestSessionDirSymlinksAreSymlinks:
             )
         if violations:
             pytest.xfail(f"Known bug: {violations} use shutil.copy2 instead of symlink_to")
+
+
+def test_backend_hook_trust_policies_and_codex_history_links_are_explicit() -> None:
+    from autoskillit.core import HookTrustPolicy
+
+    claude = BACKEND_REGISTRY["claude-code"]().capabilities
+    codex = BACKEND_REGISTRY["codex"]().capabilities
+
+    assert claude.hook_trust_policy is HookTrustPolicy.AUTOMATED
+    assert codex.hook_trust_policy is HookTrustPolicy.REVIEW_EACH_SESSION
+    assert claude.session_dir_symlinks == frozenset()
+    assert codex.session_dir_symlinks == frozenset({"sessions", "archived_sessions"})

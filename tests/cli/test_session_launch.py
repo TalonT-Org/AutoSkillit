@@ -4,21 +4,53 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from contextlib import nullcontext
+from pathlib import Path
 
 import pytest
 
 from autoskillit.cli.session._session_launch import _run_interactive_session
-from autoskillit.core import BackendConventions, ClaudeFlags
+from autoskillit.core import BackendConventions, ClaudeFlags, HookTrustPolicy
 from autoskillit.execution.backends.codex import CodexFlags
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
-class _ProjectionBackendStub:
-    """Minimum projection-facing contract shared by local backend doubles."""
+class _BackendLifecycleStub:
+    """Projection and lifecycle contract shared by local backend doubles."""
 
     name = "claude-code"
     conventions = BackendConventions()
+
+    def validate_interactive_invocation(self, spec):
+        return []
+
+    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
+        return []
+
+    def recover_cook_history(self) -> None:
+        return None
+
+    def cook_session_context(
+        self,
+        *,
+        session_home: Path,
+        project_dir: Path,
+        launch_id: str,
+        attempt: int,
+        current_resume_spec,
+    ):
+        del project_dir
+        from autoskillit.core import CookSessionHandle
+
+        return nullcontext(
+            CookSessionHandle(
+                view_id=f"{launch_id}-{attempt}",
+                pass_fds=(),
+                _record_spawn=lambda _pid, _pgid: None,
+                _record_reaped=lambda _pid, _pgid: None,
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +80,17 @@ def _stub_plugin_installed(monkeypatch: pytest.MonkeyPatch, *, installed: bool =
     monkeypatch.setattr("autoskillit.core.detect_autoskillit_mcp_prefix", lambda: prefix)
 
 
+def _stub_codex_pre_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep command-assembly tests independent of an installed Codex binary."""
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    monkeypatch.setattr(
+        CodexBackend,
+        "ensure_pre_launch",
+        lambda _self, *, session_dir=None: [],
+    )
+
+
 # Module-level flags map — shared by Tests B, C, and the registry guard.
 # Constructed from the enum values themselves so the enums ARE the ground truth.
 _BACKEND_FLAGS: dict[str, set[str]] = {
@@ -62,7 +105,7 @@ def _make_capturing_backend() -> tuple[object, list[dict]]:
 
     captured_kwargs: list[dict] = []
 
-    class _CapturingBackend(_ProjectionBackendStub):
+    class _CapturingBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -73,9 +116,6 @@ def _make_capturing_backend() -> tuple[object, list[dict]]:
         def build_interactive_cmd(self, **kwargs):
             captured_kwargs.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     return _CapturingBackend(), captured_kwargs
 
@@ -249,9 +289,10 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         food_truck_capable=True,
         completion_record_types=frozenset({"result"}),
         session_record_types=frozenset({"assistant"}),
+        hook_trust_policy=HookTrustPolicy.AUTOMATED,
     )
 
-    class _NoInjectBackend(_ProjectionBackendStub):
+    class _NoInjectBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -262,9 +303,6 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         def build_interactive_cmd(self, **kwargs):
             build_kwargs.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
@@ -299,7 +337,7 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
 
     captured_which_arg: list = []
 
-    class _CustomBinaryBackend(_ProjectionBackendStub):
+    class _CustomBinaryBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "test-agent-binary"
 
@@ -317,13 +355,11 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
                 food_truck_capable=True,
                 completion_record_types=frozenset({"result"}),
                 session_record_types=frozenset({"assistant"}),
+                hook_trust_policy=HookTrustPolicy.AUTOMATED,
             )
 
         def build_interactive_cmd(self, **kwargs):
             return CmdSpec(cmd=("test-agent-binary", "--dangerously-skip-permissions"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     def tracking_which(binary: str):
         captured_which_arg.append(binary)
@@ -345,7 +381,7 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
 
     build_called: list[dict] = []
 
-    class _InjectedBackend(_ProjectionBackendStub):
+    class _InjectedBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -363,14 +399,12 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
                 food_truck_capable=True,
                 completion_record_types=frozenset({"result"}),
                 session_record_types=frozenset({"assistant"}),
+                hook_trust_policy=HookTrustPolicy.AUTOMATED,
             )
 
         def build_interactive_cmd(self, **kwargs):
             build_called.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
@@ -386,7 +420,7 @@ def test_run_interactive_session_default_backend_calls_get_backend(
 
     get_backend_called: list = []
 
-    class _FakeBackend(_ProjectionBackendStub):
+    class _FakeBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -395,15 +429,13 @@ def test_run_interactive_session_default_backend_calls_get_backend(
             return MagicMock(
                 skill_injection_capable=True,
                 mcp_config_capable=False,
+                hook_trust_policy=HookTrustPolicy.AUTOMATED,
             )
 
         def build_interactive_cmd(self, **kwargs):
             from autoskillit.core import CmdSpec
 
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -440,9 +472,10 @@ def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) 
         food_truck_capable=True,
         completion_record_types=frozenset({"result"}),
         session_record_types=frozenset({"assistant"}),
+        hook_trust_policy=HookTrustPolicy.AUTOMATED,
     )
 
-    class _DIBackend(_ProjectionBackendStub):
+    class _DIBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -453,9 +486,6 @@ def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) 
         def build_interactive_cmd(self, **kwargs):
             build_calls.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -489,9 +519,10 @@ def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
         food_truck_capable=True,
         completion_record_types=frozenset({"result"}),
         session_record_types=frozenset({"assistant"}),
+        hook_trust_policy=HookTrustPolicy.AUTOMATED,
     )
 
-    class _NoInjectDIBackend(_ProjectionBackendStub):
+    class _NoInjectDIBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -502,9 +533,6 @@ def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
         def build_interactive_cmd(self, **kwargs):
             build_kwargs.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -543,11 +571,12 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
         food_truck_capable=False,
         completion_record_types=frozenset(),
         session_record_types=frozenset(),
+        hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
     )
 
     build_kwargs: list[dict] = []
 
-    class _CodexLikeBackend(_ProjectionBackendStub):
+    class _CodexLikeBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -558,9 +587,6 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
         def build_interactive_cmd(self, **kwargs):
             build_kwargs.append(kwargs)
             return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     captured: dict = {}
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/codex")
@@ -596,7 +622,7 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
 
     backends_used: list[str] = []
 
-    class _ClaudeStub(_ProjectionBackendStub):
+    class _ClaudeStub(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -610,10 +636,7 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
             backends_used.append("claude-code")
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
-        def ensure_pre_launch(self) -> list[str]:
-            return []
-
-    class _CodexStub(_ProjectionBackendStub):
+    class _CodexStub(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -633,14 +656,12 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
                 food_truck_capable=False,
                 completion_record_types=frozenset(),
                 session_record_types=frozenset(),
+                hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
             )
 
         def build_interactive_cmd(self, **kwargs):
             backends_used.append("codex")
             return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "codex"
@@ -675,7 +696,7 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
 
     backends_used: list[str] = []
 
-    class _CodexStub(_ProjectionBackendStub):
+    class _CodexStub(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -695,14 +716,12 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
                 food_truck_capable=False,
                 completion_record_types=frozenset(),
                 session_record_types=frozenset(),
+                hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
             )
 
         def build_interactive_cmd(self, **kwargs):
             backends_used.append("codex")
             return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "codex"
@@ -734,7 +753,7 @@ def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPat
 
     build_calls: list[dict] = []
 
-    class _CapturingBackend(_ProjectionBackendStub):
+    class _CapturingBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -745,9 +764,6 @@ def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPat
         def build_interactive_cmd(self, **kwargs):
             build_calls.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
-
-        def ensure_pre_launch(self) -> list[str]:
-            return []
 
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
     monkeypatch.setattr(
@@ -810,6 +826,7 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     _stub_plugin_installed(monkeypatch, installed=False)
+    _stub_codex_pre_launch(monkeypatch)
 
     for backend_name, backend_cls in BACKEND_REGISTRY.items():
         backend = backend_cls()
@@ -847,6 +864,7 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     _stub_plugin_installed(monkeypatch, installed=False)
+    _stub_codex_pre_launch(monkeypatch)
 
     backend = BACKEND_REGISTRY[backend_name]()
     _run_interactive_session(system_prompt="test", backend=backend)
@@ -886,6 +904,7 @@ def test_cross_validation_contract_all_flags_known(
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     _stub_plugin_installed(monkeypatch, installed=False)
+    _stub_codex_pre_launch(monkeypatch)
 
     backend = BACKEND_REGISTRY[backend_name]()
     _run_interactive_session(system_prompt="test", backend=backend)
@@ -945,9 +964,10 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
         food_truck_capable=False,
         completion_record_types=frozenset(),
         session_record_types=frozenset(),
+        hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
     )
 
-    class _CodexBackendStub(_ProjectionBackendStub):
+    class _CodexBackendStub(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -955,7 +975,7 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
         def capabilities(self):
             return caps
 
-        def ensure_pre_launch(self) -> list[str]:
+        def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
             call_sequence.append("pre_launch")
             return []
 
@@ -993,9 +1013,10 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
         food_truck_capable=False,
         completion_record_types=frozenset(),
         session_record_types=frozenset(),
+        hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
     )
 
-    class _FailingCodexBackend(_ProjectionBackendStub):
+    class _FailingCodexBackend(_BackendLifecycleStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -1003,7 +1024,7 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
         def capabilities(self):
             return caps
 
-        def ensure_pre_launch(self) -> list[str]:
+        def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
             return ["Failed to ensure MCP registration: some error"]
 
         def build_interactive_cmd(self, **kwargs):

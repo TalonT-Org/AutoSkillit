@@ -108,6 +108,17 @@ def test_all_capability_fields_have_production_consumers():
     )
 
 
+def test_hook_trust_policy_has_a_real_production_consumer() -> None:
+    from autoskillit.core import BackendCapabilities, paths
+
+    field_names = frozenset(field.name for field in dataclasses.fields(BackendCapabilities))
+    reads = _collect_attribute_reads(paths.pkg_root(), field_names)
+    assert "hook_trust_policy" not in _FORWARD_DECLARED
+    assert reads["hook_trust_policy"], (
+        "hook_trust_policy must be translated at the interactive launch boundary"
+    )
+
+
 def test_forward_declared_has_linked_issues():
     """Every _FORWARD_DECLARED entry must have a positive issue number."""
     invalid = {

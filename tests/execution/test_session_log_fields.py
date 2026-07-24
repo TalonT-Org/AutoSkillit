@@ -43,6 +43,9 @@ class _FakeLocator:
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         return self._path
 
+    def list_sessions(self, cwd: str) -> tuple:
+        return ()
+
 
 def test_flush_session_log_includes_write_path_warnings_in_summary(tmp_path):
     """summary.json records write_path_warnings list."""

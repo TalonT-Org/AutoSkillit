@@ -286,6 +286,60 @@ def test_severity_enum_not_equal_to_uppercase_string():
     assert Severity.ERROR == Severity.ERROR
 
 
+def test_hook_trust_policy_values_and_public_exports():
+    from enum import StrEnum
+
+    import autoskillit.core as core
+    from autoskillit.core.types import HookTrustPolicy
+    from autoskillit.core.types._type_enums import __all__ as enum_all
+
+    assert issubclass(HookTrustPolicy, StrEnum)
+    assert set(HookTrustPolicy) == {
+        HookTrustPolicy.AUTOMATED,
+        HookTrustPolicy.REVIEW_EACH_SESSION,
+    }
+    assert HookTrustPolicy.AUTOMATED.value == "automated"
+    assert HookTrustPolicy.REVIEW_EACH_SESSION.value == "review_each_session"
+    assert "HookTrustPolicy" in enum_all
+    assert "HookTrustPolicy" in core.__all__
+    assert core.HookTrustPolicy is HookTrustPolicy
+
+
+def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path):
+    from pathlib import Path
+    from typing import get_type_hints
+
+    import autoskillit.core as core
+    from autoskillit.core import ManagedSessionHome, ValidatedAddDir
+    from autoskillit.core.types._type_results import __all__ as results_all
+
+    skills_dir = ValidatedAddDir(tmp_path / "home" / "skills")
+    handle = ManagedSessionHome(
+        launch_id="launch-1",
+        generated_home=tmp_path / "home",
+        skills_dir=skills_dir,
+        pass_fds=(3, 5),
+    )
+
+    assert tuple(field.name for field in dataclasses.fields(ManagedSessionHome)) == (
+        "launch_id",
+        "generated_home",
+        "skills_dir",
+        "pass_fds",
+    )
+    assert get_type_hints(ManagedSessionHome) == {
+        "launch_id": str,
+        "generated_home": Path,
+        "skills_dir": ValidatedAddDir,
+        "pass_fds": tuple[int, ...],
+    }
+    assert not hasattr(handle, "__dict__")
+    assert "ManagedSessionHome" in results_all
+    assert "ManagedSessionHome" in core.__all__
+    with pytest.raises(FrozenInstanceError):
+        handle.launch_id = "other"  # type: ignore[misc]
+
+
 def test_github_fetcher_protocol_has_label_methods():
     import inspect
 

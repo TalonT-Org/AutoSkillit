@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 import zstandard
 
-from autoskillit.core import SessionLocator
+from autoskillit.core import SessionLocator, SessionSummary
 from autoskillit.execution.backends.codex import CodexSessionLocator
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -30,6 +31,130 @@ def _make_rollout(
 
 
 class TestCodexSessionLocator:
+    def test_list_sessions_reads_injected_index_without_scanning_history(
+        self, tmp_path: Path
+    ) -> None:
+        project = tmp_path / "project"
+        project.mkdir()
+        store_root = tmp_path / "store"
+        store_root.mkdir()
+        index_path = tmp_path / "codex-session-index.json"
+        index_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "backend_name": "codex",
+                        "session_id": "thread-new",
+                        "launch_id": "0123456789abcdef",
+                        "cwd": str(project / ".." / "project"),
+                        "first_prompt": "Fix startup",
+                        "summary": "Keep retained history off the startup path",
+                        "git_branch": "feature/startup",
+                        "modified": "2026-07-23T17:00:00Z",
+                        "is_sidechain": False,
+                        "session_type_hint": "cook",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        locator = CodexSessionLocator(store_root=store_root, index_path=index_path)
+
+        assert locator.list_sessions(str(project)) == (
+            SessionSummary(
+                backend_name="codex",
+                session_id="thread-new",
+                launch_id="0123456789abcdef",
+                cwd=str(project.resolve()),
+                first_prompt="Fix startup",
+                summary="Keep retained history off the startup path",
+                git_branch="feature/startup",
+                modified="2026-07-23T17:00:00Z",
+                is_sidechain=False,
+                session_type_hint="cook",
+            ),
+        )
+
+    @pytest.mark.parametrize("contents", ["", "{not-json", "null", "{}"])
+    def test_list_sessions_empty_or_corrupt_index_is_empty(
+        self, tmp_path: Path, contents: str
+    ) -> None:
+        index_path = tmp_path / "codex-session-index.json"
+        index_path.write_text(contents, encoding="utf-8")
+        locator = CodexSessionLocator(store_root=tmp_path / "store", index_path=index_path)
+
+        assert locator.list_sessions(str(tmp_path)) == ()
+
+    def test_list_sessions_filters_project_sidechains_and_preserves_source_order(
+        self, tmp_path: Path
+    ) -> None:
+        wanted = tmp_path / "wanted"
+        wanted.mkdir()
+        other = tmp_path / "other"
+        other.mkdir()
+        index_path = tmp_path / "codex-session-index.json"
+        records = [
+            {
+                "backend_name": "codex",
+                "session_id": "newest",
+                "launch_id": None,
+                "cwd": str(wanted / "."),
+                "first_prompt": "new",
+                "summary": "",
+                "git_branch": None,
+                "modified": None,
+                "is_sidechain": False,
+                "session_type_hint": "cook",
+            },
+            {
+                "backend_name": "codex",
+                "session_id": "sidechain",
+                "launch_id": None,
+                "cwd": str(wanted),
+                "first_prompt": "hidden",
+                "summary": "hidden",
+                "git_branch": None,
+                "modified": None,
+                "is_sidechain": True,
+                "session_type_hint": "cook",
+            },
+            {
+                "backend_name": "codex",
+                "session_id": "other-project",
+                "launch_id": None,
+                "cwd": str(other),
+                "first_prompt": "hidden",
+                "summary": "hidden",
+                "git_branch": None,
+                "modified": None,
+                "is_sidechain": False,
+                "session_type_hint": "cook",
+            },
+            {
+                "backend_name": "codex",
+                "session_id": "older",
+                "launch_id": None,
+                "cwd": str(wanted),
+                "first_prompt": "old",
+                "summary": "",
+                "git_branch": None,
+                "modified": None,
+                "is_sidechain": False,
+                "session_type_hint": "cook",
+            },
+        ]
+        import json
+
+        index_path.write_text(json.dumps(records), encoding="utf-8")
+        locator = CodexSessionLocator(store_root=tmp_path / "store", index_path=index_path)
+
+        assert [
+            item.session_id for item in locator.list_sessions(str(wanted / ".." / "wanted"))
+        ] == [
+            "newest",
+            "older",
+        ]
+
     def test_locate_session_finds_rollout_by_thread_id(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "sessions" / "2026" / "05" / "26"
         session_dir.mkdir(parents=True)
@@ -45,16 +170,11 @@ class TestCodexSessionLocator:
         locator = CodexSessionLocator()
         assert locator.locate_session("tid_wanted") is None
 
-    def test_locate_session_searches_permanent_dir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        perm_dir = tmp_path / "logs" / "codex-sessions" / "2026" / "05" / "26"
+    def test_locate_session_searches_permanent_dir(self, tmp_path: Path) -> None:
+        perm_dir = tmp_path / "codex-sessions" / "2026" / "05" / "26"
         perm_dir.mkdir(parents=True)
         rollout = _make_rollout(perm_dir, "tid_perm")
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.default_log_dir", lambda: tmp_path / "logs"
-        )
-        locator = CodexSessionLocator()
+        locator = CodexSessionLocator(store_root=tmp_path)
         result = locator.locate_session("tid_perm")
         assert result == rollout
 
@@ -204,21 +324,11 @@ class TestCodexSessionLocator:
         result = locator.locate_session("tid_meta")
         assert result == rollout
 
-    def test_project_log_dir_returns_codex_sessions_subdir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.default_log_dir", lambda: tmp_path / "logs"
-        )
-        locator = CodexSessionLocator()
+    def test_project_log_dir_returns_codex_sessions_subdir(self, tmp_path: Path) -> None:
+        locator = CodexSessionLocator(store_root=tmp_path / "logs")
         result = locator.project_log_dir("/any/cwd")
         assert result == tmp_path / "logs" / "codex-sessions"
 
-    def test_project_log_dir_ignores_cwd_argument(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.default_log_dir", lambda: tmp_path / "logs"
-        )
-        locator = CodexSessionLocator()
+    def test_project_log_dir_ignores_cwd_argument(self, tmp_path: Path) -> None:
+        locator = CodexSessionLocator(store_root=tmp_path / "logs")
         assert locator.project_log_dir("/path/a") == locator.project_log_dir("/path/b")

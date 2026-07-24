@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import autoskillit.cli.session._session_cook as cook_module
 from autoskillit.config import AutomationConfig
-from autoskillit.core import BackendConventions, CmdSpec, SkillContractError
+from autoskillit.core import (
+    BackendConventions,
+    CmdSpec,
+    CookSessionHandle,
+    EffectiveSkillCatalogAuthority,
+    HookTrustPolicy,
+    ManagedSessionHome,
+    SkillContractError,
+    SkillProjectionContextAuthority,
+    ValidatedAddDir,
+)
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -20,16 +32,32 @@ def _make_mock_backend_class():
     class _MockBackend:
         name = "claude-code"
         conventions = BackendConventions()
+        capabilities = SimpleNamespace(
+            hook_trust_policy=HookTrustPolicy.AUTOMATED,
+            session_dir_persistent=False,
+        )
 
         def binary_name(self) -> str:
             return "claude"
+
+        def recover_cook_history(self) -> None:
+            return None
 
         def build_interactive_cmd(self, **kwargs):
             captured.append(kwargs.get("env_extras", {}))
             return CmdSpec(cmd=("claude",), env={})
 
-        def ensure_pre_launch(self) -> list[str]:
+        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             return []
+
+        @contextmanager
+        def cook_session_context(self, **kwargs):
+            yield CookSessionHandle(
+                view_id="profile-view",
+                pass_fds=(),
+                _record_spawn=lambda _pid, _pgid: None,
+                _record_reaped=lambda _pid, _pgid: None,
+            )
 
     return _MockBackend, captured
 
@@ -41,14 +69,38 @@ def _mock_mgr():
 
 def _run_cook(profile, cfg, mock_mgr):
     mock_backend_cls, captured = _make_mock_backend_class()
+    generated_home = Path.cwd().resolve()
+
+    @contextmanager
+    def managed_session(
+        launch_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ):
+        assert projection_context.catalog == catalog
+        yield ManagedSessionHome(
+            launch_id=launch_id,
+            generated_home=generated_home,
+            skills_dir=ValidatedAddDir(str(generated_home)),
+            pass_fds=(),
+        )
+
+    mock_mgr.managed_session.side_effect = managed_session
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
-        patch("builtins.input", return_value=""),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         # cook() derives project_dir via the shared git-toplevel helper; pin it so
-        # the wholesale subprocess.run mock cannot stand in for the git probe.
+        # the test does not depend on the caller's checkout.
         patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
-        patch("subprocess.run", return_value=MagicMock(returncode=0)),
+        patch(
+            "autoskillit.cli.session._session_process.run_cook_attempt",
+            return_value=SimpleNamespace(pid=1, pgid=1, returncode=0),
+        ),
+        patch(
+            "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+            return_value=None,
+        ),
+        patch("autoskillit.cli._onboarding.is_first_run", return_value=False),
         patch("autoskillit.core.write_registry_entry"),
         patch("autoskillit.config.load_config", return_value=cfg),
         patch(
@@ -135,6 +187,150 @@ def test_profile_unknown_exits(capsys, _mock_mgr):
     assert "anthropic" in err or "openai" in err
 
 
+def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.core import (
+        CookSessionHandle,
+        HookTrustPolicy,
+        ManagedSessionHome,
+        ValidatedAddDir,
+    )
+
+    generated_home = tmp_path / "generated-home"
+    skills_dir = generated_home / "skills"
+    skills_dir.mkdir(parents=True)
+    manager = MagicMock()
+    captured: dict[str, object] = {}
+
+    @contextmanager
+    def managed_session(
+        launch_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ):
+        assert projection_context.catalog == catalog
+        yield ManagedSessionHome(
+            launch_id=launch_id,
+            generated_home=generated_home,
+            skills_dir=ValidatedAddDir(str(skills_dir)),
+            pass_fds=(3,),
+        )
+
+    manager.managed_session.side_effect = managed_session
+
+    class _Backend:
+        name = "codex"
+        conventions = BackendConventions(
+            project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
+            persistent_session_root_subdir=Path("codex-sessions"),
+            skill_sigil="$",
+        )
+        capabilities = SimpleNamespace(
+            hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
+            session_dir_persistent=True,
+            cook_startup_observer_capable=False,
+        )
+
+        def binary_name(self) -> str:
+            return "codex"
+
+        def recover_cook_history(self) -> None:
+            return None
+
+        def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
+            captured["build_kwargs"] = kwargs
+            env = dict(kwargs["env_extras"])  # type: ignore[arg-type]
+            generated_home = kwargs["generated_home"]
+            env["CODEX_HOME"] = str(generated_home)
+            env["CODEX_SQLITE_HOME"] = str(generated_home)
+            return CmdSpec(
+                cmd=(
+                    "codex",
+                    "--profile",
+                    "minimax",
+                    "-c",
+                    f"sqlite_home={generated_home!s}",
+                ),
+                env=env,
+                cwd="/ambient-cwd-must-not-survive",
+            )
+
+        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+            captured["validated"] = spec
+            return []
+
+        @contextmanager
+        def cook_session_context(self, **kwargs: object):
+            captured["context"] = kwargs
+            yield CookSessionHandle(
+                view_id="view-1",
+                pass_fds=(5,),
+                _record_spawn=lambda _pid, _pgid: None,
+                _record_reaped=lambda _pid, _pgid: None,
+            )
+
+    def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
+        captured["child"] = spec
+        captured["pass_fds"] = kwargs["pass_fds"]
+        kwargs["on_spawn"](1, 1)  # type: ignore[operator]
+        trace = kwargs["trace"]
+        trace.record_spawn()  # type: ignore[union-attr]
+        trace.record_stage(  # type: ignore[union-attr]
+            "hook_review",
+            attempt=1,
+            view_id="view-1",
+        )
+        kwargs["on_reaped"](1, 1)  # type: ignore[operator]
+        return SimpleNamespace(pid=1, pgid=1, returncode=0)
+
+    cfg = MagicMock()
+    cfg.experimental_enabled = True
+    cfg.providers.profiles = {
+        "minimax": {
+            "ANTHROPIC_BASE_URL": "https://minimax.example",
+            "CODEX_HOME": "/caller-home",
+            "CODEX_SQLITE_HOME": "/caller-sqlite-home",
+        }
+    }
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CODEX_HOME", "/ambient-home")
+    monkeypatch.setenv("CODEX_SQLITE_HOME", "/ambient-sqlite-home")
+    monkeypatch.setenv("AUTOSKILLIT_CODEX_STARTUP_TRACE", "1")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
+    with (
+        patch("shutil.which", return_value="/usr/bin/codex"),
+        patch("sys.stdin.isatty", return_value=True),
+        patch("autoskillit.config.load_config", return_value=cfg),
+        patch("autoskillit.cli.session._session_cook.is_feature_enabled", return_value=True),
+        patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=manager),
+        patch("autoskillit.cli._onboarding.is_first_run", return_value=False),
+        patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
+        patch("autoskillit.core.write_registry_entry"),
+        patch(
+            "autoskillit.cli.session._session_process.run_cook_attempt",
+            side_effect=run_attempt,
+        ),
+        patch(
+            "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+            return_value=None,
+        ),
+    ):
+        cook_module.cook(profile="minimax", backend=_Backend())
+
+    spec = captured["validated"]
+    assert spec is captured["child"]
+    assert isinstance(spec, CmdSpec)
+    assert spec.cwd == str(tmp_path)
+    assert spec.env["AUTOSKILLIT_PROVIDER_PROFILE"] == "minimax"
+    assert spec.env["CODEX_HOME"] == str(generated_home)
+    assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
+    assert "AUTOSKILLIT_CODEX_STARTUP_TRACE" not in spec.env
+    assert any("sqlite_home=" in arg and str(generated_home) in arg for arg in spec.cmd)
+    assert captured["pass_fds"] == (3, 5)
+
+
 def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
     """Direct cook composition validates configured tiers before materialization."""
     cfg = AutomationConfig()
@@ -146,7 +342,7 @@ def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
         # project_dir comes from the shared git-toplevel helper; pin it so the
         # "nothing launched" assertion below stays about launches.
         patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
-        patch("subprocess.run") as run,
+        patch("autoskillit.cli.session._session_process.run_cook_attempt") as run,
     ):
         with pytest.raises(SkillContractError, match="process-issues.*ORCHESTRATOR"):
             cook_module.cook(backend=mock_backend_cls())

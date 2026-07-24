@@ -53,6 +53,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "github_api_callable": "OPTIONAL",
     "has_unguarded_filesystem_access": "REQUIRED",
     "hook_config_format": "REQUIRED",
+    "hook_trust_policy": "REQUIRED",
     "inspector_capable": "OPTIONAL",
     "mcp_config_capable": "OPTIONAL",
     "mcp_env_forward_vars": "OPTIONAL",
@@ -123,6 +124,12 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """
         assert isinstance(self.backend.capabilities, BackendCapabilities)
 
+    def test_hook_trust_policy_is_typed(self) -> None:
+        """BackendCapabilities.hook_trust_policy — interactive hook review policy."""
+        from autoskillit.core import HookTrustPolicy
+
+        assert isinstance(self.backend.capabilities.hook_trust_policy, HookTrustPolicy)
+
     def test_conventions_returns_backend_conventions(self) -> None:
         assert isinstance(self.backend.conventions, BackendConventions)
 
@@ -177,6 +184,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         locator = self.backend.session_locator()
         assert locator.locate_session("") is None
 
+    def test_session_locator_has_typed_listing(self) -> None:
+        locator = self.backend.session_locator()
+        assert callable(locator.list_sessions)
+
     # --- Group 3: Command-builder Contracts ---
 
     def test_build_cmd_returns_cmd_spec(self) -> None:
@@ -200,8 +211,16 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert isinstance(result.cmd, tuple)
 
     def test_validate_session_layout_returns_list(self, tmp_path: Path) -> None:
-        result = self.backend.validate_session_layout(tmp_path)
+        result = self.backend.validate_session_layout(tmp_path, project_dir=tmp_path)
         assert isinstance(result, list)
+
+    def test_validate_interactive_invocation_returns_list(self) -> None:
+        spec = self.backend.build_interactive_cmd()
+        assert isinstance(self.backend.validate_interactive_invocation(spec), list)
+
+    def test_cook_lifecycle_boundaries_are_implemented(self) -> None:
+        assert callable(self.backend.recover_cook_history)
+        assert callable(self.backend.cook_session_context)
 
     def test_validate_skill_content_returns_list(self) -> None:
         """BackendCapabilities.hook_config_format and skills_subdir — skill content validation."""

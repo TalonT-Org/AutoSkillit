@@ -486,38 +486,6 @@ class TestCLIOrderCommand:
             )
 
 
-# SC-B-4: mark_onboarded() must NOT be called when the cook subprocess exits non-zero
-def test_cook_mark_onboarded_not_called_on_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """mark_onboarded() must not be called when the cook subprocess exits non-zero."""
-    import autoskillit.cli.session._session_cook as _cook
-
-    onboarded_calls: list[Path] = []
-    monkeypatch.setattr(
-        "autoskillit.cli._onboarding.mark_onboarded",
-        lambda project_dir: onboarded_calls.append(project_dir),
-    )
-
-    def fake_run(cmd: list[str], **kwargs: object) -> object:
-        return type("R", (), {"returncode": 1})()
-
-    monkeypatch.setattr(_cook.subprocess, "run", fake_run)
-
-    with pytest.raises(SystemExit):
-        _cook._run_cook_session(
-            cmd=["claude", "--test"],
-            env={},
-            _first_run=True,
-            initial_prompt="test",
-            project_dir=tmp_path,
-        )
-
-    assert onboarded_calls == [], (
-        "mark_onboarded() must not be called when the subprocess exits non-zero"
-    )
-
-
 # ---------------------------------------------------------------------------
 # ORDER_INTERACTIVE_REQUIRED_ENV call-site contract (issue #4253 Part A)
 # ---------------------------------------------------------------------------

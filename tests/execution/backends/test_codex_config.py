@@ -1026,3 +1026,106 @@ class TestIsRegisteredRequiresAllForwardVars:
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is False, (
             f"Removing {removed_var} should make registration invalid"
         )
+
+
+def test_mcp_writer_facade_owns_the_shared_config_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.backends._codex_config as config_module
+
+    config_path = tmp_path / "source-home" / "config.toml"
+    events: list[tuple[str, Path]] = []
+    lock_held = False
+
+    class RecordingLock:
+        def __init__(self, path: Path) -> None:
+            self.path = Path(path)
+
+        def __enter__(self) -> None:
+            nonlocal lock_held
+            assert lock_held is False
+            lock_held = True
+            events.append(("lock-enter", self.path))
+
+        def __exit__(self, *exc_info: object) -> None:
+            nonlocal lock_held
+            assert lock_held is True
+            events.append(("lock-exit", self.path))
+            lock_held = False
+
+    def fake_unlocked(*, config_path: Path, **_: object) -> bool:
+        assert lock_held is True
+        events.append(("mcp", config_path))
+        return True
+
+    monkeypatch.setattr(config_module, "CodexConfigLock", RecordingLock)
+    monkeypatch.setattr(
+        config_module,
+        "_ensure_codex_mcp_registered_unlocked",
+        fake_unlocked,
+    )
+
+    assert config_module.ensure_codex_mcp_registered(config_path=config_path) is True
+    assert events == [
+        ("lock-enter", config_path),
+        ("mcp", config_path),
+        ("lock-exit", config_path),
+    ]
+
+
+def test_composed_prelaunch_uses_one_lock_for_both_unlocked_mutators(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.backends._codex_prelaunch as prelaunch
+
+    source_home = tmp_path / "source-home"
+    config_path = source_home / "config.toml"
+    events: list[str] = []
+    lock_held = False
+
+    class RecordingLock:
+        def __init__(self, path: Path) -> None:
+            assert Path(path) == config_path
+
+        def __enter__(self) -> None:
+            nonlocal lock_held
+            assert lock_held is False
+            lock_held = True
+            events.append("lock-enter")
+
+        def __exit__(self, *exc_info: object) -> None:
+            nonlocal lock_held
+            assert lock_held is True
+            events.append("lock-exit")
+            lock_held = False
+
+    def fake_mcp(*, config_path: Path, **_: object) -> bool:
+        assert lock_held is True
+        assert config_path == source_home / "config.toml"
+        events.append("mcp")
+        return True
+
+    def fake_hooks(*, config_path: Path, **_: object) -> bool:
+        assert lock_held is True
+        assert config_path == source_home / "config.toml"
+        events.append("hooks")
+        return True
+
+    monkeypatch.setattr(prelaunch, "CodexConfigLock", RecordingLock)
+    monkeypatch.setattr(
+        prelaunch,
+        "_ensure_codex_mcp_registered_unlocked",
+        fake_mcp,
+    )
+    monkeypatch.setattr(
+        prelaunch,
+        "_sync_hooks_to_codex_config_unlocked",
+        fake_hooks,
+    )
+
+    with prelaunch.codex_prelaunch_transaction(source_codex_home=source_home) as target:
+        assert target == config_path
+        assert lock_held is True
+        events.append("yield")
+
+    assert events == ["lock-enter", "mcp", "hooks", "yield", "lock-exit"]

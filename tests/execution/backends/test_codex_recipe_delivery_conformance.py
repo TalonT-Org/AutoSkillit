@@ -457,8 +457,10 @@ def _run_live_probe(tmp_path: Path) -> tuple[_RecipeProbeObservation, str]:
             and candidate_pull.get("producer_tool") == "open_kitchen"
         ):
             envelopes.append(candidate)
-    assert envelopes, "live Codex probe did not retain the open_kitchen pull envelope"
-    recipe_pull = envelopes[-1]["recipe_pull"]
+    assert len(envelopes) == 1, (
+        f"live Codex probe retained {len(envelopes)} open_kitchen pull envelopes"
+    )
+    recipe_pull = envelopes[0]["recipe_pull"]
     assert isinstance(recipe_pull, dict)
     body_sha256 = recipe_pull.get("body_sha256")
     content_pages = _validated_section_pages(candidates, recipe_pull, section="content")

@@ -25,6 +25,7 @@ __all__ = [
 ]
 
 _MISSING = object()
+_RECIPE_SECTION_VALIDATION_FINDING_LIMIT = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +37,7 @@ class RecipeSectionValidationFinding:
     path: tuple[str | int, ...]
     expected: str
     actual_type: str
+    omitted_count: int = 0
 
 
 def canonical_recipe_section_json(value: object) -> str:
@@ -107,11 +109,20 @@ def validate_recipe_artifact_sections(
 ) -> tuple[RecipeSectionValidationFinding, ...]:
     """Validate pullable fields; an empty tuple is the sole valid result."""
     findings: list[RecipeSectionValidationFinding] = []
+    omitted_count = 0
+
+    def record(finding: RecipeSectionValidationFinding) -> None:
+        nonlocal omitted_count
+        if len(findings) < _RECIPE_SECTION_VALIDATION_FINDING_LIMIT:
+            findings.append(finding)
+        else:
+            omitted_count += 1
+
     for section, definition in RECIPE_SECTION_REGISTRY.items():
         value = payload.get(section, _MISSING)
         if value is _MISSING:
             if definition.missing_behavior == "invalid":
-                findings.append(
+                record(
                     _finding(
                         section,
                         "missing_required_section",
@@ -123,7 +134,7 @@ def validate_recipe_artifact_sections(
             continue
         if value is None:
             if definition.none_behavior == "invalid":
-                findings.append(
+                record(
                     _finding(
                         section,
                         "invalid_section_type",
@@ -135,7 +146,7 @@ def validate_recipe_artifact_sections(
             continue
         if definition.value_kind == "string":
             if type(value) is not str:
-                findings.append(
+                record(
                     _finding(
                         section,
                         "invalid_section_type",
@@ -146,7 +157,7 @@ def validate_recipe_artifact_sections(
                 )
             continue
         if type(value) is not list:
-            findings.append(
+            record(
                 _finding(
                     section,
                     "invalid_section_type",
@@ -158,7 +169,7 @@ def validate_recipe_artifact_sections(
             continue
         for index, element in enumerate(value):
             if type(element) is not str:
-                findings.append(
+                record(
                     _finding(
                         section,
                         "invalid_section_element_type",
@@ -171,7 +182,7 @@ def validate_recipe_artifact_sections(
     step_names = payload.get("post_prune_step_names", _MISSING)
     if step_names is not _MISSING:
         if type(step_names) is not list:
-            findings.append(
+            record(
                 _finding(
                     "post_prune_step_names",
                     "invalid_post_prune_step_names",
@@ -183,7 +194,7 @@ def validate_recipe_artifact_sections(
         else:
             for index, step_name in enumerate(step_names):
                 if type(step_name) is not str:
-                    findings.append(
+                    record(
                         _finding(
                             "post_prune_step_names",
                             "invalid_post_prune_step_name",
@@ -192,4 +203,15 @@ def validate_recipe_artifact_sections(
                             step_name,
                         )
                     )
+    if omitted_count:
+        findings.append(
+            RecipeSectionValidationFinding(
+                section="$artifact",
+                code="additional_findings_omitted",
+                path=(),
+                expected="valid recipe section values",
+                actual_type="multiple",
+                omitted_count=omitted_count,
+            )
+        )
     return tuple(findings)

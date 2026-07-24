@@ -193,6 +193,18 @@ def test_persistence_rejects_malformed_pullable_sections(
         _persist(tmp_path, payload)
 
 
+def test_schema_mismatch_diagnostic_bounds_reported_findings(tmp_path: Path) -> None:
+    payload = _payload()
+    payload["warnings"] = list(range(130))
+
+    with pytest.raises(RecipeArtifactSchemaError) as exc_info:
+        _persist(tmp_path, payload)
+
+    detail = str(exc_info.value)
+    assert detail.count("invalid_section_element_type@warnings.") == 100
+    assert detail.endswith("30 additional findings omitted")
+
+
 def test_load_rejects_digest_consistent_malformed_artifact(tmp_path: Path) -> None:
     payload = _payload()
     payload["errors"] = ["valid", 1]

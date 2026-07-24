@@ -2018,6 +2018,7 @@ class ActiveContextAdmissionState(_ContractValue):
                     AdmissionState.PREPARED,
                     AdmissionState.HISTORY_STAGED,
                     AdmissionState.REQUEST_DISPATCHED,
+                    AdmissionState.INDETERMINATE,
                 }
                 and matched_reservation is None
             ):

@@ -1190,6 +1190,35 @@ def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypa
     assert not hasattr(_skills_mod, "_read_skill_frontmatter")
 
 
+def test_projection_context_derives_and_validates_backend_conventions(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import BackendConventions
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillProjectionContext
+
+    conventions = BackendConventions(skills_subdir=Path("agent-skills"))
+    backend = SimpleNamespace(conventions=conventions)
+    catalog = EffectiveSkillCatalog(
+        skills=(),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    context = SkillProjectionContext(
+        cwd=tmp_path,
+        catalog=catalog,
+        backend=backend,
+    )
+
+    assert context.conventions is conventions
+    with pytest.raises(SkillContractError, match="conventions do not match"):
+        SkillProjectionContext(
+            cwd=tmp_path,
+            catalog=catalog,
+            backend=backend,
+            conventions=BackendConventions(skills_subdir=Path("other-skills")),
+        )
+
+
 def test_projection_strips_all_machine_authority_and_preserves_private_deps(
     tmp_path: Path,
 ) -> None:

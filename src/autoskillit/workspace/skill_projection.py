@@ -10,13 +10,15 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, assert_never
+from typing import Any, assert_never
 
 import regex as re
 
 from autoskillit.core import (
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
     SKILL_PROJECTION_VERSION,
+    BackendConventions,
+    CodingAgentBackend,
     DirectInstall,
     MarketplaceInstall,
     PluginSource,
@@ -41,9 +43,6 @@ from autoskillit.workspace.skills import (
     SkillInfo,
     _skill_info_from_frontmatter,
 )
-
-if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend
 
 __all__ = [
     "AgentSkillDocument",
@@ -117,8 +116,8 @@ class SkillProjectionContext:
     project_root: Path | None = None
     catalog: EffectiveSkillCatalog | None = None
     invocation: EffectiveSkillInvocation | None = None
-    backend: Any | None = None
-    conventions: Any | None = None
+    backend: CodingAgentBackend | None = None
+    conventions: BackendConventions | None = None
     substitutions: Mapping[str, str] | None = None
     gating: bool | None = None
     namespace: str | None = None
@@ -139,6 +138,14 @@ class SkillProjectionContext:
             project_root = self.invocation.project_root
         if project_root is not None:
             object.__setattr__(self, "project_root", project_root.resolve())
+        if self.backend is not None:
+            backend_conventions = self.backend.conventions
+            if self.conventions is None:
+                object.__setattr__(self, "conventions", backend_conventions)
+            elif self.conventions != backend_conventions:
+                raise SkillContractError("projection context conventions do not match its backend")
+        elif self.conventions is not None:
+            raise SkillContractError("projection context conventions require a bound backend")
         if self.substitutions is not None:
             object.__setattr__(
                 self,

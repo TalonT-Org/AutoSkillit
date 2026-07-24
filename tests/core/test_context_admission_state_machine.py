@@ -35,23 +35,29 @@ from autoskillit.core import (
     CanonicalRepresentationManifest,
     CanonicalSpanId,
     CanonicalSpanOwner,
+    ChargeCommittedEffect,
     ContextLineage,
     ContextSessionId,
     ContextThreadId,
     ContextWindowSnapshot,
     DeliveryOccurrenceId,
     DispatchRequestEvent,
+    EpochClosedEffect,
     EpochFenceProof,
     ExpireIdempotencyKeyEvent,
     ForkOccurrenceId,
+    GenerationReconciledEffect,
     GenerationReservationId,
     GenerationReservationRecord,
+    GenerationReservationRecordedEffect,
     GenerationState,
+    IdempotencyExpiredEffect,
     IdempotencyNamespace,
     MarkIndeterminateEvent,
     MeasurementKind,
     ModelIdentity,
     ModelItemId,
+    OccurrenceStateChangedEffect,
     OpenEpochEvent,
     PrepareBatchEvent,
     ProducerInstanceId,
@@ -59,12 +65,18 @@ from autoskillit.core import (
     ProposeOccurrenceEvent,
     ProtectedPoolOwnerId,
     ProtectedPoolSpec,
+    QuarantineRecordedEffect,
     ReconcileGenerationEvent,
+    ReconciliationEscalationEffect,
+    ReconciliationQueryRequestedEffect,
     ReleaseNonAdmissionEvent,
     RepresentationBindingId,
     RepresentationBindingWitness,
     RepresentationRevision,
     RequestReconciliationEvent,
+    ReservationInvalidatedEffect,
+    ReservationRecordedEffect,
+    ReservationReleasedEffect,
     ReserveClass,
     ReserveRequestEvent,
     ResolveIndeterminateNonAdmissionEvent,
@@ -395,6 +407,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         self.latest_replayable_event: Any | None = open_event
         self.latest_propose_event: ProposeOccurrenceEvent | None = None
         self.events: list[Any] = [open_event]
+        self.published_effects: list[tuple[object, ...]] = [opened.effects]
         self.event_sequence = 0
         self.last_revision = self.state.aggregate_revision.value
         self.last_admission_sequence = self.state.admission_sequence.value
@@ -424,6 +437,12 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         assert (
             transition.next_state.admission_sequence.value >= self.state.admission_sequence.value
         )
+        expected_effect_types = self._expected_effect_types(transition, event)
+        assert tuple(type(effect) for effect in transition.effects) == expected_effect_types
+        for effect in transition.effects:
+            assert effect.source_event_id == getattr(event, "event_id")
+            assert effect.resulting_aggregate_revision == transition.next_state.aggregate_revision
+            assert effect.resulting_admission_sequence == transition.next_state.admission_sequence
         self.state = transition.next_state
         self.last_revision = self.state.aggregate_revision.value
         self.last_admission_sequence = self.state.admission_sequence.value
@@ -431,6 +450,140 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         if any(record.event_id == event_id for record in self.state.processed_events):
             self.latest_replayable_event = event
         self.events.append(event)
+        self.published_effects.append(transition.effects)
+
+    def _expected_effect_types(
+        self,
+        transition: Any,
+        event: object,
+    ) -> tuple[type[object], ...]:
+        if transition.decision.kind not in {
+            AdmissionDecisionKind.WOULD_ADMIT,
+            AdmissionDecisionKind.QUARANTINED,
+        }:
+            return ()
+        if isinstance(event, ProposeOccurrenceEvent | StartGenerationEvent):
+            return ()
+        if isinstance(event, ReserveRequestEvent):
+            effect_types: tuple[type[object], ...] = (
+                ReservationRecordedEffect,
+                *(OccurrenceStateChangedEffect for _ in event.batch.occurrence_ids),
+            )
+            if (
+                event.generation_reservation is not None
+                and event.generation_reservation.maximum_allowance > 0
+            ):
+                effect_types += (GenerationReservationRecordedEffect,)
+            return effect_types
+        if isinstance(
+            event,
+            PrepareBatchEvent | StageHistoryEvent | DispatchRequestEvent | MarkIndeterminateEvent,
+        ):
+            record = self._find_batch(event.batch_id)
+            assert record is not None
+            return tuple(OccurrenceStateChangedEffect for _ in record.batch.occurrence_ids)
+        if isinstance(event, AcceptInputEvent):
+            record = self._find_batch(event.batch_id)
+            assert record is not None
+            effect_types = (
+                ChargeCommittedEffect,
+                *(OccurrenceStateChangedEffect for _ in record.batch.occurrence_ids),
+            )
+            if transition.decision.kind is AdmissionDecisionKind.QUARANTINED:
+                effect_types += (QuarantineRecordedEffect,)
+            return effect_types
+        if isinstance(
+            event,
+            ReleaseNonAdmissionEvent
+            | RollbackAdmissionEvent
+            | ResolveIndeterminateNonAdmissionEvent
+            | ResolveIndeterminateRollbackEvent,
+        ):
+            record = self._find_batch(event.batch_id)
+            assert record is not None
+            generation_count = sum(
+                generation.batch_id == record.batch.batch_id
+                and generation.state
+                in {
+                    GenerationState.RESERVED,
+                    GenerationState.STREAMING,
+                    GenerationState.INDETERMINATE,
+                }
+                for generation in self.state.generation_reservations
+            )
+            return (
+                ReservationReleasedEffect,
+                *(OccurrenceStateChangedEffect for _ in record.batch.occurrence_ids),
+                *(ReservationInvalidatedEffect for _ in range(generation_count)),
+            )
+        if isinstance(event, ReconcileGenerationEvent):
+            effect_types = (GenerationReconciledEffect,)
+            if transition.decision.kind is AdmissionDecisionKind.QUARANTINED:
+                effect_types += (QuarantineRecordedEffect,)
+            return effect_types
+        if isinstance(event, ExpireIdempotencyKeyEvent):
+            return (IdempotencyExpiredEffect,)
+        if isinstance(event, RolloverEpochEvent):
+            invalidated_batch_ids = {
+                record.batch.batch_id
+                for record in self.state.batch_records
+                if record.state
+                in {
+                    AdmissionState.RESERVED,
+                    AdmissionState.PREPARED,
+                    AdmissionState.HISTORY_STAGED,
+                }
+            }
+            input_invalidation_count = sum(
+                reservation.key.batch_id in invalidated_batch_ids
+                for reservation in self.state.reservations
+            )
+            retained_request_ids = {
+                record.batch.request_id
+                for record in self.state.batch_records
+                if record.state
+                in {
+                    AdmissionState.REQUEST_DISPATCHED,
+                    AdmissionState.COMMITTED,
+                    AdmissionState.INDETERMINATE,
+                    AdmissionState.QUARANTINED,
+                }
+            }
+            generation_invalidation_count = sum(
+                generation.state
+                in {
+                    GenerationState.RESERVED,
+                    GenerationState.STREAMING,
+                    GenerationState.INDETERMINATE,
+                }
+                and generation.request_id not in retained_request_ids
+                for generation in self.state.generation_reservations
+            )
+            occurrence_change_count = sum(
+                record.state
+                in {
+                    AdmissionState.PROPOSED,
+                    AdmissionState.RESERVED,
+                    AdmissionState.PREPARED,
+                    AdmissionState.HISTORY_STAGED,
+                }
+                for record in self.state.occurrence_records
+            )
+            return (
+                *(
+                    ReservationInvalidatedEffect
+                    for _ in range(input_invalidation_count + generation_invalidation_count)
+                ),
+                *(OccurrenceStateChangedEffect for _ in range(occurrence_change_count)),
+                EpochClosedEffect,
+            )
+        if isinstance(event, RequestReconciliationEvent):
+            return (
+                ReconciliationEscalationEffect
+                if "deadline" in event.reason_code.casefold()
+                else ReconciliationQueryRequestedEffect,
+            )
+        raise AssertionError(f"missing effect contract for {type(event).__name__}")
 
     def _availability(self, reserve_class: ReserveClass) -> tuple[int, int, int]:
         total_charged = sum(
@@ -998,12 +1151,14 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         transition = reduce_context_admission(self.state, restored_event)
         assert transition.decision.kind is AdmissionDecisionKind.NOOP_IDEMPOTENT
         assert transition.next_state == self.state
+        assert transition.effects == ()
 
     @rule()
     def generated_stream_replay_is_deterministic(self) -> None:
         replay = replay_context_admission(_uninitialized(), tuple(self.events))
         assert replay.final_state == self.state
         assert len(replay.transitions) == len(self.events)
+        assert [transition.effects for transition in replay.transitions] == self.published_effects
 
     @precondition(lambda self: self.latest_propose_event is not None)
     @rule()

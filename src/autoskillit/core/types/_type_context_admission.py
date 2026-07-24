@@ -1156,6 +1156,13 @@ class ReserveRequestEvent(_AdmissionEventBase):
                 _raise_invalid("reservation_batch_policy_mismatch")
         generation = self.generation_reservation
         if generation is not None and (
+            generation.state is not GenerationState.RESERVED
+            or generation.exact_terminal_usage is not None
+            or generation.witness_ids
+            or generation.authority_source_id is not None
+        ):
+            _raise_invalid("generation_reservation_not_open")
+        if generation is not None and (
             generation.request_id != self.batch.request_id
             or generation.batch_id != self.batch.batch_id
             or generation.representation_revision != self.batch.manifest.representation_revision

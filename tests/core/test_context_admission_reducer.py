@@ -623,6 +623,31 @@ def test_reserve_rejects_active_generation_reservation_id_reuse() -> None:
     _assert_rejection_unchanged(state, rejected.next_state)
 
 
+def test_reserve_event_rejects_terminal_generation_record() -> None:
+    state = _open_epoch()
+    occurrence = _occurrence("terminal-generation-reserve", maximum=10)
+    batch = _batch("batch-terminal-generation-reserve", (occurrence,))
+    generation = replace(
+        _generation_reservation(batch, maximum=5),
+        state=GenerationState.RECONCILED,
+        exact_terminal_usage=5,
+        witness_ids=(AdmissionWitnessId("terminal-generation-witness"),),
+        authority_source_id=AuthoritySourceId("terminal-generation-authority"),
+    )
+
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="generation_reservation_not_open",
+    ):
+        ReserveRequestEvent(
+            **_event_fields(state, "reserve-terminal-generation", "reserve-request"),
+            batch=batch,
+            snapshot_sequence=state.snapshot.snapshot_sequence,
+            input_reservations=(_reservation(batch, (occurrence,), count=5),),
+            generation_reservation=generation,
+        )
+
+
 def test_active_state_rejects_global_capacity_overallocation() -> None:
     state, _, _, _ = _reserved_batch(
         remaining_count=60,

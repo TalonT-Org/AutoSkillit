@@ -923,9 +923,13 @@ async def run_skill(
             # The fresh branch resolved the complete effective invocation before any
             # notification or provider/executor work. Backend-specific rendering waits
             # until capability-driven backend selection is complete.
-            resolved_command = skill_command
             _stored_contract = (
                 _stored_contract_entry.contract if _stored_contract_entry is not None else None
+            )
+            resolved_command = (
+                _stored_contract.resolved_command
+                if _stored_contract is not None
+                else skill_command
             )
             _effective_skill_contract = invocation if invocation is not None else _stored_contract
 

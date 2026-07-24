@@ -57,6 +57,7 @@ async def test_resume_skips_skill_command_validation(tool_ctx_kitchen_open, monk
     )
     data = json.loads(result)
     assert data["success"] is True  # not rejected by _validate_skill_command
+    assert executor.calls[0].skill_command == "/implement foo"
 
 
 @pytest.mark.anyio

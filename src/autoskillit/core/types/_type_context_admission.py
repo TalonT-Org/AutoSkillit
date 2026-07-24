@@ -902,6 +902,23 @@ class AdmissionBatchRecord(_ContractValue):
     committed_input_count: int
     unresolved_input_count: int
 
+    def charged_input_count(self, reservation: AdmissionReservation | None) -> int:
+        """Return the capacity charge represented by this lifecycle record."""
+        if self.state in {AdmissionState.COMMITTED, AdmissionState.QUARANTINED}:
+            return self.committed_input_count
+        if self.state is AdmissionState.INDETERMINATE:
+            return self.unresolved_input_count or (
+                reservation.reserved_count if reservation is not None else 0
+            )
+        if self.state in {
+            AdmissionState.RESERVED,
+            AdmissionState.PREPARED,
+            AdmissionState.HISTORY_STAGED,
+            AdmissionState.REQUEST_DISPATCHED,
+        }:
+            return reservation.reserved_count if reservation is not None else 0
+        return 0
+
     def __post_init__(self) -> None:
         _validate_canonical_tuple(
             self.witness_ids,
@@ -941,6 +958,17 @@ class GenerationReservationRecord(_ContractValue):
     exact_terminal_usage: int | None
     witness_ids: tuple[AdmissionWitnessId, ...]
     authority_source_id: AuthoritySourceId | None
+
+    def charged_output_count(self) -> int:
+        """Return the generation capacity charge for this lifecycle record."""
+        if self.state in {
+            GenerationState.RESERVED,
+            GenerationState.STREAMING,
+            GenerationState.INDETERMINATE,
+            GenerationState.QUARANTINED,
+        }:
+            return self.maximum_allowance
+        return 0
 
     def __post_init__(self) -> None:
         for value in (
@@ -2122,6 +2150,16 @@ class ActiveContextAdmissionState(_ContractValue):
             for key, charged in protected_charges.items()
         ):
             _raise_invalid("protected_pool_overallocated")
+        global_charged = sum(
+            record.charged_input_count(
+                reservations_by_id.get(record.reservation_id)
+                if record.reservation_id is not None
+                else None
+            )
+            for record in self.batch_records
+        ) + sum(generation.charged_output_count() for generation in self.generation_reservations)
+        if global_charged > self.snapshot.remaining_count:
+            _raise_invalid("context_capacity_overallocated")
 
 
 ContextAdmissionState: TypeAlias = UninitializedContextAdmissionState | ActiveContextAdmissionState

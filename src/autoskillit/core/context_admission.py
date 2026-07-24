@@ -232,21 +232,7 @@ def _capacity(
 
     for record in state.batch_records:
         reservation = _reservation_for(state, record)
-        if record.state in {AdmissionState.COMMITTED, AdmissionState.QUARANTINED}:
-            charged = record.committed_input_count
-        elif record.state is AdmissionState.INDETERMINATE:
-            charged = record.unresolved_input_count
-            if charged == 0 and reservation is not None:
-                charged = reservation.reserved_count
-        elif record.state in {
-            AdmissionState.RESERVED,
-            AdmissionState.PREPARED,
-            AdmissionState.HISTORY_STAGED,
-            AdmissionState.REQUEST_DISPATCHED,
-        }:
-            charged = reservation.reserved_count if reservation is not None else 0
-        else:
-            charged = 0
+        charged = record.charged_input_count(reservation)
         global_charged += charged
         owner = record.batch.protected_pool_owner_id
         if owner is not None:
@@ -254,17 +240,13 @@ def _capacity(
             charged_by_pool[key] = charged_by_pool.get(key, 0) + charged
 
     for generation in state.generation_reservations:
-        if generation.state in {
-            GenerationState.RESERVED,
-            GenerationState.STREAMING,
-            GenerationState.INDETERMINATE,
-            GenerationState.QUARANTINED,
-        }:
-            global_charged += generation.maximum_allowance
+        generation_charge = generation.charged_output_count()
+        if generation_charge > 0:
+            global_charged += generation_charge
             owner = generation.protected_pool_owner_id
             if owner is not None:
                 key = (generation.reserve_class, owner)
-                charged_by_pool[key] = charged_by_pool.get(key, 0) + generation.maximum_allowance
+                charged_by_pool[key] = charged_by_pool.get(key, 0) + generation_charge
 
     global_unallocated = max(state.snapshot.remaining_count - global_charged, 0)
     pool_available: dict[tuple[ReserveClass, ProtectedPoolOwnerId], int] = {}

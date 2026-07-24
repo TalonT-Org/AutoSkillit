@@ -622,6 +622,25 @@ def test_reserve_rejects_active_generation_reservation_id_reuse() -> None:
     _assert_rejection_unchanged(state, rejected.next_state)
 
 
+def test_active_state_rejects_global_capacity_overallocation() -> None:
+    state, _, _, _ = _reserved_batch(
+        remaining_count=60,
+        input_count=25,
+        generation_count=20,
+        name="global-overallocation",
+    )
+    impossible_snapshot = replace(
+        state.snapshot,
+        active_count=56,
+        remaining_count=44,
+    )
+
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        replace(state, snapshot=impossible_snapshot)
+
+    assert "context_capacity_overallocated" in str(exc_info.value)
+
+
 def _prepare_dispatch(
     state: ActiveContextAdmissionState, batch: AdmissionBatch
 ) -> ActiveContextAdmissionState:

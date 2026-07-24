@@ -9,7 +9,10 @@ import pytest
 import structlog
 
 from autoskillit.config import OutputBudgetConfig
-from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+from autoskillit.core import (
+    RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+)
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     RESPONSE_SPILL_METADATA_KEYS,
@@ -309,11 +312,15 @@ def test_projection_recursion_failure_fails_closed_with_artifact_path(tmp_path, 
     assert open(data["artifact_path"], encoding="utf-8").read() == original
 
 
-def test_nonpositive_response_max_bytes_is_rejected():
+@pytest.mark.parametrize(
+    "response_max_bytes",
+    [0, -10, RECIPE_SECTION_RESPONSE_FLOOR_BYTES - 1],
+)
+def test_response_max_bytes_below_recipe_section_floor_is_rejected(
+    response_max_bytes: int,
+) -> None:
     with pytest.raises(ValueError, match="response_max_bytes"):
-        OutputBudgetConfig(response_max_bytes=0)
-    with pytest.raises(ValueError, match="response_max_bytes"):
-        OutputBudgetConfig(response_max_bytes=-10)
+        OutputBudgetConfig(response_max_bytes=response_max_bytes)
 
 
 def test_spill_and_failure_telemetry_is_exact_and_path_free(tmp_path, monkeypatch):
@@ -459,7 +466,7 @@ def test_plain_text_irreducible_shape_returns_failure(tmp_path):
         inline_max_chars=10,
         head_chars=5,
         tail_chars=5,
-        response_max_bytes=50,
+        response_max_bytes=RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     )
     result = enforce_response_budget(
         "x" * 1000,

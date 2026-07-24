@@ -236,6 +236,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
     "_type_backend": frozenset({"core", "execution", "cli", "recipe", "server", "workspace"}),
     "_type_recipe_delivery": frozenset({"core", "execution", "server"}),
+    "_type_recipe_sections": frozenset({"core", "execution", "server"}),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli"}),
@@ -765,13 +766,14 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "core",
             "hooks/test_recipe_contract_freshness.py",
             "migration",
-            # Server file-level entries (14 of 52 import autoskillit.recipe):
+            # Server file-level entries importing autoskillit.recipe:
             "server/test_serve_idempotence.py",
             "server/test_backend_ingredient_injection.py",
             "server/test_factory.py",
             "server/test_tools_dispatch_validation.py",
             "server/test_tools_kitchen_gate_features.py",
             "server/test_tools_load_recipe.py",
+            "server/test_tools_recipe_pull.py",
             "server/test_server_tool_registration.py",
             "server/test_mcp_overrides.py",
             "server/test_smoke_pipeline.py",

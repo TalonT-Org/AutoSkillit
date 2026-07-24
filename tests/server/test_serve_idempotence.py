@@ -15,7 +15,7 @@ from hypothesis import strategies as st
 
 from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
 from autoskillit.pipeline.context import ToolContext
-from tests.server._helpers import _resolve_recipe_content
+from tests.server._helpers import _resolve_recipe_section
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
@@ -85,10 +85,10 @@ async def test_load_recipe_after_open_kitchen_with_overrides_serves_identical_co
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = await _resolve_recipe_content(ok_result)
+    ok_content = await _resolve_recipe_section(ok_result)
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-    lr_content = await _resolve_recipe_content(lr_result)
+    lr_content = await _resolve_recipe_section(lr_result)
 
     assert ok_content == lr_content, (
         "load_recipe content diverges from open_kitchen content — "
@@ -124,8 +124,8 @@ async def test_load_recipe_after_open_kitchen_without_overrides_serves_identical
     )
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
-    ok_content = await _resolve_recipe_content(ok_result)
-    lr_content = await _resolve_recipe_content(lr_result)
+    ok_content = await _resolve_recipe_section(ok_result)
+    lr_content = await _resolve_recipe_section(lr_result)
     assert ok_content == lr_content, (
         "load_recipe content diverges from open_kitchen content (no-override path) — "
         "session_serve_overrides baseline not applied"
@@ -151,7 +151,7 @@ async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
         monkeypatch,
     )
     assert first_result.get("success") is True, f"first open_kitchen failed: {first_result}"
-    first_content = await _resolve_recipe_content(first_result)
+    first_content = await _resolve_recipe_section(first_result)
 
     deferred_result = await _open_kitchen_patched(
         _RECIPE,
@@ -161,7 +161,7 @@ async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
     assert deferred_result.get("success") is True, (
         f"deferred-recall open_kitchen failed: {deferred_result}"
     )
-    deferred_content = await _resolve_recipe_content(deferred_result)
+    deferred_content = await _resolve_recipe_section(deferred_result)
 
     assert first_content == deferred_content, (
         "Deferred-recall open_kitchen content diverges from first serving — "
@@ -233,7 +233,7 @@ async def test_explicit_load_recipe_overrides_layer_on_top_of_session_baseline(
     lr_result = json.loads(
         await load_recipe(name=_RECIPE, overrides={"extra_ingredient": "extra_value"})
     )
-    lr_content = await _resolve_recipe_content(lr_result)
+    lr_content = await _resolve_recipe_section(lr_result)
 
     from autoskillit.core.io import load_yaml
 
@@ -252,7 +252,7 @@ async def _get_recipe_resource_content(recipe_name: str) -> str:
 
     resource = json.loads(get_recipe(recipe_name))
     assert "error" not in resource, f"get_recipe returned error: {resource}"
-    return await _resolve_recipe_content(resource)
+    return await _resolve_recipe_section(resource)
 
 
 async def test_get_recipe_content_matches_open_kitchen_with_overrides(
@@ -277,7 +277,7 @@ async def test_get_recipe_content_matches_open_kitchen_with_overrides(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = await _resolve_recipe_content(ok_result)
+    ok_content = await _resolve_recipe_section(ok_result)
 
     gr_content = await _get_recipe_resource_content(_RECIPE)
 
@@ -310,13 +310,13 @@ async def _call_re_serve_surface(
         from autoskillit.server.tools.tools_recipe import load_recipe
 
         result = json.loads(await load_recipe(name=recipe_name))
-        return await _resolve_recipe_content(result)
+        return await _resolve_recipe_section(result)
     elif surface == "get_recipe":
         return await _get_recipe_resource_content(recipe_name)
     elif surface == "open_kitchen_deferred_recall":
         result = await _open_kitchen_patched(recipe_name, None, monkeypatch)
         assert result.get("success") is True, f"deferred-recall failed: {result}"
-        return await _resolve_recipe_content(result)
+        return await _resolve_recipe_section(result)
     else:
         raise ValueError(f"Unknown surface: {surface!r}")
 
@@ -346,7 +346,7 @@ async def test_serve_surfaces_parametric_content_identity(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = await _resolve_recipe_content(ok_result)
+    ok_content = await _resolve_recipe_section(ok_result)
 
     re_served_content = await _call_re_serve_surface(surface, _RECIPE, monkeypatch)
 
@@ -375,7 +375,7 @@ async def test_get_recipe_snapshot_lifecycle(
         monkeypatch,
     )
     assert ok_result.get("success") is True, f"open_kitchen failed: {ok_result}"
-    ok_content = await _resolve_recipe_content(ok_result)
+    ok_content = await _resolve_recipe_section(ok_result)
 
     gr_content = await _get_recipe_resource_content(_RECIPE)
 
@@ -453,8 +453,8 @@ async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
     lr_result = json.loads(await load_recipe(name=_RECIPE))
     if lr_result.get("success") is False:
         assume(False)  # discard: load_recipe failed
-    ok_content = await _resolve_recipe_content(ok_result)
-    lr_content = await _resolve_recipe_content(lr_result)
+    ok_content = await _resolve_recipe_section(ok_result)
+    lr_content = await _resolve_recipe_section(lr_result)
     assert lr_content == ok_content, (
         f"Routing divergence for overrides={overrides!r}: "
         "load_recipe content must match open_kitchen content"

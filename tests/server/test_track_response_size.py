@@ -9,6 +9,7 @@ import pytest
 import structlog
 
 from autoskillit.config import OutputBudgetConfig
+from autoskillit.core import RECIPE_SECTION_RESPONSE_FLOOR_BYTES
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -239,11 +240,12 @@ class TestTrackResponseSize:
         from autoskillit.server._notify import track_response_size
 
         tool_name = "/private/tool/" + "x" * 200
+        response_bound = max(200, RECIPE_SECTION_RESPONSE_FLOOR_BYTES)
         ctx = MagicMock(
             response_log=MagicMock(record=MagicMock(return_value=False)),
             config=MagicMock(
                 mcp_response=MagicMock(alert_threshold_tokens=0),
-                output_budget=OutputBudgetConfig(response_max_bytes=200),
+                output_budget=OutputBudgetConfig(response_max_bytes=response_bound),
             ),
         )
 
@@ -261,7 +263,7 @@ class TestTrackResponseSize:
         ):
             result = await fake_handler()
 
-        assert len(result.encode("utf-8")) <= 200
+        assert len(result.encode("utf-8")) <= response_bound
         assert "/private/project" not in result
         assert "/private/project" not in repr(log_info.call_args_list)
         event = next(

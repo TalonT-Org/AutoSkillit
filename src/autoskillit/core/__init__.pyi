@@ -170,6 +170,7 @@ from .types import CORE_PACKS as CORE_PACKS
 from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
+from .types import DYNAMIC_RECIPE_SECTION_DEF as DYNAMIC_RECIPE_SECTION_DEF
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
@@ -220,6 +221,19 @@ from .types import (
 )
 from .types import RECIPE_PACK_REGISTRY as RECIPE_PACK_REGISTRY
 from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS
+from .types import (
+    RECIPE_SECTION_CONTENT_FORMAT_REGISTRY as RECIPE_SECTION_CONTENT_FORMAT_REGISTRY,
+)
+from .types import (
+    RECIPE_SECTION_MANDATORY_FAILURE_CODES as RECIPE_SECTION_MANDATORY_FAILURE_CODES,
+)
+from .types import (
+    RECIPE_SECTION_PAGINATION_POLICY_DIGEST as RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
+)
+from .types import RECIPE_SECTION_PAGINATION_VERSION as RECIPE_SECTION_PAGINATION_VERSION
+from .types import RECIPE_SECTION_REGISTRY as RECIPE_SECTION_REGISTRY
+from .types import RECIPE_SECTION_REGISTRY_DIGEST as RECIPE_SECTION_REGISTRY_DIGEST
+from .types import RECIPE_SECTION_RESPONSE_FLOOR_BYTES as RECIPE_SECTION_RESPONSE_FLOOR_BYTES
 from .types import REQUIRED_CONSUMER_FIELDS as REQUIRED_CONSUMER_FIELDS
 from .types import RESERVED_LOG_RECORD_KEYS as RESERVED_LOG_RECORD_KEYS
 from .types import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY as RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
@@ -367,6 +381,9 @@ from .types import RecipeLoadError as RecipeLoadError
 from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
+from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDef
+from .types import RecipeSectionDef as RecipeSectionDef
+from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
@@ -413,6 +430,7 @@ from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
+from .types import canonical_recipe_section_json as canonical_recipe_section_json
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_remaining as compute_remaining
 from .types import describe_capability_mismatches as describe_capability_mismatches
@@ -424,6 +442,9 @@ from .types import is_path_like_token as is_path_like_token
 from .types import is_valid_codex_model_id as is_valid_codex_model_id
 from .types import model_class as model_class
 from .types import parse_plan_paths as parse_plan_paths
+from .types import recipe_section_digest as recipe_section_digest
+from .types import recipe_section_element_digest as recipe_section_element_digest
+from .types import recipe_section_plan_digest as recipe_section_plan_digest
 from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
@@ -433,3 +454,4 @@ from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
 from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import validate_label_transition as validate_label_transition
+from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections

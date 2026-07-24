@@ -36,6 +36,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_no_raw_signal_handler.py` | AST guard: no raw signal.signal(SIGTERM, ...) in cli/app.py |
 | `test_notify_module.py` | Contract tests: server._notify module |
 | `test_response_backstop.py` | Universal response-budget spill, exact projection, exemption, fail-closed, and telemetry contracts |
+| `test_recipe_section_pagination.py` | Pure schema-driven recipe-section pagination, rendering, digest, and cache contracts |
 | `test_perform_merge_editable_guard.py` | Integration tests verifying perform_merge() aborts before cleanup on poisoned installs |
 | `test_profile_to_env.py` | Tests for _profile_to_env — ProviderProfileDef to env dict conversion in _guards.py |
 | `test_quota_refresh_loop.py` | Tests for _quota_refresh_loop in server/_misc.py |
@@ -128,6 +129,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_open_kitchen_staleness.py` | Tests for ProcessStaleError propagation through open_kitchen — failure envelope with staleness context |
 | `test_open_kitchen_deferred_recall.py` | Tests for the _is_deferred_recall=True path: active_recipe_steps and fail-closed guard |
 | `test_output_budget_e2e.py` | Env-gated real kitchen/run_skill deep-investigate probes proving backend/model selection, completed agent waves, bounded large-fixture evidence, and post-report validation for Codex and Claude Code 200K |
+| `test_cancellation_shield.py` | Legacy and typed-state cancellation shield behavior, isolation, and restoration contracts |
 | `test_tools_label_validation.py` | Tests for label whitelist validation in server tool handlers |
 | `test_tools_list_recipes.py` | Tests for autoskillit server list_recipes tool |
 | `test_tools_load_recipe.py` | Tests for autoskillit server load_recipe tool |

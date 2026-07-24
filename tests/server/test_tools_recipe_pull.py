@@ -6,6 +6,7 @@ import hashlib
 import json
 import shutil
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -15,6 +16,7 @@ import pytest
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     RECIPE_DELIVERY_SURFACE_REGISTRY,
+    RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RecipeDeliveryAttestation,
     RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
@@ -28,6 +30,9 @@ from autoskillit.execution import (
     RecipeDeliveryReceiptLedger,
 )
 from autoskillit.execution.backends import CodexBackend
+from autoskillit.recipe import load_and_validate
+from autoskillit.server import _recipe_delivery as recipe_delivery
+from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server._recipe_delivery import (
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_BODY_END,
@@ -35,7 +40,10 @@ from autoskillit.server._recipe_delivery import (
     RECIPE_COMPLETION_SENTINEL,
     RecipeArtifactError,
     RecipeArtifactGeneration,
+    RecipeArtifactSchemaError,
+    _canonical_payload,
     _generation_dir,
+    _generation_from_payload,
     build_recipe_envelope,
     complete_finalized_recipe_response,
     finalize_recipe_delivery,
@@ -45,7 +53,16 @@ from autoskillit.server._recipe_delivery import (
     recipe_recreation_producers,
     retire_recipe_artifacts,
 )
+from autoskillit.server._recipe_section_pagination import (
+    PagePlanCache,
+    RecipeSectionNonConvergenceError,
+    RecipeSectionPaginationError,
+    get_or_build_recipe_section_page_plan,
+    resolve_recipe_section_bound_bytes,
+    select_recipe_section,
+)
 from autoskillit.server._response_budget import enforce_response_budget
+from autoskillit.server.recipe_section import _lifecycle as recipe_section_lifecycle
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -62,7 +79,10 @@ def _payload(
         "content": content,
         "post_prune_step_names": ["first"],
         "orchestration_rules": "follow the graph",
-        "ingredients_table": {"task": {"required": True}},
+        "stop_step_semantics": "stop means stop",
+        "ingredients_table": "| Ingredient | Required |\n|---|---|\n| task | yes |",
+        "errors": [],
+        "warnings": [],
     }
 
 
@@ -71,14 +91,155 @@ def _persist(
     payload: dict[str, object] | None = None,
     *,
     producer: str = "open_kitchen",
+    kitchen_id: str = "kitchen-test",
 ) -> RecipeArtifactGeneration:
     return persist_recipe_artifact(
         tmp_path,
-        kitchen_id="kitchen-test",
+        kitchen_id=kitchen_id,
         producer_tool=producer,
         recipe_name="remediation",
         payload=dict(payload or _payload()),
     )
+
+
+def _write_malformed_generation(
+    tmp_path: Path,
+    payload: dict[str, object],
+    *,
+    kitchen_id: str = "kitchen-test",
+    producer: str = "open_kitchen",
+) -> RecipeArtifactGeneration:
+    """Write a digest-consistent artifact while bypassing producer validation."""
+    blob = _canonical_payload(payload)
+    generation = _generation_from_payload(
+        producer_tool=producer,
+        recipe_name="remediation",
+        blob=blob,
+        payload=payload,
+    )
+    directory = _generation_dir(
+        tmp_path,
+        kitchen_id=kitchen_id,
+        producer_tool=producer,
+        recipe_name="remediation",
+        descriptor_version=generation.descriptor_version,
+        schema_version=generation.schema_version,
+        payload_sha256=generation.payload_sha256,
+    )
+    directory.mkdir(parents=True)
+    (directory / "payload.json").write_bytes(blob)
+    (directory / "descriptor.json").write_bytes(_canonical_payload(generation.pull_identity()))
+    return generation
+
+
+def test_pull_fixture_matches_load_and_validate_section_shapes(tmp_path: Path) -> None:
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "remediation.yaml").write_text(
+        """\
+name: remediation
+description: Fixture recipe
+summary: Fixture recipe
+kitchen_rules:
+  - Follow routing rules
+ingredients:
+  task:
+    description: Work to perform
+    required: true
+steps:
+  first:
+    action: stop
+    message: Done. Emit the L3 result sentinel JSON block now.
+""",
+        encoding="utf-8",
+    )
+
+    producer = dict(load_and_validate("remediation", project_dir=tmp_path))
+    if producer.get("warnings") is None:
+        producer["warnings"] = []
+    fixture = _payload(str(producer["content"]))
+
+    assert producer["valid"] is True
+    assert producer["post_prune_step_names"] == fixture["post_prune_step_names"]
+    for section in (
+        "content",
+        "ingredients_table",
+        "orchestration_rules",
+        "stop_step_semantics",
+        "errors",
+        "warnings",
+    ):
+        assert type(fixture[section]) is type(producer[section]), section
+
+
+@pytest.mark.parametrize(
+    ("field", "malformed"),
+    [
+        ("content", []),
+        ("ingredients_table", {"task": {"required": True}}),
+        ("orchestration_rules", []),
+        ("stop_step_semantics", 1),
+        ("errors", ["valid", 1]),
+        ("warnings", "warning"),
+        ("post_prune_step_names", ["first", 1]),
+    ],
+)
+def test_persistence_rejects_malformed_pullable_sections(
+    tmp_path: Path, field: str, malformed: object
+) -> None:
+    payload = _payload()
+    payload[field] = malformed
+
+    with pytest.raises(RecipeArtifactSchemaError):
+        _persist(tmp_path, payload)
+
+
+def test_persistence_rejects_missing_required_content(tmp_path: Path) -> None:
+    payload = _payload()
+    payload.pop("content")
+
+    with pytest.raises(RecipeArtifactSchemaError, match="missing_required_section@content"):
+        _persist(tmp_path, payload)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["content", "orchestration_rules", "stop_step_semantics", "errors", "warnings"],
+)
+def test_persistence_rejects_null_for_sections_with_invalid_null_behavior(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    payload = _payload()
+    payload[field] = None
+
+    with pytest.raises(RecipeArtifactSchemaError, match=f"invalid_section_type@{field}"):
+        _persist(tmp_path, payload)
+
+
+def test_schema_mismatch_diagnostic_bounds_reported_findings(tmp_path: Path) -> None:
+    payload = _payload()
+    payload["warnings"] = list(range(130))
+
+    with pytest.raises(RecipeArtifactSchemaError) as exc_info:
+        _persist(tmp_path, payload)
+
+    detail = str(exc_info.value)
+    assert detail.count("invalid_section_element_type@warnings.") == 100
+    assert detail.endswith("30 additional findings omitted")
+
+
+def test_load_rejects_digest_consistent_malformed_artifact(tmp_path: Path) -> None:
+    payload = _payload()
+    payload["errors"] = ["valid", 1]
+    generation = _write_malformed_generation(tmp_path, payload)
+
+    with pytest.raises(RecipeArtifactSchemaError):
+        load_recipe_artifact(
+            tmp_path,
+            kitchen_id="kitchen-test",
+            identity=generation,
+        )
 
 
 def test_artifact_namespace_encodes_colliding_kitchen_ids_injectively(tmp_path: Path) -> None:
@@ -321,6 +482,124 @@ def test_kitchen_retirement_removes_only_that_namespace(tmp_path: Path) -> None:
     assert (
         load_recipe_artifact(tmp_path, kitchen_id="other-kitchen", identity=second) == _payload()
     )
+
+
+def test_kitchen_retirement_notifies_callbacks_after_one_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    notified: list[str] = []
+
+    def failing_callback(_kitchen_id: str) -> None:
+        raise RuntimeError("cleanup failed")
+
+    def succeeding_callback(kitchen_id: str) -> None:
+        notified.append(kitchen_id)
+
+    monkeypatch.setattr(
+        recipe_section_lifecycle,
+        "_KITCHEN_RETIREMENT_CALLBACKS",
+        (failing_callback, succeeding_callback),
+    )
+
+    recipe_section_lifecycle.notify_kitchen_retired("kitchen-test")
+
+    assert notified == ["kitchen-test"]
+
+
+@pytest.mark.parametrize("kwargs", [{"max_entries": -1}, {"max_bytes": -1}])
+def test_page_plan_cache_rejects_negative_capacity_limits(kwargs: dict[str, int]) -> None:
+    with pytest.raises(ValueError, match="must not be negative"):
+        PagePlanCache(**kwargs)
+
+
+def test_kitchen_retirement_evicts_only_matching_page_plans(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    cache = PagePlanCache()
+    monkeypatch.setattr(pagination, "_PAGE_PLAN_CACHE", cache)
+    generation = _persist(tmp_path)
+    selected = select_recipe_section(_payload("cached content"), "content")
+    common = {
+        "generation": generation,
+        "selected": selected,
+        "recipe_section_bound_bytes": 1_000,
+    }
+    retired = get_or_build_recipe_section_page_plan(
+        kitchen_id="kitchen-test",
+        **common,
+    )
+    retained = get_or_build_recipe_section_page_plan(
+        kitchen_id="other-kitchen",
+        **common,
+    )
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="kitchen-test") is True
+
+    assert get_or_build_recipe_section_page_plan(kitchen_id="other-kitchen", **common) is retained
+    assert (
+        get_or_build_recipe_section_page_plan(kitchen_id="kitchen-test", **common) is not retired
+    )
+
+
+def test_cold_kitchen_retirement_does_not_create_page_plan_cache(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(pagination, "_PAGE_PLAN_CACHE", None)
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="cold-kitchen") is True
+    assert pagination._PAGE_PLAN_CACHE is None
+
+
+def test_kitchen_retirement_evicts_after_generation_lock_exits(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    lock_active = False
+    original_lock = recipe_delivery._generation_lock
+
+    @contextmanager
+    def _tracked_lock(temp_dir: Path, *, exclusive: bool):
+        nonlocal lock_active
+        with original_lock(temp_dir, exclusive=exclusive):
+            lock_active = True
+            try:
+                yield
+            finally:
+                lock_active = False
+
+    evicted: list[str] = []
+
+    def _evict(kitchen_id: str) -> None:
+        assert lock_active is False
+        evicted.append(kitchen_id)
+
+    monkeypatch.setattr(recipe_delivery, "_generation_lock", _tracked_lock)
+    monkeypatch.setattr(pagination, "evict_kitchen", _evict)
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="lock-kitchen") is True
+    assert evicted == ["lock-kitchen"]
+
+
+def test_kitchen_retirement_eviction_is_success_only_and_nonthrowing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    evict = MagicMock(side_effect=RuntimeError("cache unavailable"))
+    monkeypatch.setattr(pagination, "evict_kitchen", evict)
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="successful-kitchen") is True
+    evict.assert_called_once_with("successful-kitchen")
+
+    evict.reset_mock()
+    monkeypatch.setattr(
+        recipe_delivery,
+        "atomic_write",
+        MagicMock(side_effect=OSError("retirement failed")),
+    )
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="failed-kitchen") is False
+    evict.assert_not_called()
 
 
 @pytest.mark.parametrize("kitchen_id", [".", ".."])
@@ -639,6 +918,364 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     assert part > 0
     assert expected_byte_start == response["byte_total"]
     assert "".join(chunks) == expected_content
+
+
+def _assert_section_response_bound(rendered: str, tool_ctx) -> None:
+    bound = resolve_recipe_section_bound_bytes(
+        tool_ctx.config.output_budget.response_max_bytes,
+        CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit,
+    )
+    assert len(rendered.encode("utf-8")) <= bound
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    [
+        (
+            RecipeSectionNonConvergenceError("forced nonconvergence"),
+            "recipe_section_pagination_nonconvergent",
+        ),
+        (
+            RecipeSectionPaginationError("forced invariant failure"),
+            "recipe_section_internal_error",
+        ),
+        (RuntimeError("forced planner failure"), "recipe_section_internal_error"),
+    ],
+)
+async def test_pull_tool_maps_planner_failures_to_exact_bounded_codes(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_ctx_kitchen_open,
+    failure: Exception,
+    expected_code: str,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = f"planner-failure-{expected_code}"
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    def _fail_plan(**_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_recipe.get_or_build_recipe_section_page_plan",
+        _fail_plan,
+    )
+
+    rendered = await get_recipe_section(section="content", **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered) == {"error": expected_code, "success": False}
+
+
+@pytest.mark.parametrize(
+    ("section", "state", "expected_success", "expected_value"),
+    [
+        ("ingredients_table", "missing", False, None),
+        ("ingredients_table", "none", False, None),
+        ("ingredients_table", "empty", True, ""),
+        ("errors", "missing", True, []),
+        ("errors", "empty", True, []),
+        ("warnings", "missing", True, []),
+        ("warnings", "empty", True, []),
+    ],
+)
+async def test_pull_tool_distinguishes_missing_none_and_present_empty_sections(
+    tool_ctx_kitchen_open,
+    section: str,
+    state: str,
+    expected_success: bool,
+    expected_value: object,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = f"pull-empty-{section}-{state}"
+    payload = _payload()
+    if state == "missing":
+        payload.pop(section)
+    elif state == "none":
+        payload[section] = None
+    elif section == "ingredients_table":
+        payload[section] = ""
+    else:
+        payload[section] = []
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=payload,
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section=section, **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    response = json.loads(rendered)
+    assert response["success"] is expected_success
+    if expected_success:
+        assert json.loads(response["content"]) == expected_value
+        assert response["has_more"] is False
+        assert "next_part" not in response
+    else:
+        assert response["error"] == "section_not_found"
+
+
+async def test_initial_schema_failure_is_bounded_and_never_recreates(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-initial-schema-mismatch"
+    payload = _payload()
+    payload["warnings"] = ["valid", 1]
+    generation = _write_malformed_generation(
+        tool_ctx_kitchen_open.temp_dir,
+        payload,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+    )
+    recreate = MagicMock(side_effect=AssertionError("schema failure must not recreate"))
+    warning = MagicMock()
+    monkeypatch.setattr(tools_recipe, "serve_recipe", recreate)
+    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section="warnings", **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered)["error"] == "recipe_artifact_schema_mismatch"
+    recreate.assert_not_called()
+    warning.assert_called_once_with(
+        "get_recipe_section_schema_mismatch",
+        stage="load",
+        detail=(
+            "recipe artifact section schema mismatch: invalid_section_element_type@warnings.1"
+        ),
+    )
+
+
+async def test_recreation_persistence_schema_failure_precedes_artifact_error(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-write"
+    generation = _persist(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+    )
+    _remove_persisted_namespace(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+    )
+    malformed = _payload()
+    malformed["warnings"] = ["valid", 1]
+    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: malformed)
+    monkeypatch.setattr(
+        tools_recipe,
+        "build_open_kitchen_recipe_payload",
+        lambda data, *, version: data,
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "persist_recipe_artifact",
+        MagicMock(side_effect=RecipeArtifactSchemaError("malformed recreation")),
+    )
+    warning = MagicMock()
+    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section="warnings", **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered)["error"] == "recipe_artifact_schema_mismatch"
+    warning.assert_called_once_with(
+        "get_recipe_section_schema_mismatch",
+        stage="recreate_persist",
+        detail="malformed recreation",
+    )
+
+
+async def test_post_recreation_reload_schema_failure_precedes_reload_error(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-reload"
+    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: _payload())
+    monkeypatch.setattr(
+        tools_recipe,
+        "build_open_kitchen_recipe_payload",
+        lambda data, *, version: data,
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "persist_recipe_artifact",
+        lambda *_args, **_kwargs: generation,
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "load_recipe_artifact",
+        MagicMock(
+            side_effect=[
+                RecipeArtifactError("artifact missing"),
+                RecipeArtifactSchemaError("malformed recreation"),
+            ]
+        ),
+    )
+    warning = MagicMock()
+    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section="warnings", **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered)["error"] == "recipe_artifact_schema_mismatch"
+    warning.assert_called_once_with(
+        "get_recipe_section_schema_mismatch",
+        stage="reload",
+        detail="malformed recreation",
+    )
+
+
+async def test_post_recreation_reload_artifact_failure_logs_exception_context(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-artifact-reload"
+    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: _payload())
+    monkeypatch.setattr(
+        tools_recipe,
+        "build_open_kitchen_recipe_payload",
+        lambda data, *, version: data,
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "persist_recipe_artifact",
+        lambda *_args, **_kwargs: generation,
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "load_recipe_artifact",
+        MagicMock(
+            side_effect=[
+                RecipeArtifactError("artifact missing"),
+                RecipeArtifactError("checksum mismatch"),
+            ]
+        ),
+    )
+    warning = MagicMock()
+    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section="warnings", **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered) == {
+        "success": False,
+        "error": "recipe_artifact_unavailable",
+        "detail": "post-recreation reload failed",
+    }
+    warning.assert_called_once_with(
+        "get_recipe_section_artifact_unavailable",
+        stage="reload",
+        detail="checksum mismatch",
+        exc_info=True,
+    )
+
+
+async def test_negative_part_is_rejected_before_artifact_load(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "kitchen-test"
+    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    artifact_load = MagicMock(side_effect=AssertionError("negative part reached artifact load"))
+    monkeypatch.setattr(tools_recipe, "load_recipe_artifact", artifact_load)
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section="content", part=-1, **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered)["error"] == "invalid_recipe_section_part"
+    artifact_load.assert_not_called()
+
+
+async def test_oversized_part_is_rejected_after_page_planning(
+    tool_ctx_kitchen_open,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "kitchen-test"
+    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section="content", part=10_000, **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered)["error"] == "invalid_recipe_section_part"
+
+
+async def test_request_specific_floor_returns_exact_bounded_failure(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "kitchen-test"
+    monkeypatch.setattr(
+        tool_ctx_kitchen_open,
+        "config",
+        replace(
+            tool_ctx_kitchen_open.config,
+            output_budget=OutputBudgetConfig(
+                response_max_bytes=RECIPE_SECTION_RESPONSE_FLOOR_BYTES
+            ),
+        ),
+    )
+    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section="content", **kwargs)
+
+    assert len(rendered.encode("utf-8")) <= RECIPE_SECTION_RESPONSE_FLOOR_BYTES
+    assert json.loads(rendered) == {
+        "success": False,
+        "error": "recipe_section_bound_too_small",
+    }
+
+
+@pytest.mark.parametrize(
+    ("response_max_bytes", "conservative_limit"),
+    [(20_000, 10_000), (8_000, 10_000), (10_000, 10_000)],
+)
+def test_recipe_section_bound_resolver_keeps_conservative_policy(
+    response_max_bytes: int,
+    conservative_limit: int,
+) -> None:
+    assert resolve_recipe_section_bound_bytes(
+        response_max_bytes,
+        conservative_limit,
+    ) == min(response_max_bytes, conservative_limit)
 
 
 async def test_pull_tool_returns_named_step_and_rejects_unknown_section(

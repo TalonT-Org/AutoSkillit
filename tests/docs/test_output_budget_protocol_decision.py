@@ -150,3 +150,30 @@ def test_decision_ratchets_forward_obligations(decision_text: str) -> None:
         "live large-output probe",
     ]:
         assert required in obligations
+
+
+def test_decision_defines_the_recipe_section_byte_budget(decision_text: str) -> None:
+    for required in (
+        "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
+        "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
+        "recipe_section_bound_bytes",
+        "min(response_max_bytes, conservative_general_result_limit)",
+        "10,000 bytes",
+        "request-specific",
+        "UTF-8",
+    ):
+        assert required in decision_text
+    assert "token×4" in decision_text or "token x 4" in decision_text
+
+
+def test_decision_requires_exact_bounded_recipe_section_rendering(decision_text: str) -> None:
+    for required in (
+        "complete outer response",
+        "compact",
+        "json-element-fragment",
+        "no truncation",
+        "no dropped",
+        "terminal",
+        "next_part",
+    ):
+        assert required in decision_text

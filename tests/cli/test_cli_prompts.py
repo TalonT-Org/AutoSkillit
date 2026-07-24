@@ -62,6 +62,30 @@ def test_build_open_kitchen_prompt_includes_dispatch_routing():
     assert "dispatch_food_truck" in prompt
 
 
+def test_open_kitchen_prompt_fails_closed_on_unknown_recipe_pagination() -> None:
+    from autoskillit.cli._prompts import _build_open_kitchen_prompt
+
+    prompt = _build_open_kitchen_prompt(DIRECT_PREFIX)
+    for required in (
+        "pagination_version",
+        "content_format",
+        "raw-text",
+        "json-array-page",
+        "json-scalar-page",
+        "json-element-fragment",
+        "section_registry_sha256",
+        "section_sha256",
+        "page_plan_sha256",
+        "has_more",
+        "next_part",
+    ):
+        assert required in prompt
+    assert "unknown pagination_version" in prompt
+    assert "unknown content_format" in prompt
+    assert "do not guess" in prompt.lower()
+    assert "terminal" in prompt.lower() and "omit" in prompt.lower()
+
+
 def test_orchestrator_prompt_documents_confirm_action():
     """The orchestrator system prompt must explain how to handle action:confirm steps."""
     from autoskillit.cli._prompts import _build_orchestrator_prompt

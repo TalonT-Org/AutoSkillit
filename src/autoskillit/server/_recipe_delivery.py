@@ -31,6 +31,7 @@ from autoskillit.core import (
     get_logger,
     resolve_general_output_token_limit,
     resolve_recipe_delivery_decision,
+    validate_recipe_artifact_sections,
 )
 from autoskillit.execution import (
     RecipeDeliveryReceiptLedger,
@@ -39,6 +40,7 @@ from autoskillit.execution import (
 )
 from autoskillit.recipe import _extract_routing_edges, step_byte_ranges_from_yaml
 from autoskillit.server._response_budget import enforce_response_budget
+from autoskillit.server.recipe_section._lifecycle import notify_kitchen_retired
 
 if TYPE_CHECKING:
     from autoskillit.core import RecipeDeliveryBudgetDef, RecipeDeliveryEvidenceDef
@@ -59,6 +61,10 @@ def document_recipe_delivery_contract(function: Any) -> Any:
 
 class RecipeArtifactError(RuntimeError):
     """A requested immutable recipe generation is absent or corrupt."""
+
+
+class RecipeArtifactSchemaError(RecipeArtifactError):
+    """A recipe artifact violates the static pullable-section schema."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +130,13 @@ def _canonical_payload(payload: dict[str, Any]) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def _validate_recipe_artifact_schema(payload: dict[str, Any]) -> None:
+    findings = validate_recipe_artifact_sections(payload)
+    if findings:
+        summary = ",".join(finding.diagnostic() for finding in findings)
+        raise RecipeArtifactSchemaError(f"recipe artifact section schema mismatch: {summary}")
 
 
 def _read_bounded_bytes(path: Path, *, max_bytes: int, error: str) -> bytes:
@@ -234,6 +247,7 @@ def persist_recipe_artifact(
     payload: dict[str, Any],
 ) -> RecipeArtifactGeneration:
     """Publish an immutable canonical payload and its generation descriptor."""
+    _validate_recipe_artifact_schema(payload)
     blob = _canonical_payload(payload)
     if len(blob) > RECIPE_ARTIFACT_MAX_BLOB_BYTES:
         raise RecipeArtifactError("recipe artifact blob exceeds persistence limit")
@@ -339,6 +353,7 @@ def load_recipe_artifact(
     )
     if expected != identity:
         raise RecipeArtifactError("recipe body identity mismatch")
+    _validate_recipe_artifact_schema(payload)
     return payload
 
 
@@ -354,6 +369,14 @@ def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
                 shutil.rmtree(namespace)
     except (OSError, RecipeArtifactError, TypeError):
         return False
+    try:
+        notify_kitchen_retired(kitchen_id)
+    except Exception:
+        get_logger(__name__).warning(
+            "recipe_section_cache_retirement_eviction_failed",
+            kitchen_id=kitchen_id,
+            exc_info=True,
+        )
     return True
 
 
@@ -959,6 +982,7 @@ __all__ = [
     "RECIPE_BODY_START",
     "RECIPE_COMPLETION_SENTINEL",
     "RecipeArtifactError",
+    "RecipeArtifactSchemaError",
     "RecipeArtifactGeneration",
     "complete_finalized_recipe_response",
     "enforce_recipe_resource_response",

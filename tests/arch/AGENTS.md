@@ -63,6 +63,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_layer_enforcement.py` | MCP tool registry + import layer contracts + cross-package rules |
 | `test_pyi_stub_completeness.py` | Stub-symbol completeness: verifies core submodule public symbols appear in __init__.pyi |
 | `test_pipeline_ordering.py` | Structural enforcement: semantic rules must run after _prune_skipped_steps in load_and_validate |
+| `test_recipe_section_registry.py` | Static recipe-section registry, schema, digest, and public-export contracts |
 | `test_layer_markers.py` | Enforce pytestmark layer markers on all in-scope test files |
 | `test_conftest_env_coverage.py` | Structural guard: root conftest _clear_private_env fixture must reference AUTOSKILLIT_PRIVATE_ENV_VARS and _HEADLESS_EXCLUSIVE_VARS programmatically |
 | `test_make_context_env_boundary.py` | AST guard: _factory.py functions must not read AUTOSKILLIT_PRIVATE_ENV_VARS from os.environ |

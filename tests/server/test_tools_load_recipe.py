@@ -13,7 +13,7 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_recipe import load_recipe
-from tests.server._helpers import _MINIMAL_SCRIPT_YAML, _resolve_recipe_content
+from tests.server._helpers import _MINIMAL_SCRIPT_YAML, _resolve_recipe_section
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -114,7 +114,7 @@ class TestLoadRecipeTools:
         monkeypatch.chdir(tmp_path)
         result = json.loads(await load_recipe(name="implementation"))
         assert "error" not in result, f"Unexpected error: {result.get('error')}"
-        assert await _resolve_recipe_content(result)
+        assert await _resolve_recipe_section(result)
 
     @pytest.mark.anyio
     async def test_load_recipe_parse_failure_is_logged_and_surfaced(

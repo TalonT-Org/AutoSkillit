@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
     resolve_general_output_token_limit,
@@ -62,6 +63,21 @@ def _backend_capabilities():
 def _effective_bound_bytes(bound_tokens: int) -> int:
     """Convert effective delivery token bound to UTF-8 byte ceiling (4 bytes/token)."""
     return bound_tokens * 4
+
+
+@pytest.mark.parametrize("backend_name", sorted(_backend_capabilities()), ids=lambda n: n)
+def test_ordinary_recipe_pull_bound_meets_mandatory_failure_floor(
+    backend_name: str,
+) -> None:
+    """Every backend must be able to retain the smallest recipe-pull failure."""
+    capabilities = _backend_capabilities()[backend_name]
+    conservative_general_result_limit = resolve_general_output_token_limit(capabilities)
+
+    assert conservative_general_result_limit >= RECIPE_SECTION_RESPONSE_FLOOR_BYTES, (
+        f"{backend_name}: ordinary recipe-pull ceiling "
+        f"{conservative_general_result_limit} bytes is below the mandatory failure "
+        f"floor {RECIPE_SECTION_RESPONSE_FLOOR_BYTES} bytes"
+    )
 
 
 def _full_open_kitchen_payload(recipe_name: str) -> dict[str, object]:

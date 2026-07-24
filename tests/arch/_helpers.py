@@ -346,16 +346,32 @@ def _is_mcp_tool_decorator(node: ast.expr) -> bool:
 
 
 def _has_cancellation_shield(func_node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
-    """Return True if the function has @_cancellation_shield in its decorator list."""
+    """Return whether a function has one well-formed cancellation shield.
+
+    Legacy result-envelope mode accepts the optional ``result_type`` argument. Typed
+    request-state mode is intentionally all-or-none and cannot be combined with
+    ``result_type``. Parsing these keywords here prevents a syntactically present but
+    incomplete shield from satisfying the architecture guard.
+    """
+    typed_keywords = {"state_factory", "state_context_var", "response_factory"}
     for dec in func_node.decorator_list:
-        if isinstance(dec, ast.Name) and dec.id == "_cancellation_shield":
-            return True
-        if (
+        if not (
             isinstance(dec, ast.Call)
             and isinstance(dec.func, ast.Name)
             and dec.func.id == "_cancellation_shield"
         ):
-            return True
+            continue
+        if any(keyword.arg is None for keyword in dec.keywords):
+            return False
+        keyword_names = {keyword.arg for keyword in dec.keywords}
+        supplied_typed = keyword_names & typed_keywords
+        if supplied_typed:
+            return (
+                not dec.args
+                and supplied_typed == typed_keywords
+                and keyword_names == typed_keywords
+            )
+        return len(dec.args) <= 1 and keyword_names <= {"result_type"}
     return False
 
 

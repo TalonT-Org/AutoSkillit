@@ -120,7 +120,7 @@ class LoadRecipeResult(TypedDict, total=False):
     requires_packs: list[str]
     requires_features: list[str]
     greeting: str
-    ingredients_table: str
+    ingredients_table: str | None
     orchestration_rules: str
     stop_step_semantics: str
     content_hash: str

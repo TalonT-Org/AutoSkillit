@@ -458,6 +458,12 @@ def test_attested_recipe_delivery_region_is_preserved_byte_for_byte(
     payload = {
         "success": True,
         "content": "steps:\n  impl:\n    action: stop\n",
+        "post_prune_step_names": ["impl"],
+        "ingredients_table": None,
+        "orchestration_rules": "follow the graph",
+        "stop_step_semantics": "stop means stop",
+        "errors": [],
+        "warnings": [],
     }
     generation = persist_recipe_artifact(
         tmp_path,

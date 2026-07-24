@@ -150,6 +150,21 @@ recorded explicitly in the issue body.
   explicit decision through final enforcement. History retention is never read as the
   selected outer result.
 
+### Recipe-section byte budget
+
+`RECIPE_SECTION_MANDATORY_FAILURE_CODES` defines the exact compact code-only failures,
+and `RECIPE_SECTION_RESPONSE_FLOOR_BYTES` is their maximum UTF-8 size. Configuration
+below that floor is invalid. After request admission, the request-specific ceiling is:
+
+`recipe_section_bound_bytes = min(response_max_bytes, conservative_general_result_limit)`
+
+The current ordinary Codex policy deliberately keeps the conservative limit at
+10,000 bytes. It is not the generic token×4 projection. Planning trial-renders each
+complete outer response with compact canonical JSON and accepts only pages within the
+captured UTF-8 bound. Oversized arrays use complete pages or
+`json-element-fragment`; there is no truncation and no dropped element. A terminal
+page omits `next_part`.
+
 ## Operational Signals
 
 Output-budget instrumentation uses low-cardinality structured counters or events for:

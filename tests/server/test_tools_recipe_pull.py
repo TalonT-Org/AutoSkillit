@@ -62,6 +62,7 @@ from autoskillit.server._recipe_section_pagination import (
     select_recipe_section,
 )
 from autoskillit.server._response_budget import enforce_response_budget
+from autoskillit.server.recipe_section import _lifecycle as recipe_section_lifecycle
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -458,6 +459,28 @@ def test_kitchen_retirement_removes_only_that_namespace(tmp_path: Path) -> None:
     assert (
         load_recipe_artifact(tmp_path, kitchen_id="other-kitchen", identity=second) == _payload()
     )
+
+
+def test_kitchen_retirement_notifies_callbacks_after_one_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    notified: list[str] = []
+
+    def failing_callback(_kitchen_id: str) -> None:
+        raise RuntimeError("cleanup failed")
+
+    def succeeding_callback(kitchen_id: str) -> None:
+        notified.append(kitchen_id)
+
+    monkeypatch.setattr(
+        recipe_section_lifecycle,
+        "_KITCHEN_RETIREMENT_CALLBACKS",
+        (failing_callback, succeeding_callback),
+    )
+
+    recipe_section_lifecycle.notify_kitchen_retired("kitchen-test")
+
+    assert notified == ["kitchen-test"]
 
 
 @pytest.mark.parametrize("kwargs", [{"max_entries": -1}, {"max_bytes": -1}])

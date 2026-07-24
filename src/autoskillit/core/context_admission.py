@@ -354,6 +354,7 @@ def _publish(
     protected_pool_owner_id: ProtectedPoolOwnerId | None = None,
     capacity_changed: bool = False,
     effects: tuple[AdmissionEffect, ...] = (),
+    idempotency_record: IdempotencyRecord | None = None,
 ) -> AdmissionTransition:
     aggregate_revision = type(prior_state.aggregate_revision)(
         prior_state.aggregate_revision.value + 1
@@ -381,6 +382,17 @@ def _publish(
         aggregate_revision=aggregate_revision,
         admission_sequence=admission_sequence,
     )
+    idempotency_records = published.idempotency_records
+    if idempotency_record is not None:
+        idempotency_records = tuple(
+            sorted(
+                idempotency_records + (idempotency_record,),
+                key=lambda item: (
+                    item.publication_revision.value,
+                    item.owning_event_id.value,
+                ),
+            )
+        )
     published = replace(
         published,
         processed_events=tuple(
@@ -392,6 +404,7 @@ def _publish(
                 ),
             )
         ),
+        idempotency_records=idempotency_records,
     )
     return AdmissionTransition(
         next_state=published,
@@ -1080,29 +1093,13 @@ def _reserve(
         reserve_class=event.batch.reserve_class,
         protected_pool_owner_id=event.batch.protected_pool_owner_id,
     )
-    next_state = replace(
-        next_state,
-        idempotency_records=tuple(
-            sorted(
-                next_state.idempotency_records
-                + (
-                    IdempotencyRecord(
-                        namespace=event.idempotency_namespace,
-                        reservation_key=reservation.key,
-                        original_descriptor=event,
-                        original_reserve_decision=reserve_decision,
-                        owning_event_id=event.event_id,
-                        publication_revision=type(state.aggregate_revision)(
-                            state.aggregate_revision.value + 1
-                        ),
-                    ),
-                ),
-                key=lambda item: (
-                    item.publication_revision.value,
-                    item.owning_event_id.value,
-                ),
-            ),
-        ),
+    idempotency_record = IdempotencyRecord(
+        namespace=event.idempotency_namespace,
+        reservation_key=reservation.key,
+        original_descriptor=event,
+        original_reserve_decision=reserve_decision,
+        owning_event_id=event.event_id,
+        publication_revision=type(state.aggregate_revision)(state.aggregate_revision.value + 1),
     )
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
     effects: tuple[AdmissionEffect, ...] = (
@@ -1153,6 +1150,7 @@ def _reserve(
         protected_pool_owner_id=event.batch.protected_pool_owner_id,
         capacity_changed=True,
         effects=effects,
+        idempotency_record=idempotency_record,
     )
 
 

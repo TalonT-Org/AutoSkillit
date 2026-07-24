@@ -1591,6 +1591,20 @@ def test_journal_records_cross_check_duplicated_event_identities() -> None:
             protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
             aggregate_revision=AggregateRevision(1),
             admission_sequence=AdmissionSequence(1),
+            processed_events=(),
+            idempotency_records=(idempotency,),
+            expired_idempotency_tombstones=(),
+            closed_epochs=(),
+        )
+
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="invalid_idempotency_publication_coordinates",
+    ):
+        UninitializedContextAdmissionState(
+            protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+            aggregate_revision=AggregateRevision(1),
+            admission_sequence=AdmissionSequence(1),
             processed_events=(processed,),
             idempotency_records=(
                 replace(

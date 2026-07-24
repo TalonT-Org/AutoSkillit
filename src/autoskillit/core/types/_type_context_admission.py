@@ -1751,7 +1751,7 @@ def _validate_state_metadata(
     for record in idempotency_records:
         processed = processed_by_event_id.get(record.owning_event_id)
         if record.publication_revision.value > aggregate_revision.value or (
-            processed is not None and record.publication_revision != processed.aggregate_revision
+            processed is None or record.publication_revision != processed.aggregate_revision
         ):
             _raise_invalid("invalid_idempotency_publication_coordinates")
     tombstone_keys = tuple(

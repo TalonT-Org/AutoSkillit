@@ -5,12 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import threading
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import default_log_dir
 
@@ -139,16 +140,19 @@ class StartupTrace:
         self._launch_at: float | None = None
         self._spawn_at: float | None = None
         self._hook_review_at: float | None = None
+        self._current_attempt: int | None = None
+        self._current_view_id: str | None = None
+        self._spawned_attempts: set[int] = set()
         self._terminal_status: str | None = None
 
     def record_launch_anchor(self, *, diagnostics: Mapping[str, object] | None = None) -> None:
         """Record the post-confirmation launch anchor."""
         with self._lock:
             self._ensure_open()
-            if not self.enabled:
-                return
             recorded_at = self._now()
             self._launch_at = recorded_at
+            if not self.enabled:
+                return
             self._append_record(self._record("launch", recorded_at, diagnostics=diagnostics))
 
     def record_attempt_anchor(
@@ -161,6 +165,8 @@ class StartupTrace:
         """Record the anchor and bounded diagnostics for one launch attempt."""
         with self._lock:
             self._ensure_open()
+            self._current_attempt = attempt
+            self._current_view_id = view_id
             if not self.enabled:
                 return
             recorded_at = self._now()
@@ -184,11 +190,52 @@ class StartupTrace:
             recorded_at = self._now()
             record = self._record("stage", recorded_at, diagnostics=diagnostics)
             record.update(stage=stage, attempt=attempt, view_id=view_id)
+            if stage == "spawn" and attempt in self._spawned_attempts:
+                raise RuntimeError(f"startup spawn already recorded for attempt {attempt}")
             self._append_record(record)
             if stage == "spawn":
-                self._spawn_at = recorded_at
+                self._spawned_attempts.add(attempt)
+                if self._spawn_at is None:
+                    self._spawn_at = recorded_at
             elif stage == "hook_review":
-                self._hook_review_at = recorded_at
+                if self._hook_review_at is None:
+                    self._hook_review_at = recorded_at
+
+    def record_spawn(self) -> None:
+        """Record the exact successful-Popen boundary for the current attempt."""
+        with self._lock:
+            attempt = self._current_attempt
+            view_id = self._current_view_id
+        if attempt is None or view_id is None:
+            raise RuntimeError("startup trace has no current attempt for spawn")
+        self.record_stage("spawn", attempt=attempt, view_id=view_id)
+
+    def require_startup_budgets(self) -> None:
+        """Fail an enabled launch with missing or exceeded hard startup budgets."""
+        with self._lock:
+            if not self.enabled:
+                return
+            durations = {
+                "confirmation_to_spawn": self._duration(self._launch_at, self._spawn_at),
+                "spawn_to_hook_review": self._duration(
+                    self._spawn_at,
+                    self._hook_review_at,
+                ),
+                "total_startup": self._duration(self._launch_at, self._hook_review_at),
+            }
+            missing = [name for name, duration in durations.items() if duration is None]
+            exceeded = [
+                name
+                for name, budget in _BUDGETS_SECONDS.items()
+                if (duration := durations[name]) is not None and duration > budget
+            ]
+        if missing or exceeded:
+            details = []
+            if missing:
+                details.append(f"unmeasured={','.join(missing)}")
+            if exceeded:
+                details.append(f"exceeded={','.join(exceeded)}")
+            raise RuntimeError("Codex startup budgets failed: " + "; ".join(details))
 
     def close(
         self,
@@ -246,17 +293,21 @@ class StartupTrace:
             "total_startup": total_startup,
         }
         exceeded: list[str] = []
+        missing: list[str] = []
         for name, budget in _BUDGETS_SECONDS.items():
             duration = durations[name]
-            if duration is not None and duration > budget:
+            if duration is None:
+                missing.append(name)
+            elif duration > budget:
                 exceeded.append(name)
         record = self._record("summary", recorded_at, diagnostics=diagnostics)
         record.update(
             status=status,
             durations_seconds=durations,
             budgets_seconds=dict(_BUDGETS_SECONDS),
+            budget_missing=missing,
             budget_exceeded=exceeded,
-            budgets_passed=not exceeded,
+            budgets_passed=not missing and not exceeded,
         )
         return record
 

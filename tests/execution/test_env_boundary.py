@@ -215,6 +215,19 @@ def test_orchestrator_session_required_env_hygiene_coverage() -> None:
     )
 
 
+def test_codex_cook_reserved_state_never_crosses_into_headless_children() -> None:
+    from autoskillit.core import (
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_COOK_RESERVED_ENV_VARS,
+        CODEX_STARTUP_TRACE_ENV_VAR,
+    )
+
+    assert {
+        CODEX_STARTUP_TRACE_ENV_VAR,
+        *CODEX_COOK_RESERVED_ENV_VARS,
+    } <= AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
 def test_skill_session_required_env_hygiene_coverage() -> None:
     """Every SKILL_SESSION_REQUIRED_ENV var is accounted for in the env hygiene chain."""
     from autoskillit.core import (

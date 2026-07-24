@@ -47,14 +47,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         ),
         added_date=date(2026, 6, 2),
     ),
-    "session_dir_symlinks": ForwardDeclaredField(
-        issue=3134,
-        rationale=(
-            "production consumer moved to CodexBackend.setup_session_dir — "
-            "field retained for validate_session_layout"
-        ),
-        added_date=date(2026, 6, 2),
-    ),
     "patch_format": ForwardDeclaredField(
         issue=3776,
         rationale="patch path extraction routing — P2-A3-WP1 (#3787) co-lands consumer",

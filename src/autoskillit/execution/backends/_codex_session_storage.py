@@ -6,19 +6,18 @@ import fcntl
 import hashlib
 import json
 import os
-import re
 import shutil
 import socket
 import stat
 import sys
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import zstandard
+import regex as re
 
 from autoskillit.core import (
     CODEX_ACTIVE_VIEWS_SUBDIR,
@@ -31,17 +30,27 @@ from autoskillit.core import (
     ResumeSpec,
     SessionSummary,
     default_log_dir,
+    get_logger,
+)
+from autoskillit.execution.backends._codex_parse import (
+    _identity,
+    _preserves_rollout_prefix,
+    _rollout_cwd,
+    _rollout_files,
+    _safe_relative,
+    _safe_relative_value,
+    _thread_id,
 )
 
 _VIEW_ID_RE = re.compile(r"^[0-9a-f]{16}-[1-9][0-9]*$")
+_LAUNCH_ID_RE = re.compile(r"^[0-9a-f]{16}$")
 _THREAD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
-_ROLLOUT_SUFFIXES = (".jsonl", ".jsonl.zst")
 _INDEX_READ_LIMIT = 4 * 1024 * 1024
-_ROLLOUT_METADATA_LIMIT = 64 * 1024
 _MANIFEST_READ_LIMIT = 256 * 1024
 _MANIFEST_NAME = "manifest.json"
 _LOCKS_SUBDIR = ".locks"
 _INDEX_NAME = "codex-session-index.json"
+logger = get_logger(__name__)
 _MANIFEST_STATES = frozenset({"prepared", "running", "finalizing", "complete", "failed"})
 _STORE_TO_PUBLIC = {"active": "sessions", "archived": "archived_sessions"}
 _PUBLIC_TO_STORE = {value: key for key, value in _STORE_TO_PUBLIC.items()}
@@ -68,9 +77,10 @@ _INERT_NAMES = {
 }
 
 
-def codex_session_index_path() -> Path:
+def codex_session_index_path(log_dir: Path | None = None) -> Path:
     """Return the one production path for the derived Codex cook index."""
-    return default_log_dir() / _INDEX_NAME
+    root = default_log_dir() if log_dir is None else Path(log_dir)
+    return root.expanduser().resolve(strict=False) / _INDEX_NAME
 
 
 def _lexists(path: Path) -> bool:
@@ -146,74 +156,6 @@ def _read_bounded(path: Path, limit: int) -> bytes:
         os.close(fd)
 
 
-def _read_prefix(path: Path, limit: int) -> bytes:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(path, flags)
-    try:
-        file_stat = os.fstat(fd)
-        if not stat.S_ISREG(file_stat.st_mode):
-            raise ValueError(f"{path} is not a regular file")
-        if path.name.endswith(".zst"):
-            with os.fdopen(fd, "rb", closefd=False) as source:
-                with zstandard.ZstdDecompressor().stream_reader(source) as reader:
-                    return reader.read(limit)
-        return os.read(fd, limit)
-    finally:
-        os.close(fd)
-
-
-def _safe_relative_value(value: str) -> Path:
-    if not value or "\\" in value:
-        raise RuntimeError(f"Unsafe relative rollout path: {value!r}")
-    relative = Path(value)
-    if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
-        raise RuntimeError(f"Unsafe relative rollout path: {value!r}")
-    if not relative.name.endswith(_ROLLOUT_SUFFIXES):
-        raise RuntimeError(f"Unsupported rollout filename: {value!r}")
-    return relative
-
-
-def _safe_relative(path: Path, root: Path) -> Path:
-    _require_real_directory(root, label="rollout root")
-    try:
-        mode = path.lstat().st_mode
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Missing rollout file: {path}") from exc
-    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
-        raise RuntimeError(f"Rollout must be a regular non-symlink file: {path}")
-    try:
-        relative = path.relative_to(root)
-    except ValueError as exc:
-        raise RuntimeError(f"Rollout escapes its root: {path}") from exc
-    relative = _safe_relative_value(relative.as_posix())
-    cursor = root
-    for part in relative.parts[:-1]:
-        cursor /= part
-        _require_real_directory(cursor, label="rollout parent")
-    return relative
-
-
-def _rollout_files(root: Path) -> Iterator[Path]:
-    if not _lexists(root):
-        return
-    _require_real_directory(root, label="rollout root")
-    found: list[Path] = []
-    for directory, directory_names, file_names in os.walk(root, followlinks=False):
-        parent = Path(directory)
-        for name in directory_names:
-            candidate = parent / name
-            if candidate.is_symlink():
-                raise RuntimeError(f"Symlink directory in rollout tree: {candidate}")
-        for name in file_names:
-            candidate = parent / name
-            if candidate.is_symlink():
-                raise RuntimeError(f"Symlink file in rollout tree: {candidate}")
-            if name.endswith(_ROLLOUT_SUFFIXES):
-                _safe_relative(candidate, root)
-                found.append(candidate)
-    yield from sorted(found)
-
-
 def _ensure_directory_chain(root: Path, relative: Path) -> Path:
     _require_real_directory(root, label="storage root")
     cursor = root
@@ -267,39 +209,6 @@ def _filesystem_type(path: Path) -> str:
     if selected is None:
         raise RuntimeError(f"Unable to classify Codex storage mount: {resolved}")
     return selected[1]
-
-
-def _thread_id_from_bytes(data: bytes) -> str | None:
-    for raw_line in data.splitlines():
-        if not raw_line.strip():
-            continue
-        try:
-            row = json.loads(raw_line)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            continue
-        if not isinstance(row, Mapping):
-            continue
-        if row.get("type") == "thread.started" and isinstance(row.get("thread_id"), str):
-            return str(row["thread_id"])
-        if row.get("type") == "session_meta":
-            payload = row.get("payload")
-            if isinstance(payload, Mapping) and isinstance(payload.get("id"), str):
-                return str(payload["id"])
-    return None
-
-
-def _thread_id(path: Path) -> str | None:
-    try:
-        return _thread_id_from_bytes(_read_prefix(path, _ROLLOUT_METADATA_LIMIT))
-    except (OSError, ValueError, zstandard.ZstdError):
-        return None
-
-
-def _identity(path: Path) -> tuple[int, int]:
-    file_stat = path.stat(follow_symlinks=False)
-    if not stat.S_ISREG(file_stat.st_mode):
-        raise RuntimeError(f"Expected regular rollout file: {path}")
-    return file_stat.st_dev, file_stat.st_ino
 
 
 def _replace_symlink(path: Path, target: Path) -> None:
@@ -380,11 +289,13 @@ class CodexInteractiveSessionLease(AbstractContextManager[CookSessionHandle]):
         try:
             self.store._enter_attempt(self)
         except BaseException as entry_error:
+            logger.error("codex_attempt_entry_failed", exc_info=True)
             self._closed = True
             failures: list[BaseException] = [entry_error]
             try:
                 self.store._abort_pre_spawn(self)
             except BaseException as cleanup_error:
+                logger.error("codex_attempt_entry_rollback_failed", exc_info=True)
                 failures.append(cleanup_error)
             self._release_leases(failures)
             if len(failures) == 1:
@@ -432,10 +343,12 @@ class CodexInteractiveSessionLease(AbstractContextManager[CookSessionHandle]):
             try:
                 self.thread_lease.release()
             except BaseException as release_error:
+                logger.error("codex_thread_lease_release_failed", exc_info=True)
                 failures.append(release_error)
         try:
             self.view_lease.release()
         except BaseException as release_error:
+            logger.error("codex_view_lease_release_failed", exc_info=True)
             failures.append(release_error)
 
     def __exit__(
@@ -451,6 +364,7 @@ class CodexInteractiveSessionLease(AbstractContextManager[CookSessionHandle]):
         try:
             self.store._exit_attempt(self)
         except BaseException as cleanup_error:
+            logger.error("codex_attempt_exit_failed", exc_info=True)
             failures.append(cleanup_error)
         finally:
             self._release_leases(failures)
@@ -480,7 +394,7 @@ class CodexSessionStore:
         self.index_path = (
             Path(index_path).expanduser().resolve(strict=False)
             if index_path is not None
-            else self.log_dir / _INDEX_NAME
+            else codex_session_index_path(self.log_dir)
         )
 
     def _ensure_roots(self) -> None:
@@ -515,6 +429,7 @@ class CodexSessionStore:
         self,
         *,
         session_home: Path,
+        project_dir: Path,
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
@@ -524,21 +439,21 @@ class CodexSessionStore:
         if _VIEW_ID_RE.fullmatch(view_id) is None:
             raise ValueError(f"Invalid Codex attempt identity: {view_id!r}")
         session_home = Path(session_home).resolve(strict=True)
+        project_path = Path(project_dir)
+        if not project_path.is_absolute():
+            raise ValueError("Codex project directory must be absolute")
+        resolved_project = project_path.resolve(strict=True)
+        if resolved_project != project_path or not resolved_project.is_dir():
+            raise ValueError("Codex project directory must be canonical")
         inert_targets = self._validate_inert_home(session_home)
         view_path = self.views_root / view_id
-        if os.path.lexists(view_path):
-            raise FileExistsError(f"Codex attempt view already exists: {view_id}")
-        view_path.mkdir(mode=0o700)
-        (view_path / "sessions").mkdir()
-        (view_path / "archived_sessions").mkdir()
-        _fsync_directory(view_path)
-        _fsync_directory(self.views_root)
         view_lease = _FileLease.acquire(self.locks_root / f"view-{view_id}.lock")
         manifest: dict[str, Any] = {
             "schema_version": 1,
             "launch_id": launch_id,
             "attempt": attempt,
             "view_id": view_id,
+            "project_cwd": str(resolved_project),
             "state": "prepared",
             "child_pid": None,
             "child_pgid": None,
@@ -550,7 +465,16 @@ class CodexSessionStore:
             "final_relpath": None,
         }
         thread_lease: _FileLease | None = None
+        view_created = False
         try:
+            if os.path.lexists(view_path):
+                raise FileExistsError(f"Codex attempt view already exists: {view_id}")
+            view_path.mkdir(mode=0o700)
+            view_created = True
+            (view_path / "sessions").mkdir()
+            (view_path / "archived_sessions").mkdir()
+            _fsync_directory(view_path)
+            _fsync_directory(self.views_root)
             if isinstance(current_resume_spec, NamedResume):
                 thread_id = current_resume_spec.session_id
                 thread_lease = _FileLease.acquire(
@@ -598,7 +522,7 @@ class CodexSessionStore:
             if thread_lease is not None:
                 thread_lease.release()
             view_lease.release()
-            if _lexists(view_path):
+            if view_created and _lexists(view_path):
                 self._validate_pre_spawn_view(view_path, manifest, allow_missing_resume=True)
                 shutil.rmtree(view_path)
                 _fsync_directory(self.views_root)
@@ -737,65 +661,159 @@ class CodexSessionStore:
                     raise RuntimeError(f"Completed Codex view retains unexpected data: {path}")
 
     def _promote_view(self, lease: CodexInteractiveSessionLease) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
-        for public_name, store_name, canonical_root in (
-            ("sessions", "active", self.active_root),
-            ("archived_sessions", "archived", self.archive_root),
-        ):
+        candidates: list[tuple[str, Path, Path, str]] = []
+        for public_name, store_name in _PUBLIC_TO_STORE.items():
             view_root = lease.view_path / public_name
-            for source in list(_rollout_files(view_root)):
+            for source in _rollout_files(view_root):
                 relative = _safe_relative(source, view_root)
                 thread_id = _thread_id(source)
                 if thread_id is None:
                     raise RuntimeError(f"Rollout lacks a Codex thread id: {source}")
-                resume_thread_id = lease.manifest.get("resume_thread_id")
-                if resume_thread_id is not None and thread_id != resume_thread_id:
-                    raise RuntimeError("Resumed Codex view contains a different thread identity")
-                destination = canonical_root / relative
-                _ensure_directory_chain(canonical_root, relative.parent)
-                if _lexists(destination):
-                    if destination.is_symlink() or _identity(source) != _identity(destination):
+                candidates.append((store_name, relative, source, thread_id))
+
+        resume_thread_id = lease.manifest.get("resume_thread_id")
+        if isinstance(resume_thread_id, str) and any(
+            thread_id != resume_thread_id for _, _, _, thread_id in candidates
+        ):
+            raise RuntimeError("Resumed Codex view contains a different thread identity")
+
+        final_store = lease.manifest.get("final_store")
+        final_relpath_value = lease.manifest.get("final_relpath")
+        if (final_store is None) != (final_relpath_value is None):
+            raise RuntimeError("Codex final rollout metadata is incomplete")
+
+        selected_source: Path | None = None
+        if isinstance(final_store, str) and isinstance(final_relpath_value, str):
+            if final_store not in _STORE_TO_PUBLIC:
+                raise RuntimeError(f"Invalid final Codex store: {final_store!r}")
+            final_relative = _safe_relative_value(final_relpath_value)
+            for store_name, relative, source, _ in candidates:
+                if store_name == final_store and relative == final_relative:
+                    selected_source = source
+                    break
+        else:
+            if not candidates:
+                raise RuntimeError("Codex attempt has no rollout data to promote")
+            selectable = candidates
+            resume_store = lease.manifest.get("resume_source_store")
+            resume_relpath = lease.manifest.get("resume_source_relpath")
+            if isinstance(resume_store, str) and isinstance(resume_relpath, str):
+                transitioned = [
+                    candidate
+                    for candidate in candidates
+                    if (candidate[0], candidate[1].as_posix()) != (resume_store, resume_relpath)
+                ]
+                if transitioned:
+                    selectable = transitioned
+            unique_locations = {
+                (store_name, relative.as_posix()) for store_name, relative, _, _ in selectable
+            }
+            if len(unique_locations) != 1:
+                raise RuntimeError("Codex rollout transition is ambiguous; preserving staged data")
+            final_store, final_relative, selected_source, _ = selectable[0]
+
+        canonical_root = self.active_root if final_store == "active" else self.archive_root
+        destination = canonical_root / final_relative
+        _ensure_directory_chain(canonical_root, final_relative.parent)
+        if selected_source is None and not _lexists(destination):
+            raise RuntimeError("Final Codex rollout is missing from staging and canonical storage")
+
+        comparison_source = selected_source if selected_source is not None else destination
+        destination_thread_id = _thread_id(comparison_source)
+        if destination_thread_id is None:
+            raise RuntimeError("Final Codex rollout lacks a thread identity")
+        if isinstance(resume_thread_id, str) and destination_thread_id != resume_thread_id:
+            raise RuntimeError("Final Codex rollout changed thread identity")
+
+        for _, _, source, thread_id in candidates:
+            if thread_id != destination_thread_id:
+                raise RuntimeError("Codex view contains multiple thread identities")
+            if not _preserves_rollout_prefix(source, comparison_source):
+                raise RuntimeError("Codex rollout transition would discard staged rollout content")
+
+        canonical_matches = self._canonical_matches(destination_thread_id)
+        obsolete_canonical: list[Path] = []
+        for _, canonical in canonical_matches:
+            if canonical == destination:
+                continue
+            if not _preserves_rollout_prefix(canonical, comparison_source):
+                raise RuntimeError(
+                    "Codex rollout transition would discard canonical rollout content"
+                )
+            obsolete_canonical.append(canonical)
+
+        if selected_source is not None:
+            if _lexists(destination):
+                if destination.is_symlink() or _identity(selected_source) != _identity(
+                    destination
+                ):
+                    raise RuntimeError(
+                        f"Codex rollout collision preserves both files: {destination}"
+                    )
+            else:
+                try:
+                    os.link(selected_source, destination, follow_symlinks=False)
+                except FileExistsError:
+                    if _identity(selected_source) != _identity(destination):
                         raise RuntimeError(
                             f"Codex rollout collision preserves both files: {destination}"
                         )
-                else:
-                    try:
-                        os.link(source, destination, follow_symlinks=False)
-                    except FileExistsError:
-                        if _identity(source) != _identity(destination):
-                            raise RuntimeError(
-                                f"Codex rollout collision preserves both files: {destination}"
-                            )
-                    if _identity(source) != _identity(destination):
-                        raise RuntimeError("Promoted Codex rollout identity mismatch")
-                    file_fd = os.open(destination, os.O_RDONLY)
-                    try:
-                        os.fsync(file_fd)
-                    finally:
-                        os.close(file_fd)
-                    _fsync_directory(destination.parent)
-                lease.manifest.update(
-                    final_store=store_name,
-                    final_relpath=relative.as_posix(),
-                )
-                self._write_manifest(lease)
+                if _identity(selected_source) != _identity(destination):
+                    raise RuntimeError("Promoted Codex rollout identity mismatch")
+                file_fd = os.open(destination, os.O_RDONLY)
+                try:
+                    os.fsync(file_fd)
+                finally:
+                    os.close(file_fd)
+                _fsync_directory(destination.parent)
+
+        destination_thread_id = _thread_id(destination)
+        if destination_thread_id is None:
+            raise RuntimeError("Final Codex rollout lacks a thread identity")
+        if isinstance(resume_thread_id, str) and destination_thread_id != resume_thread_id:
+            raise RuntimeError("Final Codex rollout changed thread identity")
+
+        if lease.manifest.get("final_store") is None:
+            lease.manifest.update(
+                final_store=final_store,
+                final_relpath=final_relative.as_posix(),
+            )
+            self._write_manifest(lease)
+
+        for canonical in obsolete_canonical:
+            if _lexists(canonical):
+                canonical.unlink()
+                _fsync_directory(canonical.parent)
+
+        for _, _, source, _ in candidates:
+            if _lexists(source):
                 source.unlink()
                 _fsync_directory(source.parent)
-                rows.append(
-                    self._index_row(
-                        thread_id=thread_id,
-                        launch_id=lease.launch_id,
-                        canonical_store=store_name,
-                        relative_path=relative,
-                    )
-                )
-        return rows
+
+        remaining = [
+            path
+            for public_name in _INERT_NAMES
+            for path in _rollout_files(lease.view_path / public_name)
+        ]
+        if remaining:
+            raise RuntimeError("Codex view retains rollout data after promotion")
+
+        return [
+            self._index_row(
+                thread_id=destination_thread_id,
+                launch_id=lease.launch_id,
+                cwd=str(lease.manifest["project_cwd"]),
+                canonical_store=final_store,
+                relative_path=final_relative,
+            )
+        ]
 
     def _index_row(
         self,
         *,
         thread_id: str,
         launch_id: str | None,
+        cwd: str,
         canonical_store: str,
         relative_path: Path,
     ) -> dict[str, Any]:
@@ -803,7 +821,7 @@ class CodexSessionStore:
             "backend_name": "codex",
             "session_id": thread_id,
             "launch_id": launch_id,
-            "cwd": "",
+            "cwd": cwd,
             "first_prompt": "",
             "summary": "",
             "git_branch": None,
@@ -835,10 +853,28 @@ class CodexSessionStore:
 
     def _merge_index_unlocked(self, incoming: Sequence[dict[str, Any]]) -> None:
         existing = self._read_index_rows()
+        existing_by_id = {
+            str(row["session_id"]): row
+            for row in existing
+            if isinstance(row.get("session_id"), str)
+        }
         incoming_ids = {
             str(row["session_id"]) for row in incoming if isinstance(row.get("session_id"), str)
         }
-        ordered = [dict(row) for row in incoming]
+        if len(incoming_ids) != len(incoming):
+            raise RuntimeError("Codex index update contains duplicate or invalid session ids")
+        ordered: list[dict[str, Any]] = []
+        for row in incoming:
+            merged = dict(row)
+            session_id = str(merged["session_id"])
+            previous = existing_by_id.get(session_id)
+            if (
+                merged.get("launch_id") is None
+                and previous is not None
+                and isinstance(previous.get("launch_id"), str)
+            ):
+                merged["launch_id"] = previous["launch_id"]
+            ordered.append(merged)
         ordered.extend(
             row
             for row in existing
@@ -847,18 +883,57 @@ class CodexSessionStore:
         )
         _atomic_json(self.index_path, ordered)
 
+    def _rebuild_index_unlocked(self) -> None:
+        existing_by_id = {
+            str(row["session_id"]): row
+            for row in self._read_index_rows()
+            if isinstance(row.get("session_id"), str)
+        }
+        rebuilt: list[dict[str, Any]] = []
+        seen: dict[str, Path] = {}
+        for store_name, root in (
+            ("active", self.active_root),
+            ("archived", self.archive_root),
+        ):
+            for path in _rollout_files(root):
+                thread_id = _thread_id(path)
+                cwd = _rollout_cwd(path)
+                if thread_id is None or cwd is None:
+                    continue
+                previous_path = seen.get(thread_id)
+                if previous_path is not None:
+                    raise RuntimeError(
+                        "Cannot rebuild Codex index from ambiguous canonical "
+                        f"representations: {previous_path}, {path}"
+                    )
+                seen[thread_id] = path
+                existing = existing_by_id.get(thread_id)
+                launch_id = (
+                    str(existing["launch_id"])
+                    if existing is not None and isinstance(existing.get("launch_id"), str)
+                    else None
+                )
+                rebuilt.append(
+                    self._index_row(
+                        thread_id=thread_id,
+                        launch_id=launch_id,
+                        cwd=cwd,
+                        canonical_store=store_name,
+                        relative_path=_safe_relative(path, root),
+                    )
+                )
+        _atomic_json(self.index_path, rebuilt)
+
     def read_index(self, cwd: str) -> tuple[SessionSummary, ...]:
         wanted = str(Path(cwd).expanduser().resolve(strict=False))
         summaries: list[SessionSummary] = []
         for row in self._read_index_rows():
             try:
                 row_cwd_raw = row.get("cwd")
-                row_cwd = (
-                    str(Path(str(row_cwd_raw)).expanduser().resolve(strict=False))
-                    if row_cwd_raw
-                    else ""
-                )
-                if row_cwd and row_cwd != wanted:
+                if not isinstance(row_cwd_raw, str) or not row_cwd_raw:
+                    continue
+                row_cwd = str(Path(row_cwd_raw).expanduser().resolve(strict=False))
+                if row_cwd != wanted:
                     continue
                 summary = SessionSummary(
                     backend_name=str(row.get("backend_name") or "codex"),
@@ -866,7 +941,7 @@ class CodexSessionStore:
                     launch_id=(
                         str(row["launch_id"]) if row.get("launch_id") is not None else None
                     ),
-                    cwd=row_cwd or wanted,
+                    cwd=row_cwd,
                     first_prompt=str(row.get("first_prompt") or ""),
                     summary=str(row.get("summary") or ""),
                     git_branch=(
@@ -886,22 +961,45 @@ class CodexSessionStore:
                 summaries.append(summary)
         return tuple(summaries)
 
-    def _locate_with_store(self, thread_id: str) -> tuple[str, Path] | None:
+    def _canonical_matches(self, thread_id: str) -> list[tuple[str, Path]]:
+        matches: list[tuple[str, Path]] = []
         for store_name, root in (
             ("active", self.active_root),
             ("archived", self.archive_root),
         ):
             for path in _rollout_files(root):
                 if _thread_id(path) == thread_id:
-                    return store_name, path
-        return None
+                    matches.append((store_name, path))
+        return matches
+
+    def _locate_with_store(self, thread_id: str) -> tuple[str, Path] | None:
+        matches = self._canonical_matches(thread_id)
+        if len(matches) > 1:
+            locations = ", ".join(str(path) for _, path in matches)
+            raise RuntimeError(
+                f"Ambiguous canonical Codex rollout representations for {thread_id}: {locations}"
+            )
+        return matches[0] if matches else None
 
     def locate_session(self, thread_id: str) -> Path | None:
         located = self._locate_with_store(thread_id)
         if located is not None:
             return located[1]
+        if not self.views_root.is_dir():
+            return None
         for view_path in sorted(self.views_root.iterdir()):
             if view_path.name == _LOCKS_SUBDIR or not view_path.is_dir():
+                continue
+            try:
+                manifest = json.loads(
+                    _read_bounded(view_path / _MANIFEST_NAME, _MANIFEST_READ_LIMIT)
+                )
+                if not isinstance(manifest, dict):
+                    continue
+                self._validate_manifest(view_path, manifest)
+                if manifest["state"] not in {"running", "finalizing"}:
+                    continue
+            except (OSError, RuntimeError, ValueError, json.JSONDecodeError):
                 continue
             for public_name in _INERT_NAMES:
                 for path in _rollout_files(view_path / public_name):
@@ -909,16 +1007,186 @@ class CodexSessionStore:
                         return path
         return None
 
+    def _validate_manifest(
+        self,
+        view_path: Path,
+        manifest: Mapping[str, Any],
+    ) -> None:
+        _require_real_directory(view_path, label="Codex recovery view")
+        manifest_path = view_path / _MANIFEST_NAME
+        try:
+            manifest_mode = manifest_path.lstat().st_mode
+        except FileNotFoundError as exc:
+            raise RuntimeError("Codex recovery view has no manifest") from exc
+        if stat.S_ISLNK(manifest_mode) or not stat.S_ISREG(manifest_mode):
+            raise RuntimeError("Codex recovery manifest must be a regular non-symlink file")
+        expected_entries = {"sessions", "archived_sessions", _MANIFEST_NAME}
+        if {entry.name for entry in view_path.iterdir()} != expected_entries:
+            raise RuntimeError("Codex recovery view has an invalid root layout")
+        for public_name in _INERT_NAMES:
+            _require_real_directory(
+                view_path / public_name,
+                label=f"Codex recovery {public_name} root",
+            )
+
+        if manifest.get("schema_version") != 1:
+            raise RuntimeError("Unsupported Codex recovery manifest schema")
+        launch_id = manifest.get("launch_id")
+        attempt = manifest.get("attempt")
+        view_id = manifest.get("view_id")
+        if not isinstance(launch_id, str) or _LAUNCH_ID_RE.fullmatch(launch_id) is None:
+            raise RuntimeError("Codex recovery manifest has an invalid launch id")
+        if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt <= 0:
+            raise RuntimeError("Codex recovery manifest has an invalid attempt")
+        expected_view_id = f"{launch_id}-{attempt}"
+        if view_id != expected_view_id or view_path.name != expected_view_id:
+            raise RuntimeError("Codex recovery manifest identity is inconsistent")
+
+        project_cwd = manifest.get("project_cwd")
+        if not isinstance(project_cwd, str):
+            raise RuntimeError("Codex recovery manifest has no project discriminator")
+        project_path = Path(project_cwd)
+        if (
+            not project_path.is_absolute()
+            or str(project_path.expanduser().resolve(strict=False)) != project_cwd
+        ):
+            raise RuntimeError("Codex recovery project discriminator is not canonical")
+
+        state = manifest.get("state")
+        if state not in _MANIFEST_STATES:
+            raise RuntimeError("Codex recovery manifest has an invalid lifecycle state")
+        child_pid = manifest.get("child_pid")
+        child_pgid = manifest.get("child_pgid")
+        child_values = (child_pid, child_pgid)
+        child_absent = child_values == (None, None)
+        child_valid = all(
+            not isinstance(value, bool) and isinstance(value, int) and value > 0
+            for value in child_values
+        )
+        if not child_absent and not child_valid:
+            raise RuntimeError("Codex recovery child identity is incomplete")
+
+        reaped = manifest.get("reaped")
+        if not isinstance(reaped, bool):
+            raise RuntimeError("Codex recovery reap proof is not boolean")
+        reaped_ns = manifest.get("reaped_ns")
+        if reaped:
+            if not child_valid:
+                raise RuntimeError("Codex recovery reap proof has no matching child")
+            if isinstance(reaped_ns, bool) or not isinstance(reaped_ns, int) or reaped_ns <= 0:
+                raise RuntimeError("Codex recovery reap timestamp is invalid")
+        elif reaped_ns is not None:
+            raise RuntimeError("Codex recovery has a reap timestamp without proof")
+
+        resume_thread_id = manifest.get("resume_thread_id")
+        resume_store = manifest.get("resume_source_store")
+        resume_relpath = manifest.get("resume_source_relpath")
+        resume_values = (resume_thread_id, resume_store, resume_relpath)
+        if resume_values != (None, None, None):
+            if (
+                not isinstance(resume_thread_id, str)
+                or _THREAD_ID_RE.fullmatch(resume_thread_id) is None
+                or resume_store not in _STORE_TO_PUBLIC
+                or not isinstance(resume_relpath, str)
+            ):
+                raise RuntimeError("Codex recovery resume metadata is incomplete")
+            _safe_relative_value(resume_relpath)
+
+        final_store = manifest.get("final_store")
+        final_relpath = manifest.get("final_relpath")
+        if (final_store is None) != (final_relpath is None):
+            raise RuntimeError("Codex recovery final metadata is incomplete")
+        if final_store is not None:
+            if final_store not in _STORE_TO_PUBLIC or not isinstance(final_relpath, str):
+                raise RuntimeError("Codex recovery final metadata is invalid")
+            final_relative = _safe_relative_value(final_relpath)
+            if state not in {"finalizing", "complete"}:
+                raise RuntimeError("Codex recovery final metadata precedes finalization")
+            if state == "complete":
+                canonical_root = self.active_root if final_store == "active" else self.archive_root
+                canonical = canonical_root / final_relative
+                _safe_relative(canonical, canonical_root)
+                final_thread_id = _thread_id(canonical)
+                if final_thread_id is None or (
+                    isinstance(resume_thread_id, str) and final_thread_id != resume_thread_id
+                ):
+                    raise RuntimeError("Codex recovery final rollout identity is invalid")
+        elif state == "complete":
+            raise RuntimeError("Complete Codex recovery view has no final rollout metadata")
+
+        staged_rollouts: list[tuple[str, Path, Path, str]] = []
+        for public_name, store_name in _PUBLIC_TO_STORE.items():
+            staged_root = view_path / public_name
+            for staged in _rollout_files(staged_root):
+                relative = _safe_relative(staged, staged_root)
+                thread_id = _thread_id(staged)
+                if thread_id is None or _THREAD_ID_RE.fullmatch(thread_id) is None:
+                    raise RuntimeError("Codex recovery staged rollout has no valid thread id")
+                staged_rollouts.append((store_name, relative, staged, thread_id))
+
+        staged_thread_ids = {item[3] for item in staged_rollouts}
+        if len(staged_thread_ids) > 1:
+            raise RuntimeError("Codex recovery view contains multiple thread identities")
+        if isinstance(resume_thread_id, str) and any(
+            thread_id != resume_thread_id for *_, thread_id in staged_rollouts
+        ):
+            raise RuntimeError("Codex recovery resume view changed thread identity")
+
+        if isinstance(resume_store, str) and isinstance(resume_relpath, str):
+            resume_root = self.active_root if resume_store == "active" else self.archive_root
+            resume_relative = _safe_relative_value(resume_relpath)
+            canonical_resume = resume_root / resume_relative
+            if state in {"prepared", "running"}:
+                _safe_relative(canonical_resume, resume_root)
+                if not staged_rollouts or not any(
+                    _preserves_rollout_prefix(canonical_resume, staged)
+                    for _, _, staged, _ in staged_rollouts
+                ):
+                    raise RuntimeError(
+                        "Codex recovery resume view does not preserve its canonical source"
+                    )
+
+        if isinstance(final_store, str) and isinstance(final_relpath, str):
+            final_root = self.active_root if final_store == "active" else self.archive_root
+            final_relative = _safe_relative_value(final_relpath)
+            canonical_final = final_root / final_relative
+            staged_final = view_path / _STORE_TO_PUBLIC[final_store] / final_relative
+            final_candidates = [path for path in (staged_final, canonical_final) if _lexists(path)]
+            if not final_candidates:
+                raise RuntimeError("Codex recovery final rollout data is missing")
+            for final_candidate in final_candidates:
+                expected_root = (
+                    view_path / _STORE_TO_PUBLIC[final_store]
+                    if final_candidate == staged_final
+                    else final_root
+                )
+                _safe_relative(final_candidate, expected_root)
+                final_thread_id = _thread_id(final_candidate)
+                if final_thread_id is None or (
+                    isinstance(resume_thread_id, str) and final_thread_id != resume_thread_id
+                ):
+                    raise RuntimeError("Codex recovery final rollout identity is invalid")
+
+        if state == "prepared" and (not child_absent or reaped):
+            raise RuntimeError("Prepared Codex recovery view has child lifecycle data")
+        if state in {"running", "finalizing", "complete"} and not child_valid:
+            raise RuntimeError("Spawned Codex recovery view has no child identity")
+        if state in {"finalizing", "complete"} and not reaped:
+            raise RuntimeError("Final Codex recovery view has no reap proof")
+
     def recover(self) -> None:
         """Recover safely-owned orphan views, then rebuild the derived index."""
         self._ensure_roots()
+        failures: list[BaseException] = []
         for view_path in sorted(self.views_root.iterdir()):
+            if view_path.name == _LOCKS_SUBDIR:
+                continue
             if (
-                view_path.name == _LOCKS_SUBDIR
-                or _VIEW_ID_RE.fullmatch(view_path.name) is None
+                _VIEW_ID_RE.fullmatch(view_path.name) is None
                 or view_path.is_symlink()
                 or not view_path.is_dir()
             ):
+                failures.append(RuntimeError(f"Invalid Codex recovery view retained: {view_path}"))
                 continue
             lock_path = self.locks_root / f"view-{view_path.name}.lock"
             try:
@@ -926,19 +1194,19 @@ class CodexSessionStore:
             except BlockingIOError:
                 continue
             try:
-                manifest_path = view_path / _MANIFEST_NAME
-                if not manifest_path.is_file() or manifest_path.is_symlink():
-                    continue
                 try:
+                    manifest_path = view_path / _MANIFEST_NAME
                     manifest = json.loads(_read_bounded(manifest_path, _MANIFEST_READ_LIMIT))
-                except (OSError, ValueError, json.JSONDecodeError):
-                    continue
-                if (
-                    not isinstance(manifest, dict)
-                    or manifest.get("schema_version") != 1
-                    or manifest.get("view_id") != view_path.name
-                    or manifest.get("state") not in _MANIFEST_STATES
-                ):
+                    if not isinstance(manifest, dict):
+                        raise RuntimeError("Codex recovery manifest is not an object")
+                    self._validate_manifest(view_path, manifest)
+                except BaseException as exc:
+                    logger.error("codex_recovery_manifest_invalid", exc_info=True)
+                    failures.append(
+                        RuntimeError(
+                            f"Invalid Codex recovery manifest retained for {view_path.name}: {exc}"
+                        )
+                    )
                     continue
                 state = manifest.get("state")
                 thread_locks: list[_FileLease] = []
@@ -970,8 +1238,6 @@ class CodexSessionStore:
                         shutil.rmtree(view_path)
                         _fsync_directory(self.views_root)
                     elif state in {"prepared", "failed"} and manifest.get("child_pid") is None:
-                        manifest["state"] = "failed"
-                        _atomic_json(manifest_path, manifest)
                         self._validate_pre_spawn_view(
                             view_path,
                             manifest,
@@ -979,7 +1245,11 @@ class CodexSessionStore:
                         )
                         shutil.rmtree(view_path)
                         _fsync_directory(self.views_root)
-                    elif state in {"running", "finalizing"} and manifest.get("reaped") is True:
+                    elif state in {"running", "finalizing", "failed"}:
+                        if manifest.get("reaped") is not True:
+                            manifest["reaped"] = True
+                            manifest["reaped_ns"] = time.time_ns()
+                            _atomic_json(manifest_path, manifest)
                         attempt_lease = CodexInteractiveSessionLease(
                             store=self,
                             session_home=Path("/"),
@@ -998,47 +1268,38 @@ class CodexSessionStore:
                         )
                         manifest["state"] = "finalizing"
                         self._write_manifest(attempt_lease)
-                        self._promote_view(attempt_lease)
+                        recovered_rows = self._promote_view(attempt_lease)
+                        self._merge_index_unlocked(recovered_rows)
                         manifest["state"] = "complete"
                         self._write_manifest(attempt_lease)
                         self._validate_completed_view(view_path)
                         shutil.rmtree(view_path)
                         _fsync_directory(self.views_root)
+                    else:
+                        raise RuntimeError(f"Unsupported Codex recovery state retained: {state!r}")
+                except BaseException as exc:
+                    logger.error("codex_recovery_view_failed", exc_info=True)
+                    failures.append(
+                        RuntimeError(f"Codex recovery failed closed for {view_path.name}: {exc}")
+                    )
                 finally:
                     lifecycle.release()
                     for thread_lock in reversed(thread_locks):
                         thread_lock.release()
             finally:
                 view_lock.release()
-        rows: list[dict[str, Any]] = []
-        for store_name, root in (
-            ("active", self.active_root),
-            ("archived", self.archive_root),
-        ):
-            for path in _rollout_files(root):
-                thread_id = _thread_id(path)
-                if thread_id is None:
-                    continue
-                rows.append(
-                    self._index_row(
-                        thread_id=thread_id,
-                        launch_id=None,
-                        canonical_store=store_name,
-                        relative_path=_safe_relative(path, root),
-                    )
-                )
         lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
         try:
-            deduplicated: list[dict[str, Any]] = []
-            seen: set[str] = set()
-            for row in rows:
-                thread_id = str(row["session_id"])
-                if thread_id not in seen:
-                    seen.add(thread_id)
-                    deduplicated.append(row)
-            _atomic_json(self.index_path, deduplicated)
+            self._rebuild_index_unlocked()
+        except BaseException as exc:
+            logger.error("codex_recovery_index_rebuild_failed", exc_info=True)
+            failures.append(RuntimeError(f"Codex recovery index rebuild failed closed: {exc}"))
         finally:
             lifecycle.release()
+        if failures:
+            if len(failures) == 1:
+                raise failures[0]
+            raise BaseExceptionGroup("Codex history recovery failed closed", failures)
 
 
 __all__ = [

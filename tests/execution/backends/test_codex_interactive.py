@@ -205,26 +205,36 @@ class TestCodexInteractiveCmdAddDirs:
 
 
 class TestCodexInteractiveCmdCodexHome:
-    def test_add_dirs_injects_codex_home_env(self) -> None:
-        spec = CodexBackend().build_interactive_cmd(add_dirs=[Path("/session/dir")])
-        assert spec.env["CODEX_HOME"] == "/session/dir"
+    def test_generated_home_injects_reserved_home_env(self) -> None:
+        spec = CodexBackend().build_interactive_cmd(
+            add_dirs=[Path("/session/add-dir")],
+            generated_home=Path("/session/home"),
+        )
+        assert spec.env["CODEX_HOME"] == "/session/home"
+        assert spec.env["CODEX_SQLITE_HOME"] == "/session/home"
 
-    def test_codex_home_uses_first_add_dir(self) -> None:
+    def test_add_dirs_do_not_define_generated_home(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
             add_dirs=[Path("/first"), Path("/second")],
         )
-        assert spec.env["CODEX_HOME"] == "/first"
+        assert "CODEX_HOME" not in spec.env
+        assert "CODEX_SQLITE_HOME" not in spec.env
 
     def test_empty_add_dirs_excludes_codex_home(self) -> None:
         spec = CodexBackend().build_interactive_cmd(add_dirs=[])
         assert "CODEX_HOME" not in spec.env
 
-    def test_caller_env_extras_takes_precedence(self) -> None:
+    def test_generated_home_takes_precedence_over_caller_env_extras(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
-            add_dirs=[Path("/session/dir")],
-            env_extras={"CODEX_HOME": "/override"},
+            add_dirs=[Path("/session/add-dir")],
+            generated_home=Path("/session/home"),
+            env_extras={
+                "CODEX_HOME": "/override",
+                "CODEX_SQLITE_HOME": "/other-override",
+            },
         )
-        assert spec.env["CODEX_HOME"] == "/override"
+        assert spec.env["CODEX_HOME"] == "/session/home"
+        assert spec.env["CODEX_SQLITE_HOME"] == "/session/home"
 
 
 class TestCodexInteractiveCmdPositionalOrdering:

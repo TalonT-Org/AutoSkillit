@@ -155,19 +155,11 @@ class TestCodexSessionLocator:
             "older",
         ]
 
-    def test_locate_session_finds_rollout_by_thread_id(self, tmp_path: Path) -> None:
-        session_dir = tmp_path / "sessions" / "2026" / "05" / "26"
-        session_dir.mkdir(parents=True)
-        rollout = _make_rollout(session_dir, "tid_abc123")
-        locator = CodexSessionLocator(codex_home=tmp_path)
-        result = locator.locate_session("tid_abc123")
-        assert result == rollout
-
     def test_locate_session_skips_non_matching_thread_id(self, tmp_path: Path) -> None:
-        session_dir = tmp_path / "sessions" / "2026" / "05" / "26"
+        session_dir = tmp_path / "codex-sessions" / "2026" / "05" / "26"
         session_dir.mkdir(parents=True)
         _make_rollout(session_dir, "tid_other")
-        locator = CodexSessionLocator()
+        locator = CodexSessionLocator(store_root=tmp_path)
         assert locator.locate_session("tid_wanted") is None
 
     def test_locate_session_searches_permanent_dir(self, tmp_path: Path) -> None:
@@ -178,34 +170,21 @@ class TestCodexSessionLocator:
         result = locator.locate_session("tid_perm")
         assert result == rollout
 
-    def test_locate_via_home_fallback(
+    def test_locate_ignores_ambient_and_source_codex_homes(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.default_log_dir",
-            lambda: tmp_path / "nonexistent_logs",
-        )
-        session_dir = tmp_path / ".codex" / "sessions" / "2026" / "05" / "26"
-        session_dir.mkdir(parents=True)
-        rollout = _make_rollout(session_dir, "tid_home")
-        locator = CodexSessionLocator()
-        result = locator.locate_session("tid_home")
-        assert result == rollout
+        ambient_home = tmp_path / "ambient"
+        source_home = tmp_path / "source"
+        for home in (ambient_home, source_home):
+            session_dir = home / "sessions" / "2026" / "05" / "26"
+            session_dir.mkdir(parents=True)
+            _make_rollout(session_dir, "tid_noncanonical")
+        monkeypatch.setenv("CODEX_HOME", str(ambient_home))
+        monkeypatch.setattr(Path, "home", lambda: source_home)
 
-    def test_locate_via_env_var(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.default_log_dir",
-            lambda: tmp_path / "nonexistent_logs",
-        )
-        monkeypatch.delenv("CODEX_HOME", raising=False)
-        monkeypatch.setenv("CODEX_HOME", str(tmp_path))
-        session_dir = tmp_path / "sessions" / "2026" / "05" / "26"
-        session_dir.mkdir(parents=True)
-        rollout = _make_rollout(session_dir, "tid_env")
-        locator = CodexSessionLocator()
-        result = locator.locate_session("tid_env")
-        assert result == rollout
+        locator = CodexSessionLocator(store_root=tmp_path / "canonical")
+
+        assert locator.locate_session("tid_noncanonical") is None
 
     def test_locate_session_returns_none_for_empty_id(self) -> None:
         locator = CodexSessionLocator()
@@ -218,31 +197,9 @@ class TestCodexSessionLocator:
         assert locator.locate_session("crashed_xyz789") is None
 
     def test_locate_session_returns_none_when_sessions_dir_absent(self, tmp_path: Path) -> None:
-        locator = CodexSessionLocator(codex_home=tmp_path)
+        locator = CodexSessionLocator(store_root=tmp_path)
         result = locator.locate_session("any_id")
         assert result is None
-
-    def test_codex_home_priority_over_env_var(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        env_path = tmp_path / "env_sessions"
-        env_path.mkdir(parents=True)
-        env_session_dir = env_path / "sessions" / "2026" / "05" / "26"
-        env_session_dir.mkdir(parents=True)
-        _make_rollout(env_session_dir, "tid_priority", "rollout-env.jsonl")
-
-        param_path = tmp_path / "param_sessions"
-        param_path.mkdir(parents=True)
-        param_session_dir = param_path / "sessions" / "2026" / "05" / "26"
-        param_session_dir.mkdir(parents=True)
-        rollout = _make_rollout(param_session_dir, "tid_priority", "rollout-param.jsonl")
-
-        monkeypatch.setenv("CODEX_HOME", str(env_path))
-
-        locator = CodexSessionLocator(codex_home=param_path)
-        result = locator.locate_session("tid_priority")
-
-        assert result == rollout
 
     def test_read_session_handles_plain_jsonl(self, tmp_path: Path) -> None:
         f = tmp_path / "rollout.jsonl"
@@ -300,27 +257,11 @@ class TestCodexSessionLocator:
     def test_isinstance_session_locator(self) -> None:
         assert isinstance(CodexSessionLocator(), SessionLocator)
 
-    def test_file_matches_thread_empty_file(self, tmp_path: Path) -> None:
-        f = tmp_path / "empty.jsonl"
-        f.write_text("")
-        assert CodexSessionLocator._file_matches_thread(f, "any") is False
-
-    def test_file_matches_thread_no_thread_started(self, tmp_path: Path) -> None:
-        f = tmp_path / "no_start.jsonl"
-        f.write_text('{"type":"turn.completed"}\n')
-        assert CodexSessionLocator._file_matches_thread(f, "any") is False
-
-    @pytest.mark.parametrize("fmt", ["thread_started", "session_meta"])
-    def test_file_matches_thread_both_formats(self, tmp_path: Path, fmt: str) -> None:
-        rollout = _make_rollout(tmp_path, "tid_fmt", fmt=fmt)
-        assert CodexSessionLocator._file_matches_thread(rollout, "tid_fmt") is True
-        assert CodexSessionLocator._file_matches_thread(rollout, "wrong_id") is False
-
     def test_locate_session_finds_session_meta_format(self, tmp_path: Path) -> None:
-        session_dir = tmp_path / "sessions" / "2026" / "05" / "26"
+        session_dir = tmp_path / "codex-sessions" / "2026" / "05" / "26"
         session_dir.mkdir(parents=True)
         rollout = _make_rollout(session_dir, "tid_meta", fmt="session_meta")
-        locator = CodexSessionLocator(codex_home=tmp_path)
+        locator = CodexSessionLocator(store_root=tmp_path)
         result = locator.locate_session("tid_meta")
         assert result == rollout
 

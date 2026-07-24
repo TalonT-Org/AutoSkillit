@@ -47,11 +47,11 @@ from autoskillit.core import (
 from autoskillit.execution import (
     BACKEND_REGISTRY,
     RecordingSubprocessRunner,
+    codex_prelaunch_transaction,
 )
 from autoskillit.execution import (
     ensure_codex_mcp_registered as ensure_codex_mcp_registered,
 )
-from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
 from autoskillit.fleet import (
     discover_campaign_state_files,
     reap_stale_dispatches_async,

@@ -22,6 +22,7 @@ async def test_lifespan_calls_finalize_on_recording_runner():
     mock_runner.recorder = mock_recorder
     mock_ctx = MagicMock()
     mock_ctx.runner = mock_runner
+    mock_ctx.backend.capabilities.mcp_config_capable = False
 
     with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
@@ -37,6 +38,7 @@ async def test_lifespan_skips_finalize_when_not_recording():
 
     mock_ctx = MagicMock()
     mock_ctx.runner = MagicMock()  # plain runner, not RecordingSubprocessRunner
+    mock_ctx.backend.capabilities.mcp_config_capable = False
 
     with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
@@ -68,6 +70,7 @@ async def test_lifespan_calls_finalize_on_cancellation():
     mock_runner.recorder = mock_recorder
     mock_ctx = MagicMock()
     mock_ctx.runner = mock_runner
+    mock_ctx.backend.capabilities.mcp_config_capable = False
 
     with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
         with pytest.raises(asyncio.CancelledError):
@@ -84,6 +87,7 @@ async def test_lifespan_sets_startup_ready_event(monkeypatch):
 
     mock_ctx = MagicMock()
     mock_ctx.runner = MagicMock()
+    mock_ctx.backend.capabilities.mcp_config_capable = False
     mock_ctx.config.linux_tracing.tmpfs_path = "/tmp"
     mock_ctx.config.linux_tracing.log_dir = None
     mock_ctx.audit = MagicMock()

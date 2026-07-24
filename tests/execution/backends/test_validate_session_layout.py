@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import SESSION_ADD_DIR_SUBDIR
+
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
@@ -11,7 +13,7 @@ class TestClaudeCodeLayoutValidation:
     def test_claude_code_valid_layout_returns_empty(self, tmp_path):
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
-        skills_dir = tmp_path / ".claude" / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / ".claude" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "some-skill").mkdir()
         (skills_dir / "some-skill" / "SKILL.md").write_text("# Some Skill")
@@ -31,7 +33,7 @@ class TestClaudeCodeLayoutValidation:
     def test_claude_code_empty_skills_dir_returns_error(self, tmp_path):
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
-        skills_dir = tmp_path / ".claude" / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / ".claude" / "skills"
         skills_dir.mkdir(parents=True)
 
         backend = ClaudeCodeBackend()
@@ -44,7 +46,7 @@ class TestClaudeCodeLayoutValidation:
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace.skills import DefaultSkillResolver
 
-        skills_dir = tmp_path / ".claude" / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / ".claude" / "skills"
         skills_dir.mkdir(parents=True)
 
         resolver = DefaultSkillResolver()
@@ -66,7 +68,7 @@ class TestCodexLayoutValidation:
     def test_codex_valid_layout_returns_empty(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "some-skill").mkdir()
         config_content = "[mcp_servers.autoskillit]\nname = 'autoskillit'\n"
@@ -96,7 +98,7 @@ class TestCodexLayoutValidation:
     def test_codex_empty_skills_dir_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
         skills_dir.mkdir(parents=True)
 
         backend = CodexBackend()
@@ -107,7 +109,7 @@ class TestCodexLayoutValidation:
     def test_codex_missing_config_toml_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "some-skill").mkdir()
 
@@ -119,7 +121,7 @@ class TestCodexLayoutValidation:
     def test_codex_config_toml_missing_mcp_section_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
         skills_dir.mkdir(parents=True)
         (tmp_path / "config.toml").write_text("[other_section]\nkey = 'value'\n")
 
@@ -131,7 +133,7 @@ class TestCodexLayoutValidation:
     def test_codex_auth_json_regular_file_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
         skills_dir.mkdir(parents=True)
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         (tmp_path / "auth.json").write_text("{}")
@@ -144,7 +146,7 @@ class TestCodexLayoutValidation:
     def test_codex_sessions_regular_dir_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
         skills_dir.mkdir(parents=True)
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         (tmp_path / "sessions").mkdir()
@@ -157,7 +159,7 @@ class TestCodexLayoutValidation:
     def test_codex_sessions_absent_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
         skills_dir.mkdir(parents=True)
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
 
@@ -170,8 +172,8 @@ class TestCodexLayoutValidation:
 
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
-        skills_dir.mkdir()
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
+        skills_dir.mkdir(parents=True)
         (skills_dir / "some-skill").mkdir()
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         for name in ("sessions", "archived_sessions"):
@@ -191,7 +193,7 @@ class TestCodexLayoutValidation:
         from autoskillit.execution.backends.codex import CodexBackend
 
         generated_home = tmp_path / "generated-home"
-        skills_dir = generated_home / "skills"
+        skills_dir = generated_home / SESSION_ADD_DIR_SUBDIR / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "some-skill").mkdir()
         (generated_home / "config.toml").write_text("[mcp_servers.autoskillit]\n")
@@ -211,8 +213,8 @@ class TestCodexLayoutValidation:
     def test_codex_layout_rejects_nonempty_inert_rollout_target(self, tmp_path, public_name):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / "skills"
-        skills_dir.mkdir()
+        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
+        skills_dir.mkdir(parents=True)
         (skills_dir / "some-skill").mkdir()
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         for name in ("sessions", "archived_sessions"):

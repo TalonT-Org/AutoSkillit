@@ -12,11 +12,25 @@ from typing import NoReturn
 _MODULE_NAME = "autoskillit.cli.session.pty._exec"
 
 
-def launcher_argv(slave_fd: int, command: Sequence[str]) -> tuple[str, ...]:
+def launcher_argv(
+    slave_fd: int,
+    command: Sequence[str],
+    *,
+    lease_fds: Sequence[int] = (),
+) -> tuple[str, ...]:
     """Build the interpreter command used by the parent-side process owner."""
     _validate_slave_fd(slave_fd)
     normalized = _validate_command(command)
-    return (sys.executable, "-m", _MODULE_NAME, str(slave_fd), "--", *normalized)
+    normalized_leases = _validate_lease_fds(lease_fds, slave_fd=slave_fd)
+    return (
+        sys.executable,
+        "-m",
+        _MODULE_NAME,
+        str(slave_fd),
+        *(str(fd) for fd in sorted(normalized_leases)),
+        "--",
+        *normalized,
+    )
 
 
 def exec_in_pty(
@@ -56,13 +70,23 @@ def exec_in_pty(
 def main(argv: Sequence[str] | None = None) -> NoReturn:
     """Parse the deliberately small launcher protocol and exec the target."""
     arguments = tuple(sys.argv[1:] if argv is None else argv)
-    if len(arguments) < 3 or arguments[1] != "--":
-        raise SystemExit("usage: _exec SLAVE_FD -- COMMAND [ARG ...]")
+    try:
+        separator = arguments.index("--")
+    except ValueError as exc:
+        raise SystemExit("usage: _exec SLAVE_FD [LEASE_FD ...] -- COMMAND [ARG ...]") from exc
+    if separator < 1 or separator + 1 >= len(arguments):
+        raise SystemExit("usage: _exec SLAVE_FD [LEASE_FD ...] -- COMMAND [ARG ...]")
     try:
         slave_fd = int(arguments[0], 10)
+        lease_fds = tuple(int(value, 10) for value in arguments[1:separator])
     except ValueError as exc:
-        raise SystemExit("SLAVE_FD must be a decimal integer") from exc
-    exec_in_pty(slave_fd, arguments[2:], os.environ)
+        raise SystemExit("SLAVE_FD and LEASE_FD values must be decimal integers") from exc
+    exec_in_pty(
+        slave_fd,
+        arguments[separator + 1 :],
+        os.environ,
+        lease_fds=lease_fds,
+    )
 
 
 def _validate_slave_fd(slave_fd: int) -> None:

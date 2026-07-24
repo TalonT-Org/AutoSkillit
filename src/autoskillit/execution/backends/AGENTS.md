@@ -16,7 +16,7 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 | `_codex_config.py` | TOML serialization with `[[key]]` array-of-tables support, MCP registration (`ensure_codex_mcp_registered`, `_serialize_toml`) |
 | `_codex_config_lock.py` | Canonical source-config advisory lock with timeout, ownership diagnostics, and non-reentrant lifecycle |
 | `_codex_hooks.py` | Codex config.toml hook generation, sync, and upsert (`generate_codex_hooks_config`, `sync_hooks_to_codex_config`) |
-| `_codex_parse.py` | `CodexStreamParser`, `CodexResultParser`, `_scan_codex_ndjson`, `_CodexParseAccumulator` |
+| `_codex_parse.py` | `CodexStreamParser`, `CodexResultParser`, NDJSON scanning, and bounded persisted-rollout parsing |
 | `_codex_prelaunch.py` | Sole composed source-config synchronization, hook update, snapshot, and native-validation transaction |
 | `_codex_recipe_delivery.py` | Protected outer-budget provider seam, bounded diagnostic correlation, and durable consumed-call/receipt ledger |
 | `_codex_session_storage.py` | Canonical rollout store, per-attempt views and leases, durable promotion/recovery, and derived session index |

@@ -23,6 +23,8 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "execution/headless/_headless_helpers.py",
         # FeatureDef.requires_backend_alignment is config-layer; no capabilities at scan time
         "cli/session/_session_launch.py",
+        # Persisted SessionSummary metadata has no live backend capability object.
+        "cli/session/_session_picker.py",
     }
 )
 

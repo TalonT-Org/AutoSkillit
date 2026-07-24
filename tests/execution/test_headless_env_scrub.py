@@ -23,6 +23,9 @@ async def test_run_headless_core_env_excludes_ide_vars(
     monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
     monkeypatch.setenv("ENABLE_IDE_INTEGRATION", "true")
     monkeypatch.setenv("CLAUDE_CODE_IDE_HOST_OVERRIDE", "host")
+    monkeypatch.setenv("AUTOSKILLIT_CODEX_STARTUP_TRACE", "1")
+    monkeypatch.setenv("CODEX_HOME", "/tmp/interactive-cook-home")
+    monkeypatch.setenv("CODEX_SQLITE_HOME", "/tmp/interactive-cook-home")
 
     from autoskillit.execution.headless import run_headless_core
 
@@ -37,6 +40,9 @@ async def test_run_headless_core_env_excludes_ide_vars(
     assert "CLAUDE_CODE_SSE_PORT" not in env
     assert "ENABLE_IDE_INTEGRATION" not in env
     assert "CLAUDE_CODE_IDE_HOST_OVERRIDE" not in env
+    assert "AUTOSKILLIT_CODEX_STARTUP_TRACE" not in env
+    assert "CODEX_HOME" not in env
+    assert "CODEX_SQLITE_HOME" not in env
     assert env["CLAUDE_CODE_AUTO_CONNECT_IDE"] == "0"
     assert env["AUTOSKILLIT_HEADLESS"] == "1"
     assert env["TERM"] == "dumb"

@@ -7,7 +7,6 @@ import errno
 import fcntl
 import math
 import os
-import re
 import selectors
 import signal
 import sqlite3
@@ -22,10 +21,12 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
+import regex as re
+
 _WINDOW_LIMIT = 64 * 1024
 _RELAY_CHUNK_SIZE = 64 * 1024
 _RELAY_SELECT_SECONDS = 0.05
-_SUPPORTED_STATE_DATABASES = {"codex-cli 0.145.0": "state_5.sqlite"}
+_CODEX_STATE_READINESS_COMMIT = "ad65f016ed0c91992fb175fa881a373cc460dd2a"
 _ANSI_ESCAPE_RE = re.compile(
     r"""
     \x1b
@@ -59,6 +60,20 @@ class ObserverStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class _StateReadinessDef:
+    database_name: str
+    upstream_commit: str
+
+
+_SUPPORTED_STATE_CONTRACTS = {
+    "codex-cli 0.145.0": _StateReadinessDef(
+        database_name="state_5.sqlite",
+        upstream_commit=_CODEX_STATE_READINESS_COMMIT,
+    )
+}
+
+
+@dataclass(frozen=True, slots=True)
 class CodexStateReadinessProbe:
     """Read the version-mapped disposable Codex state database without mutation."""
 
@@ -76,8 +91,14 @@ class CodexStateReadinessProbe:
     @property
     def database_path(self) -> Path | None:
         """Return the exact database path for a supported Codex version."""
-        filename = _SUPPORTED_STATE_DATABASES.get(self.codex_version)
-        return None if filename is None else self.sqlite_home / filename
+        compatibility = _SUPPORTED_STATE_CONTRACTS.get(self.codex_version)
+        return None if compatibility is None else self.sqlite_home / compatibility.database_name
+
+    @property
+    def upstream_commit(self) -> str | None:
+        """Return the source revision defining the probed schema contract."""
+        compatibility = _SUPPORTED_STATE_CONTRACTS.get(self.codex_version)
+        return None if compatibility is None else compatibility.upstream_commit
 
     def check(self) -> ObserverStatus:
         """Perform one zero-wait, read-only readiness observation."""
@@ -242,7 +263,8 @@ class PtyObserver:
         if master_fd < 0 or stdin_fd < 0 or stdout_fd < 0:
             raise ValueError("PTY relay descriptors must be non-negative")
         is_cancelled = cancelled or (lambda: False)
-        selector = selectors.DefaultSelector()
+        selector_factory = selectors.DefaultSelector
+        selector = selector_factory()
         previous_winch: Callable[[int, FrameType | None], Any] | int | None = None
         installed_winch = False
 

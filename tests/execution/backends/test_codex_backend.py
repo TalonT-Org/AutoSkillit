@@ -58,6 +58,7 @@ class TestCodexFlags:
             "SANDBOX",
             "MODEL",
             "MODEL_SHORT",
+            "PROFILE",
             "ADD_DIR",
             "RESUME_SUBCOMMAND",
             "CONFIG_OVERRIDE",
@@ -126,7 +127,7 @@ class TestCodexBackend:
 
     def test_capabilities_session_dir_symlinks(self) -> None:
         assert CodexBackend().capabilities.session_dir_symlinks == frozenset(
-            {"auth.json", ".env", "sessions"}
+            {"sessions", "archived_sessions"}
         )
 
     def test_capabilities_applicable_guards(self) -> None:
@@ -864,6 +865,25 @@ class TestCodexBuildInteractiveCmd:
             spec.cmd[spec.cmd.index(CodexFlags.ADD_DIR) + 1],
         )
 
+    def test_generated_home_is_distinct_from_add_dirs(self, tmp_path: Path) -> None:
+        generated_home = (tmp_path / "generated-home").resolve()
+        skills_dir = (tmp_path / "skills").resolve()
+
+        spec = CodexBackend().build_interactive_cmd(
+            add_dirs=[str(skills_dir)],
+            generated_home=generated_home,
+        )
+
+        assert spec.env["CODEX_HOME"] == str(generated_home)
+        assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
+        assert str(skills_dir) in spec.cmd
+        assert str(generated_home) not in [
+            spec.cmd[index + 1]
+            for index, value in enumerate(spec.cmd[:-1])
+            if value == CodexFlags.ADD_DIR
+        ]
+        assert f'sqlite_home="{generated_home}"' in spec.cmd
+
     def test_initial_prompt_is_final_element(self) -> None:
         spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
         assert spec.cmd[-1] == "hello"
@@ -1146,229 +1166,6 @@ class TestCodexBuildFoodTruckCmd:
             **{**self.BASE, "stream_idle_timeout_ms": 60000}
         )
         assert spec.process_idle_timeout_ms == 60000
-
-
-class TestCodexEnsurePreLaunchConfigValidation:
-    @pytest.fixture(autouse=True)
-    def _clean_backend_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv(MCP_CLIENT_BACKEND_ENV_VAR, raising=False)
-
-    @pytest.fixture(autouse=True)
-    def _stub_hook_sync(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config",
-            lambda *a, **kw: False,
-        )
-
-    def test_ensure_pre_launch_returns_error_on_config_load_failure(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        doctor_output = (
-            '{"checks": {"config.load": {"status": "error",'
-            ' "summary": "invalid type: map, expected u32",'
-            ' "remediation": "Delete [tui] section"}}}'
-        )
-
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout=doctor_output)
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        errors = CodexBackend().ensure_pre_launch()
-        assert errors
-        combined = " ".join(errors)
-        assert "invalid type: map, expected u32" in combined
-        assert "Delete [tui] section" in combined
-
-    def test_ensure_pre_launch_returns_empty_on_config_load_ok(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        doctor_output = '{"checks": {"config.load": {"status": "ok"}}}'
-
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout=doctor_output)
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        assert CodexBackend().ensure_pre_launch() == []
-
-    def test_ensure_pre_launch_returns_empty_on_timeout(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def fake_run(cmd, **kwargs):
-            raise subprocess.TimeoutExpired(cmd, 20)
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        assert CodexBackend().ensure_pre_launch() == []
-
-    def test_ensure_pre_launch_returns_empty_on_oserror(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def fake_run(cmd, **kwargs):
-            raise FileNotFoundError("codex not found")
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        assert CodexBackend().ensure_pre_launch() == []
-
-    def test_ensure_pre_launch_codex_doctor_runs_after_mcp_and_hook_sync(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        call_order: list[str] = []
-
-        def fake_register(**kw):
-            call_order.append("register")
-            return False
-
-        def fake_sync(*a, **kw):
-            call_order.append("hook_sync")
-            return False
-
-        def fake_run(cmd, **kwargs):
-            call_order.append("doctor")
-            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
-
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered", fake_register
-        )
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config", fake_sync
-        )
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        CodexBackend().ensure_pre_launch()
-        assert call_order == ["register", "hook_sync", "doctor"]
-
-    def test_ensure_pre_launch_returns_empty_on_nonzero_returncode(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 1, stdout="error output")
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        assert CodexBackend().ensure_pre_launch() == []
-
-    def test_ensure_pre_launch_returns_empty_on_malformed_json(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout="not json")
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        assert CodexBackend().ensure_pre_launch() == []
-
-    def test_ensure_pre_launch_returns_empty_on_missing_config_check(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        assert CodexBackend().ensure_pre_launch() == []
-
-    def test_ensure_pre_launch_syncs_hooks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        sync_calls: list[dict] = []
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config",
-            lambda **kw: sync_calls.append(kw) or False,
-        )
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        errors = CodexBackend().ensure_pre_launch()
-        assert len(sync_calls) == 1
-        assert sync_calls[0].get("hook_config_format") == "toml_nested"
-        assert errors == []
-
-    def test_ensure_pre_launch_surfaces_hook_sync_errors(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def failing_sync(**kw):
-            raise RuntimeError("TOML write failed")
-
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
-
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config", failing_sync
-        )
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        errors = CodexBackend().ensure_pre_launch()
-        assert any("hook" in e.lower() or "sync" in e.lower() for e in errors)
-
-    def test_ensure_pre_launch_hook_sync_failure_is_non_fatal(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def failing_sync(**kw):
-            raise RuntimeError("sync failed")
-
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
-
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config", failing_sync
-        )
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
-            lambda **kw: False,
-        )
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        errors = CodexBackend().ensure_pre_launch()
-        assert any("sync" in e.lower() for e in errors)
-        assert not any("codex" in e.lower() and "validation" in e.lower() for e in errors)
-
-    def test_ensure_pre_launch_integration_registration_succeeds_then_validates(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        fake_home = tmp_path / "fakehome"
-        fake_home.mkdir()
-        monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
-
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(
-                cmd,
-                0,
-                stdout='{"checks": {"config.load": {"status": "error", "summary": "bad config"}}}',
-            )
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        errors = CodexBackend().ensure_pre_launch()
-        assert errors
-        assert "bad config" in " ".join(errors)
 
 
 class TestCodexBackendVersion:
@@ -1746,6 +1543,7 @@ class TestCodexBackendSetupSessionDir:
         self.codex_home.mkdir(parents=True)
         self.session_dir = tmp_path / "session"
         self.session_dir.mkdir()
+        (self.session_dir / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         self.fake_log_dir = tmp_path / "logs"
         monkeypatch.setattr(Path, "home", staticmethod(lambda: self.fake_home))
         monkeypatch.setattr(
@@ -1764,54 +1562,35 @@ class TestCodexBackendSetupSessionDir:
         assert (self.session_dir / "config.toml").is_file()
         assert (self.session_dir / "auth.json").is_symlink()
         assert (self.session_dir / ".env").is_file()
-        assert (self.session_dir / "sessions").is_symlink()
-        assert (self.session_dir / "sessions").resolve() == (
-            self.fake_log_dir / "codex-sessions"
-        ).resolve()
+        assert not (self.session_dir / "sessions").exists()
+        assert not (self.session_dir / "archived_sessions").exists()
 
     def test_missing_config_raises_and_logs_error(self) -> None:
+        (self.session_dir / "config.toml").unlink()
         with pytest.raises(FileNotFoundError):
             CodexBackend().setup_session_dir(self.session_dir)
 
-    def test_absent_auth_logs_warning_no_raise(self) -> None:
-        (self.codex_home / "config.toml").write_text("[mcp]\n")
-        with structlog.testing.capture_logs() as cap_logs:
-            CodexBackend().setup_session_dir(self.session_dir)
+    def test_absent_auth_is_allowed(self) -> None:
+        CodexBackend().setup_session_dir(self.session_dir)
         assert not (self.session_dir / "auth.json").exists()
-        assert any(
-            e.get("event") == "codex_auth_copy_missing" and e.get("log_level") == "warning"
-            for e in cap_logs
-        )
 
-    def test_auth_symlink_oserror_logs_warning_no_raise(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        (self.codex_home / "config.toml").write_text("[mcp]\n")
+    def test_auth_destination_collision_fails_closed(self) -> None:
         (self.codex_home / "auth.json").write_text("{}")
-        # Pre-create auth.json as a regular file to block symlink creation
         (self.session_dir / "auth.json").write_text("blocker")
-        with structlog.testing.capture_logs() as cap_logs:
+        with pytest.raises(FileExistsError):
             CodexBackend().setup_session_dir(self.session_dir)
-        # Verify auth.json is still a regular file (symlink failed silently)
         assert not (self.session_dir / "auth.json").is_symlink()
-        assert any(
-            e.get("event") == "codex_auth_symlink_failed" and e.get("log_level") == "warning"
-            for e in cap_logs
-        )
 
     def test_absent_env_silently_skipped(self) -> None:
-        (self.codex_home / "config.toml").write_text("[mcp]\n")
         CodexBackend().setup_session_dir(self.session_dir)
         assert not (self.session_dir / ".env").exists()
 
-    def test_sessions_symlink_oserror_swallowed(self) -> None:
-        (self.codex_home / "config.toml").write_text("[mcp]\n")
-        (self.codex_home / "auth.json").write_text("{}")
-        # Pre-create sessions/ as a directory to block symlink creation
+    def test_setup_does_not_manage_rollout_links(self) -> None:
         (self.session_dir / "sessions").mkdir()
         CodexBackend().setup_session_dir(self.session_dir)
-        # Verify sessions is still a directory (symlink failed silently)
+        assert (self.session_dir / "sessions").is_dir()
         assert not (self.session_dir / "sessions").is_symlink()
+        assert not (self.session_dir / "archived_sessions").exists()
 
     def test_setup_session_dir_creates_agents_directory(self) -> None:
         self._write_all_source_files()
@@ -1879,7 +1658,7 @@ class TestCodexBackendSetupSessionDir:
     def test_profile_agent_registration_takes_precedence(self) -> None:
         import tomllib
 
-        (self.codex_home / "config.toml").write_text(
+        (self.session_dir / "config.toml").write_text(
             '[agents."wp-elaborator"]\n'
             'description = "profile role"\n'
             'config_file = "/profile/wp-elaborator.toml"\n'
@@ -1936,12 +1715,12 @@ class TestCodexBackendSetupSessionDir:
         CodexBackend().setup_session_dir(self.session_dir)
         assert not (self.session_dir / ".git").exists()
 
-    def test_copied_config_has_auto_compact_limit(self) -> None:
+    def test_snapshotted_config_has_auto_compact_limit(self) -> None:
         import tomllib
 
         from autoskillit.execution.backends import CODEX_AUTO_COMPACT_LIMIT
 
-        (self.codex_home / "config.toml").write_text(
+        (self.session_dir / "config.toml").write_text(
             f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}\n"
             "[mcp_servers.autoskillit]\n"
         )

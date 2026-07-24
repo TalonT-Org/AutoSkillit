@@ -16,11 +16,12 @@ from autoskillit.cli.session._session_startup_trace import StartupTrace
 from autoskillit.cli.session.pty._exec import launcher_argv
 from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.cli.ui._terminal import terminal_guard
-from autoskillit.core import CmdSpec
+from autoskillit.core import CmdSpec, get_logger
 
 _TERM_TIMEOUT_SECONDS = 2.0
 _KILL_TIMEOUT_SECONDS = 2.0
 _GROUP_POLL_SECONDS = 0.02
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,10 +55,6 @@ def run_cook_attempt(
     slave_fd: int | None = None
     failures: list[BaseException] = []
 
-    # ``trace`` is retained for the full process lifetime. Its stage callbacks
-    # are installed on the observer and storage callbacks by the cook owner.
-    _ = trace
-
     with terminal_guard():
         try:
             if observer is None:
@@ -73,7 +70,11 @@ def run_cook_attempt(
                 master_fd, slave_fd = os.openpty()
                 launcher_fds = tuple(sorted({*inherited_fds, slave_fd}))
                 process = subprocess.Popen(
-                    launcher_argv(slave_fd, spec.cmd),
+                    launcher_argv(
+                        slave_fd,
+                        spec.cmd,
+                        lease_fds=inherited_fds,
+                    ),
                     cwd=cwd,
                     env=dict(spec.env),
                     pass_fds=launcher_fds,
@@ -82,12 +83,8 @@ def run_cook_attempt(
 
             pid = process.pid
             pgid = pid
-            actual_pgid = os.getpgid(pid)
-            if actual_pgid != pgid:
-                raise RuntimeError(
-                    f"cook child process-group mismatch: pid={pid}, pgid={actual_pgid}"
-                )
             on_spawn(pid, pgid)
+            trace.record_spawn()
 
             if observer is None:
                 with _foreground_process_group(pgid):
@@ -101,12 +98,14 @@ def run_cook_attempt(
                 master_fd = None
                 returncode = process.wait()
         except BaseException as exc:
+            logger.error("cook_attempt_failed", exc_info=True)
             failures.append(exc)
         finally:
             if slave_fd is not None:
                 try:
                     os.close(slave_fd)
                 except BaseException as exc:
+                    logger.error("cook_slave_fd_close_failed", exc_info=True)
                     failures.append(exc)
                 slave_fd = None
             if master_fd is not None:
@@ -116,6 +115,7 @@ def run_cook_attempt(
                     else:
                         observer.close_master(master_fd)
                 except BaseException as exc:
+                    logger.error("cook_master_fd_close_failed", exc_info=True)
                     failures.append(exc)
                 master_fd = None
 
@@ -125,11 +125,13 @@ def run_cook_attempt(
                     returncode = _terminate_reap_and_verify(process, pgid)
                     cleanup_proved = True
                 except BaseException as exc:
+                    logger.error("cook_process_cleanup_failed", exc_info=True)
                     failures.append(exc)
                 if cleanup_proved:
                     try:
                         on_reaped(pid, pgid)
                     except BaseException as exc:
+                        logger.error("cook_reap_callback_failed", exc_info=True)
                         failures.append(exc)
 
     if failures:
@@ -142,12 +144,7 @@ def run_cook_attempt(
 
 
 def _require_posix_process_ownership() -> None:
-    if (
-        os.name != "posix"
-        or not hasattr(os, "killpg")
-        or not hasattr(os, "getpgid")
-        or not hasattr(os, "tcsetpgrp")
-    ):
+    if os.name != "posix" or not hasattr(os, "killpg") or not hasattr(os, "tcsetpgrp"):
         raise RuntimeError("interactive cook requires POSIX process-group ownership")
 
 

@@ -131,6 +131,7 @@ def test_trace_schema_anchors_monotonic_math_budgets_and_history_diagnostics(
     trace.record_stage("first_output", attempt=1, view_id=_VIEW_ID)
     clock.value = 116.5
     trace.record_stage("hook_review", attempt=1, view_id=_VIEW_ID)
+    trace.require_startup_budgets()
     trace.close(status="success")
 
     records = _records(trace.path)
@@ -169,6 +170,8 @@ def test_trace_schema_anchors_monotonic_math_budgets_and_history_diagnostics(
         "total_startup": 17.0,
     }
     assert summary["budget_exceeded"] == []
+    assert summary["budget_missing"] == []
+    assert summary["budgets_passed"] is True
 
 
 @pytest.mark.parametrize(
@@ -202,11 +205,56 @@ def test_absolute_startup_budgets_are_hard_gates(
     trace.record_stage("spawn", attempt=1, view_id=_VIEW_ID)
     clock.value = hook_at
     trace.record_stage("hook_review", attempt=1, view_id=_VIEW_ID)
-    trace.close(status="success")
+    with pytest.raises(RuntimeError, match="startup budgets failed"):
+        trace.require_startup_budgets()
+    trace.close(status="failed")
 
     summary = _records(trace.path)[-1]
     assert set(summary["budget_exceeded"]) == exceeded
-    assert summary["budgets_passed"] is (not exceeded)
+    assert summary["budget_missing"] == []
+    assert summary["budgets_passed"] is False
+
+
+def test_missing_spawn_and_hook_stages_fail_budget_enforcement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trace_mod = _trace_module()
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(trace_mod, "default_log_dir", lambda: tmp_path / "logs")
+    trace = trace_mod.StartupTrace(project, _LAUNCH_ID, enabled=True)
+    trace.record_launch_anchor()
+    trace.record_attempt_anchor(attempt=1, view_id=_VIEW_ID)
+
+    with pytest.raises(RuntimeError, match="unmeasured="):
+        trace.require_startup_budgets()
+    trace.close(status="failed")
+
+    summary = _records(trace.path)[-1]
+    assert set(summary["budget_missing"]) == {
+        "confirmation_to_spawn",
+        "spawn_to_hook_review",
+        "total_startup",
+    }
+    assert summary["budgets_passed"] is False
+
+
+def test_spawn_stage_is_exactly_once_per_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trace_mod = _trace_module()
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(trace_mod, "default_log_dir", lambda: tmp_path / "logs")
+    trace = trace_mod.StartupTrace(project, _LAUNCH_ID, enabled=True)
+    trace.record_launch_anchor()
+    trace.record_attempt_anchor(attempt=1, view_id=_VIEW_ID)
+    trace.record_spawn()
+
+    with pytest.raises(RuntimeError, match="spawn already recorded"):
+        trace.record_spawn()
 
 
 def test_trace_records_are_individually_capped_and_diagnostics_are_byte_truncated(
@@ -345,8 +393,11 @@ def test_readiness_probe_accepts_only_the_supported_complete_schema(tmp_path: Pa
     _, ObserverStatus, _ = _observer_api()
     sqlite_home = tmp_path / "sqlite-home"
     _make_state_db(sqlite_home)
+    probe = _probe(sqlite_home)
 
-    assert _probe(sqlite_home).check() is ObserverStatus.READY
+    assert probe.upstream_commit == "ad65f016ed0c91992fb175fa881a373cc460dd2a"
+    assert probe.database_path == sqlite_home / "state_5.sqlite"
+    assert probe.check() is ObserverStatus.READY
 
 
 @pytest.mark.parametrize(

@@ -121,6 +121,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
     assert tuple(context.parameters) == (
         "self",
         "session_home",
+        "project_dir",
         "launch_id",
         "attempt",
         "current_resume_spec",
@@ -130,6 +131,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
     hints = typing.get_type_hints(CodingAgentBackend.cook_session_context)
     assert hints == {
         "session_home": Path,
+        "project_dir": Path,
         "launch_id": str,
         "attempt": int,
         "current_resume_spec": ResumeSpec,
@@ -242,6 +244,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             model: str | None = None,
             plugin_source: PluginSource | None = None,
             add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+            generated_home: Path | None = None,
             resume_spec: ResumeSpec = NoResume(),
             system_prompt: str | None = None,
             env_extras: Mapping[str, str] | None = None,
@@ -275,10 +278,12 @@ def test_stub_class_satisfies_coding_agent_backend():
             self,
             *,
             session_home: Path,
+            project_dir: Path,
             launch_id: str,
             attempt: int,
             current_resume_spec: ResumeSpec,
         ):
+            del project_dir
             from contextlib import nullcontext
 
             from autoskillit.core import CookSessionHandle

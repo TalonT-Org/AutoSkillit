@@ -142,7 +142,13 @@ diagnostics and must never be reported as ready.
 
 The adapter is version-mapped, not discovery-based. For exactly
 `codex-cli 0.145.0`, it opens `<generated-home>/state_5.sqlite` with
-`mode=ro`, then applies:
+`mode=ro`. That mapping is pinned to upstream Codex commit
+`ad65f016ed0c91992fb175fa881a373cc460dd2a`, specifically the
+[`state` runtime](https://github.com/openai/codex/blob/ad65f016ed0c91992fb175fa881a373cc460dd2a/codex-rs/state/src/runtime.rs)
+and
+[`state` SQLite adapter](https://github.com/openai/codex/blob/ad65f016ed0c91992fb175fa881a373cc460dd2a/codex-rs/state/src/sqlite.rs).
+Changing either the supported CLI version or this source revision requires a
+new compatibility fixture. The adapter then applies:
 
 ```sql
 PRAGMA query_only = ON;

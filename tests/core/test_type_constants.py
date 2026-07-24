@@ -654,3 +654,30 @@ def test_codex_interactive_required_env_includes_max_mcp_output_tokens() -> None
     from autoskillit.core import CODEX_INTERACTIVE_REQUIRED_ENV
 
     assert "MAX_MCP_OUTPUT_TOKENS" in CODEX_INTERACTIVE_REQUIRED_ENV
+
+
+def test_codex_cook_storage_and_environment_constants_are_pinned() -> None:
+    from autoskillit.core import (
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_ACTIVE_VIEWS_SUBDIR,
+        CODEX_ARCHIVED_SESSIONS_SUBDIR,
+        CODEX_COOK_RESERVED_ENV_VARS,
+        CODEX_SESSIONS_SUBDIR,
+        CODEX_STARTUP_TRACE_ENV_VAR,
+    )
+
+    assert (
+        CODEX_SESSIONS_SUBDIR,
+        CODEX_ARCHIVED_SESSIONS_SUBDIR,
+        CODEX_ACTIVE_VIEWS_SUBDIR,
+    ) == (
+        "codex-sessions",
+        "codex-archived-sessions",
+        "codex-active-sessions",
+    )
+    assert CODEX_COOK_RESERVED_ENV_VARS == frozenset({"CODEX_HOME", "CODEX_SQLITE_HOME"})
+    assert CODEX_STARTUP_TRACE_ENV_VAR == "AUTOSKILLIT_CODEX_STARTUP_TRACE"
+    assert {
+        CODEX_STARTUP_TRACE_ENV_VAR,
+        *CODEX_COOK_RESERVED_ENV_VARS,
+    } <= AUTOSKILLIT_PRIVATE_ENV_VARS

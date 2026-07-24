@@ -9,6 +9,7 @@ from typing import Literal
 import pytest
 
 from autoskillit.core import (
+    CODEX_SESSIONS_SUBDIR,
     BackendCapabilities,
     BackendConventions,
     CapabilityNotSupportedError,
@@ -352,14 +353,13 @@ class TestCodingAgentBackendConformance(BackendContractBase):
                 lambda: fake_log_dir,
             )
             (fake_home / ".codex").mkdir()
-            (fake_home / ".codex" / "config.toml").write_text('[model_provider]\nname = "fake"\n')
             session_dir = tmp_path / "session"
             session_dir.mkdir()
+            (session_dir / "config.toml").write_text('[model_provider]\nname = "fake"\n')
             self.backend.setup_session_dir(session_dir)
-            sessions_symlink = session_dir / "sessions"
-            assert sessions_symlink.is_symlink()
-            sessions_target = sessions_symlink.resolve()
-            date_dir = sessions_target / "2026" / "01" / "01"
+            assert not (session_dir / "sessions").exists()
+            assert not (session_dir / "archived_sessions").exists()
+            date_dir = fake_log_dir / CODEX_SESSIONS_SUBDIR / "2026" / "01" / "01"
             date_dir.mkdir(parents=True)
             rollout_path = date_dir / "rollout-fake.jsonl"
             event = {

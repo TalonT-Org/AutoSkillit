@@ -13,13 +13,10 @@ from unittest.mock import Mock
 import pytest
 
 from autoskillit.cli.session._session_process import run_cook_attempt
+from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.core import CmdSpec
 
-pytestmark = [
-    pytest.mark.layer("cli"),
-    pytest.mark.medium,
-    pytest.mark.skipif(os.name != "posix", reason="POSIX process-group contract"),
-]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
 def _spec(tmp_path: Path, code: str, *, env: dict[str, str] | None = None) -> CmdSpec:
@@ -48,9 +45,26 @@ def _kill_if_alive(pid: int) -> None:
         return
 
 
+def _assert_unsupported_platform(tmp_path: Path) -> bool:
+    if os.name == "posix":
+        return False
+    with pytest.raises(RuntimeError, match="POSIX process-group ownership"):
+        run_cook_attempt(
+            _spec(tmp_path, "pass"),
+            pass_fds=(),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda _pid, _pgid: None,
+            trace=Mock(),
+            observer=None,
+        )
+    return True
+
+
 def test_direct_attempt_owns_new_group_and_reaps_before_callback(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    if _assert_unsupported_platform(tmp_path):
+        return
     import autoskillit.cli.session._session_process as process_mod
 
     actual_popen = subprocess.Popen
@@ -94,6 +108,8 @@ def test_direct_attempt_owns_new_group_and_reaps_before_callback(
 
 
 def test_pass_fds_are_inherited_and_callback_identity_is_stable(tmp_path: Path) -> None:
+    if _assert_unsupported_platform(tmp_path):
+        return
     read_fd, write_fd = os.pipe()
     events: list[tuple[str, int, int]] = []
     try:
@@ -123,6 +139,8 @@ def test_pass_fds_are_inherited_and_callback_identity_is_stable(tmp_path: Path) 
 
 
 def test_grandchild_cannot_outlive_group_empty_reaped_proof(tmp_path: Path) -> None:
+    if _assert_unsupported_platform(tmp_path):
+        return
     grandchild_path = tmp_path / "grandchild.pid"
     code = (
         "import pathlib, subprocess, sys;"
@@ -152,6 +170,8 @@ def test_grandchild_cannot_outlive_group_empty_reaped_proof(tmp_path: Path) -> N
 
 
 def test_spawn_failure_has_no_callbacks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    if _assert_unsupported_platform(tmp_path):
+        return
     import autoskillit.cli.session._session_process as process_mod
 
     def fail_spawn(*_args, **_kwargs):
@@ -174,6 +194,8 @@ def test_spawn_failure_has_no_callbacks(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 def test_callback_failure_still_terminates_and_reaps_child(tmp_path: Path) -> None:
+    if _assert_unsupported_platform(tmp_path):
+        return
     identity: list[tuple[int, int]] = []
 
     def fail_after_spawn(pid: int, pgid: int) -> None:
@@ -193,3 +215,49 @@ def test_callback_failure_still_terminates_and_reaps_child(tmp_path: Path) -> No
     assert len(identity) == 2
     assert identity[0] == identity[1]
     assert _wait_until_gone(identity[0][0])
+
+
+def test_pty_attempt_retains_lease_fd_and_owns_controlling_slave(
+    tmp_path: Path,
+) -> None:
+    if _assert_unsupported_platform(tmp_path):
+        return
+    read_fd, write_fd = os.pipe()
+    code = (
+        "import os;"
+        "assert os.getsid(0) == os.getpid();"
+        "assert os.tcgetpgrp(0) == os.getpgrp();"
+        "os.write(int(os.environ['LEASE_FD']), b'pty-owned')"
+    )
+    try:
+        result = run_cook_attempt(
+            _spec(
+                tmp_path,
+                code,
+                env={**os.environ, "LEASE_FD": str(write_fd)},
+            ),
+            pass_fds=(write_fd,),
+            on_spawn=lambda _pid, _pgid: None,
+            on_reaped=lambda _pid, _pgid: None,
+            trace=Mock(),
+            observer=PtyObserver(readiness_probe=None),
+        )
+    finally:
+        os.close(write_fd)
+    try:
+        assert os.read(read_fd, 9) == b"pty-owned"
+    finally:
+        os.close(read_fd)
+    assert result.pid == result.pgid
+    assert result.returncode == 0
+
+
+def test_successful_popen_records_spawn_without_post_spawn_pgid_lookup() -> None:
+    source = Path(run_cook_attempt.__code__.co_filename).read_text(encoding="utf-8")
+    body = source[
+        source.index("def run_cook_attempt(") : source.index(
+            "\ndef _require_posix_process_ownership"
+        )
+    ]
+    assert "os.getpgid" not in body
+    assert body.index("on_spawn(pid, pgid)") < body.index("trace.record_spawn()")

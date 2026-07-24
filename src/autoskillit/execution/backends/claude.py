@@ -20,6 +20,7 @@ from autoskillit.core import (
     NON_VARIADIC_CLAUDE_FLAGS,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     PROVIDER_PROFILE_ENV_VAR,
+    SESSION_ADD_DIR_SUBDIR,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
@@ -443,6 +444,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         model: str | None = None,
         plugin_source: PluginSource | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+        generated_home: Path | None = None,
         resume_spec: ResumeSpec = NoResume(),
         system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
@@ -489,6 +491,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         an interactive session is determined at runtime by kitchen state, not by a
         ``SESSION_TYPE`` env variable.
         """
+        del generated_home
         builder = CmdBuilder("claude")
         builder.mode_flag(ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS)
         match resume_spec:
@@ -768,7 +771,9 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
     ) -> list[str]:
         del project_dir
         errors: list[str] = []
-        skills_dir = session_dir / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        skills_dir = (
+            session_dir / SESSION_ADD_DIR_SUBDIR / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        )
         if not skills_dir.is_dir():
             errors.append(f"skills directory does not exist: {skills_dir}")
         else:
@@ -868,11 +873,12 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         self,
         *,
         session_home: Path,
+        project_dir: Path,
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
     ) -> AbstractContextManager[CookSessionHandle]:
-        del session_home, launch_id, attempt, current_resume_spec
+        del session_home, project_dir, launch_id, attempt, current_resume_spec
         return nullcontext(
             CookSessionHandle(
                 view_id="",

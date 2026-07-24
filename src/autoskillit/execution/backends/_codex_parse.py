@@ -1,11 +1,17 @@
-"""NDJSON stream/result parsing for the Codex backend."""
+"""NDJSON and persisted-rollout parsing for the Codex backend."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+import os
+import stat
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from typing import Any, BinaryIO
+
+import zstandard
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -23,6 +29,191 @@ from autoskillit.core import (
 from autoskillit.execution.process import _marker_is_standalone
 
 logger = get_logger(__name__)
+_ROLLOUT_METADATA_LIMIT = 64 * 1024
+_ROLLOUT_SUFFIXES = (".jsonl", ".jsonl.zst")
+
+
+def _safe_relative_value(value: str) -> Path:
+    if not value or "\\" in value:
+        raise RuntimeError(f"Unsafe relative rollout path: {value!r}")
+    relative = Path(value)
+    if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+        raise RuntimeError(f"Unsafe relative rollout path: {value!r}")
+    if not relative.name.endswith(_ROLLOUT_SUFFIXES):
+        raise RuntimeError(f"Unsupported rollout filename: {value!r}")
+    return relative
+
+
+def _require_real_directory(path: Path, *, label: str) -> None:
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"Missing {label}: {path}") from exc
+    if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+        raise RuntimeError(f"{label} must be a non-symlink directory: {path}")
+
+
+def _safe_relative(path: Path, root: Path) -> Path:
+    _require_real_directory(root, label="rollout root")
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"Missing rollout file: {path}") from exc
+    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        raise RuntimeError(f"Rollout must be a regular non-symlink file: {path}")
+    try:
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise RuntimeError(f"Rollout escapes its root: {path}") from exc
+    relative = _safe_relative_value(relative.as_posix())
+    cursor = root
+    for part in relative.parts[:-1]:
+        cursor /= part
+        _require_real_directory(cursor, label="rollout parent")
+    return relative
+
+
+def _rollout_files(root: Path) -> Iterator[Path]:
+    if not os.path.lexists(root):
+        return
+    _require_real_directory(root, label="rollout root")
+    found: list[Path] = []
+    for directory, directory_names, file_names in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        for name in directory_names:
+            candidate = parent / name
+            if candidate.is_symlink():
+                raise RuntimeError(f"Symlink directory in rollout tree: {candidate}")
+        for name in file_names:
+            candidate = parent / name
+            if candidate.is_symlink():
+                raise RuntimeError(f"Symlink file in rollout tree: {candidate}")
+            if name.endswith(_ROLLOUT_SUFFIXES):
+                _safe_relative(candidate, root)
+                found.append(candidate)
+    yield from sorted(found)
+
+
+def _read_prefix(path: Path, limit: int) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        file_stat = os.fstat(fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise ValueError(f"{path} is not a regular file")
+        if path.name.endswith(".zst"):
+            with os.fdopen(fd, "rb", closefd=False) as source:
+                with zstandard.ZstdDecompressor().stream_reader(source) as reader:
+                    return reader.read(limit)
+        return os.read(fd, limit)
+    finally:
+        os.close(fd)
+
+
+def _thread_id_from_bytes(data: bytes) -> str | None:
+    for raw_line in data.splitlines():
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(row, Mapping):
+            continue
+        if row.get("type") == "thread.started" and isinstance(row.get("thread_id"), str):
+            return str(row["thread_id"])
+        if row.get("type") == "session_meta":
+            payload = row.get("payload")
+            if isinstance(payload, Mapping) and isinstance(payload.get("id"), str):
+                return str(payload["id"])
+    return None
+
+
+def _cwd_from_bytes(data: bytes) -> str | None:
+    for raw_line in data.splitlines():
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(row, Mapping) or row.get("type") != "session_meta":
+            continue
+        payload = row.get("payload")
+        if isinstance(payload, Mapping) and isinstance(payload.get("cwd"), str):
+            raw_cwd = str(payload["cwd"])
+            path = Path(raw_cwd)
+            if path.is_absolute():
+                return str(path.expanduser().resolve(strict=False))
+    return None
+
+
+def _thread_id(path: Path) -> str | None:
+    try:
+        return _thread_id_from_bytes(_read_prefix(path, _ROLLOUT_METADATA_LIMIT))
+    except (OSError, ValueError, zstandard.ZstdError):
+        return None
+
+
+def _rollout_cwd(path: Path) -> str | None:
+    try:
+        return _cwd_from_bytes(_read_prefix(path, _ROLLOUT_METADATA_LIMIT))
+    except (OSError, ValueError, zstandard.ZstdError):
+        return None
+
+
+def _identity(path: Path) -> tuple[int, int]:
+    file_stat = path.stat(follow_symlinks=False)
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise RuntimeError(f"Expected regular rollout file: {path}")
+    return file_stat.st_dev, file_stat.st_ino
+
+
+@contextmanager
+def _logical_rollout_reader(path: Path) -> Iterator[BinaryIO]:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        file_stat = os.fstat(fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise RuntimeError(f"Rollout must be a regular file: {path}")
+        with os.fdopen(fd, "rb", closefd=False) as source:
+            if path.name.endswith(".zst"):
+                with zstandard.ZstdDecompressor().stream_reader(source) as reader:
+                    yield reader
+            else:
+                yield source
+    finally:
+        os.close(fd)
+
+
+def _read_exact(reader: BinaryIO, size: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = size
+    while remaining:
+        chunk = reader.read(remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _preserves_rollout_prefix(prior: Path, candidate: Path) -> bool:
+    """Return whether candidate preserves every logical byte already in prior."""
+    if _identity(prior) == _identity(candidate):
+        return True
+    try:
+        with (
+            _logical_rollout_reader(prior) as prior_reader,
+            _logical_rollout_reader(candidate) as candidate_reader,
+        ):
+            while chunk := prior_reader.read(64 * 1024):
+                if _read_exact(candidate_reader, len(chunk)) != chunk:
+                    return False
+    except (OSError, ValueError, zstandard.ZstdError):
+        return False
+    return True
 
 
 @dataclass

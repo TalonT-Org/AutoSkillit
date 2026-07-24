@@ -54,6 +54,7 @@ from autoskillit.execution.backends import (
     resolve_unique_codex_host_correlation,
     sync_hooks_to_codex_config,
 )
+from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.db import (
@@ -279,6 +280,7 @@ __all__ = [
     "_serialize_toml",
     "_write_codex_config",
     "codex_recipe_delivery_calling_contract",
+    "codex_prelaunch_transaction",
     "ensure_codex_mcp_registered",
     "enumerate_fresh_codex_marker_ids",
     "generate_codex_hooks_config",

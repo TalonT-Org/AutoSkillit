@@ -97,6 +97,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
         {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
     )()
     _agent_backend = type("AB", (), {"backend": "claude-code"})()
+    _branching = type("Branching", (), {"default_base_branch": "main"})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -107,6 +108,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
                 "experimental_enabled": False,
                 "fleet": _fleet,
                 "agent_backend": _agent_backend,
+                "branching": _branching,
             },
         )(),
     )
@@ -173,6 +175,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
         {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
     )()
     _agent_backend = type("AB", (), {"backend": "claude-code"})()
+    _branching = type("Branching", (), {"default_base_branch": "main"})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -183,6 +186,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
                 "experimental_enabled": False,
                 "fleet": _fleet,
                 "agent_backend": _agent_backend,
+                "branching": _branching,
             },
         )(),
     )

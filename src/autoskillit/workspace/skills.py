@@ -783,15 +783,23 @@ class DefaultSkillResolver:
     ) -> EffectiveSkillInvocation:
         """Resolve and validate a root plus every direct/pack-expanded dependency."""
         normalized_root = project_root.resolve() if project_root is not None else None
-        catalog = self._list_effective_unfiltered(normalized_root)
-        by_name = {skill.name: skill for skill in catalog}
-        root = by_name.get(name)
+        root = self.resolve_effective(name, normalized_root)
         if root is None:
             raise SkillContractError(f"skill {name!r} was not found in any effective source")
 
         closure: list[SkillInfo] = []
         visited: set[str] = set()
         visiting: set[str] = set()
+        resolved_by_name = {root.name: root}
+        pack_catalog: tuple[SkillInfo, ...] | None = None
+
+        def resolve_member(dependency: str) -> SkillInfo | None:
+            if dependency in resolved_by_name:
+                return resolved_by_name[dependency]
+            member = self.resolve_effective(dependency, normalized_root)
+            if member is not None:
+                resolved_by_name[dependency] = member
+            return member
 
         def validate_member(skill: SkillInfo) -> None:
             if skill.invalid_reason is not None:
@@ -809,6 +817,7 @@ class DefaultSkillResolver:
             validate_skill_capability_roles(skill.uses_capabilities, execution_role)
 
         def visit(skill: SkillInfo) -> None:
+            nonlocal pack_catalog
             if skill.name in visited:
                 return
             if skill.name in visiting:
@@ -818,14 +827,22 @@ class DefaultSkillResolver:
             closure.append(skill)
             for dependency in skill.activate_deps:
                 if dependency in PACK_REGISTRY:
+                    if pack_catalog is None:
+                        pack_catalog = self._list_effective_unfiltered(normalized_root)
+                        for candidate in pack_catalog:
+                            resolved_by_name.setdefault(candidate.name, candidate)
                     members = sorted(
-                        (candidate for candidate in catalog if dependency in candidate.categories),
+                        (
+                            candidate
+                            for candidate in pack_catalog
+                            if dependency in candidate.categories
+                        ),
                         key=lambda candidate: candidate.name,
                     )
                     for member in members:
                         visit(member)
                     continue
-                dependency_member = by_name.get(dependency)
+                dependency_member = resolve_member(dependency)
                 if dependency_member is None:
                     raise SkillContractError(
                         f"skill {skill.name!r} has unresolved dependency {dependency!r}"

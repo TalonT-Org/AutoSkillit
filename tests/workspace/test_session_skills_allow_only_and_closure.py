@@ -187,6 +187,36 @@ def _make_effective_resolver(tmp_path: Path, monkeypatch, skills: dict[str, dict
 class TestEffectiveInvocationClosurePolicy:
     """The complete direct/pack closure supplies one validated capability contract."""
 
+    def test_direct_closure_does_not_scan_unrelated_catalog(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from autoskillit.core import SkillExecutionRole
+
+        resolver = _make_effective_resolver(
+            tmp_path,
+            monkeypatch,
+            {
+                "root": {"deps": ("direct",)},
+                "direct": {"capabilities": ("github_api_write",)},
+                "unrelated": {},
+            },
+        )
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        def fail_catalog_scan(_project_root: Path | None) -> tuple[()]:
+            raise AssertionError("direct invocation must not scan unrelated skills")
+
+        monkeypatch.setattr(resolver, "_list_effective_unfiltered", fail_catalog_scan)
+
+        invocation = resolver.resolve_invocation(
+            "root",
+            project_root,
+            SkillExecutionRole.SESSION,
+        )
+
+        assert [member.name for member in invocation.closure] == ["root", "direct"]
+
     def test_capability_union_includes_direct_and_pack_expanded_dependencies(
         self, tmp_path: Path, monkeypatch
     ) -> None:

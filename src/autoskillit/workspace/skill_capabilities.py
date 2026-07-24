@@ -102,6 +102,20 @@ _SELF_INITIATED_TOOLS: dict[str, tuple[str, ...]] = {
 
 _STEP_HEADING_RE = re.compile(r"(?:Step\s+\d|^\d+[\.\):\s])")
 _FENCE_DELIMITER_RE = re.compile(r"^(`{3,}|~{3,})")
+_FRONTMATTER_SKILL_NAME_RE = re.compile(
+    r"^name:\s*['\"]?([^'\"\n]+)",
+    re.MULTILINE,
+)
+_SKILL_WORD_RE = re.compile(r"(?:\bskill\b|/skill|skill\s*`)")
+_CROSS_SKILL_CALL_RE = re.compile(r"\b(?:run_skill|Skill)\s*\(\s*['\"]/autoskillit:")
+_LOGICAL_CONTINUATION_RE = re.compile(r"\\\s*\n\s*")
+_SLASH_COMMAND_LINE_RE = re.compile(r"^`?/autoskillit:")
+_GRAPHQL_LINE_RE = re.compile(
+    r"\b(?:gh\s+api\s+graphql|mutation)\b",
+    re.IGNORECASE,
+)
+_GRAPHQL_COMMAND_RE = re.compile(r"\bgh\s+api\s+graphql\b")
+_MUTATION_RE = re.compile(r"\bmutation\b", re.IGNORECASE)
 _EXCLUDED_SECTION_HEADINGS = frozenset({"related skills", "see also"})
 _ARTIFACT_HEADING_RE = re.compile(
     r"\b(?:example|examples|output|result|response|artifact|frontmatter|"
@@ -166,7 +180,7 @@ _IMPERATIVE_VERBS = (
 
 
 def _frontmatter_skill_name(content: str) -> str:
-    match = re.search(r"^name:\s*['\"]?([^'\"\n]+)", content, re.MULTILINE)
+    match = _FRONTMATTER_SKILL_NAME_RE.search(content)
     return match.group(1).strip() if match else ""
 
 
@@ -320,7 +334,7 @@ def _has_imperative_cross_skill_invocation(stripped: str) -> bool:
     lower = core.lower()
     if "skill tool" in lower:
         return False
-    has_skill_word = bool(re.search(r"(?:\bskill\b|/skill|skill\s*`)", lower))
+    has_skill_word = bool(_SKILL_WORD_RE.search(lower))
     has_run_skill_invocation = "run_skill" in lower and "/autoskillit:" in lower
     for verb in _IMPERATIVE_VERBS:
         prefixes = (verb + " ", verb + " the ", verb + " all ")
@@ -376,7 +390,7 @@ def _is_cross_skill_ref(text: str, skill_name: str) -> bool:
         return False
     if "skill tool" in lower and any(verb in lower for verb in ("load", "call", "use", "invoke")):
         return True
-    if re.search(r"\b(?:run_skill|Skill)\s*\(\s*['\"]/autoskillit:", stripped):
+    if _CROSS_SKILL_CALL_RE.search(stripped):
         return True
     if _has_imperative_cross_skill_invocation(stripped):
         return True
@@ -410,7 +424,10 @@ def classify_skill_capability_evidence(
     previous_logical: tuple[_SourceLine, ...] | None = None
     previous_text = ""
     for logical in _logical_lines(lines):
-        text = re.sub(r"\\\s*\n\s*", " ", "\n".join(line.text for line in logical))
+        text = _LOGICAL_CONTINUATION_RE.sub(
+            " ",
+            "\n".join(line.text for line in logical),
+        )
         stripped = text.strip()
         if stripped.startswith("#"):
             heading = stripped.lstrip("#").strip().lower()
@@ -429,7 +446,7 @@ def classify_skill_capability_evidence(
         if (
             not excluded_cross_skill_section
             and previous_logical is not None
-            and re.match(r"^`?/autoskillit:", stripped)
+            and _SLASH_COMMAND_LINE_RE.match(stripped)
             and "skill tool" in previous_text.lower()
             and any(verb in previous_text.lower() for verb in ("load", "call", "use", "invoke"))
         ):
@@ -438,14 +455,10 @@ def classify_skill_capability_evidence(
         previous_text = text
 
     executable_text = "\n".join(line.text for line in lines if line.executable)
-    graphql_lines = tuple(
-        line
-        for line in lines
-        if re.search(r"\b(?:gh\s+api\s+graphql|mutation)\b", line.text, re.IGNORECASE)
-    )
+    graphql_lines = tuple(line for line in lines if _GRAPHQL_LINE_RE.search(line.text))
     if (
-        re.search(r"\bgh\s+api\s+graphql\b", executable_text)
-        and re.search(r"\bmutation\b", executable_text, re.IGNORECASE)
+        _GRAPHQL_COMMAND_RE.search(executable_text)
+        and _MUTATION_RE.search(executable_text)
         and graphql_lines
     ):
         add("github_api_write", graphql_lines)

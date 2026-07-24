@@ -6,9 +6,11 @@ import fcntl
 import hashlib
 import json
 import os
+import plistlib
 import shutil
 import socket
 import stat
+import subprocess
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -185,6 +187,23 @@ def _decode_mount_path(value: str) -> str:
 
 
 def _filesystem_type(path: Path) -> str:
+    if sys.platform == "darwin":
+        try:
+            result = subprocess.run(
+                ("/usr/sbin/diskutil", "info", "-plist", str(path.resolve(strict=True))),
+                capture_output=True,
+                check=False,
+                timeout=5,
+            )
+            if result.returncode != 0:
+                raise RuntimeError("Unable to classify the Codex storage filesystem with diskutil")
+            payload = plistlib.loads(result.stdout)
+            filesystem_type = payload.get("FilesystemType")
+            if not isinstance(filesystem_type, str) or not filesystem_type:
+                raise RuntimeError("diskutil did not report a filesystem type")
+            return filesystem_type.lower()
+        except (OSError, plistlib.InvalidFileException) as exc:
+            raise RuntimeError("Unable to classify the Codex storage filesystem") from exc
     if not sys.platform.startswith("linux"):
         raise RuntimeError(f"Codex durable views cannot classify filesystems on {sys.platform}")
     try:

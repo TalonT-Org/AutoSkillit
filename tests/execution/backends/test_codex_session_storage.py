@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import multiprocessing
 import os
+import plistlib
 import threading
 from pathlib import Path
 
@@ -466,6 +467,34 @@ def test_unsupported_filesystem_fails_before_view_mutation(
         )
 
     assert not (log_dir / "codex-active-sessions" / "0123456789abcdef-1").exists()
+
+
+def test_darwin_filesystem_classification_uses_diskutil(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+    result = storage.subprocess.CompletedProcess(
+        args=(),
+        returncode=0,
+        stdout=plistlib.dumps({"FilesystemType": "apfs"}),
+        stderr=b"",
+    )
+
+    def run(command: tuple[str, ...], **kwargs: object):
+        calls.append((command, kwargs))
+        return result
+
+    monkeypatch.setattr(storage.sys, "platform", "darwin")
+    monkeypatch.setattr(storage.subprocess, "run", run)
+
+    assert storage._filesystem_type(tmp_path) == "apfs"
+    assert calls == [
+        (
+            ("/usr/sbin/diskutil", "info", "-plist", str(tmp_path.resolve())),
+            {"capture_output": True, "check": False, "timeout": 5},
+        )
+    ]
 
 
 def test_cross_device_layout_fails_before_view_mutation(

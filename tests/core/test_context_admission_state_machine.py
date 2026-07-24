@@ -168,7 +168,7 @@ def _occurrence(
     window_epoch_id: WindowEpochId,
     window_epoch_number: int,
 ) -> AdmissionOccurrence:
-    name = f"occurrence-{slot}"
+    name = f"occurrence-{window_epoch_number}-{slot}"
     surface = (
         ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY
         if slot == 1
@@ -208,21 +208,21 @@ def _occurrence(
 
 
 def _batch(occurrence: AdmissionOccurrence) -> AdmissionBatch:
-    slot = occurrence.occurrence_id.value.rsplit("-", 1)[-1]
-    request_id = AdmissionRequestId(f"request-{slot}")
+    identity = occurrence.occurrence_id.value.removeprefix("occurrence-")
+    request_id = AdmissionRequestId(f"request-{identity}")
     manifest = CanonicalRepresentationManifest(
         request_id=request_id,
         representation_revision=occurrence.representation_revision,
-        representation_binding_id=RepresentationBindingId(f"binding-{slot}"),
+        representation_binding_id=RepresentationBindingId(f"binding-{identity}"),
         span_owners=tuple(
             CanonicalSpanOwner(span_id=span_id, occurrence_id=occurrence.occurrence_id)
             for span_id in occurrence.owned_span_ids
         ),
-        assembler_identity=ProducerInstanceId(f"assembler-{slot}"),
-        assembler_witness_id=AdmissionWitnessId(f"assembler-witness-{slot}"),
+        assembler_identity=ProducerInstanceId(f"assembler-{identity}"),
+        assembler_witness_id=AdmissionWitnessId(f"assembler-witness-{identity}"),
     )
     return AdmissionBatch(
-        batch_id=AdmissionBatchId(f"batch-{slot}"),
+        batch_id=AdmissionBatchId(f"batch-{identity}"),
         request_id=request_id,
         occurrence_ids=(occurrence.occurrence_id,),
         reserve_class=occurrence.reserve_class,
@@ -233,8 +233,10 @@ def _batch(occurrence: AdmissionOccurrence) -> AdmissionBatch:
 
 def _multi_batch(occurrences: tuple[AdmissionOccurrence, ...]) -> AdmissionBatch:
     occurrences = tuple(sorted(occurrences, key=lambda occurrence: occurrence.occurrence_id.value))
-    slots = tuple(occurrence.occurrence_id.value.rsplit("-", 1)[-1] for occurrence in occurrences)
-    request_id = AdmissionRequestId("request-multi-" + "-".join(slots))
+    identities = tuple(
+        occurrence.occurrence_id.value.removeprefix("occurrence-") for occurrence in occurrences
+    )
+    request_id = AdmissionRequestId("request-multi-" + "-".join(identities))
     reserve_class = occurrences[0].reserve_class
     if any(occurrence.reserve_class is not reserve_class for occurrence in occurrences):
         msg = "multi-member batch must share one reserve class"
@@ -242,17 +244,17 @@ def _multi_batch(occurrences: tuple[AdmissionOccurrence, ...]) -> AdmissionBatch
     manifest = CanonicalRepresentationManifest(
         request_id=request_id,
         representation_revision=occurrences[0].representation_revision,
-        representation_binding_id=RepresentationBindingId("binding-multi-" + "-".join(slots)),
+        representation_binding_id=RepresentationBindingId("binding-multi-" + "-".join(identities)),
         span_owners=tuple(
             CanonicalSpanOwner(span_id=span_id, occurrence_id=occurrence.occurrence_id)
             for occurrence in occurrences
             for span_id in occurrence.owned_span_ids
         ),
-        assembler_identity=ProducerInstanceId("assembler-multi-" + "-".join(slots)),
-        assembler_witness_id=AdmissionWitnessId("assembler-witness-multi-" + "-".join(slots)),
+        assembler_identity=ProducerInstanceId("assembler-multi-" + "-".join(identities)),
+        assembler_witness_id=AdmissionWitnessId("assembler-witness-multi-" + "-".join(identities)),
     )
     return AdmissionBatch(
-        batch_id=AdmissionBatchId("batch-multi-" + "-".join(slots)),
+        batch_id=AdmissionBatchId("batch-multi-" + "-".join(identities)),
         request_id=request_id,
         occurrence_ids=tuple(occurrence.occurrence_id for occurrence in occurrences),
         reserve_class=reserve_class,

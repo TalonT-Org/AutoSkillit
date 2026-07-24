@@ -167,6 +167,30 @@ class SkillProjectionContext:
         return self.catalog.skills
 
 
+def _direct_install_projection_context(
+    *,
+    cwd: Path,
+    project_root: Path | None,
+    catalog: EffectiveSkillCatalogAuthority,
+    backend: CodingAgentBackend,
+    destination: Path,
+    default_base_branch: str,
+) -> SkillProjectionContext:
+    """Bind every byte-affecting input shared by a direct install and dispatch."""
+    return SkillProjectionContext(
+        cwd=cwd,
+        project_root=project_root,
+        catalog=catalog,
+        backend=backend,
+        conventions=backend.conventions,
+        substitutions={
+            "{{AUTOSKILLIT_TEMP}}": temp_dir_display_str(None),
+            "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
+            "{{DEFAULT_BASE_BRANCH}}": default_base_branch,
+        },
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class EffectiveSkillDispatchContract:
     """Immutable execution-bound contract carried through headless dispatch."""
@@ -687,16 +711,13 @@ def project_direct_install(
         ).encode()
     ).hexdigest()[:24]
     destination = Path.home() / ".autoskillit" / "plugin-projections" / cache_key
-    context = SkillProjectionContext(
-        cwd=Path(cwd).resolve(),
+    context = _direct_install_projection_context(
+        cwd=Path(cwd),
+        project_root=None,
         catalog=catalog,
         backend=backend,
-        conventions=backend.conventions,
-        substitutions={
-            "{{AUTOSKILLIT_TEMP}}": temp_dir_display_str(None),
-            "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
-            "{{DEFAULT_BASE_BRANCH}}": default_base_branch,
-        },
+        destination=destination,
+        default_base_branch=default_base_branch,
     )
     manifest_path = destination.parent / f".{destination.name}.autoskillit-projection.json"
     with _InstallLock():
@@ -793,6 +814,7 @@ def prepare_catalog_skill_dispatch(
     project_root: Path | None = None,
 ) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
     """Project a visible catalog and bind the artifact to executor authority."""
+    default_base_branch = _default_base_branch(default_base_branch)
     plugin_source = project_default_plugin_source(
         cwd=cwd,
         backend=backend,
@@ -801,13 +823,13 @@ def prepare_catalog_skill_dispatch(
     )
     contract = build_effective_skill_dispatch_contract(
         resolved_command,
-        SkillProjectionContext(
+        _direct_install_projection_context(
             cwd=cwd,
             project_root=project_root,
             catalog=catalog,
             backend=backend,
-            conventions=backend.conventions,
-            gating=False,
+            destination=plugin_source.plugin_dir,
+            default_base_branch=default_base_branch,
         ),
         artifact_paths=(str(plugin_source.plugin_dir),),
     )

@@ -487,7 +487,11 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
         "process-issues",
         capabilities=("run_skill",),
         execution_role="orchestrator",
-        body='winning project-root body\nrun_skill("/test child")',
+        body=(
+            "winning project-root body\n"
+            "merge {{DEFAULT_BASE_BRANCH}} from {{AUTOSKILLIT_TEMP}}\n"
+            'run_skill("/test child")'
+        ),
     )
     _write_effective_skill(
         cwd / ".claude" / "skills",
@@ -498,7 +502,7 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    _, contract = prepare_effective_skill_dispatch(
+    plugin_source, contract = prepare_effective_skill_dispatch(
         resolved_command="dispatch",
         project_root=project_root,
         cwd=cwd,
@@ -513,6 +517,11 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
     assert contract.cwd == str(cwd.resolve())
     assert "winning project-root body" in contract.projected_artifacts["process-issues"]
     assert "wrong execution-cwd body" not in contract.projected_artifacts["process-issues"]
+    assert "{{DEFAULT_BASE_BRANCH}}" not in contract.projected_artifacts["process-issues"]
+    assert "{{AUTOSKILLIT_TEMP}}" not in contract.projected_artifacts["process-issues"]
+    assert contract.projected_artifacts["process-issues"] == (
+        plugin_source.plugin_dir / "skills" / "process-issues" / "SKILL.md"
+    ).read_text(encoding="utf-8")
 
 
 def test_winning_override_identity_policy_projection_and_digests_are_atomic(

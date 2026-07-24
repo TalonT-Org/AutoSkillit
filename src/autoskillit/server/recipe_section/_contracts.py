@@ -37,6 +37,10 @@ class RecipeSectionPaginationError(RuntimeError):
     """A verified immutable page plan could not be established."""
 
 
+class RecipeSectionNonConvergenceError(RecipeSectionPaginationError):
+    """Pagination width planning could not reach a stable state."""
+
+
 class RecipeSectionBoundError(RecipeSectionPaginationError):
     """The captured request bound cannot fit one progress-making page."""
 

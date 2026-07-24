@@ -55,6 +55,7 @@ from autoskillit.server._recipe_delivery import (
 )
 from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
+    RecipeSectionNonConvergenceError,
     RecipeSectionPaginationError,
     get_or_build_recipe_section_page_plan,
     resolve_recipe_section_bound_bytes,
@@ -867,8 +868,12 @@ def _assert_section_response_bound(rendered: str, tool_ctx) -> None:
     ("failure", "expected_code"),
     [
         (
-            RecipeSectionPaginationError("forced nonconvergence"),
+            RecipeSectionNonConvergenceError("forced nonconvergence"),
             "recipe_section_pagination_nonconvergent",
+        ),
+        (
+            RecipeSectionPaginationError("forced invariant failure"),
+            "recipe_section_internal_error",
         ),
         (RuntimeError("forced planner failure"), "recipe_section_internal_error"),
     ],

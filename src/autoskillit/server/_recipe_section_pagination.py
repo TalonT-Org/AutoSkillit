@@ -30,6 +30,7 @@ from autoskillit.server._recipe_delivery import (
 from autoskillit.server.recipe_section._contracts import (
     PlannedRecipeSectionPage,
     RecipeSectionBoundError,
+    RecipeSectionNonConvergenceError,
     RecipeSectionPageDescriptor,
     RecipeSectionPagePlan,
     RecipeSectionPaginationError,
@@ -62,6 +63,7 @@ __all__ = [
     "PAGE_PLAN_CACHE_MAX_ENTRIES",
     "PagePlanCache",
     "RecipeSectionBoundError",
+    "RecipeSectionNonConvergenceError",
     "RecipeSectionPageDescriptor",
     "RecipeSectionPagePlan",
     "RecipeSectionPaginationError",
@@ -769,7 +771,7 @@ def build_recipe_section_page_plan(
     for _ in range(_convergence_iteration_ceiling()):
         state = (total_width, tuple(sorted(fragment_widths.items())))
         if state in seen_states:
-            raise RecipeSectionPaginationError("recipe section pagination did not converge")
+            raise RecipeSectionNonConvergenceError("recipe section pagination did not converge")
         seen_states.add(state)
         pages, observed_fragments = _plan_pages(
             selected=selected,
@@ -793,7 +795,7 @@ def build_recipe_section_page_plan(
         if not grew:
             break
     else:
-        raise RecipeSectionPaginationError("recipe section pagination did not converge")
+        raise RecipeSectionNonConvergenceError("recipe section pagination did not converge")
 
     manifest = RecipeSectionPlanManifest(
         pagination_version=RECIPE_SECTION_PAGINATION_VERSION,

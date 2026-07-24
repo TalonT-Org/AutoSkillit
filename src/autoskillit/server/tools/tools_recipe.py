@@ -51,6 +51,7 @@ from autoskillit.server._recipe_delivery import (
 )
 from autoskillit.server._recipe_section_pagination import (
     RecipeSectionBoundError,
+    RecipeSectionNonConvergenceError,
     RecipeSectionPaginationError,
     RecipeSectionRequestState,
     get_or_build_recipe_section_page_plan,
@@ -687,8 +688,11 @@ async def get_recipe_section(
                 )
             except RecipeSectionBoundError:
                 return _recipe_section_failure("recipe_section_bound_too_small")
-            except RecipeSectionPaginationError:
+            except RecipeSectionNonConvergenceError:
                 return _recipe_section_failure("recipe_section_pagination_nonconvergent")
+            except RecipeSectionPaginationError:
+                logger.error("get_recipe_section pagination invariant failure", exc_info=True)
+                return _recipe_section_failure("recipe_section_internal_error")
             if part >= page_plan.total_parts:
                 return _recipe_section_failure(
                     "invalid_recipe_section_part",

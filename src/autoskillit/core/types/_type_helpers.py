@@ -208,8 +208,7 @@ def _validate_context_admission_state_metadata(
     processed_revisions = tuple(record.aggregate_revision.value for record in processed_events)
     processed_sequences = tuple(record.admission_sequence.value for record in processed_events)
     if (
-        len(set(processed_revisions)) != len(processed_revisions)
-        or any(revision > aggregate_revision.value for revision in processed_revisions)
+        any(revision > aggregate_revision.value for revision in processed_revisions)
         or any(sequence > admission_sequence.value for sequence in processed_sequences)
         or any(
             later < earlier for earlier, later in zip(processed_sequences, processed_sequences[1:])

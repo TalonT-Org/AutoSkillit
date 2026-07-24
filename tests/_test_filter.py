@@ -281,12 +281,13 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_delivery_bounds": frozenset({"core", "execution", "server"}),
     "_type_audit_cycle": frozenset({"core", "recipe", "server"}),
     "_type_recipe_binding": frozenset({"core", "recipe", "server"}),
+    "_type_recipe_execution": frozenset({"core", "pipeline", "server"}),
     "_type_closure_report": frozenset({"core"}),
     "context_admission": frozenset({"core"}),
     "audit_cycle_verifier": frozenset({"core", "recipe", "server"}),
     "tool_registry": frozenset({"core", "recipe", "server"}),
-    "closure_hashing": frozenset({"core"}),
-    "path_containment": frozenset({"core"}),
+    "closure_hashing": frozenset({"core", "recipe"}),
+    "path_containment": frozenset({"core", "recipe"}),
     "closure_verifier": frozenset({"core", "execution"}),
 }
 
@@ -795,6 +796,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "migration",
             # Server file-level entries importing autoskillit.recipe:
             "server/test_serve_idempotence.py",
+            "server/test_open_kitchen_deferred_recall.py",
             "server/test_backend_ingredient_injection.py",
             "server/test_factory.py",
             "server/test_tools_dispatch_validation.py",

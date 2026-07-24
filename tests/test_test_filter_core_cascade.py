@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 import tests._test_filter as tf_mod
+from autoskillit._test_filter import apply_manifest as manifest_apply_manifest
+from autoskillit._test_filter import load_manifest as manifest_load_manifest
 from tests._test_filter import (
     _CORE_UNIVERSAL_MODULES,
     MODULE_CASCADE_CORE,
@@ -15,6 +17,19 @@ from tests._test_filter import (
 )
 
 pytestmark = [pytest.mark.medium]
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_skill_contract_changes_select_server_admission() -> None:
+    manifest = manifest_load_manifest(_PROJECT_ROOT / ".autoskillit/test-filter-manifest.yaml")
+    assert manifest is not None
+    result = manifest_apply_manifest(
+        ["src/autoskillit/recipe/skill_contracts.yaml"],
+        manifest,
+    )
+    assert result is not None
+    assert {"contracts/", "skills/", "recipe/", "execution/", "server/"} <= result
 
 
 class TestCoreUniversalModules:
@@ -121,8 +136,11 @@ class TestModuleCascadeCore:
             "git_remote",
             "bash_write_targets",
             "_type_audit_cycle",
+            "_type_recipe_binding",
+            "_type_recipe_execution",
             "_type_closure_report",
             "audit_cycle_verifier",
+            "tool_registry",
             "closure_hashing",
             "path_containment",
             "closure_verifier",
@@ -135,6 +153,11 @@ class TestModuleCascadeCore:
         expected = frozenset({"core", "recipe", "server"})
         assert MODULE_CASCADE_CORE["_type_audit_cycle"] == expected
         assert MODULE_CASCADE_CORE["audit_cycle_verifier"] == expected
+
+    def test_recipe_execution_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_recipe_execution"] == frozenset(
+            {"core", "pipeline", "server"}
+        )
 
     def test_type_resume_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_resume"] == frozenset(

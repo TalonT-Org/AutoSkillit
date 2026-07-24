@@ -214,9 +214,10 @@ def test_store_rejects_opaque_or_incomplete_source_identity(tmp_path: Path) -> N
         ("read_only", "false"),
         ("completion_required", 1),
         ("projection_gating", "true"),
+        ("projection_substitutions", [["incomplete"]]),
     ],
 )
-def test_store_rejects_malformed_serialized_boolean_authority(
+def test_store_rejects_malformed_serialized_contract_authority(
     tmp_path: Path,
     field: str,
     invalid_value: object,

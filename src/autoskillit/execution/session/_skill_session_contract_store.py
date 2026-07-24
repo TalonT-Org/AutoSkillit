@@ -470,6 +470,11 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
         projection_gating = data.get("projection_gating")
         if projection_gating is not None and not isinstance(projection_gating, bool):
             raise ValueError("projection_gating must be a boolean or null")
+        projection_substitutions = data.get("projection_substitutions", [])
+        if not isinstance(projection_substitutions, list) or any(
+            not isinstance(item, list) or len(item) != 2 for item in projection_substitutions
+        ):
+            raise ValueError("projection_substitutions entries must be two-element lists")
         return SkillSessionContract(
             root_name=str(data["root_name"]),
             execution_role=SkillExecutionRole(str(data["execution_role"])),
@@ -524,7 +529,7 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             completion_required=completion_required,
             skill_contract_json=str(data.get("skill_contract_json", "")),
             projection_substitutions=tuple(
-                (str(item[0]), str(item[1])) for item in data.get("projection_substitutions", [])
+                (str(item[0]), str(item[1])) for item in projection_substitutions
             ),
             projection_gating=projection_gating,
             projection_namespace=(

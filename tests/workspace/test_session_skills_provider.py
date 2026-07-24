@@ -159,16 +159,14 @@ def test_provider_string_api_returns_unified_agent_safe_projection() -> None:
     assert "# Make-Arch-Diag: Architecture Diagram Generation" in content
 
 
-def test_materialization_rejects_wrong_role_before_filesystem_work(tmp_path: Path) -> None:
+def test_invocation_rejects_wrong_role_before_filesystem_work(tmp_path: Path) -> None:
     from autoskillit.core import SkillContractError, SkillExecutionRole, SkillSource
     from autoskillit.workspace import (
         EffectiveSkillInvocation,
         SkillInfo,
-        SkillProjectionContext,
     )
 
     ephemeral_root = tmp_path / "ephemeral"
-    manager = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     skill = SkillInfo(
         name="orchestrator",
         source=SkillSource.PROJECT_LOCAL,
@@ -179,36 +177,28 @@ def test_materialization_rejects_wrong_role_before_filesystem_work(tmp_path: Pat
             "execution_role: orchestrator\n---\nbody\n"
         ),
     )
-    invocation = EffectiveSkillInvocation(
-        root=skill,
-        closure=(skill,),
-        capability_union=frozenset(),
-        project_root=tmp_path,
-        execution_role=SkillExecutionRole.SESSION,
-    )
-    context = SkillProjectionContext(
-        cwd=tmp_path,
-        invocation=invocation,
-    )
-
-    with pytest.raises(SkillContractError, match="SESSION"):
-        manager.materialize_invocation("wrong-role", invocation, context)
+    with pytest.raises(SkillContractError, match="role"):
+        EffectiveSkillInvocation(
+            root=skill,
+            closure=(skill,),
+            capability_union=frozenset(),
+            project_root=tmp_path,
+            execution_role=SkillExecutionRole.SESSION,
+        )
 
     assert not ephemeral_root.exists()
 
 
-def test_materialization_revalidates_capability_role_before_filesystem_work(
+def test_invocation_revalidates_capability_role_before_filesystem_work(
     tmp_path: Path,
 ) -> None:
     from autoskillit.core import SkillContractError, SkillExecutionRole, SkillSource
     from autoskillit.workspace import (
         EffectiveSkillInvocation,
         SkillInfo,
-        SkillProjectionContext,
     )
 
     ephemeral_root = tmp_path / "ephemeral"
-    manager = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
     skill = SkillInfo(
         name="forged-session",
         source=SkillSource.PROJECT_LOCAL,
@@ -221,20 +211,14 @@ def test_materialization_revalidates_capability_role_before_filesystem_work(
             'Call run_skill("child").\n'
         ),
     )
-    invocation = EffectiveSkillInvocation(
-        root=skill,
-        closure=(skill,),
-        capability_union=frozenset({"run_skill"}),
-        project_root=tmp_path,
-        execution_role=SkillExecutionRole.SESSION,
-    )
-    context = SkillProjectionContext(
-        cwd=tmp_path,
-        invocation=invocation,
-    )
-
     with pytest.raises(SkillContractError, match="run_skill.*session|session.*run_skill"):
-        manager.materialize_invocation("forged-capability", invocation, context)
+        EffectiveSkillInvocation(
+            root=skill,
+            closure=(skill,),
+            capability_union=frozenset({"run_skill"}),
+            project_root=tmp_path,
+            execution_role=SkillExecutionRole.SESSION,
+        )
 
     assert not ephemeral_root.exists()
 

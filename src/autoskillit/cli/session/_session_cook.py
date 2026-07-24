@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+import os
 import shutil
-import subprocess
 import sys
 import uuid
-from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.core import is_feature_enabled, resolve_project_dir
 
 if TYPE_CHECKING:
+    from autoskillit.cli.session._session_startup_trace import StartupTrace
+    from autoskillit.cli.session.pty._observer import PtyObserver
     from autoskillit.core import CodingAgentBackend
 
 
@@ -39,32 +40,6 @@ def _print_recipes_list() -> None:
         print(f"{r.name:<{name_w}}  {r.source:<{src_w}}  {r.description}")
 
 
-def _run_cook_session(
-    *,
-    cmd: list[str],
-    env: Mapping[str, str],
-    _first_run: bool,
-    initial_prompt: str | None,
-    project_dir: Path,
-) -> str | None:
-    """Run the cook subprocess; return session_id if a reload sentinel was written."""
-    from autoskillit.cli.session._session_reload import consume_reload_sentinel
-
-    with terminal_guard():
-        result = subprocess.run(cmd, env=env)
-    reload_session_id = consume_reload_sentinel(project_dir)
-    if reload_session_id is not None:
-        return reload_session_id
-    if result.returncode == 0:
-        if _first_run and initial_prompt is not None:
-            from autoskillit.cli._onboarding import mark_onboarded
-
-            mark_onboarded(project_dir)
-    else:
-        raise SystemExit(result.returncode)
-    return None
-
-
 def cook(
     *,
     resume: bool = False,
@@ -81,6 +56,7 @@ def cook(
         SkillsDirectoryProvider,
         project_default_plugin_source,
         resolve_ephemeral_root,
+        resolve_persistent_session_root,
         validate_skill_tier_roles,
     )
 
@@ -147,18 +123,13 @@ def cook(
     print()
 
     from autoskillit.cli.ui._ansi import permissions_warning
-    from autoskillit.cli.ui._timed_input import timed_prompt
 
     print(permissions_warning())
-    confirm = timed_prompt(
-        "\nLaunch session? [Enter/n]", default="", timeout=120, label="autoskillit cook"
-    )
-    if confirm.lower() in ("n", "no"):
-        return
 
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK
     from autoskillit.core import (
+        CODEX_STARTUP_TRACE_ENV_VAR,
         LAUNCH_ID_ENV_VAR,
         PROVIDER_PROFILE_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
@@ -168,6 +139,7 @@ def cook(
         SessionType,
         SkillExecutionRole,
         configure_logging,
+        resolve_temp_dir,
         resume_spec_from_cli,
         temp_dir_display_str,
         write_registry_entry,
@@ -175,22 +147,27 @@ def cook(
 
     configure_logging()
 
+    launch_id = uuid.uuid4().hex[:16]
     resume_spec = resume_spec_from_cli(resume=resume, session_id=session_id)
+    trace_setting = os.environ.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
+    if trace_setting not in {None, "1"}:
+        raise ValueError(f"{CODEX_STARTUP_TRACE_ENV_VAR} must be absent or exactly '1'")
+    trace_enabled = trace_setting == "1" and backend.capabilities.cook_startup_observer_capable
 
+    persistent_root = resolve_persistent_session_root(
+        resolve_temp_dir(project_dir, config.workspace.temp_dir),
+        backend,
+    )
     initial_prompt: str | None = None
-    _first_run = is_first_run(project_dir)
-    if _first_run:
+    first_run = is_first_run(project_dir)
+    if first_run:
         initial_prompt = run_onboarding_menu(project_dir, color=color)
 
-    session_id_local = uuid.uuid4().hex[:16]
-    write_registry_entry(project_dir, session_id_local, SESSION_TYPE_COOK, None)
     ephemeral_root = resolve_ephemeral_root()
     skills_provider = SkillsDirectoryProvider(
         temp_dir_relpath=temp_dir_display_str(config.workspace.temp_dir),
         default_base_branch=config.branching.default_base_branch,
     )
-    session_mgr = DefaultSessionSkillManager(skills_provider, ephemeral_root)
-    session_mgr.cleanup_stale()
     session_catalog = skill_resolver.list_effective(
         project_dir,
         SkillExecutionRole.SESSION,
@@ -202,73 +179,217 @@ def cook(
         project_dir,
         backend=backend,
     )
-    skills_dir = session_mgr.init_session(
-        session_id_local,
+    session_mgr = DefaultSessionSkillManager(
+        skills_provider,
+        ephemeral_root,
+        persistent_root=persistent_root,
+    )
+    session_mgr.cleanup_stale()
+
+    with session_mgr.managed_session(
+        launch_id,
         session_catalog,
         projection_context,
+    ) as managed_home:
+        # Single resolution authority, shared with make_context: the running
+        # package, projected for this session's backend and skill catalog.
+        plugin_source = project_default_plugin_source(
+            cwd=project_dir,
+            backend=backend,
+            default_base_branch=config.branching.default_base_branch,
+            skill_catalog=session_catalog,
+        )
+
+        if isinstance(resume_spec, BareResume):
+            backend.recover_cook_history()
+            from autoskillit.cli.session._session_picker import pick_session
+
+            selected_id = pick_session(
+                SESSION_TYPE_COOK,
+                project_dir,
+                backend.session_locator(),
+            )
+            if selected_id is not None:
+                resume_spec = NamedResume(session_id=selected_id)
+            else:
+                resume_spec = NoResume()
+
+        from autoskillit.cli.session._session_startup_trace import StartupTrace
+        from autoskillit.cli.ui._timed_input import timed_prompt
+
+        trace = StartupTrace(project_dir, launch_id, enabled=trace_enabled)
+        confirm = timed_prompt(
+            "\nLaunch session? [Enter/n]",
+            default="",
+            timeout=120,
+            label="autoskillit cook",
+        )
+        if confirm.lower() in ("n", "no"):
+            return
+        trace.record_launch_anchor()
+        write_registry_entry(project_dir, launch_id, SESSION_TYPE_COOK, None)
+
+        cook_env_extras: dict[str, str] = {
+            SESSION_TYPE_ENV_VAR: SessionType.SKILL.value,
+            LAUNCH_ID_ENV_VAR: launch_id,
+        }
+        if profile is not None:
+            cook_env_extras[PROVIDER_PROFILE_ENV_VAR] = profile
+            cook_env_extras.update(
+                {
+                    key: value
+                    for key, value in config.providers.profiles[profile].items()
+                    if value is not None and key != CODEX_STARTUP_TRACE_ENV_VAR
+                }
+            )
+        cook_env_extras.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
+
+        current_resume_spec = resume_spec
+        current_initial_prompt = initial_prompt
+        max_reloads = 10
+        seen_reload_ids: set[str] = set()
+        attempt = 0
+
+        from autoskillit.cli.session._session_process import run_cook_attempt
+        from autoskillit.cli.session._session_reload import consume_reload_sentinel
+        from autoskillit.execution import assert_interactive_ordering
+
+        try:
+            while True:
+                attempt += 1
+                built_spec = backend.build_interactive_cmd(
+                    plugin_source=plugin_source,
+                    add_dirs=[managed_home.skills_dir],
+                    generated_home=managed_home.generated_home,
+                    initial_prompt=current_initial_prompt,
+                    resume_spec=current_resume_spec,
+                    env_extras=cook_env_extras,
+                )
+                final_cmd = built_spec.cmd
+                final_origin = built_spec.origin
+                final_env = dict(built_spec.env)
+                spec = replace(
+                    built_spec,
+                    cmd=final_cmd,
+                    env=final_env,
+                    cwd=str(project_dir),
+                    origin=final_origin,
+                )
+                assert_interactive_ordering(spec=spec)
+                validation_errors = backend.validate_interactive_invocation(spec)
+                if validation_errors:
+                    raise RuntimeError(
+                        "Interactive invocation validation failed: " + "; ".join(validation_errors)
+                    )
+
+                with backend.cook_session_context(
+                    session_home=managed_home.generated_home,
+                    project_dir=project_dir,
+                    launch_id=launch_id,
+                    attempt=attempt,
+                    current_resume_spec=current_resume_spec,
+                ) as attempt_handle:
+                    trace.record_attempt_anchor(
+                        attempt=attempt,
+                        view_id=attempt_handle.view_id,
+                    )
+                    observer = _startup_observer(
+                        backend=backend,
+                        trace=trace,
+                        enabled=trace_enabled,
+                        sqlite_home=managed_home.generated_home,
+                        attempt=attempt,
+                        view_id=attempt_handle.view_id,
+                    )
+                    pass_fds = tuple(
+                        dict.fromkeys((*managed_home.pass_fds, *attempt_handle.pass_fds))
+                    )
+                    result = run_cook_attempt(
+                        spec,
+                        pass_fds=pass_fds,
+                        on_spawn=attempt_handle.record_spawn,
+                        on_reaped=attempt_handle.record_reaped,
+                        trace=trace,
+                        observer=observer,
+                    )
+                    reload_session_id = consume_reload_sentinel(project_dir)
+                    _require_observer_ready(observer)
+                    trace.require_startup_budgets()
+
+                if reload_session_id is None:
+                    if result.returncode != 0:
+                        raise SystemExit(result.returncode)
+                    if first_run and initial_prompt is not None:
+                        from autoskillit.cli._onboarding import mark_onboarded
+
+                        mark_onboarded(project_dir)
+                    trace.close(status="success")
+                    return
+
+                if len(seen_reload_ids) >= max_reloads:
+                    raise SystemExit(
+                        f"Too many reloads ({max_reloads} max). Check for infinite loop."
+                    )
+                if reload_session_id in seen_reload_ids:
+                    raise SystemExit(f"Repeated reload_id {reload_session_id!r} — aborting.")
+                seen_reload_ids.add(reload_session_id)
+                current_resume_spec = NamedResume(session_id=reload_session_id)
+                current_initial_prompt = None
+        except BaseException:
+            trace.close(status="failed")
+            raise
+
+
+def _startup_observer(
+    *,
+    backend: CodingAgentBackend,
+    trace: StartupTrace,
+    enabled: bool,
+    sqlite_home: Path,
+    attempt: int,
+    view_id: str,
+) -> PtyObserver | None:
+    """Build the optional Codex PTY observer without leaking trace state to children."""
+    if not enabled:
+        return None
+    from autoskillit.cli.session.pty._observer import PtyObserver
+    from autoskillit.core import ObserverStatus
+    from autoskillit.execution import CodexStateReadinessProbe
+
+    def record_readiness(status: ObserverStatus) -> None:
+        if status is ObserverStatus.READY:
+            trace.record_stage(
+                "state_ready",
+                attempt=attempt,
+                view_id=view_id,
+            )
+
+    return PtyObserver(
+        readiness_probe=CodexStateReadinessProbe(
+            codex_version=backend.version(),
+            sqlite_home=sqlite_home,
+        ),
+        on_first_output=lambda: trace.record_stage(
+            "first_output",
+            attempt=attempt,
+            view_id=view_id,
+        ),
+        on_hook_review=lambda: trace.record_stage(
+            "hook_review",
+            attempt=attempt,
+            view_id=view_id,
+        ),
+        on_readiness=record_readiness,
     )
 
-    # Single resolution authority, shared with make_context: the running package,
-    # projected. Reading installed_plugins.json here is what made `cook` execute an
-    # eleven-versions-old snapshot of recipes/, agents/ and hooks/ against current code.
-    plugin_source = project_default_plugin_source(
-        cwd=project_dir,
-        backend=backend,
-        default_base_branch=config.branching.default_base_branch,
-        skill_catalog=session_catalog,
-    )
 
-    if isinstance(resume_spec, BareResume):
-        from autoskillit.cli.session._session_picker import pick_session
+def _require_observer_ready(observer: PtyObserver | None) -> None:
+    """Fail an enabled traced launch when the guarded state probe never became ready."""
+    if observer is None:
+        return
+    from autoskillit.core import ObserverStatus
 
-        _log_dir = backend.session_locator().project_log_dir(str(project_dir))
-        selected_id = pick_session(SESSION_TYPE_COOK, project_dir, _log_dir)
-        if selected_id is not None:
-            resume_spec = NamedResume(session_id=selected_id)
-        else:
-            resume_spec = NoResume()
-
-    _cook_env_extras: dict[str, str] = {
-        SESSION_TYPE_ENV_VAR: SessionType.SKILL.value,
-        LAUNCH_ID_ENV_VAR: session_id_local,
-    }
-    if profile is not None:
-        _cook_env_extras[PROVIDER_PROFILE_ENV_VAR] = profile
-        _cook_env_extras.update(
-            {k: v for k, v in config.providers.profiles[profile].items() if v is not None}
-        )
-
-    current_resume_spec = resume_spec
-    _current_first_run = _first_run
-    _current_initial_prompt = initial_prompt
-
-    _max_reloads = 10
-    seen_reload_ids: set[str] = set()
-    from autoskillit.execution import assert_interactive_ordering
-
-    while True:
-        spec = backend.build_interactive_cmd(
-            plugin_source=plugin_source,
-            add_dirs=[skills_dir],
-            initial_prompt=_current_initial_prompt,
-            resume_spec=current_resume_spec,
-            env_extras=_cook_env_extras,
-        )
-        assert_interactive_ordering(spec=spec)
-        reload_session_id = _run_cook_session(
-            cmd=[*spec.cmd],
-            env=spec.env,
-            _first_run=_current_first_run,
-            initial_prompt=_current_initial_prompt,
-            project_dir=project_dir,
-        )
-        if reload_session_id is None:
-            break
-        if len(seen_reload_ids) >= _max_reloads:
-            raise SystemExit(f"Too many reloads ({_max_reloads} max). Check for infinite loop.")
-        if reload_session_id in seen_reload_ids:
-            raise SystemExit(f"Repeated reload_id {reload_session_id!r} — aborting.")
-        seen_reload_ids.add(reload_session_id)
-        current_resume_spec = NamedResume(session_id=reload_session_id)
-        _current_first_run = False
-        _current_initial_prompt = None
+    if observer.readiness_status is not ObserverStatus.READY:
+        status = observer.readiness_status
+        status_name = "unobserved" if status is None else status.value
+        raise RuntimeError(f"Codex state readiness failed closed: {status_name}")

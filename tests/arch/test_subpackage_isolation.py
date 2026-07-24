@@ -911,7 +911,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
         "hooks/guards": 32,  # -output_budget_guard (#4286)
-        "execution/backends": 13,  # +_codex_recipe_delivery protected attestation broker
+        # Three private Codex ownership modules keep lock, prelaunch transaction,
+        # and per-attempt storage concerns out of the public backend gateway:
+        # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
+        "execution/backends": 16,
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

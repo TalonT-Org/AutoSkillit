@@ -26,6 +26,7 @@ __all__ = [
     "KillReason",
     "ChannelConfirmation",
     "SessionOutcome",
+    "HookTrustPolicy",
     "CliSubtype",
     "ChannelBStatus",
     "PRState",
@@ -344,6 +345,13 @@ class SessionOutcome(StrEnum):
     SUCCEEDED = "succeeded"
     RETRIABLE = "retriable"
     FAILED = "failed"
+
+
+class HookTrustPolicy(StrEnum):
+    """Interactive hook trust behavior for a coding-agent backend."""
+
+    AUTOMATED = "automated"
+    REVIEW_EACH_SESSION = "review_each_session"
 
 
 class CliSubtype(StrEnum):

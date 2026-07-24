@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -11,7 +12,9 @@ from ._type_backend import (
     BackendCapabilities,
     BackendConventions,
     CmdSpec,
+    CookSessionHandle,
     SessionEvent,
+    SessionSummary,
     SkillSessionConfig,
 )
 from ._type_checkpoint import SessionCheckpoint
@@ -64,6 +67,8 @@ class EnvPolicy(Protocol):
 @runtime_checkable
 class SessionLocator(Protocol):
     """Protocol for locating session log directories for a given backend."""
+
+    def list_sessions(self, cwd: str) -> Sequence[SessionSummary]: ...
 
     def locate_session(self, session_id: str) -> Path | None: ...
 
@@ -170,7 +175,14 @@ class CodingAgentBackend(Protocol):
         tools: Sequence[str] = (),
     ) -> CmdSpec: ...
 
-    def validate_session_layout(self, session_dir: Path) -> list[str]: ...
+    def validate_session_layout(
+        self,
+        session_dir: Path,
+        *,
+        project_dir: Path | None = None,
+    ) -> list[str]: ...
+
+    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]: ...
 
     def validate_skill_content(self, content: str) -> list[str]: ...
 
@@ -178,7 +190,18 @@ class CodingAgentBackend(Protocol):
 
     def list_plugins(self) -> list[dict[str, Any]]: ...
 
-    def ensure_pre_launch(self) -> list[str]: ...
+    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]: ...
+
+    def recover_cook_history(self) -> None: ...
+
+    def cook_session_context(
+        self,
+        *,
+        session_home: Path,
+        launch_id: str,
+        attempt: int,
+        current_resume_spec: ResumeSpec,
+    ) -> AbstractContextManager[CookSessionHandle]: ...
 
     def translate_model(self, model: str) -> str: ...
 

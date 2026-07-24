@@ -11,8 +11,8 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from autoskillit.cli.session._session_process import run_cook_attempt
 
+from autoskillit.cli.session._session_process import run_cook_attempt
 from autoskillit.core import CmdSpec
 
 pytestmark = [

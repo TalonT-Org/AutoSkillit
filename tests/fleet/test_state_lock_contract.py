@@ -38,8 +38,11 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
     {
         "core/_plugin_cache.py",
+        "execution/backends/_codex_config_lock.py",
+        "execution/backends/_codex_session_storage.py",
         "execution/session/_session_state.py",
         "workspace/clone_registry.py",
+        "workspace/session_skills.py",
         "fleet/state.py",
         "planner/merge.py",
         "server/tools/tools_kitchen.py",  # _write_ingredient_locks: atomic flock overlay write

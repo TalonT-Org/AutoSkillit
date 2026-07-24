@@ -15,6 +15,7 @@ from autoskillit.execution.backends._codex_config import (
     _serialize_toml,
     _write_codex_config,
 )
+from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 from autoskillit.hook_registry import (
     HOOKS_DIR,
     _build_hook_entry,
@@ -115,15 +116,13 @@ def _upsert_hooks_text(
     atomic_write(config_path, result_text)
 
 
-def sync_hooks_to_codex_config(
-    config_path: Path | None = None, *, hook_config_format: str = ""
+def _sync_hooks_to_codex_config_unlocked(
+    config_path: Path, *, hook_config_format: str = ""
 ) -> bool:
-    """Sync autoskillit hooks to Codex config.toml.
+    """Mutate hook entries while the caller owns the Codex config lock.
 
     Returns True if the config was changed, False if already up to date.
     """
-    if config_path is None:
-        config_path = Path.home() / ".codex" / "config.toml"
     result = _read_codex_config(config_path)
     if result.is_corrupt:
         if result.raw_bytes is None:
@@ -152,3 +151,19 @@ def sync_hooks_to_codex_config(
     config["hooks"] = merged
     _write_codex_config(config_path, config, source=result)
     return True
+
+
+def sync_hooks_to_codex_config(
+    config_path: Path | None = None, *, hook_config_format: str = ""
+) -> bool:
+    """Sync autoskillit hooks under the shared Codex config lock."""
+    resolved_config_path = (
+        (Path.home() / ".codex" / "config.toml" if config_path is None else Path(config_path))
+        .expanduser()
+        .resolve(strict=False)
+    )
+    with CodexConfigLock(resolved_config_path):
+        return _sync_hooks_to_codex_config_unlocked(
+            config_path=resolved_config_path,
+            hook_config_format=hook_config_format,
+        )

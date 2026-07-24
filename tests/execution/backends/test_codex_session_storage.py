@@ -7,12 +7,12 @@ import os
 from pathlib import Path
 
 import pytest
+
+from autoskillit.core import NamedResume, NoResume
 from autoskillit.execution.backends._codex_session_storage import (
     CodexInteractiveSessionLease,
     CodexSessionStore,
 )
-
-from autoskillit.core import NamedResume, NoResume
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 

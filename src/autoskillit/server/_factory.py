@@ -17,6 +17,8 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    CODEX_SESSIONS_SUBDIR,
+    MARKETPLACE_PREFIX,
     DirectInstall,
     FleetLock,
     PluginSource,
@@ -296,7 +298,7 @@ def make_context(
             skill_catalog=session_catalog,
         )
     ephemeral_root = resolve_ephemeral_root()
-    codex_root = temp_dir / "codex-sessions"
+    codex_root = temp_dir / CODEX_SESSIONS_SUBDIR
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root, codex_root=codex_root)
 
     audit = DefaultAuditLog()

@@ -26,6 +26,7 @@ from autoskillit.core import (
     get_logger,
     safe_upsert_section,
 )
+from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 
 # Floor value: 14364.0 = max(3600 + 7200, 7200) * 1.33
 # Computed from FleetConfig and RunSkillConfig dataclass defaults.
@@ -421,18 +422,16 @@ def _upsert_top_level_key_exact(path: Path, *, key: str, value: int) -> None:
     atomic_write(path, "".join(lines))
 
 
-def ensure_codex_mcp_registered(
+def _ensure_codex_mcp_registered_unlocked(
     *,
-    config_path: Path | None = None,
+    config_path: Path,
     headless_auto_gate: bool = True,
     tool_timeout_sec: float | None = None,
 ) -> bool:
-    """Return True if the entry was written, False if already registered.
+    """Mutate a Codex config whose caller already owns its config lock.
 
     For corrupt files, always returns True (safe_upsert_section is unconditional).
     """
-    if config_path is None:
-        config_path = Path.home() / ".codex" / "config.toml"
     effective_timeout = (
         tool_timeout_sec if tool_timeout_sec is not None else CODEX_MCP_TOOL_TIMEOUT_FLOOR
     )
@@ -480,3 +479,28 @@ def ensure_codex_mcp_registered(
         )
         _write_codex_config(config_path, config, source=result)
         return True
+
+
+def ensure_codex_mcp_registered(
+    *,
+    config_path: Path | None = None,
+    headless_auto_gate: bool = True,
+    tool_timeout_sec: float | None = None,
+) -> bool:
+    """Return True if the shared Codex MCP entry was written.
+
+    The public facade owns serialization for the complete read-modify-write
+    transaction. Composed transactions must use the private unlocked primitive
+    while holding the same lock.
+    """
+    resolved_config_path = (
+        (Path.home() / ".codex" / "config.toml" if config_path is None else Path(config_path))
+        .expanduser()
+        .resolve(strict=False)
+    )
+    with CodexConfigLock(resolved_config_path):
+        return _ensure_codex_mcp_registered_unlocked(
+            config_path=resolved_config_path,
+            headless_auto_gate=headless_auto_gate,
+            tool_timeout_sec=tool_timeout_sec,
+        )

@@ -13,3 +13,6 @@ Interactive session management — cook (ephemeral) and order (orchestrator) ent
 | `_session_reload.py` | `consume_reload_sentinel()` — detects reload sentinel written by MCP reload tool |
 | `_session_launch.py` | Shared prelude: `_launch_cook_session()`, `_run_interactive_session()` |
 | `_session_picker.py` | Scoped resume picker: filters session history by greeting prefix |
+| `_session_process.py` | Sole cook-attempt `Popen` owner — process groups, terminal foreground transfer, deterministic termination, and reap proof |
+| `_session_startup_trace.py` | Bounded versioned Codex startup JSONL tracing with monotonic timing budgets and durable terminal summaries |
+| `pty/` | Private POSIX PTY observer and exec-side controlling-terminal launcher |

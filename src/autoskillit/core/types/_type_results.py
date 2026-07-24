@@ -34,6 +34,7 @@ __all__ = [
     "SpilledOutput",
     "SpillSpec",
     "TestResult",
+    "ManagedSessionHome",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "VALID_INPUT_SPEC_TYPES",
@@ -124,6 +125,16 @@ class ValidatedAddDir:
 
     def glob(self, pattern: str) -> list[Path]:
         return list(Path(self.path).glob(pattern))
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedSessionHome:
+    """Already-owned generated home for one logical interactive cook launch."""
+
+    launch_id: str
+    generated_home: Path
+    skills_dir: ValidatedAddDir
+    pass_fds: tuple[int, ...]
 
 
 @dataclass(frozen=True, slots=True)

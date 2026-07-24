@@ -114,7 +114,10 @@ def test_projected_cross_skill_reference_uses_backend_sigil(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.execution.backends import get_backend
+    from types import SimpleNamespace
+    from typing import cast
+
+    from autoskillit.core import BackendConventions, CodingAgentBackend
     from autoskillit.workspace import SkillProjectionContext, project_agent_skill_document
 
     _, info = _provider_with_synth(
@@ -131,10 +134,13 @@ def test_projected_cross_skill_reference_uses_backend_sigil(
     context = SkillProjectionContext(
         cwd=tmp_path,
         catalog=catalog,
-        backend=get_backend("codex"),
+        backend=cast(
+            CodingAgentBackend,
+            SimpleNamespace(conventions=BackendConventions(skill_sigil="$")),
+        ),
     )
 
-    document = project_agent_skill_document(info, context)
+    document = project_agent_skill_document(catalog.skills[0], context)
 
     assert "$autoskillit:child" in document.content
     assert "/autoskillit:child" not in document.content

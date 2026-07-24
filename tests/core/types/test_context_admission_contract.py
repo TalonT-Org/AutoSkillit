@@ -808,8 +808,11 @@ def test_numeric_revisions_are_non_negative_and_have_no_default(
     revision_type: type[object],
 ) -> None:
     assert revision_type(0).value == 0
+    assert revision_type((1 << 64) - 1).value == (1 << 64) - 1
     with pytest.raises(ContextAdmissionValidationError):
         revision_type(-1)
+    with pytest.raises(ContextAdmissionValidationError):
+        revision_type(1 << 64)
     assert all(field.default is dataclasses.MISSING for field in fields(revision_type))
 
 

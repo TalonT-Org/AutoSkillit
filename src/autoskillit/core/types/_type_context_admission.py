@@ -39,6 +39,7 @@ from ._type_enums import (
 from ._type_results import ModelIdentity
 
 CONTEXT_ADMISSION_PROTOCOL_VERSION = 1
+_MAX_UINT64 = (1 << 64) - 1
 
 _CONTENT_FREE_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@+-]*\Z")
 _CONTENT_FREE_LOCATOR = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:@+-]*\Z")
@@ -88,7 +89,7 @@ def _validate_protocol_version(protocol_version: int) -> None:
 
 
 def _validate_non_negative(value: int, reason_code: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0 or value > _MAX_UINT64:
         _raise_invalid(reason_code)
 
 

@@ -2465,6 +2465,12 @@ def _expire_idempotency(
         return _reject(state, event, "idempotency_key_not_terminal")
     if not isinstance(state, ActiveContextAdmissionState):
         return _reject(state, event, "idempotency_key_not_terminal")
+    if any(
+        tombstone.namespace == record.namespace
+        and tombstone.reservation_key == event.reservation_key
+        for tombstone in state.expired_idempotency_tombstones
+    ):
+        return _reject(state, event, "idempotency_key_expired")
     batch_record: AdmissionBatchRecord | None
     snapshot: ContextWindowSnapshot
     generation_records: tuple[GenerationReservationRecord, ...]

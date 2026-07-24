@@ -1817,7 +1817,25 @@ def test_post_rollover_expiry_requires_the_complete_witness_binding() -> None:
         ),
     )
     assert accepted.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(accepted.next_state, ActiveContextAdmissionState)
     assert len(accepted.next_state.expired_idempotency_tombstones) == 1
+
+    repeated = reduce_context_admission(
+        accepted.next_state,
+        ExpireIdempotencyKeyEvent(
+            **_event_fields(
+                accepted.next_state,
+                "expire-complete-binding-again",
+                "expire-idempotency-key",
+            ),
+            reservation_key=reservation.key,
+            expiry_witness=valid_witness,
+        ),
+    )
+    assert repeated.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+    assert repeated.decision.reason_code == "idempotency_key_expired"
+    assert len(repeated.next_state.expired_idempotency_tombstones) == 1
+    _assert_rejection_unchanged(accepted.next_state, repeated.next_state)
 
 
 def test_generation_indeterminate_remains_reserved_across_reconciliation_deadline() -> None:

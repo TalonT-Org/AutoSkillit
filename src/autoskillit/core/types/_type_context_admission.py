@@ -756,6 +756,10 @@ class AdmissionWitness(_ContractValue):
             "noncanonical_witness_occurrences",
             key=lambda occurrence_id: occurrence_id.value,
         )
+        if len(self.occurrence_ids) != len(set(self.occurrence_ids)) or (
+            not self.occurrence_ids and self.kind is not WitnessKind.EPOCH_ROLLOVER
+        ):
+            _raise_invalid("invalid_witness_occurrences")
 
 
 @dataclass(frozen=True, slots=True)

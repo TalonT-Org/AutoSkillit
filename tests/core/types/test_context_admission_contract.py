@@ -1371,6 +1371,27 @@ def test_occurrence_record_rejects_duplicate_witness_ids() -> None:
     assert "duplicate_witness_id" in str(exc_info.value)
 
 
+def test_admission_witness_rejects_missing_or_duplicate_batch_occurrences() -> None:
+    occurrence = _occurrence()
+    batch = _batch("batch-witness-occurrences", (occurrence,))
+    witness = _witness(batch, WitnessKind.PROVIDER_ACCEPTED)
+
+    for invalid_occurrences in (
+        (),
+        (occurrence.occurrence_id, occurrence.occurrence_id),
+    ):
+        with pytest.raises(ContextAdmissionValidationError) as exc_info:
+            replace(witness, occurrence_ids=invalid_occurrences)
+        assert "invalid_witness_occurrences" in str(exc_info.value)
+
+    rollover = replace(
+        witness,
+        kind=WitnessKind.EPOCH_ROLLOVER,
+        occurrence_ids=(),
+    )
+    assert rollover.occurrence_ids == ()
+
+
 def test_batch_record_rejects_committed_and_unresolved_simultaneously() -> None:
     occurrence = _occurrence()
     batch = _batch("batch-simul", (occurrence,))

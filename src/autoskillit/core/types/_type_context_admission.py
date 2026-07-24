@@ -1030,6 +1030,8 @@ class CoverageEvidence(_ContractValue):
         _validate_git_revision(self.tested_revision)
         _validate_iso_date(self.checked_at)
         _validate_freshness_policy(self.freshness_policy)
+        if self.freshness_policy != "verify_on_version_or_configuration_change":
+            _raise_invalid("unsupported_coverage_freshness_policy")
         _validate_bounded_text(
             self.source_locator,
             "invalid_source_locator",
@@ -1065,6 +1067,8 @@ class ProducerCoverageDef(_ContractValue):
         )
         if not self.evidence:
             _raise_invalid("coverage_evidence_required")
+        if len(self.evidence) != 1:
+            _raise_invalid("single_coverage_evidence_required")
         primary = tuple(
             item for item in self.evidence if item.kind is not CoverageEvidenceKind.INFERENCE
         )

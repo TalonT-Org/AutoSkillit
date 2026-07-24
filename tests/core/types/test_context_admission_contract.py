@@ -1619,6 +1619,66 @@ def test_coverage_evidence_enforces_semantic_provenance_fields(
     assert reason_code in str(exc_info.value)
 
 
+@pytest.mark.parametrize(
+    "freshness_policy",
+    ["verify_on_revision_change", "infer_only"],
+)
+def test_coverage_v1_rejects_unimplemented_freshness_policies(
+    freshness_policy: str,
+) -> None:
+    evidence = CoverageEvidence(
+        claim_id="COV-v1-policy",
+        kind=CoverageEvidenceKind.AUTOSKILLIT_SOURCE,
+        backend="autoskillit",
+        configuration_mode="default",
+        verifier="source_inspection",
+        source_locator="src/autoskillit/core/context_admission.py",
+        tested_version="0.10.890",
+        tested_revision="ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
+        checked_at="2026-07-23",
+        freshness_policy="verify_on_version_or_configuration_change",
+    )
+
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="unsupported_coverage_freshness_policy",
+    ):
+        replace(evidence, freshness_policy=freshness_policy)
+
+
+def test_coverage_v1_requires_exactly_one_evidence_record() -> None:
+    evidence = CoverageEvidence(
+        claim_id="COV-v1-cardinality",
+        kind=CoverageEvidenceKind.AUTOSKILLIT_SOURCE,
+        backend="autoskillit",
+        configuration_mode="default",
+        verifier="source_inspection",
+        source_locator="src/autoskillit/core/context_admission.py",
+        tested_version="0.10.890",
+        tested_revision="ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
+        checked_at="2026-07-23",
+        freshness_policy="verify_on_version_or_configuration_change",
+    )
+    additional = replace(
+        evidence,
+        claim_id="COV-v1-cardinality-secondary",
+        source_locator="src/autoskillit/core/context_admission_secondary.py",
+    )
+
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="single_coverage_evidence_required",
+    ):
+        ProducerCoverageDef(
+            surface=ProducerSurface.NATIVE_SHELL,
+            control_point_owner="shell_capture_hook",
+            observation_state=CoverageState.VERIFIED,
+            authority_state=CoverageState.UPSTREAM_GATED,
+            evidence=(evidence, additional),
+            reason_code="authoritative-watermark-unavailable",
+        )
+
+
 def test_prepare_event_rejects_estimate_measurement() -> None:
     occurrence = _occurrence()
     batch = _batch("batch-estimate", (occurrence,))

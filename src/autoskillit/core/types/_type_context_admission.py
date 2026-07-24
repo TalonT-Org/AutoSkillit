@@ -136,7 +136,17 @@ def _validate_canonical_tuple(
 
 def _encode(value: object) -> object:
     if isinstance(value, DispatchIdentity):
-        return {"dispatch_id": value.dispatch_id}
+        try:
+            validated = DispatchIdentity(
+                dispatch_id=value.dispatch_id,
+                completion_marker=value.completion_marker,
+                sentinel_open=value.sentinel_open,
+                sentinel_close=value.sentinel_close,
+                sentinel_contract=value.sentinel_contract,
+            )
+        except ValueError:
+            _raise_invalid("invalid_dispatch_identity")
+        return {"dispatch_id": validated.dispatch_id}
     if isinstance(value, ModelIdentity):
         return {
             "__type__": "ModelIdentity",
@@ -313,7 +323,10 @@ class _OpaqueString(_ContractValue):
     def __post_init__(self) -> None:
         _validate_bounded_text(self.value, "invalid_opaque_identifier")
         allowed = "-_.:"
-        if any(
+        if (
+            len(self.value) in {40, 64, 128}
+            and all(character in "0123456789abcdefABCDEF" for character in self.value)
+        ) or any(
             not (character.isascii() and (character.isalnum() or character in allowed))
             for character in self.value
         ):
@@ -823,18 +836,11 @@ class AdmissionBatchRecord(_ContractValue):
     batch: AdmissionBatch
     state: AdmissionState
     reservation_id: AdmissionReservationId | None
-    protected_release_witness_kind: WitnessKind | None
     witness_ids: tuple[AdmissionWitnessId, ...]
-    prepared_input_count: int | None
     committed_input_count: int
     unresolved_input_count: int
-    dispatch_sequence: int | None
 
     def __post_init__(self) -> None:
-        if (self.batch.reserve_class is ReserveClass.ORDINARY) != (
-            self.protected_release_witness_kind is None
-        ):
-            _raise_invalid("invalid_protected_release_policy")
         _validate_canonical_tuple(
             self.witness_ids,
             "noncanonical_witness_ids",
@@ -842,12 +848,8 @@ class AdmissionBatchRecord(_ContractValue):
         )
         if len(self.witness_ids) != len(set(self.witness_ids)):
             _raise_invalid("duplicate_witness_id")
-        if self.prepared_input_count is not None:
-            _validate_non_negative(self.prepared_input_count, "invalid_prepared_count")
         _validate_non_negative(self.committed_input_count, "invalid_committed_count")
         _validate_non_negative(self.unresolved_input_count, "invalid_unresolved_count")
-        if self.dispatch_sequence is not None:
-            _validate_non_negative(self.dispatch_sequence, "invalid_dispatch_sequence")
         if self.committed_input_count > 0 and self.unresolved_input_count > 0:
             _raise_invalid("committed_and_unresolved_simultaneously")
 
@@ -1201,7 +1203,7 @@ class PrepareBatchEvent(_AdmissionEventBase):
     representation_binding_id: RepresentationBindingId
     proposed_charge: int
     measurement_kind: MeasurementKind
-    authority_source_id: AuthoritySourceId
+    authority_source: AuthoritySourceId
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
@@ -1233,7 +1235,7 @@ class AcceptInputEvent(_AdmissionEventBase):
     final_manifest: CanonicalRepresentationManifest
     exact_input_charge: int
     measurement_kind: MeasurementKind
-    authority_source_id: AuthoritySourceId
+    authority_source: AuthoritySourceId
     representation_binding_witness: RepresentationBindingWitness
 
     def __post_init__(self) -> None:
@@ -1247,15 +1249,6 @@ class AcceptInputEvent(_AdmissionEventBase):
 class ReleaseNonAdmissionEvent(_AdmissionEventBase):
     batch_id: AdmissionBatchId
     witness: AdmissionWitness
-    history_removal_witness: AdmissionWitness | None
-
-    def __post_init__(self) -> None:
-        _AdmissionEventBase.__post_init__(self)
-        if (
-            self.history_removal_witness is not None
-            and self.history_removal_witness.kind is not WitnessKind.ROLLBACK
-        ):
-            _raise_invalid("invalid_history_removal_witness")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1282,7 +1275,7 @@ class ResolveIndeterminateAcceptedEvent(_AdmissionEventBase):
     final_manifest: CanonicalRepresentationManifest
     exact_charge: int
     measurement_kind: MeasurementKind
-    authority_source_id: AuthoritySourceId
+    authority_source: AuthoritySourceId
     representation_binding_witness: RepresentationBindingWitness
 
     def __post_init__(self) -> None:
@@ -1296,15 +1289,6 @@ class ResolveIndeterminateAcceptedEvent(_AdmissionEventBase):
 class ResolveIndeterminateNonAdmissionEvent(_AdmissionEventBase):
     batch_id: AdmissionBatchId
     witness: AdmissionWitness
-    history_removal_witness: AdmissionWitness | None
-
-    def __post_init__(self) -> None:
-        _AdmissionEventBase.__post_init__(self)
-        if (
-            self.history_removal_witness is not None
-            and self.history_removal_witness.kind is not WitnessKind.ROLLBACK
-        ):
-            _raise_invalid("invalid_history_removal_witness")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1360,16 +1344,11 @@ class ExpireIdempotencyKeyEvent(_AdmissionEventBase):
 class RolloverEpochEvent(_AdmissionEventBase):
     witness: AdmissionWitness
     fence_proof: EpochFenceProof | None
-    deducted_unresolved_count: int
     new_snapshot: ContextWindowSnapshot
     protected_pools: tuple[ProtectedPoolSpec, ...]
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
-        _validate_non_negative(
-            self.deducted_unresolved_count,
-            "invalid_deducted_unresolved_count",
-        )
         _validate_canonical_tuple(
             self.protected_pools,
             "noncanonical_protected_pools",
@@ -1996,11 +1975,6 @@ class ActiveContextAdmissionState(_ContractValue):
                 key = (record.batch.reserve_class, owner)
                 if key not in pools_by_key:
                     _raise_invalid("orphan_protected_charge_owner")
-                if (
-                    record.protected_release_witness_kind
-                    is not pools_by_key[key].required_release_witness_kind
-                ):
-                    _raise_invalid("protected_release_policy_mismatch")
                 if record.state is AdmissionState.INDETERMINATE:
                     charge = record.unresolved_input_count
                     if charge == 0 and matched_reservation is not None:

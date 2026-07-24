@@ -321,20 +321,40 @@ def _reject(
     event: ContextAdmissionEvent,
     reason_code: str,
     *,
+    kind: AdmissionDecisionKind = AdmissionDecisionKind.WOULD_REJECT,
     requested_count: int = 0,
     reserve_class: ReserveClass = ReserveClass.ORDINARY,
     protected_pool_owner_id: ProtectedPoolOwnerId | None = None,
 ) -> AdmissionTransition:
     decision = _decision(
         state,
-        AdmissionDecisionKind.WOULD_REJECT,
+        kind,
         reason_code,
         requested_count=requested_count,
         reserve_class=reserve_class,
         protected_pool_owner_id=protected_pool_owner_id,
     )
+    processed = ProcessedEventRecord(
+        event_id=event.event_id,
+        event=event,
+        original_decision=decision,
+        aggregate_revision=state.aggregate_revision,
+        admission_sequence=state.admission_sequence,
+    )
+    next_state = replace(
+        state,
+        processed_events=tuple(
+            sorted(
+                state.processed_events + (processed,),
+                key=lambda record: (
+                    record.aggregate_revision.value,
+                    record.event_id.value,
+                ),
+            )
+        ),
+    )
     return AdmissionTransition(
-        next_state=state,
+        next_state=next_state,
         decision=decision,
         effects=(),
     )
@@ -506,14 +526,52 @@ def _batch_record(
 
 
 def _highest_dispatch_sequence(state: ActiveContextAdmissionState) -> int:
-    return max(
-        (
-            record.dispatch_sequence
-            for record in state.batch_records
-            if record.dispatch_sequence is not None
-        ),
-        default=0,
+    return sum(
+        isinstance(record.event, DispatchRequestEvent)
+        and record.original_decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+        and record.event.witness.window_epoch_id == state.snapshot.window_epoch_id
+        and record.event.witness.window_epoch_number == state.snapshot.window_epoch_number
+        for record in state.processed_events
     )
+
+
+def _required_release_witness_kind(
+    state: ActiveContextAdmissionState,
+    batch: AdmissionBatch,
+    *,
+    snapshot: ContextWindowSnapshot | None = None,
+) -> WitnessKind | None:
+    if batch.protected_pool_owner_id is None:
+        return None
+    policy_snapshot = snapshot or state.snapshot
+    if (
+        policy_snapshot.window_epoch_id == state.snapshot.window_epoch_id
+        and policy_snapshot.window_epoch_number == state.snapshot.window_epoch_number
+    ):
+        protected_pools = state.protected_pools
+    else:
+        open_event = next(
+            (
+                record.event
+                for record in state.processed_events
+                if isinstance(record.event, OpenEpochEvent)
+                and record.event.snapshot.window_epoch_id == policy_snapshot.window_epoch_id
+                and record.event.snapshot.window_epoch_number
+                == policy_snapshot.window_epoch_number
+            ),
+            None,
+        )
+        protected_pools = open_event.protected_pools if open_event is not None else ()
+    pool = next(
+        (
+            item
+            for item in protected_pools
+            if item.reserve_class is batch.reserve_class
+            and item.capability_owner_id == batch.protected_pool_owner_id
+        ),
+        None,
+    )
+    return pool.required_release_witness_kind if pool is not None else None
 
 
 def _append_witness_ids(
@@ -778,13 +836,6 @@ def _propose(
         occurrence.producer_surface is ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY
         and lineage.delivery_occurrence_id is not None
     )
-    if (
-        occurrence.lineage.window_epoch_id != state.snapshot.window_epoch_id
-        or occurrence.lineage.window_epoch_number != state.snapshot.window_epoch_number
-    ):
-        return _reject(state, event, "occurrence_epoch_mismatch")
-    if is_fork_work and not is_parent_delivery:
-        return _reject(state, event, "fork_requires_distinct_epoch")
     existing = next(
         (
             record
@@ -793,20 +844,40 @@ def _propose(
         ),
         None,
     )
+    if existing is None:
+        existing = next(
+            (
+                record
+                for audit in state.closed_epochs
+                for record in audit.terminal_occurrence_records
+                if record.occurrence.occurrence_id == occurrence.occurrence_id
+            ),
+            None,
+        )
     if existing is not None:
-        kind = (
-            AdmissionDecisionKind.NOOP_IDEMPOTENT
-            if existing.occurrence == occurrence
-            else AdmissionDecisionKind.CONFLICT
+        if existing.occurrence == occurrence:
+            return AdmissionTransition(
+                next_state=state,
+                decision=_decision(
+                    state,
+                    AdmissionDecisionKind.NOOP_IDEMPOTENT,
+                    "occurrence_replay",
+                ),
+                effects=(),
+            )
+        return _reject(
+            state,
+            event,
+            "occurrence_identity_corruption",
+            kind=AdmissionDecisionKind.QUARANTINED,
         )
-        reason = (
-            "occurrence_replay" if existing.occurrence == occurrence else "occurrence_conflict"
-        )
-        return AdmissionTransition(
-            next_state=state,
-            decision=_decision(state, kind, reason),
-            effects=(),
-        )
+    if (
+        occurrence.lineage.window_epoch_id != state.snapshot.window_epoch_id
+        or occurrence.lineage.window_epoch_number != state.snapshot.window_epoch_number
+    ):
+        return _reject(state, event, "occurrence_epoch_mismatch")
+    if is_fork_work and not is_parent_delivery:
+        return _reject(state, event, "fork_requires_distinct_epoch")
     record = AdmissionOccurrenceRecord(
         occurrence=occurrence,
         state=AdmissionState.PROPOSED,
@@ -936,7 +1007,6 @@ def _reserve(
             reserve_class=event.batch.reserve_class,
             protected_pool_owner_id=event.batch.protected_pool_owner_id,
         )
-    protected_release_witness_kind = None
     if event.batch.protected_pool_owner_id is not None:
         pool = next(
             (
@@ -949,17 +1019,13 @@ def _reserve(
         )
         if pool is None:
             return _reject(state, event, "unknown_protected_pool")
-        protected_release_witness_kind = pool.required_release_witness_kind
     batch_record = AdmissionBatchRecord(
         batch=event.batch,
         state=AdmissionState.RESERVED,
         reservation_id=reservation.reservation_id,
-        protected_release_witness_kind=protected_release_witness_kind,
         witness_ids=(),
-        prepared_input_count=None,
         committed_input_count=0,
         unresolved_input_count=0,
-        dispatch_sequence=None,
     )
     member_ids = set(event.batch.occurrence_ids)
     reserved_occurrence_records = tuple(
@@ -1104,7 +1170,6 @@ def _prepare(
     updated = replace(
         record,
         state=AdmissionState.PREPARED,
-        prepared_input_count=event.proposed_charge,
     )
     next_state = _replace_batch_record(state, updated)
     next_state = _set_occurrence_state(
@@ -1196,7 +1261,6 @@ def _dispatch(
     updated = replace(
         record,
         state=AdmissionState.REQUEST_DISPATCHED,
-        dispatch_sequence=_highest_dispatch_sequence(state) + 1,
         witness_ids=_append_witness_ids(
             record.witness_ids,
             event.witness.witness_id,
@@ -1294,8 +1358,8 @@ def _accept_closed_input(
         or binding.representation_binding_id != record.batch.manifest.representation_binding_id
         or binding.request_id != record.batch.request_id
         or binding.batch_id != record.batch.batch_id
-        or event.authority_source_id != event.witness.authority_source_id
-        or event.authority_source_id != binding.authority_source_id
+        or event.authority_source != event.witness.authority_source_id
+        or event.authority_source != binding.authority_source_id
     ):
         return _reject(state, event, "invalid_closed_epoch_acceptance")
     reservation = _closed_reservation_for(audit, record)
@@ -1472,8 +1536,8 @@ def _accept(
         (owner.span_id, owner.occurrence_id) for owner in event.final_manifest.span_owners
     )
     if (
-        event.authority_source_id != event.witness.authority_source_id
-        or event.authority_source_id != binding.authority_source_id
+        event.authority_source != event.witness.authority_source_id
+        or event.authority_source != binding.authority_source_id
     ):
         reason_code = "authority_source_mismatch"
         next_state = _quarantined_acceptance_state(
@@ -1583,19 +1647,16 @@ def _release_closed_batch(
         AdmissionState.INDETERMINATE if is_resolution else AdmissionState.REQUEST_DISPATCHED
     )
     expected_kind = WitnessKind.NON_ADMISSION if is_release else WitnessKind.ROLLBACK
-    history_removal_witness = (
-        event.history_removal_witness
-        if isinstance(
-            event,
-            ReleaseNonAdmissionEvent | ResolveIndeterminateNonAdmissionEvent,
-        )
-        else None
+    required_release_kind = _required_release_witness_kind(
+        state,
+        record.batch,
+        snapshot=audit.snapshot,
     )
     if (
         record.state is not expected_state
         or (
-            record.protected_release_witness_kind is not None
-            and record.protected_release_witness_kind is not expected_kind
+            record.batch.protected_pool_owner_id is not None
+            and required_release_kind is not expected_kind
         )
         or not _validate_witness_for_snapshot(
             audit.snapshot,
@@ -1603,26 +1664,12 @@ def _release_closed_batch(
             event.witness,
             expected_kind,
         )
-        or (
-            is_release
-            and (
-                history_removal_witness is None
-                or not _validate_witness_for_snapshot(
-                    audit.snapshot,
-                    record.batch,
-                    history_removal_witness,
-                    WitnessKind.ROLLBACK,
-                )
-                or history_removal_witness.witness_id == event.witness.witness_id
-            )
-        )
     ):
         return _reject(state, event, "invalid_closed_epoch_resolution")
     lifecycle = AdmissionState.RELEASED if is_release else AdmissionState.ROLLED_BACK
     witness_ids = _append_witness_ids(
         record.witness_ids,
         event.witness.witness_id,
-        *((history_removal_witness.witness_id,) if history_removal_witness is not None else ()),
     )
     updated_record = replace(
         record,
@@ -1642,11 +1689,6 @@ def _release_closed_batch(
             accepted_witness_ids=_append_witness_ids(
                 item.accepted_witness_ids,
                 event.witness.witness_id,
-                *(
-                    (history_removal_witness.witness_id,)
-                    if history_removal_witness is not None
-                    else ()
-                ),
             ),
             indeterminate_reason_code=None,
         )
@@ -1687,14 +1729,7 @@ def _release_closed_batch(
                 count=reservation.reserved_count,
                 window_epoch_id=reservation.window_epoch_id,
                 snapshot_sequence=reservation.snapshot_sequence,
-                witness_ids=_append_witness_ids(
-                    (event.witness.witness_id,),
-                    *(
-                        (history_removal_witness.witness_id,)
-                        if history_removal_witness is not None
-                        else ()
-                    ),
-                ),
+                witness_ids=(event.witness.witness_id,),
             ),
             *effects,
         )
@@ -1707,16 +1742,6 @@ def _release_closed_batch(
             GenerationState.STREAMING,
             GenerationState.INDETERMINATE,
         }:
-            generation_records.append(
-                replace(
-                    generation,
-                    state=GenerationState.INVALIDATED,
-                    witness_ids=_append_witness_ids(
-                        generation.witness_ids,
-                        event.witness.witness_id,
-                    ),
-                )
-            )
             generation_effects += (
                 ReservationInvalidatedEffect(
                     source_event_id=event.event_id,
@@ -1785,7 +1810,6 @@ def _release_or_rollback(
         event,
         ResolveIndeterminateNonAdmissionEvent | ResolveIndeterminateRollbackEvent,
     )
-    expected_witness = WitnessKind.NON_ADMISSION if is_release else WitnessKind.ROLLBACK
     if is_resolution:
         allowed_states = {AdmissionState.INDETERMINATE}
     elif is_release:
@@ -1800,9 +1824,11 @@ def _release_or_rollback(
             AdmissionState.HISTORY_STAGED,
             AdmissionState.REQUEST_DISPATCHED,
         }
+    expected_witness = WitnessKind.NON_ADMISSION if is_release else WitnessKind.ROLLBACK
+    required_release_kind = _required_release_witness_kind(state, record.batch)
     if (
-        record.protected_release_witness_kind is not None
-        and record.protected_release_witness_kind is not expected_witness
+        record.batch.protected_pool_owner_id is not None
+        and required_release_kind is not expected_witness
     ):
         return _reject(state, event, "protected_release_policy_mismatch")
     if record.state not in allowed_states or not _validate_witness(
@@ -1812,34 +1838,6 @@ def _release_or_rollback(
         expected_witness,
     ):
         return _reject(state, event, "invalid_release_or_rollback_witness")
-    history_removal_witness = (
-        event.history_removal_witness
-        if isinstance(
-            event,
-            ReleaseNonAdmissionEvent | ResolveIndeterminateNonAdmissionEvent,
-        )
-        else None
-    )
-    if (
-        is_release
-        and record.state
-        in {
-            AdmissionState.HISTORY_STAGED,
-            AdmissionState.REQUEST_DISPATCHED,
-            AdmissionState.INDETERMINATE,
-        }
-        and (
-            history_removal_witness is None
-            or not _validate_witness(
-                state,
-                record.batch,
-                history_removal_witness,
-                WitnessKind.ROLLBACK,
-            )
-            or history_removal_witness.witness_id == event.witness.witness_id
-        )
-    ):
-        return _reject(state, event, "staged_release_requires_history_removal")
     lifecycle = AdmissionState.RELEASED if is_release else AdmissionState.ROLLED_BACK
     updated = replace(
         record,
@@ -1847,11 +1845,6 @@ def _release_or_rollback(
         witness_ids=_append_witness_ids(
             record.witness_ids,
             event.witness.witness_id,
-            *(
-                (history_removal_witness.witness_id,)
-                if history_removal_witness is not None
-                else ()
-            ),
         ),
         unresolved_input_count=0,
     )
@@ -1862,13 +1855,6 @@ def _release_or_rollback(
         lifecycle,
         witness=event.witness,
     )
-    if history_removal_witness is not None:
-        next_state = _set_occurrence_state(
-            next_state,
-            record.batch,
-            lifecycle,
-            witness=history_removal_witness,
-        )
     effects: tuple[AdmissionEffect, ...] = _occurrence_effects(
         state,
         event,
@@ -1892,14 +1878,7 @@ def _release_or_rollback(
                 count=reservation.reserved_count,
                 window_epoch_id=reservation.window_epoch_id,
                 snapshot_sequence=reservation.snapshot_sequence,
-                witness_ids=_append_witness_ids(
-                    (event.witness.witness_id,),
-                    *(
-                        (history_removal_witness.witness_id,)
-                        if history_removal_witness is not None
-                        else ()
-                    ),
-                ),
+                witness_ids=(event.witness.witness_id,),
             ),
             *effects,
         )
@@ -1912,16 +1891,6 @@ def _release_or_rollback(
             GenerationState.STREAMING,
             GenerationState.INDETERMINATE,
         }:
-            generation_records.append(
-                replace(
-                    generation,
-                    state=GenerationState.INVALIDATED,
-                    witness_ids=_append_witness_ids(
-                        generation.witness_ids,
-                        event.witness.witness_id,
-                    ),
-                )
-            )
             generation_effects += (
                 ReservationInvalidatedEffect(
                     source_event_id=event.event_id,
@@ -2020,8 +1989,8 @@ def _resolve_indeterminate_accepted(
             event.witness,
             WitnessKind.PROVIDER_ACCEPTED,
         )
-        or event.authority_source_id != event.witness.authority_source_id
-        or event.authority_source_id != binding.authority_source_id
+        or event.authority_source != event.witness.authority_source_id
+        or event.authority_source != binding.authority_source_id
         or event.measurement_kind is not MeasurementKind.PROVIDER_EXACT
         or event.final_manifest_revision != expected_revision
         or event.final_manifest != record.batch.manifest
@@ -2476,26 +2445,69 @@ def _expire_idempotency(
     )
     if record is None:
         return _reject(state, event, "idempotency_key_not_terminal")
-    if isinstance(state, ActiveContextAdmissionState):
+    if not isinstance(state, ActiveContextAdmissionState):
+        return _reject(state, event, "idempotency_key_not_terminal")
+    batch_record: AdmissionBatchRecord | None
+    snapshot: ContextWindowSnapshot
+    generation_records: tuple[GenerationReservationRecord, ...]
+    if (
+        event.reservation_key.window_epoch_id == state.snapshot.window_epoch_id
+        and event.reservation_key.window_epoch_number == state.snapshot.window_epoch_number
+    ):
         batch_record = _batch_record(
             state,
             record.original_descriptor.batch.batch_id,
         )
-        if batch_record is not None and batch_record.state not in {
-            AdmissionState.COMMITTED,
-            AdmissionState.RELEASED,
-            AdmissionState.ROLLED_BACK,
-            AdmissionState.INVALIDATED,
-            AdmissionState.QUARANTINED,
-        }:
+        snapshot = state.snapshot
+        generation_records = state.generation_reservations
+    else:
+        audit = next(
+            (
+                item
+                for item in state.closed_epochs
+                if item.snapshot.window_epoch_id == event.reservation_key.window_epoch_id
+                and item.snapshot.window_epoch_number == event.reservation_key.window_epoch_number
+            ),
+            None,
+        )
+        if audit is None:
             return _reject(state, event, "idempotency_key_not_terminal")
-    if event.expiry_witness.kind is not WitnessKind.IDEMPOTENCY_EXPIRY:
-        return _reject(state, event, "invalid_expiry_witness")
-    if (
-        event.expiry_witness.window_epoch_id != event.reservation_key.window_epoch_id
-        or event.expiry_witness.window_epoch_number != event.reservation_key.window_epoch_number
+        batch_record = next(
+            (
+                item
+                for item in audit.terminal_batch_records
+                if item.batch.batch_id == record.original_descriptor.batch.batch_id
+            ),
+            None,
+        )
+        snapshot = audit.snapshot
+        generation_records = audit.terminal_generation_reservations
+    if batch_record is None or batch_record.state not in {
+        AdmissionState.COMMITTED,
+        AdmissionState.RELEASED,
+        AdmissionState.ROLLED_BACK,
+        AdmissionState.INVALIDATED,
+        AdmissionState.QUARANTINED,
+    }:
+        return _reject(state, event, "idempotency_key_not_terminal")
+    if any(
+        generation.batch_id == batch_record.batch.batch_id
+        and generation.state
+        in {
+            GenerationState.RESERVED,
+            GenerationState.STREAMING,
+            GenerationState.INDETERMINATE,
+        }
+        for generation in generation_records
     ):
-        return _reject(state, event, "expiry_epoch_mismatch")
+        return _reject(state, event, "idempotency_key_not_terminal")
+    if not _validate_witness_for_snapshot(
+        snapshot,
+        batch_record.batch,
+        event.expiry_witness,
+        WitnessKind.IDEMPOTENCY_EXPIRY,
+    ):
+        return _reject(state, event, "invalid_expiry_witness")
     tombstone = ExpiredIdempotencyTombstone(
         namespace=record.namespace,
         reservation_key=record.reservation_key,
@@ -2599,11 +2611,9 @@ def _rollover(
         and proof.receiver_authority_source_id == event.witness.authority_source_id
         and proof.highest_admitted_dispatch_sequence == _highest_dispatch_sequence(state)
     )
-    fully_resolved = retained_total == 0 and event.deducted_unresolved_count == 0
+    fully_resolved = retained_total == 0
     snapshot_deducts_unresolved = (
-        retained_total > 0
-        and event.deducted_unresolved_count == retained_total
-        and event.new_snapshot.active_count >= retained_total
+        retained_total > 0 and event.new_snapshot.active_count >= retained_total
     )
     authority_alternative_valid = (
         receiver_fence_valid
@@ -2645,11 +2655,9 @@ def _rollover(
         )
         for record in state.batch_records
     )
-    terminal_generation_reservations = tuple(
-        replace(
-            generation,
-            state=GenerationState.INVALIDATED,
-        )
+    invalidated_generation_reservations = tuple(
+        generation
+        for generation in state.generation_reservations
         if generation.state
         in {
             GenerationState.RESERVED,
@@ -2657,8 +2665,14 @@ def _rollover(
             GenerationState.INDETERMINATE,
         }
         and generation.request_id not in retained_generation_request_ids
-        else generation
+    )
+    invalidated_generation_ids = {
+        generation.generation_reservation_id for generation in invalidated_generation_reservations
+    }
+    terminal_generation_reservations = tuple(
+        generation
         for generation in state.generation_reservations
+        if generation.generation_reservation_id not in invalidated_generation_ids
     )
     audit = ClosedEpochAudit(
         snapshot=state.snapshot,
@@ -2735,21 +2749,16 @@ def _rollover(
             source_event_id=event.event_id,
             resulting_aggregate_revision=revision,
             resulting_admission_sequence=sequence,
-            target_id=prior.generation_reservation_id,
+            target_id=generation.generation_reservation_id,
             charge_domain=ChargeDomain.OUTPUT_GENERATION,
-            reserve_class=prior.reserve_class,
-            protected_pool_owner_id=prior.protected_pool_owner_id,
-            count=prior.maximum_allowance,
-            window_epoch_id=prior.window_epoch_id,
-            snapshot_sequence=prior.snapshot_sequence,
+            reserve_class=generation.reserve_class,
+            protected_pool_owner_id=generation.protected_pool_owner_id,
+            count=generation.maximum_allowance,
+            window_epoch_id=generation.window_epoch_id,
+            snapshot_sequence=generation.snapshot_sequence,
             witness_ids=rollover_witness_ids,
         )
-        for prior, terminal in zip(
-            state.generation_reservations,
-            terminal_generation_reservations,
-            strict=True,
-        )
-        if prior.state is not terminal.state
+        for generation in invalidated_generation_reservations
     )
     occurrence_effects = tuple(
         OccurrenceStateChangedEffect(
@@ -2777,7 +2786,9 @@ def _rollover(
             resulting_admission_sequence=sequence,
             target_id=state.snapshot.window_epoch_id,
             fence_proof=proof,
-            deducted_unresolved_count=event.deducted_unresolved_count,
+            deducted_unresolved_count=(
+                retained_total if snapshot_deducts_unresolved and proof is None else 0
+            ),
         ),
     )
     return _publish(

@@ -120,7 +120,6 @@ EXPECTED_ENUM_MEMBERS = {
         "RECONCILED",
         "INDETERMINATE",
         "QUARANTINED",
-        "INVALIDATED",
     ),
     MeasurementKind: (
         "PROVIDER_EXACT",
@@ -244,7 +243,7 @@ EXPECTED_EVENT_FIELDS = {
         "representation_binding_id",
         "proposed_charge",
         "measurement_kind",
-        "authority_source_id",
+        "authority_source",
     ),
     "StageHistoryEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
     "DispatchRequestEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
@@ -256,11 +255,10 @@ EXPECTED_EVENT_FIELDS = {
         "final_manifest",
         "exact_input_charge",
         "measurement_kind",
-        "authority_source_id",
+        "authority_source",
         "representation_binding_witness",
     ),
-    "ReleaseNonAdmissionEvent": _EVENT_BASE_FIELDS
-    + ("batch_id", "witness", "history_removal_witness"),
+    "ReleaseNonAdmissionEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
     "RollbackAdmissionEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
     "MarkIndeterminateEvent": _EVENT_BASE_FIELDS + ("batch_id", "reason_code"),
     "ResolveIndeterminateAcceptedEvent": _EVENT_BASE_FIELDS
@@ -271,11 +269,10 @@ EXPECTED_EVENT_FIELDS = {
         "final_manifest",
         "exact_charge",
         "measurement_kind",
-        "authority_source_id",
+        "authority_source",
         "representation_binding_witness",
     ),
-    "ResolveIndeterminateNonAdmissionEvent": _EVENT_BASE_FIELDS
-    + ("batch_id", "witness", "history_removal_witness"),
+    "ResolveIndeterminateNonAdmissionEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
     "ResolveIndeterminateRollbackEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
     "StartGenerationEvent": _EVENT_BASE_FIELDS + ("generation_reservation_id", "witness"),
     "ReconcileGenerationEvent": _EVENT_BASE_FIELDS
@@ -288,7 +285,6 @@ EXPECTED_EVENT_FIELDS = {
     + (
         "witness",
         "fence_proof",
-        "deducted_unresolved_count",
         "new_snapshot",
         "protected_pools",
     ),
@@ -426,12 +422,9 @@ EXPECTED_RECORD_FIELDS = {
         "batch",
         "state",
         "reservation_id",
-        "protected_release_witness_kind",
         "witness_ids",
-        "prepared_input_count",
         "committed_input_count",
         "unresolved_input_count",
-        "dispatch_sequence",
     ),
     GenerationReservationRecord: (
         "generation_reservation_id",
@@ -835,6 +828,11 @@ def test_dispatch_identity_is_validated_and_projects_only_dispatch_id() -> None:
         replace(lineage, dispatch_identity=forged)
     assert "forged-private-marker" not in str(exc_info.value)
 
+    object.__setattr__(identity, "completion_marker", "tampered-after-construction")
+    with pytest.raises(ContextAdmissionValidationError) as serialization_error:
+        lineage.to_dict()
+    assert "tampered-after-construction" not in str(serialization_error.value)
+
 
 @pytest.mark.parametrize(
     "canary",
@@ -1031,6 +1029,17 @@ def test_privacy_canaries_never_escape_validation_repr_or_serialization(canary: 
     assert canary not in serialized
 
 
+@pytest.mark.parametrize("opaque_type", OPAQUE_STRING_TYPES)
+def test_unprefixed_digest_shaped_values_are_rejected_by_every_opaque_wrapper(
+    opaque_type: type[object],
+) -> None:
+    digest = "a" * 64
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        opaque_type(digest)
+    assert digest not in str(exc_info.value)
+    assert digest not in repr(exc_info.value)
+
+
 @pytest.mark.parametrize(
     "canary",
     [
@@ -1147,12 +1156,9 @@ def test_active_state_rejects_inconsistent_bidirectional_ownership_links() -> No
         batch=batch,
         state=AdmissionState.RESERVED,
         reservation_id=None,
-        protected_release_witness_kind=None,
         witness_ids=(),
-        prepared_input_count=None,
         committed_input_count=0,
         unresolved_input_count=0,
-        dispatch_sequence=None,
     )
     with pytest.raises(ContextAdmissionValidationError):
         replace(state, batch_records=(orphan_batch,))
@@ -1290,12 +1296,9 @@ def test_batch_record_rejects_committed_and_unresolved_simultaneously() -> None:
             batch=batch,
             state=AdmissionState.INDETERMINATE,
             reservation_id=None,
-            protected_release_witness_kind=None,
             witness_ids=(),
-            prepared_input_count=None,
             committed_input_count=5,
             unresolved_input_count=5,
-            dispatch_sequence=None,
         )
     assert "committed_and_unresolved_simultaneously" in str(exc_info.value)
 
@@ -1343,7 +1346,7 @@ def test_prepare_event_rejects_estimate_measurement() -> None:
             representation_binding_id=batch.manifest.representation_binding_id,
             proposed_charge=5,
             measurement_kind=MeasurementKind.HOST_ESTIMATE,
-            authority_source_id=AuthoritySourceId("authority-test"),
+            authority_source=AuthoritySourceId("authority-test"),
         )
     assert "non_authoritative_measurement" in str(exc_info.value)
 
@@ -1363,7 +1366,7 @@ def test_accept_event_rejects_estimate_measurement() -> None:
             final_manifest=batch.manifest,
             exact_input_charge=5,
             measurement_kind=MeasurementKind.BYTE_EMERGENCY,
-            authority_source_id=AuthoritySourceId("authority-test"),
+            authority_source=AuthoritySourceId("authority-test"),
             representation_binding_witness=_binding(batch),
         )
     assert "non_authoritative_measurement" in str(exc_info.value)

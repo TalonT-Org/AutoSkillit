@@ -509,7 +509,13 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 generation_count,
             )
         else:
-            assert transition.next_state == prior
+            assert (
+                replace(
+                    transition.next_state,
+                    processed_events=prior.processed_events,
+                )
+                == prior
+            )
             self._accept_publication(transition, event)
 
     @rule()
@@ -543,7 +549,6 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 fence_witness_id=AdmissionWitnessId(f"stale-fence-{self.event_sequence}"),
                 highest_admitted_dispatch_sequence=self.state.admission_sequence.value,
             ),
-            deducted_unresolved_count=0,
             new_snapshot=ContextWindowSnapshot(
                 protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
                 window_epoch_id=WindowEpochId(f"epoch-state-machine-{new_window_epoch_number}"),
@@ -560,7 +565,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         prior = self.state
         transition = reduce_context_admission(prior, event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-        assert transition.next_state == prior
+        assert replace(transition.next_state, processed_events=prior.processed_events) == prior
         self._accept_publication(transition, event)
 
     @rule(
@@ -617,7 +622,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             representation_binding_id=batch.manifest.representation_binding_id,
             proposed_charge=reserved_input_count,
             measurement_kind=MeasurementKind.PROVIDER_EXACT,
-            authority_source_id=AuthoritySourceId("authority-state-machine"),
+            authority_source=AuthoritySourceId("authority-state-machine"),
         )
         transition = reduce_context_admission(self.state, prepare_event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
@@ -630,7 +635,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         prior = self.state
         rejected = reduce_context_admission(prior, skipped_dispatch)
         assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-        assert rejected.next_state == prior
+        assert replace(rejected.next_state, processed_events=prior.processed_events) == prior
         self._accept_publication(rejected, skipped_dispatch)
         stage_event = StageHistoryEvent(
             **self._fields("stage-history"),
@@ -657,7 +662,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             prior = self.state
             rejected = reduce_context_admission(prior, premature_generation)
             assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-            assert rejected.next_state == prior
+            assert replace(rejected.next_state, processed_events=prior.processed_events) == prior
             self._accept_publication(rejected, premature_generation)
         dispatch_event = DispatchRequestEvent(
             **self._fields("dispatch-request"),
@@ -677,7 +682,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             final_manifest=batch.manifest,
             exact_input_charge=reserved_input_count,
             measurement_kind=MeasurementKind.PROVIDER_EXACT,
-            authority_source_id=AuthoritySourceId("authority-state-machine"),
+            authority_source=AuthoritySourceId("authority-state-machine"),
             representation_binding_witness=_binding(batch),
         )
         transition = reduce_context_admission(self.state, accept_event)
@@ -702,7 +707,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             representation_binding_id=batch.manifest.representation_binding_id,
             proposed_charge=input_count,
             measurement_kind=MeasurementKind.PROVIDER_EXACT,
-            authority_source_id=AuthoritySourceId("authority-state-machine"),
+            authority_source=AuthoritySourceId("authority-state-machine"),
         )
         prepared = reduce_context_admission(self.state, prepare_event)
         assert prepared.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
@@ -745,10 +750,6 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                     AdmissionState.REQUEST_DISPATCHED,
                 }:
                     continue
-                needs_removal = record.state in {
-                    AdmissionState.HISTORY_STAGED,
-                    AdmissionState.REQUEST_DISPATCHED,
-                }
                 event = ReleaseNonAdmissionEvent(
                     **self._fields("release-non-admission"),
                     batch_id=batch.batch_id,
@@ -756,11 +757,6 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                         batch,
                         occurrence,
                         WitnessKind.NON_ADMISSION,
-                    ),
-                    history_removal_witness=(
-                        _witness(batch, occurrence, WitnessKind.ROLLBACK)
-                        if needs_removal
-                        else None
                     ),
                 )
             transition = reduce_context_admission(self.state, event)
@@ -794,11 +790,6 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                         batch,
                         occurrence,
                         WitnessKind.NON_ADMISSION,
-                    ),
-                    history_removal_witness=_witness(
-                        batch,
-                        occurrence,
-                        WitnessKind.ROLLBACK,
                     ),
                 )
             transition = reduce_context_admission(self.state, event)
@@ -938,13 +929,12 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             new_window_epoch_number=new_window_epoch_number,
             receiver_authority_source_id=AuthoritySourceId("authority-state-machine"),
             fence_witness_id=AdmissionWitnessId(f"fence-{witness_suffix}"),
-            highest_admitted_dispatch_sequence=max(
-                (
-                    record.dispatch_sequence
-                    for record in self.state.batch_records
-                    if record.dispatch_sequence is not None
-                ),
-                default=0,
+            highest_admitted_dispatch_sequence=sum(
+                isinstance(record.event, DispatchRequestEvent)
+                and record.original_decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+                and record.event.witness.window_epoch_id == old_snapshot.window_epoch_id
+                and record.event.witness.window_epoch_number == old_snapshot.window_epoch_number
+                for record in self.state.processed_events
             ),
         )
         rollover_event = RolloverEpochEvent(
@@ -963,7 +953,6 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 authority_source_id=AuthoritySourceId("authority-state-machine"),
             ),
             fence_proof=proof,
-            deducted_unresolved_count=0,
             new_snapshot=ContextWindowSnapshot(
                 protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
                 window_epoch_id=new_window_epoch_id,

@@ -101,14 +101,46 @@ def test_all_capability_fields_have_production_consumers():
 
 
 def test_hook_trust_policy_has_a_real_production_consumer() -> None:
-    from autoskillit.core import BackendCapabilities, paths
+    from autoskillit.core import paths
 
-    field_names = frozenset(field.name for field in dataclasses.fields(BackendCapabilities))
-    reads = _collect_attribute_reads(paths.pkg_root(), field_names)
-    assert "hook_trust_policy" not in _FORWARD_DECLARED
-    assert reads["hook_trust_policy"], (
-        "hook_trust_policy must be translated at the interactive launch boundary"
+    codex_path = paths.pkg_root() / "execution" / "backends" / "codex.py"
+    tree = ast.parse(codex_path.read_text(encoding="utf-8"), filename=str(codex_path))
+    backend_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "CodexBackend"
     )
+    interactive_builder = next(
+        node
+        for node in backend_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "build_interactive_cmd"
+    )
+    translation_calls = [
+        call
+        for call in ast.walk(interactive_builder)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "_should_bypass_hook_trust"
+    ]
+
+    assert "hook_trust_policy" not in _FORWARD_DECLARED
+    assert len(translation_calls) == 1
+    translation_call = translation_calls[0]
+    assert len(translation_call.args) == 1
+    policy_arg = translation_call.args[0]
+    assert (
+        isinstance(policy_arg, ast.Attribute)
+        and policy_arg.attr == "hook_trust_policy"
+        and isinstance(policy_arg.value, ast.Attribute)
+        and policy_arg.value.attr == "capabilities"
+        and isinstance(policy_arg.value.value, ast.Name)
+        and policy_arg.value.value.id == "self"
+    ), "interactive launch must translate self.capabilities.hook_trust_policy"
+    automated_keyword = next(
+        keyword for keyword in translation_call.keywords if keyword.arg == "automated_session"
+    )
+    assert isinstance(automated_keyword.value, ast.Constant)
+    assert automated_keyword.value.value is False
 
 
 def test_forward_declared_has_linked_issues():

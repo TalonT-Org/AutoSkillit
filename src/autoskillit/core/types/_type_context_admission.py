@@ -1721,7 +1721,9 @@ class IdempotencyRecord(_ContractValue):
             _raise_invalid("idempotency_record_identity_mismatch")
 
 
-def _validate_state_metadata_uniqueness(
+def _validate_state_metadata(
+    aggregate_revision: AggregateRevision,
+    admission_sequence: AdmissionSequence,
     processed_events: tuple[ProcessedEventRecord, ...],
     idempotency_records: tuple[IdempotencyRecord, ...],
     expired_tombstones: tuple[ExpiredIdempotencyTombstone, ...],
@@ -1729,11 +1731,29 @@ def _validate_state_metadata_uniqueness(
 ) -> None:
     if len({record.event_id for record in processed_events}) != len(processed_events):
         _raise_invalid("duplicate_processed_event")
+    processed_revisions = tuple(record.aggregate_revision.value for record in processed_events)
+    processed_sequences = tuple(record.admission_sequence.value for record in processed_events)
+    if (
+        len(set(processed_revisions)) != len(processed_revisions)
+        or any(revision > aggregate_revision.value for revision in processed_revisions)
+        or any(sequence > admission_sequence.value for sequence in processed_sequences)
+        or any(
+            later < earlier for earlier, later in zip(processed_sequences, processed_sequences[1:])
+        )
+    ):
+        _raise_invalid("invalid_processed_event_coordinates")
     idempotency_keys = tuple(
         (record.namespace, record.reservation_key) for record in idempotency_records
     )
     if len(set(idempotency_keys)) != len(idempotency_keys):
         _raise_invalid("duplicate_idempotency_owner")
+    processed_by_event_id = {record.event_id: record for record in processed_events}
+    for record in idempotency_records:
+        processed = processed_by_event_id.get(record.owning_event_id)
+        if record.publication_revision.value > aggregate_revision.value or (
+            processed is not None and record.publication_revision != processed.aggregate_revision
+        ):
+            _raise_invalid("invalid_idempotency_publication_coordinates")
     tombstone_keys = tuple(
         (record.namespace, record.reservation_key) for record in expired_tombstones
     )
@@ -1785,7 +1805,9 @@ class UninitializedContextAdmissionState(_ContractValue):
             "noncanonical_closed_epochs",
             key=lambda audit: audit.snapshot.window_epoch_number,
         )
-        _validate_state_metadata_uniqueness(
+        _validate_state_metadata(
+            self.aggregate_revision,
+            self.admission_sequence,
             self.processed_events,
             self.idempotency_records,
             self.expired_idempotency_tombstones,
@@ -1868,7 +1890,9 @@ class ActiveContextAdmissionState(_ContractValue):
             "noncanonical_closed_epochs",
             key=lambda audit: audit.snapshot.window_epoch_number,
         )
-        _validate_state_metadata_uniqueness(
+        _validate_state_metadata(
+            self.aggregate_revision,
+            self.admission_sequence,
             self.processed_events,
             self.idempotency_records,
             self.expired_idempotency_tombstones,

@@ -54,6 +54,26 @@ def test_recipe_section_definition_and_registry_are_immutable() -> None:
 
 
 @pytest.mark.parametrize(
+    ("section", "changes"),
+    [
+        ("content", {"name": ""}),
+        ("content", {"ordinary_content_format": "json-scalar-page"}),
+        ("content", {"has_default": True, "default_value": ()}),
+        ("errors", {"missing_behavior": "absent"}),
+        ("errors", {"has_default": False}),
+    ],
+)
+def test_recipe_section_definition_rejects_contradictory_construction(
+    section: str,
+    changes: dict[str, typing.Any],
+) -> None:
+    from autoskillit.core import RECIPE_SECTION_REGISTRY
+
+    with pytest.raises(ValueError):
+        dataclasses.replace(RECIPE_SECTION_REGISTRY[section], **changes)
+
+
+@pytest.mark.parametrize(
     ("section", "value_kind", "element_kind", "strategy", "ordinary", "oversized"),
     [
         ("content", "string", None, "raw", "raw-text", None),
@@ -99,19 +119,29 @@ def test_recipe_section_strategy_and_format_combinations_are_pinned(
 
 
 def test_recipe_section_presence_and_default_semantics_are_explicit() -> None:
-    from autoskillit.core import RECIPE_SECTION_REGISTRY
+    from autoskillit.core import DYNAMIC_RECIPE_SECTION_DEF, RECIPE_SECTION_REGISTRY
 
-    ingredients = RECIPE_SECTION_REGISTRY["ingredients_table"]
-    assert ingredients.missing_behavior == "absent"
-    assert ingredients.none_behavior == "absent"
-    assert ingredients.has_default is False
+    definitions = dict(RECIPE_SECTION_REGISTRY)
+    definitions["$dynamic"] = DYNAMIC_RECIPE_SECTION_DEF
+    expected = {
+        "content": ("invalid", "invalid", False, None),
+        "ingredients_table": ("absent", "absent", False, None),
+        "orchestration_rules": ("absent", "invalid", False, None),
+        "stop_step_semantics": ("absent", "invalid", False, None),
+        "errors": ("default", "invalid", True, ()),
+        "warnings": ("default", "invalid", True, ()),
+        "$dynamic": ("absent", "invalid", False, None),
+    }
 
-    for section in ("errors", "warnings"):
-        definition = RECIPE_SECTION_REGISTRY[section]
-        assert definition.missing_behavior == "default"
-        assert definition.none_behavior == "invalid"
-        assert definition.has_default is True
-        assert definition.default_value == ()
+    assert {
+        name: (
+            definition.missing_behavior,
+            definition.none_behavior,
+            definition.has_default,
+            definition.default_value,
+        )
+        for name, definition in definitions.items()
+    } == expected
 
 
 def test_recipe_section_registry_identity_is_stable_and_qualified() -> None:

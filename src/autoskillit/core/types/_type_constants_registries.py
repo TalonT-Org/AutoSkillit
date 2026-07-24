@@ -290,8 +290,49 @@ class RecipeSectionDef:
     has_default: bool = False
     default_value: tuple[str, ...] | None = None
 
+    def __post_init__(self) -> None:
+        """Reject contradictory public definitions at their construction boundary."""
+        if not self.name:
+            raise ValueError("recipe section definition name must not be empty")
+        layout = (
+            self.value_kind,
+            self.element_kind,
+            self.section_strategy,
+            self.ordinary_content_format,
+            self.oversized_content_format,
+        )
+        valid_layouts = {
+            ("string", None, "raw", "raw-text", None),
+            ("string", None, "scalar", "json-scalar-page", None),
+            (
+                "array",
+                "string",
+                "array",
+                "json-array-page",
+                "json-element-fragment",
+            ),
+        }
+        if layout not in valid_layouts:
+            raise ValueError("invalid recipe section strategy and content-format combination")
+        if self.has_default != (self.missing_behavior == "default"):
+            raise ValueError("recipe section default flag must match missing behavior")
+        if self.has_default:
+            if self.value_kind != "array" or self.default_value != ():
+                raise ValueError("defaulted recipe sections require an empty array default")
+        elif self.default_value is not None:
+            raise ValueError("recipe sections without defaults must not declare a default value")
 
-RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = MappingProxyType(
+
+def _validated_recipe_section_registry(
+    definitions: dict[str, RecipeSectionDef],
+) -> Mapping[str, RecipeSectionDef]:
+    for name, definition in definitions.items():
+        if definition.name != name:
+            raise ValueError(f"recipe section registry key {name!r} must match definition name")
+    return MappingProxyType(definitions)
+
+
+RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = _validated_recipe_section_registry(
     {
         "content": RecipeSectionDef(
             name="content",
@@ -357,7 +398,7 @@ RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = MappingProxyType(
             has_default=True,
             default_value=(),
         ),
-    }
+    },
 )
 
 DYNAMIC_RECIPE_SECTION_DEF = RecipeSectionDef(

@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 
-from ._type_constants_registries import RECIPE_SECTION_REGISTRY, RecipeSectionDef
+from ._type_constants_registries import RECIPE_SECTION_REGISTRY
 
 __all__ = [
     "RecipeSectionValidationFinding",
@@ -81,35 +81,6 @@ def recipe_section_plan_digest(manifest: object) -> str:
     )
 
 
-def _definition_is_valid(definition: RecipeSectionDef) -> bool:
-    combination = (
-        definition.value_kind,
-        definition.element_kind,
-        definition.section_strategy,
-        definition.ordinary_content_format,
-        definition.oversized_content_format,
-    )
-    if combination == ("string", None, "raw", "raw-text", None):
-        pass
-    elif combination == ("string", None, "scalar", "json-scalar-page", None):
-        pass
-    elif combination == (
-        "array",
-        "string",
-        "array",
-        "json-array-page",
-        "json-element-fragment",
-    ):
-        pass
-    else:
-        return False
-    if definition.has_default != (definition.missing_behavior == "default"):
-        return False
-    if definition.has_default:
-        return definition.value_kind == "array" and definition.default_value == ()
-    return definition.default_value is None
-
-
 def _finding(
     section: str,
     code: str,
@@ -135,17 +106,6 @@ def validate_recipe_artifact_sections(
     """Validate pullable fields; an empty tuple is the sole valid result."""
     findings: list[RecipeSectionValidationFinding] = []
     for section, definition in RECIPE_SECTION_REGISTRY.items():
-        if not _definition_is_valid(definition):
-            findings.append(
-                _finding(
-                    section,
-                    "invalid_section_definition",
-                    (section,),
-                    "valid strategy and content-format combination",
-                    definition,
-                )
-            )
-            continue
         value = payload.get(section, _MISSING)
         if value is _MISSING:
             if definition.missing_behavior == "invalid":

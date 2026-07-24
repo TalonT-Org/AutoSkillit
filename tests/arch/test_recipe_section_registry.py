@@ -188,6 +188,14 @@ def test_recipe_section_registry_identity_is_stable_and_qualified() -> None:
     )
 
     assert RECIPE_SECTION_PAGINATION_VERSION == 1
+    assert (
+        RECIPE_SECTION_REGISTRY_DIGEST
+        == "sha256:d2b8a9f404b264dc3963850712f7d69b0fdfcea5433331b0c4b6ea9400e1e4a1"
+    )
+    assert (
+        RECIPE_SECTION_PAGINATION_POLICY_DIGEST
+        == "sha256:c65ec6cec7cd4af15aa8247d67cf7fe7540bc7ee0df727e3e8a9da46dcd96c92"
+    )
     for digest in (
         RECIPE_SECTION_REGISTRY_DIGEST,
         RECIPE_SECTION_PAGINATION_POLICY_DIGEST,

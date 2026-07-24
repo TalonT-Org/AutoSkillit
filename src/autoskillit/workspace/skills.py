@@ -742,7 +742,7 @@ class DefaultSkillResolver:
         return EffectiveSkillCatalog(
             skills=skills,
             execution_role=execution_role,
-            namespace_sources={skill.name: skill.source for skill in effective_skills},
+            namespace_sources={skill.name: skill.source for skill in skills},
         )
 
     def resolve_invocation(

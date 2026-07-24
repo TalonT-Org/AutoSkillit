@@ -1048,7 +1048,9 @@ def test_effective_catalog_applies_pack_and_recipe_visibility(tmp_path: Path) ->
     )
 
     assert "research-skill" not in {skill.name for skill in default_catalog.skills}
+    assert "research-skill" not in default_catalog.namespace_sources
     assert "research-skill" in {skill.name for skill in recipe_catalog.skills}
+    assert "research-skill" in recipe_catalog.namespace_sources
 
 
 def test_invalid_project_override_fails_effective_catalog_admission(tmp_path: Path) -> None:
@@ -1082,7 +1084,9 @@ def test_effective_catalog_applies_subsets_and_recipe_features(tmp_path: Path) -
     names = {skill.name for skill in catalog.skills}
 
     assert "audit-skill" not in names
+    assert "audit-skill" not in catalog.namespace_sources
     assert "planner-skill" in names
+    assert "planner-skill" in catalog.namespace_sources
 
 
 def test_explicit_invocation_bypasses_feature_but_not_pack_visibility(

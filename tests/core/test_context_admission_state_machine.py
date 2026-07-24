@@ -408,6 +408,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         assert isinstance(opened.next_state, ActiveContextAdmissionState)
         self.state = opened.next_state
         self.occurrences: dict[int, AdmissionOccurrence] = {}
+        self.batches: dict[int, AdmissionBatch] = {}
         self.charges: dict[int, tuple[ReserveClass, int, int]] = {}
         self.latest_replayable_event: Any | None = open_event
         self.latest_propose_event: ProposeOccurrenceEvent | None = None
@@ -424,6 +425,34 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             (record for record in self.state.batch_records if record.batch.batch_id == batch_id),
             None,
         )
+
+    def _reserved_input_count(self, batch: AdmissionBatch) -> int | None:
+        record = self._find_batch(batch.batch_id)
+        if record is None or record.reservation_id is None:
+            return None
+        reservation = next(
+            (
+                reservation
+                for reservation in self.state.reservations
+                if reservation.reservation_id == record.reservation_id
+            ),
+            None,
+        )
+        return reservation.reserved_count if reservation is not None else None
+
+    def _clear_batch_charges(self, batch: AdmissionBatch) -> None:
+        for slot, tracked_batch in self.batches.items():
+            if tracked_batch.batch_id != batch.batch_id or slot not in self.charges:
+                continue
+            reserve_class, _, _ = self.charges[slot]
+            self.charges[slot] = (reserve_class, 0, 0)
+
+    def _clear_generation_charges(self, batch: AdmissionBatch) -> None:
+        for slot, tracked_batch in self.batches.items():
+            if tracked_batch.batch_id != batch.batch_id or slot not in self.charges:
+                continue
+            reserve_class, input_count, _ = self.charges[slot]
+            self.charges[slot] = (reserve_class, input_count, 0)
 
     def _fields(self, operation_kind: str) -> dict[str, object]:
         self.event_sequence += 1
@@ -679,6 +708,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         )
         if expected_admit:
             self._accept_publication(transition, event)
+            self.batches[slot] = batch
             self.charges[slot] = (
                 occurrence.reserve_class,
                 input_count,
@@ -774,6 +804,8 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             return
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
         self._accept_publication(transition, event)
+        self.batches[slot] = batch
+        self.batches[other_slot] = batch
         self.charges[slot] = (first.reserve_class, total, 0)
         self.charges[other_slot] = (second.reserve_class, 0, 0)
 
@@ -782,15 +814,19 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         if not self.charges:
             return
         slot = min(self.charges)
-        reserve_class, input_count, _ = self.charges[slot]
+        reserve_class, _, _ = self.charges[slot]
         if reserve_class is ReserveClass.ORDINARY:
             return
         occurrence = self.occurrences[slot]
-        batch = _batch(occurrence)
+        batch = self.batches.get(slot)
+        if batch is None:
+            return
         reserved = self._find_batch(batch.batch_id)
         if reserved is None or reserved.state is not AdmissionState.RESERVED:
             return
-        reserved_input_count = input_count
+        reserved_input_count = self._reserved_input_count(batch)
+        if reserved_input_count is None:
+            return
         prepare_event = PrepareBatchEvent(
             **self._fields("prepare-batch"),
             batch_id=batch.batch_id,
@@ -870,11 +906,14 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         if not self.charges:
             return
         slot = min(self.charges)
-        _, input_count, _ = self.charges[slot]
-        occurrence = self.occurrences[slot]
-        batch = _batch(occurrence)
+        batch = self.batches.get(slot)
+        if batch is None:
+            return
         reserved = self._find_batch(batch.batch_id)
         if reserved is None or reserved.state is not AdmissionState.RESERVED:
+            return
+        input_count = self._reserved_input_count(batch)
+        if input_count is None:
             return
         prepare_event = PrepareBatchEvent(
             **self._fields("prepare-batch"),
@@ -903,7 +942,9 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             occurrence = self.occurrences.get(slot)
             if occurrence is None:
                 continue
-            batch = _batch(occurrence)
+            batch = self.batches.get(slot)
+            if batch is None:
+                continue
             record = self._find_batch(batch.batch_id)
             if record is None:
                 continue
@@ -938,8 +979,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             transition = reduce_context_admission(self.state, event)
             assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
             self._accept_publication(transition, event)
-            reserve_class, _, _ = self.charges[slot]
-            self.charges[slot] = (reserve_class, 0, 0)
+            self._clear_batch_charges(batch)
             return
 
     @rule(rollback=st.booleans())
@@ -948,7 +988,9 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             occurrence = self.occurrences.get(slot)
             if occurrence is None:
                 continue
-            batch = _batch(occurrence)
+            batch = self.batches.get(slot)
+            if batch is None:
+                continue
             record = self._find_batch(batch.batch_id)
             if record is None or record.state is not AdmissionState.INDETERMINATE:
                 continue
@@ -971,8 +1013,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             transition = reduce_context_admission(self.state, event)
             assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
             self._accept_publication(transition, event)
-            reserve_class, _, _ = self.charges[slot]
-            self.charges[slot] = (reserve_class, 0, 0)
+            self._clear_batch_charges(batch)
             return
 
     @rule(exact_usage=st.integers(min_value=0, max_value=16))
@@ -984,14 +1025,17 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 (
                     (slot, occurrence)
                     for slot, occurrence in self.occurrences.items()
-                    if _batch(occurrence).batch_id == generation.batch_id
+                    if (
+                        self.batches.get(slot) is not None
+                        and self.batches[slot].batch_id == generation.batch_id
+                    )
                 ),
                 None,
             )
             if slot_and_occurrence is None:
                 continue
             slot, occurrence = slot_and_occurrence
-            batch = _batch(occurrence)
+            batch = self.batches[slot]
             record = self._find_batch(batch.batch_id)
             if record is None or record.state not in {
                 AdmissionState.HISTORY_STAGED,
@@ -1030,8 +1074,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             )
             assert reconciled.decision.kind is expected
             self._accept_publication(reconciled, reconcile)
-            reserve_class, input_count, _ = self.charges[slot]
-            self.charges[slot] = (reserve_class, input_count, 0)
+            self._clear_generation_charges(batch)
             return
 
     @rule()
@@ -1087,8 +1130,11 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         }
         retained_slots = {
             slot
-            for slot, occurrence in self.occurrences.items()
-            if _batch(occurrence).batch_id in retained_batch_ids
+            for slot in self.occurrences
+            if (
+                self.batches.get(slot) is not None
+                and self.batches[slot].batch_id in retained_batch_ids
+            )
         }
         old_snapshot = self.state.snapshot
         new_window_epoch_number = old_snapshot.window_epoch_number + 1
@@ -1161,6 +1207,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                     assert record.batch.reserve_class is ReserveClass.ORDINARY
         self._accept_publication(transition, rollover_event)
         self.occurrences = {}
+        self.batches = {}
         self.charges = {}
         self.last_rollover_retention = prior_audit.retained_unresolved_count
 
@@ -1204,11 +1251,11 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
     @rule()
     def reconciliation_deadline_never_releases(self) -> None:
         slot = min(self.charges)
-        occurrence = self.occurrences[slot]
+        batch = self.batches[slot]
         before = dict(self.charges)
         event = RequestReconciliationEvent(
             **self._fields("request-reconciliation"),
-            target_id=_batch(occurrence).batch_id,
+            target_id=batch.batch_id,
             reason_code="deadline-observed",
         )
         transition = reduce_context_admission(self.state, event)
@@ -1266,6 +1313,26 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 AdmissionState.INDETERMINATE,
                 AdmissionState.QUARANTINED,
             }
+
+
+def test_multi_member_batch_progresses_through_full_lifecycle() -> None:
+    machine = ContextAdmissionStateMachine()
+    machine.propose(0, ReserveClass.SYNTHESIS)
+    machine.propose(1, ReserveClass.SYNTHESIS)
+    machine.reserve_multi_member_batch(0, 5)
+    batch = machine.batches[0]
+    assert machine.batches[1] == batch
+
+    machine.prepare_stage_dispatch_and_accept(accept_now=True)
+
+    record = machine._find_batch(batch.batch_id)
+    assert record is not None
+    assert record.state is AdmissionState.COMMITTED
+    assert {
+        occurrence_record.state
+        for occurrence_record in machine.state.occurrence_records
+        if occurrence_record.occurrence.occurrence_id in batch.occurrence_ids
+    } == {AdmissionState.COMMITTED}
 
 
 ContextAdmissionStateMachine.TestCase.settings = settings(

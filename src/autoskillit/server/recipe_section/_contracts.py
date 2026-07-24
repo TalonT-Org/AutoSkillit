@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from autoskillit.core import RECIPE_SECTION_CONTENT_FORMAT_REGISTRY, RecipeSectionDef
+from autoskillit.core import (
+    RECIPE_SECTION_CONTENT_FORMAT_REGISTRY,
+    RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+    RecipeSectionDef,
+)
 from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
 
 RecipeSectionContentFormat = Literal[
@@ -41,6 +45,17 @@ class RecipeSectionRequestState:
 
     admitted: bool
     recipe_section_bound_bytes: int
+
+    def __post_init__(self) -> None:
+        """Reject bounds that cannot contain every mandatory failure response."""
+        if (
+            type(self.recipe_section_bound_bytes) is not int
+            or self.recipe_section_bound_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES
+        ):
+            raise ValueError(
+                "recipe section bound must be an integer at least "
+                f"{RECIPE_SECTION_RESPONSE_FLOOR_BYTES} bytes"
+            )
 
 
 @dataclass(frozen=True, slots=True)

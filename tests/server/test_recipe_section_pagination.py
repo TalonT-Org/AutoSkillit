@@ -31,6 +31,7 @@ from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
     RecipeSectionPageDescriptor,
     RecipeSectionPaginationError,
+    RecipeSectionRequestState,
     build_recipe_section_page_plan,
     get_or_build_recipe_section_page_plan,
     render_recipe_section_failure,
@@ -97,6 +98,18 @@ def _generation(**changes: object) -> RecipeArtifactGeneration:
     }
     base.update(changes)
     return RecipeArtifactGeneration(**base)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "bound",
+    [True, 1.0, 0, RECIPE_SECTION_RESPONSE_FLOOR_BYTES - 1],
+)
+def test_request_state_rejects_non_integer_and_below_floor_bounds(bound: object) -> None:
+    with pytest.raises(ValueError, match="bound must be an integer at least"):
+        RecipeSectionRequestState(
+            admitted=True,
+            recipe_section_bound_bytes=bound,  # type: ignore[arg-type]
+        )
 
 
 def test_page_descriptor_rejects_unknown_incomplete_and_mixed_range_families() -> None:

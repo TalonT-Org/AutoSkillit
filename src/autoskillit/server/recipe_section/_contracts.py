@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from autoskillit.core import RecipeSectionDef
+from autoskillit.core import RECIPE_SECTION_CONTENT_FORMAT_REGISTRY, RecipeSectionDef
 from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
 
 RecipeSectionContentFormat = Literal[
@@ -14,21 +14,9 @@ RecipeSectionContentFormat = Literal[
     "json-array-page",
     "json-element-fragment",
 ]
-_RANGE_FIELDS_BY_FORMAT: dict[RecipeSectionContentFormat, frozenset[str]] = {
-    "raw-text": frozenset({"byte_start", "byte_end", "byte_total"}),
-    "json-scalar-page": frozenset({"scalar_byte_start", "scalar_byte_end", "scalar_byte_total"}),
-    "json-array-page": frozenset({"element_start", "element_end", "element_total"}),
-    "json-element-fragment": frozenset(
-        {
-            "element_index",
-            "element_sha256",
-            "fragment_index",
-            "fragment_count",
-            "fragment_byte_start",
-            "fragment_byte_end",
-            "fragment_byte_total",
-        }
-    ),
+_RANGE_FIELDS_BY_FORMAT = {
+    content_format: frozenset(definition.range_fields)
+    for content_format, definition in RECIPE_SECTION_CONTENT_FORMAT_REGISTRY.items()
 }
 RECIPE_SECTION_PAGE_RANGE_FIELDS = frozenset(
     field for range_fields in _RANGE_FIELDS_BY_FORMAT.values() for field in range_fields

@@ -55,6 +55,8 @@ __all__ = [
     "RECIPE_SECTION_PAGINATION_VERSION",
     "RECIPE_SECTION_REGISTRY_DIGEST",
     "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
+    "RecipeSectionContentFormatDef",
+    "RECIPE_SECTION_CONTENT_FORMAT_REGISTRY",
     "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
     "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
     "SkillCapabilityDef",
@@ -464,37 +466,41 @@ RECIPE_SECTION_REGISTRY_DIGEST = _qualified_registry_digest(
 
 
 @dataclass(frozen=True, slots=True)
-class _RecipeSectionContentFormatDef:
+class RecipeSectionContentFormatDef:
     range_fields: tuple[str, ...]
     reconstruction: str
 
 
-_RECIPE_SECTION_CONTENT_FORMAT_REGISTRY = {
-    "raw-text": _RecipeSectionContentFormatDef(
-        range_fields=("byte_start", "byte_end", "byte_total"),
-        reconstruction="concatenate-content",
-    ),
-    "json-array-page": _RecipeSectionContentFormatDef(
-        range_fields=("element_start", "element_end", "element_total"),
-        reconstruction="json-load-each-and-extend",
-    ),
-    "json-scalar-page": _RecipeSectionContentFormatDef(
-        range_fields=("scalar_byte_start", "scalar_byte_end", "scalar_byte_total"),
-        reconstruction="json-load-each-and-concatenate-strings",
-    ),
-    "json-element-fragment": _RecipeSectionContentFormatDef(
-        range_fields=(
-            "element_index",
-            "element_sha256",
-            "fragment_index",
-            "fragment_count",
-            "fragment_byte_start",
-            "fragment_byte_end",
-            "fragment_byte_total",
-        ),
-        reconstruction="json-load-fragments-concatenate-verify-and-json-load",
-    ),
-}
+RECIPE_SECTION_CONTENT_FORMAT_REGISTRY: Mapping[str, RecipeSectionContentFormatDef] = (
+    MappingProxyType(
+        {
+            "raw-text": RecipeSectionContentFormatDef(
+                range_fields=("byte_start", "byte_end", "byte_total"),
+                reconstruction="concatenate-content",
+            ),
+            "json-array-page": RecipeSectionContentFormatDef(
+                range_fields=("element_start", "element_end", "element_total"),
+                reconstruction="json-load-each-and-extend",
+            ),
+            "json-scalar-page": RecipeSectionContentFormatDef(
+                range_fields=("scalar_byte_start", "scalar_byte_end", "scalar_byte_total"),
+                reconstruction="json-load-each-and-concatenate-strings",
+            ),
+            "json-element-fragment": RecipeSectionContentFormatDef(
+                range_fields=(
+                    "element_index",
+                    "element_sha256",
+                    "fragment_index",
+                    "fragment_count",
+                    "fragment_byte_start",
+                    "fragment_byte_end",
+                    "fragment_byte_total",
+                ),
+                reconstruction="json-load-fragments-concatenate-verify-and-json-load",
+            ),
+        }
+    )
+)
 
 
 def _recipe_section_policy_definitions() -> tuple[RecipeSectionDef, ...]:
@@ -511,7 +517,7 @@ def _declared_recipe_section_content_formats() -> tuple[str, ...]:
         )
         if content_format is not None
     }
-    if formats != _RECIPE_SECTION_CONTENT_FORMAT_REGISTRY.keys():
+    if formats != RECIPE_SECTION_CONTENT_FORMAT_REGISTRY.keys():
         raise ValueError("recipe section definitions and content-format metadata must agree")
     return tuple(sorted(formats))
 
@@ -543,7 +549,7 @@ _RECIPE_SECTION_PAGINATION_POLICY = {
     ],
     "optional_fields": {"next_part": "omit_on_terminal"},
     "content_formats": {
-        content_format: list(_RECIPE_SECTION_CONTENT_FORMAT_REGISTRY[content_format].range_fields)
+        content_format: list(RECIPE_SECTION_CONTENT_FORMAT_REGISTRY[content_format].range_fields)
         for content_format in _DECLARED_RECIPE_SECTION_CONTENT_FORMATS
     },
     "range_units": {
@@ -552,7 +558,7 @@ _RECIPE_SECTION_PAGINATION_POLICY = {
     },
     "digest_domains": dict(_RECIPE_SECTION_DIGEST_DOMAINS),
     "reconstruction": {
-        content_format: _RECIPE_SECTION_CONTENT_FORMAT_REGISTRY[content_format].reconstruction
+        content_format: RECIPE_SECTION_CONTENT_FORMAT_REGISTRY[content_format].reconstruction
         for content_format in _DECLARED_RECIPE_SECTION_CONTENT_FORMATS
     },
 }

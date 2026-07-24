@@ -222,6 +222,9 @@ from .types import (
 from .types import RECIPE_PACK_REGISTRY as RECIPE_PACK_REGISTRY
 from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS
 from .types import (
+    RECIPE_SECTION_CONTENT_FORMAT_REGISTRY as RECIPE_SECTION_CONTENT_FORMAT_REGISTRY,
+)
+from .types import (
     RECIPE_SECTION_MANDATORY_FAILURE_CODES as RECIPE_SECTION_MANDATORY_FAILURE_CODES,
 )
 from .types import (
@@ -379,6 +382,7 @@ from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
 from .types import RecipeSectionDef as RecipeSectionDef
+from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDef
 from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef

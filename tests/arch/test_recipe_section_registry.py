@@ -235,12 +235,14 @@ def test_recipe_section_contract_is_exported_through_both_core_gateways() -> Non
 
     expected_exports = {
         "DYNAMIC_RECIPE_SECTION_DEF",
+        "RECIPE_SECTION_CONTENT_FORMAT_REGISTRY",
         "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
         "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
         "RECIPE_SECTION_PAGINATION_VERSION",
         "RECIPE_SECTION_REGISTRY",
         "RECIPE_SECTION_REGISTRY_DIGEST",
         "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
+        "RecipeSectionContentFormatDef",
         "RecipeSectionDef",
         "RecipeSectionValidationFinding",
         "canonical_recipe_section_json",

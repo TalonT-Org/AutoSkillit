@@ -1151,6 +1151,56 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
     )
 
 
+async def test_post_recreation_reload_artifact_failure_logs_exception_context(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-artifact-reload"
+    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: _payload())
+    monkeypatch.setattr(
+        tools_recipe,
+        "build_open_kitchen_recipe_payload",
+        lambda data, *, version: data,
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "persist_recipe_artifact",
+        lambda *_args, **_kwargs: generation,
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "load_recipe_artifact",
+        MagicMock(
+            side_effect=[
+                RecipeArtifactError("artifact missing"),
+                RecipeArtifactError("checksum mismatch"),
+            ]
+        ),
+    )
+    warning = MagicMock()
+    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    rendered = await get_recipe_section(section="warnings", **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered) == {
+        "success": False,
+        "error": "recipe_artifact_unavailable",
+        "detail": "post-recreation reload failed",
+    }
+    warning.assert_called_once_with(
+        "get_recipe_section_artifact_unavailable",
+        stage="reload",
+        detail="checksum mismatch",
+        exc_info=True,
+    )
+
+
 async def test_negative_part_is_rejected_before_artifact_load(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:

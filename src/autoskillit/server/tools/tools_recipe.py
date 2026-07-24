@@ -659,7 +659,13 @@ async def get_recipe_section(
                         detail=str(exc),
                     )
                     return _recipe_section_failure("recipe_artifact_schema_mismatch")
-                except RecipeArtifactError:
+                except RecipeArtifactError as exc:
+                    logger.warning(
+                        "get_recipe_section_artifact_unavailable",
+                        stage="reload",
+                        detail=str(exc),
+                        exc_info=True,
+                    )
                     return _recipe_section_failure(
                         "recipe_artifact_unavailable",
                         context={"detail": "post-recreation reload failed"},

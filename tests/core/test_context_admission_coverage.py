@@ -348,31 +348,50 @@ def test_runtime_version_or_configuration_mismatch_degrades_deterministically() 
         )
         assert resolved == row
 
-        version_mismatch = resolve_context_admission_coverage(
-            row.surface,
-            evidence.backend,
-            evidence.configuration_mode,
-            f"{evidence.tested_version}-mismatch",
-            CHECKED_AT,
+        mismatch_inputs = (
+            (
+                f"{evidence.backend}-mismatch",
+                evidence.configuration_mode,
+                evidence.tested_version,
+                CHECKED_AT,
+            ),
+            (
+                evidence.backend,
+                f"{evidence.configuration_mode}-mismatch",
+                evidence.tested_version,
+                CHECKED_AT,
+            ),
+            (
+                evidence.backend,
+                evidence.configuration_mode,
+                f"{evidence.tested_version}-mismatch",
+                CHECKED_AT,
+            ),
+            (
+                evidence.backend,
+                evidence.configuration_mode,
+                evidence.tested_version,
+                "2026-07-24",
+            ),
         )
-        configuration_mismatch = resolve_context_admission_coverage(
-            row.surface,
-            evidence.backend,
-            f"{evidence.configuration_mode}-mismatch",
-            evidence.tested_version,
-            CHECKED_AT,
-        )
-        assert version_mismatch.observation_state is CoverageState.UPSTREAM_GATED
-        assert version_mismatch.authority_state is CoverageState.UPSTREAM_GATED
-        assert configuration_mismatch.observation_state is CoverageState.UPSTREAM_GATED
-        assert configuration_mismatch.authority_state is CoverageState.UPSTREAM_GATED
-        assert version_mismatch == resolve_context_admission_coverage(
-            row.surface,
-            evidence.backend,
-            evidence.configuration_mode,
-            f"{evidence.tested_version}-mismatch",
-            CHECKED_AT,
-        )
+        for backend, configuration_mode, source_version, as_of in mismatch_inputs:
+            mismatch = resolve_context_admission_coverage(
+                row.surface,
+                backend,
+                configuration_mode,
+                source_version,
+                as_of,
+            )
+            assert mismatch.observation_state is CoverageState.UPSTREAM_GATED
+            assert mismatch.authority_state is CoverageState.UPSTREAM_GATED
+            assert mismatch.reason_code == "coverage-runtime-mismatch"
+            assert mismatch == resolve_context_admission_coverage(
+                row.surface,
+                backend,
+                configuration_mode,
+                source_version,
+                as_of,
+            )
 
 
 def test_compaction_observation_does_not_imply_authority() -> None:

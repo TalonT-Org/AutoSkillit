@@ -92,7 +92,7 @@ async def test_run_skill_materializes_resolved_dependency_closure(
     mock_ssm.materialize_invocation.assert_called_once()
     invocation = mock_ssm.materialize_invocation.call_args.args[1]
     assert invocation.root.name == "investigate"
-    assert {member.name for member in invocation.closure}
+    assert {member.name for member in invocation.closure} == {"investigate"}
 
 
 @pytest.mark.anyio
@@ -150,7 +150,7 @@ async def test_run_skill_materializes_exact_resolver_closure(
     mock_ssm.materialize_invocation.assert_called_once()
     invocation = mock_ssm.materialize_invocation.call_args.args[1]
     assert invocation.root.name == "investigate"
-    assert invocation.closure
+    assert {member.name for member in invocation.closure} == {"investigate"}
 
 
 @pytest.mark.anyio

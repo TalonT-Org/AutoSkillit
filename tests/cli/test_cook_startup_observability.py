@@ -240,6 +240,50 @@ def test_missing_spawn_and_hook_stages_fail_budget_enforcement(
     assert summary["budgets_passed"] is False
 
 
+def test_reload_attempt_resets_startup_budget_anchors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trace_mod = _trace_module()
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(trace_mod, "default_log_dir", lambda: tmp_path / "logs")
+    clock = _Clock()
+    trace = trace_mod.StartupTrace(
+        project,
+        _LAUNCH_ID,
+        enabled=True,
+        clock=clock,
+    )
+    trace.record_launch_anchor()
+    trace.record_attempt_anchor(attempt=1, view_id=_VIEW_ID)
+    clock.value = 101.0
+    trace.record_stage("spawn", attempt=1, view_id=_VIEW_ID)
+    clock.value = 102.0
+    trace.record_stage("hook_review", attempt=1, view_id=_VIEW_ID)
+    trace.require_startup_budgets()
+
+    clock.value = 200.0
+    trace.record_attempt_anchor(attempt=2, view_id="f" * 32)
+
+    with pytest.raises(RuntimeError, match="unmeasured="):
+        trace.require_startup_budgets()
+
+    clock.value = 201.0
+    trace.record_stage("spawn", attempt=2, view_id="f" * 32)
+    clock.value = 202.0
+    trace.record_stage("hook_review", attempt=2, view_id="f" * 32)
+    trace.require_startup_budgets()
+    trace.close(status="success")
+
+    summary = _records(trace.path)[-1]
+    assert summary["durations_seconds"] == {
+        "confirmation_to_spawn": 1.0,
+        "spawn_to_hook_review": 1.0,
+        "total_startup": 2.0,
+    }
+
+
 def test_spawn_stage_is_exactly_once_per_attempt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

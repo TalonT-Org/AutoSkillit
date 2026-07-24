@@ -138,6 +138,7 @@ class StartupTrace:
         self._clock = clock if clock is not None else time.monotonic
         self._lock = threading.RLock()
         self._launch_at: float | None = None
+        self._attempt_start_at: float | None = None
         self._spawn_at: float | None = None
         self._hook_review_at: float | None = None
         self._current_attempt: int | None = None
@@ -167,9 +168,13 @@ class StartupTrace:
             self._ensure_open()
             self._current_attempt = attempt
             self._current_view_id = view_id
+            self._spawn_at = None
+            self._hook_review_at = None
             if not self.enabled:
+                self._attempt_start_at = None
                 return
             recorded_at = self._now()
+            self._attempt_start_at = self._launch_at if attempt == 1 else recorded_at
             record = self._record("attempt", recorded_at, diagnostics=diagnostics)
             record.update(attempt=attempt, view_id=view_id)
             self._append_record(record)
@@ -216,12 +221,18 @@ class StartupTrace:
             if not self.enabled:
                 return
             durations = {
-                "confirmation_to_spawn": self._duration(self._launch_at, self._spawn_at),
+                "confirmation_to_spawn": self._duration(
+                    self._attempt_start_at,
+                    self._spawn_at,
+                ),
                 "spawn_to_hook_review": self._duration(
                     self._spawn_at,
                     self._hook_review_at,
                 ),
-                "total_startup": self._duration(self._launch_at, self._hook_review_at),
+                "total_startup": self._duration(
+                    self._attempt_start_at,
+                    self._hook_review_at,
+                ),
             }
             missing = [name for name, duration in durations.items() if duration is None]
             exceeded = [
@@ -284,9 +295,9 @@ class StartupTrace:
         *,
         diagnostics: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
-        confirmation_to_spawn = self._duration(self._launch_at, self._spawn_at)
+        confirmation_to_spawn = self._duration(self._attempt_start_at, self._spawn_at)
         spawn_to_hook_review = self._duration(self._spawn_at, self._hook_review_at)
-        total_startup = self._duration(self._launch_at, self._hook_review_at)
+        total_startup = self._duration(self._attempt_start_at, self._hook_review_at)
         durations = {
             "confirmation_to_spawn": confirmation_to_spawn,
             "spawn_to_hook_review": spawn_to_hook_review,

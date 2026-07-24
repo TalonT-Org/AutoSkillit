@@ -38,10 +38,24 @@ class DirectSkillDispatch:
 
     add_dirs: tuple[ValidatedAddDir, ...]
     session_id: str
-    resolved_command: str
-    invocation: object
-    projection_context: SkillProjectionContext
     capability_contract: EffectiveSkillDispatchContract
+
+    def __post_init__(self) -> None:
+        if self.capability_contract.invocation is None:
+            raise SkillContractError("direct skill dispatch must bind an invocation")
+
+    @property
+    def resolved_command(self) -> str:
+        return self.capability_contract.resolved_command
+
+    @property
+    def invocation(self) -> object:
+        assert self.capability_contract.invocation is not None
+        return self.capability_contract.invocation
+
+    @property
+    def projection_context(self) -> SkillProjectionContext:
+        return self.capability_contract.projection_context
 
     def cleanup(self, tool_ctx: ToolContext) -> None:
         if tool_ctx.session_skill_manager is not None:
@@ -265,8 +279,5 @@ def _prepare_direct_skill_dispatch(
     return DirectSkillDispatch(
         add_dirs=(add_dir,),
         session_id=session_id,
-        resolved_command=resolved_command,
-        invocation=invocation,
-        projection_context=projection_context,
         capability_contract=capability_contract,
     ), None

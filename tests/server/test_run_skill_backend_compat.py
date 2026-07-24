@@ -46,6 +46,35 @@ class TestBackendCompatGate:
         assert _is_backend_incompatible(skill_info, "other") is True
 
 
+def test_direct_skill_dispatch_derives_authority_from_capability_contract() -> None:
+    from dataclasses import fields
+
+    from autoskillit.server.tools._backend_compat import DirectSkillDispatch
+
+    invocation = object()
+    projection_context = object()
+    capability_contract = MagicMock(
+        resolved_command="/autoskillit:prepare-issue",
+        invocation=invocation,
+        projection_context=projection_context,
+    )
+
+    dispatch = DirectSkillDispatch(
+        add_dirs=(),
+        session_id="direct-test",
+        capability_contract=capability_contract,
+    )
+
+    assert {field.name for field in fields(DirectSkillDispatch)} == {
+        "add_dirs",
+        "session_id",
+        "capability_contract",
+    }
+    assert dispatch.resolved_command == capability_contract.resolved_command
+    assert dispatch.invocation is invocation
+    assert dispatch.projection_context is projection_context
+
+
 class TestBackendCompatGateFailClosed:
     """Defensive unit tests for _check_backend_compat gate.
 

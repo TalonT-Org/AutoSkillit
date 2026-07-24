@@ -214,14 +214,25 @@ def _decode(value: object) -> object:
         return frozenset(_decode(item) for item in raw)
     type_name = value.get("__type__")
     if type_name == "ModelIdentity":
-        try:
-            return ModelIdentity(
-                configured_model=str(value["configured_model"]),
-                effective_model=str(value["effective_model"]),
-                profile_name=str(value["profile_name"]),
-            )
-        except KeyError as exc:
-            raise ContextAdmissionValidationError("invalid_model_identity") from exc
+        if set(value) != {
+            "__type__",
+            "configured_model",
+            "effective_model",
+            "profile_name",
+        }:
+            _raise_invalid("invalid_model_identity")
+        configured_model = value["configured_model"]
+        effective_model = value["effective_model"]
+        profile_name = value["profile_name"]
+        if not all(
+            isinstance(item, str) for item in (configured_model, effective_model, profile_name)
+        ):
+            _raise_invalid("invalid_model_identity")
+        return ModelIdentity(
+            configured_model=configured_model,
+            effective_model=effective_model,
+            profile_name=profile_name,
+        )
     if not isinstance(type_name, str) or type_name not in _TYPE_REGISTRY:
         _raise_invalid("unknown_serialized_contract_type")
     contract_type = _TYPE_REGISTRY[type_name]

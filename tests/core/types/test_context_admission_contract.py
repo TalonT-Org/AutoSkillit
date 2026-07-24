@@ -883,6 +883,25 @@ def test_invalid_serialized_enum_suppresses_attacker_controlled_cause() -> None:
 
 
 @pytest.mark.parametrize(
+    "field_name",
+    ["configured_model", "effective_model", "profile_name"],
+)
+def test_model_identity_deserialization_requires_string_fields(field_name: str) -> None:
+    encoded_identity: dict[str, object] = {
+        "__type__": "ModelIdentity",
+        "configured_model": "claude-test",
+        "effective_model": "claude-test",
+        "profile_name": "default",
+    }
+    encoded_identity[field_name] = 42
+
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        ContextSessionId.from_dict({"value": encoded_identity})
+
+    assert "invalid_model_identity" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
     "canary",
     [
         "",

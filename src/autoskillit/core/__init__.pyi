@@ -496,6 +496,7 @@ from .types import (
     ReconciliationQueryRequestedEffect as ReconciliationQueryRequestedEffect,
 )
 from .types import ReleaseNonAdmissionEvent as ReleaseNonAdmissionEvent
+from .types import RepresentationBindingId as RepresentationBindingId
 from .types import RepresentationBindingWitness as RepresentationBindingWitness
 from .types import RepresentationRevision as RepresentationRevision
 from .types import RequestReconciliationEvent as RequestReconciliationEvent

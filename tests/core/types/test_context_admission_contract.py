@@ -72,6 +72,7 @@ from autoskillit.core import (
     ProducerSurface,
     ProtectedPoolOwnerId,
     ProtectedPoolSpec,
+    RepresentationBindingId,
     RepresentationBindingWitness,
     RepresentationRevision,
     ReservationRecordedEffect,
@@ -240,6 +241,7 @@ EXPECTED_EVENT_FIELDS = {
     + (
         "batch_id",
         "representation_revision",
+        "representation_binding_id",
         "proposed_charge",
         "measurement_kind",
         "authority_source_id",
@@ -330,6 +332,7 @@ EXPECTED_RECORD_FIELDS = {
     CanonicalRepresentationManifest: (
         "request_id",
         "representation_revision",
+        "representation_binding_id",
         "span_owners",
         "assembler_identity",
         "assembler_witness_id",
@@ -381,6 +384,7 @@ EXPECTED_RECORD_FIELDS = {
         "request_id",
         "batch_id",
         "representation_revision",
+        "representation_binding_id",
         "occurrence_ids",
         "authority_source_id",
     ),
@@ -388,6 +392,7 @@ EXPECTED_RECORD_FIELDS = {
         "counted_representation_revision",
         "dispatched_representation_revision",
         "final_manifest_revision",
+        "representation_binding_id",
         "request_id",
         "batch_id",
         "authority_source_id",
@@ -421,6 +426,7 @@ EXPECTED_RECORD_FIELDS = {
         "batch",
         "state",
         "reservation_id",
+        "protected_release_witness_kind",
         "witness_ids",
         "prepared_input_count",
         "committed_input_count",
@@ -526,6 +532,7 @@ OPAQUE_STRING_TYPES = (
     GenerationReservationId,
     ProtectedPoolOwnerId,
     RepresentationRevision,
+    RepresentationBindingId,
 )
 
 
@@ -584,6 +591,7 @@ def _manifest(*occurrences: AdmissionOccurrence) -> CanonicalRepresentationManif
     return CanonicalRepresentationManifest(
         request_id=AdmissionRequestId("request-1"),
         representation_revision=RepresentationRevision("representation-1"),
+        representation_binding_id=RepresentationBindingId("binding-1"),
         span_owners=tuple(
             CanonicalSpanOwner(span_id=span_id, occurrence_id=occurrence.occurrence_id)
             for occurrence in occurrences
@@ -624,6 +632,7 @@ def _witness(
         request_id=batch.request_id,
         batch_id=batch.batch_id,
         representation_revision=batch.manifest.representation_revision,
+        representation_binding_id=batch.manifest.representation_binding_id,
         occurrence_ids=batch.occurrence_ids,
         authority_source_id=AuthoritySourceId("authority-test"),
     )
@@ -635,6 +644,7 @@ def _binding(batch: AdmissionBatch) -> RepresentationBindingWitness:
         counted_representation_revision=bound_revision,
         dispatched_representation_revision=bound_revision,
         final_manifest_revision=bound_revision,
+        representation_binding_id=batch.manifest.representation_binding_id,
         request_id=batch.request_id,
         batch_id=batch.batch_id,
         authority_source_id=AuthoritySourceId("authority-test"),
@@ -811,16 +821,88 @@ def test_numeric_revisions_are_non_negative_and_have_no_default(
 
 
 def test_dispatch_identity_is_validated_and_projects_only_dispatch_id() -> None:
-    identity = DispatchIdentity.from_dispatch_id("dispatch-12345678")
+    identity = DispatchIdentity.from_dispatch_id("12345678-1234-1234-1234-123456789abc")
     lineage = _lineage(surface=ProducerSurface.NATIVE_SHELL, dispatch_identity=identity)
     serialized = lineage.to_dict()
     assert serialized["dispatch_identity"] == {"dispatch_id": identity.dispatch_id}
     assert ContextLineage.from_dict(serialized) == lineage
 
-    forged = replace(identity, completion_marker="forged-private-marker")
+    forged = object.__new__(DispatchIdentity)
+    for identity_field in fields(identity):
+        object.__setattr__(forged, identity_field.name, getattr(identity, identity_field.name))
+    object.__setattr__(forged, "completion_marker", "forged-private-marker")
     with pytest.raises(ContextAdmissionValidationError) as exc_info:
         replace(lineage, dispatch_identity=forged)
     assert "forged-private-marker" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "canary",
+    [
+        "",
+        "/home/alice/private/context.txt",
+        "Bearer-secret-token",
+        "dispatch-private-user-content",
+        f"sha256:{'a' * 64}",
+    ],
+)
+def test_dispatch_identity_rejects_non_uuid_content_without_echoing_it(canary: str) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        DispatchIdentity.from_dispatch_id(canary)
+    if canary:
+        assert canary not in str(exc_info.value)
+        assert canary not in repr(exc_info.value)
+
+
+def test_annotated_protocol_fields_reject_raw_values_and_invalid_effect_members() -> None:
+    occurrence = _occurrence()
+    batch = _batch("batch-typed-fields", (occurrence,))
+    witness = _witness(batch, WitnessKind.PROVIDER_ACCEPTED)
+    decision = AdmissionDecision(
+        kind=AdmissionDecisionKind.WOULD_ADMIT,
+        reason_code="accepted",
+        window_epoch_id=WindowEpochId("epoch-1"),
+        snapshot_sequence=1,
+        requested_count=1,
+        available_ordinary_count=1,
+        available_protected_count=0,
+    )
+    transition = AdmissionTransition(
+        next_state=_uninitialized(),
+        decision=decision,
+        effects=(),
+    )
+    malformed_fields = (
+        (decision, "kind", "would_admit"),
+        (occurrence, "reserve_class", "ordinary"),
+        (batch, "batch_id", "batch-raw"),
+        (witness, "kind", "provider_accepted"),
+        (witness, "occurrence_ids", ("occurrence-raw",)),
+        (batch.manifest, "span_owners", ("span-owner-raw",)),
+        (transition, "effects", ("effect-raw",)),
+    )
+    for value, field_name, malformed in malformed_fields:
+        with pytest.raises(ContextAdmissionValidationError):
+            replace(value, **{field_name: malformed})
+
+    serialized_decision = decision.to_dict()
+    serialized_decision["kind"] = "unknown-decision"
+    with pytest.raises(ContextAdmissionValidationError):
+        AdmissionDecision.from_dict(serialized_decision)
+
+
+@pytest.mark.parametrize(
+    "canary",
+    [
+        "/srv/private/representation",
+        "Bearer-private-capability",
+        f"sha256:{'a' * 64}",
+    ],
+)
+def test_representation_binding_identity_is_opaque_and_content_free(canary: str) -> None:
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        RepresentationBindingId(canary)
+    assert canary not in str(exc_info.value)
 
 
 def test_authoritative_snapshot_reuses_only_known_model_identity() -> None:
@@ -980,6 +1062,7 @@ def test_aggregate_tuples_reject_noncanonical_ordering() -> None:
         CanonicalRepresentationManifest(
             request_id=AdmissionRequestId("request-1"),
             representation_revision=RepresentationRevision("representation-1"),
+            representation_binding_id=RepresentationBindingId("binding-overlap"),
             span_owners=(
                 CanonicalSpanOwner(
                     span_id=second.owned_span_ids[0],
@@ -1064,6 +1147,7 @@ def test_active_state_rejects_inconsistent_bidirectional_ownership_links() -> No
         batch=batch,
         state=AdmissionState.RESERVED,
         reservation_id=None,
+        protected_release_witness_kind=None,
         witness_ids=(),
         prepared_input_count=None,
         committed_input_count=0,
@@ -1174,7 +1258,7 @@ def test_closed_epoch_audits_survive_state_serialization() -> None:
 def test_dispatch_identity_is_rejected_on_non_dispatch_surfaces(
     non_dispatch_surface: ProducerSurface,
 ) -> None:
-    identity = DispatchIdentity.from_dispatch_id("dispatch-12345678")
+    identity = DispatchIdentity.from_dispatch_id("12345678-1234-1234-1234-123456789abc")
     with pytest.raises(ContextAdmissionValidationError) as exc_info:
         _lineage(surface=non_dispatch_surface, dispatch_identity=identity)
     assert "dispatch_identity_on_non_dispatch_surface" in str(exc_info.value)
@@ -1206,6 +1290,7 @@ def test_batch_record_rejects_committed_and_unresolved_simultaneously() -> None:
             batch=batch,
             state=AdmissionState.INDETERMINATE,
             reservation_id=None,
+            protected_release_witness_kind=None,
             witness_ids=(),
             prepared_input_count=None,
             committed_input_count=5,
@@ -1255,6 +1340,7 @@ def test_prepare_event_rejects_estimate_measurement() -> None:
             expected_aggregate_revision=AggregateRevision(0),
             batch_id=batch.batch_id,
             representation_revision=batch.manifest.representation_revision,
+            representation_binding_id=batch.manifest.representation_binding_id,
             proposed_charge=5,
             measurement_kind=MeasurementKind.HOST_ESTIMATE,
             authority_source_id=AuthoritySourceId("authority-test"),

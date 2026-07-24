@@ -9,9 +9,19 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import StrEnum
-from typing import Any, ClassVar, Never, TypeAlias
+from types import UnionType
+from typing import (
+    Any,
+    ClassVar,
+    Never,
+    TypeAlias,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from ._type_dispatch_identity import DispatchIdentity
 from ._type_enums import (
@@ -207,7 +217,13 @@ def _decode(value: object) -> object:
 
 class _ContractMeta(type):
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
-        instance = super().__call__(*args, **kwargs)
+        try:
+            instance = super().__call__(*args, **kwargs)
+        except ContextAdmissionValidationError:
+            raise
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ContextAdmissionValidationError("invalid_contract_field_type") from exc
+        _validate_declared_field_types(instance)
         _validate_deep_immutability(instance)
         return instance
 
@@ -249,6 +265,45 @@ def _validate_deep_immutability(value: object) -> None:
     elif isinstance(value, _ContractValue):
         for field_name in value.__dataclass_fields__:
             _validate_deep_immutability(getattr(value, field_name))
+
+
+def _matches_declared_type(value: object, declared_type: object) -> bool:
+    if declared_type is Any:
+        return True
+    origin = get_origin(declared_type)
+    if origin in {Union, UnionType}:
+        return any(_matches_declared_type(value, member) for member in get_args(declared_type))
+    if origin is tuple:
+        if type(value) is not tuple:
+            return False
+        members = get_args(declared_type)
+        if len(members) == 2 and members[1] is Ellipsis:
+            return all(_matches_declared_type(item, members[0]) for item in value)
+        return len(value) == len(members) and all(
+            _matches_declared_type(item, member)
+            for item, member in zip(value, members, strict=True)
+        )
+    if origin is frozenset:
+        if type(value) is not frozenset:
+            return False
+        (member_type,) = get_args(declared_type)
+        return all(_matches_declared_type(item, member_type) for item in value)
+    if declared_type is None or declared_type is type(None):
+        return value is None
+    if isinstance(declared_type, type):
+        return type(value) is declared_type
+    return False
+
+
+def _validate_declared_field_types(value: _ContractValue) -> None:
+    declared_types = get_type_hints(type(value))
+    for declared_field in fields(value):
+        declared_type = declared_types.get(declared_field.name)
+        if declared_type is None or not _matches_declared_type(
+            getattr(value, declared_field.name),
+            declared_type,
+        ):
+            _raise_invalid("invalid_contract_field_type")
 
 
 @dataclass(frozen=True, slots=True)
@@ -389,6 +444,11 @@ class RepresentationRevision(_OpaqueString):
 
 
 @dataclass(frozen=True, slots=True)
+class RepresentationBindingId(_OpaqueString):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class AggregateRevision(_NonNegativeInteger):
     pass
 
@@ -504,6 +564,7 @@ class CanonicalSpanOwner(_ContractValue):
 class CanonicalRepresentationManifest(_ContractValue):
     request_id: AdmissionRequestId
     representation_revision: RepresentationRevision
+    representation_binding_id: RepresentationBindingId
     span_owners: tuple[CanonicalSpanOwner, ...]
     assembler_identity: ProducerInstanceId
     assembler_witness_id: AdmissionWitnessId
@@ -644,6 +705,7 @@ class AdmissionWitness(_ContractValue):
     request_id: AdmissionRequestId
     batch_id: AdmissionBatchId
     representation_revision: RepresentationRevision
+    representation_binding_id: RepresentationBindingId
     occurrence_ids: tuple[AdmissionOccurrenceId, ...]
     authority_source_id: AuthoritySourceId
 
@@ -662,6 +724,7 @@ class RepresentationBindingWitness(_ContractValue):
     counted_representation_revision: RepresentationRevision
     dispatched_representation_revision: RepresentationRevision
     final_manifest_revision: RepresentationRevision
+    representation_binding_id: RepresentationBindingId
     request_id: AdmissionRequestId
     batch_id: AdmissionBatchId
     authority_source_id: AuthoritySourceId
@@ -760,6 +823,7 @@ class AdmissionBatchRecord(_ContractValue):
     batch: AdmissionBatch
     state: AdmissionState
     reservation_id: AdmissionReservationId | None
+    protected_release_witness_kind: WitnessKind | None
     witness_ids: tuple[AdmissionWitnessId, ...]
     prepared_input_count: int | None
     committed_input_count: int
@@ -767,6 +831,10 @@ class AdmissionBatchRecord(_ContractValue):
     dispatch_sequence: int | None
 
     def __post_init__(self) -> None:
+        if (self.batch.reserve_class is ReserveClass.ORDINARY) != (
+            self.protected_release_witness_kind is None
+        ):
+            _raise_invalid("invalid_protected_release_policy")
         _validate_canonical_tuple(
             self.witness_ids,
             "noncanonical_witness_ids",
@@ -1130,6 +1198,7 @@ class ReserveRequestEvent(_AdmissionEventBase):
 class PrepareBatchEvent(_AdmissionEventBase):
     batch_id: AdmissionBatchId
     representation_revision: RepresentationRevision
+    representation_binding_id: RepresentationBindingId
     proposed_charge: int
     measurement_kind: MeasurementKind
     authority_source_id: AuthoritySourceId
@@ -1927,6 +1996,11 @@ class ActiveContextAdmissionState(_ContractValue):
                 key = (record.batch.reserve_class, owner)
                 if key not in pools_by_key:
                     _raise_invalid("orphan_protected_charge_owner")
+                if (
+                    record.protected_release_witness_kind
+                    is not pools_by_key[key].required_release_witness_kind
+                ):
+                    _raise_invalid("protected_release_policy_mismatch")
                 if record.state is AdmissionState.INDETERMINATE:
                     charge = record.unresolved_input_count
                     if charge == 0 and matched_reservation is not None:
@@ -2150,6 +2224,7 @@ __all__ = [
     "GenerationReservationId",
     "ProtectedPoolOwnerId",
     "RepresentationRevision",
+    "RepresentationBindingId",
     "AggregateRevision",
     "AdmissionSequence",
     "IdempotencyNamespace",

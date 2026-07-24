@@ -62,6 +62,7 @@ from autoskillit.core import (
     ProtectedPoolSpec,
     ReconcileGenerationEvent,
     ReleaseNonAdmissionEvent,
+    RepresentationBindingId,
     RepresentationBindingWitness,
     RepresentationRevision,
     RequestReconciliationEvent,
@@ -236,6 +237,7 @@ def _manifest(
     return CanonicalRepresentationManifest(
         request_id=AdmissionRequestId(request),
         representation_revision=RepresentationRevision(revision),
+        representation_binding_id=RepresentationBindingId(f"binding-{request}"),
         span_owners=tuple(
             CanonicalSpanOwner(span_id=span_id, occurrence_id=occurrence.occurrence_id)
             for occurrence in occurrences
@@ -347,6 +349,7 @@ def _witness(
         representation_revision=RepresentationRevision(
             revision or batch.manifest.representation_revision.value
         ),
+        representation_binding_id=batch.manifest.representation_binding_id,
         occurrence_ids=batch.occurrence_ids,
         authority_source_id=AuthoritySourceId("authority-test"),
     )
@@ -362,6 +365,7 @@ def _binding(
         counted_representation_revision=bound_revision,
         dispatched_representation_revision=bound_revision,
         final_manifest_revision=bound_revision,
+        representation_binding_id=batch.manifest.representation_binding_id,
         request_id=batch.request_id,
         batch_id=batch.batch_id,
         authority_source_id=AuthoritySourceId("authority-test"),
@@ -426,12 +430,11 @@ def _batch_record(state: ActiveContextAdmissionState, batch: AdmissionBatch) -> 
     )
 
 
-def _assert_only_rejection_journal_changed(
+def _assert_rejection_unchanged(
     before: ActiveContextAdmissionState,
     after: ActiveContextAdmissionState,
 ) -> None:
-    assert replace(after, processed_events=before.processed_events) == before
-    assert len(after.processed_events) == len(before.processed_events) + 1
+    assert after == before
 
 
 def _generation_record(
@@ -506,7 +509,7 @@ def test_stale_concurrent_proposals_cannot_overcommit_one_snapshot() -> None:
         expected_revision=shared_revision,
     )
     assert stale_transition.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    _assert_only_rejection_journal_changed(
+    _assert_rejection_unchanged(
         first_transition.next_state,
         stale_transition.next_state,
     )
@@ -592,6 +595,7 @@ def _prepare_dispatch(
         **_event_fields(state, f"prepare-{batch.batch_id.value}", "prepare-batch"),
         batch_id=batch.batch_id,
         representation_revision=batch.manifest.representation_revision,
+        representation_binding_id=batch.manifest.representation_binding_id,
         proposed_charge=_input_reservation(state, batch_record.reservation_id).reserved_count,
         measurement_kind=MeasurementKind.TOKENIZER_EXACT,
         authority_source_id=AuthoritySourceId("authority-test"),
@@ -599,26 +603,99 @@ def _prepare_dispatch(
     prepared = reduce_context_admission(state, prepare)
     assert prepared.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
     assert isinstance(prepared.next_state, ActiveContextAdmissionState)
-    dispatch = DispatchRequestEvent(
+    stage = StageHistoryEvent(
         **_event_fields(
             prepared.next_state,
+            f"stage-{batch.batch_id.value}",
+            "stage-history",
+        ),
+        batch_id=batch.batch_id,
+        witness=_witness(batch, WitnessKind.HISTORY_STAGED),
+    )
+    staged = reduce_context_admission(prepared.next_state, stage)
+    assert staged.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(staged.next_state, ActiveContextAdmissionState)
+    dispatch = DispatchRequestEvent(
+        **_event_fields(
+            staged.next_state,
             f"dispatch-{batch.batch_id.value}",
             "dispatch-request",
         ),
         batch_id=batch.batch_id,
         witness=_witness(batch, WitnessKind.REQUEST_INCLUDED),
     )
-    dispatched = reduce_context_admission(prepared.next_state, dispatch)
+    dispatched = reduce_context_admission(staged.next_state, dispatch)
     assert dispatched.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
     assert isinstance(dispatched.next_state, ActiveContextAdmissionState)
     return dispatched.next_state
 
 
+def test_dispatch_and_generation_cannot_skip_required_lifecycle_transitions() -> None:
+    state, batch, _, generation = _reserved_batch(name="strict-lifecycle")
+    batch_record = _batch_record(state, batch)
+    assert batch_record.reservation_id is not None
+    prepare = PrepareBatchEvent(
+        **_event_fields(state, "prepare-strict-lifecycle", "prepare-batch"),
+        batch_id=batch.batch_id,
+        representation_revision=batch.manifest.representation_revision,
+        representation_binding_id=batch.manifest.representation_binding_id,
+        proposed_charge=_input_reservation(state, batch_record.reservation_id).reserved_count,
+        measurement_kind=MeasurementKind.TOKENIZER_EXACT,
+        authority_source_id=AuthoritySourceId("authority-test"),
+    )
+    prepared = reduce_context_admission(state, prepare)
+    assert isinstance(prepared.next_state, ActiveContextAdmissionState)
+
+    skipped_stage = DispatchRequestEvent(
+        **_event_fields(
+            prepared.next_state,
+            "dispatch-without-history-stage",
+            "dispatch-request",
+        ),
+        batch_id=batch.batch_id,
+        witness=_witness(batch, WitnessKind.REQUEST_INCLUDED),
+    )
+    rejected_dispatch = reduce_context_admission(prepared.next_state, skipped_stage)
+    assert rejected_dispatch.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+    assert rejected_dispatch.next_state == prepared.next_state
+
+    stage = StageHistoryEvent(
+        **_event_fields(prepared.next_state, "stage-strict-lifecycle", "stage-history"),
+        batch_id=batch.batch_id,
+        witness=_witness(batch, WitnessKind.HISTORY_STAGED),
+    )
+    staged = reduce_context_admission(prepared.next_state, stage)
+    assert isinstance(staged.next_state, ActiveContextAdmissionState)
+    premature_generation = StartGenerationEvent(
+        **_event_fields(
+            staged.next_state,
+            "generation-before-dispatch",
+            "start-generation",
+        ),
+        generation_reservation_id=generation.generation_reservation_id,
+        witness=_witness(batch, WitnessKind.REQUEST_INCLUDED),
+    )
+    rejected_generation = reduce_context_admission(
+        staged.next_state,
+        premature_generation,
+    )
+    assert rejected_generation.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+    assert rejected_generation.next_state == staged.next_state
+
+
 def test_input_commit_and_output_reconciliation_remain_distinct_domains() -> None:
     state, batch, _, generation = _reserved_batch()
     state = _prepare_dispatch(state, batch)
+    start = StartGenerationEvent(
+        **_event_fields(state, "start-generation-lifecycle", "start-generation"),
+        generation_reservation_id=generation.generation_reservation_id,
+        witness=_witness(batch, WitnessKind.REQUEST_INCLUDED),
+    )
+    started = reduce_context_admission(state, start)
+    assert started.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(started.next_state, ActiveContextAdmissionState)
     accept = AcceptInputEvent(
-        **_event_fields(state, "accept-lifecycle", "accept-input"),
+        **_event_fields(started.next_state, "accept-lifecycle", "accept-input"),
         batch_id=batch.batch_id,
         witness=_witness(batch, WitnessKind.PROVIDER_ACCEPTED),
         final_manifest_revision=batch.manifest.representation_revision,
@@ -628,21 +705,14 @@ def test_input_commit_and_output_reconciliation_remain_distinct_domains() -> Non
         authority_source_id=AuthoritySourceId("authority-test"),
         representation_binding_witness=_binding(batch),
     )
-    accepted = reduce_context_admission(state, accept)
+    accepted = reduce_context_admission(started.next_state, accept)
     assert accepted.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
     assert isinstance(accepted.next_state, ActiveContextAdmissionState)
     assert _batch_record(accepted.next_state, batch).committed_input_count == 18
 
-    start = StartGenerationEvent(
-        **_event_fields(accepted.next_state, "start-generation-lifecycle", "start-generation"),
-        generation_reservation_id=generation.generation_reservation_id,
-        witness=_witness(batch, WitnessKind.REQUEST_INCLUDED),
-    )
-    started = reduce_context_admission(accepted.next_state, start)
-    assert isinstance(started.next_state, ActiveContextAdmissionState)
     reconcile = ReconcileGenerationEvent(
         **_event_fields(
-            started.next_state,
+            accepted.next_state,
             "reconcile-generation-lifecycle",
             "reconcile-generation",
         ),
@@ -650,7 +720,7 @@ def test_input_commit_and_output_reconciliation_remain_distinct_domains() -> Non
         output_usage_witness=_witness(batch, WitnessKind.OUTPUT_USAGE),
         exact_output_usage=7,
     )
-    reconciled = reduce_context_admission(started.next_state, reconcile)
+    reconciled = reduce_context_admission(accepted.next_state, reconcile)
     assert isinstance(reconciled.next_state, ActiveContextAdmissionState)
     generation_record = _generation_record(
         reconciled.next_state, generation.generation_reservation_id
@@ -773,7 +843,7 @@ def test_history_request_provider_and_rollback_witnesses_are_not_interchangeable
         )
     rejected = reduce_context_admission(state, event)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    _assert_only_rejection_journal_changed(state, rejected.next_state)
+    _assert_rejection_unchanged(state, rejected.next_state)
 
 
 @pytest.mark.parametrize(
@@ -793,6 +863,7 @@ def test_revision_and_fence_failures_do_not_commit(
             **_event_fields(state, f"prepare-{mutation}", "prepare-batch"),
             batch_id=batch.batch_id,
             representation_revision=RepresentationRevision("mutated-revision"),
+            representation_binding_id=batch.manifest.representation_binding_id,
             proposed_charge=25,
             measurement_kind=MeasurementKind.PROVIDER_EXACT,
             authority_source_id=AuthoritySourceId("authority-test"),
@@ -817,7 +888,7 @@ def test_revision_and_fence_failures_do_not_commit(
     rejected = reduce_context_admission(state, event)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
     assert expected_reason_fragment in rejected.decision.reason_code
-    _assert_only_rejection_journal_changed(state, rejected.next_state)
+    _assert_rejection_unchanged(state, rejected.next_state)
 
 
 def test_partial_batch_and_illegal_order_are_typed_non_mutating_rejections() -> None:
@@ -861,14 +932,16 @@ def test_partial_batch_and_illegal_order_are_typed_non_mutating_rejections() -> 
     ):
         rejected = reduce_context_admission(state, event)
         assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT, index
-        _assert_only_rejection_journal_changed(state, rejected.next_state)
+        _assert_rejection_unchanged(state, rejected.next_state)
 
 
 @pytest.mark.parametrize(
     "mutation",
     (
         "final-manifest-revision",
-        "representation-binding",
+        "representation-revision-binding",
+        "same-revision-binding-identity",
+        "assembler-attestation",
         "silent-truncation",
     ),
 )
@@ -889,23 +962,37 @@ def test_acceptance_rejects_mutated_or_unattested_final_representation(
     )
     binding_revision = (
         "mutated-binding"
-        if mutation == "representation-binding"
+        if mutation == "representation-revision-binding"
         else batch.manifest.representation_revision.value
     )
+    final_manifest = (
+        replace(
+            batch.manifest,
+            assembler_witness_id=AdmissionWitnessId("mutated-assembler-attestation"),
+        )
+        if mutation == "assembler-attestation"
+        else batch.manifest
+    )
+    binding = _binding(batch, revision=binding_revision)
+    if mutation == "same-revision-binding-identity":
+        binding = replace(
+            binding,
+            representation_binding_id=RepresentationBindingId("mutated-binding-identity"),
+        )
     event = AcceptInputEvent(
         **_event_fields(state, f"reject-{mutation}", "accept-input"),
         batch_id=batch.batch_id,
         witness=_witness(batch, witness_kind),
         final_manifest_revision=final_revision,
-        final_manifest=batch.manifest,
+        final_manifest=final_manifest,
         exact_input_charge=20,
         measurement_kind=MeasurementKind.PROVIDER_EXACT,
         authority_source_id=AuthoritySourceId("provider-test"),
-        representation_binding_witness=_binding(batch, revision=binding_revision),
+        representation_binding_witness=binding,
     )
     rejected = reduce_context_admission(state, event)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    _assert_only_rejection_journal_changed(state, rejected.next_state)
+    _assert_rejection_unchanged(state, rejected.next_state)
 
 
 @pytest.mark.parametrize(
@@ -1004,7 +1091,7 @@ def test_provider_accepted_overage_is_recorded_and_quarantined(
     assert record.state is AdmissionState.QUARANTINED
 
 
-def test_incomplete_manifest_quarantine_retains_charge_and_publishes_all_effects() -> None:
+def test_incomplete_manifest_rejection_is_non_mutating_and_retains_reservation() -> None:
     state = _open_epoch(remaining_count=40)
     occurrence = replace(
         _occurrence("incomplete-manifest", maximum=20),
@@ -1034,20 +1121,14 @@ def test_incomplete_manifest_quarantine_retains_charge_and_publishes_all_effects
         authority_source_id=AuthoritySourceId("authority-test"),
         representation_binding_witness=_binding(batch),
     )
-    quarantined = reduce_context_admission(state, event)
-    assert quarantined.decision.kind is AdmissionDecisionKind.QUARANTINED
-    assert isinstance(quarantined.next_state, ActiveContextAdmissionState)
-    quarantined_record = _batch_record(quarantined.next_state, batch)
-    assert quarantined_record.committed_input_count == 17
-    assert quarantined_record.state is AdmissionState.QUARANTINED
-    assert {type(effect).__name__ for effect in quarantined.effects} == {
-        "ChargeCommittedEffect",
-        "OccurrenceStateChangedEffect",
-        "QuarantineRecordedEffect",
-    }
+    rejected_acceptance = reduce_context_admission(state, event)
+    assert rejected_acceptance.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+    assert rejected_acceptance.decision.reason_code == "representation_binding_mismatch"
+    assert rejected_acceptance.next_state == state
+    assert rejected_acceptance.effects == ()
 
     next_occurrence = _occurrence("after-incomplete-manifest", maximum=24)
-    next_state, _ = _propose(quarantined.next_state, next_occurrence)
+    next_state, _ = _propose(state, next_occurrence)
     next_batch = _batch("batch-after-incomplete-manifest", (next_occurrence,))
     rejected, _ = _reserve(
         next_state,
@@ -1211,7 +1292,7 @@ def test_rollover_rejects_stale_admitted_dispatch_fence() -> None:
     rejected = reduce_context_admission(state, event)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
     assert isinstance(rejected.next_state, ActiveContextAdmissionState)
-    _assert_only_rejection_journal_changed(state, rejected.next_state)
+    _assert_rejection_unchanged(state, rejected.next_state)
 
 
 def _protected_pools() -> tuple[ProtectedPoolSpec, ...]:
@@ -1231,6 +1312,89 @@ def _protected_pools() -> tuple[ProtectedPoolSpec, ...]:
             required_release_witness_kind=WitnessKind.NON_ADMISSION,
         ),
     )
+
+
+@pytest.mark.parametrize(
+    ("required_kind", "expected_state"),
+    [
+        (WitnessKind.NON_ADMISSION, AdmissionState.RELEASED),
+        (WitnessKind.ROLLBACK, AdmissionState.ROLLED_BACK),
+    ],
+)
+def test_protected_pool_release_policy_accepts_only_its_configured_resolution(
+    required_kind: WitnessKind,
+    expected_state: AdmissionState,
+) -> None:
+    owner = ProtectedPoolOwnerId("policy-owner")
+    pool = ProtectedPoolSpec(
+        reserve_class=ReserveClass.SYNTHESIS,
+        capability_owner_id=owner,
+        injected_count=30,
+        priority=1,
+        required_release_witness_kind=required_kind,
+    )
+    state = _open_epoch(remaining_count=60, protected_pools=(pool,))
+    occurrence = _occurrence(
+        "protected-release-policy",
+        maximum=10,
+        reserve_class=ReserveClass.SYNTHESIS,
+    )
+    state, _ = _propose(state, occurrence)
+    batch = _batch(
+        "batch-protected-release-policy",
+        (occurrence,),
+        reserve_class=ReserveClass.SYNTHESIS,
+        protected_owner=owner.value,
+    )
+    reserved, _ = _reserve(
+        state,
+        batch,
+        (occurrence,),
+        input_count=10,
+        generation_count=0,
+    )
+    assert isinstance(reserved.next_state, ActiveContextAdmissionState)
+    state = _prepare_dispatch(reserved.next_state, batch)
+    marked = reduce_context_admission(
+        state,
+        MarkIndeterminateEvent(
+            **_event_fields(state, "mark-protected-policy", "mark-indeterminate"),
+            batch_id=batch.batch_id,
+            reason_code="ambiguous-provider-result",
+        ),
+    )
+    assert isinstance(marked.next_state, ActiveContextAdmissionState)
+    state = marked.next_state
+    non_admission = ResolveIndeterminateNonAdmissionEvent(
+        **_event_fields(state, "resolve-protected-non-admission", "resolve-non-admission"),
+        batch_id=batch.batch_id,
+        witness=_witness(batch, WitnessKind.NON_ADMISSION),
+        history_removal_witness=_witness(
+            batch,
+            WitnessKind.ROLLBACK,
+            witness="protected-history-removal",
+        ),
+    )
+    rollback = ResolveIndeterminateRollbackEvent(
+        **_event_fields(state, "resolve-protected-rollback", "resolve-rollback"),
+        batch_id=batch.batch_id,
+        witness=_witness(batch, WitnessKind.ROLLBACK),
+    )
+    allowed_event, rejected_event = (
+        (non_admission, rollback)
+        if required_kind is WitnessKind.NON_ADMISSION
+        else (rollback, non_admission)
+    )
+
+    rejected = reduce_context_admission(state, rejected_event)
+    assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+    assert rejected.decision.reason_code == "protected_release_policy_mismatch"
+    assert rejected.next_state == state
+
+    allowed = reduce_context_admission(state, allowed_event)
+    assert allowed.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(allowed.next_state, ActiveContextAdmissionState)
+    assert _batch_record(allowed.next_state, batch).state is expected_state
 
 
 def test_protected_pools_are_isolated_without_double_subtracting_usage() -> None:
@@ -1345,6 +1509,24 @@ def test_authority_unavailable_never_creates_spendable_capacity(
     assert transition.decision.kind is expected
     assert isinstance(transition.next_state, UninitializedContextAdmissionState)
     assert not hasattr(transition.next_state, "snapshot")
+    replayed = reduce_context_admission(transition.next_state, event)
+    assert replayed.decision.kind is AdmissionDecisionKind.NOOP_IDEMPOTENT
+    assert replayed.next_state == transition.next_state
+
+
+def test_authority_unavailable_active_event_replay_is_idempotent() -> None:
+    state = _open_epoch()
+    event = AuthorityUnavailableEvent(
+        **_event_fields(state, "authority-active", "authority-unavailable"),
+        reason_code="provider-watermark-unavailable",
+        authority_state=CoverageState.PARTIAL,
+    )
+    transition = reduce_context_admission(state, event)
+    assert transition.decision.kind is AdmissionDecisionKind.WATERMARK_UNAVAILABLE
+    assert isinstance(transition.next_state, ActiveContextAdmissionState)
+    replayed = reduce_context_admission(transition.next_state, event)
+    assert replayed.decision.kind is AdmissionDecisionKind.NOOP_IDEMPOTENT
+    assert replayed.next_state == transition.next_state
 
 
 def test_full_stream_replay_uses_each_next_state_as_the_only_next_input() -> None:
@@ -1379,12 +1561,13 @@ def test_full_stream_replay_uses_each_next_state_as_the_only_next_input() -> Non
     assert restored == replay
 
 
-def test_rejected_event_replay_is_idempotent_and_changed_reuse_conflicts() -> None:
+def test_rejected_event_retries_and_changed_reuse_are_non_mutating() -> None:
     state = _open_epoch()
     rejected_event = PrepareBatchEvent(
         **_event_fields(state, "rejected-event", "prepare-batch"),
         batch_id=AdmissionBatchId("unknown-batch"),
         representation_revision=RepresentationRevision("revision-1"),
+        representation_binding_id=RepresentationBindingId("binding-unknown"),
         proposed_charge=1,
         measurement_kind=MeasurementKind.PROVIDER_EXACT,
         authority_source_id=AuthoritySourceId("authority-test"),
@@ -1394,7 +1577,7 @@ def test_rejected_event_replay_is_idempotent_and_changed_reuse_conflicts() -> No
     assert isinstance(rejected.next_state, ActiveContextAdmissionState)
 
     replayed = reduce_context_admission(rejected.next_state, rejected_event)
-    assert replayed.decision.kind is AdmissionDecisionKind.NOOP_IDEMPOTENT
+    assert replayed.decision.kind is AdmissionDecisionKind.WOULD_REJECT
     assert replayed.next_state == rejected.next_state
 
     changed = replace(
@@ -1402,7 +1585,7 @@ def test_rejected_event_replay_is_idempotent_and_changed_reuse_conflicts() -> No
         batch_id=AdmissionBatchId("different-unknown-batch"),
     )
     conflicted = reduce_context_admission(rejected.next_state, changed)
-    assert conflicted.decision.kind is AdmissionDecisionKind.CONFLICT
+    assert conflicted.decision.kind is AdmissionDecisionKind.WOULD_REJECT
     assert conflicted.next_state == rejected.next_state
 
 
@@ -1416,7 +1599,7 @@ def test_idempotency_expiry_is_explicit_and_does_not_release_capacity() -> None:
     )
     rejected = reduce_context_admission(state, event)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    _assert_only_rejection_journal_changed(state, rejected.next_state)
+    _assert_rejection_unchanged(state, rejected.next_state)
 
 
 def test_generation_indeterminate_remains_reserved_across_reconciliation_deadline() -> None:
@@ -1507,7 +1690,7 @@ def test_plain_rollback_cannot_resolve_indeterminate_input() -> None:
     rejected = reduce_context_admission(marked.next_state, event)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
     assert isinstance(rejected.next_state, ActiveContextAdmissionState)
-    _assert_only_rejection_journal_changed(marked.next_state, rejected.next_state)
+    _assert_rejection_unchanged(marked.next_state, rejected.next_state)
     assert _batch_record(rejected.next_state, batch).state is AdmissionState.INDETERMINATE
 
 
@@ -1554,6 +1737,7 @@ def test_staged_release_requires_distinct_history_removal_witness() -> None:
             **_event_fields(state, "prepare-history-removal", "prepare-batch"),
             batch_id=batch.batch_id,
             representation_revision=batch.manifest.representation_revision,
+            representation_binding_id=batch.manifest.representation_binding_id,
             proposed_charge=_input_reservation(
                 state,
                 record.reservation_id,

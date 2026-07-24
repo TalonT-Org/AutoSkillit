@@ -333,27 +333,8 @@ def _reject(
         reserve_class=reserve_class,
         protected_pool_owner_id=protected_pool_owner_id,
     )
-    processed = ProcessedEventRecord(
-        event_id=event.event_id,
-        event=event,
-        original_decision=decision,
-        aggregate_revision=state.aggregate_revision,
-        admission_sequence=state.admission_sequence,
-    )
-    next_state = replace(
-        state,
-        processed_events=tuple(
-            sorted(
-                state.processed_events + (processed,),
-                key=lambda record: (
-                    record.aggregate_revision.value,
-                    record.event_id.value,
-                ),
-            )
-        ),
-    )
     return AdmissionTransition(
-        next_state=next_state,
+        next_state=state,
         decision=decision,
         effects=(),
     )
@@ -673,6 +654,7 @@ def _validate_witness_for_snapshot(
         and witness.request_id == batch.request_id
         and witness.batch_id == batch.batch_id
         and witness.representation_revision == batch.manifest.representation_revision
+        and witness.representation_binding_id == batch.manifest.representation_binding_id
         and witness.occurrence_ids == batch.occurrence_ids
     )
 
@@ -954,10 +936,25 @@ def _reserve(
             reserve_class=event.batch.reserve_class,
             protected_pool_owner_id=event.batch.protected_pool_owner_id,
         )
+    protected_release_witness_kind = None
+    if event.batch.protected_pool_owner_id is not None:
+        pool = next(
+            (
+                item
+                for item in state.protected_pools
+                if item.reserve_class is event.batch.reserve_class
+                and item.capability_owner_id == event.batch.protected_pool_owner_id
+            ),
+            None,
+        )
+        if pool is None:
+            return _reject(state, event, "unknown_protected_pool")
+        protected_release_witness_kind = pool.required_release_witness_kind
     batch_record = AdmissionBatchRecord(
         batch=event.batch,
         state=AdmissionState.RESERVED,
         reservation_id=reservation.reservation_id,
+        protected_release_witness_kind=protected_release_witness_kind,
         witness_ids=(),
         prepared_input_count=None,
         committed_input_count=0,
@@ -1094,6 +1091,8 @@ def _prepare(
         return _reject(state, event, "illegal_prepare_order")
     if event.representation_revision != record.batch.manifest.representation_revision:
         return _reject(state, event, "representation_revision_mismatch")
+    if event.representation_binding_id != record.batch.manifest.representation_binding_id:
+        return _reject(state, event, "representation_binding_mismatch")
     reservation = _reservation_for(state, record)
     if reservation is None or event.proposed_charge != reservation.reserved_count:
         return _reject(state, event, "prepared_charge_mismatch")
@@ -1185,7 +1184,7 @@ def _dispatch(
     record = _batch_record(state, event.batch_id)
     if (
         record is None
-        or record.state not in {AdmissionState.PREPARED, AdmissionState.HISTORY_STAGED}
+        or record.state is not AdmissionState.HISTORY_STAGED
         or not _validate_witness(
             state,
             record.batch,
@@ -1286,11 +1285,13 @@ def _accept_closed_input(
         )
         or event.measurement_kind is not MeasurementKind.PROVIDER_EXACT
         or event.final_manifest_revision != expected_revision
+        or event.final_manifest != record.batch.manifest
         or event.final_manifest.representation_revision != expected_revision
         or event.final_manifest.request_id != record.batch.request_id
         or binding.counted_representation_revision != expected_revision
         or binding.dispatched_representation_revision != expected_revision
         or binding.final_manifest_revision != expected_revision
+        or binding.representation_binding_id != record.batch.manifest.representation_binding_id
         or binding.request_id != record.batch.request_id
         or binding.batch_id != record.batch.batch_id
         or event.authority_source_id != event.witness.authority_source_id
@@ -1438,6 +1439,11 @@ def _accept(
         return _reject(state, event, "invalid_provider_acceptance_witness")
     binding = event.representation_binding_witness
     expected_revision = record.batch.manifest.representation_revision
+    if (
+        event.final_manifest != record.batch.manifest
+        or binding.representation_binding_id != record.batch.manifest.representation_binding_id
+    ):
+        return _reject(state, event, "representation_binding_mismatch")
     if (
         event.final_manifest_revision != expected_revision
         or event.final_manifest.representation_revision != expected_revision
@@ -1587,6 +1593,10 @@ def _release_closed_batch(
     )
     if (
         record.state is not expected_state
+        or (
+            record.protected_release_witness_kind is not None
+            and record.protected_release_witness_kind is not expected_kind
+        )
         or not _validate_witness_for_snapshot(
             audit.snapshot,
             record.batch,
@@ -1790,6 +1800,11 @@ def _release_or_rollback(
             AdmissionState.HISTORY_STAGED,
             AdmissionState.REQUEST_DISPATCHED,
         }
+    if (
+        record.protected_release_witness_kind is not None
+        and record.protected_release_witness_kind is not expected_witness
+    ):
+        return _reject(state, event, "protected_release_policy_mismatch")
     if record.state not in allowed_states or not _validate_witness(
         state,
         record.batch,
@@ -2009,11 +2024,13 @@ def _resolve_indeterminate_accepted(
         or event.authority_source_id != binding.authority_source_id
         or event.measurement_kind is not MeasurementKind.PROVIDER_EXACT
         or event.final_manifest_revision != expected_revision
+        or event.final_manifest != record.batch.manifest
         or event.final_manifest.representation_revision != expected_revision
         or event.final_manifest.request_id != record.batch.request_id
         or binding.counted_representation_revision != expected_revision
         or binding.dispatched_representation_revision != expected_revision
         or binding.final_manifest_revision != expected_revision
+        or binding.representation_binding_id != record.batch.manifest.representation_binding_id
         or binding.request_id != record.batch.request_id
         or binding.batch_id != record.batch.batch_id
     ):
@@ -2100,13 +2117,7 @@ def _start_generation(
     if (
         batch is None
         or batch_record is None
-        or batch_record.state
-        not in {
-            AdmissionState.HISTORY_STAGED,
-            AdmissionState.REQUEST_DISPATCHED,
-            AdmissionState.COMMITTED,
-            AdmissionState.QUARANTINED,
-        }
+        or batch_record.state is not AdmissionState.REQUEST_DISPATCHED
         or not _validate_witness(
             state,
             batch,
@@ -2817,10 +2828,12 @@ def reduce_context_admission(
                         ),
                     ),
                 )
-            return AdmissionTransition(
-                next_state=state,
-                decision=_decision(state, kind, event.reason_code),
-                effects=(),
+            return _publish(
+                state,
+                state,
+                event,
+                kind=kind,
+                reason_code=event.reason_code,
             )
         case ProposeOccurrenceEvent():
             return _propose(state, event)

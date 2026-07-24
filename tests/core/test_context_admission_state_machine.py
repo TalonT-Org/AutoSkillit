@@ -61,6 +61,7 @@ from autoskillit.core import (
     ProtectedPoolSpec,
     ReconcileGenerationEvent,
     ReleaseNonAdmissionEvent,
+    RepresentationBindingId,
     RepresentationBindingWitness,
     RepresentationRevision,
     RequestReconciliationEvent,
@@ -200,6 +201,7 @@ def _batch(occurrence: AdmissionOccurrence) -> AdmissionBatch:
     manifest = CanonicalRepresentationManifest(
         request_id=request_id,
         representation_revision=occurrence.representation_revision,
+        representation_binding_id=RepresentationBindingId(f"binding-{slot}"),
         span_owners=tuple(
             CanonicalSpanOwner(span_id=span_id, occurrence_id=occurrence.occurrence_id)
             for span_id in occurrence.owned_span_ids
@@ -228,6 +230,7 @@ def _multi_batch(occurrences: tuple[AdmissionOccurrence, ...]) -> AdmissionBatch
     manifest = CanonicalRepresentationManifest(
         request_id=request_id,
         representation_revision=occurrences[0].representation_revision,
+        representation_binding_id=RepresentationBindingId("binding-multi-" + "-".join(slots)),
         span_owners=tuple(
             CanonicalSpanOwner(span_id=span_id, occurrence_id=occurrence.occurrence_id)
             for occurrence in occurrences
@@ -350,6 +353,7 @@ def _witness(
         request_id=batch.request_id,
         batch_id=batch.batch_id,
         representation_revision=batch.manifest.representation_revision,
+        representation_binding_id=batch.manifest.representation_binding_id,
         occurrence_ids=occurrence_ids or batch.occurrence_ids,
         authority_source_id=AuthoritySourceId("authority-state-machine"),
     )
@@ -361,6 +365,7 @@ def _binding(batch: AdmissionBatch) -> RepresentationBindingWitness:
         counted_representation_revision=bound_revision,
         dispatched_representation_revision=bound_revision,
         final_manifest_revision=bound_revision,
+        representation_binding_id=batch.manifest.representation_binding_id,
         request_id=batch.request_id,
         batch_id=batch.batch_id,
         authority_source_id=AuthoritySourceId("authority-state-machine"),
@@ -422,7 +427,9 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         self.state = transition.next_state
         self.last_revision = self.state.aggregate_revision.value
         self.last_admission_sequence = self.state.admission_sequence.value
-        self.latest_replayable_event = event
+        event_id = getattr(event, "event_id")
+        if any(record.event_id == event_id for record in self.state.processed_events):
+            self.latest_replayable_event = event
         self.events.append(event)
 
     def _availability(self, reserve_class: ReserveClass) -> tuple[int, int, int]:
@@ -502,6 +509,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 generation_count,
             )
         else:
+            assert transition.next_state == prior
             self._accept_publication(transition, event)
 
     @rule()
@@ -520,6 +528,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 request_id=AdmissionRequestId("stale-rollover-request"),
                 batch_id=AdmissionBatchId("stale-rollover-batch"),
                 representation_revision=RepresentationRevision("stale-rollover-revision"),
+                representation_binding_id=RepresentationBindingId("stale-rollover-binding"),
                 occurrence_ids=(),
                 authority_source_id=receiver_authority,
             ),
@@ -548,8 +557,10 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             ),
             protected_pools=_pool_specs(),
         )
-        transition = reduce_context_admission(self.state, event)
+        prior = self.state
+        transition = reduce_context_admission(prior, event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+        assert transition.next_state == prior
         self._accept_publication(transition, event)
 
     @rule(
@@ -603,6 +614,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             **self._fields("prepare-batch"),
             batch_id=batch.batch_id,
             representation_revision=batch.manifest.representation_revision,
+            representation_binding_id=batch.manifest.representation_binding_id,
             proposed_charge=reserved_input_count,
             measurement_kind=MeasurementKind.PROVIDER_EXACT,
             authority_source_id=AuthoritySourceId("authority-state-machine"),
@@ -610,6 +622,16 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         transition = reduce_context_admission(self.state, prepare_event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
         self._accept_publication(transition, prepare_event)
+        skipped_dispatch = DispatchRequestEvent(
+            **self._fields("dispatch-without-history-stage"),
+            batch_id=batch.batch_id,
+            witness=_witness(batch, occurrence, WitnessKind.REQUEST_INCLUDED),
+        )
+        prior = self.state
+        rejected = reduce_context_admission(prior, skipped_dispatch)
+        assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+        assert rejected.next_state == prior
+        self._accept_publication(rejected, skipped_dispatch)
         stage_event = StageHistoryEvent(
             **self._fields("stage-history"),
             batch_id=batch.batch_id,
@@ -618,6 +640,25 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         transition = reduce_context_admission(self.state, stage_event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
         self._accept_publication(transition, stage_event)
+        generation = next(
+            (
+                record
+                for record in self.state.generation_reservations
+                if record.batch_id == batch.batch_id
+            ),
+            None,
+        )
+        if generation is not None:
+            premature_generation = StartGenerationEvent(
+                **self._fields("generation-before-dispatch"),
+                generation_reservation_id=generation.generation_reservation_id,
+                witness=_witness(batch, occurrence, WitnessKind.REQUEST_INCLUDED),
+            )
+            prior = self.state
+            rejected = reduce_context_admission(prior, premature_generation)
+            assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+            assert rejected.next_state == prior
+            self._accept_publication(rejected, premature_generation)
         dispatch_event = DispatchRequestEvent(
             **self._fields("dispatch-request"),
             batch_id=batch.batch_id,
@@ -658,6 +699,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             **self._fields("prepare-batch"),
             batch_id=batch.batch_id,
             representation_revision=batch.manifest.representation_revision,
+            representation_binding_id=batch.manifest.representation_binding_id,
             proposed_charge=input_count,
             measurement_kind=MeasurementKind.PROVIDER_EXACT,
             authority_source_id=AuthoritySourceId("authority-state-machine"),
@@ -916,6 +958,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 request_id=AdmissionRequestId("rollover-request"),
                 batch_id=AdmissionBatchId("rollover-batch"),
                 representation_revision=RepresentationRevision("rollover-revision"),
+                representation_binding_id=RepresentationBindingId("rollover-binding"),
                 occurrence_ids=(),
                 authority_source_id=AuthoritySourceId("authority-state-machine"),
             ),

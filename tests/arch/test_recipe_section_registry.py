@@ -59,6 +59,8 @@ def test_recipe_section_definition_and_registry_are_immutable() -> None:
         ("content", {"name": ""}),
         ("content", {"ordinary_content_format": "json-scalar-page"}),
         ("content", {"has_default": True, "default_value": ()}),
+        ("content", {"missing_behavior": "unknown"}),
+        ("content", {"none_behavior": "unknown"}),
         ("errors", {"missing_behavior": "absent"}),
         ("errors", {"has_default": False}),
     ],

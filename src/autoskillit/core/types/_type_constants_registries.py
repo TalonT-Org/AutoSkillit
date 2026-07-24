@@ -295,6 +295,10 @@ class RecipeSectionDef:
         """Reject contradictory public definitions at their construction boundary."""
         if not self.name:
             raise ValueError("recipe section definition name must not be empty")
+        if self.missing_behavior not in {"invalid", "absent", "default"}:
+            raise ValueError("invalid recipe section missing behavior")
+        if self.none_behavior not in {"invalid", "absent"}:
+            raise ValueError("invalid recipe section null behavior")
         layout = (
             self.value_kind,
             self.element_kind,

@@ -54,6 +54,8 @@ class BackendConventions:
     skills_subdir: Path = Path("skills")
     #: Project-relative directories to scan for project-local skills.
     project_local_skill_search_dirs: tuple[str, ...] = ()
+    #: Persistent generated-home root below the configured project temp directory.
+    persistent_session_root_subdir: Path | None = None
     #: Native model-facing skill invocation sigil.
     skill_sigil: str = "/"
 
@@ -317,6 +319,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     github_api_callable=True,
     skill_sigil="/",
     session_dir_persistent=False,
+    cook_startup_observer_capable=False,
     supports_model_invocation_gating=True,
     unnegotiated_tool_result_token_limit=46_500,
     protected_recipe_delivery_capable=False,

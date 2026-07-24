@@ -57,6 +57,7 @@ from autoskillit.workspace.session_skills import (
     materialize_codex_profile_skills,
     resolve_closure_write_dirs,
     resolve_ephemeral_root,
+    resolve_persistent_session_root,
 )
 from autoskillit.workspace.skill_capabilities import (
     SkillCapabilityEvidence,
@@ -173,6 +174,7 @@ __all__ = [
     "push_to_remote",
     "remove_clone",
     "resolve_ephemeral_root",
+    "resolve_persistent_session_root",
     "WORKTREES_DIR",
     "parse_frontmatter_content",
     "prepare_catalog_skill_dispatch",

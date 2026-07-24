@@ -1382,6 +1382,9 @@ class TestCodexBackendConventions:
     def test_conventions_skills_subdir(self) -> None:
         assert CodexBackend().conventions.skills_subdir == Path("skills")
 
+    def test_conventions_persistent_session_root(self) -> None:
+        assert CodexBackend().conventions.persistent_session_root_subdir == Path("codex-sessions")
+
 
 class TestClaudeCodeBackendProcessIdleDefault:
     def test_claude_code_backend_process_idle_default_zero(self) -> None:

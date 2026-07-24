@@ -318,6 +318,7 @@ def test_backend_conventions_frozen_slots_fields():
     )
     assert inst.skills_subdir == Path("/claude/skills")
     assert inst.project_local_skill_search_dirs == (".claude/skills",)
+    assert inst.persistent_session_root_subdir is None
 
     with pytest.raises(FrozenInstanceError):
         inst.skills_subdir = Path("/other")  # type: ignore[misc]
@@ -328,6 +329,7 @@ def test_backend_conventions_frozen_slots_fields():
     hints = typing.get_type_hints(BackendConventions)
     assert hints["skills_subdir"] is Path
     assert hints["project_local_skill_search_dirs"] == tuple[str, ...]
+    assert hints["persistent_session_root_subdir"] == Path | None
 
 
 def test_no_autoskillit_imports_in_backend():

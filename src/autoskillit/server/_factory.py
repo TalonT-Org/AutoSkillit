@@ -17,7 +17,6 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
-    CODEX_SESSIONS_SUBDIR,
     MARKETPLACE_PREFIX,
     DirectInstall,
     FleetLock,
@@ -76,6 +75,7 @@ from autoskillit.workspace import (
     project_default_plugin_source,
     project_direct_install,
     resolve_ephemeral_root,
+    resolve_persistent_session_root,
     validate_skill_tier_roles,
 )
 
@@ -298,8 +298,12 @@ def make_context(
             skill_catalog=session_catalog,
         )
     ephemeral_root = resolve_ephemeral_root()
-    codex_root = temp_dir / CODEX_SESSIONS_SUBDIR
-    session_mgr = DefaultSessionSkillManager(provider, ephemeral_root, codex_root=codex_root)
+    persistent_root = resolve_persistent_session_root(temp_dir, backend)
+    session_mgr = DefaultSessionSkillManager(
+        provider,
+        ephemeral_root,
+        persistent_root=persistent_root,
+    )
 
     audit = DefaultAuditLog()
     github_api_log = DefaultGitHubApiLog()

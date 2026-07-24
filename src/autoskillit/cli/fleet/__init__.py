@@ -333,7 +333,7 @@ def fleet_status(
                 skill_mgr = DefaultSessionSkillManager(
                     provider=SkillsDirectoryProvider(),
                     ephemeral_root=resolve_ephemeral_root(),
-                    codex_root=resolve_temp_dir(_project_root) / CODEX_SESSIONS_SUBDIR,
+                    persistent_root=resolve_temp_dir(_project_root) / CODEX_SESSIONS_SUBDIR,
                 )
                 for d in state.dispatches:
                     if d.dispatched_session_id:

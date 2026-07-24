@@ -113,7 +113,7 @@ def make_session_skill_manager(tmp_path: Path):
         return DefaultSessionSkillManager(
             provider,
             ephemeral_root=ephemeral_root or tmp_path,
-            codex_root=codex_root or tmp_path / "codex-root",
+            persistent_root=codex_root or tmp_path / "codex-root",
         )
 
     return _factory

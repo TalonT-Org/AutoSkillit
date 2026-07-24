@@ -272,6 +272,7 @@ def load_and_validate(
         backend_name,
         tuple(sorted(effective_backend_map.items())) if effective_backend_map else (),
         tuple(sorted(backend_capabilities_map.items())) if backend_capabilities_map else (),
+        include_compiled_bindings,
         _manifest_mtime,
         _manifest_size,
         _budgets_mtime,

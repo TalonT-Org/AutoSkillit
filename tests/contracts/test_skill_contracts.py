@@ -650,23 +650,23 @@ def test_delimiter_patterns_have_hr_split_example(skills: dict[str, Any]) -> Non
 
 
 # ---------------------------------------------------------------------------
-# make-plan false-positive escape valve tests
+# make-plan audit-remediation authority tests
 # ---------------------------------------------------------------------------
 
 
 def test_make_plan_verdict_output(skills):
-    """make-plan must declare a verdict output with plan/false_positive values."""
+    """make-plan cannot close a NO GO lineage with a false-positive verdict."""
     mp = skills["make-plan"]
     verdict_outputs = [o for o in mp["outputs"] if o["name"] == "verdict"]
     assert len(verdict_outputs) == 1, "make-plan must have exactly one verdict output"
-    assert set(verdict_outputs[0]["allowed_values"]) == {"plan", "false_positive"}
+    assert verdict_outputs[0]["allowed_values"] == ["plan"]
 
 
-def test_make_plan_conditional_write_behavior(skills):
-    """make-plan must use conditional write_behavior gated on verdict=plan."""
+def test_make_plan_always_write_behavior(skills):
+    """make-plan has no successful no-write verdict."""
     mp = skills["make-plan"]
-    assert mp["write_behavior"] == "conditional"
-    assert mp["write_expected_when"] == ["verdict[ \\t]*=[ \\t]*plan"]
+    assert mp["write_behavior"] == "always"
+    assert mp["completion_required"] is True
 
 
 def test_validate_audit_verdict_allowed_values(skills):
@@ -688,8 +688,8 @@ def test_audit_impl_verdict_allowed_values(skills):
 
 
 def test_make_plan_examples_cover_verdicts(skills):
-    """pattern_examples must include examples for both verdict values."""
+    """pattern examples cover the sole plan verdict."""
     mp = skills["make-plan"]
     examples_text = "\n".join(mp.get("pattern_examples", []))
     assert "verdict = plan" in examples_text
-    assert "verdict = false_positive" in examples_text
+    assert "verdict = false_positive" not in examples_text

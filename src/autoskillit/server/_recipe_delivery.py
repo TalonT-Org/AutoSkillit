@@ -766,7 +766,7 @@ def finalize_recipe_delivery(
     execution_snapshot = None
     candidate_payload = dict(payload)
     if compiled_bindings is not None:
-        from autoskillit.server._recipe_execution import (
+        from autoskillit.server._recipe_execution import (  # circular-break
             build_recipe_execution_snapshot,
             clear_recipe_execution,
         )
@@ -997,14 +997,22 @@ def complete_finalized_recipe_response(
         if completed == finalized.rendered:
             if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
                 try:
-                    from autoskillit.server._recipe_execution import install_recipe_execution
+                    from autoskillit.server._recipe_execution import (  # circular-break
+                        install_recipe_execution,
+                    )
 
                     install_recipe_execution(
                         finalized.tool_ctx,
                         snapshot=finalized.execution_snapshot,
                     )
                 except Exception:
-                    from autoskillit.server._recipe_execution import clear_recipe_execution
+                    get_logger(__name__).error(
+                        "recipe execution snapshot installation failed",
+                        exc_info=True,
+                    )
+                    from autoskillit.server._recipe_execution import (  # circular-break
+                        clear_recipe_execution,
+                    )
 
                     clear_recipe_execution(finalized.tool_ctx)
                     return json.dumps(
@@ -1017,7 +1025,9 @@ def complete_finalized_recipe_response(
             return completed
         enforced = completed
     if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
-        from autoskillit.server._recipe_execution import clear_recipe_execution
+        from autoskillit.server._recipe_execution import (  # circular-break
+            clear_recipe_execution,
+        )
 
         clear_recipe_execution(finalized.tool_ctx)
     if handle is not None and (ledger is None or not ledger.abort(handle)):

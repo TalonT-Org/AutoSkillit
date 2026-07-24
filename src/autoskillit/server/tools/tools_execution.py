@@ -26,7 +26,6 @@ from autoskillit.core import (
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     AdmissionStatus,
-    BindingMode,
     BoundScalar,
     ClaudeDirectoryConventions,
     ClosureAuthoritySpec,
@@ -58,7 +57,6 @@ from autoskillit.execution import (
 )
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
-from autoskillit.recipe import RecipeStep, bind_step_invocation
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -84,6 +82,7 @@ from autoskillit.server._recipe_execution import (
     RecipeExecutionAdmissionError,
     bind_attested_runtime_invocation,
     build_bound_child_prompt,
+    build_standalone_child_prompt,
     get_recipe_execution,
     record_runtime_binding_digest,
 )
@@ -978,33 +977,16 @@ async def run_skill(
                 "standalone mode cannot claim recipe attestation",
             )
         elif not resume_session_id:
-            _standalone_with: dict[str, object] = {
-                "skill_command": skill_command,
-                "cwd": cwd,
-            }
-            if skill_inputs is not None:
-                _standalone_with["skill_inputs"] = skill_inputs
-            _standalone_binding = bind_step_invocation(
-                "standalone",
-                RecipeStep(
-                    name="standalone",
-                    tool="run_skill",
-                    with_args=_standalone_with,
-                    declared_with_args=dict(_standalone_with),
-                ),
-                mode=BindingMode.STANDALONE,
-            )
-            if _standalone_binding.failures:
-                failure = _standalone_binding.failures[0]
-                return _recipe_execution_deny(
-                    f"standalone_{failure.code.value}",
-                    failure.message,
-                )
-            if skill_inputs is not None:
-                child_skill_command = build_bound_child_prompt(
+            try:
+                child_skill_command = build_standalone_child_prompt(
                     skill_command,
-                    _standalone_binding.canonical_child_invocation,
-                    None,
+                    cwd,
+                    skill_inputs,
+                )
+            except RecipeExecutionAdmissionError as exc:
+                return _recipe_execution_deny(
+                    exc.code,
+                    str(exc),
                 )
 
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):

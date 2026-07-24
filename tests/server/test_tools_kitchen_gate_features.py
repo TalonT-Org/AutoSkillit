@@ -419,6 +419,7 @@ def test_recipe_resource_returns_composed_content():
     mock_ctx.recipes.load_and_validate.assert_called_once_with(
         "test-recipe",
         mock_ctx.project_dir,
+        include_compiled_bindings=True,
         ingredient_overrides={
             "kitchen_id": ANY,
             "diagnostics_log_dir": ANY,

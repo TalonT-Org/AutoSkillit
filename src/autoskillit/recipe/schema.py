@@ -23,8 +23,6 @@ from autoskillit.core import (
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 RECIPE_VERSION_KEY: Final = "recipe_version"
 CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
-RecipeScalar = str | int | float | bool
-RecipeArgValue = RecipeScalar | dict[str, RecipeScalar]
 
 
 class RecipeKind(StrEnum):
@@ -117,9 +115,8 @@ class RecipeStep:
     action: str | None = None  # Built-in action: "route", "stop", "confirm"
     python: str | None = None
     constant: str | None = None  # Literal output value — no subprocess or MCP call
-    # Runtime validation below enforces RecipeArgValue. ``Any`` keeps existing
-    # scalar consumers from falsely treating the sole nested skill_inputs
-    # channel as if every key could be a mapping.
+    # Tool-specific binding validates ordinary values. Runtime validation below
+    # reserves the one generic nested channel for structured child-skill inputs.
     with_args: dict[str, Any] = field(default_factory=dict)
     declared_with_args: dict[str, Any] = field(default_factory=dict, repr=False)
     on_success: str | None = None
@@ -156,11 +153,11 @@ class RecipeStep:
         if not isinstance(self.with_args, dict):
             raise TypeError("RecipeStep.with_args must be a mapping")
         for key, value in self.with_args.items():
-            if isinstance(value, dict):
-                if self.tool != "run_skill" or key != "skill_inputs":
+            if key == "skill_inputs":
+                if self.tool != "run_skill" or not isinstance(value, dict):
                     raise TypeError(
-                        "Only run_skill.with.skill_inputs may contain a mapping; "
-                        f"got mapping at {self.tool or '<no tool>'}.{key}"
+                        "Only run_skill.with.skill_inputs may declare structured "
+                        "child-skill inputs"
                     )
                 if not all(
                     isinstance(input_name, str)
@@ -171,10 +168,6 @@ class RecipeStep:
                     raise TypeError(
                         "run_skill.with.skill_inputs must map names to strict scalar values"
                     )
-            elif not isinstance(value, (str, int, float, bool)) or value is None:
-                raise TypeError(
-                    f"RecipeStep.with.{key} must be a strict scalar, got {type(value).__name__}"
-                )
         if self.declared_with_args:
             if self.declared_with_args.keys() != self.with_args.keys():
                 raise ValueError(

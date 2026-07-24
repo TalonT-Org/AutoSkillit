@@ -9,6 +9,7 @@ from typing import Protocol, runtime_checkable
 
 from .closure_hashing import compute_bytes_hash
 from .io import decode_versioned_json_bytes
+from .logging import get_logger
 from .path_containment import ContainmentError, read_stable_contained_bytes
 from .types._type_audit_cycle import (
     AUDIT_CYCLE_SCHEMA_VERSION,
@@ -31,6 +32,7 @@ __all__ = [
 ]
 
 _REQUIREMENTS_HEADER = ("Requirement ID", "Disposition", "Implementation Step")
+logger = get_logger(__name__)
 _STEP_HEADING_RE = re.compile(
     r"^###\s+(Step\s+[1-9][0-9]*(?:\.[1-9][0-9]*)*)(?::[^\n]*)?$",
     re.MULTILINE,
@@ -165,6 +167,7 @@ class InventoryAdmissionEvaluator:
                 current_plan_text=current_plan_text,
             )
         except Exception as exc:
+            logger.error("inventory admission evaluation failed", exc_info=True)
             return _reject(AdmissionReason.INTERNAL_ERROR, f"inventory admission failed: {exc}")
 
     def _evaluate(

@@ -37,6 +37,7 @@ __all__ = [
 
 _CONTEXT_REF_RE: Final = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 _INPUT_REF_RE: Final = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
+_AUTOSKILLIT_TEMPLATE_RE: Final = re.compile(r"\{\{(AUTOSKILLIT_[A-Z0-9_]+)\}\}")
 _EXACT_CONTEXT_REF_RE: Final = re.compile(r"^\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}$")
 _EXACT_INPUT_REF_RE: Final = re.compile(r"^\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}$")
 _SCALAR_TYPES = (str, int, float, bool)
@@ -52,11 +53,13 @@ def _origin_for(
     BoundValueOrigin,
     tuple[str, ...],
     tuple[str, ...],
+    tuple[str, ...],
 ]:
     if not isinstance(declared, str):
-        return BoundValueOrigin.LITERAL, (), ()
+        return BoundValueOrigin.LITERAL, (), (), ()
     context_dependencies = tuple(dict.fromkeys(_CONTEXT_REF_RE.findall(declared)))
     input_dependencies = tuple(dict.fromkeys(_INPUT_REF_RE.findall(declared)))
+    template_dependencies = tuple(dict.fromkeys(_AUTOSKILLIT_TEMPLATE_RE.findall(declared)))
     if _EXACT_CONTEXT_REF_RE.fullmatch(declared):
         origin = BoundValueOrigin.CONTEXT
     elif _EXACT_INPUT_REF_RE.fullmatch(declared):
@@ -70,11 +73,16 @@ def _origin_for(
         origin = BoundValueOrigin.TEMPLATE
     else:
         origin = BoundValueOrigin.LITERAL
-    return origin, context_dependencies, input_dependencies
+    return origin, context_dependencies, input_dependencies, template_dependencies
 
 
 def _bound_value(name: str, declared: BoundScalar, effective: BoundScalar) -> BoundValue:
-    origin, context_dependencies, input_dependencies = _origin_for(declared)
+    (
+        origin,
+        context_dependencies,
+        input_dependencies,
+        template_dependencies,
+    ) = _origin_for(declared)
     return BoundValue(
         name=name,
         declared_value=declared,
@@ -83,6 +91,56 @@ def _bound_value(name: str, declared: BoundScalar, effective: BoundScalar) -> Bo
         origin=origin,
         context_dependencies=context_dependencies,
         input_dependencies=input_dependencies,
+        template_dependencies=template_dependencies,
+    )
+
+
+def _structured_dependencies(
+    value: object,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    context: list[str] = []
+    inputs: list[str] = []
+    templates: list[str] = []
+
+    def visit(item: object) -> None:
+        if isinstance(item, str):
+            context.extend(_CONTEXT_REF_RE.findall(item))
+            inputs.extend(_INPUT_REF_RE.findall(item))
+            templates.extend(_AUTOSKILLIT_TEMPLATE_RE.findall(item))
+        elif isinstance(item, Mapping):
+            for key, nested in item.items():
+                visit(key)
+                visit(nested)
+        elif isinstance(item, (list, tuple)):
+            for nested in item:
+                visit(nested)
+
+    visit(value)
+    return (
+        tuple(dict.fromkeys(context)),
+        tuple(dict.fromkeys(inputs)),
+        tuple(dict.fromkeys(templates)),
+    )
+
+
+def _bound_structured_value(name: str, declared: object, effective: object) -> BoundValue:
+    context_dependencies, input_dependencies, template_dependencies = _structured_dependencies(
+        declared
+    )
+    origin = (
+        BoundValueOrigin.TEMPLATE
+        if context_dependencies or input_dependencies or template_dependencies
+        else BoundValueOrigin.LITERAL
+    )
+    return BoundValue(
+        name=name,
+        declared_value=declared,
+        effective_value=effective,
+        state=BoundValueState.PRESENT,
+        origin=origin,
+        context_dependencies=context_dependencies,
+        input_dependencies=input_dependencies,
+        template_dependencies=template_dependencies,
     )
 
 
@@ -95,7 +153,7 @@ def _failure(
     return BindingFailure(code=code, step_name=step_name, name=name, message=message)
 
 
-def _wire_value_is_valid(value: BoundScalar, param: ToolParamDef) -> bool:
+def _wire_value_is_valid(value: object, param: ToolParamDef) -> bool:
     match param.wire_type:
         case ToolWireType.STRING:
             return isinstance(value, str)
@@ -107,8 +165,10 @@ def _wire_value_is_valid(value: BoundScalar, param: ToolParamDef) -> bool:
             return isinstance(value, bool)
         case ToolWireType.SCALAR:
             return _is_scalar(value)
-        case ToolWireType.OBJECT | ToolWireType.ARRAY:
-            return False
+        case ToolWireType.OBJECT:
+            return isinstance(value, Mapping)
+        case ToolWireType.ARRAY:
+            return isinstance(value, (list, tuple))
 
 
 def _skill_value_is_valid(value: BoundScalar, input_def: SkillInput) -> bool:
@@ -253,6 +313,16 @@ def _inline_skill_inputs(
 
     input_defs = contract.inputs
     input_by_name = {input_def.name: input_def for input_def in input_defs}
+    if (
+        len(input_defs) == 1
+        and declared_args
+        and all(_split_named_token(token) is None for token in declared_args)
+    ):
+        # Slash-command callers conventionally pass a free-form prose tail for a
+        # single input. Preserve that complete tail as one value instead of
+        # treating each word as a separate positional input.
+        declared_args = (" ".join(declared_args),)
+        effective_args = (" ".join(effective_args),)
     assigned: dict[str, tuple[BoundScalar, BoundScalar]] = {}
     failures: list[BindingFailure] = []
     position = 0
@@ -455,6 +525,12 @@ def bind_step_invocation(
             authorable_params |= frozenset(
                 input_def.name for input_def in callable_contract.inputs
             )
+        if isinstance(callable_name, str):
+            # Outer run_python keys are the callable's argument channel. A
+            # manifest contract describes output capture, but all callable
+            # arguments are packed into the run_python handler's canonical
+            # ``args`` object rather than becoming MCP parameters.
+            authorable_params |= frozenset(declared_with)
     unknown_params = frozenset(declared_with) - authorable_params
     for name in sorted(unknown_params):
         failures.append(
@@ -484,6 +560,21 @@ def bind_step_invocation(
             continue
         declared = declared_with[param.name]
         effective = effective_with.get(param.name, declared)
+        if param.wire_type in {ToolWireType.OBJECT, ToolWireType.ARRAY}:
+            if not _wire_value_is_valid(declared, param) or not _wire_value_is_valid(
+                effective, param
+            ):
+                failures.append(
+                    _failure(
+                        BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+                        step_name,
+                        param.name,
+                        f"tool parameter {param.name!r} expects {param.wire_type.value!r}",
+                    )
+                )
+                continue
+            mcp_kwargs.append(_bound_structured_value(param.name, declared, effective))
+            continue
         if not _is_scalar(declared) or not _is_scalar(effective):
             failures.append(
                 _failure(
@@ -546,8 +637,41 @@ def bind_step_invocation(
         )
 
     skill_name = resolve_skill_name(effective_command)
+    declared_structured = declared_with.get("skill_inputs")
+    effective_structured = effective_with.get("skill_inputs", declared_structured)
+
     contract = get_skill_contract(skill_name, active_manifest) if skill_name else None
     if skill_name is None or contract is None:
+        if mode is BindingMode.RECIPE and not declared_command.lstrip().startswith("/"):
+            # LLM-orchestrated recipe steps may use a non-executable placeholder
+            # command while their note defines a bounded fan-out of tool calls.
+            return BoundStepInvocation(
+                step_name,
+                tool_name,
+                mode,
+                None,
+                tuple(mcp_kwargs),
+                (),
+                tuple(failures),
+            )
+        if mode is BindingMode.RECIPE and "{" in declared_command:
+            generic_inputs: list[BoundValue] = []
+            if isinstance(declared_structured, Mapping) and isinstance(
+                effective_structured, Mapping
+            ):
+                for name, declared in declared_structured.items():
+                    effective = effective_structured.get(name, declared)
+                    if isinstance(name, str) and _is_scalar(declared) and _is_scalar(effective):
+                        generic_inputs.append(_bound_value(name, declared, effective))
+            return BoundStepInvocation(
+                step_name,
+                tool_name,
+                mode,
+                None,
+                tuple(mcp_kwargs),
+                tuple(generic_inputs),
+                tuple(failures),
+            )
         failures.append(
             _failure(
                 BindingFailureCode.UNKNOWN_SKILL,
@@ -566,8 +690,6 @@ def bind_step_invocation(
             tuple(failures),
         )
 
-    declared_structured = declared_with.get("skill_inputs")
-    effective_structured = effective_with.get("skill_inputs", declared_structured)
     try:
         has_inline_args = bool(_tokenize_skill_command(declared_command)[1:])
     except ValueError:

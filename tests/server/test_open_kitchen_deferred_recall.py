@@ -8,6 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autoskillit.recipe._binding import bind_recipe
+from autoskillit.recipe.schema import Recipe, RecipeStep
+from autoskillit.server._recipe_execution import get_recipe_execution
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -20,6 +23,99 @@ def _make_deferred_recall_ctx(name: str) -> MagicMock:
     ctx.kitchen_id = "test-kitchen"
     ctx.gate_infrastructure_ready = True
     return ctx
+
+
+def _compiled_recipe_payload() -> dict:
+    recipe = Recipe(
+        name="test-recipe",
+        description="Compiled execution installation fixture.",
+        version="0.2.0",
+        kitchen_rules=["test"],
+        steps={
+            "verify": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:dry-walkthrough",
+                    "cwd": "/repo",
+                    "skill_inputs": {"plan_path": "/tmp/plan.md"},
+                },
+            )
+        },
+    )
+    return {
+        "content": "name: test-recipe\n",
+        "valid": True,
+        "errors": [],
+        "requires_packs": [],
+        "requires_features": [],
+        "content_hash": "sha256:" + "a" * 64,
+        "composite_hash": "sha256:" + "b" * 64,
+        "recipe_version": "1.0",
+        "suggestions": [],
+        "post_prune_step_names": ["verify"],
+        "dispatch_feasible": True,
+        "_compiled_bindings": bind_recipe(recipe),
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("deferred_recall", [False, True], ids=["normal", "deferred"])
+async def test_recipe_open_atomically_installs_compiled_execution(
+    tool_ctx,
+    deferred_recall: bool,
+) -> None:
+    from autoskillit.server.tools import tools_kitchen
+
+    tool_ctx.gate.enable()
+    tool_ctx.gate_infrastructure_ready = True
+    tool_ctx.recipe_name = "test-recipe" if deferred_recall else ""
+    recipes = MagicMock()
+    recipes.find.return_value = None
+    tool_ctx.recipes = recipes
+    request_ctx = MagicMock()
+    request_ctx.enable_components = AsyncMock()
+    request_ctx.disable_components = AsyncMock()
+    request_ctx.reset_visibility = AsyncMock()
+
+    with (
+        patch("autoskillit.server._get_ctx", return_value=tool_ctx),
+        patch.object(
+            tools_kitchen,
+            "serve_recipe",
+            side_effect=lambda *args, **kwargs: _compiled_recipe_payload(),
+        ),
+        patch.object(tools_kitchen, "_update_hook_config_with_recipe"),
+        patch.object(tools_kitchen, "_update_hook_config_with_git_ops_policy"),
+        patch.object(
+            tools_kitchen,
+            "_apply_triage_gate",
+            new=AsyncMock(side_effect=lambda result, *args, **kwargs: result),
+        ),
+    ):
+        result = await tools_kitchen.open_kitchen(
+            name="test-recipe",
+            ctx=request_ctx,
+        )
+
+    parsed = json.loads(result)
+    assert parsed["success"] is True, parsed
+    installed = get_recipe_execution(tool_ctx)
+    assert installed is not None
+    assert installed.snapshot.execution_id
+    assert installed.snapshot.templates["verify"].template_digest
+    assert installed.runtime_binding_digests == {}
+    assert (
+        installed.audit_cycle_heads.get(
+            execution_generation=installed.snapshot.execution_id,
+            plan_set_id="plans-1",
+            scope_id="scope-1",
+            part_id="part-a",
+        )
+        is None
+    )
+    with patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None):
+        assert await tools_kitchen.close_kitchen(ctx=request_ctx) == "Kitchen is closed."
+    assert get_recipe_execution(tool_ctx) is None
 
 
 @pytest.mark.anyio

@@ -18,6 +18,8 @@ from autoskillit.core import (
     AuditCycleHead,
     AuditCycleVerifier,
     AuditVerdict,
+    BindingFailureCode,
+    BindingMode,
     BoundScalar,
     BoundValueOrigin,
     BoundValueState,
@@ -31,9 +33,15 @@ from autoskillit.core import (
     VerifiedInputPreflightResult,
     compute_invocation_template_digest,
     compute_recipe_execution_snapshot_digest,
+    get_logger,
     resolve_skill_name,
 )
-from autoskillit.recipe import get_skill_contract, load_bundled_manifest
+from autoskillit.recipe import (
+    RecipeStep,
+    bind_step_invocation,
+    get_skill_contract,
+    load_bundled_manifest,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import AuditCycleHeadStore
@@ -47,6 +55,7 @@ __all__ = [
     "bind_attested_runtime_invocation",
     "build_bound_child_prompt",
     "build_recipe_execution_snapshot",
+    "build_standalone_child_prompt",
     "clear_recipe_execution",
     "get_recipe_execution",
     "install_recipe_execution",
@@ -124,6 +133,10 @@ class DefaultAuditCycleHeadStore:
                         "initial authority requires an empty parent and round one"
                     )
             else:
+                if current.verdict is AuditVerdict.GO:
+                    raise AuditCycleHeadConflict(
+                        "terminal GO authority cannot be advanced within the same part"
+                    )
                 if (
                     current.current_authority_digest != expected_parent_digest
                     or current.audit_round != expected_round
@@ -211,6 +224,10 @@ class DefaultInputPreflightResolver:
         try:
             authority = self._verifier.load_authority(authority_path)
         except Exception as exc:
+            get_logger(__name__).error(
+                "audit-cycle authority verification failed",
+                exc_info=True,
+            )
             return self._result(
                 InventoryAdmissionDecision.reject(
                     AdmissionReason.AUTHORITY_NOT_CURRENT,
@@ -292,10 +309,10 @@ def build_recipe_execution_snapshot(
     active_execution_id = execution_id or uuid4().hex
     templates: dict[str, InvocationTemplate] = {}
     for step_name, invocation in projection.invocations.items():
-        if invocation.tool_name != "run_skill":
+        if invocation.tool_name != "run_skill" or not invocation.attested:
             continue
-        if not invocation.attested or invocation.skill_name is None:
-            raise ValueError(f"run_skill step {step_name!r} is not valid for attestation")
+        if invocation.skill_name is None:
+            raise AssertionError("attested invocation is missing its skill identity")
         skill_identity = _skill_contract_identity(invocation.skill_name)
         digest = compute_invocation_template_digest(
             execution_id=active_execution_id,
@@ -505,6 +522,51 @@ def build_bound_child_prompt(
         }
     return f"{skill_command.strip()}\n\nAUTOSKILLIT_BOUND_INVOCATION_V1\n" + json.dumps(
         payload, ensure_ascii=False, separators=(",", ":")
+    )
+
+
+def build_standalone_child_prompt(
+    skill_command: str,
+    cwd: str,
+    skill_inputs: Mapping[str, str | int | float | bool] | None,
+) -> str:
+    """Validate standalone inputs without requiring attested recipe state.
+
+    An unknown skill with no structured inputs may still be resolved from a
+    project/plugin installation later in the normal dispatch path. Structured
+    inputs require a canonical contract because their names and order otherwise
+    cannot be validated safely.
+    """
+    with_args: dict[str, object] = {
+        "skill_command": skill_command,
+        "cwd": cwd,
+    }
+    if skill_inputs is not None:
+        with_args["skill_inputs"] = skill_inputs
+    binding = bind_step_invocation(
+        "standalone",
+        RecipeStep(
+            name="standalone",
+            tool="run_skill",
+            with_args=with_args,
+            declared_with_args=dict(with_args),
+        ),
+        mode=BindingMode.STANDALONE,
+    )
+    if binding.failures:
+        failure = binding.failures[0]
+        if failure.code is BindingFailureCode.UNKNOWN_SKILL and skill_inputs is None:
+            return skill_command
+        raise RecipeExecutionAdmissionError(
+            f"standalone_{failure.code.value}",
+            failure.message,
+        )
+    if skill_inputs is None:
+        return skill_command
+    return build_bound_child_prompt(
+        skill_command,
+        binding.canonical_child_invocation,
+        None,
     )
 
 

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    RecipeBindingProjection,
     SkillExecutionRole,
 )
 from autoskillit.server._misc import SkillProjectionContext, project_agent_skill_document
@@ -24,7 +25,6 @@ if TYPE_CHECKING:
     from autoskillit.core import (
         BackendCapabilities,
         CodingAgentBackend,
-        RecipeBindingProjection,
     )
     from autoskillit.pipeline.context import ToolContext
 
@@ -109,15 +109,15 @@ def response_backstop_tool_meta(
 
 def render_served_response(payload: dict[str, Any]) -> str:
     """Render the authoritative pre-backstop response used by recipe serve tools."""
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    public_payload = dict(payload)
+    public_payload.pop("_compiled_bindings", None)
+    return json.dumps(public_payload, ensure_ascii=False, separators=(",", ":"))
 
 
 def pop_compiled_bindings(
     payload: dict[str, Any],
 ) -> RecipeBindingProjection | None:
     """Remove and return the internal post-prune carrier before serialization."""
-    from autoskillit.core import RecipeBindingProjection
-
     candidate = payload.pop("_compiled_bindings", None)
     return candidate if isinstance(candidate, RecipeBindingProjection) else None
 
@@ -177,7 +177,7 @@ def reset_session_serve_overrides(ctx: ToolContext) -> None:
     """
     ctx.session_serve_overrides = None
     ctx.session_serve_defer_unresolved = False
-    from autoskillit.server._recipe_execution import clear_recipe_execution
+    from autoskillit.server._recipe_execution import clear_recipe_execution  # circular-break
 
     clear_recipe_execution(ctx)
 

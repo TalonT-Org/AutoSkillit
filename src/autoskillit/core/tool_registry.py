@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType
 
+from .types._type_constants_registries import HEADLESS_TOOLS
 from .types._type_recipe_binding import ToolDef, ToolParamDef, ToolWireType
 
 __all__ = [
@@ -25,11 +26,20 @@ def _tool(
     params: tuple[str, ...] = (),
     *,
     required: tuple[str, ...] = (),
+    wire_types: Mapping[str, ToolWireType] | None = None,
 ) -> ToolDef:
     required_set = frozenset(required)
+    declared_wire_types = wire_types or {}
     return ToolDef(
         name=name,
-        params=tuple(ToolParamDef(param, required=param in required_set) for param in params),
+        params=tuple(
+            ToolParamDef(
+                param,
+                wire_type=declared_wire_types.get(param, ToolWireType.SCALAR),
+                required=param in required_set,
+            )
+            for param in params
+        ),
     )
 
 
@@ -64,6 +74,13 @@ def _run_skill() -> ToolDef:
         ToolParamDef("stale_threshold", ToolWireType.INTEGER),
         ToolParamDef("idle_output_timeout", ToolWireType.INTEGER),
     ]
+    params.append(
+        ToolParamDef(
+            "dispatch_items",
+            ToolWireType.STRING,
+            handler_parameter=False,
+        )
+    )
     params.append(
         ToolParamDef(
             "skill_inputs",
@@ -195,7 +212,12 @@ _TOOL_DEFS = (
         ),
     ),
     _tool("run_cmd", ("cmd", "cwd", "timeout", "step_name"), required=("cmd", "cwd")),
-    _tool("run_python", ("callable", "args", "timeout", "work_dir"), required=("callable",)),
+    _tool(
+        "run_python",
+        ("callable", "args", "timeout", "work_dir"),
+        required=("callable",),
+        wire_types={"args": ToolWireType.OBJECT},
+    ),
     _run_skill(),
     _tool(
         "dispatch_food_truck",
@@ -216,6 +238,11 @@ _TOOL_DEFS = (
             "backend",
         ),
         required=("recipe", "task"),
+        wire_types={
+            "ingredients": ToolWireType.OBJECT,
+            "capture": ToolWireType.OBJECT,
+            "resume_checkpoint": ToolWireType.OBJECT,
+        },
     ),
     _tool(
         "record_gate_dispatch",
@@ -280,7 +307,14 @@ _TOOL_DEFS = (
         ("issue_url", "label", "target_branch", "staged_label", "fail_label", "close_issue"),
         required=("issue_url",),
     ),
-    _tool("open_kitchen", ("name", "overrides", "ingredients_only", "delivery_request")),
+    _tool(
+        "open_kitchen",
+        ("name", "overrides", "ingredients_only", "delivery_request"),
+        wire_types={
+            "overrides": ToolWireType.OBJECT,
+            "delivery_request": ToolWireType.OBJECT,
+        },
+    ),
     _tool("close_kitchen"),
     _tool("disable_quota_guard"),
     _tool("lock_ingredients", ("locked", "pipeline_id", "unlock")),
@@ -291,12 +325,17 @@ _TOOL_DEFS = (
         "bulk_close_issues",
         ("issue_numbers", "comment", "cwd"),
         required=("issue_numbers", "comment", "cwd"),
+        wire_types={"issue_numbers": ToolWireType.ARRAY},
     ),
     _tool("list_recipes"),
     _tool(
         "load_recipe",
         ("name", "overrides", "ingredients_only", "delivery_request"),
         required=("name",),
+        wire_types={
+            "overrides": ToolWireType.OBJECT,
+            "delivery_request": ToolWireType.OBJECT,
+        },
     ),
     _tool(
         "get_recipe_section",
@@ -335,7 +374,12 @@ _TOOL_DEFS = (
     _tool("analyze_tool_sequences", ("recipe", "format", "top_n", "min_count")),
     _tool("get_quota_events", ("n",)),
     _tool("write_telemetry_files", ("output_dir",), required=("output_dir",)),
-    _tool("read_db", ("db_path", "query", "params", "timeout"), required=("db_path", "query")),
+    _tool(
+        "read_db",
+        ("db_path", "query", "params", "timeout"),
+        required=("db_path", "query"),
+        wire_types={"params": ToolWireType.ARRAY},
+    ),
     _tool("test_check", ("worktree_path", "step_name"), required=("worktree_path",)),
     _tool("reset_test_dir", ("test_dir", "force", "step_name"), required=("test_dir",)),
     _tool("reset_workspace", ("test_dir",), required=("test_dir",)),
@@ -352,6 +396,11 @@ def _build_registry(tool_defs: tuple[ToolDef, ...]) -> Mapping[str, ToolDef]:
 
 
 TOOL_REGISTRY: Mapping[str, ToolDef] = _build_registry(_TOOL_DEFS)
+if not HEADLESS_TOOLS <= TOOL_REGISTRY.keys():
+    raise RuntimeError(
+        "Canonical tool registry is missing headless tools: "
+        f"{sorted(HEADLESS_TOOLS - TOOL_REGISTRY.keys())}"
+    )
 
 
 def get_tool_def(tool_name: str) -> ToolDef | None:

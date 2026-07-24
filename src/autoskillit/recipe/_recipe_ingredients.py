@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 from autoskillit.core import (
+    RecipeBindingProjection,
     TerminalColumn,
     _render_gfm_table,
 )
-
-if TYPE_CHECKING:
-    from autoskillit.core import RecipeBindingProjection
 
 # ---------------------------------------------------------------------------
 # GFM ingredient table column specs

@@ -99,6 +99,30 @@ def test_structured_binding_uses_contract_order_not_mapping_order() -> None:
     )
 
 
+def test_single_inline_input_preserves_multiword_prose_tail() -> None:
+    manifest: dict[str, object] = {
+        "skills": {
+            "investigate": {"inputs": [{"name": "topic", "type": "string", "required": True}]}
+        }
+    }
+    invocation = bind_step_invocation(
+        "investigate",
+        RecipeStep(
+            name="investigate",
+            tool="run_skill",
+            with_args={
+                "skill_command": "/autoskillit:investigate the failing lifecycle",
+                "cwd": "/repo",
+            },
+        ),
+        manifest=manifest,
+        mode=BindingMode.STANDALONE,
+    )
+
+    assert invocation.is_valid
+    assert invocation.canonical_child_invocation == (("topic", "the failing lifecycle"),)
+
+
 def test_optional_absence_does_not_shift_later_values() -> None:
     invocation = bind_step_invocation(
         "verify",
@@ -295,6 +319,7 @@ steps:
         assert plan is not None
         assert plan.declared_value == "{{AUTOSKILLIT_TEMP}}/plans/current.md"
         assert plan.effective_value == "/custom temp/plans/current.md"
+        assert plan.template_dependencies == ("AUTOSKILLIT_TEMP",)
         assert cycle is not None
         assert cycle.origin is BoundValueOrigin.TEMPLATE
         assert cycle.input_dependencies == ("private_root",)

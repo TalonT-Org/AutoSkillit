@@ -150,7 +150,7 @@ class TestRunSkillAgentResult:
         )
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
+        result = json.loads(await run_skill("/retry-worktree plan.md /tmp", "/tmp"))
         assert "prompt is too long" not in result["result"].lower()
         assert result["needs_retry"] is True
 

@@ -36,7 +36,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 | `test_dry_walkthrough_arch_catalog_reference.py` | Contract test: dry-walkthrough SKILL.md Step 4 must reference the Architectural Constraint Catalog |
 | `test_dry_walkthrough_issue_coverage.py` | Contract test: dry-walkthrough SKILL.md must contain plan-vs-issue coverage check step (Step 4.6) |
-| `test_dry_walkthrough_plan_coverage.py` | Contract test: dry-walkthrough SKILL.md must contain plan-vs-inventory coverage gate (Step 4.7) |
+| `test_dry_walkthrough_plan_coverage.py` | Focused contract: Step 4.7 consumes verified audit-cycle preflight evidence and cannot self-heal evaluator results |
 | `test_dry_walkthrough_transformation_extent.py` | Contract test: dry-walkthrough SKILL.md Step 2 must check transformation extent/scope |
 | `test_enrich_issues_contracts.py` | Contract tests for the enrich-issues skill SKILL.md |
 | `test_environment_setup_design_contracts.py` | Contract tests verifying the environment-setup skill design doc completeness |
@@ -61,7 +61,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_l1_packages.py` | Package export surface tests for the L1 sub-packages |
 | `test_make_campaign_skill_contracts.py` | Contract tests: structural invariants for the make-campaign SKILL.md |
 | `test_make_plan_echo_rule.py` | Contract test: make-plan SKILL.md must contain requirement echo validation rule and Requirements Map template section |
-| `test_make_plan_remediation_inventory.py` | Contract tests for make-plan SKILL.md remediation-mode inventory awareness |
+| `test_make_plan_remediation_inventory.py` | Focused contract: make-plan binds remediation output to explicit authority, exact dispositions, and immutable association |
 | `test_mermaid_palette_contracts.py` | Contract: any SKILL.md that generates mermaid diagrams must embed the canonical 9-class palette |
 | `test_no_interpreter_writes_in_skills.py` | Contract: no SKILL.md may prescribe interpreter-mediated file writes (python3 -c / heredoc with write APIs) |
 | `test_no_pagination_file_read.py` | Contract tests for no-pagination file read instruction in high-turn SKILL.md files |

@@ -8,13 +8,24 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from hypothesis import settings
+from hypothesis import strategies as st
+from hypothesis.stateful import (
+    RuleBasedStateMachine,
+    initialize,
+    invariant,
+    precondition,
+    rule,
+)
 
 from autoskillit.core import (
     AdmissionReason,
+    AdmissionStatus,
     ArtifactRef,
     AuditAssessment,
     AuditAssessmentRow,
     AuditCycleAuthority,
+    AuditCycleHead,
     AuditVerdict,
     BindingMode,
     BoundStepInvocation,
@@ -22,6 +33,9 @@ from autoskillit.core import (
     BoundValueOrigin,
     BoundValueState,
     InventoryAdmissionDecision,
+    InventoryAdmissionEvaluator,
+    PlanDispositionReport,
+    PlanDispositionRow,
     RecipeBindingProjection,
     VerifiedInputPreflightRequest,
     VerifiedInputPreflightResult,
@@ -130,6 +144,7 @@ def _authority(
     round_: int,
     parent: str | None,
     verdict: AuditVerdict,
+    part_id: str = "part-a",
 ) -> AuditCycleAuthority:
     assessment = AuditAssessmentRow.create(
         requirement_id="REQ-001",
@@ -142,7 +157,7 @@ def _authority(
         cycle_id="cycle-1",
         plan_set_id="plans-1",
         scope_id="scope-1",
-        part_id="part-a",
+        part_id=part_id,
         audit_round=round_,
         parent_authority_digest=parent,
         audited_plan_refs=(_artifact(tmp_path / "plan.md", _HASH_A),),
@@ -156,6 +171,44 @@ def _authority(
         ),
         generated_at="2026-07-23T00:00:00Z",
     )
+
+
+def _report(authority: AuditCycleAuthority) -> PlanDispositionReport:
+    return PlanDispositionReport.create(
+        execution_generation=authority.execution_generation,
+        cycle_id=authority.cycle_id,
+        plan_set_id=authority.plan_set_id,
+        scope_id=authority.scope_id,
+        part_id=authority.part_id,
+        audit_round=authority.audit_round,
+        parent_authority_digest=authority.authority_digest,
+        inventory_digest=authority.inventory_ref.content_digest,
+        findings_digest=authority.findings_digest,
+        current_plan_ref=_artifact(
+            Path("/virtual/autoskillit-audit-cycle-state-machine/current-plan.md"),
+            _HASH_A,
+        ),
+        dispositions=(
+            PlanDispositionRow.create(
+                requirement_id="REQ-001",
+                disposition=f"satisfied-by-round-{authority.audit_round}",
+            ),
+        ),
+        generated_at="2026-07-23T00:00:00Z",
+    )
+
+
+def _plan_text(round_: int) -> str:
+    return f"""\
+## Requirements Map
+| Requirement ID | Disposition | Implementation Step |
+| --- | --- | --- |
+| REQ-001 | satisfied-by-round-{round_} | — |
+
+## Implementation Steps
+### Step 1
+REQ-001 remains satisfied.
+"""
 
 
 def test_delivery_persists_and_installs_matching_execution(
@@ -307,6 +360,262 @@ def test_head_publication_is_monotonic_compare_and_swap(tmp_path: Path) -> None:
     )
     assert terminal.current_authority_digest == successor.authority_digest
     assert terminal.authorized_successor_part_id == "part-b"
+
+
+class AuditCycleLifecycleStateMachine(RuleBasedStateMachine):
+    """Model trusted-head monotonicity across retries, parts, and generations."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.artifact_root = Path("/virtual/autoskillit-audit-cycle-state-machine")
+        self.store = DefaultAuditCycleHeadStore()
+        self.generation_index = 0
+        self.generation = "execution-0"
+        self.part_id = "part-a"
+        self.model_heads: dict[tuple[str, str], AuditCycleHead] = {}
+        self.authorities: dict[str, AuditCycleAuthority] = {}
+        self.reports: dict[tuple[str, str], PlanDispositionReport] = {}
+        self.report_history: list[PlanDispositionReport] = []
+        self.history: list[AuditCycleAuthority] = []
+
+    @initialize()
+    def initialize_model(self) -> None:
+        self.store.clear_all()
+        self.generation_index = 0
+        self.generation = "execution-0"
+        self.part_id = "part-a"
+        self.model_heads.clear()
+        self.authorities.clear()
+        self.reports.clear()
+        self.report_history.clear()
+        self.history.clear()
+
+    def _model_key(self) -> tuple[str, str]:
+        return self.generation, self.part_id
+
+    @staticmethod
+    def _round_trip(authority: AuditCycleAuthority) -> AuditCycleAuthority:
+        payload = json.loads(authority.canonical_bytes)
+        return AuditCycleAuthority.from_dict(payload)
+
+    @rule(verdict=st.sampled_from((AuditVerdict.NO_GO, AuditVerdict.GO)))
+    def publish_current_part(self, verdict: AuditVerdict) -> None:
+        current = self.model_heads.get(self._model_key())
+        if current is not None and current.verdict is AuditVerdict.GO:
+            return
+        authority = self._round_trip(
+            _authority(
+                self.artifact_root,
+                generation=self.generation,
+                round_=1 if current is None else current.audit_round + 1,
+                parent=None if current is None else current.current_authority_digest,
+                verdict=verdict,
+                part_id=self.part_id,
+            )
+        )
+        head = self.store.publish(
+            authority,
+            expected_parent_digest=(None if current is None else current.current_authority_digest),
+            expected_round=0 if current is None else current.audit_round,
+            authorized_successor_part_id=(
+                f"{self.part_id}-successor" if verdict is AuditVerdict.GO else None
+            ),
+        )
+        self.model_heads[self._model_key()] = head
+        self.authorities[authority.authority_digest] = authority
+        self.reports.pop(self._model_key(), None)
+        self.history.append(authority)
+
+    @precondition(
+        lambda self: (
+            (head := self.model_heads.get(self._model_key())) is not None
+            and head.verdict is AuditVerdict.NO_GO
+        )
+    )
+    @rule()
+    def publish_or_salvage_plan_report(self) -> None:
+        head = self.model_heads[self._model_key()]
+        authority = self.authorities[head.current_authority_digest]
+        report = PlanDispositionReport.from_dict(json.loads(_report(authority).canonical_bytes))
+        self.reports[self._model_key()] = report
+        self.report_history.append(report)
+
+    @precondition(
+        lambda self: (
+            (head := self.model_heads.get(self._model_key())) is not None
+            and head.verdict is AuditVerdict.GO
+        )
+    )
+    @rule()
+    def terminal_go_rejects_retry(self) -> None:
+        current = self.model_heads[self._model_key()]
+        successor = self._round_trip(
+            _authority(
+                self.artifact_root,
+                generation=self.generation,
+                round_=current.audit_round + 1,
+                parent=current.current_authority_digest,
+                verdict=AuditVerdict.NO_GO,
+                part_id=self.part_id,
+            )
+        )
+        with pytest.raises(AuditCycleHeadConflict, match="terminal GO"):
+            self.store.publish(
+                successor,
+                expected_parent_digest=current.current_authority_digest,
+                expected_round=current.audit_round,
+            )
+
+    @precondition(lambda self: bool(self.history))
+    @rule()
+    def stale_replay_and_tamper_reject(self) -> None:
+        current = self.model_heads.get(self._model_key())
+        if current is not None:
+            replay = self.history[0]
+            with pytest.raises(AuditCycleHeadConflict):
+                self.store.publish(
+                    replay,
+                    expected_parent_digest=current.current_authority_digest,
+                    expected_round=current.audit_round,
+                )
+        tampered = self.history[-1].to_dict()
+        tampered["authority_digest"] = _HASH_A
+        with pytest.raises(ValueError, match="digest"):
+            AuditCycleAuthority.from_dict(tampered)
+
+    @precondition(lambda self: bool(self.report_history))
+    @rule()
+    def swapped_report_never_admits(self) -> None:
+        head = self.model_heads.get(self._model_key())
+        current_report = self.reports.get(self._model_key())
+        if head is None or head.verdict is not AuditVerdict.NO_GO:
+            return
+        authority = self.authorities[head.current_authority_digest]
+        stale = next(
+            (
+                report
+                for report in self.report_history
+                if report.parent_authority_digest != authority.authority_digest
+            ),
+            None,
+        )
+        if stale is None:
+            return
+        decision = InventoryAdmissionEvaluator().evaluate(
+            authority=authority,
+            trusted_head=head,
+            report=stale,
+            expected_generation=self.generation,
+            expected_plan_set_id="plans-1",
+            expected_scope_id="scope-1",
+            expected_part_id=self.part_id,
+            current_plan_ref=stale.current_plan_ref,
+            inventory_requirement_ids=("REQ-001",),
+            current_plan_text=_plan_text(authority.audit_round),
+        )
+        assert decision.status is AdmissionStatus.REJECT
+        assert self.reports.get(self._model_key()) is current_report
+
+    @precondition(
+        lambda self: (
+            (head := self.model_heads.get(self._model_key())) is not None
+            and head.verdict is AuditVerdict.GO
+            and head.authorized_successor_part_id is not None
+        )
+    )
+    @rule()
+    def advance_to_authorized_sibling_part(self) -> None:
+        current = self.model_heads[self._model_key()]
+        assert current.authorized_successor_part_id is not None
+        self.part_id = current.authorized_successor_part_id
+
+    @rule()
+    def replace_execution_generation(self) -> None:
+        old_generation = self.generation
+        self.store.clear_generation(old_generation)
+        self.model_heads = {
+            key: head for key, head in self.model_heads.items() if key[0] != old_generation
+        }
+        self.reports = {
+            key: report for key, report in self.reports.items() if key[0] != old_generation
+        }
+        self.generation_index += 1
+        self.generation = f"execution-{self.generation_index}"
+        self.part_id = "part-a"
+        self.history.clear()
+
+    @rule()
+    def close_and_reset(self) -> None:
+        self.store.clear_all()
+        self.model_heads.clear()
+        self.reports.clear()
+        self.history.clear()
+        self.part_id = "part-a"
+
+    @invariant()
+    def trusted_heads_match_independent_model(self) -> None:
+        for (generation, part_id), expected in self.model_heads.items():
+            assert (
+                self.store.get(
+                    execution_generation=generation,
+                    plan_set_id="plans-1",
+                    scope_id="scope-1",
+                    part_id=part_id,
+                )
+                == expected
+            )
+
+    @invariant()
+    def launch_decision_matches_current_authority_model(self) -> None:
+        head = self.model_heads.get(self._model_key())
+        authority = self.authorities[head.current_authority_digest] if head is not None else None
+        expected_part = self.part_id
+        if head is None:
+            predecessor = next(
+                (
+                    candidate
+                    for (generation, _part), candidate in self.model_heads.items()
+                    if generation == self.generation
+                    and candidate.verdict is AuditVerdict.GO
+                    and candidate.authorized_successor_part_id == self.part_id
+                ),
+                None,
+            )
+            if predecessor is not None:
+                head = predecessor
+                authority = self.authorities[head.current_authority_digest]
+        report = self.reports.get(self._model_key())
+        decision = InventoryAdmissionEvaluator().evaluate(
+            authority=authority,
+            trusted_head=head,
+            report=report,
+            expected_generation=self.generation,
+            expected_plan_set_id="plans-1",
+            expected_scope_id="scope-1",
+            expected_part_id=expected_part,
+            current_plan_ref=report.current_plan_ref if report is not None else None,
+            inventory_requirement_ids=("REQ-001",) if report is not None else (),
+            current_plan_text=(
+                _plan_text(authority.audit_round)
+                if authority is not None and report is not None
+                else ""
+            ),
+        )
+        if authority is None or authority.verdict is AuditVerdict.GO:
+            assert decision.status is AdmissionStatus.OMIT
+        elif report is None:
+            assert decision.status is AdmissionStatus.REJECT
+            assert decision.reason is AdmissionReason.AUTHORITY_WITHOUT_REPORT
+        else:
+            assert decision.status is AdmissionStatus.PASS
+
+
+TestAuditCycleLifecycle = AuditCycleLifecycleStateMachine.TestCase
+TestAuditCycleLifecycle.settings = settings(
+    max_examples=20,
+    stateful_step_count=25,
+    deadline=None,
+)
 
 
 def test_omit_preflight_performs_zero_artifact_reads(tmp_path: Path) -> None:

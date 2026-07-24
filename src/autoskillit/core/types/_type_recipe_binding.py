@@ -131,12 +131,13 @@ class BoundValue:
     """One aligned declared/effective value in a named binding slot."""
 
     name: str
-    declared_value: BoundScalar | AbsentBoundValue
-    effective_value: BoundScalar | AbsentBoundValue
+    declared_value: object | AbsentBoundValue
+    effective_value: object | AbsentBoundValue
     state: BoundValueState
     origin: BoundValueOrigin
     context_dependencies: tuple[str, ...] = ()
     input_dependencies: tuple[str, ...] = ()
+    template_dependencies: tuple[str, ...] = ()
 
     @classmethod
     def absent(cls, name: str) -> BoundValue:
@@ -195,7 +196,7 @@ class BoundStepInvocation:
     def attested(self) -> bool:
         """Whether this binding is eligible for later recipe attestation."""
 
-        return self.mode is BindingMode.RECIPE and self.is_valid
+        return self.mode is BindingMode.RECIPE and self.is_valid and self.skill_name is not None
 
     @property
     def canonical_child_invocation(self) -> tuple[tuple[str, BoundScalar], ...]:
@@ -212,6 +213,8 @@ class BoundStepInvocation:
             effective = value.effective_value
             if isinstance(effective, AbsentBoundValue):
                 continue
+            if not isinstance(effective, (str, int, float, bool)):
+                raise TypeError(f"child-skill input {value.name!r} is not a strict scalar")
             result.append((value.name, effective))
         return tuple(result)
 

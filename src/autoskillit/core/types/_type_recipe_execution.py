@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ..closure_hashing import compute_canonical_hash
 from ._type_audit_cycle import AuditCycleAuthority, AuditCycleHead, InventoryAdmissionDecision
@@ -30,6 +30,7 @@ __all__ = [
     "InvocationTemplate",
     "PreflightEvidence",
     "PreflightKind",
+    "RecipeExecutionLock",
     "RecipeExecutionSnapshot",
     "VerifiedInputPreflightRequest",
     "VerifiedInputPreflightResult",
@@ -43,7 +44,16 @@ _RECIPE_EXECUTION_SNAPSHOT_DOMAIN = "autoskillit:recipe-execution-snapshot:v1:sh
 _RUNTIME_BINDING_DOMAIN = "autoskillit:recipe-runtime-binding:v1:sha256"
 
 
-def _bound_scalar_payload(value: BoundScalar | AbsentBoundValue) -> object:
+@runtime_checkable
+class RecipeExecutionLock(Protocol):
+    """Context-manager contract for atomic recipe-execution state changes."""
+
+    def __enter__(self) -> Any: ...
+
+    def __exit__(self, *args: Any) -> Any: ...
+
+
+def _bound_scalar_payload(value: object | AbsentBoundValue) -> object:
     if isinstance(value, AbsentBoundValue):
         return {"absent": True}
     return value
@@ -58,6 +68,7 @@ def _bound_value_payload(value: BoundValue) -> dict[str, object]:
         "name": value.name,
         "origin": value.origin.value,
         "state": value.state.value,
+        "template_dependencies": list(value.template_dependencies),
     }
 
 

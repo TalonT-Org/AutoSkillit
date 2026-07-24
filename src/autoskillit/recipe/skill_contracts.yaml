@@ -80,6 +80,9 @@ skills:
     - name: experiment_plan
       type: file_path
       required: true
+    - name: revision_guidance
+      type: directory_path
+      required: false
     outputs:
     - name: resolution
       type: string
@@ -104,6 +107,12 @@ skills:
     - name: base_branch
       type: string
       required: true
+    - name: ci_conclusion
+      type: string
+      required: false
+    - name: ci_failed_jobs
+      type: string
+      required: false
     - name: diagnosis_path
       type: file_path
       required: false
@@ -204,11 +213,18 @@ skills:
     - name: issue_url
       type: string
       required: false
-    - name: remediation_path
+    - name: review_path
+      type: file_path
+      required: false
+    - name: audit_cycle_path
+      type: file_path
+      required: false
+    - name: plan_disposition_path
       type: file_path
       required: false
     outputs: []
     write_behavior: always
+    input_preflight: audit_cycle_inventory
   implement-worktree:
     inputs:
     - name: plan_path
@@ -280,24 +296,33 @@ skills:
     - name: task
       type: string
       required: true
+    - name: issue_url
+      type: string
+      required: false
+    - name: adversarial_review_level
+      type: string
+      required: false
+    - name: audit_cycle_path
+      type: file_path
+      required: false
     outputs:
     - name: verdict
       type: string
       allowed_values:
         - plan
-        - false_positive
     - name: plan_path
       type: file_path
     - name: plan_parts
       type: file_path_list
+    - name: plan_disposition_path
+      type: file_path
     expected_output_patterns:
-    - "verdict[ \\t]*=[ \\t]*(plan|false_positive)"
-    pattern_examples:
-    - "verdict = plan\nplan_path = /tmp/plan.md\nplan_parts = /tmp/plan.md\n%%ORDER_UP%%"
-    - "verdict = false_positive\n%%ORDER_UP%%"
-    write_behavior: conditional
-    write_expected_when:
     - "verdict[ \\t]*=[ \\t]*plan"
+    - "%%ORDER_UP::[a-f0-9]+%%"
+    pattern_examples:
+    - "verdict = plan\nplan_path = /tmp/plan.md\nplan_parts = /tmp/plan.md\n%%ORDER_UP::a1b2c3d4%%"
+    write_behavior: always
+    completion_required: true
   write-recipe:
     inputs: []
     outputs:
@@ -416,19 +441,27 @@ skills:
     - name: closure_authority_hash
       type: string
       required: false
+    - name: deviation_manifest_path
+      type: file_path
+      required: false
+    - name: prior_audit_cycle_path
+      type: file_path
+      required: false
     outputs:
     - name: verdict
       type: string
       allowed_values: [GO, "NO GO"]
     - name: remediation_path
       type: file_path
+    - name: audit_cycle_path
+      type: file_path
     - name: verified_verdict
       type: string
     expected_output_patterns:
     - "verdict[ \\t]*=[ \\t]*(GO|NO GO)"
     pattern_examples:
-    - "verdict = GO\n%%ORDER_UP%%"
-    - "verdict = NO GO\nremediation_path = /tmp/remediation.md\n%%ORDER_UP%%"
+    - "verdict = GO\naudit_cycle_path = /tmp/cycles/round-1/authority.json\n%%ORDER_UP%%"
+    - "verdict = NO GO\nremediation_path = /tmp/remediation.md\naudit_cycle_path = /tmp/cycles/round-1/authority.json\n%%ORDER_UP%%"
   migrate-recipes:
     inputs: []
     outputs: []
@@ -667,6 +700,9 @@ skills:
       type: string
       required: false
     - name: mode
+      type: string
+      required: false
+    - name: pr_head_sha
       type: string
       required: false
     outputs:
@@ -1637,6 +1673,9 @@ skills:
     - name: worktree_path
       type: directory_path
       required: true
+    - name: adjust
+      type: boolean
+      required: false
     outputs:
     - name: results_path
       type: file_path
@@ -1668,6 +1707,33 @@ skills:
     - name: results_path
       type: file_path
       required: true
+    - name: inconclusive
+      type: boolean
+      required: false
+    - name: output_mode
+      type: string
+      required: false
+    - name: issue_url
+      type: string
+      required: false
+    - name: experiment_type
+      type: string
+      required: false
+    - name: methodology_traditions
+      type: string
+      required: false
+    - name: design_review_verdict
+      type: string
+      required: false
+    - name: disambiguation_rule_applied
+      type: string
+      required: false
+    - name: tier_c_lens
+      type: string
+      required: false
+    - name: classification_timestamp
+      type: string
+      required: false
     - name: group_manifest
       type: file_path
       required: false
@@ -1854,6 +1920,10 @@ skills:
     - name: pr_url
       type: string
       required: true
+    - name: annotated_diff_path
+      type: string
+      required: false
+      recommended: true
     - name: hunk_ranges_path
       type: string
       required: false
@@ -2203,7 +2273,19 @@ skills:
     - "diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"
 
   build-execution-map:
-    inputs: []
+    inputs:
+    - name: issue_numbers
+      type: string
+      required: true
+    - name: base_ref
+      type: string
+      required: false
+    - name: assess_review_approach
+      type: boolean
+      required: false
+    - name: max_parallel
+      type: integer
+      required: false
     outputs:
     - name: execution_map
       type: file_path
@@ -2253,13 +2335,31 @@ skills:
     write_expected_when:
     - "html_path[ \\t]*=[ \\t]*\\S+"
   planner-analyze:
-    inputs: []
+    inputs:
+    - name: planner_dir
+      type: directory_path
+      required: true
     outputs: []
   planner-extract-domain:
-    inputs: []
+    inputs:
+    - name: analysis_path
+      type: file_path
+      required: true
+    - name: task_file_path
+      type: file_path
+      required: true
     outputs: []
   planner-generate-phases:
-    inputs: []
+    inputs:
+    - name: analysis_path
+      type: file_path
+      required: true
+    - name: domain_knowledge_path
+      type: file_path
+      required: true
+    - name: task_file_path
+      type: file_path
+      required: true
     outputs:
     - name: phase_manifest_path
       type: file_path
@@ -2332,10 +2432,19 @@ skills:
       - "phase_wps_result_dir = /tmp/autoskillit/planner/run-20260101-120000/work_packages\n%%ORDER_UP%%"
     write_behavior: always
   planner-reconcile-deps:
-    inputs: []
+    inputs:
+    - name: planner_dir
+      type: directory_path
+      required: true
     outputs: []
   planner-refine:
-    inputs: []
+    inputs:
+    - name: validation_path
+      type: file_path
+      required: true
+    - name: planner_dir
+      type: directory_path
+      required: true
     outputs:
       - name: issues_fixed
         type: string
@@ -3024,6 +3133,9 @@ callable_contracts:
     - name: plan_parts
       type: str
       required: true
+    - name: audit_cycle_path
+      type: str
+      required: false
     outputs:
     - name: verdict
       type: str
@@ -3031,6 +3143,8 @@ callable_contracts:
     - name: plan_parts
       type: str
     - name: plan_path
+      type: str
+    - name: plan_disposition_path
       type: str
   autoskillit.recipe._cmd_rpc.review_path_rebase:
     inputs:

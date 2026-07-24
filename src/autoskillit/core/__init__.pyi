@@ -48,16 +48,21 @@ from .audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerif
 from .audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
 from .audit_cycle_verifier import InventoryAdmissionEvaluator as InventoryAdmissionEvaluator
 from .audit_cycle_verifier import VerifiedAuditCycle as VerifiedAuditCycle
-from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
-from .tool_registry import all_tool_names as all_tool_names
-from .tool_registry import get_tool_def as get_tool_def
-from .tool_registry import unsupported_tool_params as unsupported_tool_params
 from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
 from .claude_conventions import LayoutError as LayoutError
 from .claude_conventions import validate_add_dir as validate_add_dir
 from .claude_conventions import validate_worktree_path as validate_worktree_path
+from .closure_hashing import HASH_RE as HASH_RE
+from .closure_hashing import canonical_json_bytes as canonical_json_bytes
+from .closure_hashing import compute_bytes_hash as compute_bytes_hash
+from .closure_hashing import compute_canonical_hash as compute_canonical_hash
+from .closure_hashing import compute_file_hash as compute_file_hash
+from .closure_hashing import compute_report_hash as compute_report_hash
+from .closure_hashing import compute_request_hash as compute_request_hash
+from .closure_hashing import compute_row_hash as compute_row_hash
+from .closure_hashing import parse_canonical_json_bytes as parse_canonical_json_bytes
 from .closure_verifier import VerificationResult as VerificationResult
 from .closure_verifier import verify_closure_report as verify_closure_report
 from .context_admission import (
@@ -103,6 +108,10 @@ from .io import write_canonical_versioned_json as write_canonical_versioned_json
 from .io import write_versioned_json as write_versioned_json
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
+from .path_containment import ContainmentError as ContainmentError
+from .path_containment import check_metadata_stable as check_metadata_stable
+from .path_containment import read_stable_contained_bytes as read_stable_contained_bytes
+from .path_containment import resolve_contained_path as resolve_contained_path
 from .paths import GENERATED_FILES as GENERATED_FILES
 from .paths import claude_code_log_path as claude_code_log_path
 from .paths import claude_code_project_dir as claude_code_project_dir
@@ -142,6 +151,10 @@ from .runtime.session_registry import bridge_claude_session_id as bridge_claude_
 from .runtime.session_registry import read_registry as read_registry
 from .runtime.session_registry import registry_path as registry_path
 from .runtime.session_registry import write_registry_entry as write_registry_entry
+from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
+from .tool_registry import all_tool_names as all_tool_names
+from .tool_registry import get_tool_def as get_tool_def
+from .tool_registry import unsupported_tool_params as unsupported_tool_params
 from .tool_sequence_analysis import DFG as DFG
 from .tool_sequence_analysis import AnalysisResult as AnalysisResult
 from .tool_sequence_analysis import AssistantTurn as AssistantTurn
@@ -161,8 +174,8 @@ from .tool_sequence_analysis import (
 from .tool_sequence_analysis import render_adjacency_table as render_adjacency_table
 from .tool_sequence_analysis import render_dot as render_dot
 from .tool_sequence_analysis import render_mermaid as render_mermaid
+from .types import ABSENT_BOUND_VALUE as ABSENT_BOUND_VALUE
 from .types import ADMIRAL_DISPATCH_SECTIONS as ADMIRAL_DISPATCH_SECTIONS
-from .types import AUDIT_CYCLE_SCHEMA_VERSION as AUDIT_CYCLE_SCHEMA_VERSION
 from .types import AGENT_BACKEND_CLAUDE_CODE as AGENT_BACKEND_CLAUDE_CODE
 from .types import AGENT_BACKEND_CODEX as AGENT_BACKEND_CODEX
 from .types import AGENT_BACKEND_DYNACONF_ENV_VAR as AGENT_BACKEND_DYNACONF_ENV_VAR
@@ -170,22 +183,13 @@ from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
+from .types import AUDIT_CYCLE_SCHEMA_VERSION as AUDIT_CYCLE_SCHEMA_VERSION
 from .types import AUTOSKILLIT_APPLICABLE_GUARDS as AUTOSKILLIT_APPLICABLE_GUARDS
 from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSION
 from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
 from .types import AUTOSKILLIT_SKILL_PREFIX as AUTOSKILLIT_SKILL_PREFIX
 from .types import AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES as AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
 from .types import BACKEND_CAPABILITY_INGREDIENTS as BACKEND_CAPABILITY_INGREDIENTS
-from .types import ABSENT_BOUND_VALUE as ABSENT_BOUND_VALUE
-from .types import AbsentBoundValue as AbsentBoundValue
-from .types import BindingFailure as BindingFailure
-from .types import BindingFailureCode as BindingFailureCode
-from .types import BindingMode as BindingMode
-from .types import BoundScalar as BoundScalar
-from .types import BoundStepInvocation as BoundStepInvocation
-from .types import BoundValue as BoundValue
-from .types import BoundValueOrigin as BoundValueOrigin
-from .types import BoundValueState as BoundValueState
 from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CAPABILITY_GATE_CALLABLES as CAPABILITY_GATE_CALLABLES
 from .types import CAPABILITY_INGREDIENT_MAP as CAPABILITY_INGREDIENT_MAP
@@ -332,6 +336,7 @@ from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VALID_INPUT_SPEC_TYPES as VALID_INPUT_SPEC_TYPES
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
+from .types import AbsentBoundValue as AbsentBoundValue
 from .types import AcceptInputEvent as AcceptInputEvent
 from .types import ActiveContextAdmissionState as ActiveContextAdmissionState
 from .types import AdmissionAttemptId as AdmissionAttemptId
@@ -355,12 +360,12 @@ from .types import AdmissionState as AdmissionState
 from .types import AdmissionTransition as AdmissionTransition
 from .types import AdmissionWitness as AdmissionWitness
 from .types import AdmissionWitnessId as AdmissionWitnessId
+from .types import AdmissionReason as AdmissionReason
+from .types import AdmissionStatus as AdmissionStatus
 from .types import AgentInstanceId as AgentInstanceId
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
-from .types import AdmissionReason as AdmissionReason
-from .types import AdmissionStatus as AdmissionStatus
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
 from .types import AuditAssessment as AuditAssessment
@@ -378,6 +383,14 @@ from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
+from .types import BindingFailure as BindingFailure
+from .types import BindingFailureCode as BindingFailureCode
+from .types import BindingMode as BindingMode
+from .types import BoundScalar as BoundScalar
+from .types import BoundStepInvocation as BoundStepInvocation
+from .types import BoundValue as BoundValue
+from .types import BoundValueOrigin as BoundValueOrigin
+from .types import BoundValueState as BoundValueState
 from .types import CampaignProtector as CampaignProtector
 from .types import CanonicalRepresentationManifest as CanonicalRepresentationManifest
 from .types import CanonicalSpanId as CanonicalSpanId
@@ -473,16 +486,16 @@ from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InputContractResolver as InputContractResolver
 from .types import InputPreflightResolver as InputPreflightResolver
-from .types import InstalledRecipeExecution as InstalledRecipeExecution
-from .types import InvocationTemplate as InvocationTemplate
 from .types import InputSpec as InputSpec
 from .types import InputSpecType as InputSpecType
 from .types import InspectorCallback as InspectorCallback
 from .types import InspectorEvidence as InspectorEvidence
 from .types import InspectorVerdict as InspectorVerdict
+from .types import InstalledRecipeExecution as InstalledRecipeExecution
 from .types import IntakeRuleDef as IntakeRuleDef
 from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
+from .types import InvocationTemplate as InvocationTemplate
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
@@ -513,13 +526,13 @@ from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
 from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
-from .types import PluginSource as PluginSource
-from .types import PrepareBatchEvent as PrepareBatchEvent
-from .types import ProcessedEventRecord as ProcessedEventRecord
 from .types import PlanDispositionReport as PlanDispositionReport
 from .types import PlanDispositionRow as PlanDispositionRow
+from .types import PluginSource as PluginSource
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
+from .types import PrepareBatchEvent as PrepareBatchEvent
+from .types import ProcessedEventRecord as ProcessedEventRecord
 from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef
 from .types import ProducerInstanceId as ProducerInstanceId
@@ -537,6 +550,7 @@ from .types import QuotaRefreshTask as QuotaRefreshTask
 from .types import ReadinessProbe as ReadinessProbe
 from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver
+from .types import RecipeBindingProjection as RecipeBindingProjection
 from .types import RecipeDeliveryAttestation as RecipeDeliveryAttestation
 from .types import RecipeDeliveryBudgetDef as RecipeDeliveryBudgetDef
 from .types import RecipeDeliveryDecision as RecipeDeliveryDecision
@@ -544,7 +558,7 @@ from .types import RecipeDeliveryEvidenceDef as RecipeDeliveryEvidenceDef
 from .types import RecipeDeliveryMode as RecipeDeliveryMode
 from .types import RecipeDeliveryRequest as RecipeDeliveryRequest
 from .types import RecipeDeliverySurfaceDef as RecipeDeliverySurfaceDef
-from .types import RecipeBindingProjection as RecipeBindingProjection
+from .types import RecipeExecutionLock as RecipeExecutionLock
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError
@@ -633,16 +647,14 @@ from .types import TerminationAction as TerminationAction
 from .types import TerminationReason as TerminationReason
 from .types import TestResult as TestResult
 from .types import TestRunner as TestRunner
-from .types import ToolDef as ToolDef
-from .types import ToolParamDef as ToolParamDef
-from .types import ToolWireType as ToolWireType
-from .types import VerifiedInputPreflightRequest as VerifiedInputPreflightRequest
-from .types import VerifiedInputPreflightResult as VerifiedInputPreflightResult
 from .types import TimingLog as TimingLog
 from .types import TokenFactory as TokenFactory
 from .types import TokenizerIdentity as TokenizerIdentity
 from .types import TokenLog as TokenLog
 from .types import ToolCallId as ToolCallId
+from .types import ToolDef as ToolDef
+from .types import ToolParamDef as ToolParamDef
+from .types import ToolWireType as ToolWireType
 from .types import TraditionManifest as TraditionManifest
 from .types import TurnId as TurnId
 from .types import (
@@ -650,6 +662,8 @@ from .types import (
 )
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath
+from .types import VerifiedInputPreflightRequest as VerifiedInputPreflightRequest
+from .types import VerifiedInputPreflightResult as VerifiedInputPreflightResult
 from .types import WindowEpochId as WindowEpochId
 from .types import WitnessKind as WitnessKind
 from .types import WorkspaceManager as WorkspaceManager
@@ -664,8 +678,8 @@ from .types import compute_invocation_template_digest as compute_invocation_temp
 from .types import (
     compute_recipe_execution_snapshot_digest as compute_recipe_execution_snapshot_digest,
 )
-from .types import compute_runtime_binding_digest as compute_runtime_binding_digest
 from .types import compute_remaining as compute_remaining
+from .types import compute_runtime_binding_digest as compute_runtime_binding_digest
 from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches
 from .types import extract_path_arg as extract_path_arg

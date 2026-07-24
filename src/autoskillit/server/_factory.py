@@ -87,7 +87,9 @@ logger = get_logger(__name__)
 
 def make_audit_cycle_head_store() -> AuditCycleHeadStore:
     """Construct the server-owned trusted-head ledger implementation."""
-    from autoskillit.server._recipe_execution import DefaultAuditCycleHeadStore
+    from autoskillit.server._recipe_execution import (  # circular-break
+        DefaultAuditCycleHeadStore,
+    )
 
     return DefaultAuditCycleHeadStore()
 
@@ -98,7 +100,9 @@ def make_input_preflight_resolver(
     head_store: AuditCycleHeadStore,
 ) -> InputPreflightResolver:
     """Construct the bounded verifier backed by the supplied trusted ledger."""
-    from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
+    from autoskillit.server._recipe_execution import (  # circular-break
+        DefaultInputPreflightResolver,
+    )
 
     return DefaultInputPreflightResolver(
         allowed_root=allowed_root,

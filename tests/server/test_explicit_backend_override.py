@@ -218,7 +218,7 @@ class TestExplicitOverrideProviderPrecedence:
 
         response = json.loads(
             await run_skill(
-                "/autoskillit:investigate",
+                "/autoskillit:investigate backend-routing-test",
                 str(tmp_path),
                 step_name="investigate",
             )

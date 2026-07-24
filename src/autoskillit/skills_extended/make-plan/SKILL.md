@@ -22,6 +22,16 @@ Create focused, actionable implementation plans that recommend the technically b
 - User wants an "implementation plan" for a feature or fix
 - User asks to "plan out" a task or migration
 
+## Arguments
+
+- `task` — Task or source document for an ordinary plan.
+- `issue_url` (optional) — GitHub issue context consumed as described below.
+- `adversarial_review_level` (optional) — `auto`, `full`, or `none`.
+- `audit_cycle_path` (optional) — The explicit current audit-cycle authority. Its presence,
+  not prose flags or ambient files, activates remediation mode. Before reading any referenced
+  artifact, verify that this authority is the server-published current `NO GO` head and that
+  its generation, plan set, scope, part, round, parent, and audited-plan lineage match this run.
+
 ## Core Values - CRITICAL
 
 The ONLY criterion for choosing an approach is **technical quality and correctness of design**. A well-designed system is the goal. Nothing else matters.
@@ -237,6 +247,10 @@ handles correctly.
 - Reject an approach because it's harder
 - Create files outside `{{AUTOSKILLIT_TEMP}}/make-plan/` directory
 - Propagate pipeline stamps or markers from input files into the plan output. Specifically, never include `Dry-walkthrough verified = TRUE` as the first line of the output plan — this stamp is written exclusively by the dry-walkthrough skill after validation
+- Discover a latest audit, read an ambient `requirements_inventory.json`, or treat a loose
+  remediation path as authority
+- Emit `false_positive` or otherwise close an active `NO GO`; only a successor audit-impl
+  authority may close that lineage
 - **Use `git merge` in implementation plans.** When a plan needs to bring in changes from another branch, use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure. See "Conflict-Resolution Plan Requirements" section for full guidance.
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
@@ -249,8 +263,10 @@ handles correctly.
   ```
   plan_path = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-plan/{filename}.md
   plan_parts = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-plan/{filename}.md
+  plan_disposition_path = /absolute/cycle/directory/dispositions/{plan_digest}.json
   ```
-  This token is MANDATORY — the pipeline cannot capture the output without it.
+  `plan_path` and `plan_parts` are mandatory for every run. In remediation mode,
+  `plan_disposition_path` is also mandatory.
 - Spawn all subagents via `Agent(model="sonnet")`
 - Recommend the single best technical solution
 - Ground decisions in design quality and correctness
@@ -267,6 +283,14 @@ handles correctly.
 3. If a constraint has no corresponding step, add one. Never leave behavioral requirements as prose-only.
 4. Include a `## Requirements Map` section at the end of the plan listing each constraint with its corresponding step reference.
 
+## Context Limit Behavior
+
+Before a context-limited session terminates, preserve every completed plan file and,
+in remediation mode, its matching disposition and association artifacts. Emit only
+paths for artifacts whose final bytes and hashes have already been verified. Never
+invent a partial disposition report or treat a prose-only plan as successful output;
+the caller must retry planning when the required artifact tuple is incomplete.
+
 ## Output
 
 If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b`, etc.) at natural section boundaries. Use as many parts as needed.
@@ -282,45 +306,47 @@ If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b
 
 Save the plan to: `{{AUTOSKILLIT_TEMP}}/make-plan/{task_name}_plan_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
-**Structured output:** After saving the file(s), emit the following lines so pipeline orchestrators can capture both fields:
+**Structured output:** After saving the file(s), emit the following lines so pipeline
+orchestrators can capture the plan and, in remediation mode, its verified disposition:
 
 **Verdict emission:** Every run MUST emit a `verdict` token as the first structured output line:
-- `verdict = plan` — a valid implementation plan was produced. Emit `plan_path` and `plan_parts` tokens after.
-- `verdict = false_positive` — all remediation findings are false positives; no implementation is needed. Do NOT emit `plan_path` or `plan_parts` tokens. Do NOT write a plan file.
+- `verdict = plan` — the only successful verdict. Emit `plan_path` and `plan_parts`;
+  remediation mode must also emit `plan_disposition_path`.
 
-**When to emit `false_positive`:** Emit `verdict = false_positive` ONLY when ALL of the following are true:
-1. ARGUMENTS contains `audit_remediation_mode=true` (injected by the recipe orchestrator when in remediation context)
-2. The remediation file describes findings that are demonstrably incorrect — the implementation already satisfies the requirement through an equivalent mechanism (e.g., naming deviation following an established codebase convention, structural equivalent, functionally identical approach)
-3. There are zero genuine gaps requiring code changes
+**Remediation-mode authority and disposition production:**
 
-If `audit_remediation_mode=true` is NOT present in ARGUMENTS, NEVER emit `false_positive`. Always emit `verdict = plan` and produce a plan file.
-
-**Remediation mode detection:** Scan ARGUMENTS for a line matching `audit_remediation_mode=true`. When present, the skill is operating in remediation context and MAY emit `verdict = false_positive` if all findings are false positives. When absent, the skill MUST emit `verdict = plan` regardless of assessment.
-
-**Remediation-mode inventory awareness:** When `audit_remediation_mode=true` is present AND `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` exists:
-
-1. Read the pinned inventory from `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`. Each entry contains a `REQ-NNN` id, requirement text, and source location.
-
-2. Read the remediation findings file — the path passed as the positional argument to this skill (the audit-impl remediation output).
-
-3. For each `REQ-NNN` in the inventory, classify:
-   - **carried** — cited in the current remediation findings AND addressed by a new Implementation Steps directive in this plan.
-   - **satisfied-by-prior-round** — NOT cited in the current remediation findings. This means audit-impl round N re-verified this requirement and did not flag it; the prior round already confirmed completion. No new directive is needed.
-
-4. Emit a `## Requirements Disposition Table` section in the plan body (before the Implementation Steps directives):
+1. Activate remediation mode only when `audit_cycle_path` is present. Missing authority is
+   not equivalent to an authoritative empty inventory.
+2. Verify the canonical `AuditCycleAuthority`, trusted current-head identity, and `NO GO`
+   verdict before opening its inventory or remediation `ArtifactRef`. Reject a stale,
+   superseded, cross-generation, cross-scope, cross-part, tampered, or `GO` authority.
+3. Verify every referenced artifact's locator, byte size, content digest, schema, and
+   containment from the exact bytes read.
+4. For every inventory row, write exactly one row in the plan's `## Requirements Map`:
 
    ```
-   ## Requirements Disposition Table
+   ## Requirements Map
 
-   | REQ | Disposition | Evidence |
-   |-----|-------------|----------|
-   | REQ-001 | satisfied-by-prior-round | Not cited in remediation findings |
-   | REQ-007 | carried | MISSING finding: "mktemp not used" → Step 3 adds mktemp |
+   | Requirement ID | Disposition | Implementation Step |
+   |---|---|---|
+   | REQ-001 | satisfied-by-round-1 | — |
+   | REQ-007 | carried@step | Step 3 |
    ```
 
-   This table makes the plan-vs-inventory gate in dry-walkthrough Step 4.7 decidable: requirements not listed in the table will be treated as UNMAPPED. Every inventory entry must appear in the table with a disposition of either `carried` or `satisfied-by-prior-round`.
-
-5. If `audit_remediation_mode=true` is present but the inventory file does NOT exist, proceed without the disposition table (this is the round-1 case where audit-impl has not yet pinned an inventory).
+   `carried@step` must cite the concrete current `Step N`/`Step N.M` that implements the
+   same REQ ID. `satisfied-by-round-N` must name the verified prior audit round. No other
+   vocabulary, duplicate IDs, omitted rows, or invented padding is allowed.
+5. After the final plan bytes are stable, create a canonical immutable
+   `PlanDispositionReport` bound to the parent authority digest, full cycle identity,
+   verified plan `ArtifactRef`, exact ordered disposition rows, timestamp, and report digest.
+   Verify the report against the plan with the production inventory-admission evaluator.
+6. In the current cycle directory, write exactly one immutable association at
+   `associations/{verified_plan_content_digest}.json`. It contains exactly the verified
+   plan ref, disposition ref, parent authority digest, schema version, and association
+   digest. Refuse an existing different record; never search for or synthesize a latest
+   report.
+7. Absence, duplication, evaluator rejection, or Markdown/report drift is an output-contract
+   failure. Do not emit successful structured tokens.
 
 For a single-part plan:
 
@@ -334,7 +360,11 @@ For a single-part plan:
 verdict = plan
 plan_path = {absolute_path}
 plan_parts = {absolute_path}
+plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ```
+
+After the structured paths, emit the completion marker supplied by the active order
+as `%%ORDER_UP::<eight hexadecimal characters>%%`.
 
 For a multi-part plan (list all part paths in alphabetical order):
 ```
@@ -343,11 +373,7 @@ plan_path = {path_to_part_a}
 plan_parts = {path_to_part_a}
 {path_to_part_b}
 {path_to_part_c}
-```
-
-For a false positive verdict (remediation mode only):
-```
-verdict = false_positive
+plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ```
 
 **Plan structure (single-part):**

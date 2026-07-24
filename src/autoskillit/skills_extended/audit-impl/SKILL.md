@@ -28,6 +28,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 
 ```
 {plans_input} {branch_name} {base_branch} [conflict_report_paths]
+[prior_audit_cycle_path=<absolute_path>]
 ```
 
 - `plans_input` — one of:
@@ -50,6 +51,10 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - `closure_authority_hash=<sha256_hash>` (optional) — SHA-256 hash (`sha256:` followed by
   64 lowercase hex chars) of the authority file content. Must be independently computed by
   the caller before invocation. Activates closure mode when paired with `closure_authority_path`.
+- `prior_audit_cycle_path=<absolute_path>` (optional) — Explicit authority for the immediate
+  remediation ancestor. The server verifies that it is the trusted current `NO GO` head and
+  that its execution generation, plan set, scope, part, round, parent, and audited-plan
+  lineage authorize this descendant. A sibling or unrelated plan starts a new scope instead.
 
 ## Critical Constraints
 
@@ -58,7 +63,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 
 - Modify source files, plan files, or any other files — read-only audit only
 - Run tests — this skill audits, it does not fix
-- Create files outside `{{AUTOSKILLIT_TEMP}}/audit-impl/`
+- Create files outside the identity-scoped directory selected below
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
@@ -69,15 +74,17 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Spawn all subagents via `Agent(model="sonnet")`
 - Resolve all plan files before starting (abort early if any are missing)
 - Issue all Task calls in a single message to maximize parallelism
-- On a NO GO verdict, after writing the remediation file, emit the **absolute path** as a
-  structured output token as your final output. Resolve the relative
-  `temp/audit-impl/...` save path to absolute by prepending the full CWD:
+- On every verdict, write one immutable `AuditCycleAuthority` and emit its **absolute path**
+  as `audit_cycle_path`. On `NO GO`, also emit the remediation path:
   ```
   verdict = NO GO
-  remediation_path = /absolute/cwd/temp/audit-impl/{filename}.md
+  verified_verdict = NO GO
+  remediation_path = /absolute/cycle/directory/remediation.md
+  audit_cycle_path = /absolute/cycle/directory/authority.json
   ```
-  On a GO verdict, emit only `verdict = GO` (no remediation_path token).
-  The remediation_path token is MANDATORY on NO GO — the pipeline cannot proceed without it.
+  On `GO`, omit `remediation_path` but still emit `audit_cycle_path`. The server verifies
+  and publishes the candidate authority to its current-head ledger; the child artifact
+  cannot appoint itself current.
 
 ## Workflow
 
@@ -86,6 +93,8 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 **Named keyword arguments:** Before positional parsing, scan all arguments for tokens containing `=`. Extract each as a key-value pair and remove from the positional argument list. Currently recognized kwargs:
 
 - `deviation_manifest_path=<path>` — Absolute path to a deviation manifest JSON file written by `resolve-failures` or `retry-worktree`. When the value is empty or the argument is absent, skip Step 3.5 (backward compatible).
+- `prior_audit_cycle_path=<path>` — Optional explicit remediation ancestor. Never infer this
+  value or a round from directory contents or from a singleton file.
 
 After extraction, validate the manifest (only when a non-empty path was provided):
 1. File exists (use `ls` or `Glob` to confirm)
@@ -144,14 +153,14 @@ sibling parallel-call cancellations.
 
 ## Closure Mode
 
-Closure mode activates hash-bound verification of the audit verdict. It is designed for
-pipelines where the requirements inventory must be frozen at audit time and the verdict
-must be independently verifiable after the session ends.
+Closure mode activates hash-bound verification of the audit verdict. Normal and closure
+mode both produce the same immutable `AuditCycleAuthority`; closure mode references the
+verified `ClosureReport` as evidence rather than duplicating it.
 
 **Activation gate:**
 - If exactly one of `closure_authority_path`/`closure_authority_hash` is provided (XOR) →
   emit error and stop (fail closed). Both must be present or both absent.
-- If both absent → continue with normal mutable-inventory mode (all subsequent steps unchanged).
+- If both absent → continue with normal mode (all subsequent steps unchanged).
 - If both present → activate closure mode.
 
 **Authority verification (must complete before any audit step):**
@@ -162,7 +171,7 @@ must be independently verifiable after the session ends.
 - Parse as JSON. Validate it has `schema_version`, `requirement_ids`, `requirements` fields.
 
 **Inventory isolation (critical):**
-- In closure mode, NEVER read, write, extend, or consult `requirements_inventory.json`.
+- In closure mode, NEVER discover or consult an ambient `requirements_inventory.json`.
 - The authority file IS the frozen inventory. It is read-only.
 - Step 1 (Requirements Extraction) is SKIPPED entirely. Requirements are loaded from the
   authority file only — no extraction subagents are invoked.
@@ -174,9 +183,8 @@ must be independently verifiable after the session ends.
   against authority requirements.
 - Step 3.5 (Deviation Evaluation): Unchanged if `deviation_manifest_path` provided.
 - Step 4 (Verdict Determination): Unchanged — determine GO/NO GO from findings.
-- Step 5 (Output — modified): In addition to emitting plain-text `verdict = GO/NO GO` tokens
-  (for backward compatibility), produce a canonical JSON report:
-  - Write to `{{AUTOSKILLIT_TEMP}}/audit-impl/closure_report.json`
+- Step 5 (Output — modified): Produce a canonical `ClosureReport` before the authority:
+  - Write it inside the current identity-scoped audit-cycle directory.
   - Report must contain all fields per the `ClosureReport` schema (`schema_version`,
     `request_hash`, `authority_hash`, `plan_hashes`, `base_sha`, `diff_sha`, `target_sha`,
     `requirement_ids`, `rows`, `verdict`, `report_hash`, `remediation_path`, `generated_at`)
@@ -195,12 +203,17 @@ must be independently verifiable after the session ends.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-**Round detection:** Before launching extraction subagents, check for the existence of `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`.
+**Authority and round selection:** Never scan for a latest file and never activate a round
+from singleton existence. When `prior_audit_cycle_path` is absent, create a new cycle/scope
+at round 1 and extract the full inventory. When it is present, consume only the
+server-verified prior authority, require its trusted verdict to be `NO GO`, require an
+exact parent/scope/part/plan-lineage match, and set the candidate round to prior round + 1.
+Reuse the prior inventory only after verifying its `ArtifactRef`. A sibling/new plan must
+start a new scope instead of extending the prior inventory.
 
-- If the file exists, this is round ≥2 — read the pinned inventory instead of re-extracting.
-- If the file does not exist, this is round 1 — proceed with extraction and persist the result.
-
-**Union extraction (round 1 only):** Launch ≥2 independent Explore subagents per plan file (not 1). Each extracts requirements independently. Take the union of all extracted requirements (deduplicate by semantic equivalence). This raises extraction recall — a requirement missed by one extractor is caught by another.
+**Union extraction (new scope only):** Launch ≥2 independent Explore subagents per plan file
+(not 1). Each extracts requirements independently. Take the union of all extracted
+requirements (deduplicate by semantic equivalence).
 
 Each Explore subagent returns:
 
@@ -214,7 +227,7 @@ Each Explore subagent returns:
 {
   "schema_version": 1,
   "generated_at": "ISO-8601",
-  "all_plan_paths": "comma-separated plan file paths (provenance key)",
+  "plan_set_id": "identity derived from the explicit ordered audited plan refs",
   "requirements": [
     {
       "id": "REQ-001",
@@ -227,9 +240,17 @@ Each Explore subagent returns:
 }
 ```
 
-**Provenance guard:** When reading an existing inventory on round ≥2, validate that the inventory's `all_plan_paths` field matches the current `context.all_plan_paths`. If mismatched (new plans added), extend the inventory with requirements extracted from new plan files only.
+Write inventory, remediation (when any), closure report (when any), and authority under:
 
-Aggregate into a unified requirements inventory and write it to `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` on round 1.
+```
+{{AUTOSKILLIT_TEMP}}/audit-impl/cycles/{execution_generation}/{plan_set_id}/{scope_id}/{part_id}/round-{N}/
+```
+
+The `AuditCycleAuthority` must include the explicit execution generation, cycle ID,
+plan-set/scope/part IDs, round, parent authority digest, audited plan refs, inventory ref,
+ordered assessment rows, findings digest, verdict, generated timestamp, and authority
+digest. `NO GO` requires a remediation `ArtifactRef`; `GO` requires `remediation_ref=null`.
+Never rewrite an authority after hashing it.
 
 ### Step 2 — Load Implementation Diff
 
@@ -332,9 +353,9 @@ audited. Do NOT use Read, Grep, or Glob — subagents are tool-restricted to Bas
 their agent definition, blocking filesystem reads at the platform level. When full file
 content is needed beyond the diff, subagents use `git show {implementation_ref}:{path}`.
 
-Slice from the pinned inventory (written in Step 1) into up to 3 slices. On round ≥2, read the
-pinned inventory from `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` rather
-than re-extracting. Each slice receives a subset of `requirements[].id` values. Launch parallel
+Slice the inventory verified or written for this exact cycle into up to 3 slices. For a
+remediation descendant, use only the inventory `ArtifactRef` from the verified prior
+authority. Each slice receives a subset of `requirements[].id` values. Launch parallel
 subagents using `Agent(subagent_type="autoskillit:audit-impl-slice-auditor")`, each receiving
 its slice, the full diff, and the `implementation_ref`. Each subagent checks:
 
@@ -448,6 +469,7 @@ last line of your text output:
 ```
 verdict = GO
 verified_verdict = GO
+audit_cycle_path = {absolute_path_to_authority_file}
 ```
 
 ---
@@ -543,18 +565,23 @@ last lines of your text output:
 verdict = NO GO
 verified_verdict = NO GO
 remediation_path = {absolute_path_to_remediation_file}
+audit_cycle_path = {absolute_path_to_authority_file}
 ```
 
 The `verdict` token must be exactly `GO` or `NO GO` — this is the value the recipe's
-`on_result: field: verdict` routing matches against. The `remediation_path` token must
-be the absolute path to the remediation file written in this session (only emitted for
-NO GO; omit the `remediation_path=` line entirely on GO).
+`on_result: field: verdict` routing matches against. `audit_cycle_path` is mandatory on
+both verdicts. `remediation_path` is mandatory only on `NO GO` and must be omitted on
+`GO`. Publication is complete only after the server verifies the immutable candidate
+and atomically advances the matching current-head entry.
 
 ## Output Location
 
 ```
-{{AUTOSKILLIT_TEMP}}/audit-impl/
-└── remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md    (written on NO GO only)
+{{AUTOSKILLIT_TEMP}}/audit-impl/cycles/{generation}/{plan_set}/{scope}/{part}/round-{N}/
+├── authority.json
+├── inventory.json
+├── remediation.md       (NO GO only)
+└── closure_report.json  (closure mode only)
 ```
 
 ## Related Skills

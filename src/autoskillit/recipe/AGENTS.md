@@ -13,6 +13,7 @@ Sub-package: rules/ (see rules/AGENTS.md).
 | `_contracts_manifest.py` | Manifest loading + ref extraction utilities |
 | `_contracts_card.py` | Card generation, loading, validation |
 | `_contracts_staleness.py` | Staleness detection + MCP suggestions |
+| `_io_loading.py` | Declaration-preserving YAML/JSON loading and placeholder substitution |
 | `io.py` | `load_recipe`, `list_recipes`, `iter_steps_with_context` |
 | `order.py` | `BUNDLED_RECIPE_ORDER` — stable display order registry for Group 0 recipes |
 | `loader.py` | Path-based recipe metadata utilities |

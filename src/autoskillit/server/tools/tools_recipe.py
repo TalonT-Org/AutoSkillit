@@ -48,7 +48,7 @@ from autoskillit.server._recipe_delivery import (
     recipe_pull_producers,
     recipe_recreation_producers,
 )
-from autoskillit.server._recipe_execution import clear_recipe_execution
+from autoskillit.server._recipe_execution import clear_recipe_execution, get_recipe_execution
 from autoskillit.server._recipe_section_pagination import (
     RecipeSectionBoundError,
     RecipeSectionNonConvergenceError,
@@ -611,6 +611,7 @@ async def get_recipe_section(
                         resolved_defaults=_defaults,
                         ingredients_only=False,
                     )
+                    pop_compiled_bindings(_recreate)
                     if not _recreate.get("valid", False):
                         return _recipe_section_failure(
                             "recipe_artifact_unavailable",
@@ -620,6 +621,17 @@ async def get_recipe_section(
                         _recreate = build_open_kitchen_recipe_payload(
                             _recreate, version=__version__
                         )
+                    installed_execution = get_recipe_execution(tool_ctx)
+                    if (
+                        installed_execution is not None
+                        and installed_execution.snapshot.recipe_name == requested_recipe_name
+                    ):
+                        snapshot = installed_execution.snapshot
+                        _recreate["recipe_execution"] = {
+                            "execution_id": snapshot.execution_id,
+                            "invocation_template_digests": dict(snapshot.template_digests),
+                            "snapshot_digest": snapshot.snapshot_digest,
+                        }
 
                     try:
                         recreated_generation = persist_recipe_artifact(

@@ -14,6 +14,7 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
 )
+from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe._contracts_manifest import (
     classify_step_arg_style,
     compute_skill_hash,
@@ -119,6 +120,7 @@ def generate_recipe_card(
     data = load_yaml(pipeline_path)
     recipe = _parse_recipe(data)
     manifest = load_bundled_manifest()
+    binding_projection = bind_recipe(recipe, manifest=manifest)
 
     skill_hashes: dict[str, str] = {}
     skills: dict[str, dict] = {}
@@ -137,7 +139,13 @@ def generate_recipe_card(
 
         if step.tool in SKILL_TOOLS:
             skill_cmd = step.with_args.get("skill_command", "")
-            skill_name = resolve_skill_name(skill_cmd)
+            invocation = binding_projection.for_step(step_name)
+            structured = "skill_inputs" in step.with_args
+            skill_name = (
+                invocation.skill_name
+                if structured and invocation is not None
+                else resolve_skill_name(skill_cmd)
+            )
             if skill_name:
                 contract = get_skill_contract(skill_name, manifest)
                 if contract:
@@ -162,9 +170,22 @@ def generate_recipe_card(
                     if contract.read_only:
                         skill_entry["read_only"] = True
                     skills[skill_name] = skill_entry
-                    all_input_names = {i.name for i in contract.inputs}
+                    all_input_names = {item.name for item in contract.inputs}
                     arg_style = classify_step_arg_style(skill_cmd, all_input_names)
-                    if arg_style == "positional_text":
+                    if structured and invocation is not None:
+                        entry["structured_inputs"] = [
+                            name for name, _value in invocation.canonical_child_invocation
+                        ]
+                        entry["required"] = [
+                            item.name
+                            for item in contract.inputs
+                            if item.required
+                            and (
+                                (bound := invocation.skill_input(item.name)) is None
+                                or not bound.is_present
+                            )
+                        ]
+                    elif arg_style == "positional_text":
                         entry["required"] = []
                         entry["positional_args"] = count_positional_args(skill_cmd)
                     elif arg_style == "positional_template":

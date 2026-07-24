@@ -39,6 +39,7 @@ from autoskillit.core import (
     PluginSource,
     QuotaRefreshTask,
     ReadOnlyResolver,
+    RecipeExecutionLock,
     RecipeRepository,
     ServeOverridesSnapshot,
     SessionSkillManager,
@@ -137,6 +138,8 @@ class ToolContext:
                           closed)
     active_recipe_execution: atomically installed compiled execution snapshot, runtime
                           binding digests, trusted audit heads, and verified input resolver.
+    recipe_execution_lock: RecipeExecutionLock — serializes installation, lookup, and
+                          cleanup of the active compiled execution state.
     temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
                           TypeError if not supplied explicitly. Use make_context() or pass
                           temp_dir=<path>.
@@ -201,7 +204,7 @@ class ToolContext:
     build_protected_campaign_ids: CampaignProtector | None = field(default=None)
     ephemeral_root: Path | None = field(default_factory=lambda: None)
     active_recipe_execution: InstalledRecipeExecution | None = field(default_factory=lambda: None)
-    recipe_execution_lock: threading.RLock = field(
+    recipe_execution_lock: RecipeExecutionLock = field(
         default_factory=threading.RLock,
         repr=False,
     )

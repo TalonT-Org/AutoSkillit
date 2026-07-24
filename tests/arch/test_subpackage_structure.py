@@ -15,6 +15,7 @@ class TestCoreSubpackages:
 
     def test_core_types_has_all_type_modules(self):
         expected = {
+            "_type_audit_cycle",
             "_type_backend",
             "_type_checkpoint",
             "_type_closure_report",
@@ -44,6 +45,8 @@ class TestCoreSubpackages:
             "_type_results",
             "_type_results_execution",
             "_type_recipe_delivery",
+            "_type_recipe_binding",
+            "_type_recipe_execution",
             "_type_recipe_sections",
             "_type_resume",
             "_type_session_env",

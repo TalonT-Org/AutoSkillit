@@ -488,8 +488,8 @@ from .types import PRState as PRState
 from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
-from .types import ReadingToken as ReadingToken
 from .types import ReadinessProbe as ReadinessProbe
+from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver
 from .types import RecipeDeliveryAttestation as RecipeDeliveryAttestation
 from .types import RecipeDeliveryBudgetDef as RecipeDeliveryBudgetDef

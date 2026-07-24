@@ -125,6 +125,7 @@ def test_backend_shard_all():
         "StreamParser",
         "ResultParser",
         "EnvPolicy",
+        "ReadinessProbe",
         "SessionLocator",
         "CodingAgentBackend",
     }

@@ -9,7 +9,7 @@ backends/ (see backends/AGENTS.md).
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Re-exports `DefaultHeadlessExecutor`, `run_headless_core` |
+| `__init__.py` | Public gateway for execution services, backends, and readiness adapters |
 | `commands.py` | `ClaudeInteractiveCmd`, `ClaudeHeadlessCmd` builders |
 | `db.py` | Read-only SQLite with defence-in-depth |
 | `diff_annotator.py` | Diff annotation + findings filter for review-pr |

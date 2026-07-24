@@ -247,14 +247,16 @@ class _FileLease:
     fd: int = field(init=False)
 
     @classmethod
-    def acquire(cls, path: Path, *, nonblocking: bool = False) -> _FileLease:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _require_real_directory(path.parent, label="lock directory")
-        if _lexists(path) and path.is_symlink():
-            raise RuntimeError(f"Refusing symlink lock file: {path}")
-        instance = cls(path=path)
+    def acquire(cls, lock_path: Path, *, nonblocking: bool = False) -> _FileLease:
+        if lock_path.suffix != ".lock":
+            raise ValueError(f"Lock path must use the .lock suffix: {lock_path}")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        _require_real_directory(lock_path.parent, label="lock directory")
+        if _lexists(lock_path) and lock_path.is_symlink():
+            raise RuntimeError(f"Refusing symlink lock file: {lock_path}")
+        instance = cls(path=lock_path)
         instance.fd = os.open(
-            path,
+            lock_path,
             os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
             0o600,
         )

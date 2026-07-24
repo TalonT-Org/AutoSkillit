@@ -67,6 +67,15 @@ def _hold_flock(lock_path: str, ready: object, release: object) -> None:
         os.close(descriptor)
 
 
+def test_file_lease_rejects_non_lock_path(tmp_path: Path) -> None:
+    invalid_path = tmp_path / "lease"
+
+    with pytest.raises(ValueError, match=r"\.lock suffix"):
+        storage._FileLease.acquire(invalid_path)
+
+    assert not invalid_path.exists()
+
+
 def test_fresh_attempt_exposes_empty_view_and_no_child_abort_restores_inert_links(
     tmp_path: Path,
 ) -> None:

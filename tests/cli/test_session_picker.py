@@ -116,22 +116,16 @@ def test_pick_session_filters_order(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert result == "order-uuid-1"
 
 
-def test_greeting_heuristic_order_session() -> None:
-    entry = _summary("s1", first_prompt="Order up! Today's special: myrecipe.")
+def test_backend_hint_classifies_order_session() -> None:
+    entry = _summary("s1", session_type_hint="order")
     result = _classify_session(entry, {})
     assert result == "order"
 
 
-def test_greeting_heuristic_cook_session() -> None:
+def test_missing_backend_hint_defaults_to_cook() -> None:
     entry = _summary("s1")
     result = _classify_session(entry, {})
     assert result == "cook"
-
-
-def test_greeting_heuristic_open_kitchen_order() -> None:
-    entry = _summary("s1", first_prompt="Kitchen's open! What are we cooking today?")
-    result = _classify_session(entry, {})
-    assert result == "order"
 
 
 def test_sidechain_sessions_excluded(tmp_path: Path) -> None:

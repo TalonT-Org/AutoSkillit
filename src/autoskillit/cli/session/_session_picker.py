@@ -7,16 +7,6 @@ from pathlib import Path
 
 from autoskillit.core import SessionLocator, SessionSummary
 
-_ORDER_GREETING_PREFIXES = (
-    "Today's special:",
-    "Order up! Today's special:",
-    "Order up! The kitchen",
-    "Kitchen's open!",
-    "Table for one!",
-    "Fresh off the menu",
-    "Welcome to Good Burger, home of the Good Burger, can I take your order?",
-)
-
 _Registry = Mapping[str, Mapping[str, object]]
 
 
@@ -58,7 +48,7 @@ def _registry_entry(
 def _classify_session(summary: SessionSummary, registry: _Registry) -> str:
     """Classify session as 'cook' or 'order'.
 
-    Uses registry lookup first, then locator and greeting hints.
+    Uses registry lookup first, then the backend locator's classification.
     """
     registry_entry = _registry_entry(summary, registry)
     if registry_entry is not None:
@@ -66,10 +56,6 @@ def _classify_session(summary: SessionSummary, registry: _Registry) -> str:
 
     if summary.session_type_hint is not None:
         return summary.session_type_hint
-
-    for prefix in _ORDER_GREETING_PREFIXES:
-        if summary.first_prompt.startswith(prefix):
-            return "order"
     return "cook"
 
 

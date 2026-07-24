@@ -2349,10 +2349,11 @@ def test_protected_release_uses_policy_from_rollover_created_epoch() -> None:
             **_event_fields(state, "rollover-policy-close", "rollover-epoch"),
             witness=_witness(batch, WitnessKind.EPOCH_ROLLOVER, epoch=2),
             fence_proof=None,
-            new_snapshot=_snapshot(epoch=3),
+            new_snapshot=_snapshot(epoch=3, active_count=70, remaining_count=30),
             protected_pools=(),
         ),
     )
+    assert rolled_again.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
     assert isinstance(rolled_again.next_state, ActiveContextAdmissionState)
     resolved = reduce_context_admission(
         rolled_again.next_state,
@@ -2409,7 +2410,7 @@ def test_rollover_accepts_only_one_explicit_authority_alternative() -> None:
     invalid_deduction = replace(
         deducted,
         event_id=AdmissionEventId("rollover-invalid-deduction"),
-        new_snapshot=_snapshot(epoch=2),
+        new_snapshot=_snapshot(epoch=2, active_count=40, remaining_count=60),
     )
     rejected = reduce_context_admission(state, invalid_deduction)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT

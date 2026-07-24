@@ -32,6 +32,8 @@ from autoskillit.core import (
     AgentInstanceId,
     AggregateRevision,
     AuthoritySourceId,
+    AuthorityUnavailableEffect,
+    AuthorityUnavailableEvent,
     CanonicalRepresentationManifest,
     CanonicalSpanId,
     CanonicalSpanOwner,
@@ -40,6 +42,7 @@ from autoskillit.core import (
     ContextSessionId,
     ContextThreadId,
     ContextWindowSnapshot,
+    CoverageState,
     DeliveryOccurrenceId,
     DispatchRequestEvent,
     EpochClosedEffect,
@@ -459,6 +462,8 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         transition: Any,
         event: object,
     ) -> tuple[type[object], ...]:
+        if isinstance(event, AuthorityUnavailableEvent):
+            return (AuthorityUnavailableEffect,)
         if transition.decision.kind not in {
             AdmissionDecisionKind.WOULD_ADMIT,
             AdmissionDecisionKind.QUARANTINED,
@@ -612,6 +617,22 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         else:
             class_available = ordinary_available
         return global_unallocated, ordinary_available, class_available
+
+    @rule(authority_state=st.sampled_from((CoverageState.PARTIAL, CoverageState.UPSTREAM_GATED)))
+    def report_authority_unavailable(self, authority_state: CoverageState) -> None:
+        event = AuthorityUnavailableEvent(
+            **self._fields("authority-unavailable"),
+            reason_code="authority-watermark-unavailable",
+            authority_state=authority_state,
+        )
+        transition = reduce_context_admission(self.state, event)
+        expected = (
+            AdmissionDecisionKind.UPSTREAM_GATED
+            if authority_state is CoverageState.UPSTREAM_GATED
+            else AdmissionDecisionKind.WATERMARK_UNAVAILABLE
+        )
+        assert transition.decision.kind is expected
+        self._accept_publication(transition, event)
 
     @rule(slot=_SLOT, reserve_class=_RESERVE_CLASS)
     def propose(self, slot: int, reserve_class: ReserveClass) -> None:

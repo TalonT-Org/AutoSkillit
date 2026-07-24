@@ -36,6 +36,7 @@ Sub-package: rules/ (see rules/AGENTS.md).
 | `registry.py` | `RuleFinding`, `RuleDef`, `BlockRuleDef`, `semantic_rule` decorator |
 | `repository.py` | `RecipeRepository` implementation |
 | `_analysis.py` | `ValidationContext` + `make_validation_context` |
+| `_binding.py` | Pure canonical compiler for MCP kwargs and ordered structured child-skill inputs |
 | `_analysis_graph.py` | `RouteEdge` + `build_recipe_graph` + step graph primitives |
 | `_analysis_bfs.py` | `bfs_reachable` + symbolic BFS fact propagation |
 | `_analysis_blocks.py` | `extract_blocks` — group steps by block annotation |

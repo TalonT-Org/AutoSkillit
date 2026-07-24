@@ -45,6 +45,7 @@ from autoskillit.recipe._api_listing import (  # noqa: F401
     list_all,
     validate_from_path,
 )
+from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe._recipe_composition import (
     _assert_content_integrity,
     _build_active_recipe,
@@ -85,7 +86,7 @@ from autoskillit.recipe.diagrams import (
 from autoskillit.recipe.io import (
     RecipeInfo,
     _assert_no_raw_placeholders,
-    _load_recipe_dict,
+    _load_recipe_dict_with_declarations,
     _parse_recipe,
     builtin_recipes_dir,
     builtin_sub_recipes_dir,
@@ -318,8 +319,8 @@ def load_and_validate(
     if match is None:
         raise RecipeNotFoundError(f"No recipe named '{name}' found")
 
-    raw = match.content if match.content is not None else match.path.read_text()
-    raw = substitute_temp_placeholder(raw, _temp_relpath)
+    raw_declared = match.content if match.content is not None else match.path.read_text()
+    raw = substitute_temp_placeholder(raw_declared, _temp_relpath)
     raw = substitute_scripts_placeholder(raw)
     suggestions: list[dict[str, Any]] = []
     valid = False
@@ -339,11 +340,15 @@ def load_and_validate(
 
     try:
         # Stage: yaml parse
-        data = _load_recipe_dict(match.path, raw_text=raw, temp_dir_relpath=_temp_relpath)
+        data, declared_data = _load_recipe_dict_with_declarations(
+            match.path,
+            raw_text=raw_declared,
+            temp_dir_relpath=_temp_relpath,
+        )
         t0 = _t("yaml_parse", t0, name)
 
         if isinstance(data, dict):
-            recipe = _parse_recipe(data)
+            recipe = _parse_recipe(data, declared_data=declared_data)
 
             from autoskillit.recipe.identity import compute_composite_hash  # noqa: PLC0415
 
@@ -393,6 +398,10 @@ def load_and_validate(
             # must also fire pre-prune so the filter intersection retains their
             # findings. Pre-prune context receives skill_resolver and effective_backend_map
             # for this reason — see test_filter_pruning_scope.
+            _pre_prune_bindings = bind_recipe(
+                active_recipe,
+                ingredient_values=ingredient_overrides,
+            )
             _pre_prune_val_ctx = make_validation_context(
                 active_recipe,
                 project_dir=_pdir,
@@ -401,6 +410,7 @@ def load_and_validate(
                 effective_backend_map=effective_backend_map,
                 backend_capabilities_map=backend_capabilities_map,
                 backend_origin_map=backend_origin_map,
+                binding_projection=_pre_prune_bindings,
             )
             _pre_prune_findings = run_semantic_rules(_pre_prune_val_ctx)
             _pre_prune_steps = dict(active_recipe.steps)
@@ -461,6 +471,10 @@ def load_and_validate(
             project_sub_dir = _pdir / ".autoskillit" / "recipes" / "sub-recipes"
             if project_sub_dir.is_dir():
                 known_sub_recipes |= frozenset(p.stem for p in project_sub_dir.glob("*.yaml"))
+            _post_prune_bindings = bind_recipe(
+                active_recipe,
+                ingredient_values=ingredient_overrides,
+            )
             val_ctx = make_validation_context(
                 active_recipe,
                 available_recipes=known,
@@ -472,6 +486,7 @@ def load_and_validate(
                 effective_backend_map=effective_backend_map,
                 backend_capabilities_map=backend_capabilities_map,
                 backend_origin_map=backend_origin_map,
+                binding_projection=_post_prune_bindings,
             )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)

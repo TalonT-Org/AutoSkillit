@@ -69,6 +69,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_io_discovery.py` | Tests for recipe I/O discovery (list_recipes, recipe iteration) |
 | `test_io_parsing.py` | Tests for recipe YAML parsing and load_recipe |
 | `test_io_schema_fields.py` | Tests for recipe schema field validation in I/O layer |
+| `test_skill_invocation_binding.py` | Canonical tool/skill namespace binding, absence, order, provenance, and YAML/JSON/prune parity |
 | `test_io_json_precompile.py` | Tests for JSON pre-compilation fast path in recipe I/O |
 | `test_issue_url_pipeline.py` | Tests for issue URL pipeline in recipe steps |
 | `test_loader.py` | Tests for path-based recipe metadata utilities |

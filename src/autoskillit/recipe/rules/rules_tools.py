@@ -6,13 +6,13 @@ from collections import deque
 from pathlib import PurePosixPath
 
 from autoskillit.core import (
-    GATED_TOOLS,
-    HEADLESS_TOOLS,
     SKILL_TOOLS,
     TOOL_SUBSET_TAGS,
-    UNGATED_TOOLS,
+    BindingFailureCode,
     Severity,
+    all_tool_names,
     get_logger,
+    get_tool_def,
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _MAX_HOPS
@@ -25,226 +25,11 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
-_ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
+_ALL_TOOLS: frozenset[str] = all_tool_names()
 
 _RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
     {"output_dir", "workspace", "diagnostics_log_dir"}
 )
-
-# Known parameter signatures for MCP tools that accept `with:` args in recipes.
-# Intentionally hardcoded — recipe validation runs without a live MCP server.
-_TOOL_PARAMS: dict[str, frozenset[str]] = {
-    # --- Execution tools ---
-    "run_skill": frozenset(
-        {
-            "skill_command",
-            "cwd",
-            "model",
-            "step_name",
-            "step_provider",
-            "order_id",
-            "stale_threshold",
-            "idle_output_timeout",
-            "output_dir",
-            "resume_session_id",
-            "closure_authority_path",
-            "closure_authority_hash",
-            "closure_plan_paths",
-            "closure_base_sha",
-            "closure_diff_sha",
-            "closure_target_sha",
-        }
-    ),
-    "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),
-    "run_python": frozenset({"callable", "args", "timeout", "work_dir"}),
-    # --- Workspace tools ---
-    "test_check": frozenset({"worktree_path", "step_name"}),
-    "merge_worktree": frozenset({"worktree_path", "base_branch", "step_name"}),
-    "reset_test_dir": frozenset({"test_dir", "force", "step_name"}),
-    "classify_fix": frozenset({"worktree_path", "base_branch", "step_name"}),
-    "reset_workspace": frozenset({"test_dir"}),
-    # --- Recipe tools ---
-    "validate_recipe": frozenset({"script_path"}),
-    "migrate_recipe": frozenset({"name"}),
-    "load_recipe": frozenset({"name", "overrides", "ingredients_only", "delivery_request"}),
-    "list_recipes": frozenset(),
-    # --- Clone tools ---
-    "clone_repo": frozenset(
-        {
-            "source_dir",
-            "run_name",
-            "branch",
-            "strategy",
-            "remote_url",
-            "step_name",
-        }
-    ),
-    "remove_clone": frozenset({"clone_path", "keep", "step_name"}),
-    "push_to_remote": frozenset(
-        {
-            "clone_path",
-            "branch",
-            "source_dir",
-            "remote_url",
-            "force",
-            "step_name",
-        }
-    ),
-    "register_clone_status": frozenset(
-        {
-            "clone_path",
-            "status",
-            "registry_path",
-            "step_name",
-        }
-    ),
-    "batch_cleanup_clones": frozenset(
-        {
-            "registry_path",
-            "all_owners",
-            "owner_filter",
-            "step_name",
-        }
-    ),
-    # --- CI tools ---
-    "wait_for_ci": frozenset(
-        {
-            "auto_trigger",
-            "branch",
-            "repo",
-            "remote_url",
-            "head_sha",
-            "workflow",
-            "event",
-            "timeout_seconds",
-            "lookback_seconds",
-            "cwd",
-            "step_name",
-        }
-    ),
-    "wait_for_merge_queue": frozenset(
-        {
-            "pr_number",
-            "target_branch",
-            "cwd",
-            "repo",
-            "remote_url",
-            "timeout_seconds",
-            "poll_interval",
-            "stall_grace_period",
-            "max_stall_retries",
-            "not_in_queue_confirmation_cycles",
-            "max_inconclusive_retries",
-            "auto_merge_available",
-            "max_merge_group_drops",
-            "merge_group_drop_backoff",
-            "step_name",
-        }
-    ),
-    "enqueue_pr": frozenset(
-        {
-            "pr_number",
-            "target_branch",
-            "cwd",
-            "auto_merge_available",
-            "repo",
-            "remote_url",
-            "step_name",
-        }
-    ),
-    "get_ci_status": frozenset({"branch", "run_id", "repo", "workflow", "event", "cwd"}),
-    "set_commit_status": frozenset(
-        {
-            "sha",
-            "state",
-            "context",
-            "description",
-            "target_url",
-            "repo",
-            "cwd",
-        }
-    ),
-    "check_repo_merge_state": frozenset(
-        {
-            "branch",
-            "cwd",
-            "remote_url",
-            "step_name",
-            "base_branch",
-        }
-    ),
-    # --- Git tools ---
-    "create_unique_branch": frozenset(
-        {
-            "slug",
-            "issue_number",
-            "remote",
-            "cwd",
-            "base_branch_name",
-            "step_name",
-        }
-    ),
-    "check_pr_mergeable": frozenset({"pr_number", "cwd", "repo"}),
-    # --- Integration tools ---
-    "report_bug": frozenset(
-        {
-            "error_context",
-            "cwd",
-            "severity",
-            "model",
-            "step_name",
-        }
-    ),
-    "prepare_issue": frozenset(
-        {
-            "title",
-            "body",
-            "repo",
-            "labels",
-            "dry_run",
-            "split",
-        }
-    ),
-    "enrich_issues": frozenset({"issue_number", "batch", "dry_run", "repo"}),
-    "claim_issue": frozenset({"issue_url", "label", "allow_reentry"}),
-    "release_issue": frozenset(
-        {"issue_url", "label", "target_branch", "staged_label", "fail_label", "close_issue"}
-    ),
-    "fetch_github_issue": frozenset({"issue_url", "include_comments"}),
-    "get_issue_title": frozenset({"issue_url"}),
-    # --- Status tools ---
-    "get_quota_events": frozenset({"n"}),
-    "write_telemetry_files": frozenset({"output_dir"}),
-    "get_pr_reviews": frozenset({"pr_number", "cwd", "repo"}),
-    "bulk_close_issues": frozenset({"issue_numbers", "comment", "cwd"}),
-    "unlock_agent_pack": frozenset({"pack_name"}),
-    "configure_fleet": frozenset(
-        {
-            "max_concurrent_dispatches",
-            "max_total_issues",
-            "default_timeout_sec",
-            "max_extension_seconds",
-            "idle_output_timeout",
-            "acquire_timeout_sec",
-            "max_issues_per_food_truck",
-            "enable_deadline_extension",
-            "default_model",
-            "inspector_model",
-        }
-    ),
-    "configure_order": frozenset(
-        {
-            "timeout",
-            "stale_threshold",
-            "idle_output_timeout",
-            "max_suppression_seconds",
-            "default_model",
-        }
-    ),
-    "lock_ingredients": frozenset({"locked", "pipeline_id", "unlock"}),
-    "record_pipeline_step": frozenset({"pipeline_id", "op", "dependencies", "step_name"}),
-}
-
 
 # Registry of context variables that are captured upstream and MUST be forwarded
 # to any tool step that accepts them. Each entry maps a tool name to the set of
@@ -394,25 +179,30 @@ def _check_subset_disabled_tool(ctx: ValidationContext) -> list[RuleFinding]:
 @semantic_rule(
     name="dead-with-param",
     description="with: key does not match any known parameter of the step's tool",
-    severity=Severity.WARNING,
+    severity=Severity.ERROR,
 )
 def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
-        if step.tool is None or step.tool not in _TOOL_PARAMS:
+        if step.tool is None:
             continue
-        known_params = _TOOL_PARAMS[step.tool]
-        for key in step.with_args:
-            if key not in known_params:
-                findings.append(
-                    make_finding(
-                        rule_name="dead-with-param",
-                        step_name=step_name,
-                        message=f"step '{step_name}': with key '{key}' is not a known "
-                        f"parameter of tool '{step.tool}'. "
-                        f"Known parameters: {sorted(known_params)}",
-                    )
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None:
+            continue
+        tool_def = get_tool_def(step.tool)
+        known_params = sorted(tool_def.param_set) if tool_def is not None else []
+        for failure in invocation.failures:
+            if failure.code is not BindingFailureCode.UNKNOWN_TOOL_PARAMETER:
+                continue
+            findings.append(
+                make_finding(
+                    rule_name="dead-with-param",
+                    step_name=step_name,
+                    message=f"step '{step_name}': with key '{failure.name}' is not a known "
+                    f"parameter of tool '{step.tool}'. "
+                    f"Known parameters: {known_params}",
                 )
+            )
     return findings
 
 

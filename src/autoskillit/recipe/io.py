@@ -123,16 +123,62 @@ def _load_recipe_dict(
         temp_dir_relpath: When set, ``{{AUTOSKILLIT_TEMP}}`` is replaced in the
             text before parsing (applies to both JSON and YAML paths).
     """
+    effective, _declared = _load_recipe_dict_with_declarations(
+        yaml_path,
+        raw_text=raw_text,
+        temp_dir_relpath=temp_dir_relpath,
+    )
+    return effective
+
+
+def _substitute_recipe_values(
+    value: Any,
+    *,
+    temp_dir_relpath: str | None,
+) -> Any:
+    if isinstance(value, str):
+        resolved = (
+            substitute_temp_placeholder(value, temp_dir_relpath)
+            if temp_dir_relpath is not None
+            else value
+        )
+        return substitute_scripts_placeholder(resolved)
+    if isinstance(value, dict):
+        return {
+            key: _substitute_recipe_values(item, temp_dir_relpath=temp_dir_relpath)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _substitute_recipe_values(item, temp_dir_relpath=temp_dir_relpath) for item in value
+        ]
+    return value
+
+
+def _load_recipe_dict_with_declarations(
+    yaml_path: Path,
+    *,
+    raw_text: str | None = None,
+    temp_dir_relpath: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load aligned effective and declared mappings.
+
+    Placeholder replacement is applied to parsed values, not source text, so
+    the declaration remains available for binding provenance.
+    """
     json_path = yaml_path.with_suffix(".json")
     try:
         if json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns:
             text = json_path.read_text(encoding="utf-8")
-            if temp_dir_relpath is not None:
-                text = substitute_temp_placeholder(text, temp_dir_relpath)
-            text = substitute_scripts_placeholder(text)
             data = _fast_loads(text)
             if isinstance(data, dict):
-                return data
+                return (
+                    _substitute_recipe_values(
+                        data,
+                        temp_dir_relpath=temp_dir_relpath,
+                    ),
+                    data,
+                )
             logger.warning(
                 "Pre-compiled JSON is not a mapping, falling back to YAML: %s", json_path
             )
@@ -142,13 +188,13 @@ def _load_recipe_dict(
         pass
     if raw_text is None:
         raw_text = yaml_path.read_text(encoding="utf-8")
-    if temp_dir_relpath is not None:
-        raw_text = substitute_temp_placeholder(raw_text, temp_dir_relpath)
-    raw_text = substitute_scripts_placeholder(raw_text)
     data = load_yaml(raw_text)
     if not isinstance(data, dict):
         raise ValueError(f"Recipe file must contain a YAML mapping: {yaml_path}")
-    return data
+    return (
+        _substitute_recipe_values(data, temp_dir_relpath=temp_dir_relpath),
+        data,
+    )
 
 
 def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Recipe:
@@ -163,8 +209,11 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     ``_analysis.py`` imports ``iter_steps_with_context`` from this module, so a
     top-level import here would create a cycle.
     """
-    data = _load_recipe_dict(path, temp_dir_relpath=temp_dir_relpath)
-    recipe = _parse_recipe(data)
+    data, declared_data = _load_recipe_dict_with_declarations(
+        path,
+        temp_dir_relpath=temp_dir_relpath,
+    )
+    recipe = _parse_recipe(data, declared_data=declared_data)
     from autoskillit.recipe.staleness_cache import compute_recipe_hash  # noqa: PLC0415
 
     recipe.content_hash = compute_recipe_hash(path)
@@ -368,6 +417,7 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "python",
         "constant",
         "with_args",
+        "declared_with_args",
         "on_success",
         "on_failure",
         "on_context_limit",
@@ -491,7 +541,11 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
     return result
 
 
-def _parse_recipe(data: dict[str, Any]) -> Recipe:
+def _parse_recipe(
+    data: dict[str, Any],
+    *,
+    declared_data: dict[str, Any] | None = None,
+) -> Recipe:
     name = data.get("name", "")
     description = data.get("description", "")
     summary = data.get("summary", "")
@@ -512,9 +566,14 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     _steps_raw = data.get("steps")
     if _steps_raw is not None and not isinstance(_steps_raw, dict):
         raise ValueError(f"'steps' must be a mapping, got {type(_steps_raw).__name__!r}")
+    declared_steps = declared_data.get("steps", {}) if isinstance(declared_data, dict) else {}
     for step_name, step_data in (_steps_raw or {}).items():
         if isinstance(step_data, dict):
-            step = _parse_step(step_data)
+            declared_step = declared_steps.get(step_name, step_data)
+            step = _parse_step(
+                step_data,
+                declared_data=declared_step if isinstance(declared_step, dict) else step_data,
+            )
             step.name = step_name
             steps[step_name] = step
 
@@ -625,7 +684,34 @@ def _ensure_list(value: Any) -> list[str]:
     return []
 
 
-def _parse_step(data: dict[str, Any]) -> RecipeStep:
+def _normalize_step_with_args(
+    tool: str | None,
+    raw_with: object,
+) -> dict[str, Any]:
+    if raw_with is None:
+        return {}
+    if not isinstance(raw_with, dict):
+        raise TypeError("Recipe step 'with' must be a mapping")
+    normalized = dict(raw_with)
+    # Precompiled JSON normalizes run_python callable arguments beneath
+    # ``args``.  Restore the canonical scalar recipe representation so fresh
+    # YAML and JSON paths produce identical RecipeStep values.
+    if tool == "run_python" and isinstance(normalized.get("args"), dict):
+        args = normalized.pop("args")
+        overlap = normalized.keys() & args.keys()
+        if overlap:
+            raise ValueError(
+                f"run_python precompiled args duplicate outer keys: {sorted(overlap)}"
+            )
+        normalized.update(args)
+    return normalized
+
+
+def _parse_step(
+    data: dict[str, Any],
+    *,
+    declared_data: dict[str, Any] | None = None,
+) -> RecipeStep:
     if "retry" in data:
         raise ValueError(
             "The 'retry:' block is no longer supported. "
@@ -652,12 +738,21 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         if conditions:
             on_result = StepResultRoute(conditions=conditions)
 
+    tool = data.get("tool")
+    declared_source = declared_data or data
+    with_args = _normalize_step_with_args(tool, data.get("with", {}))
+    declared_with_args = _normalize_step_with_args(
+        declared_source.get("tool", tool),
+        declared_source.get("with", {}),
+    )
+
     return RecipeStep(
-        tool=data.get("tool"),
+        tool=tool,
         action=data.get("action"),
         python=data.get("python"),
         constant=data.get("constant"),
-        with_args=data.get("with", {}),
+        with_args=with_args,
+        declared_with_args=declared_with_args,
         on_success=data.get("on_success"),
         on_failure=data.get("on_failure"),
         on_context_limit=data.get("on_context_limit"),

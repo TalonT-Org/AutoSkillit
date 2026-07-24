@@ -12,7 +12,7 @@ _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, slots=True)
 class SkillInput:
     name: str
     type: str
@@ -49,7 +49,7 @@ class SuccessQualifierEntry:
 
 @dataclasses.dataclass
 class SkillContract:
-    inputs: list[SkillInput]
+    inputs: tuple[SkillInput, ...]
     outputs: list[SkillOutput]
     expected_output_patterns: list[str] = dataclasses.field(default_factory=list)
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
@@ -60,6 +60,12 @@ class SkillContract:
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
     outcome_invariants: list[OutcomeInvariantEntry] = dataclasses.field(default_factory=list)
     success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # Tests and project integrations may still construct contracts from a
+        # list.  Canonicalize once at the boundary; consumers always observe an
+        # explicit immutable declaration order.
+        self.inputs = tuple(self.inputs)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

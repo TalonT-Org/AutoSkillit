@@ -1,0 +1,64 @@
+"""Canonical IL-0 tool registry parity with live MCP handlers."""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+import pytest
+
+from autoskillit.core import TOOL_REGISTRY
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _handler_signatures() -> dict[str, tuple[tuple[str, bool], ...]]:
+    tools_dir = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "server" / "tools"
+    handlers: dict[str, tuple[tuple[str, bool], ...]] = {}
+    for path in sorted(tools_dir.glob("tools_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not any(
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Attribute)
+                and decorator.func.attr == "tool"
+                for decorator in node.decorator_list
+            ):
+                continue
+            positional = [*node.args.posonlyargs, *node.args.args]
+            defaults: list[ast.expr | None] = [None] * (len(positional) - len(node.args.defaults))
+            defaults.extend(node.args.defaults)
+            pairs = [
+                *zip(positional, defaults, strict=True),
+                *zip(node.args.kwonlyargs, node.args.kw_defaults, strict=True),
+            ]
+            handlers[node.name] = tuple(
+                (argument.arg, default is None)
+                for argument, default in pairs
+                if argument.arg != "ctx"
+            )
+    return handlers
+
+
+def test_registry_matches_handler_names_bidirectionally() -> None:
+    assert set(TOOL_REGISTRY) == set(_handler_signatures())
+
+
+def test_registry_matches_handler_order_and_requiredness() -> None:
+    for name, handler_params in _handler_signatures().items():
+        registry_params = tuple(
+            (param.name, param.required)
+            for param in TOOL_REGISTRY[name].params
+            if param.handler_parameter
+        )
+        assert registry_params == handler_params, name
+
+
+def test_run_skill_has_one_compiler_owned_structured_input_channel() -> None:
+    structured = tuple(
+        param for param in TOOL_REGISTRY["run_skill"].params if param.structured_skill_inputs
+    )
+    assert tuple(param.name for param in structured) == ("skill_inputs",)
+    assert not structured[0].handler_parameter

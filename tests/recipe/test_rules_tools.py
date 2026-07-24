@@ -103,7 +103,7 @@ def _make_recipe_with_args(tool: str, with_args: dict[str, str] | None = None) -
 
 
 def test_dead_with_param_detects_unknown_key() -> None:
-    """with key 'add_dir' on run_skill produces dead-with-param WARNING."""
+    """with key 'add_dir' on run_skill produces dead-with-param ERROR."""
     recipe = _make_recipe_with_args(
         "run_skill",
         {"skill_command": "/autoskillit:investigate", "cwd": "/tmp", "add_dir": "/some/path"},
@@ -111,7 +111,7 @@ def test_dead_with_param_detects_unknown_key() -> None:
     findings = run_semantic_rules(recipe)
     dead = [f for f in findings if f.rule == "dead-with-param"]
     assert dead, "Expected dead-with-param finding for 'add_dir'"
-    assert all(f.severity == Severity.WARNING for f in dead)
+    assert all(f.severity == Severity.ERROR for f in dead)
     assert any("add_dir" in f.message for f in dead)
 
 
@@ -165,10 +165,10 @@ def test_run_python_rejects_callable_path_param() -> None:
 
 
 def test_run_python_accepts_callable_param() -> None:
-    recipe = _make_recipe_with_args("run_python", {"callable": "mod.fn", "args": {}})
+    recipe = _make_recipe_with_args("run_python", {"callable": "mod.fn"})
     findings = run_semantic_rules(recipe)
     dead = [f for f in findings if f.rule == "dead-with-param"]
-    assert not dead, "valid params 'callable'/'args' must not trigger dead-with-param"
+    assert not dead, "valid param 'callable' must not trigger dead-with-param"
 
 
 def test_clone_repo_rejects_stale_params() -> None:

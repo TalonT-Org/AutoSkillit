@@ -47,7 +47,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     skill_data = skills.get(skill_name)
     if skill_data is None:
         return None
-    inputs = [
+    inputs = tuple(
         SkillInput(
             name=inp["name"],
             type=inp["type"],
@@ -56,7 +56,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             recommended=inp.get("recommended", False),
         )
         for inp in skill_data.get("inputs", [])
-    ]
+    )
     outputs = [
         SkillOutput(
             name=out["name"],
@@ -184,7 +184,7 @@ def get_callable_contract(
     entry = callables.get(dotted_path)
     if entry is None:
         return None
-    inputs = [
+    inputs = tuple(
         SkillInput(
             name=inp["name"],
             type=inp["type"],
@@ -193,7 +193,7 @@ def get_callable_contract(
             nullable=inp.get("nullable", True),
         )
         for inp in entry.get("inputs", [])
-    ]
+    )
     outputs = [
         SkillOutput(
             name=out["name"],

@@ -48,6 +48,10 @@ from .audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerif
 from .audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
 from .audit_cycle_verifier import InventoryAdmissionEvaluator as InventoryAdmissionEvaluator
 from .audit_cycle_verifier import VerifiedAuditCycle as VerifiedAuditCycle
+from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
+from .tool_registry import all_tool_names as all_tool_names
+from .tool_registry import get_tool_def as get_tool_def
+from .tool_registry import unsupported_tool_params as unsupported_tool_params
 from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
@@ -172,6 +176,16 @@ from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
 from .types import AUTOSKILLIT_SKILL_PREFIX as AUTOSKILLIT_SKILL_PREFIX
 from .types import AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES as AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
 from .types import BACKEND_CAPABILITY_INGREDIENTS as BACKEND_CAPABILITY_INGREDIENTS
+from .types import ABSENT_BOUND_VALUE as ABSENT_BOUND_VALUE
+from .types import AbsentBoundValue as AbsentBoundValue
+from .types import BindingFailure as BindingFailure
+from .types import BindingFailureCode as BindingFailureCode
+from .types import BindingMode as BindingMode
+from .types import BoundScalar as BoundScalar
+from .types import BoundStepInvocation as BoundStepInvocation
+from .types import BoundValue as BoundValue
+from .types import BoundValueOrigin as BoundValueOrigin
+from .types import BoundValueState as BoundValueState
 from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CAPABILITY_GATE_CALLABLES as CAPABILITY_GATE_CALLABLES
 from .types import CAPABILITY_INGREDIENT_MAP as CAPABILITY_INGREDIENT_MAP
@@ -524,6 +538,7 @@ from .types import RecipeDeliveryEvidenceDef as RecipeDeliveryEvidenceDef
 from .types import RecipeDeliveryMode as RecipeDeliveryMode
 from .types import RecipeDeliveryRequest as RecipeDeliveryRequest
 from .types import RecipeDeliverySurfaceDef as RecipeDeliverySurfaceDef
+from .types import RecipeBindingProjection as RecipeBindingProjection
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError
 from .types import RecipeNotFoundError as RecipeNotFoundError
@@ -611,6 +626,9 @@ from .types import TerminationAction as TerminationAction
 from .types import TerminationReason as TerminationReason
 from .types import TestResult as TestResult
 from .types import TestRunner as TestRunner
+from .types import ToolDef as ToolDef
+from .types import ToolParamDef as ToolParamDef
+from .types import ToolWireType as ToolWireType
 from .types import TimingLog as TimingLog
 from .types import TokenFactory as TokenFactory
 from .types import TokenizerIdentity as TokenizerIdentity

@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from autoskillit.core import BoundScalar, RecipeBindingProjection
+
 if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, SkillResolver
 
@@ -32,6 +34,7 @@ from autoskillit.recipe._analysis_graph import (
     _is_infrastructure_step,
     build_recipe_graph,
 )
+from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
 from autoskillit.recipe.schema import (
     DataFlowReport,
@@ -86,6 +89,9 @@ class ValidationContext:
     backend_origin_map: dict[str, str] | None = None
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
     predecessors: dict[str, set[str]] = field(default_factory=dict)
+    binding_projection: RecipeBindingProjection = field(
+        default_factory=lambda: RecipeBindingProjection({})
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +145,8 @@ def make_validation_context(
     effective_backend_map: dict[str, str] | None = None,
     backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     backend_origin_map: dict[str, str] | None = None,
+    binding_projection: RecipeBindingProjection | None = None,
+    binding_ingredient_values: dict[str, BoundScalar] | None = None,
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
@@ -171,4 +179,9 @@ def make_validation_context(
         backend_origin_map=backend_origin_map,
         blocks=extract_blocks(recipe, step_graph, predecessors=predecessors),
         predecessors=predecessors,
+        binding_projection=(
+            binding_projection
+            if binding_projection is not None
+            else bind_recipe(recipe, ingredient_values=binding_ingredient_values)
+        ),
     )

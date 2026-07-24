@@ -32,6 +32,45 @@ try:
 except ImportError:
     _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
 
+
+class _UniqueKeyLoader(_Loader):
+    """Safe loader that rejects duplicate mapping keys before construction."""
+
+
+def _construct_unique_mapping(
+    loader: _UniqueKeyLoader,
+    node: yaml.MappingNode,
+    deep: bool = False,
+) -> dict[Any, Any]:
+    loader.flatten_mapping(node)
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in mapping
+        except TypeError as exc:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "found an unhashable key",
+                key_node.start_mark,
+            ) from exc
+        if duplicate:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
 try:
     from yaml import CDumper as _Dumper
 except ImportError:
@@ -443,8 +482,8 @@ def load_yaml(source: os.PathLike[str] | str) -> Any:
     """
     if isinstance(source, os.PathLike):
         with open(source, "rb") as fh:
-            return yaml.load(fh, Loader=_Loader)
-    return yaml.load(source, Loader=_Loader)
+            return yaml.load(fh, Loader=_UniqueKeyLoader)
+    return yaml.load(source, Loader=_UniqueKeyLoader)
 
 
 def compose_yaml(source: str) -> yaml.Node | None:

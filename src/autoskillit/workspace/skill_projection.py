@@ -687,10 +687,13 @@ def project_direct_install(
         f"{info.name}:{info.canonical_digest}"
         for info in sorted(catalog.skills, key=lambda s: s.name)
     )
+    namespace_identity = "\n".join(
+        f"{name}:{source.value}" for name, source in sorted(catalog.namespace_sources.items())
+    )
     cache_key = hashlib.sha256(
         (
             f"{source_root}\0{backend.name}\0{SKILL_PROJECTION_VERSION}\0"
-            f"{default_base_branch}\0{identity}"
+            f"{default_base_branch}\0{identity}\0{namespace_identity}"
         ).encode()
     ).hexdigest()[:24]
     destination = Path.home() / ".autoskillit" / "plugin-projections" / cache_key

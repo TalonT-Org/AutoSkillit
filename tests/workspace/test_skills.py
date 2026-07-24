@@ -1241,7 +1241,7 @@ def test_projection_context_derives_and_validates_backend_conventions(
         )
 
 
-def test_direct_install_projection_reuses_immutable_cache_entry(
+def test_direct_install_projection_cache_identity_and_reuse(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1268,7 +1268,8 @@ def test_direct_install_projection_reuses_immutable_cache_entry(
         "execution_role: session\n"
         "uses_capabilities: []\n"
         "---\n"
-        "base branch: {{DEFAULT_BASE_BRANCH}}\n",
+        "base branch: {{DEFAULT_BASE_BRANCH}}\n"
+        "external skill: /autoskillit:external\n",
         encoding="utf-8",
     )
     info = _skill_info_from_frontmatter(
@@ -1284,6 +1285,7 @@ def test_direct_install_projection_reuses_immutable_cache_entry(
     catalog = EffectiveSkillCatalog(
         skills=(SkillCatalogEntry.from_skill_info(info),),
         execution_role=SkillExecutionRole.SESSION,
+        namespace_sources={"external": SkillSource.BUNDLED},
     )
     backend = SimpleNamespace(
         name="codex",
@@ -1321,6 +1323,23 @@ def test_direct_install_projection_reuses_immutable_cache_entry(
     assert main_projection.plugin_dir != first.plugin_dir
     assert "base branch: main" in (
         main_projection.plugin_dir / "skills" / "immutable-cache" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+
+    local_namespace_catalog = EffectiveSkillCatalog(
+        skills=catalog.skills,
+        execution_role=SkillExecutionRole.SESSION,
+        namespace_sources={"external": SkillSource.PROJECT_LOCAL},
+    )
+    local_namespace_projection = project_direct_install(
+        source,
+        cwd=tmp_path,
+        backend=backend,
+        default_base_branch="develop",
+        skill_catalog=local_namespace_catalog,
+    )
+    assert local_namespace_projection.plugin_dir != first.plugin_dir
+    assert "external skill: /external" in (
+        local_namespace_projection.plugin_dir / "skills" / "immutable-cache" / "SKILL.md"
     ).read_text(encoding="utf-8")
 
 

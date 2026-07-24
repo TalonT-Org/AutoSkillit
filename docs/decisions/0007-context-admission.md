@@ -198,7 +198,8 @@ complete, version-pinned projection of `CONTEXT_ADMISSION_COVERAGE`; each row ha
 | `PARENT_VISIBLE_CHILD_DELIVERY` | `child_delivery_receipt` | `VERIFIED` | `UPSTREAM_GATED` |
 | `COMPACTION_MODEL_WINDOW_TRANSITION` | `compaction_receiver` | `PARTIAL` | `UPSTREAM_GATED` |
 
-`VERIFIED` rows use AutoSkillit source at revision `ac8f653a00d2`. Codex-backed rows use
+`VERIFIED` rows use AutoSkillit source at revision
+`ac8f653a00d24b6be50ef285958cfb0e1b7a351b`. Codex-backed rows use
 codex-cli `0.145.0` at revision `25af12f7e61572b0bc18ddb1008be543b91519b0`.
 `CLIENT_PROVIDER_RETRIEVAL` and `OTHER_CONTEXT_INJECTION` are explicitly inference-backed gap
 claims, not verified source claims. Static source pins are documentation provenance, not runtime

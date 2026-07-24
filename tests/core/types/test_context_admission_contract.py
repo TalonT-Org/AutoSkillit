@@ -1486,7 +1486,7 @@ def test_privacy_canaries_are_rejected_from_coverage_evidence() -> None:
             verifier="source_inspection",
             source_locator="/home/alice/private/source.py",
             tested_version="0.10.890",
-            tested_revision="ac8f653a00d2",
+            tested_revision="ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
             checked_at="2026-07-23",
             freshness_policy="verify_on_version_or_configuration_change",
         )
@@ -1499,10 +1499,44 @@ def test_privacy_canaries_are_rejected_from_coverage_evidence() -> None:
             verifier="source_inspection",
             source_locator="~alice/private",
             tested_version="0.10.890",
-            tested_revision="ac8f653a00d2",
+            tested_revision="ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
             checked_at="2026-07-23",
             freshness_policy="verify_on_version_or_configuration_change",
         )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value", "reason_code"),
+    [
+        ("tested_revision", "abc123", "invalid_tested_revision"),
+        ("tested_revision", "g" * 40, "invalid_tested_revision"),
+        ("checked_at", "2026-7-3", "invalid_checked_at"),
+        ("checked_at", "2026-02-30", "invalid_checked_at"),
+        ("freshness_policy", "always_fresh", "invalid_freshness_policy"),
+    ],
+)
+def test_coverage_evidence_enforces_semantic_provenance_fields(
+    field_name: str,
+    invalid_value: str,
+    reason_code: str,
+) -> None:
+    evidence = CoverageEvidence(
+        claim_id="COV-semantic-fields",
+        kind=CoverageEvidenceKind.AUTOSKILLIT_SOURCE,
+        backend="autoskillit",
+        configuration_mode="default",
+        verifier="source_inspection",
+        source_locator="src/autoskillit/core/context_admission.py",
+        tested_version="0.10.890",
+        tested_revision="ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
+        checked_at="2026-07-23",
+        freshness_policy="verify_on_version_or_configuration_change",
+    )
+
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        replace(evidence, **{field_name: invalid_value})
+
+    assert reason_code in str(exc_info.value)
 
 
 def test_prepare_event_rejects_estimate_measurement() -> None:

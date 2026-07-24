@@ -53,7 +53,7 @@ def _autoskillit_evidence(claim_id: str, source_locator: str) -> ExpectedEvidenc
         "source_inspection",
         source_locator,
         "0.10.890",
-        "ac8f653a00d2",
+        "ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
         CHECKED_AT,
         FRESHNESS_POLICY,
     )

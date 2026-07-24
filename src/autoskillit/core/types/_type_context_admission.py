@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields
+from datetime import date
 from enum import StrEnum
 from types import UnionType
 from typing import (
@@ -44,6 +45,15 @@ _MAX_UINT64 = (1 << 64) - 1
 _CONTENT_FREE_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@+-]*\Z")
 _CONTENT_FREE_LOCATOR = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:@+-]*\Z")
 _REASON_CODE = re.compile(r"[a-z][a-z0-9-]{0,63}\Z")
+_GIT_REVISION = re.compile(r"[0-9a-fA-F]{40}\Z")
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
+_FRESHNESS_POLICIES = frozenset(
+    {
+        "verify_on_version_or_configuration_change",
+        "verify_on_revision_change",
+        "infer_only",
+    }
+)
 _SENSITIVE_TEXT_MARKERS = (
     "authorization",
     "bearer",
@@ -127,6 +137,15 @@ def _validate_reason_code(
     _validate_bounded_text(value, validation_error, maximum=64)
     if not _REASON_CODE.fullmatch(value):
         _raise_invalid(validation_error)
+
+
+def _validate_iso_date(value: str) -> None:
+    if not isinstance(value, str) or not _ISO_DATE.fullmatch(value):
+        _raise_invalid("invalid_checked_at")
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        raise ContextAdmissionValidationError("invalid_checked_at") from None
 
 
 def _validate_tuple(value: object, reason_code: str) -> None:
@@ -1105,11 +1124,18 @@ class CoverageEvidence(_ContractValue):
             (self.configuration_mode, "invalid_configuration_mode", 64),
             (self.verifier, "invalid_evidence_verifier", 64),
             (self.tested_version, "invalid_tested_version", 64),
-            (self.tested_revision, "invalid_tested_revision", 96),
-            (self.checked_at, "invalid_checked_at", 32),
-            (self.freshness_policy, "invalid_freshness_policy", 128),
         ):
             _validate_bounded_text(value, reason, maximum=maximum)
+        if not isinstance(self.tested_revision, str) or not _GIT_REVISION.fullmatch(
+            self.tested_revision
+        ):
+            _raise_invalid("invalid_tested_revision")
+        _validate_iso_date(self.checked_at)
+        if (
+            not isinstance(self.freshness_policy, str)
+            or self.freshness_policy not in _FRESHNESS_POLICIES
+        ):
+            _raise_invalid("invalid_freshness_policy")
         _validate_bounded_text(
             self.source_locator,
             "invalid_source_locator",
@@ -2164,7 +2190,7 @@ def _coverage_row(surface: ProducerSurface) -> ProducerCoverageDef:
         verifier = "source_inspection"
         locator = _LOCAL_SOURCE_LOCATORS[surface]
         version = "0.10.890"
-        revision = "ac8f653a00d2"
+        revision = "ac8f653a00d24b6be50ef285958cfb0e1b7a351b"
     elif surface in _UNOBSERVABLE_SURFACES:
         observation_state = CoverageState.UPSTREAM_GATED
         evidence_kind = CoverageEvidenceKind.INFERENCE

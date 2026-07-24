@@ -40,6 +40,7 @@ from autoskillit.execution import (
 )
 from autoskillit.recipe import _extract_routing_edges, step_byte_ranges_from_yaml
 from autoskillit.server._response_budget import enforce_response_budget
+from autoskillit.server.recipe_section._lifecycle import notify_kitchen_retired
 
 if TYPE_CHECKING:
     from autoskillit.core import RecipeDeliveryBudgetDef, RecipeDeliveryEvidenceDef
@@ -372,11 +373,7 @@ def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
     except (OSError, RecipeArtifactError, TypeError):
         return False
     try:
-        from autoskillit.server._recipe_section_pagination import (  # circular-break
-            evict_kitchen,
-        )
-
-        evict_kitchen(kitchen_id)
+        notify_kitchen_retired(kitchen_id)
     except Exception:
         get_logger(__name__).warning(
             "recipe_section_cache_retirement_eviction_failed",

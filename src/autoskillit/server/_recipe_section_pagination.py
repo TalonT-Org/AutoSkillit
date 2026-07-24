@@ -26,6 +26,7 @@ from autoskillit.server._recipe_delivery import (
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RecipeArtifactGeneration,
 )
+from autoskillit.server.recipe_section._lifecycle import register_kitchen_retirement_callback
 from autoskillit.server.recipe_section._verification import (
     verify_finalized_recipe_section_plan,
 )
@@ -254,6 +255,13 @@ def evict_kitchen(kitchen_id: str) -> None:
         logger.warning(
             "recipe_section_cache_eviction_failed", kitchen_id=kitchen_id, exc_info=True
         )
+
+
+def _evict_retired_kitchen(kitchen_id: str) -> None:
+    evict_kitchen(kitchen_id)
+
+
+register_kitchen_retirement_callback(_evict_retired_kitchen)
 
 
 def resolve_recipe_section_bound_bytes(

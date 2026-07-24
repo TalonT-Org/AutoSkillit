@@ -24,6 +24,7 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillResolver,
+    SkillSessionContractStore,
     SkillSourceRef,
     SpillSpec,
     SubprocessResult,
@@ -64,6 +65,58 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 _PATH_LIKE_ARGS: frozenset[str] = frozenset({"output_dir", "workspace", "diagnostics_log_dir"})
+
+
+@dataclasses.dataclass(slots=True)
+class _RunSkillContractLifecycle:
+    """Own provisional and finalized contract state across run_skill exits."""
+
+    store: SkillSessionContractStore | None = None
+    correlation_key: str | None = None
+    bound_session_id: str | None = None
+    retain_bound: bool = True
+    execution_started: bool = False
+
+    def observe_candidate(self, candidate_session_id: str) -> None:
+        if self.store is not None and self.correlation_key is not None:
+            self.store.observe_candidate(self.correlation_key, candidate_session_id)
+
+    def finalize(self, session_id: str) -> None:
+        if self.store is None or self.correlation_key is None:
+            return
+        if session_id:
+            self.store.finalize(self.correlation_key, session_id)
+            self.bound_session_id = session_id
+        else:
+            self.store.discard(self.correlation_key)
+        self.correlation_key = None
+
+    def apply_retention(self, needs_retry: bool) -> None:
+        self.retain_bound = needs_retry
+        if self.store is not None and self.bound_session_id is not None and not needs_retry:
+            self.store.delete(self.bound_session_id)
+            self.bound_session_id = None
+
+    def cleanup(self) -> None:
+        if self.store is not None and self.correlation_key is not None:
+            try:
+                self.store.discard(self.correlation_key)
+            except Exception:
+                logger.warning("skill_session_contract_discard_failed", exc_info=True)
+        if (
+            self.store is not None
+            and self.bound_session_id is not None
+            and self.execution_started
+            and not self.retain_bound
+        ):
+            try:
+                self.store.delete(self.bound_session_id)
+            except Exception:
+                logger.warning(
+                    "skill_session_contract_delete_failed",
+                    session_id=self.bound_session_id,
+                    exc_info=True,
+                )
 
 
 def check_review_approach_plan_path(step_name: str, skill_command: str) -> str | None:

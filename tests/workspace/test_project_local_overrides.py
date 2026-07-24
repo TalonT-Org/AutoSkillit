@@ -403,6 +403,54 @@ def test_effective_resolution_rejects_external_symlinked_search_root(
     assert "external body" not in effective.canonical_content
 
 
+def test_effective_resolution_fails_closed_on_override_io_error(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from pathlib import Path
+
+    from autoskillit.core import SkillContractError
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=(),
+        execution_role="session",
+        body="bundled fallback must not run",
+    )
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=(),
+        execution_role="session",
+        body="selected override",
+    )
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    original_resolve = Path.resolve
+
+    def fail_override_resolution(path: Path, strict: bool = False) -> Path:
+        if path == override_path:
+            raise PermissionError("override unavailable")
+        return original_resolve(path, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", fail_override_resolution)
+
+    with pytest.raises(
+        SkillContractError,
+        match="cannot validate project-local skill 'target'",
+    ):
+        resolver.resolve_effective("target", project)
+
+
 def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path, monkeypatch):
     """Source precedence cannot mix policy metadata with bytes from a lower-priority source."""
     from autoskillit.workspace.skills import DefaultSkillResolver

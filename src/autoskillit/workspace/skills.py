@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import stat
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -45,15 +46,22 @@ def _contained_project_skill_path(
     """Return a non-symlinked SKILL.md contained by its project search root."""
     entry = search_root / name
     skill_path = entry / "SKILL.md"
-    if search_root.is_symlink() or entry.is_symlink() or skill_path.is_symlink():
-        return None
-    if not entry.is_dir() or not skill_path.is_file():
-        return None
     try:
+        search_root_stat = search_root.lstat()
+        entry_stat = entry.lstat()
+        skill_stat = skill_path.lstat()
         resolved_project_root = project_root.resolve(strict=True)
         resolved_root = search_root.resolve(strict=True)
         resolved_skill = skill_path.resolve(strict=True)
-    except OSError:
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise SkillContractError(
+            f"cannot validate project-local skill {name!r} under {search_root}: {exc}"
+        ) from exc
+    if any(stat.S_ISLNK(item.st_mode) for item in (search_root_stat, entry_stat, skill_stat)):
+        return None
+    if not stat.S_ISDIR(entry_stat.st_mode) or not stat.S_ISREG(skill_stat.st_mode):
         return None
     if not resolved_root.is_relative_to(
         resolved_project_root
@@ -689,12 +697,14 @@ class DefaultSkillResolver:
             selected: set[str] = set()
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
                 search_root = normalized_root / search_dir
-                if not search_root.is_dir():
-                    continue
                 try:
                     entries = sorted(search_root.iterdir(), key=lambda entry: entry.name)
-                except OSError:
+                except (FileNotFoundError, NotADirectoryError):
                     continue
+                except OSError as exc:
+                    raise SkillContractError(
+                        f"cannot inspect project-local skill search root {search_root}: {exc}"
+                    ) from exc
                 for entry in entries:
                     if entry.name in selected:
                         continue

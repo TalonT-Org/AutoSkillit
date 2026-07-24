@@ -298,7 +298,7 @@ def select_recipe_section(
         section=section,
         definition=DYNAMIC_RECIPE_SECTION_DEF,
         value=dynamic_content,
-        present=dynamic_content is not None,
+        present=bool(dynamic_content),
     )
 
 

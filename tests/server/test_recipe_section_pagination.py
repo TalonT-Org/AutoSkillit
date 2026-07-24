@@ -218,6 +218,17 @@ def test_select_recipe_section_loads_only_recognized_dynamic_content() -> None:
     assert loaded_sections == ["first"]
 
 
+def test_select_recipe_section_rejects_empty_dynamic_content() -> None:
+    selected = select_recipe_section(
+        _payload(),
+        "first",
+        dynamic_content_loader=lambda _section: "",
+    )
+
+    assert selected.present is False
+    assert selected.value == ""
+
+
 def test_failure_floor_is_derived_from_the_registered_renderer() -> None:
     rendered_failures = [
         render_recipe_section_failure(

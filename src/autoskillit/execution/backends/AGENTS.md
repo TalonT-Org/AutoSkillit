@@ -18,6 +18,8 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 | `_codex_hooks.py` | Codex config.toml hook generation, sync, and upsert (`generate_codex_hooks_config`, `sync_hooks_to_codex_config`) |
 | `_codex_parse.py` | `CodexStreamParser`, `CodexResultParser`, NDJSON scanning, and bounded persisted-rollout parsing |
 | `_codex_prelaunch.py` | Sole composed source-config synchronization, hook update, snapshot, and native-validation transaction |
+| `_codex_state_readiness.py` | Version-mapped, read-only Codex SQLite readiness adapter |
+| `_readiness.py` | Backend-neutral startup-readiness status and probe protocol |
 | `_codex_recipe_delivery.py` | Protected outer-budget provider seam, bounded diagnostic correlation, and durable consumed-call/receipt ledger |
 | `_codex_session_storage.py` | Canonical rollout store, per-attempt views and leases, durable promotion/recovery, and derived session index |
 | `codex_scenario_player.py` | `CodexScenarioPlayer`, `make_codex_scenario_player`, `CodexStepRecord`, `CodexScenario`, `_load_manifest`, `_FakeCodexCLI`, `_write_shim_script` — scenario replay data layer for Codex backend |

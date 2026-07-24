@@ -206,3 +206,36 @@ def test_store_rejects_opaque_or_incomplete_source_identity(tmp_path: Path) -> N
             contract=contract,
             snapshot={".claude/skills/root/SKILL.md": text},
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("read_only", "false"),
+        ("completion_required", 1),
+        ("projection_gating", "true"),
+    ],
+)
+def test_store_rejects_malformed_serialized_boolean_authority(
+    tmp_path: Path,
+    field: str,
+    invalid_value: object,
+) -> None:
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+    from autoskillit.execution.session._skill_session_contract_store import _digest_json
+
+    text = "projected\n"
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    entry = store._provisional_path(correlation_key)  # noqa: SLF001
+    manifest = store._read_manifest(entry)  # noqa: SLF001
+    contract_data = manifest["contract"]
+    contract_data[field] = invalid_value
+    manifest["contract_digest"] = _digest_json(contract_data)
+    store._write_manifest(entry, manifest)  # noqa: SLF001
+
+    with pytest.raises(ValueError, match="Invalid serialized"):
+        store.finalize(correlation_key, "malformed")

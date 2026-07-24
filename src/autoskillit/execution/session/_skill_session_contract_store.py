@@ -547,6 +547,15 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
         source_refs_raw = data["source_refs"]
         if not isinstance(source_refs_raw, dict):
             raise ValueError("source_refs must be an object")
+        read_only = data.get("read_only", False)
+        if not isinstance(read_only, bool):
+            raise ValueError("read_only must be a boolean")
+        completion_required = data.get("completion_required", False)
+        if not isinstance(completion_required, bool):
+            raise ValueError("completion_required must be a boolean")
+        projection_gating = data.get("projection_gating")
+        if projection_gating is not None and not isinstance(projection_gating, bool):
+            raise ValueError("projection_gating must be a boolean or null")
         return SkillSessionContract(
             root_name=str(data["root_name"]),
             execution_role=SkillExecutionRole(str(data["execution_role"])),
@@ -597,13 +606,13 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
                     for pattern in data.get("write_behavior", {}).get("expected_when", [])
                 ),
             ),
-            read_only=bool(data.get("read_only", False)),
-            completion_required=bool(data.get("completion_required", False)),
+            read_only=read_only,
+            completion_required=completion_required,
             skill_contract_json=str(data.get("skill_contract_json", "")),
             projection_substitutions=tuple(
                 (str(item[0]), str(item[1])) for item in data.get("projection_substitutions", [])
             ),
-            projection_gating=data.get("projection_gating"),
+            projection_gating=projection_gating,
             projection_namespace=(
                 str(data["projection_namespace"])
                 if data.get("projection_namespace") is not None

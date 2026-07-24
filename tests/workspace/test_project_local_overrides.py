@@ -308,6 +308,58 @@ def test_resolve_effective_observes_removed_override_and_falls_back(tmp_path, mo
     assert "temporary override body" not in second.canonical_content
 
 
+@pytest.mark.parametrize("symlink_kind", ["directory", "file"])
+def test_effective_resolution_rejects_symlinked_project_overrides(
+    tmp_path,
+    monkeypatch,
+    symlink_kind: str,
+) -> None:
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    external = tmp_path / "external"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    bundled_path = _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=(),
+        execution_role="session",
+        body="trusted bundled body",
+    )
+    external_path = _write_effective_skill(
+        external,
+        "target",
+        capabilities=("github_api_write",),
+        execution_role="session",
+        body="external body",
+    )
+    override_entry = project / ".claude" / "skills" / "target"
+    override_entry.parent.mkdir(parents=True)
+    if symlink_kind == "directory":
+        override_entry.symlink_to(external_path.parent, target_is_directory=True)
+    else:
+        override_entry.mkdir()
+        (override_entry / "SKILL.md").symlink_to(external_path)
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+
+    effective = resolver.resolve_effective("target", project)
+    catalog = resolver.list_effective(project, SkillExecutionRole.SESSION)
+
+    assert effective is not None
+    assert effective.path == bundled_path
+    assert next(skill for skill in catalog.skills if skill.name == "target").source.value == (
+        "bundled"
+    )
+
+
 def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path, monkeypatch):
     """Source precedence cannot mix policy metadata with bytes from a lower-priority source."""
     from autoskillit.workspace.skills import DefaultSkillResolver

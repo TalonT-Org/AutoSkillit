@@ -37,6 +37,24 @@ from autoskillit.workspace.skill_format import (
 logger = get_logger(__name__)
 
 
+def _contained_project_skill_path(search_root: Path, name: str) -> Path | None:
+    """Return a non-symlinked SKILL.md contained by its project search root."""
+    entry = search_root / name
+    skill_path = entry / "SKILL.md"
+    if search_root.is_symlink() or entry.is_symlink() or skill_path.is_symlink():
+        return None
+    if not entry.is_dir() or not skill_path.is_file():
+        return None
+    try:
+        resolved_root = search_root.resolve(strict=True)
+        resolved_skill = skill_path.resolve(strict=True)
+    except OSError:
+        return None
+    if not resolved_skill.is_relative_to(resolved_root):
+        return None
+    return skill_path
+
+
 @dataclass(frozen=True, slots=True)
 class SkillInfo:
     """One exact, typed skill machine contract selected from a source."""
@@ -611,8 +629,11 @@ class DefaultSkillResolver:
         normalized_root = project_root.resolve() if project_root is not None else None
         if normalized_root is not None:
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
-                skill_path = normalized_root / search_dir / name / "SKILL.md"
-                if not skill_path.is_file():
+                skill_path = _contained_project_skill_path(
+                    normalized_root / search_dir,
+                    name,
+                )
+                if skill_path is None:
                     continue
                 return _skill_info_from_frontmatter(
                     name,
@@ -642,8 +663,10 @@ class DefaultSkillResolver:
                 except OSError:
                     continue
                 for entry in entries:
-                    skill_path = entry / "SKILL.md"
-                    if not entry.is_dir() or entry.name in selected or not skill_path.is_file():
+                    if entry.name in selected:
+                        continue
+                    skill_path = _contained_project_skill_path(search_root, entry.name)
+                    if skill_path is None:
                         continue
                     selected.add(entry.name)
                     by_name[entry.name] = _skill_info_from_frontmatter(

@@ -1089,6 +1089,22 @@ def test_effective_catalog_applies_subsets_and_recipe_features(tmp_path: Path) -
     assert "planner-skill" in catalog.namespace_sources
 
 
+def test_effective_catalog_keeps_only_available_external_namespace_targets(
+    tmp_path: Path,
+) -> None:
+    resolver = _resolver_with_visibility_skills(tmp_path)
+
+    catalog = resolver.list_effective(
+        tmp_path,
+        SkillExecutionRole.SESSION,
+        allow_only=frozenset({"core-skill"}),
+    )
+
+    assert {skill.name for skill in catalog.skills} == {"core-skill"}
+    assert "audit-skill" in catalog.namespace_sources
+    assert "research-skill" not in catalog.namespace_sources
+
+
 def test_explicit_invocation_bypasses_feature_but_not_pack_visibility(
     tmp_path: Path,
 ) -> None:

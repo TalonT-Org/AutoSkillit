@@ -709,6 +709,19 @@ class DefaultSkillResolver:
             recipe_packs=recipe_packs,
             recipe_features=recipe_features,
         )
+        namespace_sources = {
+            skill.name: skill.source
+            for skill in effective_skills
+            if skill.execution_role is execution_role
+            and _skill_is_visible(
+                skill,
+                disabled=disabled,
+                custom_tags=custom_tags,
+                features=features,
+                experimental_enabled=experimental_enabled,
+                allow_only=None,
+            )
+        }
         skills = tuple(
             SkillCatalogEntry.from_skill_info(skill)
             for skill in effective_skills
@@ -723,13 +736,26 @@ class DefaultSkillResolver:
             )
         )
         if execution_role is SkillExecutionRole.ORCHESTRATOR:
-            internal = tuple(
-                SkillCatalogEntry.from_skill_info(skill)
+            available_internal = tuple(
+                skill
                 for name in sorted(_INTERNAL_SKILLS)
                 if (skill := self.resolve_effective(name, normalized_root)) is not None
                 and skill.invalid_reason is None
                 and skill.execution_role is execution_role
                 and _skill_is_visible(
+                    skill,
+                    disabled=disabled,
+                    custom_tags=custom_tags,
+                    features=features,
+                    experimental_enabled=experimental_enabled,
+                    allow_only=None,
+                )
+            )
+            namespace_sources.update({skill.name: skill.source for skill in available_internal})
+            internal = tuple(
+                SkillCatalogEntry.from_skill_info(skill)
+                for skill in available_internal
+                if _skill_is_visible(
                     skill,
                     disabled=disabled,
                     custom_tags=custom_tags,
@@ -742,7 +768,7 @@ class DefaultSkillResolver:
         return EffectiveSkillCatalog(
             skills=skills,
             execution_role=execution_role,
-            namespace_sources={skill.name: skill.source for skill in skills},
+            namespace_sources=namespace_sources,
         )
 
     def resolve_invocation(

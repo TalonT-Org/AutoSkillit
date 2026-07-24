@@ -142,6 +142,26 @@ def test_graphql_default_post_mutation_implies_github_api_write() -> None:
     assert "github_api_write" in _detect_capabilities(body, "test-skill")
 
 
+def test_git_metadata_write_patterns_detect_all_commit_forms() -> None:
+    should_match = [
+        "git commit",
+        "git commit --amend",
+        "git commit -F message.txt",
+        "git commit --message=done",
+        "git -C worktree commit",
+    ]
+    should_not_match = [
+        "git status",
+        "git log --oneline",
+        "git commit-tree",
+    ]
+
+    for text in should_match:
+        assert "git_metadata_write" in _detect_capabilities(text, "test-skill")
+    for text in should_not_match:
+        assert "git_metadata_write" not in _detect_capabilities(text, "test-skill")
+
+
 def test_derivation_backend_requirements_match_capabilities():
     """backend_requirements must NOT be declared in SKILL.md — derivation is runtime-only."""
     violations: list[str] = []

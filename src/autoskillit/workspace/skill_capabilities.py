@@ -81,7 +81,7 @@ _STATIC_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     "commit_files": (re.compile(r"\bcommit_files\s*\("),),
     "git_metadata_write": (
         re.compile(r"create_impl_worktree\.sh|git worktree add\b[ \t]+\S|git checkout -b"),
-        re.compile(r"git\s+(?:-C\s+\S+\s+)?commit\s+-m"),
+        re.compile(r"\bgit\s+(?:-C\s+\S+\s+)?commit(?:\s|$)"),
         re.compile(r'\bgit\s+(?:-C\s+\S+\s+)?rebase\s+(?:--\w|[$"\{])'),
     ),
     "github_api_write": (

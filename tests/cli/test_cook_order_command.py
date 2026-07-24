@@ -423,7 +423,7 @@ class TestCLIOrderCommand:
     ) -> None:
         """order() produces a valid command for each registered backend."""
         from autoskillit.execution.backends import get_backend as _real_get_backend
-        from autoskillit.execution.backends.codex import CodexFlags
+        from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
         real_backend = _real_get_backend(backend_name)
         captured: dict = {}
@@ -447,6 +447,11 @@ class TestCLIOrderCommand:
         monkeypatch.setattr(
             "autoskillit.execution.get_backend",
             lambda name: _real_get_backend(name),
+        )
+        monkeypatch.setattr(
+            CodexBackend,
+            "ensure_pre_launch",
+            lambda _self, *, session_dir=None: [],
         )
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")

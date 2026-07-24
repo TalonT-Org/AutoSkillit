@@ -184,6 +184,8 @@ def _decode(value: object) -> object:
             _raise_invalid("invalid_dispatch_identity")
         return DispatchIdentity.from_dispatch_id(dispatch_id)
     if "__enum__" in value:
+        if set(value) != {"__enum__", "value"}:
+            _raise_invalid("unknown_serialized_enum")
         enum_name = value.get("__enum__")
         enum_value = value.get("value")
         if (
@@ -197,11 +199,15 @@ def _decode(value: object) -> object:
         except (TypeError, ValueError) as exc:
             raise ContextAdmissionValidationError("invalid_serialized_enum") from exc
     if "__tuple__" in value:
+        if set(value) != {"__tuple__"}:
+            _raise_invalid("invalid_serialized_tuple")
         raw = value["__tuple__"]
         if not isinstance(raw, list):
             _raise_invalid("invalid_serialized_tuple")
         return tuple(_decode(item) for item in raw)
     if "__frozenset__" in value:
+        if set(value) != {"__frozenset__"}:
+            _raise_invalid("invalid_serialized_frozenset")
         raw = value["__frozenset__"]
         if not isinstance(raw, list):
             _raise_invalid("invalid_serialized_frozenset")

@@ -838,6 +838,33 @@ def test_dispatch_identity_is_validated_and_projects_only_dispatch_id() -> None:
 
 
 @pytest.mark.parametrize(
+    ("tagged_value", "reason_code"),
+    [
+        (
+            {
+                "__enum__": "ReserveClass",
+                "value": "ordinary",
+                "unexpected": "ignored",
+            },
+            "unknown_serialized_enum",
+        ),
+        ({"__tuple__": [], "unexpected": "ignored"}, "invalid_serialized_tuple"),
+        (
+            {"__frozenset__": [], "unexpected": "ignored"},
+            "invalid_serialized_frozenset",
+        ),
+    ],
+)
+def test_tagged_serialization_requires_exact_key_sets(
+    tagged_value: dict[str, object],
+    reason_code: str,
+) -> None:
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        ContextSessionId.from_dict({"value": tagged_value})
+    assert reason_code in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
     "canary",
     [
         "",

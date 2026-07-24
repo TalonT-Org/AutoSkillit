@@ -2071,6 +2071,98 @@ def test_rollover_moves_old_work_to_resolvable_closed_epoch_audit() -> None:
     assert reconciled_audit.terminal_generation_reservations[0].state is GenerationState.RECONCILED
 
 
+def test_protected_release_uses_policy_from_rollover_created_epoch() -> None:
+    owner = ProtectedPoolOwnerId("rollover-policy-owner")
+    pool = ProtectedPoolSpec(
+        reserve_class=ReserveClass.SYNTHESIS,
+        capability_owner_id=owner,
+        injected_count=20,
+        priority=1,
+        required_release_witness_kind=WitnessKind.NON_ADMISSION,
+    )
+    state = _open_epoch(remaining_count=60)
+    sentinel = _batch(
+        "batch-rollover-policy-sentinel",
+        (_occurrence("rollover-policy-sentinel", maximum=1),),
+    )
+    opened_by_rollover = reduce_context_admission(
+        state,
+        RolloverEpochEvent(
+            **_event_fields(state, "rollover-policy-open", "rollover-epoch"),
+            witness=_witness(sentinel, WitnessKind.EPOCH_ROLLOVER),
+            fence_proof=None,
+            new_snapshot=_snapshot(epoch=2),
+            protected_pools=(pool,),
+        ),
+    )
+    assert isinstance(opened_by_rollover.next_state, ActiveContextAdmissionState)
+    state = opened_by_rollover.next_state
+
+    occurrence = _occurrence(
+        "rollover-policy-work",
+        maximum=10,
+        reserve_class=ReserveClass.SYNTHESIS,
+        epoch=2,
+    )
+    state, _ = _propose(state, occurrence)
+    batch = _batch(
+        "batch-rollover-policy-work",
+        (occurrence,),
+        reserve_class=ReserveClass.SYNTHESIS,
+        protected_owner=owner.value,
+    )
+    reserved, _ = _reserve(
+        state,
+        batch,
+        (occurrence,),
+        input_count=10,
+        generation_count=0,
+    )
+    assert isinstance(reserved.next_state, ActiveContextAdmissionState)
+    state = _prepare_dispatch(reserved.next_state, batch)
+    marked = reduce_context_admission(
+        state,
+        MarkIndeterminateEvent(
+            **_event_fields(state, "mark-rollover-policy", "mark-indeterminate"),
+            batch_id=batch.batch_id,
+            reason_code="ambiguous-provider-result",
+        ),
+    )
+    assert isinstance(marked.next_state, ActiveContextAdmissionState)
+    state = marked.next_state
+
+    rolled_again = reduce_context_admission(
+        state,
+        RolloverEpochEvent(
+            **_event_fields(state, "rollover-policy-close", "rollover-epoch"),
+            witness=_witness(batch, WitnessKind.EPOCH_ROLLOVER, epoch=2),
+            fence_proof=None,
+            new_snapshot=_snapshot(epoch=3),
+            protected_pools=(),
+        ),
+    )
+    assert isinstance(rolled_again.next_state, ActiveContextAdmissionState)
+    resolved = reduce_context_admission(
+        rolled_again.next_state,
+        ResolveIndeterminateNonAdmissionEvent(
+            **_event_fields(
+                rolled_again.next_state,
+                "resolve-rollover-policy",
+                "resolve-non-admission",
+            ),
+            batch_id=batch.batch_id,
+            witness=_witness(batch, WitnessKind.NON_ADMISSION, epoch=2),
+        ),
+    )
+
+    assert resolved.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(resolved.next_state, ActiveContextAdmissionState)
+    assert (
+        resolved.next_state.closed_epochs[-1].terminal_batch_records[0].state
+        is AdmissionState.RELEASED
+    )
+
+
 def test_rollover_accepts_only_one_explicit_authority_alternative() -> None:
     empty_state = _open_epoch()
     sentinel = _batch(

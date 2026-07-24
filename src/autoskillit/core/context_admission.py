@@ -550,18 +550,27 @@ def _required_release_witness_kind(
     ):
         protected_pools = state.protected_pools
     else:
-        open_event = next(
+        policy_event = next(
             (
                 record.event
                 for record in state.processed_events
-                if isinstance(record.event, OpenEpochEvent)
-                and record.event.snapshot.window_epoch_id == policy_snapshot.window_epoch_id
-                and record.event.snapshot.window_epoch_number
-                == policy_snapshot.window_epoch_number
+                if (
+                    isinstance(record.event, OpenEpochEvent)
+                    and record.event.snapshot.window_epoch_id == policy_snapshot.window_epoch_id
+                    and record.event.snapshot.window_epoch_number
+                    == policy_snapshot.window_epoch_number
+                )
+                or (
+                    isinstance(record.event, RolloverEpochEvent)
+                    and record.event.new_snapshot.window_epoch_id
+                    == policy_snapshot.window_epoch_id
+                    and record.event.new_snapshot.window_epoch_number
+                    == policy_snapshot.window_epoch_number
+                )
             ),
             None,
         )
-        protected_pools = open_event.protected_pools if open_event is not None else ()
+        protected_pools = policy_event.protected_pools if policy_event is not None else ()
     pool = next(
         (
             item

@@ -579,8 +579,8 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 reservation.key.batch_id in invalidated_batch_ids
                 for reservation in self.state.reservations
             )
-            retained_request_ids = {
-                record.batch.request_id
+            retained_batch_ids = {
+                record.batch.batch_id
                 for record in self.state.batch_records
                 if record.state
                 in {
@@ -597,7 +597,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                     GenerationState.STREAMING,
                     GenerationState.INDETERMINATE,
                 }
-                and generation.request_id not in retained_request_ids
+                and generation.batch_id not in retained_batch_ids
                 for generation in self.state.generation_reservations
             )
             occurrence_change_count = sum(
@@ -1338,6 +1338,56 @@ def test_multi_member_batch_progresses_through_full_lifecycle() -> None:
         for occurrence_record in machine.state.occurrence_records
         if occurrence_record.occurrence.occurrence_id in batch.occurrence_ids
     } == {AdmissionState.COMMITTED}
+
+
+def test_rollover_scopes_shared_request_generation_retention_to_batch() -> None:
+    machine = ContextAdmissionStateMachine()
+    machine.propose(0, ReserveClass.ORDINARY)
+    machine.propose(1, ReserveClass.ORDINARY)
+    machine.reserve(0, input_count=5, generation_count=4)
+    machine.reserve(1, input_count=5, generation_count=3)
+    retained_batch = machine.batches[0]
+    invalidated_batch = machine.batches[1]
+    invalidated_batch = replace(
+        invalidated_batch,
+        request_id=retained_batch.request_id,
+        manifest=replace(
+            invalidated_batch.manifest,
+            request_id=retained_batch.request_id,
+        ),
+    )
+    machine.batches[1] = invalidated_batch
+    machine.state = replace(
+        machine.state,
+        batch_records=tuple(
+            replace(record, batch=invalidated_batch)
+            if record.batch.batch_id == invalidated_batch.batch_id
+            else record
+            for record in machine.state.batch_records
+        ),
+        generation_reservations=tuple(
+            replace(generation, request_id=retained_batch.request_id)
+            if generation.batch_id == invalidated_batch.batch_id
+            else generation
+            for generation in machine.state.generation_reservations
+        ),
+    )
+
+    machine.prepare_stage_dispatch_and_accept(accept_now=True)
+    machine.rollover_preserves_dispatched_and_indeterminate_charge()
+
+    audit = machine.state.closed_epochs[-1]
+    assert audit.retained_generation_count == 4
+    assert tuple(generation.batch_id for generation in audit.terminal_generation_reservations) == (
+        retained_batch.batch_id,
+    )
+    assert (
+        sum(
+            isinstance(effect, ReservationInvalidatedEffect)
+            for effect in machine.published_effects[-1]
+        )
+        == 2
+    )
 
 
 ContextAdmissionStateMachine.TestCase.settings = settings(

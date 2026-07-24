@@ -665,7 +665,11 @@ def _prepare_dispatch(
             "stage-history",
         ),
         batch_id=batch.batch_id,
-        witness=_witness(batch, WitnessKind.HISTORY_STAGED),
+        witness=_witness(
+            batch,
+            WitnessKind.HISTORY_STAGED,
+            epoch=prepared.next_state.snapshot.window_epoch_number,
+        ),
     )
     staged = reduce_context_admission(prepared.next_state, stage)
     assert staged.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
@@ -677,7 +681,11 @@ def _prepare_dispatch(
             "dispatch-request",
         ),
         batch_id=batch.batch_id,
-        witness=_witness(batch, WitnessKind.REQUEST_INCLUDED),
+        witness=_witness(
+            batch,
+            WitnessKind.REQUEST_INCLUDED,
+            epoch=staged.next_state.snapshot.window_epoch_number,
+        ),
     )
     dispatched = reduce_context_admission(staged.next_state, dispatch)
     assert dispatched.decision.kind is AdmissionDecisionKind.WOULD_ADMIT

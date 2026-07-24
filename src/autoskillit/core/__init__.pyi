@@ -320,6 +320,8 @@ from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
+from .types import EffectiveSkillCatalogAuthority as EffectiveSkillCatalogAuthority
+from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocationAuthority
 from .types import EnvPolicy as EnvPolicy
 from .types import FailureRecord as FailureRecord
 from .types import FeatureDef as FeatureDef
@@ -392,6 +394,7 @@ from .types import RecipeSectionDef as RecipeSectionDef
 from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
+from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
@@ -405,12 +408,15 @@ from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
+from .types import SkillAuthority as SkillAuthority
 from .types import SkillCapabilityDef as SkillCapabilityDef
 from .types import SkillContractError as SkillContractError
 from .types import SkillContractResolver as SkillContractResolver
 from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
+from .types import SkillFrontmatterAuthority as SkillFrontmatterAuthority
 from .types import SkillLister as SkillLister
+from .types import SkillProjectionContextAuthority as SkillProjectionContextAuthority
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig

@@ -139,7 +139,10 @@ def resolve_target_skill(
     if info is None:
         return skill_command, name
 
-    return render_target_skill_command(skill_command, info.source_ref), name
+    return render_target_skill_command(
+        skill_command,
+        info.source_ref or info.source,
+    ), name
 
 
 def render_target_skill_command(

@@ -20,8 +20,12 @@ from autoskillit.core import (
     BackendConventions,
     CodingAgentBackend,
     DirectInstall,
+    EffectiveSkillCatalogAuthority,
+    EffectiveSkillInvocationAuthority,
     MarketplaceInstall,
     PluginSource,
+    ResolvedSkillAuthority,
+    SkillAuthority,
     SkillContractError,
     SkillExecutionRole,
     SkillResolver,
@@ -39,7 +43,6 @@ from autoskillit.core import (
 from autoskillit.workspace.skill_format import parse_frontmatter_content
 from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
-    EffectiveSkillInvocation,
     SkillCatalogEntry,
     SkillInfo,
     _skill_info_from_frontmatter,
@@ -78,15 +81,11 @@ _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
 )
 
 
-SkillContractRecord = SkillInfo | SkillCatalogEntry
+SkillContractRecord = SkillAuthority
 
 
 def _source_identity(skill: SkillContractRecord) -> SkillSourceIdentity:
-    if isinstance(skill, SkillCatalogEntry):
-        return skill.source_identity
-    if skill.source_ref is None:
-        raise SkillContractError(f"skill {skill.name!r} has no effective source identity")
-    return skill.source_ref.identity
+    return skill.source_identity
 
 
 def _default_base_branch(value: object) -> str:
@@ -120,8 +119,8 @@ class SkillProjectionContext:
 
     cwd: Path
     project_root: Path | None = None
-    catalog: EffectiveSkillCatalog | None = None
-    invocation: EffectiveSkillInvocation | None = None
+    catalog: EffectiveSkillCatalogAuthority | None = None
+    invocation: EffectiveSkillInvocationAuthority | None = None
     backend: CodingAgentBackend | None = None
     conventions: BackendConventions | None = None
     substitutions: Mapping[str, str] | None = None
@@ -174,8 +173,8 @@ class EffectiveSkillDispatchContract:
 
     resolved_command: str
     projection_context: SkillProjectionContext
-    invocation: EffectiveSkillInvocation | None
-    catalog: EffectiveSkillCatalog | None
+    invocation: EffectiveSkillInvocationAuthority | None
+    catalog: EffectiveSkillCatalogAuthority | None
     root_name: str | None
     member_names: tuple[str, ...]
     execution_role: SkillExecutionRole
@@ -334,9 +333,9 @@ def project_agent_skill_document(
 
 
 def _skill_sequence(
-    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillContractRecord],
+    skills_or_catalog: EffectiveSkillCatalogAuthority | Iterable[SkillContractRecord],
 ) -> tuple[SkillContractRecord, ...]:
-    if isinstance(skills_or_catalog, EffectiveSkillCatalog):
+    if isinstance(skills_or_catalog, EffectiveSkillCatalogAuthority):
         return skills_or_catalog.skills
     return tuple(skills_or_catalog)
 
@@ -351,7 +350,7 @@ def _replace_directory(staging: Path, destination: Path) -> None:
 
 def materialize_agent_skill_tree(
     destination: Path,
-    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillContractRecord],
+    skills_or_catalog: EffectiveSkillCatalogAuthority | Iterable[SkillContractRecord],
     context: SkillProjectionContext,
 ) -> dict[str, AgentSkillDocument]:
     """Replace *destination* with an exact tree of agent-safe skill projections."""
@@ -361,7 +360,10 @@ def materialize_agent_skill_tree(
     skills = _skill_sequence(skills_or_catalog)
     resolved_destination = destination.resolve()
     for skill in skills:
-        if isinstance(skill, SkillInfo) and resolved_destination in skill.path.resolve().parents:
+        if (
+            isinstance(skill, ResolvedSkillAuthority)
+            and resolved_destination in skill.path.resolve().parents
+        ):
             raise SkillContractError(
                 f"projected skill destination contains canonical source for {skill.name!r}"
             )
@@ -441,7 +443,7 @@ def _manifest_skill_entry(
 def materialize_sanitized_plugin_root(
     source_root: Path,
     destination: Path,
-    catalog: EffectiveSkillCatalog | Iterable[SkillContractRecord],
+    catalog: EffectiveSkillCatalogAuthority | Iterable[SkillContractRecord],
     context: SkillProjectionContext,
 ) -> Path:
     """Copy plugin assets and replace its public skills with safe projections.
@@ -493,7 +495,7 @@ def validate_sanitized_plugin_artifact(
     source_root: Path,
     public_root: Path,
     manifest_path: Path,
-    skills_or_catalog: EffectiveSkillCatalog | Iterable[SkillContractRecord],
+    skills_or_catalog: EffectiveSkillCatalogAuthority | Iterable[SkillContractRecord],
     *,
     require_sources_within_root: bool = True,
 ) -> tuple[str, ...]:
@@ -603,20 +605,8 @@ def validate_sanitized_plugin_artifact(
             "canonical_digest": canonical_digest,
             "source": info.source.value,
             "logical_name": info.name,
-            "search_dir": (
-                info.source_ref.search_dir
-                if isinstance(info, SkillInfo) and info.source_ref is not None
-                else info.source_identity.search_dir
-                if isinstance(info, SkillCatalogEntry)
-                else None
-            ),
-            "precedence": (
-                info.source_ref.precedence
-                if isinstance(info, SkillInfo) and info.source_ref is not None
-                else info.source_identity.precedence
-                if isinstance(info, SkillCatalogEntry)
-                else None
-            ),
+            "search_dir": info.source_identity.search_dir,
+            "precedence": info.source_identity.precedence,
             "uses_capabilities": sorted(info.uses_capabilities),
             "execution_role": (
                 info.execution_role.value if info.execution_role is not None else None
@@ -638,7 +628,7 @@ def project_direct_install(
     cwd: Path,
     backend: CodingAgentBackend,
     default_base_branch: str,
-    skill_catalog: EffectiveSkillCatalog | None = None,
+    skill_catalog: EffectiveSkillCatalogAuthority | None = None,
 ) -> DirectInstall:
     """Return a stable, validated public projection for a direct plugin install."""
     default_base_branch = _default_base_branch(default_base_branch)
@@ -762,7 +752,7 @@ def project_plugin_source(
     cwd: Path,
     backend: CodingAgentBackend,
     default_base_branch: str,
-    skill_catalog: EffectiveSkillCatalog | None = None,
+    skill_catalog: EffectiveSkillCatalogAuthority | None = None,
 ) -> PluginSource:
     """Project every plugin source into one sanitized direct-install tree."""
     if isinstance(source, MarketplaceInstall):
@@ -781,7 +771,7 @@ def project_default_plugin_source(
     cwd: Path,
     backend: CodingAgentBackend,
     default_base_branch: str,
-    skill_catalog: EffectiveSkillCatalog | None = None,
+    skill_catalog: EffectiveSkillCatalogAuthority | None = None,
 ) -> DirectInstall:
     """Project the installed package without exposing its canonical root."""
     return project_direct_install(
@@ -798,7 +788,7 @@ def prepare_catalog_skill_dispatch(
     resolved_command: str,
     cwd: Path,
     backend: CodingAgentBackend,
-    catalog: EffectiveSkillCatalog,
+    catalog: EffectiveSkillCatalogAuthority,
     default_base_branch: str,
     project_root: Path | None = None,
 ) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:

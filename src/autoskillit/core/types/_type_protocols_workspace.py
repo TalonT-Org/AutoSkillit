@@ -2,22 +2,173 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    pass
-
-from ._type_enums import SkillExecutionRole
+from ._type_backend import BackendConventions
+from ._type_enums import SkillExecutionRole, SkillSource
+from ._type_protocols_backend import CodingAgentBackend
 from ._type_results import CleanupResult, CloneResult, ValidatedAddDir
+from ._type_skill_contract import SkillSourceIdentity, SkillSourceRef
 
 __all__ = [
     "WorkspaceManager",
     "CloneManager",
+    "EffectiveSkillCatalogAuthority",
+    "EffectiveSkillInvocationAuthority",
+    "ResolvedSkillAuthority",
     "SessionSkillManager",
+    "SkillAuthority",
+    "SkillFrontmatterAuthority",
     "SkillLister",
+    "SkillProjectionContextAuthority",
     "SkillResolver",
 ]
+
+
+@runtime_checkable
+class SkillFrontmatterAuthority(Protocol):
+    """Parsed frontmatter fields required by projection without an IL-1 import."""
+
+    @property
+    def data(self) -> Mapping[str, Any] | None: ...
+
+    @property
+    def is_valid(self) -> bool: ...
+
+    @property
+    def error(self) -> str | None: ...
+
+    @property
+    def body(self) -> str: ...
+
+
+@runtime_checkable
+class SkillAuthority(Protocol):
+    """Structural machine authority shared by resolved and catalog skill records."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def source(self) -> SkillSource: ...
+
+    @property
+    def source_identity(self) -> SkillSourceIdentity: ...
+
+    @property
+    def categories(self) -> frozenset[str]: ...
+
+    @property
+    def uses_capabilities(self) -> frozenset[str]: ...
+
+    @property
+    def execution_role(self) -> SkillExecutionRole | None: ...
+
+    @property
+    def activate_deps(self) -> tuple[str, ...]: ...
+
+    @property
+    def canonical_content(self) -> str: ...
+
+    @property
+    def canonical_digest(self) -> str: ...
+
+    @property
+    def frontmatter(self) -> SkillFrontmatterAuthority | None: ...
+
+    @property
+    def invalid_reason(self) -> str | None: ...
+
+    @property
+    def backend_requirements(self) -> frozenset[str]: ...
+
+
+@runtime_checkable
+class ResolvedSkillAuthority(SkillAuthority, Protocol):
+    """Structural authority for one source-resolved skill."""
+
+    @property
+    def path(self) -> Path: ...
+
+    @property
+    def source_ref(self) -> SkillSourceRef | None: ...
+
+
+@runtime_checkable
+class EffectiveSkillCatalogAuthority(Protocol):
+    """Role-filtered immutable skill catalog crossing the IL-0 boundary."""
+
+    @property
+    def skills(self) -> tuple[SkillAuthority, ...]: ...
+
+    @property
+    def execution_role(self) -> SkillExecutionRole: ...
+
+    @property
+    def namespace_sources(self) -> Mapping[str, SkillSource]: ...
+
+
+@runtime_checkable
+class EffectiveSkillInvocationAuthority(Protocol):
+    """Resolved root and complete executable closure crossing the IL-0 boundary."""
+
+    @property
+    def root(self) -> ResolvedSkillAuthority: ...
+
+    @property
+    def closure(self) -> tuple[ResolvedSkillAuthority, ...]: ...
+
+    @property
+    def capability_union(self) -> frozenset[str]: ...
+
+    @property
+    def project_root(self) -> Path | None: ...
+
+    @property
+    def execution_role(self) -> SkillExecutionRole: ...
+
+    @property
+    def backend_requirements(self) -> frozenset[str]: ...
+
+
+@runtime_checkable
+class SkillProjectionContextAuthority(Protocol):
+    """Projection inputs bound to an invocation or catalog."""
+
+    @property
+    def cwd(self) -> Path: ...
+
+    @property
+    def project_root(self) -> Path | None: ...
+
+    @property
+    def catalog(self) -> EffectiveSkillCatalogAuthority | None: ...
+
+    @property
+    def invocation(self) -> EffectiveSkillInvocationAuthority | None: ...
+
+    @property
+    def backend(self) -> CodingAgentBackend | None: ...
+
+    @property
+    def conventions(self) -> BackendConventions | None: ...
+
+    @property
+    def substitutions(self) -> Mapping[str, str] | None: ...
+
+    @property
+    def gating(self) -> bool | None: ...
+
+    @property
+    def namespace(self) -> str | None: ...
+
+    @property
+    def projection_version(self) -> int: ...
+
+    @property
+    def skills(self) -> tuple[SkillAuthority, ...]: ...
 
 
 @runtime_checkable
@@ -65,15 +216,15 @@ class SessionSkillManager(Protocol):
     def materialize_invocation(
         self,
         session_id: str,
-        invocation: Any,
-        projection_context: Any,
+        invocation: EffectiveSkillInvocationAuthority,
+        projection_context: SkillProjectionContextAuthority,
     ) -> ValidatedAddDir: ...
 
     def init_session(
         self,
         session_id: str,
-        catalog: Any,
-        projection_context: Any,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
     ) -> ValidatedAddDir: ...
 
     def cleanup_session(self, session_id: str) -> bool: ...
@@ -87,9 +238,13 @@ class SessionSkillManager(Protocol):
 class SkillResolver(Protocol):
     """Protocol for resolving skill names to their source tier."""
 
-    def resolve(self, name: str) -> Any: ...
+    def resolve(self, name: str) -> ResolvedSkillAuthority | None: ...
 
-    def resolve_effective(self, name: str, project_root: Path | None) -> Any: ...
+    def resolve_effective(
+        self,
+        name: str,
+        project_root: Path | None,
+    ) -> ResolvedSkillAuthority | None: ...
 
     def list_effective(
         self,
@@ -101,7 +256,7 @@ class SkillResolver(Protocol):
         recipe_packs: frozenset[str] | None = None,
         recipe_features: frozenset[str] | None = None,
         allow_only: frozenset[str] | None = None,
-    ) -> Any: ...
+    ) -> EffectiveSkillCatalogAuthority: ...
 
     def resolve_invocation(
         self,
@@ -112,7 +267,7 @@ class SkillResolver(Protocol):
         config: Any | None = None,
         recipe_packs: frozenset[str] | None = None,
         recipe_features: frozenset[str] | None = None,
-    ) -> Any: ...
+    ) -> EffectiveSkillInvocationAuthority: ...
 
 
 @runtime_checkable
@@ -126,4 +281,4 @@ class SkillLister(Protocol):
     protocol structurally.
     """
 
-    def list_all(self) -> list[Any]: ...
+    def list_all(self) -> Sequence[ResolvedSkillAuthority]: ...

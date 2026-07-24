@@ -27,6 +27,7 @@ from autoskillit.core import (
     WORKTREE_SKILLS,
     ClosureAuthoritySpec,
     CodingAgentBackend,
+    EffectiveSkillInvocationAuthority,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
@@ -700,7 +701,7 @@ async def run_skill(
         _stored_contract_entry = None
         _resume_backend_obj: CodingAgentBackend | None = None
         _effective_skill_resolver = None
-        invocation = None
+        invocation: EffectiveSkillInvocationAuthority | None = None
         projection_context: SkillProjectionContext | None = None
         target_name: str | None = None
         if resume_session_id:

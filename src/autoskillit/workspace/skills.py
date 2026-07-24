@@ -120,6 +120,12 @@ class SkillInfo:
         return self.canonical_content.encode("utf-8")
 
     @property
+    def source_identity(self) -> SkillSourceIdentity:
+        """Return the validated effective source identity."""
+        assert self.source_ref is not None
+        return self.source_ref.identity
+
+    @property
     def backend_requirements(self) -> frozenset[str]:
         """Backend requirements derived solely from the declared capability set."""
         return derive_backend_requirements(self.uses_capabilities)

@@ -21,6 +21,7 @@ from autoskillit.core import (
     BackendCapabilities,
     CapturedStream,
     CodingAgentBackend,
+    EffectiveSkillInvocationAuthority,
     SkillContractError,
     SkillExecutionRole,
     SkillResolver,
@@ -187,7 +188,7 @@ def scope_covers_cwd(allowed_write_prefixes: tuple[str, ...], cwd: str) -> bool:
 
 
 def invocation_member_names(
-    invocation: EffectiveSkillInvocation,
+    invocation: EffectiveSkillInvocationAuthority,
 ) -> frozenset[str]:
     """Return the exact member inventory bound to an effective invocation."""
     return frozenset(member.name for member in invocation.closure)
@@ -195,7 +196,7 @@ def invocation_member_names(
 
 def build_fresh_projection_context(
     cwd: str,
-    invocation: EffectiveSkillInvocation,
+    invocation: EffectiveSkillInvocationAuthority,
 ) -> SkillProjectionContext:
     """Bind a fresh invocation to normalized backend-neutral projection authority."""
     normalized_cwd = Path(cwd).resolve()

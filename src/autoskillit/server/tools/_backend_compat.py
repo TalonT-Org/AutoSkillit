@@ -268,7 +268,7 @@ def _prepare_direct_skill_dispatch(
         ).to_json()
     resolved_command = render_target_skill_command(
         skill_command,
-        invocation.root.source_ref,
+        invocation.root.source_ref or invocation.root.source,
         backend.conventions if backend is not None else None,
     )
     capability_contract = build_effective_skill_dispatch_contract(

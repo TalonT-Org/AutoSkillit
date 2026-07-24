@@ -44,8 +44,14 @@ def test_workspace_shard_all():
     assert set(__all__) == {
         "WorkspaceManager",
         "CloneManager",
+        "EffectiveSkillCatalogAuthority",
+        "EffectiveSkillInvocationAuthority",
+        "ResolvedSkillAuthority",
         "SessionSkillManager",
+        "SkillAuthority",
+        "SkillFrontmatterAuthority",
         "SkillLister",
+        "SkillProjectionContextAuthority",
         "SkillResolver",
     }
 
@@ -99,11 +105,46 @@ def test_all_protocols_reachable_via_types():
         "GitHubFetcher",
         "RecipeRepository",
         "WorkspaceManager",
+        "EffectiveSkillCatalogAuthority",
+        "EffectiveSkillInvocationAuthority",
+        "ResolvedSkillAuthority",
+        "SkillAuthority",
+        "SkillFrontmatterAuthority",
+        "SkillProjectionContextAuthority",
         "CampaignProtector",
         "CodingAgentBackend",
         "StreamParser",
     ]:
         assert hasattr(types, name), f"Missing from types: {name}"
+
+
+def test_workspace_skill_authority_boundary_has_structural_types():
+    from typing import get_type_hints
+
+    from autoskillit.core import (
+        EffectiveSkillCatalogAuthority,
+        EffectiveSkillInvocationAuthority,
+        ResolvedSkillAuthority,
+        SessionSkillManager,
+        SkillProjectionContextAuthority,
+        SkillResolver,
+    )
+
+    materialize_hints = get_type_hints(SessionSkillManager.materialize_invocation)
+    init_hints = get_type_hints(SessionSkillManager.init_session)
+    assert materialize_hints["invocation"] is EffectiveSkillInvocationAuthority
+    assert materialize_hints["projection_context"] is SkillProjectionContextAuthority
+    assert init_hints["catalog"] is EffectiveSkillCatalogAuthority
+    assert init_hints["projection_context"] is SkillProjectionContextAuthority
+
+    resolve_hints = get_type_hints(SkillResolver.resolve)
+    effective_hints = get_type_hints(SkillResolver.resolve_effective)
+    list_hints = get_type_hints(SkillResolver.list_effective)
+    invocation_hints = get_type_hints(SkillResolver.resolve_invocation)
+    assert resolve_hints["return"] == ResolvedSkillAuthority | None
+    assert effective_hints["return"] == ResolvedSkillAuthority | None
+    assert list_hints["return"] is EffectiveSkillCatalogAuthority
+    assert invocation_hints["return"] is EffectiveSkillInvocationAuthority
 
 
 def test_pyi_stub_exports_skill_constants():

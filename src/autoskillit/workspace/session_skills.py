@@ -12,14 +12,19 @@ import os
 import shutil
 import tempfile
 import time
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     ClaudeDirectoryConventions,
+    EffectiveSkillCatalogAuthority,
+    EffectiveSkillInvocationAuthority,
+    ResolvedSkillAuthority,
+    SkillAuthority,
     SkillContractError,
     SkillExecutionRole,
+    SkillFrontmatterAuthority,
+    SkillProjectionContextAuthority,
     SkillResolver,
     SkillSource,
     SkillSourceRef,
@@ -27,9 +32,6 @@ from autoskillit.core import (
     get_logger,
     pkg_root,
     validate_skill_capability_roles,
-)
-from autoskillit.workspace.skill_format import (
-    SkillFrontmatterParseResult,
 )
 from autoskillit.workspace.skill_projection import (
     SkillProjectionContext,
@@ -39,7 +41,6 @@ from autoskillit.workspace.skill_projection import (
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,
-    EffectiveSkillInvocation,
     SkillCatalogEntry,
     SkillInfo,
     _skill_info_from_frontmatter,
@@ -163,7 +164,7 @@ def resolve_ephemeral_root() -> Path:
     raise RuntimeError("No writable ephemeral root found for session skill dirs")
 
 
-def _parse_write_paths(parsed: SkillFrontmatterParseResult) -> list[str]:
+def _parse_write_paths(parsed: SkillFrontmatterAuthority) -> list[str]:
     """Extract write paths from the contract's single frontmatter parse."""
     if not parsed.is_valid or parsed.data is None:
         return []
@@ -174,7 +175,7 @@ def _parse_write_paths(parsed: SkillFrontmatterParseResult) -> list[str]:
 
 
 def resolve_closure_write_dirs(
-    closure: tuple[SkillInfo, ...],
+    closure: tuple[ResolvedSkillAuthority, ...],
     cwd: str,
     existing: list[Path] | None = None,
 ) -> list[Path]:
@@ -329,15 +330,15 @@ class DefaultSessionSkillManager:
         self._root = ephemeral_root
         self._codex_root = codex_root
         self._session_roots: dict[str, Path] = {}
-        self._session_skill_infos: dict[str, dict[str, SkillInfo | SkillCatalogEntry]] = {}
+        self._session_skill_infos: dict[str, dict[str, SkillAuthority]] = {}
         self._available_skill_infos = {skill.name: skill for skill in provider.list_skills()}
         self._skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
     def materialize_invocation(
         self,
         session_id: str,
-        invocation: EffectiveSkillInvocation,
-        projection_context: SkillProjectionContext,
+        invocation: EffectiveSkillInvocationAuthority,
+        projection_context: SkillProjectionContextAuthority,
     ) -> ValidatedAddDir:
         """Write only a prevalidated closure from its captured canonical content."""
         self._validate_session_id(session_id)
@@ -375,8 +376,8 @@ class DefaultSessionSkillManager:
     def init_session(
         self,
         session_id: str,
-        catalog: EffectiveSkillCatalog,
-        projection_context: SkillProjectionContext,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
     ) -> ValidatedAddDir:
         """Initialize a session from one prevalidated, path-free SESSION catalog."""
         self._validate_session_id(session_id)
@@ -389,9 +390,12 @@ class DefaultSessionSkillManager:
                     f"{member.invalid_reason}"
                 )
             if member.execution_role is not SkillExecutionRole.SESSION:
+                actual = (
+                    member.execution_role.value if member.execution_role is not None else "invalid"
+                )
                 raise SkillContractError(
                     f"L1 catalog materialization requires SESSION members; "
-                    f"{member.name!r} is {member.execution_role.value}"
+                    f"{member.name!r} is {actual}"
                 )
             validate_skill_capability_roles(
                 member.uses_capabilities,
@@ -421,8 +425,8 @@ class DefaultSessionSkillManager:
     def _materialize_bound_records(
         self,
         session_id: str,
-        records: tuple[SkillInfo | SkillCatalogEntry, ...],
-        projection_context: SkillProjectionContext,
+        records: tuple[SkillAuthority, ...],
+        projection_context: SkillProjectionContextAuthority,
     ) -> ValidatedAddDir:
         conventions = projection_context.conventions
         skills_subdir = (
@@ -459,7 +463,18 @@ class DefaultSessionSkillManager:
         if backend is not None:
             session_dir.mkdir(parents=True, exist_ok=True)
             backend.setup_session_dir(session_dir)
-        ungated_context = replace(projection_context, gating=False)
+        ungated_context = SkillProjectionContext(
+            cwd=projection_context.cwd,
+            project_root=projection_context.project_root,
+            catalog=projection_context.catalog,
+            invocation=projection_context.invocation,
+            backend=projection_context.backend,
+            conventions=projection_context.conventions,
+            substitutions=projection_context.substitutions,
+            gating=False,
+            namespace=projection_context.namespace,
+            projection_version=projection_context.projection_version,
+        )
         materialize_agent_skill_tree(skills_base, records, ungated_context)
         self._session_skill_infos[session_id] = {member.name: member for member in records}
 

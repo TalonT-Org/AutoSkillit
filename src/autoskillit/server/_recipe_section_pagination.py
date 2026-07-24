@@ -589,7 +589,7 @@ def _fragment_pages(
                 element_index=element_index,
                 element_sha256=element_sha256,
                 fragment_index=fragment_index,
-                fragment_count=assumed_fragment_count,
+                fragment_count=max(assumed_fragment_count, fragment_index + 1),
                 fragment_byte_start=offsets[start],
                 fragment_byte_end=offsets[end],
                 fragment_byte_total=offsets[-1],

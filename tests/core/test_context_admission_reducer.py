@@ -1493,6 +1493,7 @@ def test_protected_pool_release_policy_accepts_only_its_configured_resolution(
         input_count=10,
         generation_count=0,
     )
+    assert reserved.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
     assert isinstance(reserved.next_state, ActiveContextAdmissionState)
     state = _prepare_dispatch(reserved.next_state, batch)
     marked = reduce_context_admission(
@@ -2183,13 +2184,18 @@ def test_protected_release_uses_policy_from_rollover_created_epoch() -> None:
         reserve_class=ReserveClass.SYNTHESIS,
         protected_owner=owner.value,
     )
-    reserved, _ = _reserve(
+    _, reserve_event = _reserve(
         state,
         batch,
         (occurrence,),
         input_count=10,
         generation_count=0,
     )
+    reserved = reduce_context_admission(
+        state,
+        replace(reserve_event, generation_reservation=None),
+    )
+    assert reserved.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
     assert isinstance(reserved.next_state, ActiveContextAdmissionState)
     state = _prepare_dispatch(reserved.next_state, batch)
     marked = reduce_context_admission(

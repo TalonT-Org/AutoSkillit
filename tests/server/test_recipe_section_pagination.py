@@ -8,7 +8,9 @@ import json
 import math
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from threading import Barrier, Event
 from typing import Any
 
 import pytest
@@ -737,6 +739,86 @@ def test_cached_plans_are_reused_and_cache_clear_forces_a_rebuild(
     assert third == first
     assert third is not first
     assert calls == 2
+
+
+def test_concurrent_same_key_requests_share_one_page_plan_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selected = select_recipe_section(_payload(content="single flight"), "content")
+    kwargs: dict[str, Any] = {
+        "kitchen_id": "kitchen-single-flight",
+        "generation": _generation(),
+        "selected": selected,
+        "recipe_section_bound_bytes": 1_000,
+    }
+    start = Barrier(3)
+    build_started = Event()
+    release_build = Event()
+    build_calls: list[None] = []
+    real_builder = pagination.build_recipe_section_page_plan
+
+    def blocked_builder(**builder_kwargs: object) -> Any:
+        build_calls.append(None)
+        build_started.set()
+        assert release_build.wait(timeout=5)
+        return real_builder(**builder_kwargs)  # type: ignore[arg-type]
+
+    def request_plan() -> Any:
+        start.wait(timeout=5)
+        return get_or_build_recipe_section_page_plan(**kwargs)
+
+    monkeypatch.setattr(pagination, "build_recipe_section_page_plan", blocked_builder)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(request_plan) for _ in range(2)]
+        start.wait(timeout=5)
+        assert build_started.wait(timeout=5)
+        release_build.set()
+        plans = [future.result(timeout=5) for future in futures]
+
+    assert len(build_calls) == 1
+    assert plans[0] is plans[1]
+
+
+def test_retirement_during_build_prevents_stale_cache_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selected = select_recipe_section(_payload(content="retirement race"), "content")
+    generation = _generation()
+    kwargs: dict[str, Any] = {
+        "kitchen_id": "kitchen-retirement-race",
+        "generation": generation,
+        "selected": selected,
+        "recipe_section_bound_bytes": 1_000,
+    }
+    key = pagination._cache_key(**kwargs)
+    cache = pagination._page_plan_cache()
+    build_started = Barrier(2)
+    release_build = Event()
+    retirement_started = Event()
+    real_builder = pagination.build_recipe_section_page_plan
+
+    def blocked_builder(**builder_kwargs: object) -> Any:
+        build_started.wait(timeout=5)
+        assert release_build.wait(timeout=5)
+        return real_builder(**builder_kwargs)  # type: ignore[arg-type]
+
+    def retire_kitchen() -> None:
+        retirement_started.set()
+        cache.evict_kitchen("kitchen-retirement-race")
+
+    monkeypatch.setattr(pagination, "build_recipe_section_page_plan", blocked_builder)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        build_future = executor.submit(get_or_build_recipe_section_page_plan, **kwargs)
+        build_started.wait(timeout=5)
+        retirement_future = executor.submit(retire_kitchen)
+        assert retirement_started.wait(timeout=5)
+        release_build.set()
+        plan = build_future.result(timeout=5)
+        retirement_future.result(timeout=5)
+
+    assert cache.get(key) is None
+    cache.put(key, plan)
+    assert cache.get(key) is None
 
 
 @pytest.mark.parametrize(

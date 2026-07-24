@@ -7,8 +7,8 @@ import json
 from bisect import bisect_right
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
-from threading import Lock, RLock
+from dataclasses import dataclass, field, replace
+from threading import Event, Lock, RLock
 
 from autoskillit.core import (
     DYNAMIC_RECIPE_SECTION_DEF,
@@ -93,6 +93,15 @@ class _PagePlanCacheKey:
     pagination_version: int
 
 
+@dataclass(slots=True)
+class _PagePlanBuildState:
+    """One shared in-flight page-plan build for a cache key."""
+
+    completed: Event = field(default_factory=Event)
+    plan: RecipeSectionPagePlan | None = None
+    error: BaseException | None = None
+
+
 class PagePlanCache:
     """Bounded thread-safe LRU storing only verified immutable plans."""
 
@@ -110,6 +119,8 @@ class PagePlanCache:
         self._max_bytes = max_bytes
         self._entries: OrderedDict[_PagePlanCacheKey, RecipeSectionPagePlan] = OrderedDict()
         self._weight_bytes = 0
+        self._builds: dict[_PagePlanCacheKey, _PagePlanBuildState] = {}
+        self._retired_kitchens: set[str] = set()
         self._lock = RLock()
 
     def get(self, key: _PagePlanCacheKey) -> RecipeSectionPagePlan | None:
@@ -119,26 +130,73 @@ class PagePlanCache:
                 self._entries.move_to_end(key)
             return plan
 
-    def put(self, key: _PagePlanCacheKey, plan: RecipeSectionPagePlan) -> None:
+    def _put_locked(self, key: _PagePlanCacheKey, plan: RecipeSectionPagePlan) -> None:
         if plan.cache_weight_bytes > self._max_bytes:
             return
+        existing = self._entries.pop(key, None)
+        if existing is not None:
+            self._weight_bytes -= existing.cache_weight_bytes
+        self._entries[key] = plan
+        self._weight_bytes += plan.cache_weight_bytes
+        while len(self._entries) > self._max_entries or self._weight_bytes > self._max_bytes:
+            _, evicted = self._entries.popitem(last=False)
+            self._weight_bytes -= evicted.cache_weight_bytes
+
+    def put(self, key: _PagePlanCacheKey, plan: RecipeSectionPagePlan) -> None:
         with self._lock:
-            existing = self._entries.pop(key, None)
-            if existing is not None:
-                self._weight_bytes -= existing.cache_weight_bytes
-            self._entries[key] = plan
-            self._weight_bytes += plan.cache_weight_bytes
-            while len(self._entries) > self._max_entries or self._weight_bytes > self._max_bytes:
-                _, evicted = self._entries.popitem(last=False)
-                self._weight_bytes -= evicted.cache_weight_bytes
+            if key.kitchen_id not in self._retired_kitchens:
+                self._put_locked(key, plan)
+
+    def get_or_build(
+        self,
+        key: _PagePlanCacheKey,
+        builder: Callable[[], RecipeSectionPagePlan],
+    ) -> RecipeSectionPagePlan:
+        """Share a key build and admit it only while its kitchen remains active."""
+        with self._lock:
+            cached = self._entries.get(key)
+            if cached is not None:
+                self._entries.move_to_end(key)
+                return cached
+            build_state = self._builds.get(key)
+            build_here = build_state is None
+            if build_state is None:
+                build_state = _PagePlanBuildState()
+                self._builds[key] = build_state
+
+        if build_here:
+            try:
+                plan = builder()
+            except BaseException as exc:
+                with self._lock:
+                    build_state.error = exc
+                    self._builds.pop(key, None)
+                    build_state.completed.set()
+                raise
+            with self._lock:
+                if key.kitchen_id not in self._retired_kitchens:
+                    self._put_locked(key, plan)
+                build_state.plan = plan
+                self._builds.pop(key, None)
+                build_state.completed.set()
+            return plan
+
+        build_state.completed.wait()
+        if build_state.error is not None:
+            raise build_state.error
+        if build_state.plan is None:
+            raise RuntimeError("page-plan build completed without a plan")
+        return build_state.plan
 
     def clear(self) -> None:
         with self._lock:
             self._entries.clear()
             self._weight_bytes = 0
+            self._retired_kitchens.clear()
 
     def evict_kitchen(self, kitchen_id: str) -> None:
         with self._lock:
+            self._retired_kitchens.add(kitchen_id)
             keys = [key for key in self._entries if key.kitchen_id == kitchen_id]
             for key in keys:
                 self._weight_bytes -= self._entries.pop(key).cache_weight_bytes
@@ -905,17 +963,15 @@ def get_or_build_recipe_section_page_plan(
         recipe_section_bound_bytes=recipe_section_bound_bytes,
     )
     cache = _page_plan_cache()
-    cached = cache.get(key)
-    if cached is not None:
-        return cached
-    plan = build_recipe_section_page_plan(
-        kitchen_id=kitchen_id,
-        generation=generation,
-        selected=selected,
-        recipe_section_bound_bytes=recipe_section_bound_bytes,
+    return cache.get_or_build(
+        key,
+        lambda: build_recipe_section_page_plan(
+            kitchen_id=kitchen_id,
+            generation=generation,
+            selected=selected,
+            recipe_section_bound_bytes=recipe_section_bound_bytes,
+        ),
     )
-    cache.put(key, plan)
-    return plan
 
 
 def render_recipe_section_page(plan: RecipeSectionPagePlan, part: int) -> str:

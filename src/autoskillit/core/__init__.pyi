@@ -43,6 +43,11 @@ from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
+from .audit_cycle_verifier import ArtifactByteReader as ArtifactByteReader
+from .audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerificationError
+from .audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
+from .audit_cycle_verifier import InventoryAdmissionEvaluator as InventoryAdmissionEvaluator
+from .audit_cycle_verifier import VerifiedAuditCycle as VerifiedAuditCycle
 from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
@@ -79,6 +84,7 @@ from .io import ReadResult as ReadResult
 from .io import YAMLError as YAMLError
 from .io import atomic_write as atomic_write
 from .io import compose_yaml as compose_yaml
+from .io import decode_versioned_json_bytes as decode_versioned_json_bytes
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
 from .io import load_yaml as load_yaml
@@ -89,6 +95,7 @@ from .io import resolve_temp_dir as resolve_temp_dir
 from .io import safe_upsert_section as safe_upsert_section
 from .io import spill_output as spill_output
 from .io import temp_dir_display_str as temp_dir_display_str
+from .io import write_canonical_versioned_json as write_canonical_versioned_json
 from .io import write_versioned_json as write_versioned_json
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
@@ -151,6 +158,7 @@ from .tool_sequence_analysis import render_adjacency_table as render_adjacency_t
 from .tool_sequence_analysis import render_dot as render_dot
 from .tool_sequence_analysis import render_mermaid as render_mermaid
 from .types import ADMIRAL_DISPATCH_SECTIONS as ADMIRAL_DISPATCH_SECTIONS
+from .types import AUDIT_CYCLE_SCHEMA_VERSION as AUDIT_CYCLE_SCHEMA_VERSION
 from .types import AGENT_BACKEND_CLAUDE_CODE as AGENT_BACKEND_CLAUDE_CODE
 from .types import AGENT_BACKEND_CODEX as AGENT_BACKEND_CODEX
 from .types import AGENT_BACKEND_DYNACONF_ENV_VAR as AGENT_BACKEND_DYNACONF_ENV_VAR
@@ -337,11 +345,19 @@ from .types import AgentInstanceId as AgentInstanceId
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
+from .types import AdmissionReason as AdmissionReason
+from .types import AdmissionStatus as AdmissionStatus
 from .types import ApiRetryOutcome as ApiRetryOutcome
+from .types import ArtifactRef as ArtifactRef
+from .types import AuditAssessment as AuditAssessment
+from .types import AuditAssessmentRow as AuditAssessmentRow
+from .types import AuditCycleAuthority as AuditCycleAuthority
+from .types import AuditCycleHead as AuditCycleHead
 from .types import AuditLog as AuditLog
 from .types import AuthoritySourceId as AuthoritySourceId
 from .types import AuthorityUnavailableEffect as AuthorityUnavailableEffect
 from .types import AuthorityUnavailableEvent as AuthorityUnavailableEvent
+from .types import AuditVerdict as AuditVerdict
 from .types import BackendCapabilities as BackendCapabilities
 from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
@@ -448,6 +464,7 @@ from .types import InspectorEvidence as InspectorEvidence
 from .types import InspectorVerdict as InspectorVerdict
 from .types import IntakeRuleDef as IntakeRuleDef
 from .types import InvariantDef as InvariantDef
+from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
@@ -481,6 +498,8 @@ from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PluginSource as PluginSource
 from .types import PrepareBatchEvent as PrepareBatchEvent
 from .types import ProcessedEventRecord as ProcessedEventRecord
+from .types import PlanDispositionReport as PlanDispositionReport
+from .types import PlanDispositionRow as PlanDispositionRow
 from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef
 from .types import ProducerInstanceId as ProducerInstanceId
@@ -613,6 +632,7 @@ from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
+from .types import compute_findings_digest as compute_findings_digest
 from .types import compute_remaining as compute_remaining
 from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches

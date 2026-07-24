@@ -16,8 +16,8 @@ from .closure_hashing import (
     compute_request_hash,
     compute_row_hash,
 )
-from .io import read_versioned_json
-from .path_containment import ContainmentError, resolve_contained_path
+from .io import decode_versioned_json_bytes
+from .path_containment import ContainmentError, read_stable_contained_bytes
 from .types._type_closure_report import ClosureReport
 
 __all__ = ["VerificationResult", "verify_closure_report"]
@@ -44,7 +44,7 @@ def verify_closure_report(
     errors: list[str] = []
 
     try:
-        resolved_report_path = resolve_contained_path(report_path, output_root)
+        _resolved_report_path, report_bytes = read_stable_contained_bytes(report_path, output_root)
     except ContainmentError as exc:
         errors.append(f"report containment failed: {exc}")
         return VerificationResult(
@@ -56,7 +56,7 @@ def verify_closure_report(
             success=False, verdict=None, errors=tuple(errors), report_path=str(report_path)
         )
 
-    raw = read_versioned_json(resolved_report_path, expected_version=1)
+    raw = decode_versioned_json_bytes(report_bytes, expected_version=1)
     if raw is None:
         errors.append("report unreadable or schema_version mismatch")
         return VerificationResult(

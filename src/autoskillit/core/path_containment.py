@@ -13,7 +13,12 @@ import os
 import stat
 from pathlib import Path
 
-__all__ = ["ContainmentError", "resolve_contained_path", "check_metadata_stable"]
+__all__ = [
+    "ContainmentError",
+    "check_metadata_stable",
+    "read_stable_contained_bytes",
+    "resolve_contained_path",
+]
 
 
 class ContainmentError(Exception):
@@ -37,6 +42,8 @@ def resolve_contained_path(
     if not resolved.is_relative_to(allowed_root_resolved):
         raise ContainmentError("Path escapes allowed root")
     st = resolved.stat()
+    if not stat.S_ISREG(st.st_mode):
+        raise ContainmentError("Regular file required")
     if st.st_nlink > 1:
         raise ContainmentError("Hardlink not allowed")
     if st.st_size > max_size_bytes:
@@ -53,3 +60,37 @@ def check_metadata_stable(path: Path, pre_stat: os.stat_result, post_stat: os.st
         raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
     if pre_stat.st_ino != post_stat.st_ino:
         raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+    if pre_stat.st_dev != post_stat.st_dev:
+        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+    if pre_stat.st_mode != post_stat.st_mode:
+        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+    if pre_stat.st_nlink != post_stat.st_nlink:
+        raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
+
+
+def read_stable_contained_bytes(
+    path: str | Path,
+    allowed_root: str | Path,
+    *,
+    max_size_bytes: int = 50_000_000,
+) -> tuple[Path, bytes]:
+    """Read one bounded buffer while detecting containment and metadata drift."""
+    resolved = resolve_contained_path(path, allowed_root, max_size_bytes=max_size_bytes)
+    pre_stat = resolved.stat()
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(resolved, flags)
+    try:
+        opened_stat = os.fstat(fd)
+        check_metadata_stable(resolved, pre_stat, opened_stat)
+        with os.fdopen(fd, "rb", closefd=False) as handle:
+            data = handle.read(max_size_bytes + 1)
+        post_fd_stat = os.fstat(fd)
+    finally:
+        os.close(fd)
+    if len(data) > max_size_bytes:
+        raise ContainmentError("File too large")
+    if len(data) != pre_stat.st_size:
+        raise ContainmentError(f"File {resolved} modified between reads (TOCTOU)")
+    check_metadata_stable(resolved, pre_stat, post_fd_stat)
+    check_metadata_stable(resolved, pre_stat, resolved.stat())
+    return resolved, data

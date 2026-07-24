@@ -15,31 +15,95 @@ from typing import Any
 
 __all__ = [
     "HASH_RE",
+    "canonical_json_bytes",
+    "compute_bytes_hash",
     "compute_canonical_hash",
     "compute_file_hash",
     "compute_request_hash",
     "compute_row_hash",
     "compute_report_hash",
+    "parse_canonical_json_bytes",
 ]
 
 HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
-def _canonical_bytes(payload: dict[str, Any]) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+def _reject_noncanonical_value(value: Any) -> None:
+    if isinstance(value, float):
+        raise ValueError("canonical JSON does not permit floating-point values")
+    if isinstance(value, dict):
+        if any(not isinstance(key, str) for key in value):
+            raise ValueError("canonical JSON object keys must be strings")
+        for item in value.values():
+            _reject_noncanonical_value(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _reject_noncanonical_value(item)
+    elif value is not None and not isinstance(value, (str, int, bool)):
+        raise ValueError(f"unsupported canonical JSON value: {type(value).__name__}")
+
+
+def canonical_json_bytes(payload: Any) -> bytes:
+    """Encode the narrow AutoSkillit canonical JSON profile."""
+    _reject_noncanonical_value(payload)
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def parse_canonical_json_bytes(data: bytes) -> Any:
+    """Decode canonical JSON, rejecting duplicates, floats, NaN, and noncanonical bytes."""
+
+    def _object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON object key: {key!r}")
+            result[key] = value
+        return result
+
+    def _reject_number(value: str) -> Any:
+        raise ValueError(f"canonical JSON does not permit floating-point value {value!r}")
+
+    try:
+        text = data.decode("utf-8", errors="strict")
+        parsed = json.loads(
+            text,
+            object_pairs_hook=_object,
+            parse_float=_reject_number,
+            parse_constant=_reject_number,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid canonical JSON: {exc}") from exc
+    _reject_noncanonical_value(parsed)
+    try:
+        encoded = canonical_json_bytes(parsed)
+    except UnicodeEncodeError as exc:
+        raise ValueError(f"invalid canonical JSON Unicode: {exc}") from exc
+    if encoded != data:
+        raise ValueError("JSON bytes are not in canonical compact sorted-key form")
+    return parsed
+
+
+def compute_bytes_hash(data: bytes) -> str:
+    """Return an algorithm-qualified digest for an already-bounded byte buffer."""
+    return f"sha256:{hashlib.sha256(data).hexdigest()}"
 
 
 def compute_canonical_hash(
     payload: dict[str, Any], *, domain: str = "autoskillit-closure-v1"
 ) -> str:
     domain_prefix = domain.encode("utf-8") + b"\n"
-    digest = hashlib.sha256(domain_prefix + _canonical_bytes(payload)).hexdigest()
+    digest = hashlib.sha256(domain_prefix + canonical_json_bytes(payload)).hexdigest()
     return f"sha256:{digest}"
 
 
 def compute_file_hash(path: str | Path) -> str:
-    digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-    return f"sha256:{digest}"
+    return compute_bytes_hash(Path(path).read_bytes())
 
 
 def compute_request_hash(

@@ -77,6 +77,7 @@ from autoskillit.core import (
     RepresentationRevision,
     ReservationRecordedEffect,
     ReserveClass,
+    ReserveRequestEvent,
     TokenizerIdentity,
     ToolCallId,
     TurnId,
@@ -1474,6 +1475,85 @@ def test_batch_record_counts_match_lifecycle_state(
             unresolved_input_count=unresolved_count,
         )
     assert reason_code in str(exc_info.value)
+
+
+def test_journal_records_cross_check_duplicated_event_identities() -> None:
+    occurrence = _occurrence()
+    batch = _batch("batch-journal-identities", (occurrence,))
+    namespace = _namespace("reserve-request")
+    reservation_key = AdmissionReservationKey(
+        idempotency_namespace=namespace,
+        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+        window_epoch_id=WindowEpochId("epoch-1"),
+        window_epoch_number=1,
+        batch_id=batch.batch_id,
+        reserve_class=batch.reserve_class,
+        protected_pool_owner_id=None,
+        occurrence_revisions=((occurrence.occurrence_id, occurrence.representation_revision),),
+    )
+    reservation = AdmissionReservation(
+        reservation_id=AdmissionReservationId("reservation-journal-identities"),
+        key=reservation_key,
+        window_epoch_id=WindowEpochId("epoch-1"),
+        window_epoch_number=1,
+        snapshot_sequence=1,
+        reserve_class=batch.reserve_class,
+        protected_pool_owner_id=None,
+        occurrence_ids=batch.occurrence_ids,
+        reserved_count=5,
+    )
+    event = ReserveRequestEvent(
+        event_id=AdmissionEventId("event-journal-identities"),
+        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+        idempotency_namespace=namespace,
+        expected_aggregate_revision=AggregateRevision(0),
+        batch=batch,
+        snapshot_sequence=1,
+        input_reservations=(reservation,),
+        generation_reservation=None,
+    )
+    decision = AdmissionDecision(
+        kind=AdmissionDecisionKind.WOULD_ADMIT,
+        reason_code="accepted",
+        window_epoch_id=WindowEpochId("epoch-1"),
+        snapshot_sequence=1,
+        requested_count=5,
+        available_ordinary_count=35,
+        available_protected_count=0,
+    )
+    processed = ProcessedEventRecord(
+        event_id=event.event_id,
+        event=event,
+        original_decision=decision,
+        aggregate_revision=AggregateRevision(1),
+        admission_sequence=AdmissionSequence(1),
+    )
+    with pytest.raises(ContextAdmissionValidationError) as processed_error:
+        replace(processed, event_id=AdmissionEventId("different-processed-event"))
+    assert "processed_event_identity_mismatch" in str(processed_error.value)
+
+    idempotency = IdempotencyRecord(
+        namespace=namespace,
+        reservation_key=reservation_key,
+        original_descriptor=event,
+        original_reserve_decision=decision,
+        owning_event_id=event.event_id,
+        publication_revision=AggregateRevision(1),
+    )
+    mismatches = (
+        {"namespace": _namespace("different-operation")},
+        {
+            "reservation_key": replace(
+                reservation_key,
+                batch_id=AdmissionBatchId("different-reservation-key"),
+            )
+        },
+        {"owning_event_id": AdmissionEventId("different-owning-event")},
+    )
+    for mismatch in mismatches:
+        with pytest.raises(ContextAdmissionValidationError) as idempotency_error:
+            replace(idempotency, **mismatch)
+        assert "idempotency_record_identity_mismatch" in str(idempotency_error.value)
 
 
 def test_privacy_canaries_are_rejected_from_coverage_evidence() -> None:

@@ -1762,6 +1762,10 @@ class ProcessedEventRecord(_ContractValue):
     aggregate_revision: AggregateRevision
     admission_sequence: AdmissionSequence
 
+    def __post_init__(self) -> None:
+        if self.event_id != self.event.event_id:
+            _raise_invalid("processed_event_identity_mismatch")
+
 
 @dataclass(frozen=True, slots=True)
 class IdempotencyRecord(_ContractValue):
@@ -1771,6 +1775,16 @@ class IdempotencyRecord(_ContractValue):
     original_reserve_decision: AdmissionDecision
     owning_event_id: AdmissionEventId
     publication_revision: AggregateRevision
+
+    def __post_init__(self) -> None:
+        input_reservations = self.original_descriptor.input_reservations
+        if (
+            self.namespace != self.original_descriptor.idempotency_namespace
+            or len(input_reservations) != 1
+            or self.reservation_key != input_reservations[0].key
+            or self.owning_event_id != self.original_descriptor.event_id
+        ):
+            _raise_invalid("idempotency_record_identity_mismatch")
 
 
 def _validate_state_metadata_uniqueness(

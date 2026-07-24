@@ -79,6 +79,16 @@ class SkillSessionContract:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "source_refs", MappingProxyType(dict(self.source_refs)))
+        object.__setattr__(
+            self,
+            "canonical_digests",
+            MappingProxyType(dict(self.canonical_digests)),
+        )
+        object.__setattr__(
+            self,
+            "projected_digests",
+            MappingProxyType(dict(self.projected_digests)),
+        )
         object.__setattr__(self, "member_roles", MappingProxyType(dict(self.member_roles)))
         object.__setattr__(
             self,

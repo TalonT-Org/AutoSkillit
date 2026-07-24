@@ -74,6 +74,26 @@ def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(
     assert stored.snapshot_dir.resolve().is_relative_to(root.resolve())
 
 
+def test_contract_digest_authority_is_copied_and_immutable(tmp_path: Path) -> None:
+    canonical_digests = {"root": "a" * 64}
+    projected_digests = {"root": "b" * 64}
+    contract = replace(
+        _contract(tmp_path, "projected\n"),
+        canonical_digests=canonical_digests,
+        projected_digests=projected_digests,
+    )
+
+    canonical_digests["root"] = "c" * 64
+    projected_digests["root"] = "d" * 64
+
+    assert contract.canonical_digests["root"] == "a" * 64
+    assert contract.projected_digests["root"] == "b" * 64
+    with pytest.raises(TypeError):
+        contract.canonical_digests["root"] = "e" * 64  # type: ignore[index]
+    with pytest.raises(TypeError):
+        contract.projected_digests["root"] = "f" * 64  # type: ignore[index]
+
+
 def test_store_keys_are_distinct_contained_collision_safe_and_final_only(tmp_path: Path) -> None:
     from autoskillit.execution.session import DefaultSkillSessionContractStore
 

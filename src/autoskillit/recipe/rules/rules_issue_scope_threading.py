@@ -12,7 +12,17 @@ def _has_issue_ingredient(ctx: ValidationContext) -> bool:
     return "issue_url" in ctx.recipe.ingredients or "issue_number" in ctx.recipe.ingredients
 
 
-def _threads_issue_context(with_args: dict[str, str]) -> bool:
+def _threads_issue_context(ctx: ValidationContext, step_name: str) -> bool:
+    invocation = ctx.binding_projection.for_step(step_name)
+    if invocation is not None:
+        for name in ("issue_url", "issue_number"):
+            value = invocation.skill_input(name)
+            if value is not None and value.is_present:
+                return True
+    with_args = ctx.recipe.steps[step_name].with_args
+    structured = with_args.get("skill_inputs")
+    if isinstance(structured, dict):
+        return "issue_url" in structured or "issue_number" in structured
     return "issue_url" in with_args or "issue_number" in with_args
 
 
@@ -37,7 +47,7 @@ def _check_issue_scope_threading(ctx: ValidationContext) -> list[RuleFinding]:
         skill = resolve_skill_name(step.with_args.get("skill_command", ""))
         if skill != "dry-walkthrough":
             continue
-        if _threads_issue_context(step.with_args):
+        if _threads_issue_context(ctx, step_name):
             continue
         findings.append(
             make_finding(

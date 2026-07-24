@@ -266,9 +266,11 @@ def test_wait_for_ci_rejects_poll_interval() -> None:
 
 def test_rules_tools_batch_cleanup_clones_accepts_all_owners_param() -> None:
     """T20 — batch_cleanup_clones with all_owners param must not trigger dead-with-param."""
-    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
+    from autoskillit.core import get_tool_def
 
-    assert "all_owners" in _TOOL_PARAMS["batch_cleanup_clones"]
+    tool_def = get_tool_def("batch_cleanup_clones")
+    assert tool_def is not None
+    assert "all_owners" in tool_def.param_set
 
     recipe = _make_recipe_with_args(
         "batch_cleanup_clones",
@@ -332,7 +334,7 @@ def test_rebase_then_push_with_force_true_passes_validation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _TOOL_PARAMS sync test (T8)
+# Canonical tool registry sync test (T8)
 # ---------------------------------------------------------------------------
 
 _SERVER_TOOL_MODULES = [
@@ -341,11 +343,14 @@ _SERVER_TOOL_MODULES = [
     "autoskillit.server.tools.tools_ci_merge_queue",
     "autoskillit.server.tools.tools_clone",
     "autoskillit.server.tools.tools_execution",
+    "autoskillit.server.tools.tools_fleet_dispatch",
+    "autoskillit.server.tools.tools_fleet_reset",
     "autoskillit.server.tools.tools_git",
     "autoskillit.server.tools.tools_recipe",
     "autoskillit.server.tools.tools_status",
     "autoskillit.server.tools.tools_github",
     "autoskillit.server.tools.tools_issue_headless",
+    "autoskillit.server.tools.tools_issue_composite",
     "autoskillit.server.tools.tools_issue_labels",
     "autoskillit.server.tools.tools_pr_ops",
     "autoskillit.server.tools.tools_workspace",
@@ -369,13 +374,14 @@ def _build_handler_map() -> dict[str, object]:
 
 
 def test_tool_params_matches_mcp_handler_signatures() -> None:
-    """T8: _TOOL_PARAMS keys match actual MCP handler signatures — drift fails CI."""
-    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
+    """T8: canonical tool metadata matches MCP handler signatures — drift fails CI."""
+    from autoskillit.core import TOOL_REGISTRY
 
     handler_map = _build_handler_map()
     mismatches: list[str] = []
 
-    for tool_name, expected_params in _TOOL_PARAMS.items():
+    for tool_name, tool_def in TOOL_REGISTRY.items():
+        expected_params = tool_def.handler_param_set
         if tool_name not in handler_map:
             mismatches.append(f"{tool_name}: handler not found in server modules")
             continue
@@ -386,13 +392,13 @@ def test_tool_params_matches_mcp_handler_signatures() -> None:
             missing = expected_params - actual_params
             extra = actual_params - expected_params
             mismatches.append(
-                f"{tool_name}: _TOOL_PARAMS={sorted(expected_params)} "
+                f"{tool_name}: TOOL_REGISTRY={sorted(expected_params)} "
                 f"handler={sorted(actual_params)} "
                 f"(missing={sorted(missing)}, extra={sorted(extra)})"
             )
 
     assert not mismatches, (
-        "_TOOL_PARAMS is out of sync with MCP handler signatures:\n" + "\n".join(mismatches)
+        "TOOL_REGISTRY is out of sync with MCP handler signatures:\n" + "\n".join(mismatches)
     )
 
 

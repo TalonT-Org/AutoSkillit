@@ -7,10 +7,10 @@ from pathlib import PurePosixPath
 
 from autoskillit.core import (
     SKILL_TOOLS,
+    TOOL_REGISTRY,
     TOOL_SUBSET_TAGS,
     BindingFailureCode,
     Severity,
-    all_tool_names,
     get_logger,
     get_tool_def,
 )
@@ -25,7 +25,7 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
-_ALL_TOOLS: frozenset[str] = all_tool_names()
+_ALL_TOOLS: frozenset[str] = frozenset(TOOL_REGISTRY)
 
 _RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
     {"output_dir", "workspace", "diagnostics_log_dir"}

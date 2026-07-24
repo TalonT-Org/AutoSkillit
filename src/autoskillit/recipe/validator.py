@@ -63,6 +63,22 @@ __all__ = [
 _SKILL_HINT = " (Use /autoskillit:write-recipe for schema guidance)"
 
 
+def _iter_string_leaves(value: object, path: str) -> list[tuple[str, str]]:
+    if isinstance(value, str):
+        return [(path, value)]
+    if isinstance(value, dict):
+        leaves: list[tuple[str, str]] = []
+        for key, nested in value.items():
+            leaves.extend(_iter_string_leaves(nested, f"{path}.{key}"))
+        return leaves
+    if isinstance(value, (list, tuple)):
+        leaves = []
+        for index, nested in enumerate(value):
+            leaves.extend(_iter_string_leaves(nested, f"{path}[{index}]"))
+        return leaves
+    return []
+
+
 def validate_recipe_structure(recipe: Recipe) -> list[str]:
     """Return structural validation errors (empty if valid).
 
@@ -242,21 +258,20 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
         if step.sub_recipe is not None:
             continue
         for arg_key, arg_val in step.with_args.items():
-            if not isinstance(arg_val, str):
-                continue
-            for ref in INPUT_REF_RE.findall(arg_val):
-                if ref not in ingredient_names:
-                    errors.append(
-                        f"Step '{step_name}'.with.{arg_key} references undeclared input '{ref}'."
-                        + _SKILL_HINT
-                    )
-            for ref in _CONTEXT_REF_RE.findall(arg_val):
-                if ref not in available_context and ref not in step.optional_context_refs:
-                    errors.append(
-                        f"Step '{step_name}'.with.{arg_key} references "
-                        f"context variable '{ref}' which has not been "
-                        f"captured by a preceding step."
-                    )
+            for arg_path, string_value in _iter_string_leaves(arg_val, arg_key):
+                for ref in INPUT_REF_RE.findall(string_value):
+                    if ref not in ingredient_names:
+                        errors.append(
+                            f"Step '{step_name}'.with.{arg_path} references undeclared "
+                            f"input '{ref}'." + _SKILL_HINT
+                        )
+                for ref in _CONTEXT_REF_RE.findall(string_value):
+                    if ref not in available_context and ref not in step.optional_context_refs:
+                        errors.append(
+                            f"Step '{step_name}'.with.{arg_path} references "
+                            f"context variable '{ref}' which has not been "
+                            f"captured by a preceding step."
+                        )
 
     if not recipe.kitchen_rules:
         errors.append(

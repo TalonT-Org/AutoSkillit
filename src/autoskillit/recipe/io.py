@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json as _json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -17,12 +16,25 @@ from autoskillit.core import (
     LoadResult,
     RecipeSource,
     get_logger,
-    load_yaml,
     mapping_entry_byte_ranges_from_yaml,
     pkg_root,
 )
-from autoskillit.core import fast_loads as _fast_loads
-from autoskillit.recipe._contracts_types import INPUT_REF_RE
+from autoskillit.recipe._io_loading import (
+    _SCRIPTS_PLACEHOLDER as _SCRIPTS_PLACEHOLDER,
+)
+from autoskillit.recipe._io_loading import assert_no_raw_placeholders
+from autoskillit.recipe._io_loading import (
+    load_recipe_dict as _load_recipe_dict,
+)
+from autoskillit.recipe._io_loading import (
+    load_recipe_dict_with_declarations as _load_recipe_dict_with_declarations,
+)
+from autoskillit.recipe._io_loading import (
+    substitute_scripts_placeholder as substitute_scripts_placeholder,
+)
+from autoskillit.recipe._io_loading import (
+    substitute_temp_placeholder as substitute_temp_placeholder,
+)
 from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
@@ -38,6 +50,7 @@ from autoskillit.recipe.schema import (
 )
 
 logger = get_logger(__name__)
+_assert_no_raw_placeholders = assert_no_raw_placeholders
 
 
 def step_byte_ranges_from_yaml(content: str) -> dict[str, tuple[int, int]]:
@@ -62,139 +75,6 @@ NON_RECIPE_DIRS: frozenset[str] = frozenset(
         "sub-recipes",
     }
 )
-
-
-_TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
-_SCRIPTS_PLACEHOLDER = "{{AUTOSKILLIT_SCRIPTS}}"
-
-
-def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
-    """Replace ``{{AUTOSKILLIT_TEMP}}`` in raw recipe/skill text.
-
-    Validates that ``temp_dir_relpath`` is YAML-safe (no newlines or
-    ``": "`` sequences); raises ``ValueError`` otherwise. Filesystem paths
-    should never contain these characters, but the guard makes the failure
-    loud and free.
-    """
-    if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
-        raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
-    return text.replace(_TEMP_PLACEHOLDER, temp_dir_relpath)
-
-
-def substitute_scripts_placeholder(text: str) -> str:
-    """Replace ``{{AUTOSKILLIT_SCRIPTS}}`` with the absolute path to bundled scripts."""
-    return text.replace(_SCRIPTS_PLACEHOLDER, str(builtin_scripts_dir()))
-
-
-def _assert_no_raw_placeholders(
-    text: str,
-    *,
-    context: str = "",
-    hidden_ingredient_names: frozenset[str] | None = None,
-) -> None:
-    # Content-delivery boundary guard: raises if placeholder substitution was skipped.
-    for placeholder in (_TEMP_PLACEHOLDER, _SCRIPTS_PLACEHOLDER):
-        if placeholder in text:
-            raise ValueError(
-                f"Unresolved {placeholder} in recipe content"
-                + (f" ({context})" if context else "")
-            )
-    if hidden_ingredient_names:
-        for _m in INPUT_REF_RE.finditer(text):
-            _name = _m.group(1)
-            if _name in hidden_ingredient_names:
-                raise ValueError(
-                    f"Unresolved hidden ingredient template ${{{{ inputs.{_name} }}}} "
-                    "in recipe content" + (f" ({context})" if context else "")
-                )
-
-
-def _load_recipe_dict(
-    yaml_path: Path,
-    *,
-    raw_text: str | None = None,
-    temp_dir_relpath: str | None = None,
-) -> dict[str, Any]:
-    """Load a recipe dict, preferring a pre-compiled JSON sibling when fresh.
-
-    Args:
-        yaml_path: Path to the .yaml recipe file.
-        raw_text: Already-read YAML text (avoids redundant I/O on fallback).
-        temp_dir_relpath: When set, ``{{AUTOSKILLIT_TEMP}}`` is replaced in the
-            text before parsing (applies to both JSON and YAML paths).
-    """
-    effective, _declared = _load_recipe_dict_with_declarations(
-        yaml_path,
-        raw_text=raw_text,
-        temp_dir_relpath=temp_dir_relpath,
-    )
-    return effective
-
-
-def _substitute_recipe_values(
-    value: Any,
-    *,
-    temp_dir_relpath: str | None,
-) -> Any:
-    if isinstance(value, str):
-        resolved = (
-            substitute_temp_placeholder(value, temp_dir_relpath)
-            if temp_dir_relpath is not None
-            else value
-        )
-        return substitute_scripts_placeholder(resolved)
-    if isinstance(value, dict):
-        return {
-            key: _substitute_recipe_values(item, temp_dir_relpath=temp_dir_relpath)
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [
-            _substitute_recipe_values(item, temp_dir_relpath=temp_dir_relpath) for item in value
-        ]
-    return value
-
-
-def _load_recipe_dict_with_declarations(
-    yaml_path: Path,
-    *,
-    raw_text: str | None = None,
-    temp_dir_relpath: str | None = None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Load aligned effective and declared mappings.
-
-    Placeholder replacement is applied to parsed values, not source text, so
-    the declaration remains available for binding provenance.
-    """
-    json_path = yaml_path.with_suffix(".json")
-    try:
-        if json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns:
-            text = json_path.read_text(encoding="utf-8")
-            data = _fast_loads(text)
-            if isinstance(data, dict):
-                return (
-                    _substitute_recipe_values(
-                        data,
-                        temp_dir_relpath=temp_dir_relpath,
-                    ),
-                    data,
-                )
-            logger.warning(
-                "Pre-compiled JSON is not a mapping, falling back to YAML: %s", json_path
-            )
-    except _json.JSONDecodeError:
-        logger.warning("Pre-compiled JSON is corrupt, falling back to YAML: %s", json_path)
-    except (FileNotFoundError, OSError):
-        pass
-    if raw_text is None:
-        raw_text = yaml_path.read_text(encoding="utf-8")
-    data = load_yaml(raw_text)
-    if not isinstance(data, dict):
-        raise ValueError(f"Recipe file must contain a YAML mapping: {yaml_path}")
-    return (
-        _substitute_recipe_values(data, temp_dir_relpath=temp_dir_relpath),
-        data,
-    )
 
 
 def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Recipe:

@@ -63,15 +63,19 @@ transport-prose effect.
 - Causal scope: the deterministic result establishes projection behavior only. It does
   not claim a causal effect on a stochastic reviewer or CI outcome.
 
-## Worktree verification evidence
+## Committed verification evidence
 
-Verification ran on 2026-07-23 (America/Los_Angeles) in the feature worktree at
-`HEAD=8c4a4ff925077139516cc22faa37bd1a583a3323`, with the remediation represented by
-the uncommitted working-tree diff and `develop` used as the configured base ref.
+The durable remediation baseline is the repository tree at
+`9562bf47fa2987c7108fbb40ffb07817d185c985`. Unlike the original worktree-only
+record, that commit contains the implementation and its tests. The deterministic
+matrix is preserved in
+`tests/workspace/test_session_skills_provider.py::test_review_pr_four_way_metadata_transport_projection_matrix`.
 
-| Command | Outcome | Saved evidence |
-|---|---|---|
-| `pre-commit run --all-files` | PASS; Ruff format/check, mypy, lock validation, documentation and architecture guards, merge-conflict check, and gitleaks passed | `.autoskillit/temp/retry-worktree/third-pre-commit.txt` |
-| `AUTOSKILLIT_TEST_FILTER=conservative AUTOSKILLIT_TEST_BASE_REF=develop task test-filtered` | PASS; 28,610 passed, 2,508 skipped, 28 xfailed | `.autoskillit/temp/retry-worktree/second-test-filtered-rerun.txt` |
-| `AUTOSKILLIT_TEST_FILTER=conservative AUTOSKILLIT_TEST_BASE_REF=develop task test-check` | PASS; 28,610 passed, 2,508 skipped, 28 xfailed | `.autoskillit/temp/retry-worktree/second-test-check.txt` |
-| `AUTOSKILLIT_TEST_FILTER=conservative AUTOSKILLIT_TEST_BASE_REF=develop task test-all` | PASS; 11 import contracts kept, 0 broken; 28,610 passed, 2,508 skipped, 28 xfailed | `.autoskillit/temp/retry-worktree/second-test-all.txt` |
+The verification is reproducible from the committed tree with `develop` as the base ref:
+
+| Command | Durable evidence |
+|---|---|
+| `git show --stat 9562bf47fa2987c7108fbb40ffb07817d185c985` | Identifies the committed source tree that contains the remediation. |
+| `AUTOSKILLIT_TEST_FILTER=conservative AUTOSKILLIT_TEST_BASE_REF=develop task test-filtered` | Executes the repository-owned deterministic matrix and its affected test closure. |
+| `AUTOSKILLIT_TEST_FILTER=conservative AUTOSKILLIT_TEST_BASE_REF=develop task test-check` | Runs the automation-facing PASS/FAIL gate against the committed implementation. |
+| `pre-commit run --all-files` | Runs the repository-owned formatting, typing, lock, documentation, architecture, conflict, and secret-scanning guards. |

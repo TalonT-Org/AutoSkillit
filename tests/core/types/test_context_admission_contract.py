@@ -1054,6 +1054,15 @@ def test_protected_pool_policy_is_injected_and_has_no_borrowing_or_defaults() ->
             priority=1,
             required_release_witness_kind=WitnessKind.NON_ADMISSION,
         )
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        ProtectedPoolSpec(
+            reserve_class=ReserveClass.SYNTHESIS,
+            capability_owner_id=ProtectedPoolOwnerId("owner-unsupported-witness"),
+            injected_count=10,
+            priority=1,
+            required_release_witness_kind=WitnessKind.PROVIDER_ACCEPTED,
+        )
+    assert "invalid_protected_release_witness_kind" in str(exc_info.value)
 
 
 def test_manifest_rejects_overlapping_span_ownership() -> None:

@@ -805,6 +805,11 @@ class ProtectedPoolSpec(_ContractValue):
         _validate_non_negative(self.priority, "invalid_protected_pool_priority")
         if self.reserve_class is ReserveClass.ORDINARY:
             _raise_invalid("ordinary_pool_forbidden")
+        if self.required_release_witness_kind not in {
+            WitnessKind.NON_ADMISSION,
+            WitnessKind.ROLLBACK,
+        }:
+            _raise_invalid("invalid_protected_release_witness_kind")
 
 
 @dataclass(frozen=True, slots=True)

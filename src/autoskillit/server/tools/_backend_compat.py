@@ -161,7 +161,7 @@ def _resolve_and_check_backend_compat(
                 target_name,
                 tool_ctx.project_dir,
                 SkillExecutionRole.SESSION,
-                config=tool_ctx.config,
+                visibility=tool_ctx.config.skill_visibility_spec(),
                 recipe_packs=tool_ctx.active_recipe_packs,
                 recipe_features=tool_ctx.active_recipe_features,
             )
@@ -219,7 +219,7 @@ def _prepare_direct_skill_dispatch(
             target_name,
             tool_ctx.project_dir,
             SkillExecutionRole.SESSION,
-            config=tool_ctx.config,
+            visibility=tool_ctx.config.skill_visibility_spec(),
             recipe_packs=tool_ctx.active_recipe_packs,
             recipe_features=tool_ctx.active_recipe_features,
         )

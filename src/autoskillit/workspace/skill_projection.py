@@ -32,6 +32,7 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceIdentity,
     SkillSourceRef,
+    SkillVisibilitySpec,
     _InstallLock,
     atomic_write,
     dump_yaml_str,
@@ -844,7 +845,8 @@ def prepare_effective_skill_dispatch(
     cwd: Path,
     backend: CodingAgentBackend,
     resolver: SkillResolver,
-    config: Any,
+    visibility: SkillVisibilitySpec | None,
+    default_base_branch: str | None,
     recipe_packs: frozenset[str] | None,
     recipe_features: frozenset[str] | None,
 ) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
@@ -852,7 +854,7 @@ def prepare_effective_skill_dispatch(
     catalog = resolver.list_effective(
         project_root,
         SkillExecutionRole.ORCHESTRATOR,
-        config=config,
+        visibility=visibility,
         recipe_packs=recipe_packs,
         recipe_features=recipe_features,
     )
@@ -861,8 +863,6 @@ def prepare_effective_skill_dispatch(
         cwd=cwd,
         backend=backend,
         catalog=catalog,
-        default_base_branch=_default_base_branch(
-            getattr(getattr(config, "branching", None), "default_base_branch", None)
-        ),
+        default_base_branch=_default_base_branch(default_base_branch),
         project_root=project_root,
     )

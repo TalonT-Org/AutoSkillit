@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
@@ -21,6 +21,7 @@ __all__ = [
     "SkillSessionContract",
     "SkillSourceIdentity",
     "SkillSourceRef",
+    "SkillVisibilitySpec",
     "StoredSkillSessionContract",
     "derive_backend_requirements",
 ]
@@ -75,6 +76,39 @@ class SkillSourceRef:
             search_dir=self.search_dir,
             precedence=self.precedence,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SkillVisibilitySpec:
+    """Typed visibility and tier policy passed across composition boundaries."""
+
+    disabled_categories: frozenset[str] = frozenset()
+    custom_tags: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    features: Mapping[str, bool] = field(default_factory=dict)
+    experimental_enabled: bool = False
+    enabled_packs: frozenset[str] = frozenset()
+    tier1_skills: frozenset[str] = frozenset()
+    tier2_skills: frozenset[str] = frozenset()
+    tier3_skills: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "disabled_categories",
+            frozenset(self.disabled_categories),
+        )
+        object.__setattr__(
+            self,
+            "custom_tags",
+            MappingProxyType(
+                {tag: frozenset(skill_names) for tag, skill_names in self.custom_tags.items()}
+            ),
+        )
+        object.__setattr__(self, "features", MappingProxyType(dict(self.features)))
+        object.__setattr__(self, "enabled_packs", frozenset(self.enabled_packs))
+        object.__setattr__(self, "tier1_skills", frozenset(self.tier1_skills))
+        object.__setattr__(self, "tier2_skills", frozenset(self.tier2_skills))
+        object.__setattr__(self, "tier3_skills", frozenset(self.tier3_skills))
 
 
 @dataclass(frozen=True, slots=True)

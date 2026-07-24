@@ -16,6 +16,7 @@ from autoskillit.core.types import (
     SkillExecutionRole,
     SkillSource,
     SkillSourceRef,
+    SkillVisibilitySpec,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -726,7 +727,11 @@ def test_orchestrator_skill_cannot_be_readded_to_session_tier(tmp_path: Path) ->
 
     config = load_config(tmp_path)
     with pytest.raises(SkillContractError, match="process-issues|ORCHESTRATOR"):
-        validate_skill_tier_roles(config, DefaultSkillResolver(), tmp_path)
+        validate_skill_tier_roles(
+            config.skill_visibility_spec(),
+            DefaultSkillResolver(),
+            tmp_path,
+        )
 
 
 def test_activate_deps_are_resolvable():
@@ -1129,17 +1134,14 @@ def test_invalid_project_override_fails_effective_catalog_admission(tmp_path: Pa
 
 def test_effective_catalog_applies_subsets_and_recipe_features(tmp_path: Path) -> None:
     resolver = _resolver_with_visibility_skills(tmp_path)
-    config = SimpleNamespace(
-        subsets=SimpleNamespace(disabled=["audit"], custom_tags={}),
-        packs=SimpleNamespace(enabled=[]),
-        features={},
-        experimental_enabled=False,
+    visibility = SkillVisibilitySpec(
+        disabled_categories=frozenset({"audit"}),
     )
 
     catalog = resolver.list_effective(
         tmp_path,
         SkillExecutionRole.SESSION,
-        config=config,
+        visibility=visibility,
         recipe_features=frozenset({"planner"}),
     )
     names = {skill.name for skill in catalog.skills}
@@ -1170,18 +1172,13 @@ def test_explicit_invocation_bypasses_feature_but_not_pack_visibility(
     tmp_path: Path,
 ) -> None:
     resolver = _resolver_with_visibility_skills(tmp_path)
-    config = SimpleNamespace(
-        subsets=SimpleNamespace(disabled=[], custom_tags={}),
-        packs=SimpleNamespace(enabled=[]),
-        features={},
-        experimental_enabled=False,
-    )
+    visibility = SkillVisibilitySpec()
 
     invocation = resolver.resolve_invocation(
         "planner-skill",
         tmp_path,
         SkillExecutionRole.SESSION,
-        config=config,
+        visibility=visibility,
     )
 
     assert invocation.root.name == "planner-skill"
@@ -1190,7 +1187,7 @@ def test_explicit_invocation_bypasses_feature_but_not_pack_visibility(
             "research-skill",
             tmp_path,
             SkillExecutionRole.SESSION,
-            config=config,
+            visibility=visibility,
         )
 
 

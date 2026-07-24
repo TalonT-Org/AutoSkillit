@@ -23,6 +23,7 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceIdentity,
     SkillSourceRef,
+    SkillVisibilitySpec,
     derive_backend_requirements,
     get_logger,
     is_feature_enabled,
@@ -560,7 +561,7 @@ def _skill_is_visible(
 
 
 def _visibility_policy(
-    config: Any | None,
+    visibility: SkillVisibilitySpec | None,
     *,
     cook_session: bool,
     recipe_packs: frozenset[str] | None,
@@ -571,7 +572,7 @@ def _visibility_policy(
     dict[str, bool],
     bool,
 ]:
-    """Resolve configured visibility without importing the IL-1 config package."""
+    """Resolve effective visibility from the core-owned policy contract."""
     if cook_session:
         explicit_disabled: Iterable[str] = ()
         custom_tags: Mapping[str, Iterable[str]] = {}
@@ -581,16 +582,16 @@ def _visibility_policy(
             if definition.lifecycle is not FeatureLifecycle.DISABLED
         }
         experimental_enabled = False
-    elif config is None:
+    elif visibility is None:
         explicit_disabled = ()
         custom_tags = {}
         features = {}
         experimental_enabled = False
     else:
-        explicit_disabled = tuple(getattr(config.subsets, "disabled", ()))
-        custom_tags = dict(getattr(config.subsets, "custom_tags", {}))
-        features = dict(getattr(config, "features", {}))
-        experimental_enabled = bool(getattr(config, "experimental_enabled", False))
+        explicit_disabled = visibility.disabled_categories
+        custom_tags = visibility.custom_tags
+        features = dict(visibility.features)
+        experimental_enabled = visibility.experimental_enabled
 
     if recipe_features and not cook_session:
         for feature_name in recipe_features:
@@ -612,7 +613,7 @@ def _visibility_policy(
                 disabled_tool_tags.update(feature_def.tool_tags)
         disabled_feature_tags = frozenset(disabled_tool_tags - enabled_tool_tags)
 
-    packs_enabled = () if config is None else tuple(getattr(config.packs, "enabled", ()))
+    packs_enabled = () if visibility is None else visibility.enabled_packs
     disabled = _effective_disabled_categories(
         explicit_disabled=explicit_disabled,
         packs_enabled=packs_enabled,
@@ -746,7 +747,7 @@ class DefaultSkillResolver:
         project_root: Path | None,
         execution_role: SkillExecutionRole,
         *,
-        config: Any | None = None,
+        visibility: SkillVisibilitySpec | None = None,
         cook_session: bool = False,
         recipe_packs: frozenset[str] | None = None,
         recipe_features: frozenset[str] | None = None,
@@ -762,7 +763,7 @@ class DefaultSkillResolver:
                 f"effective skill catalog contains invalid contracts: {details}"
             )
         disabled, custom_tags, features, experimental_enabled = _visibility_policy(
-            config,
+            visibility,
             cook_session=cook_session,
             recipe_packs=recipe_packs,
             recipe_features=recipe_features,
@@ -836,7 +837,7 @@ class DefaultSkillResolver:
         project_root: Path | None,
         execution_role: SkillExecutionRole,
         *,
-        config: Any | None = None,
+        visibility: SkillVisibilitySpec | None = None,
         recipe_packs: frozenset[str] | None = None,
         recipe_features: frozenset[str] | None = None,
     ) -> EffectiveSkillInvocation:
@@ -911,10 +912,10 @@ class DefaultSkillResolver:
             visited.add(skill.name)
 
         visit(root)
-        if config is not None or recipe_packs is not None or recipe_features is not None:
+        if visibility is not None or recipe_packs is not None or recipe_features is not None:
             requested_members = frozenset(member.name for member in closure)
             disabled, custom_tags, features, experimental_enabled = _visibility_policy(
-                config,
+                visibility,
                 cook_session=False,
                 recipe_packs=recipe_packs,
                 recipe_features=recipe_features,
@@ -947,22 +948,21 @@ class DefaultSkillResolver:
 
 
 def validate_skill_tier_roles(
-    config: Any,
+    visibility: SkillVisibilitySpec,
     resolver: SkillResolver,
     project_root: Path | None,
 ) -> None:
     """Reject configured L1 tiers containing non-SESSION skill contracts.
 
-    ``config`` is intentionally duck-typed so workspace remains independent of
-    the IL-1 config package. Composition roots call this after loading config.
+    Composition roots convert config into ``SkillVisibilitySpec`` before calling.
     """
-    skills_config = getattr(config, "skills", None)
-    if skills_config is None:
-        return
-    for tier_name in ("tier1", "tier2", "tier3"):
-        configured = getattr(skills_config, tier_name, ())
+    for tier_name, configured in (
+        ("tier1", visibility.tier1_skills),
+        ("tier2", visibility.tier2_skills),
+        ("tier3", visibility.tier3_skills),
+    ):
         for skill_name in configured:
-            effective = resolver.resolve_effective(str(skill_name), project_root)
+            effective = resolver.resolve_effective(skill_name, project_root)
             if effective is None:
                 raise SkillContractError(
                     f"configured {tier_name} skill {skill_name!r} was not found"

@@ -10,7 +10,7 @@ from ._type_backend import BackendConventions
 from ._type_enums import SkillExecutionRole, SkillSource
 from ._type_protocols_backend import CodingAgentBackend
 from ._type_results import CleanupResult, CloneResult, ValidatedAddDir
-from ._type_skill_contract import SkillSourceIdentity, SkillSourceRef
+from ._type_skill_contract import SkillSourceIdentity, SkillSourceRef, SkillVisibilitySpec
 
 __all__ = [
     "WorkspaceManager",
@@ -251,7 +251,7 @@ class SkillResolver(Protocol):
         project_root: Path | None,
         execution_role: SkillExecutionRole,
         *,
-        config: Any | None = None,
+        visibility: SkillVisibilitySpec | None = None,
         cook_session: bool = False,
         recipe_packs: frozenset[str] | None = None,
         recipe_features: frozenset[str] | None = None,
@@ -264,7 +264,7 @@ class SkillResolver(Protocol):
         project_root: Path | None,
         execution_role: SkillExecutionRole,
         *,
-        config: Any | None = None,
+        visibility: SkillVisibilitySpec | None = None,
         recipe_packs: frozenset[str] | None = None,
         recipe_features: frozenset[str] | None = None,
     ) -> EffectiveSkillInvocationAuthority: ...

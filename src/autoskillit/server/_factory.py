@@ -319,11 +319,12 @@ def make_context(
         temp_dir_relpath=temp_dir_relpath,
         default_base_branch=config.branching.default_base_branch,
     )
-    validate_skill_tier_roles(config, provider.resolver, project_dir)
+    skill_visibility = config.skill_visibility_spec()
+    validate_skill_tier_roles(skill_visibility, provider.resolver, project_dir)
     session_catalog = provider.resolver.list_effective(
         project_dir,
         SkillExecutionRole.SESSION,
-        config=config,
+        visibility=skill_visibility,
     )
     plugin_source = project_plugin_source(
         resolved_plugin_source,

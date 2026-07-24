@@ -87,7 +87,8 @@ def cook(
     config = load_config()
     project_dir = Path.cwd()
     skill_resolver = DefaultSkillResolver()
-    validate_skill_tier_roles(config, skill_resolver, project_dir)
+    skill_visibility = config.skill_visibility_spec()
+    validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
     if backend is None:
         backend = get_backend(config.agent_backend.backend)
 
@@ -198,7 +199,7 @@ def cook(
     session_catalog = skill_resolver.list_effective(
         project_dir,
         SkillExecutionRole.SESSION,
-        config=config,
+        visibility=skill_visibility,
         cook_session=True,
     )
     projection_context = skills_provider.catalog_projection_context(

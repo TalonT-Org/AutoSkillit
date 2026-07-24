@@ -52,6 +52,27 @@ class TestDefaultConfig:
         cfg = AutomationConfig()
         assert cfg.diagnostics.pipeline_health is False
 
+    def test_skill_visibility_spec_is_typed_snapshot(self):
+        cfg = AutomationConfig(features={"fleet": True}, experimental_enabled=True)
+        cfg.subsets.disabled = ["audit"]
+        cfg.subsets.custom_tags = {"custom": ["investigate"]}
+        cfg.packs.enabled = ["research"]
+        cfg.skills.tier1 = ["open-kitchen"]
+        cfg.skills.tier2 = ["investigate"]
+        cfg.skills.tier3 = ["review-pr"]
+
+        spec = cfg.skill_visibility_spec()
+        cfg.subsets.disabled.append("later-change")
+
+        assert spec.disabled_categories == frozenset({"audit"})
+        assert spec.custom_tags == {"custom": frozenset({"investigate"})}
+        assert spec.features == {"fleet": True}
+        assert spec.experimental_enabled is True
+        assert spec.enabled_packs == frozenset({"research"})
+        assert spec.tier1_skills == frozenset({"open-kitchen"})
+        assert spec.tier2_skills == frozenset({"investigate"})
+        assert spec.tier3_skills == frozenset({"review-pr"})
+
     def test_model_provider_custom(self):
         """MOD_C4: CoreRunConfig accepts custom provider."""
         from autoskillit.config import CoreRunConfig

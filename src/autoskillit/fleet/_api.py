@@ -773,7 +773,8 @@ async def _run_dispatch(
                 cwd=tool_ctx.project_dir,
                 backend=_effective_backend,
                 resolver=tool_ctx.skill_resolver or default_skill_resolver(),
-                config=tool_ctx.config,
+                visibility=tool_ctx.config.skill_visibility_spec(),
+                default_base_branch=tool_ctx.config.branching.default_base_branch,
                 recipe_packs=tool_ctx.active_recipe_packs,
                 recipe_features=tool_ctx.active_recipe_features,
             )

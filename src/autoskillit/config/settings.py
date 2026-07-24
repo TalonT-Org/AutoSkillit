@@ -72,6 +72,7 @@ from autoskillit.config._config_loader import (
 from autoskillit.core import (
     FEATURE_REGISTRY,
     FeatureLifecycle,
+    SkillVisibilitySpec,
     atomic_write,
     dump_yaml_str,
     get_logger,
@@ -389,6 +390,22 @@ class AutomationConfig:
     agent_backend: AgentBackendConfig = field(default_factory=AgentBackendConfig)
     features: dict[str, bool] = field(default_factory=dict)
     experimental_enabled: bool = False
+
+    def skill_visibility_spec(self) -> SkillVisibilitySpec:
+        """Project config-owned fields into the core workspace policy contract."""
+        return SkillVisibilitySpec(
+            disabled_categories=frozenset(self.subsets.disabled),
+            custom_tags={
+                tag: frozenset(skill_names)
+                for tag, skill_names in self.subsets.custom_tags.items()
+            },
+            features=self.features,
+            experimental_enabled=self.experimental_enabled,
+            enabled_packs=frozenset(self.packs.enabled),
+            tier1_skills=frozenset(self.skills.tier1),
+            tier2_skills=frozenset(self.skills.tier2),
+            tier3_skills=frozenset(self.skills.tier3),
+        )
 
     @staticmethod
     def _build_features_dict(raw: dict[str, Any]) -> tuple[dict[str, bool], bool]:

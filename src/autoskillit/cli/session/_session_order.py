@@ -141,11 +141,12 @@ def order(
     project_dir = Path.cwd()
     config = load_config(project_dir)
     skill_resolver = DefaultSkillResolver()
-    validate_skill_tier_roles(config, skill_resolver, project_dir)
+    skill_visibility = config.skill_visibility_spec()
+    validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
     skill_catalog = skill_resolver.list_effective(
         project_dir,
         SkillExecutionRole.ORCHESTRATOR,
-        config=config,
+        visibility=skill_visibility,
     )
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)

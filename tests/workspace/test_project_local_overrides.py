@@ -599,7 +599,8 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
         cwd=cwd,
         backend=get_backend("codex"),
         resolver=DefaultSkillResolver(),
-        config=None,
+        visibility=None,
+        default_base_branch=None,
         recipe_packs=None,
         recipe_features=None,
     )

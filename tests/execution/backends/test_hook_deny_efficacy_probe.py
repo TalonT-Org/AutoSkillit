@@ -8,10 +8,12 @@ these results.
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -364,5 +366,19 @@ def test_shell_capture_hook_is_input_rewrite_and_excluded_from_deny_matrix(
     hook_output = result["hookSpecificOutput"]
     assert hook_output["permissionDecision"] == "allow"
     updated_command = hook_output["updatedInput"]["command"]
-    assert _OUTPUT_BUDGET_PROBE_COMMAND in updated_command
     assert "autoskillit-shell-capture" in updated_command
+    assert _OUTPUT_BUDGET_PROBE_COMMAND in updated_command
+
+    argv = shlex.split(updated_command.splitlines()[-1])
+    runner_index = next(
+        index for index, value in enumerate(argv) if value.endswith("_capture_artifacts.py")
+    )
+    assert argv[runner_index - 2] == sys.executable
+    assert argv[runner_index - 1] == "-I"
+    assert argv[runner_index + 1] == "run"
+    assert (
+        base64.b64decode(argv[runner_index + 2], validate=True).decode()
+        == _OUTPUT_BUDGET_PROBE_COMMAND
+    )
+    assert argv[runner_index + 3] == str(tmp_path)
+    assert re.fullmatch(r"[0-9a-f]{16}", argv[runner_index + 4])

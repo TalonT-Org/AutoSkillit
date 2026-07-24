@@ -26,8 +26,11 @@ output-boundary bounding on measured bytes:
    oversized outputs are promoted in place with a contract (bytes, sha256,
    completeness).
 3. **Codex native shell** — PreToolUse input-rewrite hook wraps every shell
-   command in a capture harness: complete output to a mechanism-owned artifact,
-   bounded inline slice with provenance marker, exit code preserved. The
+   command in a minimal isolated runner invocation. The runner opens `cwd` first,
+   establishes descriptor-relative authority for policy and capture components,
+   creates the artifact exclusively without following symlinks, and drains child
+   output through its owned fd. The bounded inline slice includes a provenance
+   marker whose path is present only after marker-time identity verification. The
    ordinary outer-result limit remains the backstop for hook-failure paths. The
    separately configured `CODEX_HISTORY_RETENTION_TOKEN_LIMIT` governs later history.
 
@@ -66,10 +69,9 @@ hook can be retired in favor of that mechanism.
 1. `disown`ed/job-table-detached children are outside the `wait` drain guarantee.
    Their post-exit writes into the artifact are best-effort — mirrors native
    detached-output semantics.
-2. Fatal self-signals (e.g. `kill -TERM $$`) skip the slice-emission postlude.
-   Exit-code parity holds, the artifact persists as lossless evidence, but no inline
-   slice is emitted and the file is not deleted. SIGKILL is untrappable, so full
-   closure is impossible.
+2. Fatal self-signals (e.g. `kill -TERM $$`) are reported as the shell-compatible
+   `128 + signal` status by the runner. Output drained before termination remains
+   available inline and in the retained artifact. SIGKILL remains untrappable.
 3. Head/tail slices are byte-cut and may split multibyte UTF-8 at slice edges. The
    artifact is authoritative.
 4. Draining non-detached background jobs makes the harness synchronous for their
@@ -79,6 +81,18 @@ hook can be retired in favor of that mechanism.
 6. Vendored-tree version discrepancy: the checkout tag is `rust-v0.143.0-alpha.10`
    vs the 0.144.1 description in the issue/ADR. The hook contract must be re-verified
    against the deployed Codex version before shipping.
+7. A supplied symlink spelling of `cwd` is accepted only by opening it first as
+   the `ProjectAnchor`; `.autoskillit`, `temp`, and `shell_capture` symlinks are
+   rejected. Physical path strings are display hints, not filesystem authority.
+8. Same-user code inside the command can rename a verified directory entry after
+   it is opened. Output, hashing, and replay remain fd-bound; if the live pathname
+   chain no longer matches, the marker reports its path as `unavailable`.
+9. Portable Linux/macOS Python exposes descriptor-relative unlink but no
+   expected-inode conditional unlink. SessionStart therefore retains stale
+   candidates rather than making a security claim across a validation/deletion
+   race. Artifact quota and lifecycle reclamation remain follow-up work tracked
+   by [#4327](https://github.com/TalonT-Org/AutoSkillit/issues/4327) and
+   [#4320](https://github.com/TalonT-Org/AutoSkillit/issues/4320), respectively.
 
 ## Consequences
 
@@ -89,4 +103,5 @@ hook can be retired in favor of that mechanism.
   for the classifier's literal-small-JSONL exception).
 - `shell_max_inline_bytes` survives with its new capture-threshold meaning.
 - Complete Codex shell output is captured to mechanism-owned artifacts at
-  `<cwd>/.autoskillit/temp/shell_capture/shell_<uuid16>.log`.
+  the descriptor-anchored project capture root. A pathname is reported only
+  while it still binds to the opened project, directories, and artifact.

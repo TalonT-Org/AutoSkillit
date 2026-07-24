@@ -33,11 +33,10 @@ def render_provenance_prefix(event: PolicyEvent) -> str:
 
 
 def render_capture_marker(event: PolicyEvent) -> str:
-    """Render a capture marker prefix safe for embedding in double-quoted shell strings.
+    """Render a capture marker prefix safe for direct bounded-output emission.
 
     The returned string is guaranteed free of ``"``, backticks, and ``$``
-    (it is embedded inside a double-quoted ``printf`` argument in the
-    shell capture harness).
+    so callers may also transport it through a shell boundary if needed.
     """
     return (
         f"[AutoSkillit hook {event.hook_id} v{event.hook_version}"

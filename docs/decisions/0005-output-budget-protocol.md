@@ -69,8 +69,10 @@ the selected decision without applying a second static shaping pass.
 
 The shell capture hook uses `shell_max_inline_bytes = 12_000` as the inline threshold:
 commands whose combined output fits within that budget are inlined in full (artifact
-deleted); larger outputs are captured losslessly to a mechanism-owned artifact with a
-bounded head/tail slice and provenance marker inlined.
+retained); larger outputs are captured losslessly to the same descriptor-owned artifact
+with a bounded head/tail slice and provenance marker inlined. SessionStart classifies
+stale artifacts but conservatively retains them on portable Python because pathname
+unlink cannot condition deletion on the validated inode.
 `small_file_max_bytes` was removed — it existed solely for the classifier's
 literal-small-JSONL exception, which is no longer needed.
 

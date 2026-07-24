@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """PreToolUse input-rewrite hook for Codex native shell lossless capture.
 
-Rewrites every native shell command on Codex into a capture harness: the
-original command runs unmodified in a subshell, its complete combined output
-goes to a project artifact, and only a bounded inline slice enters context.
+Rewrites every native shell command on Codex into a minimal isolated-Python
+runner invocation. The runner establishes the project/capture trust anchor,
+executes the command, and emits only a bounded inline slice.
 
 Codex-only (#4286 / ADR-0006).  Claude Code sessions are unaffected.
 stdlib-only; no autoskillit imports.
@@ -11,113 +11,98 @@ stdlib-only; no autoskillit imports.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shlex
+import struct
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
-from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
-    PolicyEvent,
-    render_capture_marker,
-)
+if TYPE_CHECKING:
+    from autoskillit.hooks._capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
+else:
+    from _capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
 
 _HARNESS_SENTINEL = "# autoskillit-shell-capture v1"
-_DEFAULT_SHELL_MAX_INLINE_BYTES = 12_000
-_CAPTURE_SUBDIR = ".autoskillit/temp/shell_capture"
+_ARG_MAX_FALLBACK_BYTES = 128 * 1024
+_ARG_MAX_HEADROOM_BYTES = 32 * 1024
+_RUNNER_BASENAME = "_capture_artifacts.py"
 
 
 def _is_codex_session(payload: dict) -> bool:
     return os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex" or "turn_id" in payload
 
 
-def _positive_int(value: object, default: int) -> int:
-    return (
-        value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
-    )
-
-
-def _read_policy(cwd: str) -> tuple[bool, int]:
+def _system_arg_max() -> int:
     try:
-        config = read_merged_hook_config(root=Path(cwd))
-        section = config.get("output_budget_policy", {})
-        if not isinstance(section, dict):
-            section = {}
-    except (OSError, AttributeError, TypeError, json.JSONDecodeError):
-        section = {}
-    return (
-        section.get("disabled") is True,
-        _positive_int(section.get("shell_max_inline_bytes"), _DEFAULT_SHELL_MAX_INLINE_BYTES),
+        value = os.sysconf("SC_ARG_MAX")
+    except (AttributeError, OSError, ValueError):
+        return _ARG_MAX_FALLBACK_BYTES
+    return value if isinstance(value, int) and value > 0 else _ARG_MAX_FALLBACK_BYTES
+
+
+def _exec_footprint(argv: list[str]) -> int:
+    argv_bytes = sum(len(os.fsencode(argument)) + 1 for argument in argv)
+    environment_bytes = sum(
+        len(os.fsencode(key)) + len(os.fsencode(value)) + 2 for key, value in os.environ.items()
     )
+    pointer_bytes = (len(argv) + len(os.environ) + 2) * struct.calcsize("P")
+    return argv_bytes + environment_bytes + pointer_bytes
 
 
-def _build_harness(command: str, cwd: str, inline_bytes: int) -> str:
-    uid = uuid4().hex[:16]
-    capture_dir = str(Path(cwd) / _CAPTURE_SUBDIR)
-    capture_file = str(Path(cwd) / _CAPTURE_SUBDIR / f"shell_{uid}.log")
-    head = (2 * inline_bytes) // 3
-    tail = inline_bytes - head
+def _fits_arg_max(argv: list[str]) -> bool:
+    return _exec_footprint(argv) + _ARG_MAX_HEADROOM_BYTES <= _system_arg_max()
 
-    marker_event = PolicyEvent(
-        hook_id="shell_capture_hook",
-        hook_version=1,
-        event="PreToolUse",
-        decision="input rewrite",
-        reason_code="SHELL_OUTPUT_CAPTURED",
-    )
-    marker_prefix = render_capture_marker(marker_event)
 
-    fail_event = PolicyEvent(
-        hook_id="shell_capture_hook",
-        hook_version=1,
-        event="PreToolUse",
-        decision="deny",
-        reason_code="CAPTURE_FAILED",
-    )
-    fail_msg = render_capture_marker(fail_event) + " cannot create capture directory]"
+def _render_harness(argv: list[str], *, policy_command: str | None = None) -> str:
+    lines = [_HARNESS_SENTINEL]
+    if policy_command is not None:
+        policy_text = json.dumps(policy_command, ensure_ascii=True)
+        lines.append(f": {shlex.quote(policy_text)}")
+    lines.append(shlex.join(argv))
+    return "\n".join(lines)
 
-    if not command.endswith("\n"):
-        command += "\n"
 
-    q_dir = shlex.quote(capture_dir)
-    q_file = shlex.quote(capture_file)
+def _runner_path() -> Path:
+    return Path(__file__).resolve().with_name(_RUNNER_BASENAME)
 
-    sha_line = (
-        "  if command -v sha256sum >/dev/null 2>&1; then"
-        ' __as_sha=$(sha256sum "$__as_f" | cut -d" " -f1);'
-        " else __as_sha=unavailable; fi"
-    )
-    marker_line = (
-        f"  printf '\\n%s\\n' '{marker_prefix}"
-        " full output '\"$__as_sz\"' bytes"
-        " -> '\"$__as_f\"' sha256='\"$__as_sha\"' complete=true]'"
-    )
 
-    return f"""{_HARNESS_SENTINEL}
-__as_d={q_dir}
-__as_f={q_file}
-mkdir -p "$__as_d" || {{ echo '{fail_msg}' >&2; exit 1; }}
-(
-trap '__as_user_ec=$?; wait; exit "$__as_user_ec"' EXIT
-{command})  > "$__as_f" 2>&1
-__as_ec=$?
-__as_sz=$(wc -c < "$__as_f")
-if [ "$__as_sz" -le {inline_bytes} ]; then
-  cat "$__as_f"
-else
-{sha_line}
-  head -c {head} "$__as_f"
-{marker_line}
-  tail -c {tail} "$__as_f"
-fi
-exit $__as_ec
-"""
+def _build_harness(command: str, cwd: str, capture_id: str) -> str:
+    """Build a shell-safe isolated runner invocation without embedding ``command``."""
+
+    if not _CAPTURE_ID_RE.fullmatch(capture_id):
+        raise ValueError("capture_id must contain exactly 16 lowercase hex characters")
+    try:
+        command_bytes = command.encode("utf-8")
+    except UnicodeEncodeError:
+        command_bytes = b""
+    if "\x00" in command or not command_bytes or len(command_bytes) > _MAX_COMMAND_BYTES:
+        argv = [sys.executable, "-I", str(_runner_path()), "reject", capture_id]
+        harness = _render_harness(argv)
+    else:
+        encoded = base64.b64encode(command_bytes).decode("ascii")
+        argv = [
+            sys.executable,
+            "-I",
+            str(_runner_path()),
+            "run",
+            encoded,
+            cwd,
+            capture_id,
+        ]
+        harness = _render_harness(argv, policy_command=command)
+        outer_argv = ["bash", "-c", harness]
+        if not _fits_arg_max(argv) or not _fits_arg_max(outer_argv):
+            argv = [sys.executable, "-I", str(_runner_path()), "reject", capture_id]
+            harness = _render_harness(argv)
+    return harness
 
 
 def main() -> None:
@@ -136,16 +121,12 @@ def main() -> None:
     if not isinstance(cwd, str) or not cwd or not os.path.isabs(cwd):
         sys.exit(0)
 
-    disabled, inline_bytes = _read_policy(cwd)
-    if disabled:
-        sys.exit(0)
-
     tool_input = data.get("tool_input", {})
     command = tool_input.get("command", "")
     if not isinstance(command, str) or not command:
         sys.exit(0)
 
-    harness = _build_harness(command, cwd, inline_bytes)
+    harness = _build_harness(command, cwd, uuid4().hex[:16])
     payload = json.dumps(
         {
             "hookSpecificOutput": {

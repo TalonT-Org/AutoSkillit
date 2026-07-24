@@ -75,6 +75,16 @@ class TestResolveContainedPath:
         with pytest.raises(ContainmentError, match="[Hh]ardlink"):
             resolve_contained_path(hardlinked, allowed)
 
+    def test_symlinked_allowed_root_is_a_caller_authority_precondition(self, tmp_path) -> None:
+        trusted_target = tmp_path / "trusted-target"
+        trusted_target.mkdir()
+        child = trusted_target / "child.txt"
+        child.write_text("data")
+        allowed_spelling = tmp_path / "allowed-root"
+        allowed_spelling.symlink_to(trusted_target, target_is_directory=True)
+
+        assert resolve_contained_path(allowed_spelling / child.name, allowed_spelling) == child
+
 
 class TestCheckMetadataStable:
     def test_accepts_unchanged(self, tmp_path) -> None:

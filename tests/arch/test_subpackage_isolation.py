@@ -890,7 +890,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 25,  # +_delivery_bounds (resolve_general_output_token_limit)
         "core/types": 33,  # +recipe_delivery typed budget/provenance contracts
         "cli": 21,
-        "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_cleanup.py  # noqa: E501
+        "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_artifacts.py  # noqa: E501
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 55,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery  # noqa: E501

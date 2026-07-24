@@ -181,6 +181,28 @@ class EffectiveSkillInvocation:
     project_root: Path | None
     execution_role: SkillExecutionRole
 
+    def __post_init__(self) -> None:
+        if self.root not in self.closure:
+            raise SkillContractError("effective invocation root is absent from its closure")
+        names = tuple(member.name for member in self.closure)
+        if len(names) != len(set(names)):
+            raise SkillContractError("effective invocation closure contains duplicate members")
+        for member in self.closure:
+            if member.execution_role is not self.execution_role:
+                actual = (
+                    member.execution_role.value if member.execution_role is not None else "invalid"
+                )
+                raise SkillContractError(
+                    f"effective invocation role {self.execution_role.value!r} cannot contain "
+                    f"{actual!r} skill {member.name!r}"
+                )
+            validate_skill_capability_roles(member.uses_capabilities, self.execution_role)
+        expected_union = frozenset().union(*(member.uses_capabilities for member in self.closure))
+        if self.capability_union != expected_union:
+            raise SkillContractError(
+                "effective invocation capability union does not match its closure"
+            )
+
     @property
     def backend_requirements(self) -> frozenset[str]:
         """Derive backend constraints once from the invocation capability union."""

@@ -1113,6 +1113,26 @@ def test_explicit_invocation_bypasses_feature_but_not_pack_visibility(
         )
 
 
+def test_effective_invocation_rejects_inconsistent_direct_construction(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    resolver = _resolver_with_visibility_skills(tmp_path)
+    invocation = resolver.resolve_invocation(
+        "core-skill",
+        tmp_path,
+        SkillExecutionRole.SESSION,
+    )
+
+    with pytest.raises(SkillContractError, match="root.*closure"):
+        replace(invocation, closure=())
+    with pytest.raises(SkillContractError, match="role"):
+        replace(invocation, execution_role=SkillExecutionRole.ORCHESTRATOR)
+    with pytest.raises(SkillContractError, match="capability union"):
+        replace(invocation, capability_union=frozenset({"run_skill"}))
+
+
 def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypatch) -> None:
     import autoskillit.workspace.skill_projection as projection_module
     from autoskillit.workspace import (

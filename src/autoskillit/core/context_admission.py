@@ -2580,8 +2580,8 @@ def _rollover(
             AdmissionState.INDETERMINATE,
         }
     )
-    retained_generation_request_ids = {
-        record.batch.request_id
+    retained_generation_batch_ids = {
+        record.batch.batch_id
         for record in state.batch_records
         if record.state
         in {
@@ -2603,7 +2603,7 @@ def _rollover(
     retained_generation_count = sum(
         generation.maximum_allowance
         for generation in state.generation_reservations
-        if generation.request_id in retained_generation_request_ids
+        if generation.batch_id in retained_generation_batch_ids
         and generation.state
         in {
             GenerationState.RESERVED,
@@ -2674,7 +2674,7 @@ def _rollover(
             GenerationState.STREAMING,
             GenerationState.INDETERMINATE,
         }
-        and generation.request_id not in retained_generation_request_ids
+        and generation.batch_id not in retained_generation_batch_ids
     )
     invalidated_generation_ids = {
         generation.generation_reservation_id for generation in invalidated_generation_reservations

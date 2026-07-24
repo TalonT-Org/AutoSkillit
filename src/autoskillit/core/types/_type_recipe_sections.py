@@ -16,33 +16,16 @@ from ._type_constants_registries import (
 )
 
 __all__ = [
-    "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
-    "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
     "RecipeSectionValidationFinding",
     "canonical_recipe_section_json",
     "recipe_section_digest",
     "recipe_section_element_digest",
     "recipe_section_plan_digest",
-    "render_recipe_section_failure",
     "validate_recipe_artifact_sections",
 ]
 
 _MISSING = object()
 _RECIPE_SECTION_VALIDATION_FINDING_LIMIT = 100
-RECIPE_SECTION_MANDATORY_FAILURE_CODES: tuple[str, ...] = (
-    "invalid_recipe_artifact_identity",
-    "invalid_recipe_section_part",
-    "recipe_artifact_identity_required",
-    "recipe_artifact_parse_failed",
-    "recipe_artifact_schema_mismatch",
-    "recipe_artifact_unavailable",
-    "recipe_section_bound_too_small",
-    "recipe_section_cancelled",
-    "recipe_section_internal_error",
-    "recipe_section_pagination_nonconvergent",
-    "recipe_section_serialization_failed",
-    "section_not_found",
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,38 +56,6 @@ def canonical_recipe_section_json(value: object) -> str:
         separators=_RECIPE_SECTION_CANONICAL_JSON_SEPARATORS,
         sort_keys=_RECIPE_SECTION_CANONICAL_JSON_SORT_KEYS,
     )
-
-
-def render_recipe_section_failure(
-    code: str,
-    *,
-    bound_bytes: int,
-    context: Mapping[str, object] | None = None,
-) -> str:
-    """Render one registered atomic failure, dropping context before truncation."""
-    if code not in RECIPE_SECTION_MANDATORY_FAILURE_CODES:
-        raise ValueError(f"unregistered recipe section failure code: {code}")
-    base: dict[str, object] = {"error": code, "success": False}
-    if context:
-        candidate = dict(base)
-        candidate.update(
-            {name: value for name, value in context.items() if name not in {"error", "success"}}
-        )
-        rendered = canonical_recipe_section_json(candidate)
-        if len(rendered.encode("utf-8")) <= bound_bytes:
-            return rendered
-    return canonical_recipe_section_json(base)
-
-
-RECIPE_SECTION_RESPONSE_FLOOR_BYTES = max(
-    len(
-        render_recipe_section_failure(
-            code,
-            bound_bytes=0,
-        ).encode("utf-8")
-    )
-    for code in RECIPE_SECTION_MANDATORY_FAILURE_CODES
-)
 
 
 def _domain_digest(domain: str, payload: bytes) -> str:

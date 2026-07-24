@@ -57,6 +57,9 @@ __all__ = [
     "RECIPE_SECTION_PAGINATION_POLICY_DIGEST",
     "RecipeSectionContentFormatDef",
     "RECIPE_SECTION_CONTENT_FORMAT_REGISTRY",
+    "RECIPE_SECTION_MANDATORY_FAILURE_CODES",
+    "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
+    "render_recipe_section_failure",
     "SkillCapabilityDef",
     "HardCapabilityMismatch",
     "SKILL_CAPABILITY_REGISTRY",
@@ -562,6 +565,62 @@ _RECIPE_SECTION_PAGINATION_POLICY = {
 }
 RECIPE_SECTION_PAGINATION_POLICY_DIGEST = _qualified_registry_digest(
     _RECIPE_SECTION_PAGINATION_POLICY
+)
+
+RECIPE_SECTION_MANDATORY_FAILURE_CODES: tuple[str, ...] = (
+    "invalid_recipe_artifact_identity",
+    "invalid_recipe_section_part",
+    "recipe_artifact_identity_required",
+    "recipe_artifact_parse_failed",
+    "recipe_artifact_schema_mismatch",
+    "recipe_artifact_unavailable",
+    "recipe_section_bound_too_small",
+    "recipe_section_cancelled",
+    "recipe_section_internal_error",
+    "recipe_section_pagination_nonconvergent",
+    "recipe_section_serialization_failed",
+    "section_not_found",
+)
+
+
+def render_recipe_section_failure(
+    code: str,
+    *,
+    bound_bytes: int,
+    context: Mapping[str, object] | None = None,
+) -> str:
+    """Render one registered atomic failure, dropping context before truncation."""
+    if code not in RECIPE_SECTION_MANDATORY_FAILURE_CODES:
+        raise ValueError(f"unregistered recipe section failure code: {code}")
+
+    def compact(value: object) -> str:
+        return json.dumps(
+            value,
+            ensure_ascii=_RECIPE_SECTION_CANONICAL_JSON_ENSURE_ASCII,
+            separators=_RECIPE_SECTION_CANONICAL_JSON_SEPARATORS,
+            sort_keys=_RECIPE_SECTION_CANONICAL_JSON_SORT_KEYS,
+        )
+
+    base: dict[str, object] = {"error": code, "success": False}
+    if context:
+        candidate = dict(base)
+        candidate.update(
+            {name: value for name, value in context.items() if name not in {"error", "success"}}
+        )
+        rendered = compact(candidate)
+        if len(rendered.encode("utf-8")) <= bound_bytes:
+            return rendered
+    return compact(base)
+
+
+RECIPE_SECTION_RESPONSE_FLOOR_BYTES = max(
+    len(
+        render_recipe_section_failure(
+            code,
+            bound_bytes=0,
+        ).encode("utf-8")
+    )
+    for code in RECIPE_SECTION_MANDATORY_FAILURE_CODES
 )
 
 RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: Mapping[str, ResponseBackstopExemptionDef] = (

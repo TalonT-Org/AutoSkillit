@@ -228,6 +228,7 @@ def cook(
         plugin_source,
         cwd=project_dir,
         backend=backend,
+        default_base_branch=config.branching.default_base_branch,
         skill_catalog=session_catalog,
     )
 

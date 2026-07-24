@@ -329,6 +329,7 @@ def make_context(
         resolved_plugin_source,
         cwd=project_dir,
         backend=backend,
+        default_base_branch=config.branching.default_base_branch,
         skill_catalog=session_catalog,
     )
     ephemeral_root = resolve_ephemeral_root()

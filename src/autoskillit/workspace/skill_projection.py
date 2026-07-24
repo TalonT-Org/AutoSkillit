@@ -646,6 +646,7 @@ def project_direct_install(
     *,
     cwd: Path,
     backend: CodingAgentBackend,
+    default_base_branch: str,
     skill_catalog: EffectiveSkillCatalog | None = None,
 ) -> DirectInstall:
     """Return a stable, validated public projection for a direct plugin install."""
@@ -694,9 +695,12 @@ def project_direct_install(
         f"{info.name}:{info.canonical_digest}"
         for info in sorted(catalog.skills, key=lambda s: s.name)
     )
-    cache_key = hashlib.sha256(f"{source_root}\0{backend.name}\0{identity}".encode()).hexdigest()[
-        :24
-    ]
+    cache_key = hashlib.sha256(
+        (
+            f"{source_root}\0{backend.name}\0{SKILL_PROJECTION_VERSION}\0"
+            f"{default_base_branch}\0{identity}"
+        ).encode()
+    ).hexdigest()[:24]
     destination = Path.home() / ".autoskillit" / "plugin-projections" / cache_key
     context = SkillProjectionContext(
         cwd=Path(cwd).resolve(),
@@ -706,7 +710,7 @@ def project_direct_install(
         substitutions={
             "{{AUTOSKILLIT_TEMP}}": temp_dir_display_str(None),
             "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
-            "{{DEFAULT_BASE_BRANCH}}": "main",
+            "{{DEFAULT_BASE_BRANCH}}": default_base_branch,
         },
     )
     manifest_path = destination.parent / f".{destination.name}.autoskillit-projection.json"
@@ -741,6 +745,7 @@ def project_plugin_source(
     *,
     cwd: Path,
     backend: CodingAgentBackend,
+    default_base_branch: str,
     skill_catalog: EffectiveSkillCatalog | None = None,
 ) -> PluginSource:
     """Project every plugin source into one sanitized direct-install tree."""
@@ -750,6 +755,7 @@ def project_plugin_source(
         source,
         cwd=cwd,
         backend=backend,
+        default_base_branch=default_base_branch,
         skill_catalog=skill_catalog,
     )
 
@@ -758,6 +764,7 @@ def project_default_plugin_source(
     *,
     cwd: Path,
     backend: CodingAgentBackend,
+    default_base_branch: str,
     skill_catalog: EffectiveSkillCatalog | None = None,
 ) -> DirectInstall:
     """Project the installed package without exposing its canonical root."""
@@ -765,6 +772,7 @@ def project_default_plugin_source(
         DirectInstall(plugin_dir=pkg_root()),
         cwd=cwd,
         backend=backend,
+        default_base_branch=default_base_branch,
         skill_catalog=skill_catalog,
     )
 
@@ -775,12 +783,14 @@ def prepare_catalog_skill_dispatch(
     cwd: Path,
     backend: CodingAgentBackend,
     catalog: EffectiveSkillCatalog,
+    default_base_branch: str,
     project_root: Path | None = None,
 ) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
     """Project a visible catalog and bind the artifact to executor authority."""
     plugin_source = project_default_plugin_source(
         cwd=cwd,
         backend=backend,
+        default_base_branch=default_base_branch,
         skill_catalog=catalog,
     )
     contract = build_effective_skill_dispatch_contract(
@@ -822,5 +832,6 @@ def prepare_effective_skill_dispatch(
         cwd=cwd,
         backend=backend,
         catalog=catalog,
+        default_base_branch=config.branching.default_base_branch,
         project_root=project_root,
     )

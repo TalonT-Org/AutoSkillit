@@ -104,6 +104,7 @@ def _run_interactive_session(
             plugin_source = project_default_plugin_source(
                 cwd=_project_dir,
                 backend=backend,
+                default_base_branch=config.branching.default_base_branch,
                 skill_catalog=skill_catalog,
             )
         tools_arg: tuple[str, ...] = ("AskUserQuestion",)

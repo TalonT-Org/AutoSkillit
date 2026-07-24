@@ -1246,7 +1246,7 @@ def test_direct_install_projection_reuses_immutable_cache_entry(
         "execution_role: session\n"
         "uses_capabilities: []\n"
         "---\n"
-        "fixture body\n",
+        "base branch: {{DEFAULT_BASE_BRANCH}}\n",
         encoding="utf-8",
     )
     info = _skill_info_from_frontmatter(
@@ -1273,18 +1273,33 @@ def test_direct_install_projection_reuses_immutable_cache_entry(
         source,
         cwd=tmp_path,
         backend=backend,
+        default_base_branch="develop",
         skill_catalog=catalog,
     )
     first_inode = first.plugin_dir.stat().st_ino
+    projected_skill = first.plugin_dir / "skills" / "immutable-cache" / "SKILL.md"
+    assert "base branch: develop" in projected_skill.read_text(encoding="utf-8")
     second = project_direct_install(
         source,
         cwd=tmp_path,
         backend=backend,
+        default_base_branch="develop",
         skill_catalog=catalog,
     )
 
     assert second.plugin_dir == first.plugin_dir
     assert second.plugin_dir.stat().st_ino == first_inode
+    main_projection = project_direct_install(
+        source,
+        cwd=tmp_path,
+        backend=backend,
+        default_base_branch="main",
+        skill_catalog=catalog,
+    )
+    assert main_projection.plugin_dir != first.plugin_dir
+    assert "base branch: main" in (
+        main_projection.plugin_dir / "skills" / "immutable-cache" / "SKILL.md"
+    ).read_text(encoding="utf-8")
 
 
 def test_projection_strips_all_machine_authority_and_preserves_private_deps(

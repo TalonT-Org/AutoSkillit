@@ -106,6 +106,12 @@ def test_semantic_capability_evidence_negative(body: str) -> None:
     )
 
 
+def test_never_constraint_block_is_not_executable_evidence() -> None:
+    body = "**NEVER:**\n- Use `gh pr edit 42 --add-label ready`.\n"
+
+    assert "github_api_write" not in _detect_capabilities(body, "test-skill")
+
+
 def test_genuine_run_skill_inventory_is_exact() -> None:
     inventory = {
         name
@@ -191,7 +197,7 @@ def test_github_api_write_pattern_detected() -> None:
         "gh pr merge --squash",
         "gh issue create --title bar",
         "gh issue reopen 42",
-        "gh release upload v1 artifact.tar.gz",
+        "gh release upload v1 bundle.tar.gz",
     ]
     should_not_match = [
         "gh pr list",

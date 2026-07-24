@@ -187,13 +187,14 @@ def _frontmatter_skill_name(content: str) -> str:
 
 
 def _source_lines(body: str) -> tuple[_SourceLine, ...]:
-    """Mark lines in frontmatter and documentary fences as non-executable."""
+    """Mark frontmatter, constraint blocks, and documentary fences non-executable."""
     result: list[_SourceLine] = []
     in_frontmatter = body.startswith("---\n")
     frontmatter_closed = not in_frontmatter
     fence_delimiter: str | None = None
     in_step_section = False
     artifact_section = False
+    prohibition_section = False
 
     for number, text in enumerate(body.splitlines(), start=1):
         stripped = text.strip()
@@ -206,7 +207,16 @@ def _source_lines(body: str) -> tuple[_SourceLine, ...]:
             result.append(_SourceLine(number, text, False))
             continue
 
+        if stripped == "**NEVER:**":
+            prohibition_section = True
+            result.append(_SourceLine(number, text, False))
+            continue
+        if stripped.startswith("**") and stripped.endswith(":**"):
+            prohibition_section = False
+            result.append(_SourceLine(number, text, False))
+            continue
         if stripped.startswith("#") and fence_delimiter is None:
+            prohibition_section = False
             heading = stripped.lstrip("#").strip()
             heading_level = len(stripped) - len(stripped.lstrip("#"))
             is_step_heading = bool(_STEP_HEADING_RE.match(heading))
@@ -231,7 +241,7 @@ def _source_lines(body: str) -> tuple[_SourceLine, ...]:
             fence_delimiter = None if closes_fence else marker
             continue
 
-        executable = not (
+        executable = not prohibition_section and not (
             fence_delimiter is not None and (not in_step_section or artifact_section)
         )
         result.append(_SourceLine(number, text, executable))

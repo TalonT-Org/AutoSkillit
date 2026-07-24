@@ -125,6 +125,43 @@ def test_typed_mode_rejects_explicit_result_type() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("typed_kwargs", "message"),
+    [
+        (
+            {
+                "state_factory": object(),
+                "state_context_var": ContextVar("state"),
+                "response_factory": lambda state, exc: "{}",
+            },
+            "state_factory must be callable",
+        ),
+        (
+            {
+                "state_factory": lambda: None,
+                "state_context_var": object(),
+                "response_factory": lambda state, exc: "{}",
+            },
+            "state_context_var must be a ContextVar",
+        ),
+        (
+            {
+                "state_factory": lambda: None,
+                "state_context_var": ContextVar("state"),
+                "response_factory": object(),
+            },
+            "response_factory must be callable",
+        ),
+    ],
+)
+def test_typed_mode_rejects_invalid_argument_types_at_construction(
+    typed_kwargs: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(TypeError, match=message):
+        _cancellation_shield(**typed_kwargs)  # type: ignore[arg-type]
+
+
 @pytest.mark.anyio
 async def test_typed_factories_use_exact_signatures_and_same_state_object() -> None:
     state_var: ContextVar[_State] = ContextVar("state")

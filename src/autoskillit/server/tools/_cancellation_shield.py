@@ -70,6 +70,13 @@ def _cancellation_shield(
     typed_mode = typed_count == 3
     if typed_mode and result_type is not _RESULT_TYPE_UNSET:
         raise TypeError("result_type cannot be supplied with typed cancellation mode")
+    if typed_mode:
+        if not callable(state_factory):
+            raise TypeError("state_factory must be callable")
+        if not isinstance(state_context_var, ContextVar):
+            raise TypeError("state_context_var must be a ContextVar")
+        if not callable(response_factory):
+            raise TypeError("response_factory must be callable")
     resolved_result_type = (
         "generic" if result_type is _RESULT_TYPE_UNSET else cast(ResultType, result_type)
     )
@@ -78,12 +85,12 @@ def _cancellation_shield(
         @wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             if typed_mode:
-                typed_state_factory = state_factory
-                typed_context_var = state_context_var
-                typed_response_factory = response_factory
-                assert callable(typed_state_factory)
-                assert isinstance(typed_context_var, ContextVar)
-                assert callable(typed_response_factory)
+                typed_state_factory = cast(Callable[[], Any], state_factory)
+                typed_context_var = cast(ContextVar[Any], state_context_var)
+                typed_response_factory = cast(
+                    Callable[[Any, asyncio.CancelledError], str],
+                    response_factory,
+                )
                 state = typed_state_factory()
                 token = typed_context_var.set(state)
                 try:

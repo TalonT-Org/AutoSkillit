@@ -101,6 +101,10 @@ class PagePlanCache:
         max_entries: int = PAGE_PLAN_CACHE_MAX_ENTRIES,
         max_bytes: int = PAGE_PLAN_CACHE_MAX_BYTES,
     ) -> None:
+        if max_entries < 0:
+            raise ValueError("page-plan cache max_entries must not be negative")
+        if max_bytes < 0:
+            raise ValueError("page-plan cache max_bytes must not be negative")
         self._max_entries = max_entries
         self._max_bytes = max_bytes
         self._entries: OrderedDict[_PagePlanCacheKey, RecipeSectionPagePlan] = OrderedDict()

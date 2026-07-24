@@ -460,6 +460,12 @@ def test_kitchen_retirement_removes_only_that_namespace(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("kwargs", [{"max_entries": -1}, {"max_bytes": -1}])
+def test_page_plan_cache_rejects_negative_capacity_limits(kwargs: dict[str, int]) -> None:
+    with pytest.raises(ValueError, match="must not be negative"):
+        PagePlanCache(**kwargs)
+
+
 def test_kitchen_retirement_evicts_only_matching_page_plans(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

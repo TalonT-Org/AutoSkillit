@@ -1423,6 +1423,7 @@ def test_reserve_rejects_batch_id_retained_in_closed_epoch() -> None:
         reused_batch,
         (occurrence,),
         input_count=5,
+        event_id="reserve-closed-batch-id-reused",
     )
 
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT

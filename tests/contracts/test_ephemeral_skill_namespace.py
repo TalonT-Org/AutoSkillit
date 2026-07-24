@@ -5,8 +5,9 @@ namespace that matches how those skills are delivered in the session:
 - BUNDLED_EXTENDED skills are delivered via --add-dir as bare /name
 - BUNDLED skills are delivered via --plugin-dir as /autoskillit:name
 
-A /autoskillit:<ref> reference in an ephemeral SKILL.md for a BUNDLED_EXTENDED target
-is wrong — the agent will not find it.
+A /autoskillit:<ref> reference in an ephemeral SKILL.md for an available
+BUNDLED_EXTENDED target is wrong — the agent will not find it. Disabled or
+otherwise unavailable targets are intentionally not projected as invocable.
 """
 
 from __future__ import annotations
@@ -44,8 +45,7 @@ def test_ephemeral_skill_md_namespace_matches_session_delivery(tmp_path: Path) -
         body = skill_md.read_text()
         for m in _PREFIXED_REF_RE.finditer(body):
             ref_name = m.group(1)
-            info = resolver.resolve(ref_name)
-            if info is not None and info.source == SkillSource.BUNDLED_EXTENDED:
+            if catalog.namespace_sources.get(ref_name) == SkillSource.BUNDLED_EXTENDED:
                 line_no = body[: m.start()].count("\n") + 1
                 violations.append(
                     f"{skill_name}/SKILL.md:{line_no}: /autoskillit:{ref_name} "

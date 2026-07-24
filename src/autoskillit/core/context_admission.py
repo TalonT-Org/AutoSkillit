@@ -1737,7 +1737,7 @@ def _release_closed_batch(
     generation_records: list[GenerationReservationRecord] = []
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
     for generation in audit.terminal_generation_reservations:
-        if generation.request_id == record.batch.request_id and generation.state in {
+        if generation.batch_id == record.batch.batch_id and generation.state in {
             GenerationState.RESERVED,
             GenerationState.STREAMING,
             GenerationState.INDETERMINATE,
@@ -1886,7 +1886,7 @@ def _release_or_rollback(
     generation_records: list[GenerationReservationRecord] = []
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
     for generation in next_state.generation_reservations:
-        if generation.request_id == record.batch.request_id and generation.state in {
+        if generation.batch_id == record.batch.batch_id and generation.state in {
             GenerationState.RESERVED,
             GenerationState.STREAMING,
             GenerationState.INDETERMINATE,

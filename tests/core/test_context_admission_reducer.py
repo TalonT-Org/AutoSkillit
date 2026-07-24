@@ -66,6 +66,7 @@ from autoskillit.core import (
     RepresentationBindingWitness,
     RepresentationRevision,
     RequestReconciliationEvent,
+    ReservationInvalidatedEffect,
     ReserveClass,
     ReserveRequestEvent,
     ResolveIndeterminateAcceptedEvent,
@@ -2071,6 +2072,64 @@ def test_output_reconciliation_is_bound_to_exact_generation_request() -> None:
         generation.generation_reservation_id,
     )
     assert unchanged.state is GenerationState.STREAMING
+
+
+def test_release_invalidates_generation_for_exact_batch_not_shared_request() -> None:
+    state = _open_epoch()
+    first_occurrence = _occurrence("shared-request-first", maximum=10)
+    second_occurrence = _occurrence("shared-request-second", maximum=10)
+    state, _ = _propose(state, first_occurrence)
+    state, _ = _propose(state, second_occurrence)
+    first_batch = _batch("batch-shared-request-first", (first_occurrence,))
+    second_batch_template = _batch("batch-shared-request-second", (second_occurrence,))
+    second_batch = replace(
+        second_batch_template,
+        request_id=first_batch.request_id,
+        manifest=replace(
+            second_batch_template.manifest,
+            request_id=first_batch.request_id,
+        ),
+    )
+    first_reserved, _ = _reserve(
+        state,
+        first_batch,
+        (first_occurrence,),
+        input_count=5,
+        generation_count=5,
+    )
+    assert isinstance(first_reserved.next_state, ActiveContextAdmissionState)
+    second_reserved, _ = _reserve(
+        first_reserved.next_state,
+        second_batch,
+        (second_occurrence,),
+        input_count=5,
+        generation_count=5,
+    )
+    assert isinstance(second_reserved.next_state, ActiveContextAdmissionState)
+    before_release = second_reserved.next_state
+
+    released = reduce_context_admission(
+        before_release,
+        ReleaseNonAdmissionEvent(
+            **_event_fields(before_release, "release-shared-request-first", "release"),
+            batch_id=first_batch.batch_id,
+            witness=_witness(first_batch, WitnessKind.NON_ADMISSION),
+        ),
+    )
+
+    assert released.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(released.next_state, ActiveContextAdmissionState)
+    assert tuple(record.batch_id for record in released.next_state.generation_reservations) == (
+        second_batch.batch_id,
+    )
+    invalidated_targets = {
+        effect.target_id
+        for effect in released.effects
+        if isinstance(effect, ReservationInvalidatedEffect)
+    }
+    assert invalidated_targets == {
+        GenerationReservationId(f"generation-{first_batch.batch_id.value}")
+    }
 
 
 def test_rollover_moves_old_work_to_resolvable_closed_epoch_audit() -> None:

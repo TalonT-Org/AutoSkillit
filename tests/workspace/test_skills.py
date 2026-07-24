@@ -11,7 +11,12 @@ import pytest
 
 import autoskillit.workspace.skills as _skills_mod
 from autoskillit.core.io import load_yaml
-from autoskillit.core.types import SkillContractError, SkillExecutionRole, SkillSource
+from autoskillit.core.types import (
+    SkillContractError,
+    SkillExecutionRole,
+    SkillSource,
+    SkillSourceRef,
+)
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     bundled_skills_dir,
@@ -495,6 +500,40 @@ class TestSkillCategories:
 
         info = SkillInfo(name="test", source=SkillSource.BUNDLED, path=Path("/fake/SKILL.md"))
         assert info.categories == frozenset()
+
+    @pytest.mark.parametrize(
+        "source_ref",
+        [
+            SkillSourceRef(
+                origin=SkillSource.THIRD_PARTY,
+                logical_name="test",
+                skill_path=Path("/fake/SKILL.md"),
+            ),
+            SkillSourceRef(
+                origin=SkillSource.BUNDLED,
+                logical_name="other",
+                skill_path=Path("/fake/SKILL.md"),
+            ),
+            SkillSourceRef(
+                origin=SkillSource.BUNDLED,
+                logical_name="test",
+                skill_path=Path("/other/SKILL.md"),
+            ),
+        ],
+    )
+    def test_skill_info_rejects_mismatched_source_ref(
+        self,
+        source_ref: SkillSourceRef,
+    ) -> None:
+        from autoskillit.workspace.skills import SkillInfo
+
+        with pytest.raises(SkillContractError, match="source_ref does not match direct fields"):
+            SkillInfo(
+                name="test",
+                source=SkillSource.BUNDLED,
+                path=Path("/fake/SKILL.md"),
+                source_ref=source_ref,
+            )
 
     def test_direct_skill_info_rejects_invalid_canonical_frontmatter(self, tmp_path) -> None:
         from autoskillit.core import SkillContractError

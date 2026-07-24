@@ -94,6 +94,21 @@ class SkillInfo:
                     skill_path=self.path,
                 ),
             )
+        else:
+            mismatched_fields = tuple(
+                field_name
+                for field_name, direct_value, referenced_value in (
+                    ("name", self.name, self.source_ref.logical_name),
+                    ("source", self.source, self.source_ref.origin),
+                    ("path", self.path, self.source_ref.skill_path),
+                )
+                if direct_value != referenced_value
+            )
+            if mismatched_fields:
+                raise SkillContractError(
+                    "SkillInfo source_ref does not match direct fields: "
+                    f"{', '.join(mismatched_fields)}"
+                )
         if not self.canonical_content and self.path.is_file():
             try:
                 object.__setattr__(

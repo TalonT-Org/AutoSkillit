@@ -587,6 +587,41 @@ def _reserved_batch(
     return transition.next_state, batch, occurrences, generation
 
 
+def test_reserve_rejects_active_generation_reservation_id_reuse() -> None:
+    state, _, _, existing_generation = _reserved_batch(
+        name="generation-id-owner",
+        input_count=5,
+        generation_count=5,
+    )
+    occurrence = _occurrence("generation-id-collision", maximum=5)
+    state, _ = _propose(state, occurrence)
+    batch = _batch("batch-generation-id-collision", (occurrence,))
+    _, event = _reserve(
+        state,
+        batch,
+        (occurrence,),
+        input_count=5,
+        generation_count=5,
+    )
+    assert event.generation_reservation is not None
+    collision = replace(
+        event,
+        generation_reservation=replace(
+            event.generation_reservation,
+            generation_reservation_id=existing_generation.generation_reservation_id,
+        ),
+    )
+
+    rejected = reduce_context_admission(state, collision)
+
+    assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+    assert (
+        rejected.decision.reason_code == "generation_reservation_id_reuse_with_changed_descriptor"
+    )
+    assert isinstance(rejected.next_state, ActiveContextAdmissionState)
+    _assert_rejection_unchanged(state, rejected.next_state)
+
+
 def _prepare_dispatch(
     state: ActiveContextAdmissionState, batch: AdmissionBatch
 ) -> ActiveContextAdmissionState:

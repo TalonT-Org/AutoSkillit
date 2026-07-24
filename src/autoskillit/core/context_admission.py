@@ -980,6 +980,15 @@ def _reserve(
         return _reject(state, event, "reservation_revision_mismatch")
     generation = event.generation_reservation
     generation_count = generation.maximum_allowance if generation is not None else 0
+    if generation is not None and any(
+        existing.generation_reservation_id == generation.generation_reservation_id
+        for existing in state.generation_reservations
+    ):
+        return _reject(
+            state,
+            event,
+            "generation_reservation_id_reuse_with_changed_descriptor",
+        )
     if generation is not None and (
         generation.request_id != event.batch.request_id
         or generation.batch_id != event.batch.batch_id

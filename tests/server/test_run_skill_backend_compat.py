@@ -303,7 +303,7 @@ class TestHardCapabilityFeasibilityPredicate:
         session_dir.mkdir()
         skill_md = session_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
         skill_md.parent.mkdir(parents=True)
-        skill_md.write_text("name: investigate\n")
+        skill_md.write_text("---\nname: investigate\ndescription: Test skill.\n---\n# Test\n")
 
         fake_validated = ValidatedAddDir(path=str(session_dir))
         mock_ssm = MagicMock()

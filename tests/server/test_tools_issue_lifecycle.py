@@ -530,7 +530,7 @@ async def test_issue_headless_handlers_reject_incompatible_backend_before_execut
         source=SkillSource.BUNDLED_EXTENDED,
         path=Path(f"/fake/{skill_name}/SKILL.md"),
         uses_capabilities=frozenset({"open_kitchen"}),
-        canonical_content="# test",
+        canonical_content=(f"---\nname: {skill_name}\ndescription: Test skill.\n---\n# Test\n"),
     )
     invocation = EffectiveSkillInvocation(
         root=skill_info,

@@ -285,7 +285,7 @@ async def test_run_skill_incompatible_backend_rejects_before_init_session(
         source=SkillSource.BUNDLED,
         path=Path("/fake/SKILL.md"),
         uses_capabilities=frozenset({"open_kitchen"}),
-        canonical_content="# test",
+        canonical_content=("---\nname: test-skill\ndescription: Test skill.\n---\n# Test\n"),
     )
     invocation = EffectiveSkillInvocation(
         root=skill_info,

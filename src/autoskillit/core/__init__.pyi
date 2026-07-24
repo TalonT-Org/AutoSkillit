@@ -393,8 +393,8 @@ from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDe
 from .types import RecipeSectionDef as RecipeSectionDef
 from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
-from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
+from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec

@@ -1219,6 +1219,74 @@ def test_projection_context_derives_and_validates_backend_conventions(
         )
 
 
+def test_direct_install_projection_reuses_immutable_cache_entry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from autoskillit.core import (
+        BackendConventions,
+        DirectInstall,
+        SkillSourceRef,
+    )
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        project_direct_install,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    source_root = tmp_path / "plugin"
+    skill_path = source_root / "canonical" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text(
+        "---\n"
+        "name: immutable-cache\n"
+        "description: Immutable projection fixture.\n"
+        "execution_role: session\n"
+        "uses_capabilities: []\n"
+        "---\n"
+        "fixture body\n",
+        encoding="utf-8",
+    )
+    info = _skill_info_from_frontmatter(
+        "immutable-cache",
+        SkillSource.BUNDLED,
+        skill_path,
+        source_ref=SkillSourceRef(
+            origin=SkillSource.BUNDLED,
+            logical_name="immutable-cache",
+            skill_path=skill_path,
+        ),
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=(SkillCatalogEntry.from_skill_info(info),),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    backend = SimpleNamespace(
+        name="codex",
+        conventions=BackendConventions(),
+    )
+    source = DirectInstall(plugin_dir=source_root)
+
+    first = project_direct_install(
+        source,
+        cwd=tmp_path,
+        backend=backend,
+        skill_catalog=catalog,
+    )
+    first_inode = first.plugin_dir.stat().st_ino
+    second = project_direct_install(
+        source,
+        cwd=tmp_path,
+        backend=backend,
+        skill_catalog=catalog,
+    )
+
+    assert second.plugin_dir == first.plugin_dir
+    assert second.plugin_dir.stat().st_ino == first_inode
+
+
 def test_projection_strips_all_machine_authority_and_preserves_private_deps(
     tmp_path: Path,
 ) -> None:

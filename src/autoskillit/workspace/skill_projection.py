@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import os
 import shutil
 import tempfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -341,6 +343,19 @@ def _replace_directory(staging: Path, destination: Path) -> None:
     elif destination.exists():
         shutil.rmtree(destination)
     os.replace(staging, destination)
+
+
+@contextmanager
+def _projection_publication_lock(destination: Path) -> Iterator[None]:
+    """Serialize first publication for one content-addressed projection."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = destination.parent / f".{destination.name}.lock"
+    with lock_path.open("a", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def materialize_agent_skill_tree(
@@ -694,25 +709,30 @@ def project_direct_install(
             "{{DEFAULT_BASE_BRANCH}}": "main",
         },
     )
-    manifest_path = materialize_sanitized_plugin_root(
-        source_root,
-        destination,
-        catalog,
-        context,
-    )
-    errors = validate_sanitized_plugin_artifact(
-        source_root,
-        destination,
-        manifest_path,
-        source_infos if source_infos else catalog,
-        require_sources_within_root=bool(source_infos),
-    )
-    if errors:
-        shutil.rmtree(destination, ignore_errors=True)
-        manifest_path.unlink(missing_ok=True)
-        raise SkillContractError(
-            "direct plugin projection validation failed: " + "; ".join(errors)
+    manifest_path = destination.parent / f".{destination.name}.autoskillit-projection.json"
+    with _projection_publication_lock(destination):
+        if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
+            raise SkillContractError(
+                f"direct plugin projection cache is not a directory: {destination}"
+            )
+        if not destination.exists():
+            manifest_path = materialize_sanitized_plugin_root(
+                source_root,
+                destination,
+                catalog,
+                context,
+            )
+        errors = validate_sanitized_plugin_artifact(
+            source_root,
+            destination,
+            manifest_path,
+            source_infos if source_infos else catalog,
+            require_sources_within_root=bool(source_infos),
         )
+        if errors:
+            raise SkillContractError(
+                "direct plugin projection validation failed: " + "; ".join(errors)
+            )
     return DirectInstall(plugin_dir=destination)
 
 

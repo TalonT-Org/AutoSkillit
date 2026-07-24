@@ -43,6 +43,7 @@ _MAX_UINT64 = (1 << 64) - 1
 
 _CONTENT_FREE_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@+-]*\Z")
 _CONTENT_FREE_LOCATOR = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:@+-]*\Z")
+_REASON_CODE = re.compile(r"[a-z][a-z0-9-]{0,63}\Z")
 _SENSITIVE_TEXT_MARKERS = (
     "authorization",
     "bearer",
@@ -117,6 +118,15 @@ def _validate_bounded_text(
         or (locator and ".." in value.split("/"))
     ):
         _raise_invalid(reason_code)
+
+
+def _validate_reason_code(
+    value: str,
+    validation_error: str = "invalid_reason_code",
+) -> None:
+    _validate_bounded_text(value, validation_error, maximum=64)
+    if not _REASON_CODE.fullmatch(value):
+        _raise_invalid(validation_error)
 
 
 def _validate_tuple(value: object, reason_code: str) -> None:
@@ -823,7 +833,7 @@ class AdmissionDecision(_ContractValue):
     available_protected_count: int
 
     def __post_init__(self) -> None:
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
         for value in (
             self.requested_count,
             self.available_ordinary_count,
@@ -853,16 +863,14 @@ class AdmissionOccurrenceRecord(_ContractValue):
         if len(self.accepted_witness_ids) != len(set(self.accepted_witness_ids)):
             _raise_invalid("duplicate_witness_id")
         if self.indeterminate_reason_code is not None:
-            _validate_bounded_text(
+            _validate_reason_code(
                 self.indeterminate_reason_code,
                 "invalid_indeterminate_reason",
-                maximum=64,
             )
         if self.quarantine_reason_code is not None:
-            _validate_bounded_text(
+            _validate_reason_code(
                 self.quarantine_reason_code,
                 "invalid_quarantine_reason",
-                maximum=64,
             )
 
 
@@ -1029,7 +1037,7 @@ class ClosedEpochAudit(_ContractValue):
             if batch_record.reservation_id is not None:
                 reservation = reservation_by_id.get(batch_record.reservation_id)
                 if reservation is None or reservation.key.batch_id != batch_record.batch.batch_id:
-                    _raise_invalid("missing_closed_epoch_reservation")
+                    _raise_invalid("missing-closed-epoch-reservation")
         for generation in self.terminal_generation_reservations:
             generation_batch = batch_by_id.get(generation.batch_id)
             if (
@@ -1118,7 +1126,7 @@ class ProducerCoverageDef(_ContractValue):
             "invalid_control_point_owner",
             maximum=96,
         )
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
         _validate_canonical_tuple(
             self.evidence,
             "noncanonical_coverage_evidence",
@@ -1176,7 +1184,7 @@ class AuthorityUnavailableEvent(_AdmissionEventBase):
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
         if self.authority_state is CoverageState.VERIFIED:
             _raise_invalid("invalid_unavailable_authority_state")
 
@@ -1247,7 +1255,7 @@ class PrepareBatchEvent(_AdmissionEventBase):
             MeasurementKind.HOST_ESTIMATE,
             MeasurementKind.BYTE_EMERGENCY,
         }:
-            _raise_invalid("non_authoritative_measurement")
+            _raise_invalid("non-authoritative-measurement")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1277,7 +1285,7 @@ class AcceptInputEvent(_AdmissionEventBase):
         _AdmissionEventBase.__post_init__(self)
         _validate_non_negative(self.exact_input_charge, "invalid_exact_input_charge")
         if self.measurement_kind is not MeasurementKind.PROVIDER_EXACT:
-            _raise_invalid("non_authoritative_measurement")
+            _raise_invalid("non-authoritative-measurement")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1299,7 +1307,7 @@ class MarkIndeterminateEvent(_AdmissionEventBase):
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1315,9 +1323,9 @@ class ResolveIndeterminateAcceptedEvent(_AdmissionEventBase):
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
-        _validate_non_negative(self.exact_charge, "invalid_exact_charge")
+        _validate_non_negative(self.exact_charge, "invalid-exact-charge")
         if self.measurement_kind is not MeasurementKind.PROVIDER_EXACT:
-            _raise_invalid("non_authoritative_measurement")
+            _raise_invalid("non-authoritative-measurement")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1356,7 +1364,7 @@ class MarkGenerationIndeterminateEvent(_AdmissionEventBase):
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1366,7 +1374,7 @@ class RequestReconciliationEvent(_AdmissionEventBase):
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1588,7 +1596,7 @@ class ReconciliationQueryRequestedEffect(_AdmissionEffectBase):
         _AdmissionEffectBase.__post_init__(self)
         if not isinstance(self.target_id, AdmissionBatchId | GenerationReservationId):
             _raise_invalid("invalid_effect_target")
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1600,7 +1608,7 @@ class ReconciliationEscalationEffect(_AdmissionEffectBase):
         _AdmissionEffectBase.__post_init__(self)
         if not isinstance(self.target_id, AdmissionBatchId | GenerationReservationId):
             _raise_invalid("invalid_effect_target")
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1612,7 +1620,7 @@ class ConflictRejectedEffect(_AdmissionEffectBase):
         _AdmissionEffectBase.__post_init__(self)
         if not isinstance(self.target_id, AdmissionEventId):
             _raise_invalid("invalid_effect_target")
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1677,7 +1685,7 @@ class QuarantineRecordedEffect(_AdmissionEffectBase):
         _AdmissionEffectBase.__post_init__(self)
         if not isinstance(self.target_id, AdmissionBatchId | GenerationReservationId):
             _raise_invalid("invalid_effect_target")
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1690,7 +1698,7 @@ class AuthorityUnavailableEffect(_AdmissionEffectBase):
         _AdmissionEffectBase.__post_init__(self)
         if not isinstance(self.target_id, WindowEpochId):
             _raise_invalid("invalid_effect_target")
-        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        _validate_reason_code(self.reason_code)
         if self.authority_state is CoverageState.VERIFIED:
             _raise_invalid("invalid_unavailable_authority_state")
 
@@ -1967,7 +1975,7 @@ class ActiveContextAdmissionState(_ContractValue):
                 or set(owned_pairs) != set(manifest_pairs)
                 or len(owned_pairs) != len(manifest_pairs)
             ):
-                _raise_invalid("inconsistent_span_ownership")
+                _raise_invalid("inconsistent-span-ownership")
         for reservation in self.reservations:
             matching_batch = batch_records_by_id.get(reservation.key.batch_id)
             if matching_batch is None:
@@ -2198,7 +2206,7 @@ def _coverage_row(surface: ProducerSurface) -> ProducerCoverageDef:
         observation_state=observation_state,
         authority_state=CoverageState.UPSTREAM_GATED,
         evidence=(evidence,),
-        reason_code="authoritative_watermark_unavailable",
+        reason_code="authoritative-watermark-unavailable",
     )
 
 

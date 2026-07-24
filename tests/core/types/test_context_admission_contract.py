@@ -1156,6 +1156,29 @@ def test_free_text_and_model_identity_privacy_is_fail_closed(canary: str) -> Non
         _snapshot(model_identity=ModelIdentity.anthropic(canary))
 
 
+@pytest.mark.parametrize(
+    "invalid_reason_code",
+    [
+        "Uppercase",
+        "under_score",
+        "dot.value",
+        "colon:value",
+    ],
+)
+def test_reason_codes_require_lowercase_kebab_case(invalid_reason_code: str) -> None:
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        AdmissionDecision(
+            kind=AdmissionDecisionKind.WOULD_REJECT,
+            reason_code=invalid_reason_code,
+            window_epoch_id=WindowEpochId("epoch-1"),
+            snapshot_sequence=1,
+            requested_count=0,
+            available_ordinary_count=0,
+            available_protected_count=0,
+        )
+    assert "invalid_reason_code" in str(exc_info.value)
+
+
 def test_aggregate_tuples_reject_noncanonical_ordering() -> None:
     first = _occurrence("occurrence-a", span_id="span-a")
     second = _occurrence("occurrence-b", span_id="span-b")
@@ -1461,7 +1484,7 @@ def test_prepare_event_rejects_estimate_measurement() -> None:
             measurement_kind=MeasurementKind.HOST_ESTIMATE,
             authority_source=AuthoritySourceId("authority-test"),
         )
-    assert "non_authoritative_measurement" in str(exc_info.value)
+    assert "non-authoritative-measurement" in str(exc_info.value)
 
 
 def test_accept_event_rejects_estimate_measurement() -> None:
@@ -1482,4 +1505,4 @@ def test_accept_event_rejects_estimate_measurement() -> None:
             authority_source=AuthoritySourceId("authority-test"),
             representation_binding_witness=_binding(batch),
         )
-    assert "non_authoritative_measurement" in str(exc_info.value)
+    assert "non-authoritative-measurement" in str(exc_info.value)

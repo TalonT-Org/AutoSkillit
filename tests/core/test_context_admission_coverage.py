@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 CHECKED_AT = "2026-07-23"
 FRESHNESS_POLICY = "verify_on_version_or_configuration_change"
 CODEX_REVISION = "25af12f7e61572b0bc18ddb1008be543b91519b0"
-REASON_CODE = "authoritative_watermark_unavailable"
+REASON_CODE = "authoritative-watermark-unavailable"
 
 
 class ExpectedEvidence(NamedTuple):

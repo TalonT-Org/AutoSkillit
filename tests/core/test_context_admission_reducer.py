@@ -616,7 +616,7 @@ def test_reserve_rejects_active_generation_reservation_id_reuse() -> None:
 
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
     assert (
-        rejected.decision.reason_code == "generation_reservation_id_reuse_with_changed_descriptor"
+        rejected.decision.reason_code == "generation-reservation-id-reuse-with-changed-descriptor"
     )
     assert isinstance(rejected.next_state, ActiveContextAdmissionState)
     _assert_rejection_unchanged(state, rejected.next_state)
@@ -1196,7 +1196,7 @@ def test_incomplete_manifest_rejection_is_non_mutating_and_retains_reservation()
     )
     rejected_acceptance = reduce_context_admission(state, event)
     assert rejected_acceptance.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    assert rejected_acceptance.decision.reason_code == "representation_binding_mismatch"
+    assert rejected_acceptance.decision.reason_code == "representation-binding-mismatch"
     _assert_rejection_unchanged(state, rejected_acceptance.next_state)
     assert rejected_acceptance.effects == ()
 
@@ -1266,7 +1266,7 @@ def test_fork_requires_distinct_epoch_and_parent_accepts_only_delivery() -> None
     )
     rejected_fork = reduce_context_admission(state, fork_event)
     assert rejected_fork.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    assert rejected_fork.decision.reason_code == "fork_requires_distinct_epoch"
+    assert rejected_fork.decision.reason_code == "fork-requires-distinct-epoch"
     assert isinstance(rejected_fork.next_state, ActiveContextAdmissionState)
     state = rejected_fork.next_state
     state, _ = _propose(state, occurrences[2])
@@ -1382,7 +1382,7 @@ def test_closed_epoch_occurrence_identity_is_immutable_and_exact_retry_is_idempo
         )
         rejected = reduce_context_admission(current, changed)
         assert rejected.decision.kind is AdmissionDecisionKind.QUARANTINED
-        assert rejected.decision.reason_code == "occurrence_identity_corruption"
+        assert rejected.decision.reason_code == "occurrence-identity-corruption"
         _assert_rejection_unchanged(current, rejected.next_state)
         current = rejected.next_state
 
@@ -1504,7 +1504,7 @@ def test_protected_pool_release_policy_accepts_only_its_configured_resolution(
 
     rejected = reduce_context_admission(state, rejected_event)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    assert rejected.decision.reason_code == "protected_release_policy_mismatch"
+    assert rejected.decision.reason_code == "protected-release-policy-mismatch"
     _assert_rejection_unchanged(state, rejected.next_state)
 
     allowed = reduce_context_admission(state, allowed_event)
@@ -1757,7 +1757,7 @@ def test_post_rollover_expiry_cannot_tombstone_retained_work(
     )
     rejected = reduce_context_admission(rolled, expiry)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    assert rejected.decision.reason_code == "idempotency_key_not_terminal"
+    assert rejected.decision.reason_code == "idempotency-key-not-terminal"
     assert rejected.next_state.expired_idempotency_tombstones == ()
     assert rejected.next_state.closed_epochs[-1] == retained_before
     _assert_rejection_unchanged(rolled, rejected.next_state)
@@ -1799,7 +1799,7 @@ def test_post_rollover_expiry_requires_the_complete_witness_binding() -> None:
         )
         rejected = reduce_context_admission(current, expiry)
         assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-        assert rejected.decision.reason_code == "invalid_expiry_witness"
+        assert rejected.decision.reason_code == "invalid-expiry-witness"
         assert rejected.next_state.expired_idempotency_tombstones == ()
         _assert_rejection_unchanged(current, rejected.next_state)
         current = rejected.next_state
@@ -1833,7 +1833,7 @@ def test_post_rollover_expiry_requires_the_complete_witness_binding() -> None:
         ),
     )
     assert repeated.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-    assert repeated.decision.reason_code == "idempotency_key_expired"
+    assert repeated.decision.reason_code == "idempotency-key-expired"
     assert len(repeated.next_state.expired_idempotency_tombstones) == 1
     _assert_rejection_unchanged(accepted.next_state, repeated.next_state)
 

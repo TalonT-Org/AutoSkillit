@@ -38,26 +38,22 @@ from autoskillit.workspace.skill_format import (
 logger = get_logger(__name__)
 
 
-def _contained_project_skill_path(
-    project_root: Path,
-    search_root: Path,
-    name: str,
-) -> Path | None:
+def _project_skill_path(root: Path, search: Path, name: str) -> Path | None:
     """Return a non-symlinked SKILL.md contained by its project search root."""
-    entry = search_root / name
+    entry = search / name
     skill_path = entry / "SKILL.md"
     try:
-        search_root_stat = search_root.lstat()
+        search_root_stat = search.lstat()
         entry_stat = entry.lstat()
         skill_stat = skill_path.lstat()
-        resolved_project_root = project_root.resolve(strict=True)
-        resolved_root = search_root.resolve(strict=True)
+        resolved_project_root = root.resolve(strict=True)
+        resolved_root = search.resolve(strict=True)
         resolved_skill = skill_path.resolve(strict=True)
     except FileNotFoundError:
         return None
     except OSError as exc:
         raise SkillContractError(
-            f"cannot validate project-local skill {name!r} under {search_root}: {exc}"
+            f"cannot validate project-local skill {name!r} under {search}: {exc}"
         ) from exc
     if any(stat.S_ISLNK(item.st_mode) for item in (search_root_stat, entry_stat, skill_stat)):
         return None
@@ -669,7 +665,7 @@ class DefaultSkillResolver:
         normalized_root = project_root.resolve() if project_root is not None else None
         if normalized_root is not None:
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
-                skill_path = _contained_project_skill_path(
+                skill_path = _project_skill_path(
                     normalized_root,
                     normalized_root / search_dir,
                     name,
@@ -708,7 +704,7 @@ class DefaultSkillResolver:
                 for entry in entries:
                     if entry.name in selected:
                         continue
-                    skill_path = _contained_project_skill_path(
+                    skill_path = _project_skill_path(
                         normalized_root,
                         search_root,
                         entry.name,
@@ -799,8 +795,7 @@ class DefaultSkillResolver:
                 )
             )
             namespace_sources.update({skill.name: skill.source for skill in available_internal})
-            internal_names = {skill.name for skill in available_internal}
-            skills = tuple(skill for skill in skills if skill.name not in internal_names)
+            skills = tuple(skill for skill in skills if skill.name not in _INTERNAL_SKILLS)
             internal = tuple(
                 SkillCatalogEntry.from_skill_info(skill)
                 for skill in available_internal

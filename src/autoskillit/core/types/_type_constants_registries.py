@@ -285,6 +285,7 @@ class RecipeSectionDef:
     missing_behavior: Literal["invalid", "absent", "default"]
     none_behavior: Literal["invalid", "absent"]
     section_strategy: Literal["raw", "scalar", "array"]
+    range_unit: Literal["utf8-bytes", "decoded-utf8-bytes", "elements"]
     ordinary_content_format: Literal["raw-text", "json-scalar-page", "json-array-page"]
     oversized_content_format: Literal["json-element-fragment"] | None
     has_default: bool = False
@@ -298,16 +299,25 @@ class RecipeSectionDef:
             self.value_kind,
             self.element_kind,
             self.section_strategy,
+            self.range_unit,
             self.ordinary_content_format,
             self.oversized_content_format,
         )
         valid_layouts = {
-            ("string", None, "raw", "raw-text", None),
-            ("string", None, "scalar", "json-scalar-page", None),
+            ("string", None, "raw", "utf8-bytes", "raw-text", None),
+            (
+                "string",
+                None,
+                "scalar",
+                "decoded-utf8-bytes",
+                "json-scalar-page",
+                None,
+            ),
             (
                 "array",
                 "string",
                 "array",
+                "elements",
                 "json-array-page",
                 "json-element-fragment",
             ),
@@ -341,6 +351,7 @@ RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = _validated_recipe_sect
             missing_behavior="invalid",
             none_behavior="invalid",
             section_strategy="raw",
+            range_unit="utf8-bytes",
             ordinary_content_format="raw-text",
             oversized_content_format=None,
         ),
@@ -351,6 +362,7 @@ RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = _validated_recipe_sect
             missing_behavior="absent",
             none_behavior="absent",
             section_strategy="scalar",
+            range_unit="decoded-utf8-bytes",
             ordinary_content_format="json-scalar-page",
             oversized_content_format=None,
         ),
@@ -361,6 +373,7 @@ RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = _validated_recipe_sect
             missing_behavior="absent",
             none_behavior="invalid",
             section_strategy="raw",
+            range_unit="utf8-bytes",
             ordinary_content_format="raw-text",
             oversized_content_format=None,
         ),
@@ -371,6 +384,7 @@ RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = _validated_recipe_sect
             missing_behavior="absent",
             none_behavior="invalid",
             section_strategy="raw",
+            range_unit="utf8-bytes",
             ordinary_content_format="raw-text",
             oversized_content_format=None,
         ),
@@ -381,6 +395,7 @@ RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = _validated_recipe_sect
             missing_behavior="default",
             none_behavior="invalid",
             section_strategy="array",
+            range_unit="elements",
             ordinary_content_format="json-array-page",
             oversized_content_format="json-element-fragment",
             has_default=True,
@@ -393,6 +408,7 @@ RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = _validated_recipe_sect
             missing_behavior="default",
             none_behavior="invalid",
             section_strategy="array",
+            range_unit="elements",
             ordinary_content_format="json-array-page",
             oversized_content_format="json-element-fragment",
             has_default=True,
@@ -408,6 +424,7 @@ DYNAMIC_RECIPE_SECTION_DEF = RecipeSectionDef(
     missing_behavior="absent",
     none_behavior="invalid",
     section_strategy="raw",
+    range_unit="utf8-bytes",
     ordinary_content_format="raw-text",
     oversized_content_format=None,
 )
@@ -429,6 +446,62 @@ RECIPE_SECTION_REGISTRY_DIGEST = _qualified_registry_digest(
     {name: asdict(definition) for name, definition in sorted(RECIPE_SECTION_REGISTRY.items())}
     | {"$dynamic": asdict(DYNAMIC_RECIPE_SECTION_DEF)}
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _RecipeSectionContentFormatDef:
+    range_fields: tuple[str, ...]
+    reconstruction: str
+
+
+_RECIPE_SECTION_CONTENT_FORMAT_REGISTRY = {
+    "raw-text": _RecipeSectionContentFormatDef(
+        range_fields=("byte_start", "byte_end", "byte_total"),
+        reconstruction="concatenate-content",
+    ),
+    "json-array-page": _RecipeSectionContentFormatDef(
+        range_fields=("element_start", "element_end", "element_total"),
+        reconstruction="json-load-each-and-extend",
+    ),
+    "json-scalar-page": _RecipeSectionContentFormatDef(
+        range_fields=("scalar_byte_start", "scalar_byte_end", "scalar_byte_total"),
+        reconstruction="json-load-each-and-concatenate-strings",
+    ),
+    "json-element-fragment": _RecipeSectionContentFormatDef(
+        range_fields=(
+            "element_index",
+            "element_sha256",
+            "fragment_index",
+            "fragment_count",
+            "fragment_byte_start",
+            "fragment_byte_end",
+            "fragment_byte_total",
+        ),
+        reconstruction="json-load-fragments-concatenate-verify-and-json-load",
+    ),
+}
+
+
+def _recipe_section_policy_definitions() -> tuple[RecipeSectionDef, ...]:
+    return (*RECIPE_SECTION_REGISTRY.values(), DYNAMIC_RECIPE_SECTION_DEF)
+
+
+def _declared_recipe_section_content_formats() -> tuple[str, ...]:
+    formats = {
+        content_format
+        for definition in _recipe_section_policy_definitions()
+        for content_format in (
+            definition.ordinary_content_format,
+            definition.oversized_content_format,
+        )
+        if content_format is not None
+    }
+    if formats != _RECIPE_SECTION_CONTENT_FORMAT_REGISTRY.keys():
+        raise ValueError("recipe section definitions and content-format metadata must agree")
+    return tuple(sorted(formats))
+
+
+_DECLARED_RECIPE_SECTION_CONTENT_FORMATS = _declared_recipe_section_content_formats()
 
 _RECIPE_SECTION_PAGINATION_POLICY = {
     "version": RECIPE_SECTION_PAGINATION_VERSION,
@@ -455,27 +528,12 @@ _RECIPE_SECTION_PAGINATION_POLICY = {
     ],
     "optional_fields": {"next_part": "omit_on_terminal"},
     "content_formats": {
-        "raw-text": ["byte_start", "byte_end", "byte_total"],
-        "json-array-page": ["element_start", "element_end", "element_total"],
-        "json-scalar-page": [
-            "scalar_byte_start",
-            "scalar_byte_end",
-            "scalar_byte_total",
-        ],
-        "json-element-fragment": [
-            "element_index",
-            "element_sha256",
-            "fragment_index",
-            "fragment_count",
-            "fragment_byte_start",
-            "fragment_byte_end",
-            "fragment_byte_total",
-        ],
+        content_format: list(_RECIPE_SECTION_CONTENT_FORMAT_REGISTRY[content_format].range_fields)
+        for content_format in _DECLARED_RECIPE_SECTION_CONTENT_FORMATS
     },
     "range_units": {
-        "raw": "utf8-bytes",
-        "scalar": "decoded-utf8-bytes",
-        "array": "elements",
+        definition.section_strategy: definition.range_unit
+        for definition in _recipe_section_policy_definitions()
     },
     "digest_domains": {
         "raw_section": "autoskillit.recipe-section.raw.v1",
@@ -484,10 +542,8 @@ _RECIPE_SECTION_PAGINATION_POLICY = {
         "plan": "autoskillit.recipe-section.plan.v1",
     },
     "reconstruction": {
-        "raw-text": "concatenate-content",
-        "json-array-page": "json-load-each-and-extend",
-        "json-scalar-page": "json-load-each-and-concatenate-strings",
-        "json-element-fragment": "json-load-fragments-concatenate-verify-and-json-load",
+        content_format: _RECIPE_SECTION_CONTENT_FORMAT_REGISTRY[content_format].reconstruction
+        for content_format in _DECLARED_RECIPE_SECTION_CONTENT_FORMATS
     },
 }
 RECIPE_SECTION_PAGINATION_POLICY_DIGEST = _qualified_registry_digest(

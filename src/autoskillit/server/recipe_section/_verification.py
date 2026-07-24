@@ -80,7 +80,7 @@ def _verify_reconstruction(
         while index < len(pages):
             page = pages[index]
             descriptor = page.descriptor
-            if descriptor.content_format == "json-array-page":
+            if descriptor.content_format == selected.definition.ordinary_content_format:
                 reconstructed_values.extend(json.loads(page.content))
                 index += 1
                 continue
@@ -105,7 +105,7 @@ def _verify_string_descriptors(
     value = selected.value
     if type(value) is not str:
         raise _pagination_error("string recipe section strategy requires a string")
-    expected_format = "raw-text" if strategy == "raw" else "json-scalar-page"
+    expected_format = selected.definition.ordinary_content_format
     range_prefix = "byte" if strategy == "raw" else "scalar_byte"
     total = len(value.encode("utf-8"))
     expected_start = 0
@@ -167,7 +167,7 @@ def _verify_array_descriptors(
     fragment_end = 0
     for page in pages:
         descriptor = page.descriptor
-        if descriptor.content_format == "json-array-page":
+        if descriptor.content_format == selected.definition.ordinary_content_format:
             _require(
                 fragment_count is None,
                 "complete array page interrupts an element fragment",
@@ -196,7 +196,7 @@ def _verify_array_descriptors(
             continue
 
         _require(
-            descriptor.content_format == "json-element-fragment",
+            descriptor.content_format == selected.definition.oversized_content_format,
             "array plan contains an unknown page format",
         )
         decoded_fragment = _decode(

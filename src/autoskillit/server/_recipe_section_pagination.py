@@ -416,7 +416,7 @@ def _raw_or_scalar_pages(
         content = canonical_recipe_section_json("") if scalar else ""
         if scalar:
             descriptor = RecipeSectionPageDescriptor(
-                content_format="json-scalar-page",
+                content_format=selected.definition.ordinary_content_format,
                 page_content_sha256=_qualified_content_digest(content),
                 scalar_byte_start=0,
                 scalar_byte_end=0,
@@ -424,7 +424,7 @@ def _raw_or_scalar_pages(
             )
         else:
             descriptor = RecipeSectionPageDescriptor(
-                content_format="raw-text",
+                content_format=selected.definition.ordinary_content_format,
                 page_content_sha256=_qualified_content_digest(content),
                 byte_start=0,
                 byte_end=0,
@@ -453,7 +453,7 @@ def _raw_or_scalar_pages(
             content = canonical_recipe_section_json(chunk) if scalar else chunk
             if scalar:
                 descriptor = RecipeSectionPageDescriptor(
-                    content_format="json-scalar-page",
+                    content_format=selected.definition.ordinary_content_format,
                     page_content_sha256=_qualified_content_digest(content),
                     scalar_byte_start=offsets[start],
                     scalar_byte_end=offsets[end],
@@ -461,7 +461,7 @@ def _raw_or_scalar_pages(
                 )
             else:
                 descriptor = RecipeSectionPageDescriptor(
-                    content_format="raw-text",
+                    content_format=selected.definition.ordinary_content_format,
                     page_content_sha256=_qualified_content_digest(content),
                     byte_start=offsets[start],
                     byte_end=offsets[end],
@@ -514,6 +514,7 @@ def _raw_or_scalar_pages(
 
 def _array_page(
     *,
+    definition: RecipeSectionDef,
     canonical_elements: list[str],
     start: int,
     end: int,
@@ -521,7 +522,7 @@ def _array_page(
     content = "[" + ",".join(canonical_elements[start:end]) + "]"
     return _PlannedPage(
         RecipeSectionPageDescriptor(
-            content_format="json-array-page",
+            content_format=definition.ordinary_content_format,
             page_content_sha256=_qualified_content_digest(content),
             element_start=start,
             element_end=end,
@@ -550,6 +551,9 @@ def _fragment_pages(
     pages: list[_PlannedPage] = []
     start = 0
     assumed_fragment_count = (10**fragment_width) - 1
+    content_format = selected.definition.oversized_content_format
+    if content_format is None:
+        raise ValueError("array recipe section definition requires an oversized format")
     while start < len(canonical_element):
         part = part_start + len(pages)
         fragment_index = len(pages)
@@ -557,7 +561,7 @@ def _fragment_pages(
         def candidate_for(end: int) -> _PlannedPage:
             content = canonical_recipe_section_json(canonical_element[start:end])
             descriptor = RecipeSectionPageDescriptor(
-                content_format="json-element-fragment",
+                content_format=content_format,
                 page_content_sha256=_qualified_content_digest(content),
                 element_index=element_index,
                 element_sha256=element_sha256,
@@ -636,7 +640,12 @@ def _array_pages(
 ) -> tuple[list[_PlannedPage], dict[int, int]]:
     canonical_elements = [canonical_recipe_section_json(value) for value in values]
     if not values:
-        page = _array_page(canonical_elements=canonical_elements, start=0, end=0)
+        page = _array_page(
+            definition=selected.definition,
+            canonical_elements=canonical_elements,
+            start=0,
+            end=0,
+        )
         if not _fits(
             selected=selected,
             generation=generation,
@@ -656,6 +665,7 @@ def _array_pages(
     while start < len(values):
         part = len(pages)
         terminal_candidate = _array_page(
+            definition=selected.definition,
             canonical_elements=canonical_elements,
             start=start,
             end=len(values),
@@ -680,6 +690,7 @@ def _array_pages(
         while low <= high:
             end = (low + high) // 2
             candidate = _array_page(
+                definition=selected.definition,
                 canonical_elements=canonical_elements,
                 start=start,
                 end=end,

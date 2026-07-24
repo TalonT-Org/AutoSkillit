@@ -74,17 +74,50 @@ def test_recipe_section_definition_rejects_contradictory_construction(
 
 
 @pytest.mark.parametrize(
-    ("section", "value_kind", "element_kind", "strategy", "ordinary", "oversized"),
+    (
+        "section",
+        "value_kind",
+        "element_kind",
+        "strategy",
+        "range_unit",
+        "ordinary",
+        "oversized",
+    ),
     [
-        ("content", "string", None, "raw", "raw-text", None),
-        ("ingredients_table", "string", None, "scalar", "json-scalar-page", None),
-        ("orchestration_rules", "string", None, "raw", "raw-text", None),
-        ("stop_step_semantics", "string", None, "raw", "raw-text", None),
+        ("content", "string", None, "raw", "utf8-bytes", "raw-text", None),
+        (
+            "ingredients_table",
+            "string",
+            None,
+            "scalar",
+            "decoded-utf8-bytes",
+            "json-scalar-page",
+            None,
+        ),
+        (
+            "orchestration_rules",
+            "string",
+            None,
+            "raw",
+            "utf8-bytes",
+            "raw-text",
+            None,
+        ),
+        (
+            "stop_step_semantics",
+            "string",
+            None,
+            "raw",
+            "utf8-bytes",
+            "raw-text",
+            None,
+        ),
         (
             "errors",
             "array",
             "string",
             "array",
+            "elements",
             "json-array-page",
             "json-element-fragment",
         ),
@@ -93,6 +126,7 @@ def test_recipe_section_definition_rejects_contradictory_construction(
             "array",
             "string",
             "array",
+            "elements",
             "json-array-page",
             "json-element-fragment",
         ),
@@ -103,6 +137,7 @@ def test_recipe_section_strategy_and_format_combinations_are_pinned(
     value_kind: str,
     element_kind: str | None,
     strategy: str,
+    range_unit: str,
     ordinary: str,
     oversized: str | None,
 ) -> None:
@@ -113,9 +148,10 @@ def test_recipe_section_strategy_and_format_combinations_are_pinned(
         definition.value_kind,
         definition.element_kind,
         definition.section_strategy,
+        definition.range_unit,
         definition.ordinary_content_format,
         definition.oversized_content_format,
-    ) == (value_kind, element_kind, strategy, ordinary, oversized)
+    ) == (value_kind, element_kind, strategy, range_unit, ordinary, oversized)
 
 
 def test_recipe_section_presence_and_default_semantics_are_explicit() -> None:

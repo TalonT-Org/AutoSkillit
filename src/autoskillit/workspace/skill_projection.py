@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import os
 import shutil
 import tempfile
-from collections.abc import Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -30,6 +28,7 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceIdentity,
     SkillSourceRef,
+    _InstallLock,
     atomic_write,
     dump_yaml_str,
     pkg_root,
@@ -343,19 +342,6 @@ def _replace_directory(staging: Path, destination: Path) -> None:
     elif destination.exists():
         shutil.rmtree(destination)
     os.replace(staging, destination)
-
-
-@contextmanager
-def _projection_publication_lock(destination: Path) -> Iterator[None]:
-    """Serialize first publication for one content-addressed projection."""
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = destination.parent / f".{destination.name}.lock"
-    with lock_path.open("a", encoding="utf-8") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def materialize_agent_skill_tree(
@@ -714,7 +700,7 @@ def project_direct_install(
         },
     )
     manifest_path = destination.parent / f".{destination.name}.autoskillit-projection.json"
-    with _projection_publication_lock(destination):
+    with _InstallLock():
         if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
             raise SkillContractError(
                 f"direct plugin projection cache is not a directory: {destination}"

@@ -1342,10 +1342,10 @@ def test_multi_member_batch_progresses_through_full_lifecycle() -> None:
 
 def test_rollover_scopes_shared_request_generation_retention_to_batch() -> None:
     machine = ContextAdmissionStateMachine()
-    machine.propose(0, ReserveClass.ORDINARY)
-    machine.propose(1, ReserveClass.ORDINARY)
-    machine.reserve(0, input_count=5, generation_count=4)
-    machine.reserve(1, input_count=5, generation_count=3)
+    machine.propose(0, ReserveClass.SYNTHESIS)
+    machine.propose(1, ReserveClass.SYNTHESIS)
+    machine.reserve(0, input_count=2, generation_count=4)
+    machine.reserve(1, input_count=2, generation_count=3)
     retained_batch = machine.batches[0]
     invalidated_batch = machine.batches[1]
     invalidated_batch = replace(

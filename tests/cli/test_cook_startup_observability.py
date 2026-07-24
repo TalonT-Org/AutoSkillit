@@ -381,6 +381,51 @@ def _make_state_db(sqlite_home: Path, status: str = "complete") -> Path:
     return path
 
 
+def test_enabled_cook_observer_calls_backend_version_and_passes_readiness(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.cli.session._session_cook import (
+        _require_observer_ready,
+        _startup_observer,
+    )
+
+    stages: list[tuple[str, dict[str, object]]] = []
+
+    class Backend:
+        def __init__(self) -> None:
+            self.version_calls = 0
+
+        def version(self) -> str:
+            self.version_calls += 1
+            return "codex-cli 0.145.0"
+
+    class Trace:
+        def record_stage(self, stage: str, **fields: object) -> None:
+            stages.append((stage, fields))
+
+    sqlite_home = tmp_path / "sqlite-home"
+    _make_state_db(sqlite_home)
+    backend = Backend()
+    observer = _startup_observer(
+        backend=backend,  # type: ignore[arg-type]
+        trace=Trace(),  # type: ignore[arg-type]
+        enabled=True,
+        sqlite_home=sqlite_home,
+        attempt=2,
+        view_id="view-2",
+    )
+
+    assert observer is not None
+    assert backend.version_calls == 1
+    observer.observe_output(b"Codex started")
+    observer.check_readiness()
+    _require_observer_ready(observer)
+    assert stages == [
+        ("first_output", {"attempt": 2, "view_id": "view-2"}),
+        ("state_ready", {"attempt": 2, "view_id": "view-2"}),
+    ]
+
+
 def _probe(sqlite_home: Path):
     CodexStateReadinessProbe, _, _ = _observer_api()
     return CodexStateReadinessProbe(

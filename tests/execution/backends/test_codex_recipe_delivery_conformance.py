@@ -272,8 +272,7 @@ def _validated_section_pages(
         if not isinstance(part, int):
             continue
         previous = by_part.get(part)
-        if previous is not None:
-            assert previous == candidate, f"duplicate {section} part returned conflicting content"
+        assert previous is None, f"duplicate {section} part returned"
         by_part[part] = candidate
     assert by_part, f"live Codex probe did not retain {section} pages"
 

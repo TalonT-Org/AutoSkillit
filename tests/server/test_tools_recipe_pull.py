@@ -978,7 +978,9 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
     )
     recreate = MagicMock(side_effect=AssertionError("schema failure must not recreate"))
+    warning = MagicMock()
     monkeypatch.setattr(tools_recipe, "serve_recipe", recreate)
+    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -987,6 +989,11 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
     _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
     assert json.loads(rendered)["error"] == "recipe_artifact_schema_mismatch"
     recreate.assert_not_called()
+    warning.assert_called_once_with(
+        "get_recipe_section_schema_mismatch",
+        stage="load",
+        detail="recipe artifact schema invalid: recipe_section_type@warnings[1]",
+    )
 
 
 async def test_recreation_persistence_schema_failure_precedes_artifact_error(
@@ -1017,6 +1024,8 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
         "persist_recipe_artifact",
         MagicMock(side_effect=RecipeArtifactSchemaError("malformed recreation")),
     )
+    warning = MagicMock()
+    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1024,6 +1033,11 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
 
     _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
     assert json.loads(rendered)["error"] == "recipe_artifact_schema_mismatch"
+    warning.assert_called_once_with(
+        "get_recipe_section_schema_mismatch",
+        stage="recreate_persist",
+        detail="malformed recreation",
+    )
 
 
 async def test_post_recreation_reload_schema_failure_precedes_reload_error(
@@ -1055,6 +1069,8 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
             ]
         ),
     )
+    warning = MagicMock()
+    monkeypatch.setattr(tools_recipe.logger, "warning", warning)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -1062,6 +1078,11 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
 
     _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
     assert json.loads(rendered)["error"] == "recipe_artifact_schema_mismatch"
+    warning.assert_called_once_with(
+        "get_recipe_section_schema_mismatch",
+        stage="reload",
+        detail="malformed recreation",
+    )
 
 
 async def test_negative_part_is_rejected_before_artifact_load(

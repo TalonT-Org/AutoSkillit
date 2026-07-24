@@ -559,7 +559,12 @@ async def get_recipe_section(
                     kitchen_id=tool_ctx.kitchen_id,
                     identity=identity,
                 )
-            except RecipeArtifactSchemaError:
+            except RecipeArtifactSchemaError as exc:
+                logger.warning(
+                    "get_recipe_section_schema_mismatch",
+                    stage="load",
+                    detail=str(exc),
+                )
                 return _recipe_section_failure("recipe_artifact_schema_mismatch")
             except RecipeArtifactError:
                 if producer_tool not in recipe_recreation_producers():
@@ -615,7 +620,12 @@ async def get_recipe_section(
                             recipe_name=requested_recipe_name,
                             payload=_recreate,
                         )
-                    except RecipeArtifactSchemaError:
+                    except RecipeArtifactSchemaError as exc:
+                        logger.warning(
+                            "get_recipe_section_schema_mismatch",
+                            stage="recreate_persist",
+                            detail=str(exc),
+                        )
                         return _recipe_section_failure("recipe_artifact_schema_mismatch")
                     except (OSError, RecipeArtifactError):
                         return _recipe_section_failure(
@@ -643,7 +653,12 @@ async def get_recipe_section(
                         kitchen_id=tool_ctx.kitchen_id,
                         identity=identity,
                     )
-                except RecipeArtifactSchemaError:
+                except RecipeArtifactSchemaError as exc:
+                    logger.warning(
+                        "get_recipe_section_schema_mismatch",
+                        stage="reload",
+                        detail=str(exc),
+                    )
                     return _recipe_section_failure("recipe_artifact_schema_mismatch")
                 except RecipeArtifactError:
                     return _recipe_section_failure(

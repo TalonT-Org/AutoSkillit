@@ -1555,6 +1555,50 @@ def test_journal_records_cross_check_duplicated_event_identities() -> None:
             replace(idempotency, **mismatch)
         assert "idempotency_record_identity_mismatch" in str(idempotency_error.value)
 
+    tombstone = ExpiredIdempotencyTombstone(
+        namespace=namespace,
+        reservation_key=reservation_key,
+        original_descriptor=event,
+        expiry_witness=_witness(batch, WitnessKind.IDEMPOTENCY_EXPIRY),
+        original_terminal_decision=decision,
+    )
+    identity_mismatches = (
+        {"namespace": _namespace("different-operation")},
+        {
+            "reservation_key": replace(
+                reservation_key,
+                batch_id=AdmissionBatchId("different-tombstone-key"),
+            )
+        },
+        {
+            "original_terminal_decision": replace(
+                decision,
+                window_epoch_id=WindowEpochId("different-decision-epoch"),
+            )
+        },
+    )
+    for mismatch in identity_mismatches:
+        with pytest.raises(
+            ContextAdmissionValidationError,
+            match="idempotency_tombstone_identity_mismatch",
+        ):
+            replace(tombstone, **mismatch)
+
+    witness_mismatches = (
+        {"kind": WitnessKind.PROVIDER_ACCEPTED},
+        {"request_id": AdmissionRequestId("different-tombstone-request")},
+        {"batch_id": AdmissionBatchId("different-tombstone-batch")},
+    )
+    for mismatch in witness_mismatches:
+        with pytest.raises(
+            ContextAdmissionValidationError,
+            match="idempotency_tombstone_witness_mismatch",
+        ):
+            replace(
+                tombstone,
+                expiry_witness=replace(tombstone.expiry_witness, **mismatch),
+            )
+
 
 def test_privacy_canaries_are_rejected_from_coverage_evidence() -> None:
     with pytest.raises(ContextAdmissionValidationError):

@@ -878,6 +878,35 @@ class ExpiredIdempotencyTombstone(_ContractValue):
     expiry_witness: AdmissionWitness
     original_terminal_decision: AdmissionDecision
 
+    def __post_init__(self) -> None:
+        input_reservations = self.original_descriptor.input_reservations
+        batch = self.original_descriptor.batch
+        if (
+            self.namespace != self.original_descriptor.idempotency_namespace
+            or self.reservation_key.idempotency_namespace != self.namespace
+            or len(input_reservations) != 1
+            or self.reservation_key != input_reservations[0].key
+            or self.reservation_key.batch_id != batch.batch_id
+            or self.original_terminal_decision.window_epoch_id
+            != self.reservation_key.window_epoch_id
+            or self.original_terminal_decision.snapshot_sequence
+            != self.original_descriptor.snapshot_sequence
+        ):
+            _raise_invalid("idempotency_tombstone_identity_mismatch")
+        witness = self.expiry_witness
+        if (
+            witness.kind is not WitnessKind.IDEMPOTENCY_EXPIRY
+            or witness.window_epoch_id != self.reservation_key.window_epoch_id
+            or witness.window_epoch_number != self.reservation_key.window_epoch_number
+            or witness.snapshot_sequence != self.original_descriptor.snapshot_sequence
+            or witness.request_id != batch.request_id
+            or witness.batch_id != batch.batch_id
+            or witness.representation_revision != batch.manifest.representation_revision
+            or witness.representation_binding_id != batch.manifest.representation_binding_id
+            or witness.occurrence_ids != batch.occurrence_ids
+        ):
+            _raise_invalid("idempotency_tombstone_witness_mismatch")
+
 
 @dataclass(frozen=True, slots=True)
 class ClosedEpochAudit(_ContractValue):

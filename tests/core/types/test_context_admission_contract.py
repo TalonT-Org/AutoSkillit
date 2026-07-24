@@ -803,6 +803,22 @@ def test_opaque_string_identifiers_are_frozen_content_free_values(
         value.value = "changed"
 
 
+@pytest.mark.parametrize(
+    "invalid_identifier",
+    [
+        "a" * 97,
+        "-leading-segment",
+        "trailing-segment-",
+        "contains+unsupported",
+        "contains@unsupported",
+    ],
+)
+def test_opaque_identifiers_enforce_protocol_shape(invalid_identifier: str) -> None:
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        AdmissionEventId(invalid_identifier)
+    assert "invalid_opaque_identifier" in str(exc_info.value)
+
+
 @pytest.mark.parametrize("revision_type", [AggregateRevision, AdmissionSequence])
 def test_numeric_revisions_are_non_negative_and_have_no_default(
     revision_type: type[object],

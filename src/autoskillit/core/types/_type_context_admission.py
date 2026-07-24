@@ -339,14 +339,22 @@ class _OpaqueString(_ContractValue):
     value: str
 
     def __post_init__(self) -> None:
-        _validate_bounded_text(self.value, "invalid_opaque_identifier")
+        _validate_bounded_text(
+            self.value,
+            "invalid_opaque_identifier",
+            maximum=96,
+        )
         allowed = "-_.:"
         if (
             len(self.value) in {40, 64, 128}
             and all(character in "0123456789abcdefABCDEF" for character in self.value)
-        ) or any(
-            not (character.isascii() and (character.isalnum() or character in allowed))
-            for character in self.value
+        ) or (
+            self.value.startswith("-")
+            or self.value.endswith("-")
+            or any(
+                not (character.isascii() and (character.isalnum() or character in allowed))
+                for character in self.value
+            )
         ):
             _raise_invalid("invalid_opaque_identifier")
 

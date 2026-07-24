@@ -377,6 +377,7 @@ def test_installed_codex_preserves_staged_rollout_inode_and_inherited_lease(
     (diagnostics / "resume.stderr").write_bytes(resume_stderr)
 
 
+@pytest.mark.timeout(600)
 def test_installed_codex_startup_profile_matrix_is_bounded_and_retained(
     tmp_path: Path,
 ) -> None:

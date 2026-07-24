@@ -194,6 +194,29 @@ def test_persistence_rejects_malformed_pullable_sections(
         _persist(tmp_path, payload)
 
 
+def test_persistence_rejects_missing_required_content(tmp_path: Path) -> None:
+    payload = _payload()
+    payload.pop("content")
+
+    with pytest.raises(RecipeArtifactSchemaError, match="missing_required_section@content"):
+        _persist(tmp_path, payload)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["content", "orchestration_rules", "stop_step_semantics", "errors", "warnings"],
+)
+def test_persistence_rejects_null_for_sections_with_invalid_null_behavior(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    payload = _payload()
+    payload[field] = None
+
+    with pytest.raises(RecipeArtifactSchemaError, match=f"invalid_section_type@{field}"):
+        _persist(tmp_path, payload)
+
+
 def test_schema_mismatch_diagnostic_bounds_reported_findings(tmp_path: Path) -> None:
     payload = _payload()
     payload["warnings"] = list(range(130))

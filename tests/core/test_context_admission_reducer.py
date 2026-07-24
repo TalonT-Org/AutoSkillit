@@ -667,6 +667,28 @@ def test_active_state_rejects_global_capacity_overallocation() -> None:
     assert "context_capacity_overallocated" in str(exc_info.value)
 
 
+def test_active_state_requires_dispatched_batch_reservation_owner() -> None:
+    state, batch, _, _ = _reserved_batch(name="missing-dispatched-reservation")
+    state = _prepare_dispatch(state, batch)
+    batch_record = _batch_record(state, batch)
+
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="missing_active_batch_reservation",
+    ):
+        replace(
+            state,
+            occurrence_records=tuple(
+                replace(record, reservation_id=None)
+                if record.batch_id == batch.batch_id
+                else record
+                for record in state.occurrence_records
+            ),
+            batch_records=(replace(batch_record, reservation_id=None),),
+            reservations=(),
+        )
+
+
 def _prepare_dispatch(
     state: ActiveContextAdmissionState, batch: AdmissionBatch
 ) -> ActiveContextAdmissionState:

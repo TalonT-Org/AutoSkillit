@@ -1954,6 +1954,17 @@ class ActiveContextAdmissionState(_ContractValue):
                 if record.reservation_id is not None
                 else None
             )
+            if (
+                record.state
+                in {
+                    AdmissionState.RESERVED,
+                    AdmissionState.PREPARED,
+                    AdmissionState.HISTORY_STAGED,
+                    AdmissionState.REQUEST_DISPATCHED,
+                }
+                and matched_reservation is None
+            ):
+                _raise_invalid("missing_active_batch_reservation")
             if matched_reservation is not None and (
                 matched_reservation.key.batch_id != record.batch.batch_id
                 or matched_reservation.reserve_class is not record.batch.reserve_class

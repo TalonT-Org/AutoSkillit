@@ -339,7 +339,8 @@ def project_agent_skill_document(
         )
         if source is None:
             return match.group(0)
-        return f"/{_agent_skill_namespace(source)}{match.group(1)}"
+        skill_sigil = context.conventions.skill_sigil if context.conventions is not None else "/"
+        return f"{skill_sigil}{_agent_skill_namespace(source)}{match.group(1)}"
 
     content = _SKILL_NAMESPACE_REF_RE.sub(_rewrite_namespace, content)
 

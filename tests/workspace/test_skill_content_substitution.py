@@ -110,6 +110,36 @@ def test_get_skill_content_substitutes_both_placeholders(
     assert "develop" in content
 
 
+def test_projected_cross_skill_reference_uses_backend_sigil(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends import get_backend
+    from autoskillit.workspace import SkillProjectionContext, project_agent_skill_document
+
+    _, info = _provider_with_synth(
+        monkeypatch,
+        tmp_path,
+        "synth_cross_skill",
+        "Delegate to /autoskillit:child.",
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=(SkillCatalogEntry.from_skill_info(info),),
+        execution_role=SkillExecutionRole.SESSION,
+        namespace_sources={"child": SkillSource.BUNDLED},
+    )
+    context = SkillProjectionContext(
+        cwd=tmp_path,
+        catalog=catalog,
+        backend=get_backend("codex"),
+    )
+
+    document = project_agent_skill_document(info, context)
+
+    assert "$autoskillit:child" in document.content
+    assert "/autoskillit:child" not in document.content
+
+
 def test_get_skill_content_substitutes_custom_temp_dir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

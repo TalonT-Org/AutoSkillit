@@ -86,10 +86,12 @@ _STATIC_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     ),
     "github_api_write": (
         re.compile(
-            r"gh api[^\n]*(?:--method\s+(?:POST|PATCH|PUT|DELETE))"
-            r"|gh pr (?:review|create|merge)\b"
-            r"|gh issue (?:create|edit|close)\b"
-            r"|gh release create\b"
+            r"gh api[^\n]*(?:(?:--method(?:\s+|=)|-X\s+)(?:POST|PATCH|PUT|DELETE))"
+            r"|gh pr (?:close|comment|create|edit|lock|merge|ready|reopen|review|unlock)\b"
+            r"|gh issue (?:close|comment|create|delete|develop|edit|lock|pin|reopen|"
+            r"transfer|unlock|unpin)\b"
+            r"|gh release (?:create|delete|edit|upload)\b",
+            re.IGNORECASE,
         ),
     ),
 }

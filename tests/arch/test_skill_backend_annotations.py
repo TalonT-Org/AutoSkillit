@@ -183,9 +183,15 @@ def test_github_api_write_pattern_detected() -> None:
     should_match = [
         "gh pr review --approve",
         "gh api /repos/foo/bar --method POST",
+        "gh api /repos/foo/bar -X POST",
+        "gh api /repos/foo/bar --method=PATCH",
         "gh pr create --title foo",
+        "gh pr edit 42 --add-label ready",
+        "gh pr comment 42 --body done",
         "gh pr merge --squash",
         "gh issue create --title bar",
+        "gh issue reopen 42",
+        "gh release upload v1 artifact.tar.gz",
     ]
     should_not_match = [
         "gh pr list",

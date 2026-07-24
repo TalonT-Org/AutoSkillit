@@ -30,7 +30,9 @@ _RANGE_FIELDS_BY_FORMAT: dict[RecipeSectionContentFormat, frozenset[str]] = {
         }
     ),
 }
-RECIPE_SECTION_PAGE_RANGE_FIELDS = frozenset().union(*_RANGE_FIELDS_BY_FORMAT.values())
+RECIPE_SECTION_PAGE_RANGE_FIELDS = frozenset(
+    field for range_fields in _RANGE_FIELDS_BY_FORMAT.values() for field in range_fields
+)
 
 
 class RecipeSectionPaginationError(RuntimeError):

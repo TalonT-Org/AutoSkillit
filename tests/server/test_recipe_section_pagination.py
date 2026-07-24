@@ -133,7 +133,7 @@ def test_scalar_planning_never_serializes_the_whole_oversized_remainder(
         return original(value)
 
     monkeypatch.setattr(pagination, "canonical_recipe_section_json", _record_bounded_string)
-    bound = 700
+    bound = 1_000
     plan = _build(
         _payload(ingredients_table="x" * 10_000),
         "ingredients_table",

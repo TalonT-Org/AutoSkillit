@@ -99,6 +99,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
         "tools_recipe",  # request-scoped recipe pagination ContextVar
+        # Thread-safe callback registry decouples artifact retirement from page-cache lifecycle.
+        "_lifecycle",
         # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
         "_label_cleanup",  # fleet/_label_cleanup.py: _REMOVE_LABELS constant (see comment above)
         "_step_context",  # core/_step_context.py: current_step_name, current_order_id ContextVars

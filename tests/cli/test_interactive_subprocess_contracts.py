@@ -143,6 +143,31 @@ def _calls_in(node: ast.AST, *, owner: str, attr: str) -> list[ast.Call]:
     ]
 
 
+def _attributes_in(node: ast.AST, *, owner: str, attr: str) -> list[ast.Attribute]:
+    return [
+        attribute
+        for attribute in ast.walk(node)
+        if isinstance(attribute, ast.Attribute)
+        and isinstance(attribute.value, ast.Name)
+        and attribute.value.id == owner
+        and attribute.attr == attr
+    ]
+
+
+def _with_context_calls(node: ast.AST, *, name: str) -> list[ast.With]:
+    return [
+        with_node
+        for with_node in ast.walk(node)
+        if isinstance(with_node, ast.With)
+        and any(
+            isinstance(item.context_expr, ast.Call)
+            and isinstance(item.context_expr.func, ast.Name)
+            and item.context_expr.func.id == name
+            for item in with_node.items
+        )
+    ]
+
+
 def _function(tree: ast.Module, name: str) -> ast.FunctionDef:
     matches = [
         node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name
@@ -257,14 +282,28 @@ def test_cook_pty_path_has_no_unsafe_post_fork_python_setup() -> None:
 
 def test_terminal_and_lease_ownership_are_not_duplicated_across_pty_layers() -> None:
     session_dir = CLI_DIR / "session"
-    process_source = (session_dir / "_session_process.py").read_text(encoding="utf-8")
-    observer_source = (session_dir / "pty" / "_observer.py").read_text(encoding="utf-8")
+    process_path = session_dir / "_session_process.py"
+    observer_path = session_dir / "pty" / "_observer.py"
+    process_tree = ast.parse(
+        process_path.read_text(encoding="utf-8"),
+        filename=str(process_path),
+    )
+    observer_tree = ast.parse(
+        observer_path.read_text(encoding="utf-8"),
+        filename=str(observer_path),
+    )
+    run_attempt = _function(process_tree, "run_cook_attempt")
 
-    assert "terminal_guard" in process_source
-    assert "tcsetpgrp" in process_source
-    assert "LOCK_UN" not in process_source
-    assert "tcsetpgrp" not in observer_source
-    assert "subprocess.Popen" not in observer_source
+    assert len(_with_context_calls(run_attempt, name="terminal_guard")) == 1
+    assert _calls_in(run_attempt, owner="subprocess", attr="Popen")
+    assert _popen_outside_terminal_guard(run_attempt) == []
+    assert _calls_in(process_tree, owner="os", attr="tcsetpgrp")
+    assert _attributes_in(process_tree, owner="fcntl", attr="LOCK_UN") == []
+    assert not any(
+        isinstance(node, ast.Name) and node.id == "LOCK_UN" for node in ast.walk(process_tree)
+    )
+    assert _calls_in(observer_tree, owner="os", attr="tcsetpgrp") == []
+    assert _calls_in(observer_tree, owner="subprocess", attr="Popen") == []
 
 
 def test_unchanged_order_fleet_launch_path_retains_its_separate_run_owner() -> None:

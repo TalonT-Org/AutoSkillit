@@ -30,7 +30,9 @@ class TestResolvedNamespaceMatchesSkillLocation:
         info = resolver.resolve("make-plan")
         assert info is not None
         assert info.source == SkillSource.BUNDLED_EXTENDED
-        resolved, name = resolve_target_skill("/autoskillit:make-plan arg1", resolver)
+        resolved, name = resolve_target_skill(
+            "/autoskillit:make-plan arg1", resolver, _PROJECT_ROOT
+        )
         assert name == "make-plan"
         assert resolved == "/make-plan arg1"
 
@@ -39,21 +41,42 @@ class TestResolvedNamespaceMatchesSkillLocation:
         info = resolver.resolve("open-kitchen")
         assert info is not None
         assert info.source == SkillSource.BUNDLED
-        resolved, name = resolve_target_skill("/open-kitchen", resolver)
+        resolved, name = resolve_target_skill("/open-kitchen", resolver, _PROJECT_ROOT)
         assert name == "open-kitchen"
         assert resolved == "/autoskillit:open-kitchen"
 
     def test_already_correct_namespace_is_preserved(self) -> None:
         resolver = DefaultSkillResolver()
-        resolved, name = resolve_target_skill("/make-plan arg1 arg2", resolver)
+        resolved, name = resolve_target_skill("/make-plan arg1 arg2", resolver, _PROJECT_ROOT)
         assert name == "make-plan"
         assert resolved == "/make-plan arg1 arg2"
 
     def test_non_slash_command_passes_through(self) -> None:
         resolver = DefaultSkillResolver()
-        resolved, name = resolve_target_skill("Fix the bug", resolver)
+        resolved, name = resolve_target_skill("Fix the bug", resolver, _PROJECT_ROOT)
         assert name is None
         assert resolved == "Fix the bug"
+
+    def test_project_override_controls_target_namespace(self, tmp_path: Path) -> None:
+        override = tmp_path / ".claude" / "skills" / "open-kitchen" / "SKILL.md"
+        override.parent.mkdir(parents=True)
+        override.write_text(
+            "---\n"
+            "name: open-kitchen\n"
+            "description: Project-local target.\n"
+            "execution_role: session\n"
+            "---\n"
+            "override\n"
+        )
+
+        resolved, name = resolve_target_skill(
+            "/autoskillit:open-kitchen",
+            DefaultSkillResolver(),
+            tmp_path,
+        )
+
+        assert name == "open-kitchen"
+        assert resolved == "/open-kitchen"
 
 
 class TestRoleDerivedInvocability:

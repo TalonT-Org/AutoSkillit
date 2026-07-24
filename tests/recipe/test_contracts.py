@@ -328,6 +328,35 @@ def test_check_staleness_hash_mismatch() -> None:
     assert any(s.skill == "investigate" and s.reason == "hash_mismatch" for s in stale)
 
 
+def test_check_staleness_hashes_the_effective_project_override(tmp_path: Path) -> None:
+    from autoskillit.recipe.contracts import load_bundled_manifest
+    from autoskillit.workspace import DefaultSkillResolver
+
+    skills_dir = tmp_path / ".claude" / "skills"
+    skill_md = skills_dir / "investigate" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text(
+        "---\n"
+        "name: investigate\n"
+        "description: Project override.\n"
+        "execution_role: session\n"
+        "---\n"
+        "project override body\n"
+    )
+    contract = {
+        "bundled_manifest_version": load_bundled_manifest()["version"],
+        "skill_hashes": {"investigate": compute_skill_hash("investigate", skills_dir=skills_dir)},
+    }
+
+    stale = check_contract_staleness(
+        contract,
+        resolver=DefaultSkillResolver(),
+        project_root=tmp_path,
+    )
+
+    assert stale == []
+
+
 def test_check_staleness_preserves_triage_result_on_repeated_stale_hit(
     tmp_path: Path,
 ) -> None:

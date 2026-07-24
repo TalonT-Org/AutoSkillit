@@ -93,8 +93,6 @@ class BackendCapabilities:
     triage_capable: bool = field(default=False)
     # Forward-declared: planned for context exhaustion handling
     supports_context_exhaustion_detection: bool = field(default=False)
-    # True when backend supports project-local --add-dir skill discovery
-    project_local_skills_capable: bool = field(default=False)
     # False triggers pre-reveal kitchen at startup instead of notification-driven reveal
     supports_tool_list_changed: bool = field(default=True)
     # SKILL.md front-matter fields required by this backend
@@ -284,7 +282,6 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     session_record_types=frozenset({"assistant"}),
     triage_capable=True,
     supports_context_exhaustion_detection=True,
-    project_local_skills_capable=True,
     supports_tool_list_changed=False,
     required_skill_fields=frozenset({"name", "description"}),
     required_session_files=frozenset(),

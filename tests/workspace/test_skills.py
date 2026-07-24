@@ -1257,3 +1257,49 @@ def test_projection_namespace_is_exhaustive_for_every_source(
         "project_local",
         "third_party",
     }
+
+
+@pytest.mark.parametrize(
+    "source",
+    [SkillSource.PROJECT_LOCAL, SkillSource.THIRD_PARTY],
+)
+def test_projection_never_mutates_external_canonical_sources(
+    tmp_path: Path,
+    source: SkillSource,
+) -> None:
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillProjectionContext,
+        project_agent_skill_document,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    skill_md = tmp_path / source.value / "external" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text(
+        "---\n"
+        "name: external\n"
+        "description: External source.\n"
+        "uses_capabilities: [agent_model]\n"
+        "execution_role: session\n"
+        "---\n"
+        'external body\nAgent(model="sonnet")\n',
+        encoding="utf-8",
+    )
+    before = skill_md.read_bytes()
+    info = _skill_info_from_frontmatter("external", source, skill_md)
+    entry = SkillCatalogEntry.from_skill_info(info)
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    document = project_agent_skill_document(
+        entry,
+        SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog),
+    )
+
+    assert "uses_capabilities:" not in document.content
+    assert "execution_role:" not in document.content
+    assert skill_md.read_bytes() == before

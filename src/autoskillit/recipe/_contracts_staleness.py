@@ -27,6 +27,7 @@ def check_contract_staleness(
     cache_path: Path | None = None,
     skills_dir: Path | None = None,
     resolver: SkillResolver | None = None,
+    project_root: Path | None = None,
     stored_card: Any = None,
 ) -> list[StaleItem]:
     """Check a pipeline contract for staleness against the current manifest.
@@ -140,7 +141,7 @@ def check_contract_staleness(
                 raise RuntimeError(
                     "check_staleness called without effective_skills_dir or resolver"
                 )
-            info = _resolver.resolve(skill_name)
+            info = _resolver.resolve_effective(skill_name, project_root)
             current_hash = (
                 compute_skill_hash(skill_name, skills_dir=info.path.parent.parent)
                 if info is not None

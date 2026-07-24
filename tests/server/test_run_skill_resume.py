@@ -77,19 +77,31 @@ async def test_no_resume_still_validates_skill_command(tool_ctx_kitchen_open, mo
 async def test_resume_rejects_unbound_contract_before_downstream_work(
     tool_ctx_kitchen_open, monkeypatch
 ) -> None:
+    from unittest.mock import AsyncMock, call
+
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     manager = MagicMock()
+    store = MagicMock()
+    store.load.side_effect = FileNotFoundError("unbound")
+    notify = AsyncMock()
+    audit = MagicMock()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.session_skill_manager = manager
+    tool_ctx_kitchen_open.skill_session_contract_store = store
+    tool_ctx_kitchen_open.audit = audit
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.server.tools.tools_execution._notify", notify)
 
     result = json.loads(await run_skill("/implement foo", "/tmp", resume_session_id="never-bound"))
 
     assert result["success"] is False
     assert "cannot resume" in result["result"].lower()
     manager.materialize_invocation.assert_not_called()
+    assert store.mock_calls == [call.load("never-bound")]
+    notify.assert_not_awaited()
+    assert audit.mock_calls == []
     assert executor.calls == []
 
 
@@ -189,3 +201,89 @@ async def test_resume_rejects_incompatible_bound_contract_before_executor(
     assert "cannot resume" in result["result"].lower()
     manager.materialize_invocation.assert_not_called()
     assert executor.calls == []
+
+
+@pytest.mark.parametrize("needs_retry", [False, True], ids=("terminal", "resumable"))
+@pytest.mark.anyio
+async def test_fresh_dispatch_binds_only_final_backend_id_and_applies_retention_policy(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    tmp_path,
+    needs_retry: bool,
+) -> None:
+    from unittest.mock import AsyncMock, call
+
+    from autoskillit.core import RetryReason, SkillResult
+
+    real_manager = tool_ctx_kitchen_open.session_skill_manager
+    manager = MagicMock(wraps=real_manager)
+    tool_ctx_kitchen_open.session_skill_manager = manager
+
+    real_store = tool_ctx_kitchen_open.skill_session_contract_store
+    store = MagicMock(wraps=real_store)
+    correlation_keys: list[str] = []
+
+    def _create_provisional(**kwargs) -> str:
+        key = real_store.create_provisional(**kwargs)
+        correlation_keys.append(key)
+        return key
+
+    store.create_provisional.side_effect = _create_provisional
+    tool_ctx_kitchen_open.skill_session_contract_store = store
+
+    async def _run_with_provider_fallback(
+        _command: str,
+        _cwd: str,
+        *,
+        on_session_id_resolved,
+        **_kwargs,
+    ) -> SkillResult:
+        on_session_id_resolved("provider-attempt-1")
+        on_session_id_resolved("provider-attempt-1")
+        on_session_id_resolved("provider-attempt-2")
+        return SkillResult(
+            success=not needs_retry,
+            result="retry" if needs_retry else "done",
+            session_id="final-backend-session",
+            subtype="context_limit" if needs_retry else "success",
+            is_error=needs_retry,
+            exit_code=1 if needs_retry else 0,
+            needs_retry=needs_retry,
+            retry_reason=(RetryReason.RESUME if needs_retry else RetryReason.NONE),
+            stderr="",
+            token_usage=None,
+        )
+
+    executor = MagicMock()
+    executor.run = AsyncMock(side_effect=_run_with_provider_fallback)
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    payload = json.loads(await run_skill("/test work", str(tmp_path)))
+
+    assert payload["session_id"] == "final-backend-session"
+    assert len(correlation_keys) == 1
+    correlation_key = correlation_keys[0]
+    materialization_id = manager.materialize_invocation.call_args.args[0]
+    assert len({correlation_key, materialization_id, "final-backend-session"}) == 3
+    assert store.observe_candidate.call_args_list == [
+        call(correlation_key, "provider-attempt-1"),
+        call(correlation_key, "provider-attempt-1"),
+        call(correlation_key, "provider-attempt-2"),
+    ]
+    store.finalize.assert_called_once_with(
+        correlation_key,
+        "final-backend-session",
+    )
+    for candidate in ("provider-attempt-1", "provider-attempt-2"):
+        with pytest.raises((FileNotFoundError, KeyError)):
+            real_store.load(candidate)
+
+    if needs_retry:
+        stored = real_store.load("final-backend-session")
+        assert stored.raw_session_id == "final-backend-session"
+        store.delete.assert_not_called()
+    else:
+        store.delete.assert_called_once_with("final-backend-session")
+        with pytest.raises((FileNotFoundError, KeyError)):
+            real_store.load("final-backend-session")

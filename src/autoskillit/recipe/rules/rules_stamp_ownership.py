@@ -48,7 +48,9 @@ def _check_exclusive_stamp_ownership(ctx: ValidationContext) -> list[RuleFinding
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:

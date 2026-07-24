@@ -63,7 +63,6 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "recipe_delivery_budget": "OPTIONAL",
     "process_name": "REQUIRED",
     "process_name_aliases": "REQUIRED",
-    "project_local_skills_capable": "OPTIONAL",
     "pty_required": "REQUIRED",
     "record_capable": "OPTIONAL",
     "replay_capable": "OPTIONAL",
@@ -118,8 +117,8 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         Fields cited: applicable_guards, default_skill_sandbox_mode,
         unnegotiated_tool_result_token_limit, git_metadata_writable,
         has_unguarded_filesystem_access, process_name_aliases,
-        project_local_skills_capable, record_capable, replay_capable,
-        session_dir_persistent, supports_context_window_suffix,
+        record_capable, replay_capable, session_dir_persistent,
+        supports_context_window_suffix,
         supports_tool_list_changed, triage_capable, write_detection_strategy.
         """
         assert isinstance(self.backend.capabilities, BackendCapabilities)

@@ -114,6 +114,7 @@ class SkillProjectionContext:
     """Execution-local inputs that may affect an agent-visible projection."""
 
     execution_cwd: Path
+    project_root: Path | None = None
     catalog: EffectiveSkillCatalog | None = None
     invocation: EffectiveSkillInvocation | None = None
     backend: Any | None = None
@@ -129,6 +130,15 @@ class SkillProjectionContext:
                 "projection context must bind exactly one effective catalog or invocation"
             )
         object.__setattr__(self, "execution_cwd", self.execution_cwd.resolve())
+        project_root = self.project_root
+        if (
+            project_root is None
+            and self.invocation is not None
+            and self.invocation.project_root is not None
+        ):
+            project_root = self.invocation.project_root
+        if project_root is not None:
+            object.__setattr__(self, "project_root", project_root.resolve())
         if self.substitutions is not None:
             object.__setattr__(
                 self,
@@ -232,8 +242,8 @@ def build_effective_skill_dispatch_contract(
         projected_artifacts={name: document.content for name, document in documents.items()},
         projection_version=projection_context.projection_version,
         project_root=(
-            str(invocation.project_root.resolve())
-            if invocation is not None and invocation.project_root is not None
+            str(projection_context.project_root)
+            if projection_context.project_root is not None
             else None
         ),
         execution_cwd=str(projection_context.execution_cwd),
@@ -738,6 +748,7 @@ def prepare_catalog_skill_dispatch(
     cwd: Path,
     backend: CodingAgentBackend,
     catalog: EffectiveSkillCatalog,
+    project_root: Path | None = None,
 ) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
     """Project a visible catalog and bind the artifact to executor authority."""
     plugin_source = project_default_plugin_source(
@@ -749,6 +760,7 @@ def prepare_catalog_skill_dispatch(
         resolved_command,
         SkillProjectionContext(
             execution_cwd=cwd,
+            project_root=project_root,
             catalog=catalog,
             backend=backend,
             conventions=backend.conventions,
@@ -762,6 +774,7 @@ def prepare_catalog_skill_dispatch(
 def prepare_effective_skill_dispatch(
     *,
     resolved_command: str,
+    project_root: Path,
     cwd: Path,
     backend: CodingAgentBackend,
     resolver: SkillResolver,
@@ -771,7 +784,7 @@ def prepare_effective_skill_dispatch(
 ) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
     """Resolve visible orchestrator skills, project them, and bind dispatch authority."""
     catalog = resolver.list_effective(
-        cwd,
+        project_root,
         SkillExecutionRole.ORCHESTRATOR,
         config=config,
         recipe_packs=recipe_packs,
@@ -782,4 +795,5 @@ def prepare_effective_skill_dispatch(
         cwd=cwd,
         backend=backend,
         catalog=catalog,
+        project_root=project_root,
     )

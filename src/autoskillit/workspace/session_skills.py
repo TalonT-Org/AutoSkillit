@@ -172,36 +172,6 @@ def _parse_write_paths(parsed: SkillFrontmatterParseResult) -> list[str]:
     return [str(p) for p in raw if p and isinstance(p, str)]
 
 
-def collect_closure_write_paths(
-    closure: frozenset[str],
-    resolver: SkillResolver,
-) -> tuple[str, ...]:
-    """Collect write_paths from all skills in a pre-computed closure.
-
-    Returns a deduplicated tuple of raw template paths (may contain
-    ``{{AUTOSKILLIT_TEMP}}``). Unresolvable or unreadable skills are
-    silently skipped.
-    """
-    paths: list[str] = []
-    seen: set[str] = set()
-    for name in sorted(closure):
-        info = resolver.resolve(name)
-        if info is None:
-            continue
-        if (
-            info.invalid_reason is not None
-            or info.execution_role is not SkillExecutionRole.SESSION
-        ):
-            continue
-        if info.frontmatter is None:
-            continue
-        for wp in _parse_write_paths(info.frontmatter):
-            if wp not in seen:
-                seen.add(wp)
-                paths.append(wp)
-    return tuple(paths)
-
-
 def resolve_closure_write_dirs(
     closure: tuple[SkillInfo, ...],
     cwd: str,
@@ -257,8 +227,14 @@ class SkillsDirectoryProvider:
         """List all public bundled skills."""
         return self._resolver.list_all()
 
-    def get_skill_content(self, name: str, *, gated: bool = True) -> str:
-        """Return SKILL.md content with gating frontmatter injected when required.
+    def get_skill_content(
+        self,
+        skill_info: SkillInfo,
+        *,
+        execution_cwd: Path,
+        gated: bool = True,
+    ) -> str:
+        """Project already-resolved SKILL.md content with optional gating.
 
         - gated=True  → ensure disable-model-invocation: true is present
           (used only by the activate path — init_session omits gated skills entirely)
@@ -267,12 +243,9 @@ class SkillsDirectoryProvider:
         Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
         Tier 1 skills (which contain no placeholder) are unaffected.
         """
-        skill_info = self._resolver.resolve(name)
-        if skill_info is None:
-            raise FileNotFoundError(f"Skill not found: {name}")
         return self.project_skill_info(
             skill_info,
-            execution_cwd=Path.cwd(),
+            execution_cwd=execution_cwd,
             gating=True if gated else None,
         )
 
@@ -457,13 +430,6 @@ class DefaultSessionSkillManager:
         ):
             effective_root = self._codex_root
         if backend is not None:
-            if (
-                any(record.source is SkillSource.PROJECT_LOCAL for record in records)
-                and not backend.capabilities.project_local_skills_capable
-            ):
-                raise SkillContractError(
-                    f"backend {backend.name!r} does not accept project-local skill contracts"
-                )
             if (
                 projection_context.gating is True
                 and not backend.capabilities.supports_model_invocation_gating

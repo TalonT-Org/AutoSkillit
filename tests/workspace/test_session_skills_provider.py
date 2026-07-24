@@ -68,7 +68,9 @@ def test_skills_directory_provider_lists_all_skills() -> None:
 
 def test_provider_injects_disable_model_invocation_for_tier2() -> None:
     provider = SkillsDirectoryProvider()
-    content = provider.get_skill_content("open-kitchen", gated=True)
+    skill = provider.resolver.resolve_effective("open-kitchen", Path.cwd())
+    assert skill is not None
+    content = provider.get_skill_content(skill, execution_cwd=Path.cwd(), gated=True)
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match, "Content must have YAML frontmatter"
     fm = load_yaml(fm_match.group(1))
@@ -81,7 +83,9 @@ def test_provider_does_not_inject_for_cook_session() -> None:
     # open-kitchen and close-kitchen carry disable-model-invocation: true in their source
     # (human-only skills), so they cannot be used to assert "flag not present".
     provider = SkillsDirectoryProvider()
-    content = provider.get_skill_content("mermaid", gated=False)
+    skill = provider.resolver.resolve_effective("mermaid", Path.cwd())
+    assert skill is not None
+    content = provider.get_skill_content(skill, execution_cwd=Path.cwd(), gated=False)
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match, "Content must have YAML frontmatter"
     fm = load_yaml(fm_match.group(1))
@@ -148,7 +152,7 @@ def test_provider_string_api_returns_unified_agent_safe_projection() -> None:
     assert raw is not None
     assert "uses_capabilities:" in raw.path.read_text()
 
-    content = provider.get_skill_content("make-arch-diag", gated=False)
+    content = provider.get_skill_content(raw, execution_cwd=Path.cwd(), gated=False)
 
     _assert_agent_safe(content)
     assert _frontmatter(content)["name"] == "make-arch-diag"

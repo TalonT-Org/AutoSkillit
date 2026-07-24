@@ -121,7 +121,7 @@ provides:
   (e.g., a GAP on `build_resume_cmd` implies a new `RetryReason`-to-rung
   pathway for opencode's session model).
 - **Section 3 (Capabilities Translation)** — the 17 ACP-Mappable / 6
-  Forward-Declared / 18 autoskillit-Local = 41 total taxonomy that this
+  Forward-Declared / 17 autoskillit-Local = 40 total taxonomy that this
   exercise's Section 3 adopts and re-applies per-field.
 
 ### 1.3 Classification legend
@@ -205,13 +205,13 @@ and PCR-003 in Section 6.
 The taxonomy below mirrors `acp-session-contract.md` Section 3:
 
 - **ACP-Mappable** — 17 fields with a direct or close ACP analogue.
-- **autoskillit-Local Extension** — 18 fields with no ACP analogue but
+- **autoskillit-Local Extension** — 17 fields with no ACP analogue but
   required for autoskillit's extended contract.
 - **Forward-Declared** — 6 fields with no current production consumer
   outside the exemption set in `_FORWARD_DECLARED`
   (`tests/arch/test_capability_consumption.py:26–63`).
 
-All 41 fields appear in exactly one row below. The "opencode value" column
+All 40 fields appear in exactly one row below. The "opencode value" column
 records what the field would hold for an `OpencodeBackend.capabilities`
 instance; the classification column is TRIVIAL / SHIM-REQUIRED / GAP with the
 same legend as Section 2.
@@ -238,51 +238,51 @@ same legend as Section 2.
 | 16 | `record_capable` | `False` | GAP | Same as row 15. Maps to PCR-009. |
 | 17 | `inspector_capable` | `False` | TRIVIAL | Same as both existing backends; raises `CapabilityNotSupportedError`. |
 
-### 3.2 autoskillit-Local Extension fields (18)
+### 3.2 autoskillit-Local Extension fields (17)
 
 | # | Field | opencode value | Classification | Rationale |
 |---|---|---|---|---|
-| 18 | `project_local_skills_capable` | `False` | GAP | No project-local skill discovery mechanism. Maps to PCR-004. |
-| 19 | `supports_tool_list_changed` | `True` | TRIVIAL | Default; kitchen reveal timing is unaffected. |
-| 20 | `required_skill_fields` | `frozenset()` | TRIVIAL | No frontmatter requirement when no skill injection exists. |
-| 21 | `applicable_guards` | `frozenset()` | TRIVIAL | No hook system documented; guards list is empty. |
-| 22 | `write_guard_tool_names` | `frozenset()` (pending vocabulary) | SHIM-REQUIRED | Same dependency as Section 2 row 9; vocabulary must be enumerated before the frozenset can be populated. |
-| 23 | `env_denylist_prefixes` | `()` | TRIVIAL | No env scrubbing required unless opencode leaks sensitive env vars; defaults to empty. |
-| 24 | `version_check_command` | `"opencode --version"` | TRIVIAL | Same pattern as Claude Code / Codex. |
-| 25 | `skills_subdir` | `"skills"` | TRIVIAL | See Section 4 caveat — the value is meaningless while `skill_injection_capable=False`. |
-| 26 | `hook_config_format` | `""` | TRIVIAL | No hook config; empty string. |
-| 27 | `write_detection_strategy` | `""` (pending) | SHIM-REQUIRED | opencode's write evidence format is unknown; strategy cannot be set until the adapter surfaces write events. Maps to PCR-010. |
-| 28 | `default_skill_sandbox_mode` | `"workspace-write"` | GAP | Mismatch: opencode hard-codes `--sandbox deny`; the field value is aspirational but cannot be honoured at runtime. Maps to PCR-001. |
-| 29 | `anthropic_provider_capable` | `False` | TRIVIAL | Multi-provider via AI SDK; not Anthropic-exclusive. |
-| 30 | `plugin_install_capable` | `False` | TRIVIAL | No plugin system. |
-| 31 | `supports_context_window_suffix` | `False` | TRIVIAL | AI SDK model identifiers do not carry `[1m]`-style suffixes. |
-| 32 | `has_unguarded_filesystem_access` | `True` (pending adapter) | SHIM-REQUIRED | Default `True` matches Codex behaviour; gated prompt supplements apply until the write-detection adapter surfaces the per-tool evidence needed to gate more precisely. |
-| 33 | `git_metadata_writable` | `True` | TRIVIAL | opencode's `--sandbox deny` is write-blocked at the user level, not at the kernel level; `.git/worktrees/` remains writable. |
-| 34 | `skill_sigil` | `"$"` (defaulted) | SHIM-REQUIRED | No documented invocation prefix; defaulting to Codex's `"$"` until research surfaces an opencode-native convention. Maps to PCR-011. |
-| 35 | `session_dir_persistent` | `True` | SHIM-REQUIRED | SQLite-backed sessions are persistent by construction; filesystem bridge must produce a persistent dir (analogous to Codex's `session_dir_persistent=True`). |
+| 18 | `supports_tool_list_changed` | `True` | TRIVIAL | Default; kitchen reveal timing is unaffected. |
+| 19 | `required_skill_fields` | `frozenset()` | TRIVIAL | No frontmatter requirement when no skill injection exists. |
+| 20 | `applicable_guards` | `frozenset()` | TRIVIAL | No hook system documented; guards list is empty. |
+| 21 | `write_guard_tool_names` | `frozenset()` (pending vocabulary) | SHIM-REQUIRED | Same dependency as Section 2 row 9; vocabulary must be enumerated before the frozenset can be populated. |
+| 22 | `env_denylist_prefixes` | `()` | TRIVIAL | No env scrubbing required unless opencode leaks sensitive env vars; defaults to empty. |
+| 23 | `version_check_command` | `"opencode --version"` | TRIVIAL | Same pattern as Claude Code / Codex. |
+| 24 | `skills_subdir` | `"skills"` | TRIVIAL | See Section 4 caveat — the value is meaningless while `skill_injection_capable=False`. |
+| 25 | `hook_config_format` | `""` | TRIVIAL | No hook config; empty string. |
+| 26 | `write_detection_strategy` | `""` (pending) | SHIM-REQUIRED | opencode's write evidence format is unknown; strategy cannot be set until the adapter surfaces write events. Maps to PCR-010. |
+| 27 | `default_skill_sandbox_mode` | `"workspace-write"` | GAP | Mismatch: opencode hard-codes `--sandbox deny`; the field value is aspirational but cannot be honoured at runtime. Maps to PCR-001. |
+| 28 | `anthropic_provider_capable` | `False` | TRIVIAL | Multi-provider via AI SDK; not Anthropic-exclusive. |
+| 29 | `plugin_install_capable` | `False` | TRIVIAL | No plugin system. |
+| 30 | `supports_context_window_suffix` | `False` | TRIVIAL | AI SDK model identifiers do not carry `[1m]`-style suffixes. |
+| 31 | `has_unguarded_filesystem_access` | `True` (pending adapter) | SHIM-REQUIRED | Default `True` matches Codex behaviour; gated prompt supplements apply until the write-detection adapter surfaces the per-tool evidence needed to gate more precisely. |
+| 32 | `git_metadata_writable` | `True` | TRIVIAL | opencode's `--sandbox deny` is write-blocked at the user level, not at the kernel level; `.git/worktrees/` remains writable. |
+| 33 | `skill_sigil` | `"$"` (defaulted) | SHIM-REQUIRED | No documented invocation prefix; defaulting to Codex's `"$"` until research surfaces an opencode-native convention. Maps to PCR-011. |
+| 34 | `session_dir_persistent` | `True` | SHIM-REQUIRED | SQLite-backed sessions are persistent by construction; filesystem bridge must produce a persistent dir (analogous to Codex's `session_dir_persistent=True`). |
 
 ### 3.3 Forward-Declared fields (6)
 
 | # | Field | Forward-declared issue | opencode value | Classification | Rationale |
 |---|---|---|---|---|---|
-| 36 | `supports_thinking_blocks` | #3497 (Claude + Codex pre-existing) | `False` | TRIVIAL | No thinking-block format documented. |
-| 37 | `required_session_files` | #3134 (Codex pre-existing) | `frozenset()` | TRIVIAL | No session-dir contract; SQLite-only. |
-| 38 | `session_dir_symlinks` | #3134 (Codex pre-existing) | `frozenset()` | TRIVIAL | No symlink targets. |
-| 39 | `patch_format` | #3776 (Codex pre-existing) | `""` | SHIM-REQUIRED | Write-detection adapter must surface patch evidence before a format string can be set. Maps to PCR-010. |
-| 40 | `min_version` | #3122 (Codex pre-existing) | `""` | TRIVIAL | Version policy deferred; daily cadence makes pinning fragile. |
-| 41 | `mcp_env_forward_vars` | #3458 (Codex pre-existing) | `frozenset()` | TRIVIAL | No MCP wiring; empty set. |
+| 35 | `supports_thinking_blocks` | #3497 (Claude + Codex pre-existing) | `False` | TRIVIAL | No thinking-block format documented. |
+| 36 | `required_session_files` | #3134 (Codex pre-existing) | `frozenset()` | TRIVIAL | No session-dir contract; SQLite-only. |
+| 37 | `session_dir_symlinks` | #3134 (Codex pre-existing) | `frozenset()` | TRIVIAL | No symlink targets. |
+| 38 | `patch_format` | #3776 (Codex pre-existing) | `""` | SHIM-REQUIRED | Write-detection adapter must surface patch evidence before a format string can be set. Maps to PCR-010. |
+| 39 | `min_version` | #3122 (Codex pre-existing) | `""` | TRIVIAL | Version policy deferred; daily cadence makes pinning fragile. |
+| 40 | `mcp_env_forward_vars` | #3458 (Codex pre-existing) | `frozenset()` | TRIVIAL | No MCP wiring; empty set. |
 
 ### 3.4 Capabilities rollup
 
 | Category | TRIVIAL | SHIM-REQUIRED | GAP |
 |---|---|---|---|
 | ACP-Mappable (17) | 6 | 3 | 8 |
-| autoskillit-Local Extension (18) | 11 | 5 | 2 |
+| autoskillit-Local Extension (17) | 11 | 5 | 1 |
 | Forward-Declared (6) | 5 | 1 | 0 |
-| **Total (41)** | **22** | **9** | **10** |
+| **Total (40)** | **22** | **9** | **9** |
 
-The 10 GAP rows consolidate into 9 PCRs (PCR-001 through PCR-009, plus the
-sandbox-policy mismatch in row 28 maps to PCR-001); the 9 SHIM-REQUIRED rows
+The 9 GAP rows consolidate into 8 PCRs (PCR-001 through PCR-005 and PCR-007
+through PCR-009); the sandbox-policy mismatch in row 27 maps to PCR-001. The
+9 SHIM-REQUIRED rows
 consolidate into PCR-006 / PCR-010 / PCR-011 plus the opencode-vocabulary
 adapter family.
 
@@ -380,17 +380,17 @@ single PCR with multiple affected surfaces. The PCR ID is sequential.
 
 | PCR | Name | Source section | Gap description | Protocol impact | Upstream dependency | Precedent |
 |---|---|---|---|---|---|---|
-| PCR-001 | sandbox-write-enablement | §2 rows 4, 12, 13; §3 row 8, 28 | `opencode run` hard-codes `--sandbox deny`; every `build_*_cmd` method that requires headless write capability (`build_cmd`, `build_skill_session_cmd`, `build_food_truck_cmd`) is structurally blocked. `food_truck_capable=False` and `default_skill_sandbox_mode="workspace-write"` are aspirational only. | **Protocol change**: a new capability flag (`sandbox_policy_override_capable: bool`) that distinguishes backends whose sandbox can be relaxed via a flag from those whose sandbox is hard-coded. `build_*_cmd` returns must distinguish "capability blocked" from "config rejected". | sst/opencode#13851 | Codex applies `--dangerously-bypass-approvals-and-sandbox` (`codex.py` lines 98–107); Claude Code applies `--dangerously-skip-permissions`. Both have explicit bypass flags; opencode does not. |
+| PCR-001 | sandbox-write-enablement | §2 rows 4, 12, 13; §3 row 8, 27 | `opencode run` hard-codes `--sandbox deny`; every `build_*_cmd` method that requires headless write capability (`build_cmd`, `build_skill_session_cmd`, `build_food_truck_cmd`) is structurally blocked. `food_truck_capable=False` and `default_skill_sandbox_mode="workspace-write"` are aspirational only. | **Protocol change**: a new capability flag (`sandbox_policy_override_capable: bool`) that distinguishes backends whose sandbox can be relaxed via a flag from those whose sandbox is hard-coded. `build_*_cmd` returns must distinguish "capability blocked" from "config rejected". | sst/opencode#13851 | Codex applies `--dangerously-bypass-approvals-and-sandbox` (`codex.py` lines 98–107); Claude Code applies `--dangerously-skip-permissions`. Both have explicit bypass flags; opencode does not. |
 | PCR-002 | session-resume-mechanism | §2 row 11; §3 row 3 | No documented `--resume <session_id>` flag; SQLite session IDs are not first-class CLI arguments. `build_resume_cmd` cannot produce a `CmdSpec` that targets an existing session. `session_resume_capable=False`. | **Protocol change**: a new `ResumeSpec` variant (`SqliteBackedResume(session_db_path: Path, session_id: str)`) under `_type_resume.py`, or a generalised `backend-specific-resume` callable on the Protocol surface. | opencode resume feature | Claude Code uses `--resume <session_id>` flag; Codex uses `resume <session_id>` positional subcommand (`codex.py` lines 978–979). |
 | PCR-003 | orchestrator-session-support | §2 row 13; §3 row 8 | `build_food_truck_cmd` requires orchestrator-level L2 session support (driven by fleet dispatch); opencode has no equivalent and the sandbox blocker compounds. `food_truck_capable=False`. | **Protocol change**: a new `food_truck_capable` distinction between "no orchestrator support at all" (`False`) and "blocked by sandbox" (new variant or sub-flag). Same proposal as PCR-001 — likely merged into a single new capability. | sst/opencode#13851 | Codex supports food-truck via `build_food_truck_cmd` (lines 821–823) but discards `plugin_source` / `output_format` / `exit_after_stop_delay_ms`. |
-| PCR-004 | skill-registration-discovery | §2 rows 9, 12; §3 row 4, 18; §4 row 2 | No documented `--add-dir` / `--plugin-dir` / skill-discovery mechanism. `skill_injection_capable=False`, `project_local_skills_capable=False`, `project_local_skill_search_dirs=()`. | **Protocol change**: a new `skill_registration: Callable[[SkillManifest], None]` field on the Protocol, decoupling registration from CLI flags. | opencode skill-injection feature | Claude Code uses `--add-dir` / `--plugin-dir`; Codex has no equivalent and uses an empty frozenset. |
+| PCR-004 | skill-registration-discovery | §2 rows 9, 12; §3 row 4; §4 row 2 | No documented `--add-dir` / `--plugin-dir` / skill-discovery mechanism. `skill_injection_capable=False` and `project_local_skill_search_dirs=()`. | **Protocol change**: a new `skill_registration: Callable[[SkillManifest], None]` field on the Protocol, decoupling registration from CLI flags. | opencode skill-injection feature | Claude Code uses `--add-dir` / `--plugin-dir`; Codex has no equivalent and uses an empty frozenset. |
 | PCR-005 | exit-code-semantics | §3 row 6 | Exit codes are undocumented; daily release cadence with no schema versioning. `exit_code_is_terminal=False` is conservative but may yield false positives when opencode exits with a non-zero status on benign conditions. | **Protocol change**: a new `exit_code_is_terminal: Literal["true","false","unknown"]` (string union) to distinguish "verified terminal" from "undocumented". | opencode exit-code documentation | Codex has verified semantics (`exit_code_is_terminal=True`); Claude Code has verified semantics (`False`). |
 | PCR-006 | mcp-config-wiring | §3 row 7 | opencode may have an MCP-style config; the absence of documentation makes `mcp_config_capable` ambiguous. SHIM-REQUIRED rather than GAP because the Protocol surface is sufficient; the implementation simply awaits research. | **No Protocol change**. Implementation work only. | opencode MCP documentation | Codex: `mcp_config_capable=True`; Claude Code: `False`. |
 | PCR-007 | triage-probe-mechanism | §3 row 11 | No lightweight probe mechanism documented. `triage_capable=False` blocks `_llm_triage.py` from dispatching to opencode. | **Protocol change**: a new `triage_cmd_builder: Callable[[str], CmdSpec]` field that backends can implement to expose lightweight probes without requiring a full skill session. | opencode probe feature | Claude Code uses `claude -p` for triage (`_llm_triage.py`); Codex has no triage path. |
 | PCR-008 | context-exhaustion-signal | §3 row 12 | No documented exhaustion signal in stdout or SQLite. `supports_context_exhaustion_detection=False` blocks Codex-style `_headless_result.py` jsonl-context-exhausted handling for opencode. | **Protocol change**: a new `context_exhaustion_signal: Literal["stdout","sqlite","none"]` to distinguish the detection surface. | opencode exhaustion signal | Codex surfaces via `error_code == CODEX_CONTEXT_EXHAUSTION_MARKER` (`_headless_evidence.py` lines 105–108). |
 | PCR-009 | recording-replay-support | §3 rows 15, 16 | No recording/replay support documented. `replay_capable=False`, `record_capable=False` blocks api_simulator-based REPLAY_SCENARIO / RECORD_SCENARIO runners. | **No Protocol change**. Implementation work only — api_simulator can wrap opencode once the output adapter (PCR-010) lands. | opencode output-format documentation | Claude Code: `replay_capable=True`, `record_capable=True`. Codex: wired via T5-P3-A4-WP1 (`replay_capable=True`, local `CodexScenarioPlayer`). |
-| PCR-010 | output-format-adapter | §2 rows 5, 24, 26; §3 rows 9, 10, 27, 39; §5 B3a | opencode emits bulk JSON or terminal-formatted output, not NDJSON. The `StreamParser` / `ResultParser` pair require an adapter; `completion_record_types`, `session_record_types`, `write_detection_strategy`, `patch_format` all depend on the adapter's surface. | **Protocol change**: a new `output_format: Literal["ndjson","bulk_json","terminal"]` field on the Protocol so consumers can dispatch on the actual format rather than assuming NDJSON. | opencode output-format documentation | Both existing backends emit NDJSON; this is the first non-NDJSON candidate. |
-| PCR-011 | skill-sigil-convention | §3 row 34 | No documented invocation prefix. Defaulting to Codex's `"$"` until research surfaces an opencode-native convention. | **No Protocol change**. Implementation choice only. | opencode invocation convention | Claude Code uses `"/"`; Codex uses `"$"`. |
+| PCR-010 | output-format-adapter | §2 rows 5, 24, 26; §3 rows 9, 10, 26, 38; §5 B3a | opencode emits bulk JSON or terminal-formatted output, not NDJSON. The `StreamParser` / `ResultParser` pair require an adapter; `completion_record_types`, `session_record_types`, `write_detection_strategy`, `patch_format` all depend on the adapter's surface. | **Protocol change**: a new `output_format: Literal["ndjson","bulk_json","terminal"]` field on the Protocol so consumers can dispatch on the actual format rather than assuming NDJSON. | opencode output-format documentation | Both existing backends emit NDJSON; this is the first non-NDJSON candidate. |
+| PCR-011 | skill-sigil-convention | §3 row 33 | No documented invocation prefix. Defaulting to Codex's `"$"` until research surfaces an opencode-native convention. | **No Protocol change**. Implementation choice only. | opencode invocation convention | Claude Code uses `"/"`; Codex uses `"$"`. |
 | PCR-012 | conformance-probe-authoring | §5 B3a | The fixture-based conformance probe pattern (`tests/execution/backends/fixtures/codex_ndjson/`) assumes NDJSON; opencode requires a new authoring pattern. | **No Protocol change**. Test infrastructure extension only. | PCR-010 | Codex NDJSON fixtures. |
 | PCR-013 | hook-config-discovery | §5 B3b | Hook config file path and format are undocumented; opencode may use shell-level sandbox or another mechanism that bypasses the autoskillit hook surface. | **Protocol change**: a new `hook_config_paths: tuple[Path, ...]` field on `BackendCapabilities` that backends populate to declare the files the probe should write and observe. | opencode hook documentation | Codex: `hook_config_format="toml_nested"` (forward-declared); Claude Code: `hook_config_format=""`. |
 
@@ -414,7 +414,7 @@ semantics.
 | Section | Source of truth | File |
 |---|---|---|
 | §2 method enumeration | `CodingAgentBackend` Protocol + 4 sub-protocols | `src/autoskillit/core/types/_type_protocols_backend.py` |
-| §3 capability taxonomy | `BackendCapabilities` (41 fields) + `_FORWARD_DECLARED` | `src/autoskillit/core/types/_type_backend.py`, `tests/arch/test_capability_consumption.py` |
+| §3 capability taxonomy | `BackendCapabilities` (40 fields) + `_FORWARD_DECLARED` | `src/autoskillit/core/types/_type_backend.py`, `tests/arch/test_capability_consumption.py` |
 | §3 capability categories | ACP-Mappable / autoskillit-Local / Forward-Declared counts | `docs/design/acp-session-contract.md` Section 3 |
 | §4 conventions | `BackendConventions` (2 fields) | `src/autoskillit/core/types/_type_backend.py:38–49` |
 | §5 B3a pattern | Codex NDJSON fixtures | `tests/execution/backends/fixtures/codex_ndjson/` |

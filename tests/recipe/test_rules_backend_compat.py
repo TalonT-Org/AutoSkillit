@@ -41,6 +41,39 @@ def _make_recipe_with_skill_step(skill_command: str) -> Recipe:
     return Recipe(name="test-recipe", description="test", steps=steps)
 
 
+def test_recipe_validation_rejects_role_incompatible_effective_override(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.workspace import DefaultSkillResolver
+
+    override = tmp_path / ".claude" / "skills" / "investigate" / "SKILL.md"
+    override.parent.mkdir(parents=True)
+    override.write_text(
+        "---\n"
+        "name: investigate\n"
+        "description: Invalid effective override.\n"
+        "uses_capabilities: [run_skill]\n"
+        "execution_role: session\n"
+        "---\n"
+        'run_skill("/child")\n'
+    )
+    recipe = _make_recipe_with_skill_step("/investigate")
+    context = make_validation_context(
+        recipe,
+        project_dir=tmp_path,
+        backend_name="claude-code",
+        skill_resolver=DefaultSkillResolver(),
+    )
+
+    findings = run_semantic_rules(context)
+
+    incompatible = [
+        finding for finding in findings if finding.rule == "backend-incompatible-skill"
+    ]
+    assert len(incompatible) == 1
+    assert "no valid effective invocation" in incompatible[0].message
+
+
 def _mock_resolver(skill_info: SimpleNamespace | None) -> MagicMock:
     resolver = MagicMock()
     resolver.resolve.return_value = skill_info

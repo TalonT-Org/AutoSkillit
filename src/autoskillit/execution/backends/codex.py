@@ -568,7 +568,6 @@ class CodexBackend(BackendCmdBuilderBase):
             session_record_types=frozenset({"item.completed"}),
             triage_capable=False,
             supports_context_exhaustion_detection=False,
-            project_local_skills_capable=False,
             supports_tool_list_changed=False,
             required_skill_fields=frozenset({"name", "description"}),
             required_session_files=frozenset({"config.toml"}),

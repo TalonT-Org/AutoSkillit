@@ -45,17 +45,16 @@ def _provider_with_synth(
         SkillSource.BUNDLED_EXTENDED,
         _make_synth_skill_md(tmp_path, name, body),
     )
-    monkeypatch.setattr(provider._resolver, "resolve", lambda n: info if n == name else None)
     return provider, info
 
 
 def test_get_skill_content_substitutes_default_temp_dir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    provider, _ = _provider_with_synth(
+    provider, info = _provider_with_synth(
         monkeypatch, tmp_path, "synth_default", "Write to {{AUTOSKILLIT_TEMP}}/foo/output.md"
     )
-    content = provider.get_skill_content("synth_default", gated=False)
+    content = provider.get_skill_content(info, execution_cwd=tmp_path, gated=False)
     assert "{{AUTOSKILLIT_TEMP}}" not in content
     assert ".autoskillit/temp/foo/output.md" in content
 
@@ -64,14 +63,14 @@ def test_get_skill_content_substitutes_default_base_branch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """{{DEFAULT_BASE_BRANCH}} resolves to the default when no explicit value set."""
-    provider, _ = _provider_with_synth(
+    provider, info = _provider_with_synth(
         monkeypatch,
         tmp_path,
         "synth_base_branch",
         "Merging into {{DEFAULT_BASE_BRANCH}}",
         default_base_branch="main",
     )
-    content = provider.get_skill_content("synth_base_branch", gated=False)
+    content = provider.get_skill_content(info, execution_cwd=tmp_path, gated=False)
     assert "{{DEFAULT_BASE_BRANCH}}" not in content
     assert "main" in content
 
@@ -80,14 +79,14 @@ def test_get_skill_content_substitutes_explicit_base_branch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """{{DEFAULT_BASE_BRANCH}} resolves to the explicit value passed to constructor."""
-    provider, _ = _provider_with_synth(
+    provider, info = _provider_with_synth(
         monkeypatch,
         tmp_path,
         "synth_develop",
         "Merging into {{DEFAULT_BASE_BRANCH}}",
         default_base_branch="develop",
     )
-    content = provider.get_skill_content("synth_develop", gated=False)
+    content = provider.get_skill_content(info, execution_cwd=tmp_path, gated=False)
     assert "{{DEFAULT_BASE_BRANCH}}" not in content
     assert "develop" in content
 
@@ -96,7 +95,7 @@ def test_get_skill_content_substitutes_both_placeholders(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Both {{AUTOSKILLIT_TEMP}} and {{DEFAULT_BASE_BRANCH}} are substituted."""
-    provider, _ = _provider_with_synth(
+    provider, info = _provider_with_synth(
         monkeypatch,
         tmp_path,
         "synth_both",
@@ -104,7 +103,7 @@ def test_get_skill_content_substitutes_both_placeholders(
         temp_dir_relpath=".autoskillit/temp",
         default_base_branch="develop",
     )
-    content = provider.get_skill_content("synth_both", gated=False)
+    content = provider.get_skill_content(info, execution_cwd=tmp_path, gated=False)
     assert "{{AUTOSKILLIT_TEMP}}" not in content
     assert "{{DEFAULT_BASE_BRANCH}}" not in content
     assert ".autoskillit/temp" in content
@@ -114,24 +113,24 @@ def test_get_skill_content_substitutes_both_placeholders(
 def test_get_skill_content_substitutes_custom_temp_dir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    provider, _ = _provider_with_synth(
+    provider, info = _provider_with_synth(
         monkeypatch,
         tmp_path,
         "synth_custom",
         "Write to {{AUTOSKILLIT_TEMP}}/foo",
         temp_dir_relpath=".build/scratch",
     )
-    content = provider.get_skill_content("synth_custom", gated=False)
+    content = provider.get_skill_content(info, execution_cwd=tmp_path, gated=False)
     assert ".build/scratch/foo" in content
 
 
 def test_get_skill_content_substitution_runs_after_gating(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    provider, _ = _provider_with_synth(
+    provider, info = _provider_with_synth(
         monkeypatch, tmp_path, "synth_gated", "Write to {{AUTOSKILLIT_TEMP}}/x"
     )
-    content = provider.get_skill_content("synth_gated", gated=True)
+    content = provider.get_skill_content(info, execution_cwd=tmp_path, gated=True)
     assert "disable-model-invocation: true" in content
     assert ".autoskillit/temp/x" in content
 
@@ -139,8 +138,8 @@ def test_get_skill_content_substitution_runs_after_gating(
 def test_get_skill_content_no_placeholder_no_change(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    provider, _ = _provider_with_synth(monkeypatch, tmp_path, "synth_plain", "Hello world.")
-    content = provider.get_skill_content("synth_plain", gated=False)
+    provider, info = _provider_with_synth(monkeypatch, tmp_path, "synth_plain", "Hello world.")
+    content = provider.get_skill_content(info, execution_cwd=tmp_path, gated=False)
     assert "Hello world." in content
 
 
@@ -195,9 +194,9 @@ def test_get_skill_content_substitutes_scripts_placeholder(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """{{AUTOSKILLIT_SCRIPTS}} is replaced with the path to bundled scripts."""
-    provider, _ = _provider_with_synth(
+    provider, info = _provider_with_synth(
         monkeypatch, tmp_path, "synth_scripts", "Run {{AUTOSKILLIT_SCRIPTS}}/foo.sh"
     )
-    content = provider.get_skill_content("synth_scripts", gated=False)
+    content = provider.get_skill_content(info, execution_cwd=tmp_path, gated=False)
     assert "{{AUTOSKILLIT_SCRIPTS}}" not in content
     assert "recipes/scripts" in content

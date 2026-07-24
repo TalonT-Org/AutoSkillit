@@ -1030,30 +1030,31 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
     project_root = Path(__file__).resolve().parent.parent.parent
     measured_modes: set[tuple[str, str, bool]] = set()
     maxima = {"load_recipe": (0, "", ""), "open_kitchen": (0, "", "")}
+    monkeypatch.setattr(_api_cache, "_refresh_staleness_baseline", lambda: None)
     # Normalize away the environment-dependent scripts path so the pinned
     # maxima are identical regardless of checkout location.
     _scripts_dir = str(builtin_scripts_dir())
 
     for recipe_name in all_validated_recipe_names(project_root):
         for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
-            for ingredients_only in (False, True):
-                monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-                tool_ctx = SimpleNamespace(
-                    recipes=DefaultRecipeRepository(),
-                    project_dir=project_root,
-                    session_serve_overrides=None,
-                    session_serve_defer_unresolved=False,
-                )
-                result = serve_recipe(
-                    tool_ctx,
-                    recipe_name,
-                    caller_overrides=dict(overrides, source_dir=str(project_root)),
-                    config_default={},
-                    session_overrides={},
-                    config_layer={},
-                    temp_dir=tmp_path,
-                )
+            monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+            tool_ctx = SimpleNamespace(
+                recipes=DefaultRecipeRepository(),
+                project_dir=project_root,
+                session_serve_overrides=None,
+                session_serve_defer_unresolved=False,
+            )
+            result = serve_recipe(
+                tool_ctx,
+                recipe_name,
+                caller_overrides=dict(overrides, source_dir=str(project_root)),
+                config_default={},
+                session_overrides={},
+                config_layer={},
+                temp_dir=tmp_path,
+            )
 
+            for ingredients_only in (False, True):
                 for tool_name in ("load_recipe", "open_kitchen"):
                     payload = dict(result)
                     if tool_name == "open_kitchen":

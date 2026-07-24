@@ -394,4 +394,127 @@ def test_backend_rendering_uses_the_selected_effective_source(tmp_path, monkeypa
     assert rendered == "@target --flag"
 
 
+def test_prepare_effective_dispatch_separates_project_root_from_execution_cwd(
+    tmp_path, monkeypatch
+) -> None:
+    """L2 source selection is project-root-bound while execution stays cwd-bound."""
+    from pathlib import Path
+
+    from autoskillit.execution.backends import get_backend
+    from autoskillit.workspace import prepare_effective_skill_dispatch
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    project_root = tmp_path / "source-project"
+    execution_cwd = tmp_path / "execution-worktree"
+    execution_cwd.mkdir()
+    _write_effective_skill(
+        project_root / ".claude" / "skills",
+        "process-issues",
+        capabilities=("run_skill",),
+        execution_role="orchestrator",
+        body='winning project-root body\nrun_skill("/test child")',
+    )
+    _write_effective_skill(
+        execution_cwd / ".claude" / "skills",
+        "process-issues",
+        capabilities=("run_skill",),
+        execution_role="orchestrator",
+        body='wrong execution-cwd body\nrun_skill("/test child")',
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+    _, contract = prepare_effective_skill_dispatch(
+        resolved_command="dispatch",
+        project_root=project_root,
+        cwd=execution_cwd,
+        backend=get_backend("codex"),
+        resolver=DefaultSkillResolver(),
+        config=None,
+        recipe_packs=None,
+        recipe_features=None,
+    )
+
+    assert contract.project_root == str(project_root.resolve())
+    assert contract.execution_cwd == str(execution_cwd.resolve())
+    assert "winning project-root body" in contract.projected_artifacts["process-issues"]
+    assert "wrong execution-cwd body" not in contract.projected_artifacts["process-issues"]
+
+
+def test_winning_override_identity_policy_projection_and_digests_are_atomic(
+    tmp_path, monkeypatch
+) -> None:
+    """No bundled SkillInfo can leak after a project override wins resolution."""
+    import hashlib
+
+    import autoskillit.workspace.skills as skills_module
+    from autoskillit.core import SkillExecutionRole, render_target_skill_command
+    from autoskillit.workspace import (
+        SkillProjectionContext,
+        build_effective_skill_dispatch_contract,
+        project_agent_skill_document,
+    )
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("agent_model",),
+        execution_role="session",
+        body="bundled sentinel body",
+    )
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("github_api_write", "git_metadata_write"),
+        execution_role="session",
+        body=(
+            'winning override body\ngh issue edit 42 --body-file report.md\ngit commit -m "test"'
+        ),
+    )
+    source_before = override_path.read_bytes()
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    monkeypatch.setattr(skills_module, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(skills_module, "_LIST_ALL_CACHE_KEY", None)
+    monkeypatch.setattr(
+        resolver,
+        "resolve",
+        lambda _name: pytest.fail("bundled resolver lookup leaked into effective flow"),
+    )
+
+    invocation = resolver.resolve_invocation(
+        "target",
+        project,
+        SkillExecutionRole.SESSION,
+    )
+    context = SkillProjectionContext(execution_cwd=tmp_path, invocation=invocation)
+    document = project_agent_skill_document(invocation.root, context)
+    contract = build_effective_skill_dispatch_contract("/target", context)
+
+    assert invocation.root.path == override_path
+    assert invocation.root.execution_role is SkillExecutionRole.SESSION
+    assert invocation.capability_union == frozenset({"github_api_write", "git_metadata_write"})
+    assert "winning override body" in invocation.root.canonical_content
+    assert "bundled sentinel body" not in invocation.root.canonical_content
+    assert "winning override body" in document.content
+    assert contract.source_identities["target"].origin.value == "project_local"
+    assert contract.canonical_digests["target"] == hashlib.sha256(source_before).hexdigest()
+    assert (
+        contract.projected_digests["target"]
+        == hashlib.sha256(document.content.encode()).hexdigest()
+    )
+    assert (
+        render_target_skill_command("/autoskillit:target", invocation.root.source_ref) == "/target"
+    )
+    assert override_path.read_bytes() == source_before
+
+
 # ---------------------------------------------------------------------------

@@ -364,6 +364,65 @@ async def test_report_bug_dispatches_projected_skill_and_cleans_session(
 
 
 @pytest.mark.anyio
+async def test_report_bug_delivers_winning_override_identity_and_projection(
+    tool_ctx_kitchen_open,
+    tmp_path,
+) -> None:
+    import hashlib
+
+    from autoskillit.core import SkillExecutionRole, SkillSource
+    from autoskillit.workspace import DefaultSkillResolver
+
+    override = tmp_path / ".claude" / "skills" / "report-bug" / "SKILL.md"
+    override.parent.mkdir(parents=True)
+    override.write_text(
+        "---\n"
+        "name: report-bug\n"
+        "description: Winning report override.\n"
+        "uses_capabilities: [agent_model]\n"
+        "execution_role: session\n"
+        "---\n"
+        'winning report override body\nAgent(model="sonnet")\n'
+    )
+    source_before = override.read_bytes()
+    captured: dict[str, object] = {}
+
+    async def _capture_contract(
+        _command: str,
+        _cwd: str,
+        *,
+        capability_contract,
+        **_kwargs,
+    ) -> SkillResult:
+        captured["contract"] = capability_contract
+        return _skill_ok("# Report")
+
+    tool_ctx_kitchen_open.project_dir = tmp_path
+    tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
+    tool_ctx_kitchen_open.config.report_bug.github_filing = False
+    tool_ctx_kitchen_open.skill_resolver = DefaultSkillResolver()
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(side_effect=_capture_contract)
+
+    result = json.loads(await report_bug("error", str(tmp_path), severity="blocking"))
+
+    assert result["success"] is True
+    contract = captured["contract"]
+    assert contract.source_identities["report-bug"].origin is SkillSource.PROJECT_LOCAL
+    assert contract.execution_role is SkillExecutionRole.SESSION
+    assert contract.capability_union == frozenset({"agent_model"})
+    assert contract.canonical_digests["report-bug"] == hashlib.sha256(source_before).hexdigest()
+    projected = contract.projected_artifacts["report-bug"]
+    assert "winning report override body" in projected
+    assert "uses_capabilities:" not in projected
+    assert "execution_role:" not in projected
+    assert (
+        contract.projected_digests["report-bug"] == hashlib.sha256(projected.encode()).hexdigest()
+    )
+    assert override.read_bytes() == source_before
+
+
+@pytest.mark.anyio
 async def test_report_bug_blocking_failure_propagated(tool_ctx_kitchen_open, tmp_path):
     """If the headless session fails, status=failed is returned."""
     tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")

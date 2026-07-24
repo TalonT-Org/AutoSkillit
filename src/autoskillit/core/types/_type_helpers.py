@@ -11,6 +11,7 @@ import os
 import re
 import shlex
 import warnings
+from pathlib import Path
 from typing import Any, assert_never
 
 from ._type_backend import BackendConventions
@@ -120,6 +121,7 @@ def resolve_skill_name(skill_command: str) -> str | None:
 def resolve_target_skill(
     skill_command: str,
     resolver: SkillResolver,
+    project_root: Path | None,
 ) -> tuple[str, str | None]:
     """Resolve a skill_command to the correct invocation namespace.
 
@@ -133,7 +135,7 @@ def resolve_target_skill(
     if name is None:
         return skill_command, None
 
-    info = resolver.resolve(name)
+    info = resolver.resolve_effective(name, project_root)
     if info is None:
         return skill_command, name
 

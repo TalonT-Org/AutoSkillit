@@ -40,7 +40,6 @@ from autoskillit.workspace.clone_registry import (
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
-    collect_closure_write_paths,
     default_skill_resolver,
     materialize_codex_profile_skills,
     resolve_closure_write_dirs,
@@ -143,7 +142,6 @@ __all__ = [
     "ProjectLocalOverride",
     "clone_repo",
     "CloneSourceResolution",
-    "collect_closure_write_paths",
     "resolve_closure_write_dirs",
     "detect_branch",
     "detect_skill_capabilities",

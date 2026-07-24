@@ -621,7 +621,7 @@ async def test_run_skill_exact_role_denial_precedes_all_downstream_work(
     tool_ctx_kitchen_open, monkeypatch, tmp_path, session_type
 ) -> None:
     """L1 and L3 are denied before resolution, materialization, or execution."""
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -629,11 +629,24 @@ async def test_run_skill_exact_role_denial_precedes_all_downstream_work(
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", session_type)
     resolver = MagicMock()
     manager = MagicMock()
+    contract_store = MagicMock()
+    audit = MagicMock()
+    token_log = MagicMock()
+    timing_log = MagicMock()
+    notify = AsyncMock()
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.skill_resolver = resolver
     tool_ctx_kitchen_open.session_skill_manager = manager
+    tool_ctx_kitchen_open.skill_session_contract_store = contract_store
+    tool_ctx_kitchen_open.audit = audit
+    tool_ctx_kitchen_open.token_log = token_log
+    tool_ctx_kitchen_open.timing_log = timing_log
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution._notify",
+        notify,
+    )
 
     result = await run_skill("/autoskillit:root work", str(tmp_path))
 
@@ -642,7 +655,109 @@ async def test_run_skill_exact_role_denial_precedes_all_downstream_work(
     resolver.resolve_invocation.assert_not_called()
     manager.init_session.assert_not_called()
     manager.activate_skill_deps.assert_not_called()
+    manager.materialize_invocation.assert_not_called()
+    assert contract_store.mock_calls == []
+    assert audit.mock_calls == []
+    assert token_log.mock_calls == []
+    assert timing_log.mock_calls == []
+    notify.assert_not_awaited()
     assert executor.calls == []
+
+
+@pytest.mark.anyio
+async def test_invalid_orchestrator_root_rejects_before_all_downstream_work(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """An L2 caller cannot materialize an ORCHESTRATOR skill as an L1 root."""
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    from autoskillit.workspace import DefaultSkillResolver
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    skill_md = tmp_path / ".claude" / "skills" / "invalid-root" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text(
+        "---\n"
+        "name: invalid-root\n"
+        "description: Invalid L1 root.\n"
+        "uses_capabilities: [run_skill]\n"
+        "execution_role: orchestrator\n"
+        "---\n"
+        'Call run_skill("/test child").\n'
+    )
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+    notify = AsyncMock()
+    manager = MagicMock()
+    contract_store = MagicMock()
+    audit = MagicMock()
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.project_dir = tmp_path
+    tool_ctx_kitchen_open.skill_resolver = DefaultSkillResolver()
+    tool_ctx_kitchen_open.session_skill_manager = manager
+    tool_ctx_kitchen_open.skill_session_contract_store = contract_store
+    tool_ctx_kitchen_open.audit = audit
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.server.tools.tools_execution._notify", notify)
+
+    result = json.loads(await run_skill("/invalid-root", str(tmp_path)))
+
+    assert result["success"] is False
+    assert "orchestrator" in result["result"].lower()
+    notify.assert_not_awaited()
+    manager.init_session.assert_not_called()
+    manager.activate_skill_deps.assert_not_called()
+    manager.materialize_invocation.assert_not_called()
+    assert contract_store.mock_calls == []
+    assert audit.mock_calls == []
+    assert executor.calls == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+async def test_process_issues_l2_parent_executes_session_child_on_each_backend(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    tmp_path,
+    backend_name: str,
+) -> None:
+    """The process-issues L2 role is the authorized L2→L1 run_skill edge."""
+    import json
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.execution.backends import get_backend
+    from autoskillit.workspace import DefaultSkillResolver
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    resolver = DefaultSkillResolver()
+    parent = resolver.resolve_invocation(
+        "process-issues",
+        tool_ctx_kitchen_open.project_dir,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    assert parent.root.execution_role is SkillExecutionRole.ORCHESTRATOR
+    assert "run_skill" in parent.capability_union
+
+    manager = MagicMock(wraps=tool_ctx_kitchen_open.session_skill_manager)
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.skill_resolver = resolver
+    tool_ctx_kitchen_open.session_skill_manager = manager
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.backend = get_backend(backend_name)
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/test child", str(tmp_path)))
+
+    assert result["success"] is True, result.get("result")
+    child = manager.materialize_invocation.call_args.args[1]
+    assert child.execution_role is SkillExecutionRole.SESSION
+    assert child.root.execution_role is SkillExecutionRole.SESSION
+    assert len(executor.calls) == 1
 
 
 @pytest.mark.anyio

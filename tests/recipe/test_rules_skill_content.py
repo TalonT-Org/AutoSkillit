@@ -863,12 +863,24 @@ def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> No
     received_resolvers: list[object] = []
     original_fn = _rsc._resolve_skill_md
 
-    def tracking_fn(skill_name: str, *, resolver: object = None) -> object:
+    received_project_roots: list[Path | None] = []
+
+    def tracking_fn(
+        skill_name: str,
+        *,
+        project_root: Path | None,
+        resolver: object = None,
+    ) -> object:
         received_resolvers.append(resolver)
-        return original_fn(skill_name, resolver=resolver)
+        received_project_roots.append(project_root)
+        return original_fn(
+            skill_name,
+            project_root=project_root,
+            resolver=resolver,
+        )
 
     resolver = DefaultSkillResolver()
-    ctx = make_validation_context(recipe, skill_resolver=resolver)
+    ctx = make_validation_context(recipe, project_dir=tmp_path, skill_resolver=resolver)
 
     with (
         patch.object(_rsc, "_resolve_skill_md", tracking_fn),
@@ -884,6 +896,32 @@ def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> No
     assert all(r is resolver for r in non_none), (
         "Expected every non-None resolver to be the exact instance from ctx"
     )
+    assert received_project_roots
+    assert all(root == tmp_path for root in received_project_roots)
+
+
+def test_resolve_skill_md_selects_the_effective_project_source(tmp_path: Path) -> None:
+    from autoskillit.recipe._skill_helpers import _resolve_skill_md
+    from autoskillit.workspace import DefaultSkillResolver
+
+    override = tmp_path / ".claude" / "skills" / "investigate" / "SKILL.md"
+    override.parent.mkdir(parents=True)
+    override.write_text(
+        "---\n"
+        "name: investigate\n"
+        "description: Project override.\n"
+        "execution_role: session\n"
+        "---\n"
+        "override\n"
+    )
+
+    resolved = _resolve_skill_md(
+        "investigate",
+        project_root=tmp_path,
+        resolver=DefaultSkillResolver(),
+    )
+
+    assert resolved == override
 
 
 # ---------------------------------------------------------------------------

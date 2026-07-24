@@ -764,12 +764,12 @@ async def _run_dispatch(
             FleetErrorCode.FLEET_MANIFEST_MISSING,
             "Executor not configured.",
         )
-    food_truck_plugin_source = None
-    food_truck_capability_contract = None
+    food_truck_plugin_source = food_truck_capability_contract = None
     if _effective_backend is not None:
         food_truck_plugin_source, food_truck_capability_contract = (
             prepare_effective_skill_dispatch(
                 resolved_command=prompt,
+                project_root=tool_ctx.project_dir,
                 cwd=tool_ctx.project_dir,
                 backend=_effective_backend,
                 resolver=tool_ctx.skill_resolver or default_skill_resolver(),

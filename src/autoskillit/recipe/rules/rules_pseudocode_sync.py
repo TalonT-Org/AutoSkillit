@@ -129,7 +129,11 @@ def _check_pseudocode_callable_divergence(ctx: ValidationContext) -> list[RuleFi
             skill_name = resolve_skill_name(skill_cmd)
             if skill_name is None:
                 continue
-            skill_md_path = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+            skill_md_path = _resolve_skill_md(
+                skill_name,
+                project_root=ctx.project_dir,
+                resolver=ctx.skill_resolver,
+            )
             if skill_md_path is None:
                 continue
             try:

@@ -424,6 +424,91 @@ async def test_prepare_issue_dispatches_only_projected_skill_documents(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
+    ("handler", "args", "skill_name", "output"),
+    [
+        (
+            prepare_issue,
+            ("Title", "Body"),
+            "prepare-issue",
+            (
+                "---prepare-issue-result---\n"
+                '{"issue_number": 42, "url": "https://example.test/42"}\n'
+                "---/prepare-issue-result---\n"
+            ),
+        ),
+        (
+            enrich_issues,
+            (),
+            "enrich-issues",
+            (
+                "---enrich-issues-result---\n"
+                '{"enriched": [42], "skipped_already_enriched": []}\n'
+                "---/enrich-issues-result---\n"
+            ),
+        ),
+    ],
+    ids=("prepare-issue", "enrich-issues"),
+)
+async def test_issue_launchers_deliver_winning_override_identity_and_projection(
+    tool_ctx_kitchen_open,
+    tmp_path,
+    handler,
+    args,
+    skill_name,
+    output,
+) -> None:
+    import hashlib
+
+    from autoskillit.workspace import DefaultSkillResolver
+
+    override = tmp_path / ".claude" / "skills" / skill_name / "SKILL.md"
+    override.parent.mkdir(parents=True)
+    override.write_text(
+        "---\n"
+        f"name: {skill_name}\n"
+        "description: Winning direct-launch override.\n"
+        "uses_capabilities: [github_api_write]\n"
+        "execution_role: session\n"
+        "---\n"
+        f"winning {skill_name} override body\n"
+        "gh issue edit 42 --body-file report.md\n"
+    )
+    source_before = override.read_bytes()
+    captured: dict[str, object] = {}
+
+    async def _capture_contract(
+        _command: str,
+        _cwd: str,
+        *,
+        capability_contract,
+        **_kwargs,
+    ) -> SkillResult:
+        captured["contract"] = capability_contract
+        return _make_skill_result(success=True, result=output)
+
+    tool_ctx_kitchen_open.project_dir = tmp_path
+    tool_ctx_kitchen_open.skill_resolver = DefaultSkillResolver()
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(side_effect=_capture_contract)
+
+    result = json.loads(await handler(*args))
+
+    assert result["success"] is True
+    contract = captured["contract"]
+    assert contract.source_identities[skill_name].origin is SkillSource.PROJECT_LOCAL
+    assert contract.execution_role is SkillExecutionRole.SESSION
+    assert contract.capability_union == frozenset({"github_api_write"})
+    assert contract.canonical_digests[skill_name] == hashlib.sha256(source_before).hexdigest()
+    projected = contract.projected_artifacts[skill_name]
+    assert f"winning {skill_name} override body" in projected
+    assert "uses_capabilities:" not in projected
+    assert "execution_role:" not in projected
+    assert contract.projected_digests[skill_name] == hashlib.sha256(projected.encode()).hexdigest()
+    assert override.read_bytes() == source_before
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
     ("handler", "args"),
     [
         (prepare_issue, ("Title", "Body")),

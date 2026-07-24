@@ -108,6 +108,42 @@ class TestCLIInstall:
             assert "source_path" not in identity
             assert hashlib.sha256(projected.encode()).hexdigest() == identity["projected_digest"]
 
+    def test_install_rejects_role_incompatible_skill_contract(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import importlib as _importlib
+
+        from autoskillit.core import SkillContractError, SkillSource
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        invalid_md = tmp_path / "invalid" / "SKILL.md"
+        invalid_md.parent.mkdir()
+        invalid_md.write_text(
+            "---\n"
+            "name: invalid\n"
+            "description: Invalid package contract.\n"
+            "uses_capabilities: [run_skill]\n"
+            "execution_role: session\n"
+            "---\n"
+            'run_skill("/child")\n'
+        )
+        invalid = _skill_info_from_frontmatter(
+            "invalid",
+            SkillSource.BUNDLED,
+            invalid_md,
+        )
+        marketplace = _importlib.import_module("autoskillit.cli._marketplace")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr(marketplace, "is_git_worktree", lambda _path: False)
+        monkeypatch.setattr(
+            marketplace.DefaultSkillResolver,
+            "list_all",
+            lambda _self: [invalid],
+        )
+
+        with pytest.raises(SkillContractError, match="invalid|run_skill|role"):
+            marketplace._ensure_marketplace()
+
     def test_install_projection_is_independent_of_test_file_location(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

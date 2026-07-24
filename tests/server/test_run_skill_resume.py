@@ -144,12 +144,18 @@ async def test_resume_uses_bound_snapshot_without_current_metadata_or_source_rea
     output_resolver = MagicMock(side_effect=AssertionError("current output metadata read"))
     write_resolver = MagicMock(side_effect=AssertionError("current write metadata read"))
     contract_resolver = MagicMock(side_effect=AssertionError("current contract metadata read"))
+    closure_write_dir = tmp_path / "closure-output"
+    closure_write_resolver = MagicMock(return_value=[closure_write_dir])
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.session_skill_manager = manager
     tool_ctx_kitchen_open.skill_resolver = resolver
     tool_ctx_kitchen_open.output_pattern_resolver = output_resolver
     tool_ctx_kitchen_open.write_expected_resolver = write_resolver
     tool_ctx_kitchen_open.skill_contract_resolver = contract_resolver
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_closure_write_dirs",
+        closure_write_resolver,
+    )
     bind_test_skill_resume_contract(
         tool_ctx_kitchen_open,
         session_id="source-isolated",
@@ -177,6 +183,8 @@ async def test_resume_uses_bound_snapshot_without_current_metadata_or_source_rea
     contract_resolver.assert_not_called()
     manager.materialize_invocation.assert_not_called()
     assert len(executor.calls) == 1
+    closure_write_resolver.assert_called_once()
+    assert executor.calls[0].write_watch_dirs == (closure_write_dir,)
 
 
 @pytest.mark.parametrize(

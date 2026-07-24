@@ -1300,8 +1300,9 @@ async def run_skill(
                     ).to_json()
                 skill_add_dirs.append(session_root)
 
-                # Fresh invocations extend scope from their validated closure.
-                if invocation is not None and _effective_skill_resolver is not None:
+                # Both fresh and rehydrated invocations extend scope from their
+                # validated closure.
+                if invocation is not None:
                     write_watch_dirs.extend(
                         resolve_closure_write_dirs(
                             invocation.closure,

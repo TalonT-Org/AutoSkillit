@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import CONTEXT_ADMISSION_COVERAGE
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DECISION = REPO_ROOT / "docs/decisions/0007-context-admission.md"
 DECISION_INDEX = REPO_ROOT / "docs/decisions/README.md"
@@ -209,33 +211,22 @@ def test_authority_unavailable_behavior_preserves_byte_boundaries(
 
 def test_decision_freezes_the_complete_producer_matrix(decision_text: str) -> None:
     coverage = _section(decision_text, "Producer coverage matrix")
-    for surface in [
-        "NATIVE_SHELL",
-        "UNIFIED_EXEC_AND_WRITE_STDIN",
-        "APPLY_PATCH",
-        "AUTOSKILLIT_MCP",
-        "EXTERNAL_MCP",
-        "AUTOSKILLIT_LOCAL_FUNCTION",
-        "OTHER_LOCAL_FUNCTION",
-        "MCP_RESOURCE",
-        "CLIENT_PROVIDER_RETRIEVAL",
-        "CODE_MODE_AGGREGATE",
-        "HOSTED_SPECIALIZED_TOOL",
-        "HOOK_FEEDBACK",
-        "TOOL_ARGUMENT",
-        "TOOL_RESULT_ENVELOPE",
-        "USER_PROMPT",
-        "ASSISTANT_OUTPUT_HISTORY",
-        "SKILL_PLUGIN_CONTEXT",
-        "OTHER_CONTEXT_INJECTION",
-        "HEADLESS_CHILD_PROMPT",
-        "PARENT_VISIBLE_CHILD_DELIVERY",
-        "COMPACTION_MODEL_WINDOW_TRANSITION",
-    ]:
-        assert surface in coverage
-    assert "PARTIAL" in coverage
-    assert "UPSTREAM_GATED" in coverage
-    assert "VERIFIED" in coverage
+    actual_rows = tuple(
+        tuple(cell.strip().strip("`") for cell in line.strip().strip("|").split("|"))
+        for line in coverage.splitlines()
+        if line.startswith("| `")
+    )
+    expected_rows = tuple(
+        (
+            row.surface.name,
+            row.control_point_owner,
+            row.observation_state.name,
+            row.authority_state.name,
+        )
+        for row in CONTEXT_ADMISSION_COVERAGE
+    )
+
+    assert actual_rows == expected_rows
 
 
 def test_upstream_request_contains_all_three_authority_parts_and_minimum_fields(

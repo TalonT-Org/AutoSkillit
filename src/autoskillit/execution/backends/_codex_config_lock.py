@@ -8,6 +8,7 @@ import json
 import math
 import os
 import socket
+import stat
 import threading
 import time
 from pathlib import Path
@@ -101,8 +102,21 @@ class CodexConfigLock:
         acquired = False
         try:
             self.lock_path.parent.mkdir(parents=True, exist_ok=True)
-            flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
+            no_follow = getattr(os, "O_NOFOLLOW", None)
+            if no_follow is None:  # pragma: no cover - supported on POSIX cook hosts
+                raise OSError(
+                    errno.ENOTSUP,
+                    "Codex config lock requires no-follow open semantics",
+                    self.lock_path,
+                )
+            flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | no_follow
             fd = os.open(self.lock_path, flags, 0o600)
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise OSError(
+                    errno.EINVAL,
+                    "Codex config lock sidecar is not a regular file",
+                    self.lock_path,
+                )
             deadline = time.monotonic() + self.timeout
             while True:
                 try:

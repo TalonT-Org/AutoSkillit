@@ -144,3 +144,22 @@ def test_config_lock_is_non_reentrant_for_the_same_canonical_path(tmp_path: Path
         with pytest.raises(RuntimeError, match="non-reentrant|already owns"):
             with CodexConfigLock(alias):
                 pytest.fail("same-process nested acquisition must fail before entry")
+
+
+def test_config_lock_rejects_symlink_sidecar_without_truncating_target(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
+
+    codex_home = tmp_path / "codex-home"
+    codex_home.mkdir()
+    config_path = codex_home / "config.toml"
+    victim = tmp_path / "victim.txt"
+    victim.write_text("preserve me", encoding="utf-8")
+    lock_path = codex_home / ".config.toml.autoskillit.lock"
+    lock_path.symlink_to(victim)
+
+    with pytest.raises(OSError):
+        CodexConfigLock(config_path).acquire()
+
+    assert victim.read_text(encoding="utf-8") == "preserve me"

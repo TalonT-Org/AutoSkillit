@@ -21,7 +21,7 @@ import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
@@ -44,14 +44,7 @@ from autoskillit.core import (
 from autoskillit.core import (
     session_type as _resolve_session_type,
 )
-from autoskillit.execution import (
-    BACKEND_REGISTRY,
-    RecordingSubprocessRunner,
-    codex_prelaunch_transaction,
-)
-from autoskillit.execution import (
-    ensure_codex_mcp_registered as ensure_codex_mcp_registered,
-)
+from autoskillit.execution import BACKEND_REGISTRY, RecordingSubprocessRunner
 from autoskillit.fleet import (
     discover_campaign_state_files,
     reap_stale_dispatches_async,
@@ -72,7 +65,7 @@ from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 from autoskillit.workspace import verify_install_state
 
 if TYPE_CHECKING:
-    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
 
@@ -573,25 +566,19 @@ _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | No
 }
 
 
-async def _run_codex_mcp_registration_async(
-    source_codex_home: Path,
-    *,
-    hook_config_format: str,
-) -> None:
-    """Offload the composed Codex config transaction to an executor — fail-open."""
+async def _run_backend_mcp_registration_async(backend: CodingAgentBackend) -> None:
+    """Offload backend-owned MCP configuration to an executor — fail-open."""
 
-    def _run_transaction() -> None:
-        with codex_prelaunch_transaction(
-            source_codex_home=source_codex_home,
-            hook_config_format=hook_config_format,
-        ):
-            pass
+    def _run_prelaunch() -> None:
+        errors = backend.ensure_pre_launch()
+        if errors:
+            raise RuntimeError("; ".join(errors))
 
     try:
         loop = _asyncio.get_running_loop()
-        await loop.run_in_executor(None, _run_transaction)
+        await loop.run_in_executor(None, _run_prelaunch)
     except Exception:
-        logger.warning("codex_mcp_registration_failed", exc_info=True)
+        logger.warning("backend_mcp_registration_failed", exc_info=True)
 
 
 @asynccontextmanager
@@ -642,17 +629,10 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             and _boot_ctx.backend is not None
             and _boot_ctx.backend.capabilities.mcp_config_capable
         ):
-            codex_backend = cast("CodexBackend", _boot_ctx.backend)
-            source_codex_home = codex_backend.source_codex_home
-            if source_codex_home is None:
-                raise RuntimeError("Codex backend has no immutable source home")
             bg_tasks.append(
                 create_background_task(
-                    _run_codex_mcp_registration_async(
-                        source_codex_home,
-                        hook_config_format=codex_backend.capabilities.hook_config_format,
-                    ),
-                    label="codex_mcp_registration",
+                    _run_backend_mcp_registration_async(_boot_ctx.backend),
+                    label="backend_mcp_registration",
                 )
             )
 

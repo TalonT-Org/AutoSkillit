@@ -22,9 +22,30 @@ _RANGE_FIELDS_BY_FORMAT = {
     content_format: frozenset(definition.range_fields)
     for content_format, definition in RECIPE_SECTION_CONTENT_FORMAT_REGISTRY.items()
 }
+_RANGE_TRIPLE_BY_FORMAT = {
+    "raw-text": ("byte_start", "byte_end", "byte_total"),
+    "json-scalar-page": ("scalar_byte_start", "scalar_byte_end", "scalar_byte_total"),
+    "json-array-page": ("element_start", "element_end", "element_total"),
+    "json-element-fragment": (
+        "fragment_byte_start",
+        "fragment_byte_end",
+        "fragment_byte_total",
+    ),
+}
 RECIPE_SECTION_PAGE_RANGE_FIELDS = frozenset(
     field for range_fields in _RANGE_FIELDS_BY_FORMAT.values() for field in range_fields
 )
+_SHA256_PREFIX = "sha256:"
+_LOWERCASE_HEX = frozenset("0123456789abcdef")
+
+
+def _is_sha256_digest(value: object) -> bool:
+    return (
+        type(value) is str
+        and value.startswith(_SHA256_PREFIX)
+        and len(value) == len(_SHA256_PREFIX) + 64
+        and all(character in _LOWERCASE_HEX for character in value[len(_SHA256_PREFIX) :])
+    )
 
 
 class RecipeSectionPaginationError(RuntimeError):
@@ -92,7 +113,7 @@ class RecipeSectionPageDescriptor:
     fragment_byte_total: int | None = None
 
     def __post_init__(self) -> None:
-        """Require exactly one complete range family for the declared format."""
+        """Require a typed, ordered range family and valid content digests."""
         expected_fields = _RANGE_FIELDS_BY_FORMAT.get(self.content_format)
         if expected_fields is None:
             raise ValueError(f"unknown recipe section content format: {self.content_format!r}")
@@ -103,6 +124,36 @@ class RecipeSectionPageDescriptor:
             raise ValueError(
                 "recipe section page descriptor range fields must exactly match content format"
             )
+        if not _is_sha256_digest(self.page_content_sha256):
+            raise ValueError("recipe section page content digest must be lowercase sha256")
+
+        numeric_values: dict[str, int] = {}
+        for name in expected_fields:
+            value = getattr(self, name)
+            if name.endswith("_sha256"):
+                if not _is_sha256_digest(value):
+                    raise ValueError(f"recipe section {name} must be a lowercase sha256 digest")
+                continue
+            if type(value) is not int or value < 0:
+                raise ValueError(f"recipe section {name} must be a non-negative integer")
+            numeric_values[name] = value
+
+        start_name, end_name, total_name = _RANGE_TRIPLE_BY_FORMAT[self.content_format]
+        start = numeric_values[start_name]
+        end = numeric_values[end_name]
+        total = numeric_values[total_name]
+        if not start <= end <= total or (total > 0 and start == end):
+            raise ValueError(
+                "recipe section page range must make ordered progress within its total"
+            )
+
+        if self.content_format == "json-element-fragment":
+            fragment_index = numeric_values["fragment_index"]
+            fragment_count = numeric_values["fragment_count"]
+            if fragment_count == 0 or fragment_index >= fragment_count:
+                raise ValueError(
+                    "recipe section fragment index must be within a positive fragment count"
+                )
 
     def wire_ranges(self) -> dict[str, int | str]:
         values: dict[str, int | str | None] = {

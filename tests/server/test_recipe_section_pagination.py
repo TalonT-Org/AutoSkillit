@@ -139,6 +139,74 @@ def test_page_descriptor_rejects_unknown_incomplete_and_mixed_range_families() -
         )
 
 
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"page_content_sha256": "sha256:not-a-digest"}, "page content digest"),
+        ({"byte_start": False}, "byte_start must be a non-negative integer"),
+        ({"byte_end": 1.0}, "byte_end must be a non-negative integer"),
+        ({"byte_start": -1}, "byte_start must be a non-negative integer"),
+        (
+            {"byte_start": 2, "byte_end": 1},
+            "range must make ordered progress within its total",
+        ),
+        (
+            {"byte_start": 1, "byte_end": 1, "byte_total": 2},
+            "range must make ordered progress within its total",
+        ),
+        (
+            {"byte_end": 3, "byte_total": 2},
+            "range must make ordered progress within its total",
+        ),
+    ],
+)
+def test_page_descriptor_rejects_malformed_raw_range_values(
+    changes: dict[str, object],
+    message: str,
+) -> None:
+    values: dict[str, object] = {
+        "content_format": "raw-text",
+        "page_content_sha256": f"sha256:{'0' * 64}",
+        "byte_start": 0,
+        "byte_end": 1,
+        "byte_total": 2,
+    }
+    values.update(changes)
+
+    with pytest.raises(ValueError, match=message):
+        RecipeSectionPageDescriptor(**values)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"element_sha256": "sha256:BAD"}, "element_sha256"),
+        ({"element_index": False}, "element_index must be a non-negative integer"),
+        ({"fragment_count": 0}, "within a positive fragment count"),
+        ({"fragment_index": 2}, "within a positive fragment count"),
+    ],
+)
+def test_page_descriptor_rejects_malformed_fragment_values(
+    changes: dict[str, object],
+    message: str,
+) -> None:
+    values: dict[str, object] = {
+        "content_format": "json-element-fragment",
+        "page_content_sha256": f"sha256:{'0' * 64}",
+        "element_index": 0,
+        "element_sha256": f"sha256:{'1' * 64}",
+        "fragment_index": 0,
+        "fragment_count": 2,
+        "fragment_byte_start": 0,
+        "fragment_byte_end": 1,
+        "fragment_byte_total": 2,
+    }
+    values.update(changes)
+
+    with pytest.raises(ValueError, match=message):
+        RecipeSectionPageDescriptor(**values)  # type: ignore[arg-type]
+
+
 def test_scalar_planning_never_serializes_the_whole_oversized_remainder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

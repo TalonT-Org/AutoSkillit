@@ -446,6 +446,31 @@ def test_backend_rendering_uses_the_selected_effective_source(tmp_path, monkeypa
     assert rendered == "@target --flag"
 
 
+def test_project_local_internal_override_is_not_duplicated(tmp_path) -> None:
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    project = tmp_path / "project"
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "sous-chef",
+        capabilities=("run_skill",),
+        execution_role="orchestrator",
+        body='Call run_skill("child").',
+    )
+
+    catalog = DefaultSkillResolver().list_effective(
+        project,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    matches = [skill for skill in catalog.skills if skill.name == "sous-chef"]
+
+    assert len(matches) == 1
+    assert matches[0].source.value == "project_local"
+    assert matches[0].canonical_digest
+    assert override_path.read_text(encoding="utf-8").endswith('Call run_skill("child").\n')
+
+
 def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, monkeypatch) -> None:
     """L2 source selection is project-root-bound while execution stays cwd-bound."""
     from pathlib import Path

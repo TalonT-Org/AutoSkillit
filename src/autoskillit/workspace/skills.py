@@ -777,6 +777,8 @@ class DefaultSkillResolver:
                 )
             )
             namespace_sources.update({skill.name: skill.source for skill in available_internal})
+            internal_names = {skill.name for skill in available_internal}
+            skills = tuple(skill for skill in skills if skill.name not in internal_names)
             internal = tuple(
                 SkillCatalogEntry.from_skill_info(skill)
                 for skill in available_internal

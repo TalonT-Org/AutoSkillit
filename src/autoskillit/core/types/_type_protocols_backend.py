@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -18,7 +18,7 @@ from ._type_backend import (
     SkillSessionConfig,
 )
 from ._type_checkpoint import SessionCheckpoint
-from ._type_enums import OutputFormat
+from ._type_enums import ObserverStatus, OutputFormat
 from ._type_plugin_source import PluginSource
 from ._type_results import ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
@@ -27,6 +27,7 @@ __all__ = [
     "StreamParser",
     "ResultParser",
     "EnvPolicy",
+    "ReadinessProbe",
     "SessionLocator",
     "CodingAgentBackend",
 ]
@@ -62,6 +63,24 @@ class EnvPolicy(Protocol):
         extras: Mapping[str, str] | None = None,
         required: frozenset[str] | None = None,
     ) -> dict[str, str]: ...
+
+
+@runtime_checkable
+class ReadinessProbe(Protocol):
+    """Backend-owned readiness adapter consumed by generic observers."""
+
+    def check(self) -> ObserverStatus:
+        """Perform one non-blocking readiness observation."""
+        ...
+
+    def wait(
+        self,
+        *,
+        timeout_seconds: float,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> ObserverStatus:
+        """Wait within a bounded interval for a terminal readiness outcome."""
+        ...
 
 
 @runtime_checkable

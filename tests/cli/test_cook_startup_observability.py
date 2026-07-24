@@ -34,10 +34,8 @@ def _trace_module():
 
 def _observer_api():
     from autoskillit.cli.session.pty._observer import PtyObserver
-    from autoskillit.execution.backends._codex_state_readiness import (
-        CodexStateReadinessProbe,
-    )
-    from autoskillit.execution.backends._readiness import ObserverStatus
+    from autoskillit.core import ObserverStatus
+    from autoskillit.execution.backends import CodexStateReadinessProbe
 
     return CodexStateReadinessProbe, ObserverStatus, PtyObserver
 

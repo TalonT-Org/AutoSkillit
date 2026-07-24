@@ -12,14 +12,12 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 | `_probe_cache.py` | `ProbeResult`, `PROBE_CACHE_TTL`, `read_probe_cache`, `write_probe_cache` — versioned probe result cache |
 | `claude.py` | `ClaudeCodeBackend` (incl. `validate_session_layout`), `ClaudeEnvPolicy`, `ClaudeSessionLocator`, `ClaudeStreamParser`, `ClaudeResultParser` (prompt utilities moved to `_claude_prompt.py`) |
 | `_claude_prompt.py` | Prompt injection utilities, session constants (`_ensure_skill_prefix`, `_inject_completion_directive`, `_compose_resume_prompt`, etc.), shared by claude + codex + commands |
-| `codex.py` | `CodexFlags`, `CodexBackend` (incl. `validate_session_layout`, `setup_session_dir` agent TOML generation and session-config registration), `CodexEnvPolicy`, `CodexSessionLocator` (parse/config moved to `_codex_parse.py` / `_codex_config.py`) |
+| `codex.py` | `CodexFlags`, `CodexBackend` (incl. `validate_session_layout`, `setup_session_dir` agent TOML generation and session-config registration), `CodexEnvPolicy`, `CodexSessionLocator`, `CodexStateReadinessProbe` (parse/config moved to `_codex_parse.py` / `_codex_config.py`) |
 | `_codex_config.py` | TOML serialization with `[[key]]` array-of-tables support, MCP registration (`ensure_codex_mcp_registered`, `_serialize_toml`) |
 | `_codex_config_lock.py` | Canonical source-config advisory lock with timeout, ownership diagnostics, and non-reentrant lifecycle |
 | `_codex_hooks.py` | Codex config.toml hook generation, sync, and upsert (`generate_codex_hooks_config`, `sync_hooks_to_codex_config`) |
 | `_codex_parse.py` | `CodexStreamParser`, `CodexResultParser`, NDJSON scanning, and bounded persisted-rollout parsing |
 | `_codex_prelaunch.py` | Sole composed source-config synchronization, hook update, snapshot, and native-validation transaction |
-| `_codex_state_readiness.py` | Version-mapped, read-only Codex SQLite readiness adapter |
-| `_readiness.py` | Backend-neutral startup-readiness status and probe protocol |
 | `_codex_recipe_delivery.py` | Protected outer-budget provider seam, bounded diagnostic correlation, and durable consumed-call/receipt ledger |
 | `_codex_session_storage.py` | Canonical rollout store, per-attempt views and leases, durable promotion/recovery, and derived session index |
 | `codex_scenario_player.py` | `CodexScenarioPlayer`, `make_codex_scenario_player`, `CodexStepRecord`, `CodexScenario`, `_load_manifest`, `_FakeCodexCLI`, `_write_shim_script` — scenario replay data layer for Codex backend |

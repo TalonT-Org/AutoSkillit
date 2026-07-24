@@ -27,6 +27,7 @@ __all__ = [
     "ChannelConfirmation",
     "SessionOutcome",
     "HookTrustPolicy",
+    "ObserverStatus",
     "CliSubtype",
     "ChannelBStatus",
     "PRState",
@@ -352,6 +353,20 @@ class HookTrustPolicy(StrEnum):
 
     AUTOMATED = "automated"
     REVIEW_EACH_SESSION = "review_each_session"
+
+
+class ObserverStatus(StrEnum):
+    """Typed outcomes from a guarded startup-readiness adapter."""
+
+    READY = "ready"
+    ABSENT = "absent"
+    LOCKED = "locked"
+    CORRUPT = "corrupt"
+    INCOMPLETE = "incomplete"
+    SCHEMA_CHANGED = "schema_changed"
+    UNSUPPORTED_VERSION = "unsupported_version"
+    TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
 
 
 class CliSubtype(StrEnum):

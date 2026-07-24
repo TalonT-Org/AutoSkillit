@@ -463,6 +463,7 @@ from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
 from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
+from .types import ObserverStatus as ObserverStatus
 from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
 from .types import OpenEpochEvent as OpenEpochEvent
 from .types import OutputFormat as OutputFormat
@@ -488,6 +489,7 @@ from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
 from .types import ReadingToken as ReadingToken
+from .types import ReadinessProbe as ReadinessProbe
 from .types import ReadOnlyResolver as ReadOnlyResolver
 from .types import RecipeDeliveryAttestation as RecipeDeliveryAttestation
 from .types import RecipeDeliveryBudgetDef as RecipeDeliveryBudgetDef

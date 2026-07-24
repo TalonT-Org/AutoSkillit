@@ -17,7 +17,7 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.execution.backends._readiness import ObserverStatus, ReadinessProbe
+from autoskillit.core import ObserverStatus, ReadinessProbe
 
 _WINDOW_LIMIT = 64 * 1024
 _RELAY_CHUNK_SIZE = 64 * 1024

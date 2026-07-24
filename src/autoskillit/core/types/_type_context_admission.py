@@ -895,6 +895,13 @@ class AdmissionBatchRecord(_ContractValue):
         _validate_non_negative(self.unresolved_input_count, "invalid_unresolved_count")
         if self.committed_input_count > 0 and self.unresolved_input_count > 0:
             _raise_invalid("committed_and_unresolved_simultaneously")
+        if self.committed_input_count > 0 and self.state not in {
+            AdmissionState.COMMITTED,
+            AdmissionState.QUARANTINED,
+        }:
+            _raise_invalid("committed_count_for_nonterminal_batch")
+        if self.unresolved_input_count > 0 and self.state is not AdmissionState.INDETERMINATE:
+            _raise_invalid("unresolved_count_for_resolved_batch")
 
 
 @dataclass(frozen=True, slots=True)

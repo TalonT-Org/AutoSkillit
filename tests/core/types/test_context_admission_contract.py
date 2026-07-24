@@ -1439,6 +1439,43 @@ def test_batch_record_rejects_committed_and_unresolved_simultaneously() -> None:
     assert "committed_and_unresolved_simultaneously" in str(exc_info.value)
 
 
+@pytest.mark.parametrize(
+    ("state", "committed_count", "unresolved_count", "reason_code"),
+    [
+        (
+            AdmissionState.RESERVED,
+            1,
+            0,
+            "committed_count_for_nonterminal_batch",
+        ),
+        (
+            AdmissionState.REQUEST_DISPATCHED,
+            0,
+            1,
+            "unresolved_count_for_resolved_batch",
+        ),
+    ],
+)
+def test_batch_record_counts_match_lifecycle_state(
+    state: AdmissionState,
+    committed_count: int,
+    unresolved_count: int,
+    reason_code: str,
+) -> None:
+    occurrence = _occurrence()
+    batch = _batch("batch-lifecycle-counts", (occurrence,))
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        AdmissionBatchRecord(
+            batch=batch,
+            state=state,
+            reservation_id=AdmissionReservationId("reservation-lifecycle-counts"),
+            witness_ids=(),
+            committed_input_count=committed_count,
+            unresolved_input_count=unresolved_count,
+        )
+    assert reason_code in str(exc_info.value)
+
+
 def test_privacy_canaries_are_rejected_from_coverage_evidence() -> None:
     with pytest.raises(ContextAdmissionValidationError):
         CoverageEvidence(

@@ -569,7 +569,7 @@ def test_plan_manifest_is_complete_and_plan_digest_is_non_self_referential() -> 
     pages = _decoded_pages(plan, bound=bound)
     manifest = dataclasses.asdict(plan.manifest)
 
-    assert {
+    assert set(manifest) == {
         "pagination_version",
         "section_registry_sha256",
         "pagination_policy_sha256",
@@ -579,8 +579,7 @@ def test_plan_manifest_is_complete_and_plan_digest_is_non_self_referential() -> 
         "section_sha256",
         "recipe_section_bound_bytes",
         "pages",
-    } <= manifest.keys()
-    assert "page_plan_sha256" not in manifest
+    }
     assert manifest["recipe_section_bound_bytes"] == bound
     assert plan.page_plan_sha256 == recipe_section_plan_digest(plan.manifest)
     assert {page["page_plan_sha256"] for page in pages} == {plan.page_plan_sha256}

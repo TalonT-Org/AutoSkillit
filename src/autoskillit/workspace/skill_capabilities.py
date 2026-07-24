@@ -101,6 +101,7 @@ _SELF_INITIATED_TOOLS: dict[str, tuple[str, ...]] = {
 }
 
 _STEP_HEADING_RE = re.compile(r"(?:Step\s+\d|^\d+[\.\):\s])")
+_FENCE_DELIMITER_RE = re.compile(r"^(`{3,}|~{3,})")
 _EXCLUDED_SECTION_HEADINGS = frozenset({"related skills", "see also"})
 _ARTIFACT_HEADING_RE = re.compile(
     r"\b(?:example|examples|output|result|response|artifact|frontmatter|"
@@ -174,7 +175,7 @@ def _source_lines(body: str) -> tuple[_SourceLine, ...]:
     result: list[_SourceLine] = []
     in_frontmatter = body.startswith("---\n")
     frontmatter_closed = not in_frontmatter
-    in_fence = False
+    fence_delimiter: str | None = None
     in_step_section = False
     artifact_section = False
 
@@ -189,7 +190,7 @@ def _source_lines(body: str) -> tuple[_SourceLine, ...]:
             result.append(_SourceLine(number, text, False))
             continue
 
-        if stripped.startswith("#") and not in_fence:
+        if stripped.startswith("#") and fence_delimiter is None:
             heading = stripped.lstrip("#").strip()
             heading_level = len(stripped) - len(stripped.lstrip("#"))
             is_step_heading = bool(_STEP_HEADING_RE.match(heading))
@@ -199,16 +200,24 @@ def _source_lines(body: str) -> tuple[_SourceLine, ...]:
             result.append(_SourceLine(number, text, False))
             continue
 
-        if stripped.startswith("```"):
-            was_in_fence = in_fence
-            in_fence = not in_fence
+        fence_match = _FENCE_DELIMITER_RE.match(stripped)
+        marker = fence_match.group(1) if fence_match else None
+        opens_fence = marker is not None and fence_delimiter is None
+        closes_fence = (
+            marker is not None
+            and fence_delimiter is not None
+            and marker[0] == fence_delimiter[0]
+            and len(marker) >= len(fence_delimiter)
+        )
+        if opens_fence or closes_fence:
             executable = in_step_section and not artifact_section
             result.append(_SourceLine(number, text, executable))
-            if was_in_fence:
-                in_fence = False
+            fence_delimiter = None if closes_fence else marker
             continue
 
-        executable = not (in_fence and (not in_step_section or artifact_section))
+        executable = not (
+            fence_delimiter is not None and (not in_step_section or artifact_section)
+        )
         result.append(_SourceLine(number, text, executable))
     return tuple(result)
 

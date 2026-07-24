@@ -135,14 +135,7 @@ def _canonical_payload(payload: dict[str, Any]) -> bytes:
 def _validate_recipe_artifact_schema(payload: dict[str, Any]) -> None:
     findings = validate_recipe_artifact_sections(payload)
     if findings:
-        summary = ",".join(
-            (
-                f"{finding.omitted_count} additional findings omitted"
-                if finding.omitted_count
-                else f"{finding.code}@{'.'.join(str(part) for part in finding.path)}"
-            )
-            for finding in findings
-        )
+        summary = ",".join(finding.diagnostic() for finding in findings)
         raise RecipeArtifactSchemaError(f"recipe artifact section schema mismatch: {summary}")
 
 

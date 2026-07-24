@@ -381,8 +381,8 @@ from .types import RecipeLoadError as RecipeLoadError
 from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
-from .types import RecipeSectionDef as RecipeSectionDef
 from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDef
+from .types import RecipeSectionDef as RecipeSectionDef
 from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef

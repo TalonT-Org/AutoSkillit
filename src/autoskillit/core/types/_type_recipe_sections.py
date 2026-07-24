@@ -39,6 +39,12 @@ class RecipeSectionValidationFinding:
     actual_type: str
     omitted_count: int = 0
 
+    def diagnostic(self) -> str:
+        """Render one bounded value-free diagnostic token."""
+        if self.omitted_count:
+            return f"{self.omitted_count} additional findings omitted"
+        return f"{self.code}@{'.'.join(str(part) for part in self.path)}"
+
 
 def canonical_recipe_section_json(value: object) -> str:
     """Return the application canonical JSON used by recipe-section identities."""

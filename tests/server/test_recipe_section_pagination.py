@@ -25,6 +25,7 @@ from autoskillit.server._recipe_delivery import (
 )
 from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
+    RecipeSectionPageDescriptor,
     RecipeSectionPaginationError,
     build_recipe_section_page_plan,
     get_or_build_recipe_section_page_plan,
@@ -91,6 +92,33 @@ def _generation(**changes: object) -> RecipeArtifactGeneration:
     }
     base.update(changes)
     return RecipeArtifactGeneration(**base)  # type: ignore[arg-type]
+
+
+def test_page_descriptor_rejects_unknown_incomplete_and_mixed_range_families() -> None:
+    digest = f"sha256:{'0' * 64}"
+    with pytest.raises(ValueError, match="unknown recipe section content format"):
+        RecipeSectionPageDescriptor(
+            content_format="unknown",  # type: ignore[arg-type]
+            page_content_sha256=digest,
+        )
+    with pytest.raises(ValueError, match="range fields must exactly match"):
+        RecipeSectionPageDescriptor(
+            content_format="raw-text",
+            page_content_sha256=digest,
+            byte_start=0,
+            byte_end=1,
+        )
+    with pytest.raises(ValueError, match="range fields must exactly match"):
+        RecipeSectionPageDescriptor(
+            content_format="raw-text",
+            page_content_sha256=digest,
+            byte_start=0,
+            byte_end=1,
+            byte_total=1,
+            scalar_byte_start=0,
+            scalar_byte_end=1,
+            scalar_byte_total=1,
+        )
 
 
 def _payload(**changes: object) -> dict[str, object]:

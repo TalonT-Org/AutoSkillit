@@ -8,30 +8,10 @@ import json
 from autoskillit.core import recipe_section_element_digest
 from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
 from autoskillit.server.recipe_section._contracts import (
+    RECIPE_SECTION_PAGE_RANGE_FIELDS,
     PlannedRecipeSectionPage,
     RecipeSectionPaginationError,
     SelectedRecipeSection,
-)
-
-_PAGE_RANGE_FIELDS = frozenset(
-    {
-        "byte_start",
-        "byte_end",
-        "byte_total",
-        "element_start",
-        "element_end",
-        "element_total",
-        "scalar_byte_start",
-        "scalar_byte_end",
-        "scalar_byte_total",
-        "element_index",
-        "element_sha256",
-        "fragment_index",
-        "fragment_count",
-        "fragment_byte_start",
-        "fragment_byte_end",
-        "fragment_byte_total",
-    }
 )
 
 
@@ -301,7 +281,9 @@ def verify_finalized_recipe_section_plan(
             raise _pagination_error("final recipe section page is not a JSON object")
         terminal = part + 1 == len(pages)
         expected_ranges = page.descriptor.wire_ranges()
-        actual_ranges = {name: response[name] for name in _PAGE_RANGE_FIELDS if name in response}
+        actual_ranges = {
+            name: response[name] for name in RECIPE_SECTION_PAGE_RANGE_FIELDS if name in response
+        }
         _require(
             response.get("success") is True
             and response.get("pagination_version") == pagination_version

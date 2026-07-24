@@ -3,9 +3,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from autoskillit.core import RecipeSectionDef
 from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
+
+RecipeSectionContentFormat = Literal[
+    "raw-text",
+    "json-scalar-page",
+    "json-array-page",
+    "json-element-fragment",
+]
+_RANGE_FIELDS_BY_FORMAT: dict[RecipeSectionContentFormat, frozenset[str]] = {
+    "raw-text": frozenset({"byte_start", "byte_end", "byte_total"}),
+    "json-scalar-page": frozenset({"scalar_byte_start", "scalar_byte_end", "scalar_byte_total"}),
+    "json-array-page": frozenset({"element_start", "element_end", "element_total"}),
+    "json-element-fragment": frozenset(
+        {
+            "element_index",
+            "element_sha256",
+            "fragment_index",
+            "fragment_count",
+            "fragment_byte_start",
+            "fragment_byte_end",
+            "fragment_byte_total",
+        }
+    ),
+}
+RECIPE_SECTION_PAGE_RANGE_FIELDS = frozenset().union(*_RANGE_FIELDS_BY_FORMAT.values())
 
 
 class RecipeSectionPaginationError(RuntimeError):
@@ -38,7 +63,7 @@ class SelectedRecipeSection:
 class RecipeSectionPageDescriptor:
     """One immutable page boundary in a page-plan manifest."""
 
-    content_format: str
+    content_format: RecipeSectionContentFormat
     page_content_sha256: str
     byte_start: int | None = None
     byte_end: int | None = None
@@ -56,6 +81,19 @@ class RecipeSectionPageDescriptor:
     fragment_byte_start: int | None = None
     fragment_byte_end: int | None = None
     fragment_byte_total: int | None = None
+
+    def __post_init__(self) -> None:
+        """Require exactly one complete range family for the declared format."""
+        expected_fields = _RANGE_FIELDS_BY_FORMAT.get(self.content_format)
+        if expected_fields is None:
+            raise ValueError(f"unknown recipe section content format: {self.content_format!r}")
+        populated_fields = {
+            name for name in RECIPE_SECTION_PAGE_RANGE_FIELDS if getattr(self, name) is not None
+        }
+        if populated_fields != expected_fields:
+            raise ValueError(
+                "recipe section page descriptor range fields must exactly match content format"
+            )
 
     def wire_ranges(self) -> dict[str, int | str]:
         values: dict[str, int | str | None] = {

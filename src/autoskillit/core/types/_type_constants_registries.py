@@ -434,6 +434,17 @@ DYNAMIC_RECIPE_SECTION_DEF = RecipeSectionDef(
 )
 
 RECIPE_SECTION_PAGINATION_VERSION = 1
+_RECIPE_SECTION_CANONICAL_JSON_ENSURE_ASCII = False
+_RECIPE_SECTION_CANONICAL_JSON_SEPARATORS = (",", ":")
+_RECIPE_SECTION_CANONICAL_JSON_SORT_KEYS = True
+_RECIPE_SECTION_DIGEST_DOMAINS: Mapping[str, str] = MappingProxyType(
+    {
+        "raw_section": "autoskillit.recipe-section.raw.v1",
+        "structured_section": "autoskillit.recipe-section.structured.v1",
+        "element": "autoskillit.recipe-section.element.v1",
+        "plan": "autoskillit.recipe-section.plan.v1",
+    }
+)
 
 
 def _qualified_registry_digest(value: object) -> str:
@@ -510,9 +521,9 @@ _DECLARED_RECIPE_SECTION_CONTENT_FORMATS = _declared_recipe_section_content_form
 _RECIPE_SECTION_PAGINATION_POLICY = {
     "version": RECIPE_SECTION_PAGINATION_VERSION,
     "canonical_json": {
-        "ensure_ascii": False,
-        "separators": [",", ":"],
-        "sort_keys": True,
+        "ensure_ascii": _RECIPE_SECTION_CANONICAL_JSON_ENSURE_ASCII,
+        "separators": list(_RECIPE_SECTION_CANONICAL_JSON_SEPARATORS),
+        "sort_keys": _RECIPE_SECTION_CANONICAL_JSON_SORT_KEYS,
     },
     "success_fields": [
         "success",
@@ -539,12 +550,7 @@ _RECIPE_SECTION_PAGINATION_POLICY = {
         definition.section_strategy: definition.range_unit
         for definition in _recipe_section_policy_definitions()
     },
-    "digest_domains": {
-        "raw_section": "autoskillit.recipe-section.raw.v1",
-        "structured_section": "autoskillit.recipe-section.structured.v1",
-        "element": "autoskillit.recipe-section.element.v1",
-        "plan": "autoskillit.recipe-section.plan.v1",
-    },
+    "digest_domains": dict(_RECIPE_SECTION_DIGEST_DOMAINS),
     "reconstruction": {
         content_format: _RECIPE_SECTION_CONTENT_FORMAT_REGISTRY[content_format].reconstruction
         for content_format in _DECLARED_RECIPE_SECTION_CONTENT_FORMATS

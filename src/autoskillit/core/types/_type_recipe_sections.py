@@ -7,7 +7,13 @@ import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 
-from ._type_constants_registries import RECIPE_SECTION_REGISTRY
+from ._type_constants_registries import (
+    _RECIPE_SECTION_CANONICAL_JSON_ENSURE_ASCII,
+    _RECIPE_SECTION_CANONICAL_JSON_SEPARATORS,
+    _RECIPE_SECTION_CANONICAL_JSON_SORT_KEYS,
+    _RECIPE_SECTION_DIGEST_DOMAINS,
+    RECIPE_SECTION_REGISTRY,
+)
 
 __all__ = [
     "RecipeSectionValidationFinding",
@@ -19,10 +25,6 @@ __all__ = [
 ]
 
 _MISSING = object()
-_RAW_SECTION_DOMAIN = "autoskillit.recipe-section.raw.v1"
-_STRUCTURED_SECTION_DOMAIN = "autoskillit.recipe-section.structured.v1"
-_ELEMENT_DOMAIN = "autoskillit.recipe-section.element.v1"
-_PLAN_DOMAIN = "autoskillit.recipe-section.plan.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,9 +44,9 @@ def canonical_recipe_section_json(value: object) -> str:
         value = asdict(value)
     return json.dumps(
         value,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
+        ensure_ascii=_RECIPE_SECTION_CANONICAL_JSON_ENSURE_ASCII,
+        separators=_RECIPE_SECTION_CANONICAL_JSON_SEPARATORS,
+        sort_keys=_RECIPE_SECTION_CANONICAL_JSON_SORT_KEYS,
     )
 
 
@@ -58,9 +60,9 @@ def recipe_section_digest(value: object, *, raw: bool) -> str:
     if raw:
         if type(value) is not str:
             raise TypeError("raw recipe section digest requires a string")
-        return _domain_digest(_RAW_SECTION_DOMAIN, value.encode("utf-8"))
+        return _domain_digest(_RECIPE_SECTION_DIGEST_DOMAINS["raw_section"], value.encode("utf-8"))
     return _domain_digest(
-        _STRUCTURED_SECTION_DOMAIN,
+        _RECIPE_SECTION_DIGEST_DOMAINS["structured_section"],
         canonical_recipe_section_json(value).encode("utf-8"),
     )
 
@@ -68,7 +70,7 @@ def recipe_section_digest(value: object, *, raw: bool) -> str:
 def recipe_section_element_digest(value: object) -> str:
     """Hash one complete canonical structured element."""
     return _domain_digest(
-        _ELEMENT_DOMAIN,
+        _RECIPE_SECTION_DIGEST_DOMAINS["element"],
         canonical_recipe_section_json(value).encode("utf-8"),
     )
 
@@ -76,7 +78,7 @@ def recipe_section_element_digest(value: object) -> str:
 def recipe_section_plan_digest(manifest: object) -> str:
     """Hash a plan manifest that excludes its resulting digest."""
     return _domain_digest(
-        _PLAN_DOMAIN,
+        _RECIPE_SECTION_DIGEST_DOMAINS["plan"],
         canonical_recipe_section_json(manifest).encode("utf-8"),
     )
 

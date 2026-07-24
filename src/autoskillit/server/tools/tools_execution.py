@@ -1299,16 +1299,16 @@ async def run_skill(
                     ).to_json()
                 skill_add_dirs.append(session_root)
 
-                # Both fresh and rehydrated invocations extend scope from their
-                # validated closure.
-                if invocation is not None:
-                    write_watch_dirs.extend(
-                        resolve_closure_write_dirs(
-                            invocation.closure,
-                            cwd,
-                            write_watch_dirs,
-                        )
+            # Both fresh and rehydrated invocations extend scope from their
+            # validated closure, independent of whether a snapshot was replayed.
+            if invocation is not None:
+                write_watch_dirs.extend(
+                    resolve_closure_write_dirs(
+                        invocation.closure,
+                        cwd,
+                        write_watch_dirs,
                     )
+                )
 
             if invocation is not None and _stored_contract is None:
                 if not skill_add_dirs:

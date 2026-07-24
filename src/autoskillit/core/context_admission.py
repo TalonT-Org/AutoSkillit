@@ -14,6 +14,7 @@ from .types._type_context_admission import (
     AdmissionBatchRecord,
     AdmissionDecision,
     AdmissionEffect,
+    AdmissionOccurrenceId,
     AdmissionOccurrenceRecord,
     AdmissionReplay,
     AdmissionReservation,
@@ -21,6 +22,7 @@ from .types._type_context_admission import (
     AdmissionSequence,
     AdmissionTransition,
     AdmissionWitness,
+    AdmissionWitnessId,
     AggregateRevision,
     AuthorityUnavailableEffect,
     AuthorityUnavailableEvent,
@@ -30,6 +32,7 @@ from .types._type_context_admission import (
     ContextAdmissionEvent,
     ContextAdmissionState,
     ContextAdmissionValidationError,
+    ContextWindowSnapshot,
     DispatchRequestEvent,
     EpochClosedEffect,
     ExpiredIdempotencyTombstone,
@@ -127,19 +130,18 @@ def _occurrence_effects(
     )
 
 
-def _accepted_effects(
+def _acceptance_effects(
     state: ActiveContextAdmissionState,
     event: AcceptInputEvent | ResolveIndeterminateAcceptedEvent,
     record: AdmissionBatchRecord,
     exact_charge: int,
     witness: AdmissionWitness,
+    *,
+    quarantine_reason_code: str | None,
 ) -> tuple[AdmissionEffect, ...]:
     reservation = _reservation_for(state, record)
     if reservation is None:
         return ()
-    quarantined = (
-        exact_charge > reservation.reserved_count or exact_charge > state.snapshot.hard_limit
-    )
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
     effects: tuple[AdmissionEffect, ...] = (
         ChargeCommittedEffect(
@@ -160,21 +162,46 @@ def _accepted_effects(
             event,
             record.batch,
             record.state,
-            AdmissionState.QUARANTINED if quarantined else AdmissionState.COMMITTED,
+            (
+                AdmissionState.QUARANTINED
+                if quarantine_reason_code is not None
+                else AdmissionState.COMMITTED
+            ),
             capacity_changed=True,
         ),
     )
-    if quarantined:
+    if quarantine_reason_code is not None:
         effects += (
             QuarantineRecordedEffect(
                 source_event_id=event.event_id,
                 resulting_aggregate_revision=revision,
                 resulting_admission_sequence=sequence,
                 target_id=record.batch.batch_id,
-                reason_code="provider_charge_exceeds_reservation",
+                reason_code=quarantine_reason_code,
             ),
         )
     return effects
+
+
+def _accepted_effects(
+    state: ActiveContextAdmissionState,
+    event: AcceptInputEvent | ResolveIndeterminateAcceptedEvent,
+    record: AdmissionBatchRecord,
+    exact_charge: int,
+    witness: AdmissionWitness,
+) -> tuple[AdmissionEffect, ...]:
+    reservation = _reservation_for(state, record)
+    quarantined = reservation is not None and (
+        exact_charge > reservation.reserved_count or exact_charge > state.snapshot.hard_limit
+    )
+    return _acceptance_effects(
+        state,
+        event,
+        record,
+        exact_charge,
+        witness,
+        quarantine_reason_code=("provider_charge_exceeds_reservation" if quarantined else None),
+    )
 
 
 def _reservation_for(
@@ -291,22 +318,43 @@ def _decision(
 
 def _reject(
     state: ContextAdmissionState,
+    event: ContextAdmissionEvent,
     reason_code: str,
     *,
     requested_count: int = 0,
     reserve_class: ReserveClass = ReserveClass.ORDINARY,
     protected_pool_owner_id: ProtectedPoolOwnerId | None = None,
 ) -> AdmissionTransition:
-    return AdmissionTransition(
-        next_state=state,
-        decision=_decision(
-            state,
-            AdmissionDecisionKind.WOULD_REJECT,
-            reason_code,
-            requested_count=requested_count,
-            reserve_class=reserve_class,
-            protected_pool_owner_id=protected_pool_owner_id,
+    decision = _decision(
+        state,
+        AdmissionDecisionKind.WOULD_REJECT,
+        reason_code,
+        requested_count=requested_count,
+        reserve_class=reserve_class,
+        protected_pool_owner_id=protected_pool_owner_id,
+    )
+    processed = ProcessedEventRecord(
+        event_id=event.event_id,
+        event=event,
+        original_decision=decision,
+        aggregate_revision=state.aggregate_revision,
+        admission_sequence=state.admission_sequence,
+    )
+    next_state = replace(
+        state,
+        processed_events=tuple(
+            sorted(
+                state.processed_events + (processed,),
+                key=lambda record: (
+                    record.aggregate_revision.value,
+                    record.event_id.value,
+                ),
+            )
         ),
+    )
+    return AdmissionTransition(
+        next_state=next_state,
+        decision=decision,
         effects=(),
     )
 
@@ -352,7 +400,15 @@ def _publish(
     )
     published = replace(
         published,
-        processed_events=published.processed_events + (processed,),
+        processed_events=tuple(
+            sorted(
+                published.processed_events + (processed,),
+                key=lambda record: (
+                    record.aggregate_revision.value,
+                    record.event_id.value,
+                ),
+            )
+        ),
     )
     return AdmissionTransition(
         next_state=published,
@@ -454,7 +510,7 @@ def _preflight(
                 effects=(),
             )
     if event.expected_aggregate_revision != state.aggregate_revision:
-        return _reject(state, "stale_revision")
+        return _reject(state, event, "stale_revision")
     return None
 
 
@@ -468,9 +524,26 @@ def _batch_record(
     )
 
 
-def _dispatched_count(state: ActiveContextAdmissionState) -> int:
-    return sum(
-        1 for record in state.batch_records if record.state is AdmissionState.REQUEST_DISPATCHED
+def _highest_dispatch_sequence(state: ActiveContextAdmissionState) -> int:
+    return max(
+        (
+            record.dispatch_sequence
+            for record in state.batch_records
+            if record.dispatch_sequence is not None
+        ),
+        default=0,
+    )
+
+
+def _append_witness_ids(
+    witness_ids: tuple[AdmissionWitnessId, ...],
+    *new_witness_ids: AdmissionWitnessId,
+) -> tuple[AdmissionWitnessId, ...]:
+    return tuple(
+        sorted(
+            {*witness_ids, *new_witness_ids},
+            key=lambda witness_id: witness_id.value,
+        )
     )
 
 
@@ -492,23 +565,48 @@ def _replace_batch_record(
     state: ActiveContextAdmissionState,
     updated: AdmissionBatchRecord,
 ) -> ActiveContextAdmissionState:
+    member_ids = set(updated.batch.occurrence_ids)
     return replace(
         state,
         batch_records=tuple(
             updated if record.batch.batch_id == updated.batch.batch_id else record
             for record in state.batch_records
         ),
+        occurrence_records=tuple(
+            replace(
+                record,
+                state=updated.state,
+                batch_id=updated.batch.batch_id,
+                reservation_id=updated.reservation_id,
+            )
+            if record.occurrence.occurrence_id in member_ids
+            else record
+            for record in state.occurrence_records
+        ),
     )
 
 
-def _replace_batch_record_quarantine(
+def _quarantined_acceptance_state(
     state: ActiveContextAdmissionState,
     record: AdmissionBatchRecord,
-) -> tuple[AdmissionBatchRecord, ...]:
-    quarantined = replace(record, state=AdmissionState.QUARANTINED)
-    return tuple(
-        quarantined if other.batch.batch_id == record.batch.batch_id else other
-        for other in state.batch_records
+    witness: AdmissionWitness,
+    exact_charge: int,
+    reason_code: str,
+) -> ActiveContextAdmissionState:
+    quarantined = replace(
+        record,
+        state=AdmissionState.QUARANTINED,
+        witness_ids=_append_witness_ids(record.witness_ids, witness.witness_id),
+        committed_input_count=exact_charge,
+        unresolved_input_count=0,
+    )
+    next_state = _replace_batch_record(state, quarantined)
+    return _set_occurrence_state(
+        next_state,
+        record.batch,
+        AdmissionState.QUARANTINED,
+        witness=witness,
+        quarantine_reason_code=reason_code,
     )
 
 
@@ -530,7 +628,7 @@ def _set_occurrence_state(
             continue
         witness_ids = record.accepted_witness_ids
         if witness is not None and witness.witness_id not in witness_ids:
-            witness_ids += (witness.witness_id,)
+            witness_ids = _append_witness_ids(witness_ids, witness.witness_id)
         records.append(
             replace(
                 record,
@@ -553,15 +651,101 @@ def _validate_witness(
     witness: AdmissionWitness,
     expected_kind: WitnessKind,
 ) -> bool:
+    return _validate_witness_for_snapshot(
+        state.snapshot,
+        batch,
+        witness,
+        expected_kind,
+    )
+
+
+def _validate_witness_for_snapshot(
+    snapshot: ContextWindowSnapshot,
+    batch: AdmissionBatch,
+    witness: AdmissionWitness,
+    expected_kind: WitnessKind,
+) -> bool:
     return (
         witness.kind is expected_kind
-        and witness.window_epoch_id == state.snapshot.window_epoch_id
-        and witness.window_epoch_number == state.snapshot.window_epoch_number
-        and witness.snapshot_sequence == state.snapshot.snapshot_sequence
+        and witness.window_epoch_id == snapshot.window_epoch_id
+        and witness.window_epoch_number == snapshot.window_epoch_number
+        and witness.snapshot_sequence == snapshot.snapshot_sequence
         and witness.request_id == batch.request_id
         and witness.batch_id == batch.batch_id
         and witness.representation_revision == batch.manifest.representation_revision
         and witness.occurrence_ids == batch.occurrence_ids
+    )
+
+
+def _closed_batch_location(
+    state: ActiveContextAdmissionState,
+    batch_id: AdmissionBatchId,
+) -> tuple[int, ClosedEpochAudit, AdmissionBatchRecord] | None:
+    for index, audit in enumerate(state.closed_epochs):
+        for record in audit.terminal_batch_records:
+            if record.batch.batch_id == batch_id:
+                return index, audit, record
+    return None
+
+
+def _closed_generation_location(
+    state: ActiveContextAdmissionState,
+    reservation_id: GenerationReservationId,
+) -> tuple[int, ClosedEpochAudit, GenerationReservationRecord] | None:
+    for index, audit in enumerate(state.closed_epochs):
+        for record in audit.terminal_generation_reservations:
+            if record.generation_reservation_id == reservation_id:
+                return index, audit, record
+    return None
+
+
+def _closed_reservation_for(
+    audit: ClosedEpochAudit,
+    record: AdmissionBatchRecord,
+) -> AdmissionReservation | None:
+    if record.reservation_id is None:
+        return None
+    return next(
+        (
+            reservation
+            for reservation in audit.terminal_reservations
+            if reservation.reservation_id == record.reservation_id
+        ),
+        None,
+    )
+
+
+def _closed_retained_input_count(
+    audit: ClosedEpochAudit,
+    records: tuple[AdmissionBatchRecord, ...],
+) -> int:
+    return sum(
+        record.unresolved_input_count
+        or (
+            reservation.reserved_count
+            if (reservation := _closed_reservation_for(audit, record)) is not None
+            else 0
+        )
+        for record in records
+        if record.state
+        in {
+            AdmissionState.REQUEST_DISPATCHED,
+            AdmissionState.INDETERMINATE,
+        }
+    )
+
+
+def _replace_closed_audit(
+    state: ActiveContextAdmissionState,
+    index: int,
+    audit: ClosedEpochAudit,
+) -> ActiveContextAdmissionState:
+    return replace(
+        state,
+        closed_epochs=tuple(
+            audit if item_index == index else item
+            for item_index, item in enumerate(state.closed_epochs)
+        ),
     )
 
 
@@ -570,7 +754,7 @@ def _open_epoch(
     event: OpenEpochEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, UninitializedContextAdmissionState):
-        return _reject(state, "epoch_already_active")
+        return _reject(state, event, "epoch_already_active")
     try:
         active = ActiveContextAdmissionState(
             protocol_version=state.protocol_version,
@@ -588,7 +772,7 @@ def _open_epoch(
             closed_epochs=state.closed_epochs,
         )
     except ContextAdmissionValidationError:
-        return _reject(state, "invalid_epoch_snapshot")
+        return _reject(state, event, "invalid_epoch_snapshot")
     return _publish(state, active, event)
 
 
@@ -597,13 +781,28 @@ def _propose(
     event: ProposeOccurrenceEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     occurrence = event.occurrence
+    lineage = occurrence.lineage
+    is_fork_work = (
+        lineage.current_session_id != lineage.root_session_id
+        or lineage.current_agent_id != lineage.root_agent_id
+        or lineage.current_thread_id != lineage.root_thread_id
+        or lineage.parent_agent_id is not None
+        or lineage.parent_thread_id is not None
+        or lineage.fork_occurrence_id is not None
+    )
+    is_parent_delivery = (
+        occurrence.producer_surface is ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY
+        and lineage.delivery_occurrence_id is not None
+    )
     if (
         occurrence.lineage.window_epoch_id != state.snapshot.window_epoch_id
         or occurrence.lineage.window_epoch_number != state.snapshot.window_epoch_number
     ):
-        return _reject(state, "occurrence_epoch_mismatch")
+        return _reject(state, event, "occurrence_epoch_mismatch")
+    if is_fork_work and not is_parent_delivery:
+        return _reject(state, event, "fork_requires_distinct_epoch")
     existing = next(
         (
             record
@@ -637,7 +836,15 @@ def _propose(
     )
     return _publish(
         state,
-        replace(state, occurrence_records=state.occurrence_records + (record,)),
+        replace(
+            state,
+            occurrence_records=tuple(
+                sorted(
+                    state.occurrence_records + (record,),
+                    key=lambda item: item.occurrence.occurrence_id.value,
+                )
+            ),
+        ),
         event,
     )
 
@@ -647,16 +854,16 @@ def _reserve(
     event: ReserveRequestEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     if event.snapshot_sequence != state.snapshot.snapshot_sequence:
-        return _reject(state, "snapshot_sequence_mismatch")
+        return _reject(state, event, "snapshot_sequence_mismatch")
     if _batch_record(state, event.batch.batch_id) is not None:
-        return _reject(state, "batch_already_reserved")
+        return _reject(state, event, "batch_already_reserved")
     reservation = event.input_reservations[0]
     if any(
         existing.reservation_id == reservation.reservation_id for existing in state.reservations
     ):
-        return _reject(state, "reservation_id_reuse_with_changed_descriptor")
+        return _reject(state, event, "reservation_id_reuse_with_changed_descriptor")
     member_records = tuple(
         record
         for record in state.occurrence_records
@@ -672,9 +879,24 @@ def _reserve(
             for record in member_records
         )
     ):
-        return _reject(state, "batch_members_not_all_proposed")
+        return _reject(state, event, "batch_members_not_all_proposed")
+    owned_pairs = tuple(
+        (span_id, member.occurrence.occurrence_id)
+        for member in member_records
+        for span_id in member.occurrence.owned_span_ids
+    )
+    owned_span_ids = tuple(span_id for span_id, _ in owned_pairs)
+    manifest_pairs = tuple(
+        (owner.span_id, owner.occurrence_id) for owner in event.batch.manifest.span_owners
+    )
+    if (
+        len(owned_span_ids) != len(set(owned_span_ids))
+        or set(owned_pairs) != set(manifest_pairs)
+        or len(owned_pairs) != len(manifest_pairs)
+    ):
+        return _reject(state, event, "inconsistent_span_ownership")
     if len(event.input_reservations) != 1:
-        return _reject(state, "atomic_input_reservation_required")
+        return _reject(state, event, "atomic_input_reservation_required")
     if (
         reservation.key.batch_id != event.batch.batch_id
         or reservation.occurrence_ids != event.batch.occurrence_ids
@@ -684,7 +906,7 @@ def _reserve(
         or reservation.reserve_class is not event.batch.reserve_class
         or reservation.protected_pool_owner_id != event.batch.protected_pool_owner_id
     ):
-        return _reject(state, "reservation_descriptor_mismatch")
+        return _reject(state, event, "reservation_descriptor_mismatch")
     expected_revisions = tuple(
         (
             record.occurrence.occurrence_id,
@@ -693,18 +915,21 @@ def _reserve(
         for record in member_records
     )
     if reservation.key.occurrence_revisions != expected_revisions:
-        return _reject(state, "reservation_revision_mismatch")
+        return _reject(state, event, "reservation_revision_mismatch")
     generation = event.generation_reservation
     generation_count = generation.maximum_allowance if generation is not None else 0
     if generation is not None and (
         generation.request_id != event.batch.request_id
+        or generation.batch_id != event.batch.batch_id
+        or generation.representation_revision != event.batch.manifest.representation_revision
+        or generation.occurrence_ids != event.batch.occurrence_ids
         or generation.window_epoch_id != state.snapshot.window_epoch_id
         or generation.window_epoch_number != state.snapshot.window_epoch_number
         or generation.snapshot_sequence != state.snapshot.snapshot_sequence
         or generation.reserve_class is not event.batch.reserve_class
         or generation.protected_pool_owner_id != event.batch.protected_pool_owner_id
     ):
-        return _reject(state, "generation_descriptor_mismatch")
+        return _reject(state, event, "generation_descriptor_mismatch")
     requested = reservation.reserved_count + generation_count
     global_available, ordinary_available, pool_available = _capacity(state)
     if event.batch.protected_pool_owner_id is None:
@@ -723,6 +948,7 @@ def _reserve(
     if requested > available:
         return _reject(
             state,
+            event,
             "insufficient_capacity",
             requested_count=requested,
             reserve_class=event.batch.reserve_class,
@@ -736,14 +962,41 @@ def _reserve(
         prepared_input_count=None,
         committed_input_count=0,
         unresolved_input_count=0,
+        dispatch_sequence=None,
+    )
+    member_ids = set(event.batch.occurrence_ids)
+    reserved_occurrence_records = tuple(
+        replace(
+            record,
+            state=AdmissionState.RESERVED,
+            batch_id=event.batch.batch_id,
+            reservation_id=reservation.reservation_id,
+        )
+        if record.occurrence.occurrence_id in member_ids
+        else record
+        for record in state.occurrence_records
     )
     next_state = replace(
         state,
-        batch_records=state.batch_records + (batch_record,),
-        reservations=state.reservations + event.input_reservations,
-        generation_reservations=(
-            state.generation_reservations
-            + ((generation,) if generation is not None and generation_count > 0 else ())
+        occurrence_records=reserved_occurrence_records,
+        batch_records=tuple(
+            sorted(
+                state.batch_records + (batch_record,),
+                key=lambda item: item.batch.batch_id.value,
+            )
+        ),
+        reservations=tuple(
+            sorted(
+                state.reservations + event.input_reservations,
+                key=lambda item: item.reservation_id.value,
+            )
+        ),
+        generation_reservations=tuple(
+            sorted(
+                state.generation_reservations
+                + ((generation,) if generation is not None and generation_count > 0 else ()),
+                key=lambda item: item.generation_reservation_id.value,
+            )
         ),
     )
     reserve_decision = _decision(
@@ -756,25 +1009,27 @@ def _reserve(
     )
     next_state = replace(
         next_state,
-        idempotency_records=next_state.idempotency_records
-        + (
-            IdempotencyRecord(
-                namespace=event.idempotency_namespace,
-                reservation_key=reservation.key,
-                original_descriptor=event,
-                original_reserve_decision=reserve_decision,
-                owning_event_id=event.event_id,
-                publication_revision=type(state.aggregate_revision)(
-                    state.aggregate_revision.value + 1
+        idempotency_records=tuple(
+            sorted(
+                next_state.idempotency_records
+                + (
+                    IdempotencyRecord(
+                        namespace=event.idempotency_namespace,
+                        reservation_key=reservation.key,
+                        original_descriptor=event,
+                        original_reserve_decision=reserve_decision,
+                        owning_event_id=event.event_id,
+                        publication_revision=type(state.aggregate_revision)(
+                            state.aggregate_revision.value + 1
+                        ),
+                    ),
+                ),
+                key=lambda item: (
+                    item.publication_revision.value,
+                    item.owning_event_id.value,
                 ),
             ),
         ),
-    )
-    next_state = _set_occurrence_state(
-        next_state,
-        event.batch,
-        AdmissionState.RESERVED,
-        reservation_id=reservation.reservation_id,
     )
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
     effects: tuple[AdmissionEffect, ...] = (
@@ -833,20 +1088,20 @@ def _prepare(
     event: PrepareBatchEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     record = _batch_record(state, event.batch_id)
     if record is None or record.state is not AdmissionState.RESERVED:
-        return _reject(state, "illegal_prepare_order")
+        return _reject(state, event, "illegal_prepare_order")
     if event.representation_revision != record.batch.manifest.representation_revision:
-        return _reject(state, "representation_revision_mismatch")
+        return _reject(state, event, "representation_revision_mismatch")
     reservation = _reservation_for(state, record)
     if reservation is None or event.proposed_charge != reservation.reserved_count:
-        return _reject(state, "prepared_charge_mismatch")
+        return _reject(state, event, "prepared_charge_mismatch")
     if event.measurement_kind not in {
         MeasurementKind.PROVIDER_EXACT,
         MeasurementKind.TOKENIZER_EXACT,
     }:
-        return _reject(state, "non_authoritative_measurement")
+        return _reject(state, event, "non_authoritative_measurement")
     updated = replace(
         record,
         state=AdmissionState.PREPARED,
@@ -878,7 +1133,7 @@ def _stage(
     event: StageHistoryEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     record = _batch_record(state, event.batch_id)
     if (
         record is None
@@ -890,11 +1145,14 @@ def _stage(
             WitnessKind.HISTORY_STAGED,
         )
     ):
-        return _reject(state, "invalid_history_stage_witness")
+        return _reject(state, event, "invalid_history_stage_witness")
     updated = replace(
         record,
         state=AdmissionState.HISTORY_STAGED,
-        witness_ids=record.witness_ids + (event.witness.witness_id,),
+        witness_ids=_append_witness_ids(
+            record.witness_ids,
+            event.witness.witness_id,
+        ),
     )
     next_state = _replace_batch_record(state, updated)
     next_state = _set_occurrence_state(
@@ -923,7 +1181,7 @@ def _dispatch(
     event: DispatchRequestEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     record = _batch_record(state, event.batch_id)
     if (
         record is None
@@ -935,11 +1193,15 @@ def _dispatch(
             WitnessKind.REQUEST_INCLUDED,
         )
     ):
-        return _reject(state, "invalid_request_inclusion_witness")
+        return _reject(state, event, "invalid_request_inclusion_witness")
     updated = replace(
         record,
         state=AdmissionState.REQUEST_DISPATCHED,
-        witness_ids=record.witness_ids + (event.witness.witness_id,),
+        dispatch_sequence=_highest_dispatch_sequence(state) + 1,
+        witness_ids=_append_witness_ids(
+            record.witness_ids,
+            event.witness.witness_id,
+        ),
     )
     next_state = _replace_batch_record(state, updated)
     next_state = _set_occurrence_state(
@@ -979,7 +1241,7 @@ def _accepted_state(
     updated = replace(
         record,
         state=lifecycle,
-        witness_ids=record.witness_ids + (witness.witness_id,),
+        witness_ids=_append_witness_ids(record.witness_ids, witness.witness_id),
         committed_input_count=exact_charge,
         unresolved_input_count=0,
     )
@@ -998,102 +1260,272 @@ def _accepted_state(
     )
 
 
+def _accept_closed_input(
+    state: ActiveContextAdmissionState,
+    event: AcceptInputEvent | ResolveIndeterminateAcceptedEvent,
+    location: tuple[int, ClosedEpochAudit, AdmissionBatchRecord],
+) -> AdmissionTransition:
+    index, audit, record = location
+    expected_state = (
+        AdmissionState.REQUEST_DISPATCHED
+        if isinstance(event, AcceptInputEvent)
+        else AdmissionState.INDETERMINATE
+    )
+    binding = event.representation_binding_witness
+    expected_revision = record.batch.manifest.representation_revision
+    exact_charge = (
+        event.exact_input_charge if isinstance(event, AcceptInputEvent) else event.exact_charge
+    )
+    if (
+        record.state is not expected_state
+        or not _validate_witness_for_snapshot(
+            audit.snapshot,
+            record.batch,
+            event.witness,
+            WitnessKind.PROVIDER_ACCEPTED,
+        )
+        or event.measurement_kind is not MeasurementKind.PROVIDER_EXACT
+        or event.final_manifest_revision != expected_revision
+        or event.final_manifest.representation_revision != expected_revision
+        or event.final_manifest.request_id != record.batch.request_id
+        or binding.counted_representation_revision != expected_revision
+        or binding.dispatched_representation_revision != expected_revision
+        or binding.final_manifest_revision != expected_revision
+        or binding.request_id != record.batch.request_id
+        or binding.batch_id != record.batch.batch_id
+        or event.authority_source_id != event.witness.authority_source_id
+        or event.authority_source_id != binding.authority_source_id
+    ):
+        return _reject(state, event, "invalid_closed_epoch_acceptance")
+    reservation = _closed_reservation_for(audit, record)
+    if reservation is None:
+        return _reject(state, event, "missing_closed_epoch_reservation")
+    member_ids = set(record.batch.occurrence_ids)
+    expected_owned_pairs = tuple(
+        (span_id, item.occurrence.occurrence_id)
+        for item in audit.terminal_occurrence_records
+        if item.occurrence.occurrence_id in member_ids
+        for span_id in item.occurrence.owned_span_ids
+    )
+    manifest_pairs = tuple(
+        (owner.span_id, owner.occurrence_id) for owner in event.final_manifest.span_owners
+    )
+    manifest_invalid = (
+        len({span_id for span_id, _ in expected_owned_pairs}) != len(expected_owned_pairs)
+        or set(manifest_pairs) != set(expected_owned_pairs)
+        or len(manifest_pairs) != len(expected_owned_pairs)
+    )
+    quarantined = (
+        exact_charge > reservation.reserved_count
+        or exact_charge > audit.snapshot.hard_limit
+        or manifest_invalid
+    )
+    reason_code = (
+        "incomplete_canonical_span_ownership"
+        if manifest_invalid
+        else "provider_charge_exceeds_reservation"
+        if quarantined
+        else "accepted"
+    )
+    lifecycle = AdmissionState.QUARANTINED if quarantined else AdmissionState.COMMITTED
+    updated_record = replace(
+        record,
+        state=lifecycle,
+        witness_ids=_append_witness_ids(
+            record.witness_ids,
+            event.witness.witness_id,
+        ),
+        committed_input_count=exact_charge,
+        unresolved_input_count=0,
+    )
+    batch_records = tuple(
+        updated_record if item.batch.batch_id == record.batch.batch_id else item
+        for item in audit.terminal_batch_records
+    )
+    occurrence_records = tuple(
+        replace(
+            item,
+            state=lifecycle,
+            accepted_witness_ids=_append_witness_ids(
+                item.accepted_witness_ids,
+                event.witness.witness_id,
+            ),
+            quarantine_reason_code=(reason_code if quarantined else None),
+        )
+        if item.occurrence.occurrence_id in member_ids
+        else item
+        for item in audit.terminal_occurrence_records
+    )
+    updated_audit = replace(
+        audit,
+        terminal_occurrence_records=occurrence_records,
+        terminal_batch_records=batch_records,
+        retained_unresolved_count=_closed_retained_input_count(
+            audit,
+            batch_records,
+        ),
+    )
+    next_state = _replace_closed_audit(state, index, updated_audit)
+    revision, sequence = _effect_coordinates(state, capacity_changed=True)
+    effects: tuple[AdmissionEffect, ...] = (
+        ChargeCommittedEffect(
+            source_event_id=event.event_id,
+            resulting_aggregate_revision=revision,
+            resulting_admission_sequence=sequence,
+            target_id=record.batch.batch_id,
+            charge_domain=ChargeDomain.INPUT_CONTEXT,
+            reserve_class=record.batch.reserve_class,
+            protected_pool_owner_id=record.batch.protected_pool_owner_id,
+            count=exact_charge,
+            window_epoch_id=audit.snapshot.window_epoch_id,
+            snapshot_sequence=audit.snapshot.snapshot_sequence,
+            witness_ids=(event.witness.witness_id,),
+        ),
+        *_occurrence_effects(
+            state,
+            event,
+            record.batch,
+            record.state,
+            lifecycle,
+            capacity_changed=True,
+        ),
+    )
+    if quarantined:
+        effects += (
+            QuarantineRecordedEffect(
+                source_event_id=event.event_id,
+                resulting_aggregate_revision=revision,
+                resulting_admission_sequence=sequence,
+                target_id=record.batch.batch_id,
+                reason_code=reason_code,
+            ),
+        )
+    return _publish(
+        state,
+        next_state,
+        event,
+        kind=(
+            AdmissionDecisionKind.QUARANTINED if quarantined else AdmissionDecisionKind.WOULD_ADMIT
+        ),
+        reason_code=reason_code,
+        requested_count=exact_charge,
+        reserve_class=record.batch.reserve_class,
+        protected_pool_owner_id=record.batch.protected_pool_owner_id,
+        capacity_changed=True,
+        effects=effects,
+    )
+
+
 def _accept(
     state: ContextAdmissionState,
     event: AcceptInputEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     record = _batch_record(state, event.batch_id)
+    if record is None:
+        location = _closed_batch_location(state, event.batch_id)
+        if location is not None:
+            return _accept_closed_input(state, event, location)
     if record is None or record.state is not AdmissionState.REQUEST_DISPATCHED:
-        return _reject(state, "illegal_accept_order")
+        return _reject(state, event, "illegal_accept_order")
     if not _validate_witness(
         state,
         record.batch,
         event.witness,
         WitnessKind.PROVIDER_ACCEPTED,
     ):
-        return _reject(state, "invalid_provider_acceptance_witness")
+        return _reject(state, event, "invalid_provider_acceptance_witness")
     binding = event.representation_binding_witness
     expected_revision = record.batch.manifest.representation_revision
     if (
         event.final_manifest_revision != expected_revision
+        or event.final_manifest.representation_revision != expected_revision
+        or event.final_manifest.request_id != record.batch.request_id
         or binding.counted_representation_revision != expected_revision
         or binding.dispatched_representation_revision != expected_revision
         or binding.final_manifest_revision != expected_revision
         or binding.request_id != record.batch.request_id
         or binding.batch_id != record.batch.batch_id
     ):
-        return _reject(state, "representation_revision_mismatch")
-    if event.measurement_kind not in {
-        MeasurementKind.PROVIDER_EXACT,
-        MeasurementKind.TOKENIZER_EXACT,
-    }:
-        return _reject(state, "non_authoritative_measurement")
+        return _reject(state, event, "representation_revision_mismatch")
+    if event.measurement_kind is not MeasurementKind.PROVIDER_EXACT:
+        return _reject(state, event, "non_authoritative_measurement")
     if event.exact_input_charge < 0:
-        return _reject(state, "invalid_exact_charge")
-    expected_owned_spans: set[CanonicalSpanId] = set()
+        return _reject(state, event, "invalid_exact_charge")
+    expected_owned_spans: list[CanonicalSpanId] = []
+    expected_owned_pairs: list[tuple[CanonicalSpanId, AdmissionOccurrenceId]] = []
     for occurrence in state.occurrence_records:
         if occurrence.occurrence.occurrence_id in set(record.batch.occurrence_ids):
-            expected_owned_spans.update(occurrence.occurrence.owned_span_ids)
-    manifest_spans = {owner.span_id for owner in record.batch.manifest.span_owners}
+            expected_owned_spans.extend(occurrence.occurrence.owned_span_ids)
+            expected_owned_pairs.extend(
+                (span_id, occurrence.occurrence.occurrence_id)
+                for span_id in occurrence.occurrence.owned_span_ids
+            )
+    manifest_pairs = tuple(
+        (owner.span_id, owner.occurrence_id) for owner in event.final_manifest.span_owners
+    )
     if (
         event.authority_source_id != event.witness.authority_source_id
         or event.authority_source_id != binding.authority_source_id
     ):
-        coord = _effect_coordinates(state, capacity_changed=True)
-        quarantined_record = replace(
+        reason_code = "authority_source_mismatch"
+        next_state = _quarantined_acceptance_state(
+            state,
             record,
-            state=AdmissionState.QUARANTINED,
-            witness_ids=record.witness_ids + (event.witness.witness_id,),
-            committed_input_count=event.exact_input_charge,
-            unresolved_input_count=0,
-        )
-        next_state = _replace_batch_record(state, quarantined_record)
-        next_state = _set_occurrence_state(
-            next_state,
-            record.batch,
-            AdmissionState.QUARANTINED,
-            witness=event.witness,
-            quarantine_reason_code="authority_source_mismatch",
+            event.witness,
+            event.exact_input_charge,
+            reason_code,
         )
         return _publish(
             state,
             next_state,
             event,
             kind=AdmissionDecisionKind.QUARANTINED,
-            reason_code="authority_source_mismatch",
+            reason_code=reason_code,
             requested_count=event.exact_input_charge,
             reserve_class=record.batch.reserve_class,
             protected_pool_owner_id=record.batch.protected_pool_owner_id,
             capacity_changed=True,
-            effects=(
-                QuarantineRecordedEffect(
-                    source_event_id=event.event_id,
-                    resulting_aggregate_revision=coord[0],
-                    resulting_admission_sequence=coord[1],
-                    target_id=record.batch.batch_id,
-                    reason_code="authority_source_mismatch",
-                ),
+            effects=_acceptance_effects(
+                state,
+                event,
+                record,
+                event.exact_input_charge,
+                event.witness,
+                quarantine_reason_code=reason_code,
             ),
         )
-    if manifest_spans != expected_owned_spans:
-        coord = _effect_coordinates(state, capacity_changed=True)
+    if (
+        len(expected_owned_spans) != len(set(expected_owned_spans))
+        or set(manifest_pairs) != set(expected_owned_pairs)
+        or len(manifest_pairs) != len(expected_owned_pairs)
+    ):
+        reason_code = "incomplete_canonical_span_ownership"
+        next_state = _quarantined_acceptance_state(
+            state,
+            record,
+            event.witness,
+            event.exact_input_charge,
+            reason_code,
+        )
         return _publish(
             state,
-            replace(state, batch_records=_replace_batch_record_quarantine(state, record)),
+            next_state,
             event,
             kind=AdmissionDecisionKind.QUARANTINED,
-            reason_code="incomplete_canonical_span_ownership",
+            reason_code=reason_code,
+            requested_count=event.exact_input_charge,
+            reserve_class=record.batch.reserve_class,
+            protected_pool_owner_id=record.batch.protected_pool_owner_id,
             capacity_changed=True,
-            effects=(
-                QuarantineRecordedEffect(
-                    source_event_id=event.event_id,
-                    resulting_aggregate_revision=coord[0],
-                    resulting_admission_sequence=coord[1],
-                    target_id=record.batch.batch_id,
-                    reason_code="incomplete_canonical_span_ownership",
-                ),
+            effects=_acceptance_effects(
+                state,
+                event,
+                record,
+                event.exact_input_charge,
+                event.witness,
+                quarantine_reason_code=reason_code,
             ),
         )
     next_state, kind, reason = _accepted_state(
@@ -1122,6 +1554,202 @@ def _accept(
     )
 
 
+def _release_closed_batch(
+    state: ActiveContextAdmissionState,
+    event: (
+        ReleaseNonAdmissionEvent
+        | RollbackAdmissionEvent
+        | ResolveIndeterminateNonAdmissionEvent
+        | ResolveIndeterminateRollbackEvent
+    ),
+    location: tuple[int, ClosedEpochAudit, AdmissionBatchRecord],
+) -> AdmissionTransition:
+    index, audit, record = location
+    is_release = isinstance(
+        event,
+        ReleaseNonAdmissionEvent | ResolveIndeterminateNonAdmissionEvent,
+    )
+    is_resolution = isinstance(
+        event,
+        ResolveIndeterminateNonAdmissionEvent | ResolveIndeterminateRollbackEvent,
+    )
+    expected_state = (
+        AdmissionState.INDETERMINATE if is_resolution else AdmissionState.REQUEST_DISPATCHED
+    )
+    expected_kind = WitnessKind.NON_ADMISSION if is_release else WitnessKind.ROLLBACK
+    history_removal_witness = (
+        event.history_removal_witness
+        if isinstance(
+            event,
+            ReleaseNonAdmissionEvent | ResolveIndeterminateNonAdmissionEvent,
+        )
+        else None
+    )
+    if (
+        record.state is not expected_state
+        or not _validate_witness_for_snapshot(
+            audit.snapshot,
+            record.batch,
+            event.witness,
+            expected_kind,
+        )
+        or (
+            is_release
+            and (
+                history_removal_witness is None
+                or not _validate_witness_for_snapshot(
+                    audit.snapshot,
+                    record.batch,
+                    history_removal_witness,
+                    WitnessKind.ROLLBACK,
+                )
+                or history_removal_witness.witness_id == event.witness.witness_id
+            )
+        )
+    ):
+        return _reject(state, event, "invalid_closed_epoch_resolution")
+    lifecycle = AdmissionState.RELEASED if is_release else AdmissionState.ROLLED_BACK
+    witness_ids = _append_witness_ids(
+        record.witness_ids,
+        event.witness.witness_id,
+        *((history_removal_witness.witness_id,) if history_removal_witness is not None else ()),
+    )
+    updated_record = replace(
+        record,
+        state=lifecycle,
+        witness_ids=witness_ids,
+        unresolved_input_count=0,
+    )
+    batch_records = tuple(
+        updated_record if item.batch.batch_id == record.batch.batch_id else item
+        for item in audit.terminal_batch_records
+    )
+    member_ids = set(record.batch.occurrence_ids)
+    occurrence_records = tuple(
+        replace(
+            item,
+            state=lifecycle,
+            accepted_witness_ids=_append_witness_ids(
+                item.accepted_witness_ids,
+                event.witness.witness_id,
+                *(
+                    (history_removal_witness.witness_id,)
+                    if history_removal_witness is not None
+                    else ()
+                ),
+            ),
+            indeterminate_reason_code=None,
+        )
+        if item.occurrence.occurrence_id in member_ids
+        else item
+        for item in audit.terminal_occurrence_records
+    )
+    updated_audit = replace(
+        audit,
+        terminal_occurrence_records=occurrence_records,
+        terminal_batch_records=batch_records,
+        retained_unresolved_count=_closed_retained_input_count(
+            audit,
+            batch_records,
+        ),
+    )
+    next_state = _replace_closed_audit(state, index, updated_audit)
+    reservation = _closed_reservation_for(audit, record)
+    effects: tuple[AdmissionEffect, ...] = _occurrence_effects(
+        state,
+        event,
+        record.batch,
+        record.state,
+        lifecycle,
+        capacity_changed=True,
+    )
+    if reservation is not None:
+        revision, sequence = _effect_coordinates(state, capacity_changed=True)
+        effects = (
+            ReservationReleasedEffect(
+                source_event_id=event.event_id,
+                resulting_aggregate_revision=revision,
+                resulting_admission_sequence=sequence,
+                target_id=reservation.reservation_id,
+                charge_domain=ChargeDomain.INPUT_CONTEXT,
+                reserve_class=reservation.reserve_class,
+                protected_pool_owner_id=reservation.protected_pool_owner_id,
+                count=reservation.reserved_count,
+                window_epoch_id=reservation.window_epoch_id,
+                snapshot_sequence=reservation.snapshot_sequence,
+                witness_ids=_append_witness_ids(
+                    (event.witness.witness_id,),
+                    *(
+                        (history_removal_witness.witness_id,)
+                        if history_removal_witness is not None
+                        else ()
+                    ),
+                ),
+            ),
+            *effects,
+        )
+    generation_effects: tuple[AdmissionEffect, ...] = ()
+    generation_records: list[GenerationReservationRecord] = []
+    revision, sequence = _effect_coordinates(state, capacity_changed=True)
+    for generation in audit.terminal_generation_reservations:
+        if generation.request_id == record.batch.request_id and generation.state in {
+            GenerationState.RESERVED,
+            GenerationState.STREAMING,
+            GenerationState.INDETERMINATE,
+        }:
+            generation_records.append(
+                replace(
+                    generation,
+                    state=GenerationState.INVALIDATED,
+                    witness_ids=_append_witness_ids(
+                        generation.witness_ids,
+                        event.witness.witness_id,
+                    ),
+                )
+            )
+            generation_effects += (
+                ReservationInvalidatedEffect(
+                    source_event_id=event.event_id,
+                    resulting_aggregate_revision=revision,
+                    resulting_admission_sequence=sequence,
+                    target_id=generation.generation_reservation_id,
+                    charge_domain=ChargeDomain.OUTPUT_GENERATION,
+                    reserve_class=generation.reserve_class,
+                    protected_pool_owner_id=generation.protected_pool_owner_id,
+                    count=generation.maximum_allowance,
+                    window_epoch_id=generation.window_epoch_id,
+                    snapshot_sequence=generation.snapshot_sequence,
+                    witness_ids=(event.witness.witness_id,),
+                ),
+            )
+        else:
+            generation_records.append(generation)
+    if generation_effects:
+        updated_audit = replace(
+            updated_audit,
+            terminal_generation_reservations=tuple(generation_records),
+            retained_generation_count=sum(
+                generation.maximum_allowance
+                for generation in generation_records
+                if generation.state
+                in {
+                    GenerationState.RESERVED,
+                    GenerationState.STREAMING,
+                    GenerationState.INDETERMINATE,
+                }
+            ),
+        )
+        next_state = _replace_closed_audit(state, index, updated_audit)
+        effects += generation_effects
+    return _publish(
+        state,
+        next_state,
+        event,
+        capacity_changed=True,
+        effects=effects,
+    )
+
+
 def _release_or_rollback(
     state: ContextAdmissionState,
     event: (
@@ -1132,10 +1760,13 @@ def _release_or_rollback(
     ),
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     record = _batch_record(state, event.batch_id)
     if record is None:
-        return _reject(state, "unknown_batch")
+        location = _closed_batch_location(state, event.batch_id)
+        if location is not None:
+            return _release_closed_batch(state, event, location)
+        return _reject(state, event, "unknown_batch")
     is_release = isinstance(
         event,
         ReleaseNonAdmissionEvent | ResolveIndeterminateNonAdmissionEvent,
@@ -1158,7 +1789,6 @@ def _release_or_rollback(
         allowed_states = {
             AdmissionState.HISTORY_STAGED,
             AdmissionState.REQUEST_DISPATCHED,
-            AdmissionState.INDETERMINATE,
         }
     if record.state not in allowed_states or not _validate_witness(
         state,
@@ -1166,18 +1796,48 @@ def _release_or_rollback(
         event.witness,
         expected_witness,
     ):
-        return _reject(state, "invalid_release_or_rollback_witness")
+        return _reject(state, event, "invalid_release_or_rollback_witness")
+    history_removal_witness = (
+        event.history_removal_witness
+        if isinstance(
+            event,
+            ReleaseNonAdmissionEvent | ResolveIndeterminateNonAdmissionEvent,
+        )
+        else None
+    )
     if (
         is_release
-        and record.state in {AdmissionState.HISTORY_STAGED, AdmissionState.REQUEST_DISPATCHED}
-        and event.witness.kind is not WitnessKind.NON_ADMISSION
+        and record.state
+        in {
+            AdmissionState.HISTORY_STAGED,
+            AdmissionState.REQUEST_DISPATCHED,
+            AdmissionState.INDETERMINATE,
+        }
+        and (
+            history_removal_witness is None
+            or not _validate_witness(
+                state,
+                record.batch,
+                history_removal_witness,
+                WitnessKind.ROLLBACK,
+            )
+            or history_removal_witness.witness_id == event.witness.witness_id
+        )
     ):
-        return _reject(state, "staged_release_requires_non_admission_witness")
+        return _reject(state, event, "staged_release_requires_history_removal")
     lifecycle = AdmissionState.RELEASED if is_release else AdmissionState.ROLLED_BACK
     updated = replace(
         record,
         state=lifecycle,
-        witness_ids=record.witness_ids + (event.witness.witness_id,),
+        witness_ids=_append_witness_ids(
+            record.witness_ids,
+            event.witness.witness_id,
+            *(
+                (history_removal_witness.witness_id,)
+                if history_removal_witness is not None
+                else ()
+            ),
+        ),
         unresolved_input_count=0,
     )
     next_state = _replace_batch_record(state, updated)
@@ -1187,6 +1847,13 @@ def _release_or_rollback(
         lifecycle,
         witness=event.witness,
     )
+    if history_removal_witness is not None:
+        next_state = _set_occurrence_state(
+            next_state,
+            record.batch,
+            lifecycle,
+            witness=history_removal_witness,
+        )
     effects: tuple[AdmissionEffect, ...] = _occurrence_effects(
         state,
         event,
@@ -1210,10 +1877,59 @@ def _release_or_rollback(
                 count=reservation.reserved_count,
                 window_epoch_id=reservation.window_epoch_id,
                 snapshot_sequence=reservation.snapshot_sequence,
-                witness_ids=(event.witness.witness_id,),
+                witness_ids=_append_witness_ids(
+                    (event.witness.witness_id,),
+                    *(
+                        (history_removal_witness.witness_id,)
+                        if history_removal_witness is not None
+                        else ()
+                    ),
+                ),
             ),
             *effects,
         )
+    generation_effects: tuple[AdmissionEffect, ...] = ()
+    generation_records: list[GenerationReservationRecord] = []
+    revision, sequence = _effect_coordinates(state, capacity_changed=True)
+    for generation in next_state.generation_reservations:
+        if generation.request_id == record.batch.request_id and generation.state in {
+            GenerationState.RESERVED,
+            GenerationState.STREAMING,
+            GenerationState.INDETERMINATE,
+        }:
+            generation_records.append(
+                replace(
+                    generation,
+                    state=GenerationState.INVALIDATED,
+                    witness_ids=_append_witness_ids(
+                        generation.witness_ids,
+                        event.witness.witness_id,
+                    ),
+                )
+            )
+            generation_effects += (
+                ReservationInvalidatedEffect(
+                    source_event_id=event.event_id,
+                    resulting_aggregate_revision=revision,
+                    resulting_admission_sequence=sequence,
+                    target_id=generation.generation_reservation_id,
+                    charge_domain=ChargeDomain.OUTPUT_GENERATION,
+                    reserve_class=generation.reserve_class,
+                    protected_pool_owner_id=generation.protected_pool_owner_id,
+                    count=generation.maximum_allowance,
+                    window_epoch_id=generation.window_epoch_id,
+                    snapshot_sequence=generation.snapshot_sequence,
+                    witness_ids=(event.witness.witness_id,),
+                ),
+            )
+        else:
+            generation_records.append(generation)
+    if generation_effects:
+        next_state = replace(
+            next_state,
+            generation_reservations=tuple(generation_records),
+        )
+        effects += generation_effects
     return _publish(
         state,
         next_state,
@@ -1228,14 +1944,14 @@ def _mark_indeterminate(
     event: MarkIndeterminateEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     record = _batch_record(state, event.batch_id)
     if record is None or record.state not in {
         AdmissionState.PREPARED,
         AdmissionState.HISTORY_STAGED,
         AdmissionState.REQUEST_DISPATCHED,
     }:
-        return _reject(state, "illegal_indeterminate_order")
+        return _reject(state, event, "illegal_indeterminate_order")
     reservation = _reservation_for(state, record)
     unresolved = reservation.reserved_count if reservation is not None else 0
     updated = replace(
@@ -1270,8 +1986,16 @@ def _resolve_indeterminate_accepted(
     event: ResolveIndeterminateAcceptedEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     record = _batch_record(state, event.batch_id)
+    if record is None:
+        location = _closed_batch_location(state, event.batch_id)
+        if location is not None:
+            return _accept_closed_input(state, event, location)
+    binding = event.representation_binding_witness
+    expected_revision = (
+        record.batch.manifest.representation_revision if record is not None else None
+    )
     if (
         record is None
         or record.state is not AdmissionState.INDETERMINATE
@@ -1281,8 +2005,61 @@ def _resolve_indeterminate_accepted(
             event.witness,
             WitnessKind.PROVIDER_ACCEPTED,
         )
+        or event.authority_source_id != event.witness.authority_source_id
+        or event.authority_source_id != binding.authority_source_id
+        or event.measurement_kind is not MeasurementKind.PROVIDER_EXACT
+        or event.final_manifest_revision != expected_revision
+        or event.final_manifest.representation_revision != expected_revision
+        or event.final_manifest.request_id != record.batch.request_id
+        or binding.counted_representation_revision != expected_revision
+        or binding.dispatched_representation_revision != expected_revision
+        or binding.final_manifest_revision != expected_revision
+        or binding.request_id != record.batch.request_id
+        or binding.batch_id != record.batch.batch_id
     ):
-        return _reject(state, "invalid_indeterminate_acceptance")
+        return _reject(state, event, "invalid_indeterminate_acceptance")
+    member_ids = set(record.batch.occurrence_ids)
+    expected_owned_pairs = tuple(
+        (span_id, item.occurrence.occurrence_id)
+        for item in state.occurrence_records
+        if item.occurrence.occurrence_id in member_ids
+        for span_id in item.occurrence.owned_span_ids
+    )
+    manifest_pairs = tuple(
+        (owner.span_id, owner.occurrence_id) for owner in event.final_manifest.span_owners
+    )
+    if (
+        len({span_id for span_id, _ in expected_owned_pairs}) != len(expected_owned_pairs)
+        or set(manifest_pairs) != set(expected_owned_pairs)
+        or len(manifest_pairs) != len(expected_owned_pairs)
+    ):
+        reason_code = "incomplete_canonical_span_ownership"
+        next_state = _quarantined_acceptance_state(
+            state,
+            record,
+            event.witness,
+            event.exact_charge,
+            reason_code,
+        )
+        return _publish(
+            state,
+            next_state,
+            event,
+            kind=AdmissionDecisionKind.QUARANTINED,
+            reason_code=reason_code,
+            requested_count=event.exact_charge,
+            reserve_class=record.batch.reserve_class,
+            protected_pool_owner_id=record.batch.protected_pool_owner_id,
+            capacity_changed=True,
+            effects=_acceptance_effects(
+                state,
+                event,
+                record,
+                event.exact_charge,
+                event.witness,
+                quarantine_reason_code=reason_code,
+            ),
+        )
     next_state, kind, reason = _accepted_state(
         state,
         record,
@@ -1314,36 +2091,42 @@ def _start_generation(
     event: StartGenerationEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     generation = _generation_record(state, event.generation_reservation_id)
     if generation is None or generation.state is not GenerationState.RESERVED:
-        return _reject(state, "illegal_generation_start")
-    batch_record = next(
-        (
-            record
-            for record in state.batch_records
-            if record.batch.request_id == generation.request_id
-        ),
-        None,
-    )
+        return _reject(state, event, "illegal_generation_start")
+    batch_record = _batch_record(state, generation.batch_id)
     batch = batch_record.batch if batch_record is not None else None
     if (
         batch is None
         or batch_record is None
         or batch_record.state
-        not in {AdmissionState.HISTORY_STAGED, AdmissionState.REQUEST_DISPATCHED}
+        not in {
+            AdmissionState.HISTORY_STAGED,
+            AdmissionState.REQUEST_DISPATCHED,
+            AdmissionState.COMMITTED,
+            AdmissionState.QUARANTINED,
+        }
         or not _validate_witness(
             state,
             batch,
             event.witness,
             WitnessKind.REQUEST_INCLUDED,
         )
+        or (
+            generation.authority_source_id is not None
+            and generation.authority_source_id != event.witness.authority_source_id
+        )
     ):
-        return _reject(state, "invalid_generation_start_witness")
+        return _reject(state, event, "invalid_generation_start_witness")
     updated = replace(
         generation,
         state=GenerationState.STREAMING,
-        witness_ids=generation.witness_ids + (event.witness.witness_id,),
+        authority_source_id=event.witness.authority_source_id,
+        witness_ids=_append_witness_ids(
+            generation.witness_ids,
+            event.witness.witness_id,
+        ),
     )
     next_state = replace(
         state,
@@ -1357,29 +2140,155 @@ def _start_generation(
     return _publish(state, next_state, event)
 
 
-def _reconcile_generation(
-    state: ContextAdmissionState,
+def _reconcile_closed_generation(
+    state: ActiveContextAdmissionState,
     event: ReconcileGenerationEvent,
+    location: tuple[int, ClosedEpochAudit, GenerationReservationRecord],
 ) -> AdmissionTransition:
-    if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
-    generation = _generation_record(state, event.generation_reservation_id)
-    if generation is None or generation.state not in {
-        GenerationState.RESERVED,
-        GenerationState.STREAMING,
-        GenerationState.INDETERMINATE,
-    }:
-        return _reject(state, "illegal_generation_reconciliation")
-    if event.output_usage_witness.kind is not WitnessKind.OUTPUT_USAGE:
-        return _reject(state, "invalid_output_usage_witness")
-    if event.output_usage_witness.authority_source_id.value == "":
-        return _reject(state, "missing_witness_authority_source")
+    index, audit, generation = location
+    batch_record = next(
+        (
+            record
+            for record in audit.terminal_batch_records
+            if record.batch.batch_id == generation.batch_id
+        ),
+        None,
+    )
+    if (
+        generation.state
+        not in {
+            GenerationState.RESERVED,
+            GenerationState.STREAMING,
+            GenerationState.INDETERMINATE,
+        }
+        or batch_record is None
+        or not _validate_witness_for_snapshot(
+            audit.snapshot,
+            batch_record.batch,
+            event.output_usage_witness,
+            WitnessKind.OUTPUT_USAGE,
+        )
+        or (
+            generation.authority_source_id is not None
+            and generation.authority_source_id != event.output_usage_witness.authority_source_id
+        )
+    ):
+        return _reject(state, event, "invalid_closed_generation_witness")
     quarantined = event.exact_output_usage > generation.maximum_allowance
     updated = replace(
         generation,
         state=(GenerationState.QUARANTINED if quarantined else GenerationState.RECONCILED),
         exact_terminal_usage=event.exact_output_usage,
-        witness_ids=generation.witness_ids + (event.output_usage_witness.witness_id,),
+        witness_ids=_append_witness_ids(
+            generation.witness_ids,
+            event.output_usage_witness.witness_id,
+        ),
+        authority_source_id=event.output_usage_witness.authority_source_id,
+    )
+    generation_records = tuple(
+        updated if item.generation_reservation_id == generation.generation_reservation_id else item
+        for item in audit.terminal_generation_reservations
+    )
+    retained_generation_count = sum(
+        item.maximum_allowance
+        for item in generation_records
+        if item.state
+        in {
+            GenerationState.RESERVED,
+            GenerationState.STREAMING,
+            GenerationState.INDETERMINATE,
+        }
+    )
+    updated_audit = replace(
+        audit,
+        terminal_generation_reservations=generation_records,
+        retained_generation_count=retained_generation_count,
+    )
+    next_state = _replace_closed_audit(state, index, updated_audit)
+    revision, sequence = _effect_coordinates(state, capacity_changed=True)
+    effects: tuple[AdmissionEffect, ...] = (
+        GenerationReconciledEffect(
+            source_event_id=event.event_id,
+            resulting_aggregate_revision=revision,
+            resulting_admission_sequence=sequence,
+            target_id=generation.generation_reservation_id,
+            charge_domain=ChargeDomain.OUTPUT_GENERATION,
+            reserve_class=generation.reserve_class,
+            protected_pool_owner_id=generation.protected_pool_owner_id,
+            count=event.exact_output_usage,
+            window_epoch_id=audit.snapshot.window_epoch_id,
+            snapshot_sequence=audit.snapshot.snapshot_sequence,
+            witness_ids=(event.output_usage_witness.witness_id,),
+        ),
+    )
+    reason_code = "generation_usage_exceeds_allowance" if quarantined else "accepted"
+    if quarantined:
+        effects += (
+            QuarantineRecordedEffect(
+                source_event_id=event.event_id,
+                resulting_aggregate_revision=revision,
+                resulting_admission_sequence=sequence,
+                target_id=generation.generation_reservation_id,
+                reason_code=reason_code,
+            ),
+        )
+    return _publish(
+        state,
+        next_state,
+        event,
+        kind=(
+            AdmissionDecisionKind.QUARANTINED if quarantined else AdmissionDecisionKind.WOULD_ADMIT
+        ),
+        reason_code=reason_code,
+        capacity_changed=True,
+        effects=effects,
+    )
+
+
+def _reconcile_generation(
+    state: ContextAdmissionState,
+    event: ReconcileGenerationEvent,
+) -> AdmissionTransition:
+    if not isinstance(state, ActiveContextAdmissionState):
+        return _reject(state, event, "epoch_uninitialized")
+    generation = _generation_record(state, event.generation_reservation_id)
+    if generation is None:
+        location = _closed_generation_location(
+            state,
+            event.generation_reservation_id,
+        )
+        if location is not None:
+            return _reconcile_closed_generation(state, event, location)
+    if generation is None or generation.state not in {
+        GenerationState.STREAMING,
+        GenerationState.INDETERMINATE,
+    }:
+        return _reject(state, event, "illegal_generation_reconciliation")
+    batch_record = _batch_record(state, generation.batch_id)
+    if (
+        batch_record is None
+        or not _validate_witness(
+            state,
+            batch_record.batch,
+            event.output_usage_witness,
+            WitnessKind.OUTPUT_USAGE,
+        )
+        or (
+            generation.authority_source_id is not None
+            and generation.authority_source_id != event.output_usage_witness.authority_source_id
+        )
+    ):
+        return _reject(state, event, "invalid_output_usage_witness")
+    quarantined = event.exact_output_usage > generation.maximum_allowance
+    updated = replace(
+        generation,
+        state=(GenerationState.QUARANTINED if quarantined else GenerationState.RECONCILED),
+        exact_terminal_usage=event.exact_output_usage,
+        authority_source_id=event.output_usage_witness.authority_source_id,
+        witness_ids=_append_witness_ids(
+            generation.witness_ids,
+            event.output_usage_witness.witness_id,
+        ),
     )
     next_state = replace(
         state,
@@ -1434,13 +2343,13 @@ def _mark_generation_indeterminate(
     event: MarkGenerationIndeterminateEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     generation = _generation_record(state, event.generation_reservation_id)
     if generation is None or generation.state not in {
         GenerationState.RESERVED,
         GenerationState.STREAMING,
     }:
-        return _reject(state, "illegal_generation_indeterminate")
+        return _reject(state, event, "illegal_generation_indeterminate")
     updated = replace(generation, state=GenerationState.INDETERMINATE)
     next_state = replace(
         state,
@@ -1459,7 +2368,7 @@ def _request_reconciliation(
     event: RequestReconciliationEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     batch = (
         _batch_record(state, event.target_id)
         if isinstance(event.target_id, AdmissionBatchId)
@@ -1467,6 +2376,16 @@ def _request_reconciliation(
     )
     generation = (
         _generation_record(state, event.target_id)
+        if isinstance(event.target_id, GenerationReservationId)
+        else None
+    )
+    closed_batch = (
+        _closed_batch_location(state, event.target_id)
+        if isinstance(event.target_id, AdmissionBatchId)
+        else None
+    )
+    closed_generation = (
+        _closed_generation_location(state, event.target_id)
         if isinstance(event.target_id, GenerationReservationId)
         else None
     )
@@ -1491,8 +2410,25 @@ def _request_reconciliation(
                 GenerationState.INDETERMINATE,
             }
         )
+        or (
+            closed_batch is not None
+            and closed_batch[2].state
+            in {
+                AdmissionState.REQUEST_DISPATCHED,
+                AdmissionState.INDETERMINATE,
+            }
+        )
+        or (
+            closed_generation is not None
+            and closed_generation[2].state
+            in {
+                GenerationState.RESERVED,
+                GenerationState.STREAMING,
+                GenerationState.INDETERMINATE,
+            }
+        )
     ):
-        return _reject(state, "reconciliation_target_not_unresolved")
+        return _reject(state, event, "reconciliation_target_not_unresolved")
     revision, sequence = _effect_coordinates(state, capacity_changed=False)
     effect_type = (
         ReconciliationEscalationEffect
@@ -1528,7 +2464,7 @@ def _expire_idempotency(
         None,
     )
     if record is None:
-        return _reject(state, "idempotency_key_not_terminal")
+        return _reject(state, event, "idempotency_key_not_terminal")
     if isinstance(state, ActiveContextAdmissionState):
         batch_record = _batch_record(
             state,
@@ -1541,14 +2477,14 @@ def _expire_idempotency(
             AdmissionState.INVALIDATED,
             AdmissionState.QUARANTINED,
         }:
-            return _reject(state, "idempotency_key_not_terminal")
+            return _reject(state, event, "idempotency_key_not_terminal")
     if event.expiry_witness.kind is not WitnessKind.IDEMPOTENCY_EXPIRY:
-        return _reject(state, "invalid_expiry_witness")
+        return _reject(state, event, "invalid_expiry_witness")
     if (
         event.expiry_witness.window_epoch_id != event.reservation_key.window_epoch_id
         or event.expiry_witness.window_epoch_number != event.reservation_key.window_epoch_number
     ):
-        return _reject(state, "expiry_epoch_mismatch")
+        return _reject(state, event, "expiry_epoch_mismatch")
     tombstone = ExpiredIdempotencyTombstone(
         namespace=record.namespace,
         reservation_key=record.reservation_key,
@@ -1558,7 +2494,15 @@ def _expire_idempotency(
     )
     next_state = replace(
         state,
-        expired_idempotency_tombstones=(state.expired_idempotency_tombstones + (tombstone,)),
+        expired_idempotency_tombstones=tuple(
+            sorted(
+                state.expired_idempotency_tombstones + (tombstone,),
+                key=lambda item: (
+                    item.reservation_key.window_epoch_number,
+                    item.reservation_key.batch_id.value,
+                ),
+            )
+        ),
     )
     revision, sequence = _effect_coordinates(state, capacity_changed=False)
     reservation = record.original_descriptor.input_reservations[0]
@@ -1584,19 +2528,79 @@ def _rollover(
     event: RolloverEpochEvent,
 ) -> AdmissionTransition:
     if not isinstance(state, ActiveContextAdmissionState):
-        return _reject(state, "epoch_uninitialized")
+        return _reject(state, event, "epoch_uninitialized")
     proof = event.fence_proof
     if (
         event.witness.kind is not WitnessKind.EPOCH_ROLLOVER
-        or proof.old_window_epoch_id != state.snapshot.window_epoch_id
-        or proof.old_window_epoch_number != state.snapshot.window_epoch_number
-        or proof.new_window_epoch_id != event.new_snapshot.window_epoch_id
-        or proof.new_window_epoch_number != event.new_snapshot.window_epoch_number
-        or proof.new_window_epoch_number <= proof.old_window_epoch_number
-        or proof.receiver_authority_source_id != event.witness.authority_source_id
-        or proof.highest_admitted_dispatch_sequence < len(state.reservations)
+        or event.witness.window_epoch_id != state.snapshot.window_epoch_id
+        or event.witness.window_epoch_number != state.snapshot.window_epoch_number
+        or event.witness.snapshot_sequence != state.snapshot.snapshot_sequence
+        or event.new_snapshot.window_epoch_number <= state.snapshot.window_epoch_number
+        or event.new_snapshot.window_epoch_id == state.snapshot.window_epoch_id
     ):
-        return _reject(state, "stale_receiver_fence")
+        return _reject(state, event, "invalid_rollover_witness")
+    unresolved_batch_records = tuple(
+        record
+        for record in state.batch_records
+        if record.state
+        in {
+            AdmissionState.REQUEST_DISPATCHED,
+            AdmissionState.INDETERMINATE,
+        }
+    )
+    retained_generation_request_ids = {
+        record.batch.request_id
+        for record in state.batch_records
+        if record.state
+        in {
+            AdmissionState.REQUEST_DISPATCHED,
+            AdmissionState.COMMITTED,
+            AdmissionState.INDETERMINATE,
+            AdmissionState.QUARANTINED,
+        }
+    }
+    retained_unresolved_count = sum(
+        record.unresolved_input_count
+        or (
+            reservation.reserved_count
+            if (reservation := _reservation_for(state, record)) is not None
+            else 0
+        )
+        for record in unresolved_batch_records
+    )
+    retained_generation_count = sum(
+        generation.maximum_allowance
+        for generation in state.generation_reservations
+        if generation.request_id in retained_generation_request_ids
+        and generation.state
+        in {
+            GenerationState.RESERVED,
+            GenerationState.STREAMING,
+            GenerationState.INDETERMINATE,
+        }
+    )
+    retained_total = retained_unresolved_count + retained_generation_count
+    receiver_fence_valid = proof is not None and (
+        proof.old_window_epoch_id == state.snapshot.window_epoch_id
+        and proof.old_window_epoch_number == state.snapshot.window_epoch_number
+        and proof.new_window_epoch_id == event.new_snapshot.window_epoch_id
+        and proof.new_window_epoch_number == event.new_snapshot.window_epoch_number
+        and proof.receiver_authority_source_id == event.witness.authority_source_id
+        and proof.highest_admitted_dispatch_sequence == _highest_dispatch_sequence(state)
+    )
+    fully_resolved = retained_total == 0 and event.deducted_unresolved_count == 0
+    snapshot_deducts_unresolved = (
+        retained_total > 0
+        and event.deducted_unresolved_count == retained_total
+        and event.new_snapshot.active_count >= retained_total
+    )
+    authority_alternative_valid = (
+        receiver_fence_valid
+        if proof is not None
+        else (fully_resolved or snapshot_deducts_unresolved)
+    )
+    if not authority_alternative_valid:
+        return _reject(state, event, "stale_receiver_fence")
     terminal_occurrences = tuple(
         replace(
             record,
@@ -1614,66 +2618,53 @@ def _rollover(
         )
         for record in state.occurrence_records
     )
-    retained_batch_records = tuple(
-        record
-        for record in state.batch_records
-        if record.state
-        in {
-            AdmissionState.REQUEST_DISPATCHED,
-            AdmissionState.INDETERMINATE,
-        }
-    )
-    retained_reservation_ids = {
-        record.reservation_id for record in retained_batch_records if record.reservation_id
-    }
-    retained_reservations = tuple(
-        reservation
-        for reservation in state.reservations
-        if reservation.reservation_id in retained_reservation_ids
-    )
-    retained_generation_ids = {record.batch.batch_id for record in retained_batch_records}
-    retained_generation_reservations = tuple(
-        generation
-        for generation in state.generation_reservations
-        if generation.request_id in {record.batch.request_id for record in retained_batch_records}
-        or generation.state
-        in {
-            GenerationState.RESERVED,
-            GenerationState.STREAMING,
-            GenerationState.INDETERMINATE,
-        }
-        and any(
-            record.batch.request_id == generation.request_id
-            and record.state is AdmissionState.REQUEST_DISPATCHED
-            for record in retained_batch_records
+    terminal_batch_records = tuple(
+        replace(
+            record,
+            state=(
+                AdmissionState.INVALIDATED
+                if record.state
+                in {
+                    AdmissionState.RESERVED,
+                    AdmissionState.PREPARED,
+                    AdmissionState.HISTORY_STAGED,
+                }
+                else record.state
+            ),
         )
+        for record in state.batch_records
     )
-    retained_unresolved_count = 0
-    retained_generation_count = 0
-    for record in state.batch_records:
-        if record.state in {
-            AdmissionState.REQUEST_DISPATCHED,
-            AdmissionState.INDETERMINATE,
-        }:
-            reservation = _reservation_for(state, record)
-            retained_unresolved_count += record.unresolved_input_count or (
-                reservation.reserved_count if reservation is not None else 0
-            )
-    for generation in state.generation_reservations:
-        if generation.state in {
+    terminal_generation_reservations = tuple(
+        replace(
+            generation,
+            state=GenerationState.INVALIDATED,
+        )
+        if generation.state
+        in {
             GenerationState.RESERVED,
             GenerationState.STREAMING,
             GenerationState.INDETERMINATE,
-        } and any(request_id == generation.request_id for request_id in retained_generation_ids):
-            retained_generation_count += generation.maximum_allowance
+        }
+        and generation.request_id not in retained_generation_request_ids
+        else generation
+        for generation in state.generation_reservations
+    )
     audit = ClosedEpochAudit(
         snapshot=state.snapshot,
         terminal_occurrence_records=terminal_occurrences,
+        terminal_batch_records=terminal_batch_records,
         terminal_reservations=state.reservations,
+        terminal_generation_reservations=terminal_generation_reservations,
         closure_witness_id=event.witness.witness_id,
         fence_proof=proof,
-        processed_event_tombstones=tuple(record.event_id for record in state.processed_events),
+        processed_event_tombstones=tuple(
+            sorted(
+                (record.event_id for record in state.processed_events),
+                key=lambda event_id: event_id.value,
+            )
+        ),
         retained_unresolved_count=retained_unresolved_count,
+        retained_generation_count=retained_generation_count,
     )
     try:
         next_state = ActiveContextAdmissionState(
@@ -1683,18 +2674,27 @@ def _rollover(
             snapshot=event.new_snapshot,
             protected_pools=event.protected_pools,
             occurrence_records=(),
-            batch_records=retained_batch_records,
-            reservations=retained_reservations,
-            generation_reservations=retained_generation_reservations,
+            batch_records=(),
+            reservations=(),
+            generation_reservations=(),
             processed_events=state.processed_events,
             idempotency_records=state.idempotency_records,
             expired_idempotency_tombstones=state.expired_idempotency_tombstones,
-            closed_epochs=state.closed_epochs + (audit,),
+            closed_epochs=tuple(
+                sorted(
+                    state.closed_epochs + (audit,),
+                    key=lambda item: item.snapshot.window_epoch_number,
+                )
+            ),
         )
     except ContextAdmissionValidationError:
-        return _reject(state, "invalid_rollover_snapshot")
-    _ = retained_generation_count  # retained for future CapacityRecord accounting
+        return _reject(state, event, "invalid_rollover_snapshot")
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
+    rollover_witness_ids = _append_witness_ids(
+        (),
+        event.witness.witness_id,
+        *((proof.fence_witness_id,) if proof is not None else ()),
+    )
     invalidation_effects = tuple(
         ReservationInvalidatedEffect(
             source_event_id=event.event_id,
@@ -1707,7 +2707,7 @@ def _rollover(
             count=reservation.reserved_count,
             window_epoch_id=reservation.window_epoch_id,
             snapshot_sequence=reservation.snapshot_sequence,
-            witness_ids=(event.witness.witness_id, proof.fence_witness_id),
+            witness_ids=rollover_witness_ids,
         )
         for record in state.batch_records
         if record.state
@@ -1718,6 +2718,27 @@ def _rollover(
         }
         for reservation in state.reservations
         if reservation.reservation_id == record.reservation_id
+    )
+    generation_invalidation_effects = tuple(
+        ReservationInvalidatedEffect(
+            source_event_id=event.event_id,
+            resulting_aggregate_revision=revision,
+            resulting_admission_sequence=sequence,
+            target_id=prior.generation_reservation_id,
+            charge_domain=ChargeDomain.OUTPUT_GENERATION,
+            reserve_class=prior.reserve_class,
+            protected_pool_owner_id=prior.protected_pool_owner_id,
+            count=prior.maximum_allowance,
+            window_epoch_id=prior.window_epoch_id,
+            snapshot_sequence=prior.snapshot_sequence,
+            witness_ids=rollover_witness_ids,
+        )
+        for prior, terminal in zip(
+            state.generation_reservations,
+            terminal_generation_reservations,
+            strict=True,
+        )
+        if prior.state is not terminal.state
     )
     occurrence_effects = tuple(
         OccurrenceStateChangedEffect(
@@ -1737,6 +2758,7 @@ def _rollover(
     )
     effects: tuple[AdmissionEffect, ...] = (
         *invalidation_effects,
+        *generation_invalidation_effects,
         *occurrence_effects,
         EpochClosedEffect(
             source_event_id=event.event_id,
@@ -1744,6 +2766,7 @@ def _rollover(
             resulting_admission_sequence=sequence,
             target_id=state.snapshot.window_epoch_id,
             fence_proof=proof,
+            deducted_unresolved_count=event.deducted_unresolved_count,
         ),
     )
     return _publish(

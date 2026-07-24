@@ -23,7 +23,9 @@ from autoskillit.core import (
     AdmissionOccurrence,
     AdmissionOccurrenceId,
     AdmissionOccurrenceRecord,
+    AdmissionReplay,
     AdmissionRequestId,
+    AdmissionReservation,
     AdmissionReservationId,
     AdmissionReservationKey,
     AdmissionSequence,
@@ -37,6 +39,7 @@ from autoskillit.core import (
     CanonicalRepresentationManifest,
     CanonicalSpanId,
     CanonicalSpanOwner,
+    ChargeCommittedEffect,
     ChargeDomain,
     ClosedEpochAudit,
     ContextAdmissionEvent,
@@ -51,20 +54,27 @@ from autoskillit.core import (
     CoverageState,
     DeliveryOccurrenceId,
     DispatchIdentity,
+    EpochFenceProof,
+    ExpiredIdempotencyTombstone,
     ForkOccurrenceId,
     GenerationReservationId,
+    GenerationReservationRecord,
     GenerationState,
     IdempotencyNamespace,
+    IdempotencyRecord,
     MeasurementKind,
     ModelIdentity,
     ModelItemId,
     PrepareBatchEvent,
+    ProcessedEventRecord,
+    ProducerCoverageDef,
     ProducerInstanceId,
     ProducerSurface,
     ProtectedPoolOwnerId,
     ProtectedPoolSpec,
     RepresentationBindingWitness,
     RepresentationRevision,
+    ReservationRecordedEffect,
     ReserveClass,
     TokenizerIdentity,
     ToolCallId,
@@ -109,6 +119,7 @@ EXPECTED_ENUM_MEMBERS = {
         "RECONCILED",
         "INDETERMINATE",
         "QUARANTINED",
+        "INVALIDATED",
     ),
     MeasurementKind: (
         "PROVIDER_EXACT",
@@ -205,6 +216,290 @@ EXPECTED_EFFECT_TYPES = {
     "EpochClosedEffect",
     "QuarantineRecordedEffect",
     "AuthorityUnavailableEffect",
+}
+
+_EVENT_BASE_FIELDS = (
+    "event_id",
+    "protocol_version",
+    "idempotency_namespace",
+    "expected_aggregate_revision",
+)
+
+EXPECTED_EVENT_FIELDS = {
+    "OpenEpochEvent": _EVENT_BASE_FIELDS + ("snapshot", "protected_pools"),
+    "AuthorityUnavailableEvent": _EVENT_BASE_FIELDS + ("reason_code", "authority_state"),
+    "ProposeOccurrenceEvent": _EVENT_BASE_FIELDS + ("occurrence",),
+    "ReserveRequestEvent": _EVENT_BASE_FIELDS
+    + (
+        "batch",
+        "snapshot_sequence",
+        "input_reservations",
+        "generation_reservation",
+    ),
+    "PrepareBatchEvent": _EVENT_BASE_FIELDS
+    + (
+        "batch_id",
+        "representation_revision",
+        "proposed_charge",
+        "measurement_kind",
+        "authority_source_id",
+    ),
+    "StageHistoryEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
+    "DispatchRequestEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
+    "AcceptInputEvent": _EVENT_BASE_FIELDS
+    + (
+        "batch_id",
+        "witness",
+        "final_manifest_revision",
+        "final_manifest",
+        "exact_input_charge",
+        "measurement_kind",
+        "authority_source_id",
+        "representation_binding_witness",
+    ),
+    "ReleaseNonAdmissionEvent": _EVENT_BASE_FIELDS
+    + ("batch_id", "witness", "history_removal_witness"),
+    "RollbackAdmissionEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
+    "MarkIndeterminateEvent": _EVENT_BASE_FIELDS + ("batch_id", "reason_code"),
+    "ResolveIndeterminateAcceptedEvent": _EVENT_BASE_FIELDS
+    + (
+        "batch_id",
+        "witness",
+        "final_manifest_revision",
+        "final_manifest",
+        "exact_charge",
+        "measurement_kind",
+        "authority_source_id",
+        "representation_binding_witness",
+    ),
+    "ResolveIndeterminateNonAdmissionEvent": _EVENT_BASE_FIELDS
+    + ("batch_id", "witness", "history_removal_witness"),
+    "ResolveIndeterminateRollbackEvent": _EVENT_BASE_FIELDS + ("batch_id", "witness"),
+    "StartGenerationEvent": _EVENT_BASE_FIELDS + ("generation_reservation_id", "witness"),
+    "ReconcileGenerationEvent": _EVENT_BASE_FIELDS
+    + ("generation_reservation_id", "output_usage_witness", "exact_output_usage"),
+    "MarkGenerationIndeterminateEvent": _EVENT_BASE_FIELDS
+    + ("generation_reservation_id", "reason_code"),
+    "RequestReconciliationEvent": _EVENT_BASE_FIELDS + ("target_id", "reason_code"),
+    "ExpireIdempotencyKeyEvent": _EVENT_BASE_FIELDS + ("reservation_key", "expiry_witness"),
+    "RolloverEpochEvent": _EVENT_BASE_FIELDS
+    + (
+        "witness",
+        "fence_proof",
+        "deducted_unresolved_count",
+        "new_snapshot",
+        "protected_pools",
+    ),
+}
+
+_EFFECT_BASE_FIELDS = (
+    "source_event_id",
+    "resulting_aggregate_revision",
+    "resulting_admission_sequence",
+    "target_id",
+)
+_CHARGE_EFFECT_FIELDS = _EFFECT_BASE_FIELDS + (
+    "charge_domain",
+    "reserve_class",
+    "protected_pool_owner_id",
+    "count",
+    "window_epoch_id",
+    "snapshot_sequence",
+    "witness_ids",
+)
+
+EXPECTED_EFFECT_FIELDS = {
+    "ReservationRecordedEffect": _CHARGE_EFFECT_FIELDS,
+    "ReservationReleasedEffect": _CHARGE_EFFECT_FIELDS,
+    "OccurrenceStateChangedEffect": _EFFECT_BASE_FIELDS + ("previous_state", "next_state"),
+    "ChargeCommittedEffect": _CHARGE_EFFECT_FIELDS,
+    "GenerationReservationRecordedEffect": _CHARGE_EFFECT_FIELDS,
+    "GenerationReconciledEffect": _CHARGE_EFFECT_FIELDS,
+    "ReconciliationQueryRequestedEffect": _EFFECT_BASE_FIELDS + ("reason_code",),
+    "ReconciliationEscalationEffect": _EFFECT_BASE_FIELDS + ("reason_code",),
+    "ConflictRejectedEffect": _EFFECT_BASE_FIELDS + ("reason_code",),
+    "IdempotencyExpiredEffect": _EFFECT_BASE_FIELDS + ("reservation_key", "expiry_witness_id"),
+    "ReservationInvalidatedEffect": _CHARGE_EFFECT_FIELDS,
+    "EpochClosedEffect": _EFFECT_BASE_FIELDS + ("fence_proof", "deducted_unresolved_count"),
+    "QuarantineRecordedEffect": _EFFECT_BASE_FIELDS + ("reason_code",),
+    "AuthorityUnavailableEffect": _EFFECT_BASE_FIELDS + ("reason_code", "authority_state"),
+}
+
+EXPECTED_RECORD_FIELDS = {
+    CanonicalSpanOwner: ("span_id", "occurrence_id"),
+    CanonicalRepresentationManifest: (
+        "request_id",
+        "representation_revision",
+        "span_owners",
+        "assembler_identity",
+        "assembler_witness_id",
+    ),
+    AdmissionOccurrence: (
+        "occurrence_id",
+        "lineage",
+        "reserve_class",
+        "producer_surface",
+        "predicted_authoritative_maximum",
+        "representation_revision",
+        "owned_span_ids",
+    ),
+    AdmissionBatch: (
+        "batch_id",
+        "request_id",
+        "occurrence_ids",
+        "reserve_class",
+        "protected_pool_owner_id",
+        "manifest",
+    ),
+    AdmissionReservationKey: (
+        "idempotency_namespace",
+        "protocol_version",
+        "window_epoch_id",
+        "window_epoch_number",
+        "batch_id",
+        "reserve_class",
+        "protected_pool_owner_id",
+        "occurrence_revisions",
+    ),
+    AdmissionReservation: (
+        "reservation_id",
+        "key",
+        "window_epoch_id",
+        "window_epoch_number",
+        "snapshot_sequence",
+        "reserve_class",
+        "protected_pool_owner_id",
+        "occurrence_ids",
+        "reserved_count",
+    ),
+    AdmissionWitness: (
+        "witness_id",
+        "kind",
+        "window_epoch_id",
+        "window_epoch_number",
+        "snapshot_sequence",
+        "request_id",
+        "batch_id",
+        "representation_revision",
+        "occurrence_ids",
+        "authority_source_id",
+    ),
+    RepresentationBindingWitness: (
+        "counted_representation_revision",
+        "dispatched_representation_revision",
+        "final_manifest_revision",
+        "request_id",
+        "batch_id",
+        "authority_source_id",
+    ),
+    EpochFenceProof: (
+        "old_window_epoch_id",
+        "old_window_epoch_number",
+        "new_window_epoch_id",
+        "new_window_epoch_number",
+        "receiver_authority_source_id",
+        "fence_witness_id",
+        "highest_admitted_dispatch_sequence",
+    ),
+    ProtectedPoolSpec: (
+        "reserve_class",
+        "capability_owner_id",
+        "injected_count",
+        "priority",
+        "required_release_witness_kind",
+    ),
+    AdmissionOccurrenceRecord: (
+        "occurrence",
+        "state",
+        "batch_id",
+        "reservation_id",
+        "accepted_witness_ids",
+        "indeterminate_reason_code",
+        "quarantine_reason_code",
+    ),
+    AdmissionBatchRecord: (
+        "batch",
+        "state",
+        "reservation_id",
+        "witness_ids",
+        "prepared_input_count",
+        "committed_input_count",
+        "unresolved_input_count",
+        "dispatch_sequence",
+    ),
+    GenerationReservationRecord: (
+        "generation_reservation_id",
+        "request_id",
+        "batch_id",
+        "representation_revision",
+        "occurrence_ids",
+        "response_id",
+        "window_epoch_id",
+        "window_epoch_number",
+        "snapshot_sequence",
+        "reserve_class",
+        "protected_pool_owner_id",
+        "maximum_allowance",
+        "state",
+        "exact_terminal_usage",
+        "witness_ids",
+        "authority_source_id",
+    ),
+    ExpiredIdempotencyTombstone: (
+        "namespace",
+        "reservation_key",
+        "original_descriptor",
+        "expiry_witness",
+        "original_terminal_decision",
+    ),
+    ClosedEpochAudit: (
+        "snapshot",
+        "terminal_occurrence_records",
+        "terminal_batch_records",
+        "terminal_reservations",
+        "terminal_generation_reservations",
+        "closure_witness_id",
+        "fence_proof",
+        "processed_event_tombstones",
+        "retained_unresolved_count",
+        "retained_generation_count",
+    ),
+    ProcessedEventRecord: (
+        "event_id",
+        "event",
+        "original_decision",
+        "aggregate_revision",
+        "admission_sequence",
+    ),
+    IdempotencyRecord: (
+        "namespace",
+        "reservation_key",
+        "original_descriptor",
+        "original_reserve_decision",
+        "owning_event_id",
+        "publication_revision",
+    ),
+    CoverageEvidence: (
+        "claim_id",
+        "kind",
+        "backend",
+        "configuration_mode",
+        "verifier",
+        "source_locator",
+        "tested_version",
+        "tested_revision",
+        "checked_at",
+        "freshness_policy",
+    ),
+    ProducerCoverageDef: (
+        "surface",
+        "control_point_owner",
+        "observation_state",
+        "authority_state",
+        "evidence",
+        "reason_code",
+    ),
+    AdmissionReplay: ("final_state", "transitions"),
 }
 
 OPAQUE_STRING_TYPES = (
@@ -399,6 +694,21 @@ def test_event_and_effect_unions_are_closed() -> None:
         UninitializedContextAdmissionState,
         ActiveContextAdmissionState,
     }
+
+
+def test_every_event_effect_and_record_field_set_is_exact() -> None:
+    event_types = {
+        event_type.__name__: event_type for event_type in get_args(ContextAdmissionEvent)
+    }
+    effect_types = {effect_type.__name__: effect_type for effect_type in get_args(AdmissionEffect)}
+    assert set(event_types) == set(EXPECTED_EVENT_FIELDS)
+    assert set(effect_types) == set(EXPECTED_EFFECT_FIELDS)
+    for type_name, expected_fields in EXPECTED_EVENT_FIELDS.items():
+        assert _field_names(event_types[type_name]) == expected_fields
+    for type_name, expected_fields in EXPECTED_EFFECT_FIELDS.items():
+        assert _field_names(effect_types[type_name]) == expected_fields
+    for record_type, expected_fields in EXPECTED_RECORD_FIELDS.items():
+        assert _field_names(record_type) == expected_fields
 
 
 @pytest.mark.parametrize(
@@ -639,6 +949,185 @@ def test_privacy_canaries_never_escape_validation_repr_or_serialization(canary: 
     assert canary not in serialized
 
 
+@pytest.mark.parametrize(
+    "canary",
+    [
+        "private user message",
+        "secret-value",
+        "token=private-value",
+        "/srv/private/model",
+    ],
+)
+def test_free_text_and_model_identity_privacy_is_fail_closed(canary: str) -> None:
+    with pytest.raises(ContextAdmissionValidationError):
+        AdmissionDecision(
+            kind=AdmissionDecisionKind.WOULD_REJECT,
+            reason_code=canary,
+            window_epoch_id=WindowEpochId("epoch-1"),
+            snapshot_sequence=1,
+            requested_count=0,
+            available_ordinary_count=0,
+            available_protected_count=0,
+        )
+    with pytest.raises(ContextAdmissionValidationError):
+        _snapshot(model_identity=ModelIdentity.anthropic(canary))
+
+
+def test_aggregate_tuples_reject_noncanonical_ordering() -> None:
+    first = _occurrence("occurrence-a", span_id="span-a")
+    second = _occurrence("occurrence-b", span_id="span-b")
+    with pytest.raises(ContextAdmissionValidationError):
+        CanonicalRepresentationManifest(
+            request_id=AdmissionRequestId("request-1"),
+            representation_revision=RepresentationRevision("representation-1"),
+            span_owners=(
+                CanonicalSpanOwner(
+                    span_id=second.owned_span_ids[0],
+                    occurrence_id=second.occurrence_id,
+                ),
+                CanonicalSpanOwner(
+                    span_id=first.owned_span_ids[0],
+                    occurrence_id=first.occurrence_id,
+                ),
+            ),
+            assembler_identity=ProducerInstanceId("assembler-1"),
+            assembler_witness_id=AdmissionWitnessId("assembler-witness-1"),
+        )
+
+    records = (
+        AdmissionOccurrenceRecord(
+            occurrence=first,
+            state=AdmissionState.PROPOSED,
+            batch_id=None,
+            reservation_id=None,
+            accepted_witness_ids=(),
+            indeterminate_reason_code=None,
+            quarantine_reason_code=None,
+        ),
+        AdmissionOccurrenceRecord(
+            occurrence=second,
+            state=AdmissionState.PROPOSED,
+            batch_id=None,
+            reservation_id=None,
+            accepted_witness_ids=(),
+            indeterminate_reason_code=None,
+            quarantine_reason_code=None,
+        ),
+    )
+    state = ActiveContextAdmissionState(
+        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+        aggregate_revision=AggregateRevision(0),
+        admission_sequence=AdmissionSequence(0),
+        snapshot=_snapshot(),
+        protected_pools=(),
+        occurrence_records=records,
+        batch_records=(),
+        reservations=(),
+        generation_reservations=(),
+        processed_events=(),
+        idempotency_records=(),
+        expired_idempotency_tombstones=(),
+        closed_epochs=(),
+    )
+    with pytest.raises(ContextAdmissionValidationError):
+        replace(state, occurrence_records=tuple(reversed(records)))
+
+
+def test_active_state_rejects_inconsistent_bidirectional_ownership_links() -> None:
+    occurrence = _occurrence("graph-member", span_id="graph-span")
+    batch = _batch("batch-graph", (occurrence,))
+    proposed = AdmissionOccurrenceRecord(
+        occurrence=occurrence,
+        state=AdmissionState.PROPOSED,
+        batch_id=None,
+        reservation_id=None,
+        accepted_witness_ids=(),
+        indeterminate_reason_code=None,
+        quarantine_reason_code=None,
+    )
+    state = ActiveContextAdmissionState(
+        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+        aggregate_revision=AggregateRevision(0),
+        admission_sequence=AdmissionSequence(0),
+        snapshot=_snapshot(),
+        protected_pools=(),
+        occurrence_records=(proposed,),
+        batch_records=(),
+        reservations=(),
+        generation_reservations=(),
+        processed_events=(),
+        idempotency_records=(),
+        expired_idempotency_tombstones=(),
+        closed_epochs=(),
+    )
+    orphan_batch = AdmissionBatchRecord(
+        batch=batch,
+        state=AdmissionState.RESERVED,
+        reservation_id=None,
+        witness_ids=(),
+        prepared_input_count=None,
+        committed_input_count=0,
+        unresolved_input_count=0,
+        dispatch_sequence=None,
+    )
+    with pytest.raises(ContextAdmissionValidationError):
+        replace(state, batch_records=(orphan_batch,))
+    with pytest.raises(ContextAdmissionValidationError):
+        replace(
+            state,
+            occurrence_records=(
+                replace(
+                    proposed,
+                    state=AdmissionState.RESERVED,
+                    batch_id=AdmissionBatchId("missing-batch"),
+                ),
+            ),
+        )
+
+
+def test_charge_effects_validate_exact_target_domain_owner_and_counts() -> None:
+    effect = ReservationRecordedEffect(
+        source_event_id=AdmissionEventId("event-1"),
+        resulting_aggregate_revision=AggregateRevision(1),
+        resulting_admission_sequence=AdmissionSequence(1),
+        target_id=AdmissionReservationId("reservation-1"),
+        charge_domain=ChargeDomain.INPUT_CONTEXT,
+        reserve_class=ReserveClass.ORDINARY,
+        protected_pool_owner_id=None,
+        count=3,
+        window_epoch_id=WindowEpochId("epoch-1"),
+        snapshot_sequence=1,
+        witness_ids=(),
+    )
+    with pytest.raises(ContextAdmissionValidationError):
+        replace(effect, target_id=AdmissionBatchId("batch-1"))
+    with pytest.raises(ContextAdmissionValidationError):
+        replace(effect, charge_domain=ChargeDomain.OUTPUT_GENERATION)
+    with pytest.raises(ContextAdmissionValidationError):
+        replace(effect, count=-1)
+    with pytest.raises(ContextAdmissionValidationError):
+        replace(
+            effect,
+            protected_pool_owner_id=ProtectedPoolOwnerId("ordinary-owner"),
+        )
+
+    committed = ChargeCommittedEffect(
+        source_event_id=AdmissionEventId("event-2"),
+        resulting_aggregate_revision=AggregateRevision(2),
+        resulting_admission_sequence=AdmissionSequence(2),
+        target_id=AdmissionBatchId("batch-1"),
+        charge_domain=ChargeDomain.INPUT_CONTEXT,
+        reserve_class=ReserveClass.ORDINARY,
+        protected_pool_owner_id=None,
+        count=3,
+        window_epoch_id=WindowEpochId("epoch-1"),
+        snapshot_sequence=1,
+        witness_ids=(AdmissionWitnessId("witness-1"),),
+    )
+    with pytest.raises(ContextAdmissionValidationError):
+        replace(committed, target_id=AdmissionReservationId("reservation-1"))
+
+
 def test_unknown_protocol_versions_fail_closed() -> None:
     assert CONTEXT_ADMISSION_PROTOCOL_VERSION == 1
     with pytest.raises(UnsupportedContextAdmissionProtocolError):
@@ -651,11 +1140,14 @@ def test_closed_epoch_audits_survive_state_serialization() -> None:
     empty_audit = ClosedEpochAudit(
         snapshot=_snapshot(),
         terminal_occurrence_records=(),
+        terminal_batch_records=(),
         terminal_reservations=(),
+        terminal_generation_reservations=(),
         closure_witness_id=AdmissionWitnessId("closure-witness-1"),
         fence_proof=None,
         processed_event_tombstones=(),
         retained_unresolved_count=0,
+        retained_generation_count=0,
     )
     state = replace(_uninitialized(), closed_epochs=(empty_audit,))
     restored = UninitializedContextAdmissionState.from_dict(state.to_dict())
@@ -718,6 +1210,7 @@ def test_batch_record_rejects_committed_and_unresolved_simultaneously() -> None:
             prepared_input_count=None,
             committed_input_count=5,
             unresolved_input_count=5,
+            dispatch_sequence=None,
         )
     assert "committed_and_unresolved_simultaneously" in str(exc_info.value)
 
@@ -781,6 +1274,7 @@ def test_accept_event_rejects_estimate_measurement() -> None:
             batch_id=batch.batch_id,
             witness=_witness(batch, WitnessKind.PROVIDER_ACCEPTED),
             final_manifest_revision=batch.manifest.representation_revision,
+            final_manifest=batch.manifest,
             exact_input_charge=5,
             measurement_kind=MeasurementKind.BYTE_EMERGENCY,
             authority_source_id=AuthoritySourceId("authority-test"),

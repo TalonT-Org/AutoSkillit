@@ -7,7 +7,8 @@ effects; persistence and producer integration belong to downstream layers.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, ClassVar, Never, TypeAlias
@@ -28,6 +29,17 @@ from ._type_enums import (
 from ._type_results import ModelIdentity
 
 CONTEXT_ADMISSION_PROTOCOL_VERSION = 1
+
+_CONTENT_FREE_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@+-]*\Z")
+_CONTENT_FREE_LOCATOR = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:@+-]*\Z")
+_SENSITIVE_TEXT_MARKERS = (
+    "authorization",
+    "bearer",
+    "content:",
+    "password",
+    "secret",
+    "token=",
+)
 
 
 class ContextAdmissionValidationError(ValueError):
@@ -75,26 +87,40 @@ def _validate_bounded_text(
     reason_code: str,
     *,
     maximum: int = 128,
+    locator: bool = False,
 ) -> None:
     if not isinstance(value, str) or not value or len(value) > maximum:
         _raise_invalid(reason_code)
     lowered = value.casefold()
+    pattern = _CONTENT_FREE_LOCATOR if locator else _CONTENT_FREE_TEXT
     if (
-        lowered.startswith("bearer")
+        any(marker in lowered for marker in _SENSITIVE_TEXT_MARKERS)
         or lowered.startswith("sha256:")
         or lowered.startswith("blake2:")
-        or lowered.startswith("content:")
         or "\n" in value
         or "\r" in value
         or value.startswith("/")
         or "\\" in value
         or value.startswith("~")
+        or not pattern.fullmatch(value)
+        or (locator and ".." in value.split("/"))
     ):
         _raise_invalid(reason_code)
 
 
 def _validate_tuple(value: object, reason_code: str) -> None:
     if not isinstance(value, tuple):
+        _raise_invalid(reason_code)
+
+
+def _validate_canonical_tuple(
+    value: tuple[Any, ...],
+    reason_code: str,
+    *,
+    key: Callable[[Any], Any],
+) -> None:
+    _validate_tuple(value, reason_code)
+    if value != tuple(sorted(value, key=key)):
         _raise_invalid(reason_code)
 
 
@@ -412,6 +438,15 @@ class ContextLineage(_ContractValue):
                 _raise_invalid("invalid_dispatch_identity")
             if self.producer_surface in _NON_DISPATCH_PRODUCER_SURFACES:
                 _raise_invalid("dispatch_identity_on_non_dispatch_surface")
+        is_parent_delivery = self.producer_surface is ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY
+        if is_parent_delivery != (self.delivery_occurrence_id is not None):
+            _raise_invalid("invalid_parent_delivery_lineage")
+        if is_parent_delivery and (
+            self.parent_agent_id is None
+            or self.parent_thread_id is None
+            or self.fork_occurrence_id is None
+        ):
+            _raise_invalid("incomplete_parent_delivery_lineage")
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,6 +477,21 @@ class ContextWindowSnapshot(_ContractValue):
             or self.active_count + self.remaining_count > self.hard_limit
         ):
             _raise_invalid("invalid_authoritative_snapshot")
+        for model_value in (
+            self.model_identity.configured_model,
+            self.model_identity.effective_model,
+        ):
+            _validate_bounded_text(
+                model_value,
+                "invalid_model_identity",
+                maximum=128,
+            )
+        if self.model_identity.profile_name:
+            _validate_bounded_text(
+                self.model_identity.profile_name,
+                "invalid_model_identity",
+                maximum=64,
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -459,7 +509,11 @@ class CanonicalRepresentationManifest(_ContractValue):
     assembler_witness_id: AdmissionWitnessId
 
     def __post_init__(self) -> None:
-        _validate_tuple(self.span_owners, "invalid_span_owners")
+        _validate_canonical_tuple(
+            self.span_owners,
+            "noncanonical_span_owners",
+            key=lambda owner: (owner.span_id.value, owner.occurrence_id.value),
+        )
         if not self.span_owners:
             _raise_invalid("incomplete_representation_manifest")
         span_ids = tuple(owner.span_id for owner in self.span_owners)
@@ -482,7 +536,11 @@ class AdmissionOccurrence(_ContractValue):
             self.predicted_authoritative_maximum,
             "invalid_predicted_authoritative_maximum",
         )
-        _validate_tuple(self.owned_span_ids, "invalid_owned_span_ids")
+        _validate_canonical_tuple(
+            self.owned_span_ids,
+            "noncanonical_owned_span_ids",
+            key=lambda span_id: span_id.value,
+        )
         if not self.owned_span_ids or len(self.owned_span_ids) != len(set(self.owned_span_ids)):
             _raise_invalid("invalid_owned_span_ids")
         if self.producer_surface is not self.lineage.producer_surface:
@@ -499,7 +557,11 @@ class AdmissionBatch(_ContractValue):
     manifest: CanonicalRepresentationManifest
 
     def __post_init__(self) -> None:
-        _validate_tuple(self.occurrence_ids, "invalid_batch_occurrences")
+        _validate_canonical_tuple(
+            self.occurrence_ids,
+            "noncanonical_batch_occurrences",
+            key=lambda occurrence_id: occurrence_id.value,
+        )
         if not self.occurrence_ids or len(self.occurrence_ids) != len(set(self.occurrence_ids)):
             _raise_invalid("invalid_batch_occurrences")
         if self.manifest.request_id != self.request_id:
@@ -525,7 +587,11 @@ class AdmissionReservationKey(_ContractValue):
     def __post_init__(self) -> None:
         _validate_protocol_version(self.protocol_version)
         _validate_non_negative(self.window_epoch_number, "invalid_window_epoch_number")
-        _validate_tuple(self.occurrence_revisions, "invalid_occurrence_revisions")
+        _validate_canonical_tuple(
+            self.occurrence_revisions,
+            "noncanonical_occurrence_revisions",
+            key=lambda pair: (pair[0].value, pair[1].value),
+        )
         occurrence_ids = tuple(pair[0] for pair in self.occurrence_revisions)
         if (
             not occurrence_ids
@@ -552,7 +618,11 @@ class AdmissionReservation(_ContractValue):
         _validate_non_negative(self.window_epoch_number, "invalid_window_epoch_number")
         _validate_non_negative(self.snapshot_sequence, "invalid_snapshot_sequence")
         _validate_non_negative(self.reserved_count, "invalid_reserved_count")
-        _validate_tuple(self.occurrence_ids, "invalid_reservation_occurrences")
+        _validate_canonical_tuple(
+            self.occurrence_ids,
+            "noncanonical_reservation_occurrences",
+            key=lambda occurrence_id: occurrence_id.value,
+        )
         if (
             self.window_epoch_id != self.key.window_epoch_id
             or self.window_epoch_number != self.key.window_epoch_number
@@ -580,7 +650,11 @@ class AdmissionWitness(_ContractValue):
     def __post_init__(self) -> None:
         _validate_non_negative(self.window_epoch_number, "invalid_window_epoch_number")
         _validate_non_negative(self.snapshot_sequence, "invalid_snapshot_sequence")
-        _validate_tuple(self.occurrence_ids, "invalid_witness_occurrences")
+        _validate_canonical_tuple(
+            self.occurrence_ids,
+            "noncanonical_witness_occurrences",
+            key=lambda occurrence_id: occurrence_id.value,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -660,7 +734,11 @@ class AdmissionOccurrenceRecord(_ContractValue):
     quarantine_reason_code: str | None
 
     def __post_init__(self) -> None:
-        _validate_tuple(self.accepted_witness_ids, "invalid_witness_ids")
+        _validate_canonical_tuple(
+            self.accepted_witness_ids,
+            "noncanonical_witness_ids",
+            key=lambda witness_id: witness_id.value,
+        )
         if len(self.accepted_witness_ids) != len(set(self.accepted_witness_ids)):
             _raise_invalid("duplicate_witness_id")
         if self.indeterminate_reason_code is not None:
@@ -686,15 +764,22 @@ class AdmissionBatchRecord(_ContractValue):
     prepared_input_count: int | None
     committed_input_count: int
     unresolved_input_count: int
+    dispatch_sequence: int | None
 
     def __post_init__(self) -> None:
-        _validate_tuple(self.witness_ids, "invalid_witness_ids")
+        _validate_canonical_tuple(
+            self.witness_ids,
+            "noncanonical_witness_ids",
+            key=lambda witness_id: witness_id.value,
+        )
         if len(self.witness_ids) != len(set(self.witness_ids)):
             _raise_invalid("duplicate_witness_id")
         if self.prepared_input_count is not None:
             _validate_non_negative(self.prepared_input_count, "invalid_prepared_count")
         _validate_non_negative(self.committed_input_count, "invalid_committed_count")
         _validate_non_negative(self.unresolved_input_count, "invalid_unresolved_count")
+        if self.dispatch_sequence is not None:
+            _validate_non_negative(self.dispatch_sequence, "invalid_dispatch_sequence")
         if self.committed_input_count > 0 and self.unresolved_input_count > 0:
             _raise_invalid("committed_and_unresolved_simultaneously")
 
@@ -703,6 +788,9 @@ class AdmissionBatchRecord(_ContractValue):
 class GenerationReservationRecord(_ContractValue):
     generation_reservation_id: GenerationReservationId
     request_id: AdmissionRequestId
+    batch_id: AdmissionBatchId
+    representation_revision: RepresentationRevision
+    occurrence_ids: tuple[AdmissionOccurrenceId, ...]
     response_id: ModelItemId
     window_epoch_id: WindowEpochId
     window_epoch_number: int
@@ -713,6 +801,7 @@ class GenerationReservationRecord(_ContractValue):
     state: GenerationState
     exact_terminal_usage: int | None
     witness_ids: tuple[AdmissionWitnessId, ...]
+    authority_source_id: AuthoritySourceId | None
 
     def __post_init__(self) -> None:
         for value in (
@@ -725,6 +814,20 @@ class GenerationReservationRecord(_ContractValue):
             _validate_non_negative(self.exact_terminal_usage, "invalid_generation_usage")
         if (self.reserve_class is ReserveClass.ORDINARY) != (self.protected_pool_owner_id is None):
             _raise_invalid("invalid_generation_owner")
+        _validate_canonical_tuple(
+            self.occurrence_ids,
+            "noncanonical_generation_occurrences",
+            key=lambda occurrence_id: occurrence_id.value,
+        )
+        if not self.occurrence_ids or len(self.occurrence_ids) != len(set(self.occurrence_ids)):
+            _raise_invalid("invalid_generation_occurrences")
+        _validate_canonical_tuple(
+            self.witness_ids,
+            "noncanonical_witness_ids",
+            key=lambda witness_id: witness_id.value,
+        )
+        if len(self.witness_ids) != len(set(self.witness_ids)):
+            _raise_invalid("duplicate_witness_id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -740,14 +843,126 @@ class ExpiredIdempotencyTombstone(_ContractValue):
 class ClosedEpochAudit(_ContractValue):
     snapshot: ContextWindowSnapshot
     terminal_occurrence_records: tuple[AdmissionOccurrenceRecord, ...]
+    terminal_batch_records: tuple[AdmissionBatchRecord, ...]
     terminal_reservations: tuple[AdmissionReservation, ...]
+    terminal_generation_reservations: tuple[GenerationReservationRecord, ...]
     closure_witness_id: AdmissionWitnessId
     fence_proof: EpochFenceProof | None
     processed_event_tombstones: tuple[AdmissionEventId, ...]
     retained_unresolved_count: int
+    retained_generation_count: int
 
     def __post_init__(self) -> None:
         _validate_non_negative(self.retained_unresolved_count, "invalid_retained_charge")
+        _validate_non_negative(
+            self.retained_generation_count,
+            "invalid_retained_generation_charge",
+        )
+        _validate_canonical_tuple(
+            self.terminal_occurrence_records,
+            "noncanonical_terminal_occurrences",
+            key=lambda record: record.occurrence.occurrence_id.value,
+        )
+        _validate_canonical_tuple(
+            self.terminal_batch_records,
+            "noncanonical_terminal_batches",
+            key=lambda record: record.batch.batch_id.value,
+        )
+        _validate_canonical_tuple(
+            self.terminal_reservations,
+            "noncanonical_terminal_reservations",
+            key=lambda reservation: reservation.reservation_id.value,
+        )
+        _validate_canonical_tuple(
+            self.terminal_generation_reservations,
+            "noncanonical_terminal_generation_reservations",
+            key=lambda record: record.generation_reservation_id.value,
+        )
+        _validate_canonical_tuple(
+            self.processed_event_tombstones,
+            "noncanonical_processed_event_tombstones",
+            key=lambda event_id: event_id.value,
+        )
+        occurrence_by_id = {
+            record.occurrence.occurrence_id: record for record in self.terminal_occurrence_records
+        }
+        batch_by_id = {record.batch.batch_id: record for record in self.terminal_batch_records}
+        reservation_by_id = {
+            reservation.reservation_id: reservation for reservation in self.terminal_reservations
+        }
+        if (
+            len(occurrence_by_id) != len(self.terminal_occurrence_records)
+            or len(batch_by_id) != len(self.terminal_batch_records)
+            or len(reservation_by_id) != len(self.terminal_reservations)
+            or len(
+                {
+                    record.generation_reservation_id
+                    for record in self.terminal_generation_reservations
+                }
+            )
+            != len(self.terminal_generation_reservations)
+            or len(set(self.processed_event_tombstones)) != len(self.processed_event_tombstones)
+        ):
+            _raise_invalid("duplicate_closed_epoch_owner")
+        for batch_record in self.terminal_batch_records:
+            members = tuple(
+                occurrence_by_id.get(occurrence_id)
+                for occurrence_id in batch_record.batch.occurrence_ids
+            )
+            if any(member is None for member in members):
+                _raise_invalid("missing_closed_epoch_occurrence")
+            if any(
+                member is not None
+                and (
+                    member.batch_id != batch_record.batch.batch_id
+                    or member.reservation_id != batch_record.reservation_id
+                    or member.state is not batch_record.state
+                )
+                for member in members
+            ):
+                _raise_invalid("inconsistent_closed_epoch_link")
+            if batch_record.reservation_id is not None:
+                reservation = reservation_by_id.get(batch_record.reservation_id)
+                if reservation is None or reservation.key.batch_id != batch_record.batch.batch_id:
+                    _raise_invalid("missing_closed_epoch_reservation")
+        for generation in self.terminal_generation_reservations:
+            generation_batch = batch_by_id.get(generation.batch_id)
+            if (
+                generation_batch is None
+                or generation.request_id != generation_batch.batch.request_id
+                or generation.representation_revision
+                != generation_batch.batch.manifest.representation_revision
+                or generation.occurrence_ids != generation_batch.batch.occurrence_ids
+            ):
+                _raise_invalid("inconsistent_closed_epoch_generation")
+        retained_input = 0
+        for record in self.terminal_batch_records:
+            if record.state not in {
+                AdmissionState.REQUEST_DISPATCHED,
+                AdmissionState.INDETERMINATE,
+            }:
+                continue
+            charge = record.unresolved_input_count
+            if charge == 0 and record.reservation_id is not None:
+                reservation = reservation_by_id.get(record.reservation_id)
+                if reservation is not None:
+                    charge = reservation.reserved_count
+            retained_input += charge
+        retained_generation = sum(
+            record.maximum_allowance
+            for record in self.terminal_generation_reservations
+            if record.state
+            in {
+                GenerationState.RESERVED,
+                GenerationState.STREAMING,
+                GenerationState.INDETERMINATE,
+            }
+        )
+        if (
+            retained_input != self.retained_unresolved_count
+            or retained_generation != self.retained_generation_count
+        ):
+            _raise_invalid("closed_epoch_retained_charge_mismatch")
 
 
 @dataclass(frozen=True, slots=True)
@@ -769,13 +984,18 @@ class CoverageEvidence(_ContractValue):
             (self.backend, "invalid_evidence_backend", 64),
             (self.configuration_mode, "invalid_configuration_mode", 64),
             (self.verifier, "invalid_evidence_verifier", 64),
-            (self.source_locator, "invalid_source_locator", 256),
             (self.tested_version, "invalid_tested_version", 64),
             (self.tested_revision, "invalid_tested_revision", 96),
             (self.checked_at, "invalid_checked_at", 32),
             (self.freshness_policy, "invalid_freshness_policy", 128),
         ):
             _validate_bounded_text(value, reason, maximum=maximum)
+        _validate_bounded_text(
+            self.source_locator,
+            "invalid_source_locator",
+            maximum=256,
+            locator=True,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -794,7 +1014,15 @@ class ProducerCoverageDef(_ContractValue):
             maximum=96,
         )
         _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
-        _validate_tuple(self.evidence, "invalid_coverage_evidence")
+        _validate_canonical_tuple(
+            self.evidence,
+            "noncanonical_coverage_evidence",
+            key=lambda evidence: (
+                evidence.kind.value,
+                evidence.source_locator,
+                evidence.claim_id,
+            ),
+        )
         if not self.evidence:
             _raise_invalid("coverage_evidence_required")
         primary = tuple(
@@ -822,6 +1050,18 @@ class _AdmissionEventBase(_ContractValue):
 class OpenEpochEvent(_AdmissionEventBase):
     snapshot: ContextWindowSnapshot
     protected_pools: tuple[ProtectedPoolSpec, ...]
+
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        _validate_canonical_tuple(
+            self.protected_pools,
+            "noncanonical_protected_pools",
+            key=lambda pool: (
+                pool.priority,
+                pool.reserve_class.value,
+                pool.capability_owner_id.value,
+            ),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -851,16 +1091,39 @@ class ReserveRequestEvent(_AdmissionEventBase):
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
         _validate_non_negative(self.snapshot_sequence, "invalid_snapshot_sequence")
-        _validate_tuple(self.input_reservations, "invalid_input_reservations")
+        _validate_canonical_tuple(
+            self.input_reservations,
+            "noncanonical_input_reservations",
+            key=lambda reservation: reservation.reservation_id.value,
+        )
+        if not self.input_reservations:
+            _raise_invalid("input_reservation_required")
         reservation_ids = tuple(
             reservation.reservation_id for reservation in self.input_reservations
         )
         if len(reservation_ids) != len(set(reservation_ids)):
             _raise_invalid("duplicate_reservation_id")
-        if self.batch.occurrence_ids != self.input_reservations[0].occurrence_ids:
-            _raise_invalid("reservation_occurrence_mismatch")
-        if self.idempotency_namespace != self.input_reservations[0].key.idempotency_namespace:
-            _raise_invalid("reservation_namespace_mismatch")
+        for reservation in self.input_reservations:
+            if reservation.occurrence_ids != self.batch.occurrence_ids:
+                _raise_invalid("reservation_occurrence_mismatch")
+            if self.idempotency_namespace != reservation.key.idempotency_namespace:
+                _raise_invalid("reservation_namespace_mismatch")
+            if (
+                reservation.key.batch_id != self.batch.batch_id
+                or reservation.reserve_class is not self.batch.reserve_class
+                or reservation.protected_pool_owner_id != self.batch.protected_pool_owner_id
+            ):
+                _raise_invalid("reservation_batch_policy_mismatch")
+        generation = self.generation_reservation
+        if generation is not None and (
+            generation.request_id != self.batch.request_id
+            or generation.batch_id != self.batch.batch_id
+            or generation.representation_revision != self.batch.manifest.representation_revision
+            or generation.occurrence_ids != self.batch.occurrence_ids
+            or generation.reserve_class is not self.batch.reserve_class
+            or generation.protected_pool_owner_id != self.batch.protected_pool_owner_id
+        ):
+            _raise_invalid("generation_batch_policy_mismatch")
 
 
 @dataclass(frozen=True, slots=True)
@@ -898,6 +1161,7 @@ class AcceptInputEvent(_AdmissionEventBase):
     batch_id: AdmissionBatchId
     witness: AdmissionWitness
     final_manifest_revision: RepresentationRevision
+    final_manifest: CanonicalRepresentationManifest
     exact_input_charge: int
     measurement_kind: MeasurementKind
     authority_source_id: AuthoritySourceId
@@ -906,10 +1170,7 @@ class AcceptInputEvent(_AdmissionEventBase):
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
         _validate_non_negative(self.exact_input_charge, "invalid_exact_input_charge")
-        if self.measurement_kind in {
-            MeasurementKind.HOST_ESTIMATE,
-            MeasurementKind.BYTE_EMERGENCY,
-        }:
+        if self.measurement_kind is not MeasurementKind.PROVIDER_EXACT:
             _raise_invalid("non_authoritative_measurement")
 
 
@@ -917,6 +1178,15 @@ class AcceptInputEvent(_AdmissionEventBase):
 class ReleaseNonAdmissionEvent(_AdmissionEventBase):
     batch_id: AdmissionBatchId
     witness: AdmissionWitness
+    history_removal_witness: AdmissionWitness | None
+
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        if (
+            self.history_removal_witness is not None
+            and self.history_removal_witness.kind is not WitnessKind.ROLLBACK
+        ):
+            _raise_invalid("invalid_history_removal_witness")
 
 
 @dataclass(frozen=True, slots=True)
@@ -939,17 +1209,17 @@ class MarkIndeterminateEvent(_AdmissionEventBase):
 class ResolveIndeterminateAcceptedEvent(_AdmissionEventBase):
     batch_id: AdmissionBatchId
     witness: AdmissionWitness
+    final_manifest_revision: RepresentationRevision
+    final_manifest: CanonicalRepresentationManifest
     exact_charge: int
     measurement_kind: MeasurementKind
     authority_source_id: AuthoritySourceId
+    representation_binding_witness: RepresentationBindingWitness
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
         _validate_non_negative(self.exact_charge, "invalid_exact_charge")
-        if self.measurement_kind in {
-            MeasurementKind.HOST_ESTIMATE,
-            MeasurementKind.BYTE_EMERGENCY,
-        }:
+        if self.measurement_kind is not MeasurementKind.PROVIDER_EXACT:
             _raise_invalid("non_authoritative_measurement")
 
 
@@ -957,6 +1227,15 @@ class ResolveIndeterminateAcceptedEvent(_AdmissionEventBase):
 class ResolveIndeterminateNonAdmissionEvent(_AdmissionEventBase):
     batch_id: AdmissionBatchId
     witness: AdmissionWitness
+    history_removal_witness: AdmissionWitness | None
+
+    def __post_init__(self) -> None:
+        _AdmissionEventBase.__post_init__(self)
+        if (
+            self.history_removal_witness is not None
+            and self.history_removal_witness.kind is not WitnessKind.ROLLBACK
+        ):
+            _raise_invalid("invalid_history_removal_witness")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1011,13 +1290,26 @@ class ExpireIdempotencyKeyEvent(_AdmissionEventBase):
 @dataclass(frozen=True, slots=True)
 class RolloverEpochEvent(_AdmissionEventBase):
     witness: AdmissionWitness
-    fence_proof: EpochFenceProof
+    fence_proof: EpochFenceProof | None
+    deducted_unresolved_count: int
     new_snapshot: ContextWindowSnapshot
     protected_pools: tuple[ProtectedPoolSpec, ...]
 
     def __post_init__(self) -> None:
         _AdmissionEventBase.__post_init__(self)
-        _validate_tuple(self.protected_pools, "invalid_protected_pools")
+        _validate_non_negative(
+            self.deducted_unresolved_count,
+            "invalid_deducted_unresolved_count",
+        )
+        _validate_canonical_tuple(
+            self.protected_pools,
+            "noncanonical_protected_pools",
+            key=lambda pool: (
+                pool.priority,
+                pool.reserve_class.value,
+                pool.capability_owner_id.value,
+            ),
+        )
 
 
 ContextAdmissionEvent: TypeAlias = (
@@ -1053,13 +1345,53 @@ class _AdmissionEffectBase(_ContractValue):
         AdmissionOccurrenceId
         | AdmissionBatchId
         | AdmissionReservationId
+        | AdmissionEventId
         | GenerationReservationId
         | WindowEpochId
     )
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.source_event_id, AdmissionEventId):
+            _raise_invalid("invalid_effect_source_event")
+        if not isinstance(self.resulting_aggregate_revision, AggregateRevision):
+            _raise_invalid("invalid_effect_aggregate_revision")
+        if not isinstance(self.resulting_admission_sequence, AdmissionSequence):
+            _raise_invalid("invalid_effect_admission_sequence")
+
+
+def _validate_charge_effect(
+    effect: _AdmissionEffectBase,
+    *,
+    target_type: type[_OpaqueString],
+    charge_domain: ChargeDomain,
+) -> None:
+    _AdmissionEffectBase.__post_init__(effect)
+    if not isinstance(effect.target_id, target_type):
+        _raise_invalid("invalid_effect_target")
+    if getattr(effect, "charge_domain") is not charge_domain:
+        _raise_invalid("invalid_effect_charge_domain")
+    reserve_class = getattr(effect, "reserve_class")
+    owner = getattr(effect, "protected_pool_owner_id")
+    if (reserve_class is ReserveClass.ORDINARY) != (owner is None):
+        _raise_invalid("invalid_effect_protected_pool_owner")
+    _validate_non_negative(getattr(effect, "count"), "invalid_effect_count")
+    _validate_non_negative(
+        getattr(effect, "snapshot_sequence"),
+        "invalid_effect_snapshot_sequence",
+    )
+    witness_ids = getattr(effect, "witness_ids")
+    _validate_canonical_tuple(
+        witness_ids,
+        "noncanonical_effect_witness_ids",
+        key=lambda witness_id: witness_id.value,
+    )
+    if len(witness_ids) != len(set(witness_ids)):
+        _raise_invalid("duplicate_effect_witness_id")
+
 
 @dataclass(frozen=True, slots=True)
 class ReservationRecordedEffect(_AdmissionEffectBase):
+    target_id: AdmissionReservationId
     charge_domain: ChargeDomain
     reserve_class: ReserveClass
     protected_pool_owner_id: ProtectedPoolOwnerId | None
@@ -1067,10 +1399,18 @@ class ReservationRecordedEffect(_AdmissionEffectBase):
     window_epoch_id: WindowEpochId
     snapshot_sequence: int
     witness_ids: tuple[AdmissionWitnessId, ...]
+
+    def __post_init__(self) -> None:
+        _validate_charge_effect(
+            self,
+            target_type=AdmissionReservationId,
+            charge_domain=ChargeDomain.INPUT_CONTEXT,
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class ReservationReleasedEffect(_AdmissionEffectBase):
+    target_id: AdmissionReservationId
     charge_domain: ChargeDomain
     reserve_class: ReserveClass
     protected_pool_owner_id: ProtectedPoolOwnerId | None
@@ -1078,16 +1418,30 @@ class ReservationReleasedEffect(_AdmissionEffectBase):
     window_epoch_id: WindowEpochId
     snapshot_sequence: int
     witness_ids: tuple[AdmissionWitnessId, ...]
+
+    def __post_init__(self) -> None:
+        _validate_charge_effect(
+            self,
+            target_type=AdmissionReservationId,
+            charge_domain=ChargeDomain.INPUT_CONTEXT,
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class OccurrenceStateChangedEffect(_AdmissionEffectBase):
+    target_id: AdmissionOccurrenceId
     previous_state: AdmissionState
     next_state: AdmissionState
+
+    def __post_init__(self) -> None:
+        _AdmissionEffectBase.__post_init__(self)
+        if not isinstance(self.target_id, AdmissionOccurrenceId):
+            _raise_invalid("invalid_effect_target")
 
 
 @dataclass(frozen=True, slots=True)
 class ChargeCommittedEffect(_AdmissionEffectBase):
+    target_id: AdmissionBatchId
     charge_domain: ChargeDomain
     reserve_class: ReserveClass
     protected_pool_owner_id: ProtectedPoolOwnerId | None
@@ -1095,10 +1449,18 @@ class ChargeCommittedEffect(_AdmissionEffectBase):
     window_epoch_id: WindowEpochId
     snapshot_sequence: int
     witness_ids: tuple[AdmissionWitnessId, ...]
+
+    def __post_init__(self) -> None:
+        _validate_charge_effect(
+            self,
+            target_type=AdmissionBatchId,
+            charge_domain=ChargeDomain.INPUT_CONTEXT,
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class GenerationReservationRecordedEffect(_AdmissionEffectBase):
+    target_id: GenerationReservationId
     charge_domain: ChargeDomain
     reserve_class: ReserveClass
     protected_pool_owner_id: ProtectedPoolOwnerId | None
@@ -1106,10 +1468,18 @@ class GenerationReservationRecordedEffect(_AdmissionEffectBase):
     window_epoch_id: WindowEpochId
     snapshot_sequence: int
     witness_ids: tuple[AdmissionWitnessId, ...]
+
+    def __post_init__(self) -> None:
+        _validate_charge_effect(
+            self,
+            target_type=GenerationReservationId,
+            charge_domain=ChargeDomain.OUTPUT_GENERATION,
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class GenerationReconciledEffect(_AdmissionEffectBase):
+    target_id: GenerationReservationId
     charge_domain: ChargeDomain
     reserve_class: ReserveClass
     protected_pool_owner_id: ProtectedPoolOwnerId | None
@@ -1117,31 +1487,66 @@ class GenerationReconciledEffect(_AdmissionEffectBase):
     window_epoch_id: WindowEpochId
     snapshot_sequence: int
     witness_ids: tuple[AdmissionWitnessId, ...]
+
+    def __post_init__(self) -> None:
+        _validate_charge_effect(
+            self,
+            target_type=GenerationReservationId,
+            charge_domain=ChargeDomain.OUTPUT_GENERATION,
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class ReconciliationQueryRequestedEffect(_AdmissionEffectBase):
+    target_id: AdmissionBatchId | GenerationReservationId
     reason_code: str
+
+    def __post_init__(self) -> None:
+        _AdmissionEffectBase.__post_init__(self)
+        if not isinstance(self.target_id, AdmissionBatchId | GenerationReservationId):
+            _raise_invalid("invalid_effect_target")
+        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
 
 
 @dataclass(frozen=True, slots=True)
 class ReconciliationEscalationEffect(_AdmissionEffectBase):
+    target_id: AdmissionBatchId | GenerationReservationId
     reason_code: str
+
+    def __post_init__(self) -> None:
+        _AdmissionEffectBase.__post_init__(self)
+        if not isinstance(self.target_id, AdmissionBatchId | GenerationReservationId):
+            _raise_invalid("invalid_effect_target")
+        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
 
 
 @dataclass(frozen=True, slots=True)
 class ConflictRejectedEffect(_AdmissionEffectBase):
+    target_id: AdmissionEventId
     reason_code: str
+
+    def __post_init__(self) -> None:
+        _AdmissionEffectBase.__post_init__(self)
+        if not isinstance(self.target_id, AdmissionEventId):
+            _raise_invalid("invalid_effect_target")
+        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
 
 
 @dataclass(frozen=True, slots=True)
 class IdempotencyExpiredEffect(_AdmissionEffectBase):
+    target_id: AdmissionReservationId
     reservation_key: AdmissionReservationKey
     expiry_witness_id: AdmissionWitnessId
+
+    def __post_init__(self) -> None:
+        _AdmissionEffectBase.__post_init__(self)
+        if not isinstance(self.target_id, AdmissionReservationId):
+            _raise_invalid("invalid_effect_target")
 
 
 @dataclass(frozen=True, slots=True)
 class ReservationInvalidatedEffect(_AdmissionEffectBase):
+    target_id: AdmissionReservationId | GenerationReservationId
     charge_domain: ChargeDomain
     reserve_class: ReserveClass
     protected_pool_owner_id: ProtectedPoolOwnerId | None
@@ -1150,21 +1555,61 @@ class ReservationInvalidatedEffect(_AdmissionEffectBase):
     snapshot_sequence: int
     witness_ids: tuple[AdmissionWitnessId, ...]
 
+    def __post_init__(self) -> None:
+        if isinstance(self.target_id, AdmissionReservationId):
+            expected_domain = ChargeDomain.INPUT_CONTEXT
+        elif isinstance(self.target_id, GenerationReservationId):
+            expected_domain = ChargeDomain.OUTPUT_GENERATION
+        else:
+            _raise_invalid("invalid_effect_target")
+        _validate_charge_effect(
+            self, target_type=type(self.target_id), charge_domain=expected_domain
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class EpochClosedEffect(_AdmissionEffectBase):
-    fence_proof: EpochFenceProof
+    target_id: WindowEpochId
+    fence_proof: EpochFenceProof | None
+    deducted_unresolved_count: int
+
+    def __post_init__(self) -> None:
+        _AdmissionEffectBase.__post_init__(self)
+        if not isinstance(self.target_id, WindowEpochId):
+            _raise_invalid("invalid_effect_target")
+        if self.fence_proof is not None and self.target_id != self.fence_proof.old_window_epoch_id:
+            _raise_invalid("invalid_effect_target")
+        _validate_non_negative(
+            self.deducted_unresolved_count,
+            "invalid_deducted_unresolved_count",
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class QuarantineRecordedEffect(_AdmissionEffectBase):
+    target_id: AdmissionBatchId | GenerationReservationId
     reason_code: str
+
+    def __post_init__(self) -> None:
+        _AdmissionEffectBase.__post_init__(self)
+        if not isinstance(self.target_id, AdmissionBatchId | GenerationReservationId):
+            _raise_invalid("invalid_effect_target")
+        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
 
 
 @dataclass(frozen=True, slots=True)
 class AuthorityUnavailableEffect(_AdmissionEffectBase):
+    target_id: WindowEpochId
     reason_code: str
     authority_state: CoverageState
+
+    def __post_init__(self) -> None:
+        _AdmissionEffectBase.__post_init__(self)
+        if not isinstance(self.target_id, WindowEpochId):
+            _raise_invalid("invalid_effect_target")
+        _validate_bounded_text(self.reason_code, "invalid_reason_code", maximum=64)
+        if self.authority_state is CoverageState.VERIFIED:
+            _raise_invalid("invalid_unavailable_authority_state")
 
 
 AdmissionEffect: TypeAlias = (
@@ -1204,6 +1649,32 @@ class IdempotencyRecord(_ContractValue):
     publication_revision: AggregateRevision
 
 
+def _validate_state_metadata_uniqueness(
+    processed_events: tuple[ProcessedEventRecord, ...],
+    idempotency_records: tuple[IdempotencyRecord, ...],
+    expired_tombstones: tuple[ExpiredIdempotencyTombstone, ...],
+    closed_epochs: tuple[ClosedEpochAudit, ...],
+) -> None:
+    if len({record.event_id for record in processed_events}) != len(processed_events):
+        _raise_invalid("duplicate_processed_event")
+    idempotency_keys = tuple(
+        (record.namespace, record.reservation_key) for record in idempotency_records
+    )
+    if len(set(idempotency_keys)) != len(idempotency_keys):
+        _raise_invalid("duplicate_idempotency_owner")
+    tombstone_keys = tuple(
+        (record.namespace, record.reservation_key) for record in expired_tombstones
+    )
+    if len(set(tombstone_keys)) != len(tombstone_keys):
+        _raise_invalid("duplicate_idempotency_tombstone")
+    epoch_keys = tuple(
+        (audit.snapshot.window_epoch_id, audit.snapshot.window_epoch_number)
+        for audit in closed_epochs
+    )
+    if len(set(epoch_keys)) != len(epoch_keys):
+        _raise_invalid("duplicate_closed_epoch")
+
+
 @dataclass(frozen=True, slots=True)
 class UninitializedContextAdmissionState(_ContractValue):
     protocol_version: int
@@ -1216,6 +1687,38 @@ class UninitializedContextAdmissionState(_ContractValue):
 
     def __post_init__(self) -> None:
         _validate_protocol_version(self.protocol_version)
+        _validate_canonical_tuple(
+            self.processed_events,
+            "noncanonical_processed_events",
+            key=lambda record: (record.aggregate_revision.value, record.event_id.value),
+        )
+        _validate_canonical_tuple(
+            self.idempotency_records,
+            "noncanonical_idempotency_records",
+            key=lambda record: (
+                record.publication_revision.value,
+                record.owning_event_id.value,
+            ),
+        )
+        _validate_canonical_tuple(
+            self.expired_idempotency_tombstones,
+            "noncanonical_idempotency_tombstones",
+            key=lambda tombstone: (
+                tombstone.reservation_key.window_epoch_number,
+                tombstone.reservation_key.batch_id.value,
+            ),
+        )
+        _validate_canonical_tuple(
+            self.closed_epochs,
+            "noncanonical_closed_epochs",
+            key=lambda audit: audit.snapshot.window_epoch_number,
+        )
+        _validate_state_metadata_uniqueness(
+            self.processed_events,
+            self.idempotency_records,
+            self.expired_idempotency_tombstones,
+            self.closed_epochs,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1238,6 +1741,67 @@ class ActiveContextAdmissionState(_ContractValue):
         _validate_protocol_version(self.protocol_version)
         if self.snapshot.protocol_version != self.protocol_version:
             _raise_invalid("state_snapshot_protocol_mismatch")
+        _validate_canonical_tuple(
+            self.protected_pools,
+            "noncanonical_protected_pools",
+            key=lambda pool: (
+                pool.priority,
+                pool.reserve_class.value,
+                pool.capability_owner_id.value,
+            ),
+        )
+        _validate_canonical_tuple(
+            self.occurrence_records,
+            "noncanonical_occurrence_records",
+            key=lambda record: record.occurrence.occurrence_id.value,
+        )
+        _validate_canonical_tuple(
+            self.batch_records,
+            "noncanonical_batch_records",
+            key=lambda record: record.batch.batch_id.value,
+        )
+        _validate_canonical_tuple(
+            self.reservations,
+            "noncanonical_reservations",
+            key=lambda reservation: reservation.reservation_id.value,
+        )
+        _validate_canonical_tuple(
+            self.generation_reservations,
+            "noncanonical_generation_reservations",
+            key=lambda record: record.generation_reservation_id.value,
+        )
+        _validate_canonical_tuple(
+            self.processed_events,
+            "noncanonical_processed_events",
+            key=lambda record: (record.aggregate_revision.value, record.event_id.value),
+        )
+        _validate_canonical_tuple(
+            self.idempotency_records,
+            "noncanonical_idempotency_records",
+            key=lambda record: (
+                record.publication_revision.value,
+                record.owning_event_id.value,
+            ),
+        )
+        _validate_canonical_tuple(
+            self.expired_idempotency_tombstones,
+            "noncanonical_idempotency_tombstones",
+            key=lambda tombstone: (
+                tombstone.reservation_key.window_epoch_number,
+                tombstone.reservation_key.batch_id.value,
+            ),
+        )
+        _validate_canonical_tuple(
+            self.closed_epochs,
+            "noncanonical_closed_epochs",
+            key=lambda audit: audit.snapshot.window_epoch_number,
+        )
+        _validate_state_metadata_uniqueness(
+            self.processed_events,
+            self.idempotency_records,
+            self.expired_idempotency_tombstones,
+            self.closed_epochs,
+        )
         pools = tuple(
             (pool.reserve_class, pool.capability_owner_id) for pool in self.protected_pools
         )
@@ -1247,10 +1811,6 @@ class ActiveContextAdmissionState(_ContractValue):
             self.snapshot.remaining_count
         ):
             _raise_invalid("protected_pool_capacity_exceeded")
-        _validate_tuple(self.batch_records, "invalid_batch_records")
-        _validate_tuple(self.reservations, "invalid_reservations")
-        _validate_tuple(self.generation_reservations, "invalid_generation_reservations")
-        _validate_tuple(self.occurrence_records, "invalid_occurrence_records")
         batch_ids = tuple(record.batch.batch_id for record in self.batch_records)
         if len(batch_ids) != len(set(batch_ids)):
             _raise_invalid("duplicate_batch_owner")
@@ -1267,40 +1827,163 @@ class ActiveContextAdmissionState(_ContractValue):
         )
         if len(occurrence_ids) != len(set(occurrence_ids)):
             _raise_invalid("duplicate_occurrence_owner")
-        seen_pool_owners: set[tuple[ReserveClass, ProtectedPoolOwnerId]] = set()
-        seen_batch_owners: set[tuple[ReserveClass, ProtectedPoolOwnerId]] = set()
-        seen_generation_owners: set[tuple[ReserveClass, ProtectedPoolOwnerId]] = set()
+        pools_by_key = {
+            (pool.reserve_class, pool.capability_owner_id): pool for pool in self.protected_pools
+        }
+        reservations_by_id = {
+            reservation.reservation_id: reservation for reservation in self.reservations
+        }
+        batch_records_by_id = {record.batch.batch_id: record for record in self.batch_records}
+        occurrence_records_by_id = {
+            record.occurrence.occurrence_id: record for record in self.occurrence_records
+        }
+        for occurrence_record in self.occurrence_records:
+            if occurrence_record.batch_id is None:
+                if (
+                    occurrence_record.reservation_id is not None
+                    or occurrence_record.state is not AdmissionState.PROPOSED
+                ):
+                    _raise_invalid("orphan_occurrence_link")
+                continue
+            linked_batch = batch_records_by_id.get(occurrence_record.batch_id)
+            if (
+                linked_batch is None
+                or occurrence_record.occurrence.occurrence_id
+                not in linked_batch.batch.occurrence_ids
+                or occurrence_record.reservation_id != linked_batch.reservation_id
+                or occurrence_record.state is not linked_batch.state
+            ):
+                _raise_invalid("inconsistent_occurrence_link")
+        for batch_record in self.batch_records:
+            member_records = tuple(
+                occurrence_records_by_id.get(occurrence_id)
+                for occurrence_id in batch_record.batch.occurrence_ids
+            )
+            if any(record is None for record in member_records):
+                _raise_invalid("missing_batch_occurrence")
+            concrete_members = tuple(record for record in member_records if record is not None)
+            if any(
+                record.batch_id != batch_record.batch.batch_id
+                or record.reservation_id != batch_record.reservation_id
+                or record.state is not batch_record.state
+                for record in concrete_members
+            ):
+                _raise_invalid("inconsistent_batch_occurrence_link")
+            owned_pairs = tuple(
+                (span_id, record.occurrence.occurrence_id)
+                for record in concrete_members
+                for span_id in record.occurrence.owned_span_ids
+            )
+            owned_span_ids = tuple(span_id for span_id, _ in owned_pairs)
+            manifest_pairs = tuple(
+                (owner.span_id, owner.occurrence_id)
+                for owner in batch_record.batch.manifest.span_owners
+            )
+            if (
+                len(owned_span_ids) != len(set(owned_span_ids))
+                or set(owned_pairs) != set(manifest_pairs)
+                or len(owned_pairs) != len(manifest_pairs)
+            ):
+                _raise_invalid("inconsistent_span_ownership")
+        for reservation in self.reservations:
+            matching_batch = batch_records_by_id.get(reservation.key.batch_id)
+            if matching_batch is None:
+                _raise_invalid("orphan_reservation")
+            if (
+                matching_batch.reservation_id != reservation.reservation_id
+                or reservation.occurrence_ids != matching_batch.batch.occurrence_ids
+                or reservation.reserve_class is not matching_batch.batch.reserve_class
+                or reservation.protected_pool_owner_id
+                != matching_batch.batch.protected_pool_owner_id
+            ):
+                _raise_invalid("reservation_batch_policy_mismatch")
+            owner = reservation.protected_pool_owner_id
+            if (
+                owner is not None
+                and (
+                    reservation.reserve_class,
+                    owner,
+                )
+                not in pools_by_key
+            ):
+                _raise_invalid("orphan_protected_charge_owner")
+        protected_charges: dict[tuple[ReserveClass, ProtectedPoolOwnerId], int] = {}
         for record in self.batch_records:
             owner = record.batch.protected_pool_owner_id
+            matched_reservation = (
+                reservations_by_id.get(record.reservation_id)
+                if record.reservation_id is not None
+                else None
+            )
+            if matched_reservation is not None and (
+                matched_reservation.key.batch_id != record.batch.batch_id
+                or matched_reservation.reserve_class is not record.batch.reserve_class
+                or matched_reservation.protected_pool_owner_id != owner
+            ):
+                _raise_invalid("reservation_batch_policy_mismatch")
             if record.batch.reserve_class is not ReserveClass.ORDINARY:
                 if owner is None:
                     _raise_invalid("missing_protected_pool_owner")
                 key = (record.batch.reserve_class, owner)
-                if key in seen_batch_owners:
-                    _raise_invalid("duplicate_protected_charge_owner")
-                seen_batch_owners.add(key)
-                seen_pool_owners.add(key)
-                if not any(
-                    pool.reserve_class is record.batch.reserve_class
-                    and pool.capability_owner_id == owner
-                    for pool in self.protected_pools
-                ):
+                if key not in pools_by_key:
                     _raise_invalid("orphan_protected_charge_owner")
+                if record.state is AdmissionState.INDETERMINATE:
+                    charge = record.unresolved_input_count
+                    if charge == 0 and matched_reservation is not None:
+                        charge = matched_reservation.reserved_count
+                elif record.state in {
+                    AdmissionState.RESERVED,
+                    AdmissionState.PREPARED,
+                    AdmissionState.HISTORY_STAGED,
+                    AdmissionState.REQUEST_DISPATCHED,
+                }:
+                    charge = (
+                        matched_reservation.reserved_count
+                        if matched_reservation is not None
+                        else 0
+                    )
+                else:
+                    # Committed/quarantined facts may exceed their reservation after
+                    # an authoritative acceptance.  They remain charged by _capacity,
+                    # but are no longer an outstanding allocation against the pool.
+                    charge = 0
+                protected_charges[key] = protected_charges.get(key, 0) + charge
         for generation_record in self.generation_reservations:
+            matching_batch = batch_records_by_id.get(generation_record.batch_id)
+            if (
+                matching_batch is None
+                or generation_record.request_id != matching_batch.batch.request_id
+                or generation_record.representation_revision
+                != matching_batch.batch.manifest.representation_revision
+                or generation_record.occurrence_ids != matching_batch.batch.occurrence_ids
+                or generation_record.reserve_class is not matching_batch.batch.reserve_class
+                or generation_record.protected_pool_owner_id
+                != matching_batch.batch.protected_pool_owner_id
+                or generation_record.window_epoch_id != self.snapshot.window_epoch_id
+                or generation_record.window_epoch_number != self.snapshot.window_epoch_number
+                or generation_record.snapshot_sequence != self.snapshot.snapshot_sequence
+            ):
+                _raise_invalid("inconsistent_generation_link")
             owner = generation_record.protected_pool_owner_id
             if generation_record.reserve_class is not ReserveClass.ORDINARY:
                 if owner is None:
                     _raise_invalid("missing_protected_pool_owner")
                 key = (generation_record.reserve_class, owner)
-                if key in seen_generation_owners:
-                    _raise_invalid("duplicate_protected_charge_owner")
-                seen_generation_owners.add(key)
-                if not any(
-                    pool.reserve_class is generation_record.reserve_class
-                    and pool.capability_owner_id == owner
-                    for pool in self.protected_pools
-                ):
+                if key not in pools_by_key:
                     _raise_invalid("orphan_protected_charge_owner")
+                if generation_record.state in {
+                    GenerationState.RESERVED,
+                    GenerationState.STREAMING,
+                    GenerationState.INDETERMINATE,
+                }:
+                    protected_charges[key] = (
+                        protected_charges.get(key, 0) + generation_record.maximum_allowance
+                    )
+        if any(
+            charged > pools_by_key[key].injected_count
+            for key, charged in protected_charges.items()
+        ):
+            _raise_invalid("protected_pool_overallocated")
 
 
 ContextAdmissionState: TypeAlias = UninitializedContextAdmissionState | ActiveContextAdmissionState

@@ -39,12 +39,16 @@ from autoskillit.core import (
     ContextSessionId,
     ContextThreadId,
     ContextWindowSnapshot,
+    DeliveryOccurrenceId,
     DispatchRequestEvent,
     EpochFenceProof,
+    ExpireIdempotencyKeyEvent,
+    ForkOccurrenceId,
     GenerationReservationId,
     GenerationReservationRecord,
     GenerationState,
     IdempotencyNamespace,
+    MarkIndeterminateEvent,
     MeasurementKind,
     ModelIdentity,
     ModelItemId,
@@ -55,13 +59,19 @@ from autoskillit.core import (
     ProposeOccurrenceEvent,
     ProtectedPoolOwnerId,
     ProtectedPoolSpec,
+    ReconcileGenerationEvent,
+    ReleaseNonAdmissionEvent,
     RepresentationBindingWitness,
     RepresentationRevision,
     RequestReconciliationEvent,
     ReserveClass,
     ReserveRequestEvent,
+    ResolveIndeterminateNonAdmissionEvent,
+    ResolveIndeterminateRollbackEvent,
+    RollbackAdmissionEvent,
     RolloverEpochEvent,
     StageHistoryEvent,
+    StartGenerationEvent,
     TokenizerIdentity,
     ToolCallId,
     TurnId,
@@ -69,6 +79,7 @@ from autoskillit.core import (
     WindowEpochId,
     WitnessKind,
     reduce_context_admission,
+    replay_context_admission,
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
@@ -137,7 +148,13 @@ def _owner(reserve_class: ReserveClass) -> ProtectedPoolOwnerId | None:
     return None
 
 
-def _occurrence(slot: int, reserve_class: ReserveClass) -> AdmissionOccurrence:
+def _occurrence(
+    slot: int,
+    reserve_class: ReserveClass,
+    *,
+    window_epoch_id: WindowEpochId,
+    window_epoch_number: int,
+) -> AdmissionOccurrence:
     name = f"occurrence-{slot}"
     surface = (
         ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY
@@ -155,7 +172,7 @@ def _occurrence(slot: int, reserve_class: ReserveClass) -> AdmissionOccurrence:
             root_thread_id=ContextThreadId("thread-root"),
             current_thread_id=ContextThreadId("thread-child" if slot == 1 else "thread-root"),
             parent_thread_id=ContextThreadId("thread-root") if slot == 1 else None,
-            fork_occurrence_id=None,
+            fork_occurrence_id=(ForkOccurrenceId("fork-state-machine") if slot == 1 else None),
             turn_id=TurnId(f"turn-{slot}"),
             producer_surface=surface,
             producer_instance_id=ProducerInstanceId(f"producer-{slot}"),
@@ -163,9 +180,11 @@ def _occurrence(slot: int, reserve_class: ReserveClass) -> AdmissionOccurrence:
             model_item_id=ModelItemId(f"item-{slot}"),
             dispatch_identity=None,
             attempt_id=AdmissionAttemptId(f"attempt-{slot}"),
-            delivery_occurrence_id=None,
-            window_epoch_id=WindowEpochId("epoch-state-machine"),
-            window_epoch_number=1,
+            delivery_occurrence_id=(
+                DeliveryOccurrenceId("delivery-state-machine") if slot == 1 else None
+            ),
+            window_epoch_id=window_epoch_id,
+            window_epoch_number=window_epoch_number,
         ),
         reserve_class=reserve_class,
         producer_surface=surface,
@@ -199,6 +218,7 @@ def _batch(occurrence: AdmissionOccurrence) -> AdmissionBatch:
 
 
 def _multi_batch(occurrences: tuple[AdmissionOccurrence, ...]) -> AdmissionBatch:
+    occurrences = tuple(sorted(occurrences, key=lambda occurrence: occurrence.occurrence_id.value))
     slots = tuple(occurrence.occurrence_id.value.rsplit("-", 1)[-1] for occurrence in occurrences)
     request_id = AdmissionRequestId("request-multi-" + "-".join(slots))
     reserve_class = occurrences[0].reserve_class
@@ -229,11 +249,13 @@ def _multi_batch(occurrences: tuple[AdmissionOccurrence, ...]) -> AdmissionBatch
 def _reservation(
     occurrence: AdmissionOccurrence, batch: AdmissionBatch, count: int
 ) -> AdmissionReservation:
+    window_epoch_id = occurrence.lineage.window_epoch_id
+    window_epoch_number = occurrence.lineage.window_epoch_number
     key = AdmissionReservationKey(
         idempotency_namespace=_namespace("reserve-request"),
         protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
-        window_epoch_id=WindowEpochId("epoch-state-machine"),
-        window_epoch_number=1,
+        window_epoch_id=window_epoch_id,
+        window_epoch_number=window_epoch_number,
         batch_id=batch.batch_id,
         reserve_class=occurrence.reserve_class,
         protected_pool_owner_id=_owner(occurrence.reserve_class),
@@ -242,8 +264,8 @@ def _reservation(
     return AdmissionReservation(
         reservation_id=AdmissionReservationId(f"reservation-{occurrence.occurrence_id.value}"),
         key=key,
-        window_epoch_id=WindowEpochId("epoch-state-machine"),
-        window_epoch_number=1,
+        window_epoch_id=window_epoch_id,
+        window_epoch_number=window_epoch_number,
         snapshot_sequence=1,
         reserve_class=occurrence.reserve_class,
         protected_pool_owner_id=_owner(occurrence.reserve_class),
@@ -252,14 +274,20 @@ def _reservation(
     )
 
 
-def _reservation_for_batch(batch: AdmissionBatch, count: int) -> AdmissionReservation:
+def _reservation_for_batch(
+    batch: AdmissionBatch,
+    occurrence: AdmissionOccurrence,
+    count: int,
+) -> AdmissionReservation:
     occurrence_ids = batch.occurrence_ids
     slot = occurrence_ids[0].value.rsplit("-", 1)[-1]
+    window_epoch_id = occurrence.lineage.window_epoch_id
+    window_epoch_number = occurrence.lineage.window_epoch_number
     key = AdmissionReservationKey(
         idempotency_namespace=_namespace("reserve-multi"),
         protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
-        window_epoch_id=WindowEpochId("epoch-state-machine"),
-        window_epoch_number=1,
+        window_epoch_id=window_epoch_id,
+        window_epoch_number=window_epoch_number,
         batch_id=batch.batch_id,
         reserve_class=batch.reserve_class,
         protected_pool_owner_id=batch.protected_pool_owner_id,
@@ -271,8 +299,8 @@ def _reservation_for_batch(batch: AdmissionBatch, count: int) -> AdmissionReserv
     return AdmissionReservation(
         reservation_id=AdmissionReservationId(f"reservation-multi-{slot}"),
         key=key,
-        window_epoch_id=WindowEpochId("epoch-state-machine"),
-        window_epoch_number=1,
+        window_epoch_id=window_epoch_id,
+        window_epoch_number=window_epoch_number,
         snapshot_sequence=1,
         reserve_class=batch.reserve_class,
         protected_pool_owner_id=batch.protected_pool_owner_id,
@@ -289,9 +317,12 @@ def _generation(
             f"generation-{occurrence.occurrence_id.value}"
         ),
         request_id=batch.request_id,
+        batch_id=batch.batch_id,
+        representation_revision=batch.manifest.representation_revision,
+        occurrence_ids=batch.occurrence_ids,
         response_id=ModelItemId(f"response-{occurrence.occurrence_id.value}"),
-        window_epoch_id=WindowEpochId("epoch-state-machine"),
-        window_epoch_number=1,
+        window_epoch_id=occurrence.lineage.window_epoch_id,
+        window_epoch_number=occurrence.lineage.window_epoch_number,
         snapshot_sequence=1,
         reserve_class=occurrence.reserve_class,
         protected_pool_owner_id=_owner(occurrence.reserve_class),
@@ -299,11 +330,13 @@ def _generation(
         state=GenerationState.RESERVED,
         exact_terminal_usage=None,
         witness_ids=(),
+        authority_source_id=None,
     )
 
 
 def _witness(
     batch: AdmissionBatch,
+    occurrence: AdmissionOccurrence,
     kind: WitnessKind,
     *,
     occurrence_ids: tuple[AdmissionOccurrenceId, ...] | None = None,
@@ -311,8 +344,8 @@ def _witness(
     return AdmissionWitness(
         witness_id=AdmissionWitnessId(f"{kind.value}-witness-{batch.batch_id.value}"),
         kind=kind,
-        window_epoch_id=WindowEpochId("epoch-state-machine"),
-        window_epoch_number=1,
+        window_epoch_id=occurrence.lineage.window_epoch_id,
+        window_epoch_number=occurrence.lineage.window_epoch_number,
         snapshot_sequence=1,
         request_id=batch.request_id,
         batch_id=batch.batch_id,
@@ -356,6 +389,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         self.charges: dict[int, tuple[ReserveClass, int, int]] = {}
         self.latest_replayable_event: Any | None = open_event
         self.latest_propose_event: ProposeOccurrenceEvent | None = None
+        self.events: list[Any] = [open_event]
         self.event_sequence = 0
         self.last_revision = self.state.aggregate_revision.value
         self.last_admission_sequence = self.state.admission_sequence.value
@@ -389,6 +423,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         self.last_revision = self.state.aggregate_revision.value
         self.last_admission_sequence = self.state.admission_sequence.value
         self.latest_replayable_event = event
+        self.events.append(event)
 
     def _availability(self, reserve_class: ReserveClass) -> tuple[int, int, int]:
         total_charged = sum(
@@ -420,7 +455,12 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
     def propose(self, slot: int, reserve_class: ReserveClass) -> None:
         if slot in self.occurrences:
             return
-        occurrence = _occurrence(slot, reserve_class)
+        occurrence = _occurrence(
+            slot,
+            reserve_class,
+            window_epoch_id=self.state.snapshot.window_epoch_id,
+            window_epoch_number=self.state.snapshot.window_epoch_number,
+        )
         event = ProposeOccurrenceEvent(**self._fields("propose-occurrence"), occurrence=occurrence)
         transition = reduce_context_admission(self.state, event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
@@ -462,30 +502,55 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 generation_count,
             )
         else:
-            assert transition.next_state == prior
+            self._accept_publication(transition, event)
 
-    @rule(slot=_SLOT)
-    def stale_fence_is_rejected(self, slot: int) -> None:
-        if slot not in self.occurrences or slot in self.charges:
-            return
-        occurrence = self.occurrences[slot]
-        batch = _batch(occurrence)
-        event = ReserveRequestEvent(
-            **{
-                **self._fields("reserve-request"),
-                "expected_aggregate_revision": AggregateRevision(
-                    max(0, self.state.aggregate_revision.value - 1)
+    @rule()
+    def stale_fence_is_rejected(self) -> None:
+        old_snapshot = self.state.snapshot
+        new_window_epoch_number = old_snapshot.window_epoch_number + 1
+        receiver_authority = AuthoritySourceId("authority-state-machine")
+        event = RolloverEpochEvent(
+            **self._fields("rollover-epoch"),
+            witness=AdmissionWitness(
+                witness_id=AdmissionWitnessId(f"stale-rollover-witness-{self.event_sequence}"),
+                kind=WitnessKind.EPOCH_ROLLOVER,
+                window_epoch_id=old_snapshot.window_epoch_id,
+                window_epoch_number=old_snapshot.window_epoch_number,
+                snapshot_sequence=old_snapshot.snapshot_sequence,
+                request_id=AdmissionRequestId("stale-rollover-request"),
+                batch_id=AdmissionBatchId("stale-rollover-batch"),
+                representation_revision=RepresentationRevision("stale-rollover-revision"),
+                occurrence_ids=(),
+                authority_source_id=receiver_authority,
+            ),
+            fence_proof=EpochFenceProof(
+                old_window_epoch_id=WindowEpochId("stale-window-epoch"),
+                old_window_epoch_number=old_snapshot.window_epoch_number,
+                new_window_epoch_id=WindowEpochId(
+                    f"epoch-state-machine-{new_window_epoch_number}"
                 ),
-            },
-            batch=batch,
-            snapshot_sequence=1,
-            input_reservations=(_reservation(occurrence, batch, 1),),
-            generation_reservation=_generation(occurrence, batch, 0),
+                new_window_epoch_number=new_window_epoch_number,
+                receiver_authority_source_id=receiver_authority,
+                fence_witness_id=AdmissionWitnessId(f"stale-fence-{self.event_sequence}"),
+                highest_admitted_dispatch_sequence=self.state.admission_sequence.value,
+            ),
+            deducted_unresolved_count=0,
+            new_snapshot=ContextWindowSnapshot(
+                protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+                window_epoch_id=WindowEpochId(f"epoch-state-machine-{new_window_epoch_number}"),
+                window_epoch_number=new_window_epoch_number,
+                model_identity=ModelIdentity.anthropic("claude-state-machine"),
+                tokenizer_identity=TokenizerIdentity("tokenizer-state-machine"),
+                snapshot_sequence=1,
+                active_count=50,
+                hard_limit=100,
+                remaining_count=50,
+            ),
+            protected_pools=_pool_specs(),
         )
-        prior = self.state
-        transition = reduce_context_admission(prior, event)
+        transition = reduce_context_admission(self.state, event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_REJECT
-        assert transition.next_state == prior
+        self._accept_publication(transition, event)
 
     @rule(
         slot=_SLOT,
@@ -507,21 +572,21 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             **self._fields("reserve-multi"),
             batch=batch,
             snapshot_sequence=1,
-            input_reservations=(_reservation_for_batch(batch, total),),
+            input_reservations=(_reservation_for_batch(batch, first, total),),
             generation_reservation=None,
         )
         prior = self.state
         transition = reduce_context_admission(prior, event)
         if transition.decision.kind is AdmissionDecisionKind.WOULD_REJECT:
-            assert transition.next_state == prior
+            self._accept_publication(transition, event)
             return
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
         self._accept_publication(transition, event)
         self.charges[slot] = (first.reserve_class, total, 0)
         self.charges[other_slot] = (second.reserve_class, 0, 0)
 
-    @rule()
-    def prepare_stage_dispatch_and_accept(self) -> None:
+    @rule(accept_now=st.booleans())
+    def prepare_stage_dispatch_and_accept(self, accept_now: bool) -> None:
         if not self.charges:
             return
         slot = min(self.charges)
@@ -548,7 +613,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         stage_event = StageHistoryEvent(
             **self._fields("stage-history"),
             batch_id=batch.batch_id,
-            witness=_witness(batch, WitnessKind.HISTORY_STAGED),
+            witness=_witness(batch, occurrence, WitnessKind.HISTORY_STAGED),
         )
         transition = reduce_context_admission(self.state, stage_event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
@@ -556,16 +621,19 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         dispatch_event = DispatchRequestEvent(
             **self._fields("dispatch-request"),
             batch_id=batch.batch_id,
-            witness=_witness(batch, WitnessKind.REQUEST_INCLUDED),
+            witness=_witness(batch, occurrence, WitnessKind.REQUEST_INCLUDED),
         )
         transition = reduce_context_admission(self.state, dispatch_event)
         assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
         self._accept_publication(transition, dispatch_event)
+        if not accept_now:
+            return
         accept_event = AcceptInputEvent(
             **self._fields("accept-input"),
             batch_id=batch.batch_id,
-            witness=_witness(batch, WitnessKind.PROVIDER_ACCEPTED),
+            witness=_witness(batch, occurrence, WitnessKind.PROVIDER_ACCEPTED),
             final_manifest_revision=batch.manifest.representation_revision,
+            final_manifest=batch.manifest,
             exact_input_charge=reserved_input_count,
             measurement_kind=MeasurementKind.PROVIDER_EXACT,
             authority_source_id=AuthoritySourceId("authority-state-machine"),
@@ -576,8 +644,243 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         self._accept_publication(transition, accept_event)
 
     @rule()
+    def prepare_and_mark_indeterminate(self) -> None:
+        if not self.charges:
+            return
+        slot = min(self.charges)
+        _, input_count, _ = self.charges[slot]
+        occurrence = self.occurrences[slot]
+        batch = _batch(occurrence)
+        reserved = self._find_batch(batch.batch_id)
+        if reserved is None or reserved.state is not AdmissionState.RESERVED:
+            return
+        prepare_event = PrepareBatchEvent(
+            **self._fields("prepare-batch"),
+            batch_id=batch.batch_id,
+            representation_revision=batch.manifest.representation_revision,
+            proposed_charge=input_count,
+            measurement_kind=MeasurementKind.PROVIDER_EXACT,
+            authority_source_id=AuthoritySourceId("authority-state-machine"),
+        )
+        prepared = reduce_context_admission(self.state, prepare_event)
+        assert prepared.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+        self._accept_publication(prepared, prepare_event)
+        indeterminate_event = MarkIndeterminateEvent(
+            **self._fields("mark-indeterminate"),
+            batch_id=batch.batch_id,
+            reason_code="provider-result-lost",
+        )
+        marked = reduce_context_admission(self.state, indeterminate_event)
+        assert marked.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+        self._accept_publication(marked, indeterminate_event)
+
+    @rule(rollback=st.booleans())
+    def release_or_rollback_preacceptance(self, rollback: bool) -> None:
+        for slot in sorted(self.charges):
+            occurrence = self.occurrences.get(slot)
+            if occurrence is None:
+                continue
+            batch = _batch(occurrence)
+            record = self._find_batch(batch.batch_id)
+            if record is None:
+                continue
+            if rollback:
+                if record.state not in {
+                    AdmissionState.HISTORY_STAGED,
+                    AdmissionState.REQUEST_DISPATCHED,
+                }:
+                    continue
+                event: Any = RollbackAdmissionEvent(
+                    **self._fields("rollback-admission"),
+                    batch_id=batch.batch_id,
+                    witness=_witness(batch, occurrence, WitnessKind.ROLLBACK),
+                )
+            else:
+                if record.state not in {
+                    AdmissionState.RESERVED,
+                    AdmissionState.PREPARED,
+                    AdmissionState.HISTORY_STAGED,
+                    AdmissionState.REQUEST_DISPATCHED,
+                }:
+                    continue
+                needs_removal = record.state in {
+                    AdmissionState.HISTORY_STAGED,
+                    AdmissionState.REQUEST_DISPATCHED,
+                }
+                event = ReleaseNonAdmissionEvent(
+                    **self._fields("release-non-admission"),
+                    batch_id=batch.batch_id,
+                    witness=_witness(
+                        batch,
+                        occurrence,
+                        WitnessKind.NON_ADMISSION,
+                    ),
+                    history_removal_witness=(
+                        _witness(batch, occurrence, WitnessKind.ROLLBACK)
+                        if needs_removal
+                        else None
+                    ),
+                )
+            transition = reduce_context_admission(self.state, event)
+            assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+            self._accept_publication(transition, event)
+            reserve_class, _, _ = self.charges[slot]
+            self.charges[slot] = (reserve_class, 0, 0)
+            return
+
+    @rule(rollback=st.booleans())
+    def resolve_indeterminate_nonacceptance(self, rollback: bool) -> None:
+        for slot in sorted(self.charges):
+            occurrence = self.occurrences.get(slot)
+            if occurrence is None:
+                continue
+            batch = _batch(occurrence)
+            record = self._find_batch(batch.batch_id)
+            if record is None or record.state is not AdmissionState.INDETERMINATE:
+                continue
+            if rollback:
+                event: Any = ResolveIndeterminateRollbackEvent(
+                    **self._fields("resolve-indeterminate-rollback"),
+                    batch_id=batch.batch_id,
+                    witness=_witness(batch, occurrence, WitnessKind.ROLLBACK),
+                )
+            else:
+                event = ResolveIndeterminateNonAdmissionEvent(
+                    **self._fields("resolve-indeterminate-non-admission"),
+                    batch_id=batch.batch_id,
+                    witness=_witness(
+                        batch,
+                        occurrence,
+                        WitnessKind.NON_ADMISSION,
+                    ),
+                    history_removal_witness=_witness(
+                        batch,
+                        occurrence,
+                        WitnessKind.ROLLBACK,
+                    ),
+                )
+            transition = reduce_context_admission(self.state, event)
+            assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+            self._accept_publication(transition, event)
+            reserve_class, _, _ = self.charges[slot]
+            self.charges[slot] = (reserve_class, 0, 0)
+            return
+
+    @rule(exact_usage=st.integers(min_value=0, max_value=16))
+    def start_and_reconcile_generation(self, exact_usage: int) -> None:
+        for generation in self.state.generation_reservations:
+            if generation.state is not GenerationState.RESERVED:
+                continue
+            slot_and_occurrence = next(
+                (
+                    (slot, occurrence)
+                    for slot, occurrence in self.occurrences.items()
+                    if _batch(occurrence).batch_id == generation.batch_id
+                ),
+                None,
+            )
+            if slot_and_occurrence is None:
+                continue
+            slot, occurrence = slot_and_occurrence
+            batch = _batch(occurrence)
+            record = self._find_batch(batch.batch_id)
+            if record is None or record.state not in {
+                AdmissionState.HISTORY_STAGED,
+                AdmissionState.REQUEST_DISPATCHED,
+                AdmissionState.COMMITTED,
+                AdmissionState.QUARANTINED,
+            }:
+                continue
+            start = StartGenerationEvent(
+                **self._fields("start-generation"),
+                generation_reservation_id=generation.generation_reservation_id,
+                witness=_witness(
+                    batch,
+                    occurrence,
+                    WitnessKind.REQUEST_INCLUDED,
+                ),
+            )
+            started = reduce_context_admission(self.state, start)
+            assert started.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+            self._accept_publication(started, start)
+            reconcile = ReconcileGenerationEvent(
+                **self._fields("reconcile-generation"),
+                generation_reservation_id=generation.generation_reservation_id,
+                output_usage_witness=_witness(
+                    batch,
+                    occurrence,
+                    WitnessKind.OUTPUT_USAGE,
+                ),
+                exact_output_usage=exact_usage,
+            )
+            reconciled = reduce_context_admission(self.state, reconcile)
+            expected = (
+                AdmissionDecisionKind.QUARANTINED
+                if exact_usage > generation.maximum_allowance
+                else AdmissionDecisionKind.WOULD_ADMIT
+            )
+            assert reconciled.decision.kind is expected
+            self._accept_publication(reconciled, reconcile)
+            reserve_class, input_count, _ = self.charges[slot]
+            self.charges[slot] = (reserve_class, input_count, 0)
+            return
+
+    @rule()
+    def expire_terminal_idempotency_key(self) -> None:
+        for record in self.state.idempotency_records:
+            batch = record.original_descriptor.batch
+            occurrence = next(
+                (
+                    occurrence
+                    for occurrence in self.occurrences.values()
+                    if occurrence.occurrence_id in batch.occurrence_ids
+                ),
+                None,
+            )
+            batch_record = self._find_batch(batch.batch_id)
+            if (
+                occurrence is None
+                or batch_record is None
+                or batch_record.state
+                not in {
+                    AdmissionState.COMMITTED,
+                    AdmissionState.RELEASED,
+                    AdmissionState.ROLLED_BACK,
+                    AdmissionState.QUARANTINED,
+                }
+            ):
+                continue
+            event = ExpireIdempotencyKeyEvent(
+                **self._fields("expire-idempotency-key"),
+                reservation_key=record.reservation_key,
+                expiry_witness=_witness(
+                    batch,
+                    occurrence,
+                    WitnessKind.IDEMPOTENCY_EXPIRY,
+                ),
+            )
+            transition = reduce_context_admission(self.state, event)
+            assert transition.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+            self._accept_publication(transition, event)
+            return
+
+    @rule()
     def rollover_preserves_dispatched_and_indeterminate_charge(self) -> None:
         before_charges = dict(self.charges)
+        retained_batch_ids = {
+            record.batch.batch_id
+            for record in self.state.batch_records
+            if record.state
+            in {
+                AdmissionState.REQUEST_DISPATCHED,
+                AdmissionState.INDETERMINATE,
+            }
+        }
+        retained_slots = {
+            slot
+            for slot, occurrence in self.occurrences.items()
+            if _batch(occurrence).batch_id in retained_batch_ids
+        }
         old_snapshot = self.state.snapshot
         new_window_epoch_number = old_snapshot.window_epoch_number + 1
         new_window_epoch_id = WindowEpochId(f"epoch-state-machine-{new_window_epoch_number}")
@@ -593,7 +896,14 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             new_window_epoch_number=new_window_epoch_number,
             receiver_authority_source_id=AuthoritySourceId("authority-state-machine"),
             fence_witness_id=AdmissionWitnessId(f"fence-{witness_suffix}"),
-            highest_admitted_dispatch_sequence=self.state.admission_sequence.value,
+            highest_admitted_dispatch_sequence=max(
+                (
+                    record.dispatch_sequence
+                    for record in self.state.batch_records
+                    if record.dispatch_sequence is not None
+                ),
+                default=0,
+            ),
         )
         rollover_event = RolloverEpochEvent(
             **event_fields,
@@ -610,6 +920,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 authority_source_id=AuthoritySourceId("authority-state-machine"),
             ),
             fence_proof=proof,
+            deducted_unresolved_count=0,
             new_snapshot=ContextWindowSnapshot(
                 protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
                 window_epoch_id=new_window_epoch_id,
@@ -629,7 +940,9 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         assert isinstance(new_state, ActiveContextAdmissionState)
         assert len(new_state.closed_epochs) >= 1
         prior_audit = new_state.closed_epochs[-1]
-        assert prior_audit.retained_unresolved_count >= 0
+        assert prior_audit.retained_unresolved_count == sum(
+            before_charges[slot][1] for slot in retained_slots
+        )
         for record in new_state.batch_records:
             if record.state in {
                 AdmissionState.REQUEST_DISPATCHED,
@@ -638,9 +951,10 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 owner = record.batch.protected_pool_owner_id
                 if owner is None:
                     assert record.batch.reserve_class is ReserveClass.ORDINARY
-        if before_charges:
-            self._accept_publication(transition, rollover_event)
-            self.last_rollover_retention = prior_audit.retained_unresolved_count
+        self._accept_publication(transition, rollover_event)
+        self.occurrences = {}
+        self.charges = {}
+        self.last_rollover_retention = prior_audit.retained_unresolved_count
 
     @precondition(lambda self: self.latest_replayable_event is not None)
     @rule()
@@ -652,6 +966,12 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
         transition = reduce_context_admission(self.state, restored_event)
         assert transition.decision.kind is AdmissionDecisionKind.NOOP_IDEMPOTENT
         assert transition.next_state == self.state
+
+    @rule()
+    def generated_stream_replay_is_deterministic(self) -> None:
+        replay = replay_context_admission(_uninitialized(), tuple(self.events))
+        assert replay.final_state == self.state
+        assert len(replay.transitions) == len(self.events)
 
     @precondition(lambda self: self.latest_propose_event is not None)
     @rule()

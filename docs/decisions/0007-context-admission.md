@@ -319,11 +319,17 @@ Primary source evidence at that exact commit:
 - [App Server raw-response documentation](https://github.com/openai/codex/blob/25af12f7e61572b0bc18ddb1008be543b91519b0/codex-rs/app-server/README.md)
 - [compaction identity](https://github.com/openai/codex/blob/25af12f7e61572b0bc18ddb1008be543b91519b0/codex-rs/protocol/src/protocol.rs)
 - [four-byte truncation heuristic](https://github.com/openai/codex/blob/25af12f7e61572b0bc18ddb1008be543b91519b0/codex-rs/utils/string/src/truncate.rs)
+- [generated hook schemas](https://github.com/openai/codex/tree/25af12f7e61572b0bc18ddb1008be543b91519b0/codex-rs/hooks/schema/generated)
 
 Official provider documentation: [input-token-count API
 reference](https://platform.openai.com/docs/api-reference/responses/input-tokens),
 [token-counting guide](https://platform.openai.com/docs/guides/token-counting), and
 [compaction guide](https://platform.openai.com/docs/guides/compaction).
+
+Current hook coverage is documented separately by the
+[App Server hook-discovery and `hooks/list` contract](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#hooks).
+That moving documentation describes current client-visible coverage; it is not substituted for
+the immutable 0.145.0 source pins above.
 
 The `token_budget` capability is disabled and experimental. `get_context_remaining` is a
 model-callable/polling observation, not an atomic reservation available synchronously to every

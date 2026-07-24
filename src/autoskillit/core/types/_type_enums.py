@@ -678,6 +678,7 @@ class GenerationState(StrEnum):
     RECONCILED = "reconciled"
     INDETERMINATE = "indeterminate"
     QUARANTINED = "quarantined"
+    INVALIDATED = "invalidated"
 
 
 @unique

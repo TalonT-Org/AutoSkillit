@@ -15,6 +15,30 @@ pytestmark = pytest.mark.small
 
 CODEX_VERSION = "0.145.0"
 CODEX_REVISION = "25af12f7e61572b0bc18ddb1008be543b91519b0"
+REQUIRED_PINNED_CODEX_PATHS = (
+    "codex-rs/core/src/session/context_window.rs",
+    "codex-rs/core/src/context_manager/history.rs",
+    "codex-rs/features/src/lib.rs",
+    "codex-rs/core/src/tools/spec_plan.rs",
+    "codex-rs/core/src/tools/handlers/get_context_remaining.rs",
+    "codex-rs/app-server-protocol/src/protocol/v2/thread.rs",
+    "codex-rs/app-server/README.md",
+    "codex-rs/protocol/src/protocol.rs",
+    "codex-rs/utils/string/src/truncate.rs",
+    "codex-rs/hooks/schema/generated",
+)
+CURRENT_HOOK_COVERAGE_URL = (
+    "https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#hooks"
+)
+EXPECTED_DEPENDENCY_EDGES = {
+    "#4333 C1 -> #4334 C2",
+    "#4333 C1 + #4334 C2 + #4335 C3 -> #4336 C4",
+    "#4333 C1 + #4334 C2 + #4335 C3 -> #4337 C5",
+    "#4333 C1 + #4334 C2 -> #4338 C8",
+    "#4319/#4320/#4321/#4322/#4325/#4326/#4327 -> #4335 C3 artifact authority",
+    "#4334 C2 + #4336 C4 + #4337 C5 + #4324 + #4338 C8 -> #4339 C6",
+    "#4334 C2 + #4335 C3 + #4271 + #4338 C8 -> #4340 C7",
+}
 
 REQUIRED_HEADINGS = (
     "Context",
@@ -163,8 +187,10 @@ def test_codex_capability_claims_are_version_pinned_to_primary_evidence(
         "PostCompact",
     ]:
         assert required in capability
-    primary_source_prefix = f"https://github.com/openai/codex/blob/{CODEX_REVISION}/"
-    assert capability.count(primary_source_prefix) >= 3
+    for source_path in REQUIRED_PINNED_CODEX_PATHS:
+        assert CODEX_REVISION in capability
+        assert source_path in capability
+    assert CURRENT_HOOK_COVERAGE_URL in capability
 
 
 def test_authority_unavailable_behavior_preserves_byte_boundaries(
@@ -426,26 +452,7 @@ def test_decision_keeps_issue_non_goals_explicit(decision_text: str) -> None:
         assert required in non_goals
 
 
-@pytest.mark.parametrize(
-    ("work_package", "issue"),
-    [
-        ("C2", "#4334"),
-        ("C3", "#4335"),
-        ("C4", "#4336"),
-        ("C5", "#4337"),
-        ("C6", "#4339"),
-        ("C7", "#4340"),
-        ("C8", "#4338"),
-    ],
-)
-def test_dependency_graph_maps_existing_child_issues(
-    decision_text: str,
-    work_package: str,
-    issue: str,
-) -> None:
+def test_dependency_graph_freezes_exact_edges(decision_text: str) -> None:
     graph = _section(decision_text, "Downstream dependency graph")
-    assert re.search(
-        rf"\b{re.escape(work_package)}\b[^\n]*{re.escape(issue)}"
-        rf"|{re.escape(issue)}[^\n]*\b{re.escape(work_package)}\b",
-        graph,
-    )
+    actual_edges = {line.strip() for line in graph.splitlines() if "->" in line}
+    assert actual_edges == EXPECTED_DEPENDENCY_EDGES

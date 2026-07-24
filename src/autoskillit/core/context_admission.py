@@ -2619,7 +2619,8 @@ def _rollover(
     )
     fully_resolved = retained_total == 0
     snapshot_deducts_unresolved = (
-        retained_total > 0 and event.new_snapshot.active_count >= retained_total
+        retained_total > 0
+        and event.new_snapshot.remaining_count <= state.snapshot.remaining_count - retained_total
     )
     authority_alternative_valid = (
         receiver_fence_valid

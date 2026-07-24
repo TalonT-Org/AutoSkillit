@@ -2275,7 +2275,7 @@ def test_rollover_accepts_only_one_explicit_authority_alternative() -> None:
         **_event_fields(state, "rollover-snapshot-deducted", "rollover-epoch"),
         witness=_witness(batch, WitnessKind.EPOCH_ROLLOVER),
         fence_proof=None,
-        new_snapshot=_snapshot(epoch=2),
+        new_snapshot=_snapshot(epoch=2, active_count=70, remaining_count=30),
         protected_pools=(),
     )
     deducted_rollover = reduce_context_admission(state, deducted)
@@ -2283,7 +2283,7 @@ def test_rollover_accepts_only_one_explicit_authority_alternative() -> None:
     invalid_deduction = replace(
         deducted,
         event_id=AdmissionEventId("rollover-invalid-deduction"),
-        new_snapshot=_snapshot(epoch=2, active_count=9),
+        new_snapshot=_snapshot(epoch=2),
     )
     rejected = reduce_context_admission(state, invalid_deduction)
     assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT

@@ -296,11 +296,13 @@ def _reservation(
 
 def _reservation_for_batch(
     batch: AdmissionBatch,
-    occurrence: AdmissionOccurrence,
+    occurrences: tuple[AdmissionOccurrence, ...],
     count: int,
 ) -> AdmissionReservation:
     occurrence_ids = batch.occurrence_ids
+    occurrences_by_id = {occurrence.occurrence_id: occurrence for occurrence in occurrences}
     slot = occurrence_ids[0].value.rsplit("-", 1)[-1]
+    occurrence = occurrences[0]
     window_epoch_id = occurrence.lineage.window_epoch_id
     window_epoch_number = occurrence.lineage.window_epoch_number
     key = AdmissionReservationKey(
@@ -312,7 +314,10 @@ def _reservation_for_batch(
         reserve_class=batch.reserve_class,
         protected_pool_owner_id=batch.protected_pool_owner_id,
         occurrence_revisions=tuple(
-            (occurrence_id, batch.manifest.representation_revision)
+            (
+                occurrence_id,
+                occurrences_by_id[occurrence_id].representation_revision,
+            )
             for occurrence_id in occurrence_ids
         ),
     )
@@ -794,7 +799,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             **self._fields("reserve-multi"),
             batch=batch,
             snapshot_sequence=1,
-            input_reservations=(_reservation_for_batch(batch, first, total),),
+            input_reservations=(_reservation_for_batch(batch, (first, second), total),),
             generation_reservation=None,
         )
         prior = self.state

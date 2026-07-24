@@ -262,6 +262,9 @@ from .types import SKILL_COMMAND_DISPLAY_MAX as SKILL_COMMAND_DISPLAY_MAX
 from .types import SKILL_COMMAND_PREFIX as SKILL_COMMAND_PREFIX
 from .types import SKILL_FILE_ADVISORY_MAP as SKILL_FILE_ADVISORY_MAP
 from .types import SKILL_PROJECTION_VERSION as SKILL_PROJECTION_VERSION
+from .types import (
+    SKILL_SESSION_CONTRACT_SCHEMA_VERSION as SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
+)
 from .types import SKILL_SESSION_REQUIRED_ENV as SKILL_SESSION_REQUIRED_ENV
 from .types import SKILL_TOOLS as SKILL_TOOLS
 from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
@@ -413,10 +416,12 @@ from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig
+from .types import SkillSessionContract as SkillSessionContract
 from .types import SkillSessionContractStore as SkillSessionContractStore
 from .types import SkillSource as SkillSource
 from .types import SkillSourceIdentity as SkillSourceIdentity
 from .types import SkillSourceRef as SkillSourceRef
+from .types import StoredSkillSessionContract as StoredSkillSessionContract
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StreamParser as StreamParser

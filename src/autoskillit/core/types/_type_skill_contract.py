@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
-from ._type_constants_registries import SKILL_CAPABILITY_REGISTRY
-from ._type_enums import SkillSource
+from ._type_constants_registries import (
+    SKILL_CAPABILITY_REGISTRY,
+    validate_skill_capability_roles,
+)
+from ._type_enums import SkillExecutionRole, SkillSource
+from ._type_results import WriteBehaviorSpec
 
 __all__ = [
     "MACHINE_ONLY_SKILL_FRONTMATTER_KEYS",
     "SKILL_PROJECTION_VERSION",
+    "SKILL_SESSION_CONTRACT_SCHEMA_VERSION",
+    "SkillSessionContract",
     "SkillSourceIdentity",
     "SkillSourceRef",
+    "StoredSkillSessionContract",
     "derive_backend_requirements",
 ]
 
@@ -26,6 +35,7 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
     }
 )
 SKILL_PROJECTION_VERSION = 1
+SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 2
 
 
 def derive_backend_requirements(uses_capabilities: frozenset[str]) -> frozenset[str]:
@@ -65,3 +75,88 @@ class SkillSourceRef:
             search_dir=self.search_dir,
             precedence=self.precedence,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SkillSessionContract:
+    """Immutable execution contract bound to a projected skill snapshot."""
+
+    root_name: str
+    execution_role: SkillExecutionRole
+    source_refs: Mapping[str, SkillSourceRef]
+    closure: tuple[str, ...]
+    capability_union: frozenset[str]
+    canonical_digests: Mapping[str, str]
+    projected_digests: Mapping[str, str]
+    projection_version: int
+    project_root: str
+    cwd: str
+    backend: str
+    resolved_command: str
+    member_roles: Mapping[str, SkillExecutionRole]
+    member_capabilities: Mapping[str, frozenset[str]]
+    member_activate_deps: Mapping[str, tuple[str, ...]]
+    canonical_contents: Mapping[str, str]
+    expected_output_patterns: tuple[str, ...] = ()
+    write_behavior: WriteBehaviorSpec = WriteBehaviorSpec()
+    read_only: bool = False
+    completion_required: bool = False
+    skill_contract_json: str = ""
+    projection_substitutions: tuple[tuple[str, str], ...] = ()
+    projection_gating: bool | None = None
+    projection_namespace: str | None = None
+    schema_version: int = SKILL_SESSION_CONTRACT_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "source_refs", MappingProxyType(dict(self.source_refs)))
+        object.__setattr__(
+            self,
+            "canonical_digests",
+            MappingProxyType(dict(self.canonical_digests)),
+        )
+        object.__setattr__(
+            self,
+            "projected_digests",
+            MappingProxyType(dict(self.projected_digests)),
+        )
+        object.__setattr__(self, "member_roles", MappingProxyType(dict(self.member_roles)))
+        object.__setattr__(
+            self,
+            "member_capabilities",
+            MappingProxyType(
+                {
+                    name: frozenset(capabilities)
+                    for name, capabilities in self.member_capabilities.items()
+                }
+            ),
+        )
+        object.__setattr__(
+            self,
+            "member_activate_deps",
+            MappingProxyType(
+                {
+                    name: tuple(dependencies)
+                    for name, dependencies in self.member_activate_deps.items()
+                }
+            ),
+        )
+        object.__setattr__(
+            self,
+            "canonical_contents",
+            MappingProxyType(dict(self.canonical_contents)),
+        )
+
+    @property
+    def backend_requirements(self) -> frozenset[str]:
+        """Derive backend constraints from the persisted capability union."""
+        validate_skill_capability_roles(self.capability_union, self.execution_role)
+        return derive_backend_requirements(self.capability_union)
+
+
+@dataclass(frozen=True, slots=True)
+class StoredSkillSessionContract:
+    """Validated contract plus the retained projected snapshot directory."""
+
+    contract: SkillSessionContract
+    snapshot_dir: Path
+    raw_session_id: str

@@ -9,24 +9,24 @@ import secrets
 import shutil
 import tempfile
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from threading import RLock
-from types import MappingProxyType
 from typing import Any
 
 import regex as re
 
 from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
+    SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
     SkillContractError,
     SkillExecutionRole,
+    SkillSessionContract,
     SkillSource,
     SkillSourceRef,
+    StoredSkillSessionContract,
     WriteBehaviorSpec,
     atomic_write,
     default_log_dir,
-    derive_backend_requirements,
     read_versioned_json,
     validate_skill_capability_roles,
     write_versioned_json,
@@ -39,97 +39,11 @@ __all__ = [
     "delete_skill_session_contracts",
 ]
 
-SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 2
 _STORE_MANIFEST_SCHEMA_VERSION = 1
 _MANIFEST_FILENAME = "manifest.json"
 _SNAPSHOT_DIRNAME = "snapshot"
 _CORRELATION_KEY_RE = re.compile(r"^[0-9a-f]{32}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-
-
-@dataclass(frozen=True, slots=True)
-class SkillSessionContract:
-    """Immutable execution contract bound to a projected skill snapshot."""
-
-    root_name: str
-    execution_role: SkillExecutionRole
-    source_refs: Mapping[str, SkillSourceRef]
-    closure: tuple[str, ...]
-    capability_union: frozenset[str]
-    canonical_digests: Mapping[str, str]
-    projected_digests: Mapping[str, str]
-    projection_version: int
-    project_root: str
-    cwd: str
-    backend: str
-    resolved_command: str
-    member_roles: Mapping[str, SkillExecutionRole]
-    member_capabilities: Mapping[str, frozenset[str]]
-    member_activate_deps: Mapping[str, tuple[str, ...]]
-    canonical_contents: Mapping[str, str]
-    expected_output_patterns: tuple[str, ...] = ()
-    write_behavior: WriteBehaviorSpec = WriteBehaviorSpec()
-    read_only: bool = False
-    completion_required: bool = False
-    skill_contract_json: str = ""
-    projection_substitutions: tuple[tuple[str, str], ...] = ()
-    projection_gating: bool | None = None
-    projection_namespace: str | None = None
-    schema_version: int = SKILL_SESSION_CONTRACT_SCHEMA_VERSION
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "source_refs", MappingProxyType(dict(self.source_refs)))
-        object.__setattr__(
-            self,
-            "canonical_digests",
-            MappingProxyType(dict(self.canonical_digests)),
-        )
-        object.__setattr__(
-            self,
-            "projected_digests",
-            MappingProxyType(dict(self.projected_digests)),
-        )
-        object.__setattr__(self, "member_roles", MappingProxyType(dict(self.member_roles)))
-        object.__setattr__(
-            self,
-            "member_capabilities",
-            MappingProxyType(
-                {
-                    name: frozenset(capabilities)
-                    for name, capabilities in self.member_capabilities.items()
-                }
-            ),
-        )
-        object.__setattr__(
-            self,
-            "member_activate_deps",
-            MappingProxyType(
-                {
-                    name: tuple(dependencies)
-                    for name, dependencies in self.member_activate_deps.items()
-                }
-            ),
-        )
-        object.__setattr__(
-            self,
-            "canonical_contents",
-            MappingProxyType(dict(self.canonical_contents)),
-        )
-
-    @property
-    def backend_requirements(self) -> frozenset[str]:
-        """Derive backend constraints from the persisted capability union."""
-        validate_skill_capability_roles(self.capability_union, self.execution_role)
-        return derive_backend_requirements(self.capability_union)
-
-
-@dataclass(frozen=True, slots=True)
-class StoredSkillSessionContract:
-    """Validated contract plus the retained projected snapshot directory."""
-
-    contract: SkillSessionContract
-    snapshot_dir: Path
-    raw_session_id: str
 
 
 class DefaultSkillSessionContractStore:

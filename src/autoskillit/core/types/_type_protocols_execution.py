@@ -17,7 +17,11 @@ from ._type_results import (
     ValidatedAddDir,
     WriteBehaviorSpec,
 )
-from ._type_skill_contract import SkillSourceIdentity
+from ._type_skill_contract import (
+    SkillSessionContract,
+    SkillSourceIdentity,
+    StoredSkillSessionContract,
+)
 
 __all__ = [
     "CompletionRequiredResolver",
@@ -103,13 +107,18 @@ class TestRunner(Protocol):
 class SkillSessionContractStore(Protocol):
     """Persistence boundary for skill-session contract ownership."""
 
-    def create_provisional(self, *, contract: Any, snapshot: Any) -> str: ...
+    def create_provisional(
+        self,
+        *,
+        contract: SkillSessionContract,
+        snapshot: Mapping[str, str],
+    ) -> str: ...
 
     def observe_candidate(self, correlation_key: str, session_id: str) -> None: ...
 
     def finalize(self, correlation_key: str, session_id: str) -> None: ...
 
-    def load(self, session_id: str) -> Any: ...
+    def load(self, session_id: str) -> StoredSkillSessionContract: ...
 
     def delete(self, session_id: str) -> None: ...
 

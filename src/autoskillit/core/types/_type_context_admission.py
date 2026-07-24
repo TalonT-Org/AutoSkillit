@@ -17,7 +17,20 @@ from typing import (
     get_type_hints,
 )
 
-from ._type_context_admission_validation import (
+from ._type_dispatch_identity import DispatchIdentity
+from ._type_enums import (
+    AdmissionDecisionKind,
+    AdmissionState,
+    ChargeDomain,
+    CoverageEvidenceKind,
+    CoverageState,
+    GenerationState,
+    MeasurementKind,
+    ProducerSurface,
+    ReserveClass,
+    WitnessKind,
+)
+from ._type_helpers import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
     ContextAdmissionValidationError,
     UnsupportedContextAdmissionProtocolError,
@@ -31,19 +44,6 @@ from ._type_context_admission_validation import (
     _validate_non_negative,
     _validate_protocol_version,
     _validate_reason_code,
-)
-from ._type_dispatch_identity import DispatchIdentity
-from ._type_enums import (
-    AdmissionDecisionKind,
-    AdmissionState,
-    ChargeDomain,
-    CoverageEvidenceKind,
-    CoverageState,
-    GenerationState,
-    MeasurementKind,
-    ProducerSurface,
-    ReserveClass,
-    WitnessKind,
 )
 from ._type_results import ModelIdentity
 

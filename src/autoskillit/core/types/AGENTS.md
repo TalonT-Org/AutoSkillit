@@ -34,7 +34,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_recipe_sections.py` | Recipe-section schema validation plus canonical section, element, and plan digest helpers |
 | `_type_capture.py` | `CaptureEntrySpec` and `CaptureValueTypeError` for typed capture contract enforcement |
 | `_type_dispatch_identity.py` | `DispatchIdentity` frozen value object, `PromptContractError`, and `assert_prompt_sentinel` for sentinel contract enforcement |
-| `_type_helpers.py` | Text processing and skill-name extraction utilities |
+| `_type_helpers.py` | Text processing, skill-name extraction, and shared content-free validation utilities |
 | `_type_inspector.py` | Health Inspector types: `InspectorEvidence`, `InspectorVerdict`, `InspectorCallback` (issue #3533) |
 | `_type_invariant_registry.py` | Invariant registry: `InvariantDef` dataclass and `INVARIANT_REGISTRY` mapping prose prohibitions to runtime gates |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
@@ -42,7 +42,6 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_plugin_source.py` | `PluginSource` discriminated union: `DirectInstall | MarketplaceInstall` |
 | `_type_tradition_manifest.py` | `TraditionManifest`, `LensEntry`, `DialingConfig` frozen dataclasses with `from_dict`/`from_yaml_path` loaders |
 | `_type_context_admission.py` | Frozen content-free identities, events, records, effects, states, and coverage definitions for context admission |
-| `_type_context_admission_validation.py` | Internal validation primitives shared by the context-admission protocol values |
 
 ## Architecture Notes
 

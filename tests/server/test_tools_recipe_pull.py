@@ -992,7 +992,9 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
     warning.assert_called_once_with(
         "get_recipe_section_schema_mismatch",
         stage="load",
-        detail="recipe artifact schema invalid: recipe_section_type@warnings[1]",
+        detail=(
+            "recipe artifact section schema mismatch: invalid_section_element_type@warnings.1"
+        ),
     )
 
 

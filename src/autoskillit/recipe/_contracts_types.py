@@ -60,6 +60,7 @@ class SkillContract:
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
     outcome_invariants: list[OutcomeInvariantEntry] = dataclasses.field(default_factory=list)
     success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
+    input_preflight: str | None = None
 
     def __post_init__(self) -> None:
         # Tests and project integrations may still construct contracts from a

@@ -1353,6 +1353,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_protocols_recipe.py",
         "core/types/_type_protocols_infra.py",
         "core/types/_type_protocols_backend.py",
+        "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
@@ -1378,6 +1379,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "active_recipe_features",
         "active_recipe_steps",
         "active_recipe_ingredients",
+        "active_recipe_execution",
         "temp_dir",
         "project_dir",
         "ephemeral_root",

@@ -48,6 +48,7 @@ from autoskillit.server._recipe_delivery import (
     recipe_pull_producers,
     recipe_recreation_producers,
 )
+from autoskillit.server._recipe_execution import clear_recipe_execution
 from autoskillit.server._recipe_section_pagination import (
     RecipeSectionBoundError,
     RecipeSectionNonConvergenceError,
@@ -70,6 +71,7 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
+    pop_compiled_bindings,
     render_served_response,
     response_backstop_tool_meta,
     serve_recipe,
@@ -336,6 +338,8 @@ async def load_recipe(
             tool_ctx = _get_ctx_or_none()
             if tool_ctx is None or tool_ctx.recipes is None:
                 return json.dumps({"error": "Server not initialized"})
+            if not ingredients_only:
+                clear_recipe_execution(tool_ctx)
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
             _recipe_info_pre = tool_ctx.recipes.find(name, tool_ctx.project_dir)
@@ -389,6 +393,7 @@ async def load_recipe(
                 backend_capabilities_map=_backend_capabilities_map,
                 backend_origin_map=_backend_origin_map,
             )
+            _compiled_bindings = pop_compiled_bindings(result)
             recipe_info = _recipe_info_pre
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             if not result.get("valid", False):
@@ -448,6 +453,9 @@ async def load_recipe(
                         recipe_name=name,
                         tool_ctx=tool_ctx,
                         delivery_request=delivery_request,
+                        compiled_bindings=(
+                            _compiled_bindings if result.get("valid", False) else None
+                        ),
                     ),
                 )
             return render_served_response(result)

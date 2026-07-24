@@ -130,6 +130,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         result_fields=result_fields,
         outcome_invariants=outcome_invariants,
         success_qualifiers=success_qualifiers,
+        input_preflight=skill_data.get("input_preflight"),
     )
 
 

@@ -61,4 +61,4 @@ def test_run_skill_has_one_compiler_owned_structured_input_channel() -> None:
         param for param in TOOL_REGISTRY["run_skill"].params if param.structured_skill_inputs
     )
     assert tuple(param.name for param in structured) == ("skill_inputs",)
-    assert not structured[0].handler_parameter
+    assert structured[0].handler_parameter

@@ -23,6 +23,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_closure_report.py` | Closure report dataclasses: `ClosureRow`, `ClosureReport`, `CLOSURE_REPORT_SCHEMA_VERSION` |
 | `_type_audit_cycle.py` | Frozen audit-cycle authority, artifact reference, disposition, head, and admission decision models |
 | `_type_recipe_binding.py` | Frozen tool definitions, binding values/failures, compiled step invocations, and immutable binding projections |
+| `_type_recipe_execution.py` | Frozen compiled-execution snapshots, domain-separated invocation/runtime digests, and audit/preflight service protocols |
 | `_type_protocols_logging.py` | Protocols: `AuditLog`, `TokenLog`, `TimingLog`, `McpResponseLog`, `GitHubApiLog`, `SupportsDebug`, `SupportsLogger` |
 | `_type_protocols_execution.py` | Protocols: `TestRunner`, `HeadlessExecutor`, `OutputPatternResolver`, `WriteExpectedResolver` |
 | `_type_protocols_github.py` | Protocols: `GitHubFetcher`, `CIWatcher`, `MergeQueueWatcher` |

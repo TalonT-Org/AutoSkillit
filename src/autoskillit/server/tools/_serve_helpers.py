@@ -21,7 +21,11 @@ from autoskillit.core import (
 from autoskillit.server._misc import SkillProjectionContext, project_agent_skill_document
 
 if TYPE_CHECKING:
-    from autoskillit.core import BackendCapabilities, CodingAgentBackend
+    from autoskillit.core import (
+        BackendCapabilities,
+        CodingAgentBackend,
+        RecipeBindingProjection,
+    )
     from autoskillit.pipeline.context import ToolContext
 
 
@@ -108,6 +112,16 @@ def render_served_response(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
+def pop_compiled_bindings(
+    payload: dict[str, Any],
+) -> RecipeBindingProjection | None:
+    """Remove and return the internal post-prune carrier before serialization."""
+    from autoskillit.core import RecipeBindingProjection
+
+    candidate = payload.pop("_compiled_bindings", None)
+    return candidate if isinstance(candidate, RecipeBindingProjection) else None
+
+
 def build_open_kitchen_recipe_payload(result: dict[str, Any], *, version: str) -> dict[str, Any]:
     """Add the routing fields shared by every recipe-bearing open-kitchen response."""
     payload = dict(result)
@@ -163,6 +177,9 @@ def reset_session_serve_overrides(ctx: ToolContext) -> None:
     """
     ctx.session_serve_overrides = None
     ctx.session_serve_defer_unresolved = False
+    from autoskillit.server._recipe_execution import clear_recipe_execution
+
+    clear_recipe_execution(ctx)
 
 
 def serve_recipe(
@@ -218,4 +235,9 @@ def serve_recipe(
         kwargs["temp_dir_relpath"] = temp_dir_relpath
     if ctx.recipes is None:
         raise RuntimeError("serve_recipe() called with ctx.recipes=None")
-    return ctx.recipes.load_and_validate(name, ctx.project_dir, **kwargs)
+    return ctx.recipes.load_and_validate(
+        name,
+        ctx.project_dir,
+        include_compiled_bindings=True,
+        **kwargs,
+    )

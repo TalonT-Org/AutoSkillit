@@ -64,6 +64,8 @@ from ._type_recipe_binding import *  # noqa: F401, F403
 from ._type_recipe_binding import __all__ as _recipe_binding_all
 from ._type_recipe_delivery import *  # noqa: F401, F403
 from ._type_recipe_delivery import __all__ as _recipe_delivery_all
+from ._type_recipe_execution import *  # noqa: F401, F403
+from ._type_recipe_execution import __all__ as _recipe_execution_all
 from ._type_recipe_sections import *  # noqa: F401, F403
 from ._type_recipe_sections import __all__ as _recipe_sections_all
 from ._type_results import *  # noqa: F401, F403
@@ -114,6 +116,7 @@ __all__ = (
     + _results_all
     + _results_execution_all
     + _recipe_binding_all
+    + _recipe_execution_all
     + _recipe_delivery_all
     + _recipe_sections_all
     + _resume_all

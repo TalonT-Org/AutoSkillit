@@ -1,5 +1,5 @@
 """Composition Root: make_context() is the only location that legally instantiates
-all 24 service contracts simultaneously.
+the server service contracts simultaneously.
 
 server/ is IL-3 — the only layer permitted to import from both IL-1 (pipeline/)
 and IL-2 (recipe/, migration/) at the same time. This module is the canonical
@@ -17,8 +17,12 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    MARKETPLACE_PREFIX,
+    AuditCycleHeadStore,
     DirectInstall,
     FleetLock,
+    InputPreflightResolver,
+    MarketplaceInstall,
     PluginSource,
     SkillExecutionRole,
     SubprocessRunner,
@@ -79,6 +83,28 @@ from autoskillit.workspace import (
 )
 
 logger = get_logger(__name__)
+
+
+def make_audit_cycle_head_store() -> AuditCycleHeadStore:
+    """Construct the server-owned trusted-head ledger implementation."""
+    from autoskillit.server._recipe_execution import DefaultAuditCycleHeadStore
+
+    return DefaultAuditCycleHeadStore()
+
+
+def make_input_preflight_resolver(
+    *,
+    allowed_root: Path,
+    head_store: AuditCycleHeadStore,
+) -> InputPreflightResolver:
+    """Construct the bounded verifier backed by the supplied trusted ledger."""
+    from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
+
+    return DefaultInputPreflightResolver(
+        allowed_root=allowed_root,
+        head_store=head_store,
+    )
+
 
 # Optional-override: _UNSET means "not provided, use factory-computed default" (None is valid).
 _UNSET: Any = object()
@@ -390,6 +416,11 @@ def make_context(
     ctx.completion_required_resolver = _resolve_completion_required
     ctx.skill_contract_resolver = _resolve_skill_contract
     ctx.input_contract_resolver = resolve_input_specs
+    ctx.audit_cycle_head_store = make_audit_cycle_head_store()
+    ctx.input_preflight_resolver = make_input_preflight_resolver(
+        allowed_root=ctx.temp_dir,
+        head_store=ctx.audit_cycle_head_store,
+    )
     ctx.token_factory = token_factory
     ctx.build_protected_campaign_ids = build_protected_campaign_ids
     ctx.executor = DefaultHeadlessExecutor(ctx)

@@ -367,6 +367,7 @@ from .types import AuditAssessment as AuditAssessment
 from .types import AuditAssessmentRow as AuditAssessmentRow
 from .types import AuditCycleAuthority as AuditCycleAuthority
 from .types import AuditCycleHead as AuditCycleHead
+from .types import AuditCycleHeadStore as AuditCycleHeadStore
 from .types import AuditLog as AuditLog
 from .types import AuthoritySourceId as AuthoritySourceId
 from .types import AuthorityUnavailableEffect as AuthorityUnavailableEffect
@@ -471,6 +472,9 @@ from .types import IdempotencyRecord as IdempotencyRecord
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InputContractResolver as InputContractResolver
+from .types import InputPreflightResolver as InputPreflightResolver
+from .types import InstalledRecipeExecution as InstalledRecipeExecution
+from .types import InvocationTemplate as InvocationTemplate
 from .types import InputSpec as InputSpec
 from .types import InputSpecType as InputSpecType
 from .types import InspectorCallback as InspectorCallback
@@ -514,6 +518,8 @@ from .types import PrepareBatchEvent as PrepareBatchEvent
 from .types import ProcessedEventRecord as ProcessedEventRecord
 from .types import PlanDispositionReport as PlanDispositionReport
 from .types import PlanDispositionRow as PlanDispositionRow
+from .types import PreflightEvidence as PreflightEvidence
+from .types import PreflightKind as PreflightKind
 from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef
 from .types import ProducerInstanceId as ProducerInstanceId
@@ -539,6 +545,7 @@ from .types import RecipeDeliveryMode as RecipeDeliveryMode
 from .types import RecipeDeliveryRequest as RecipeDeliveryRequest
 from .types import RecipeDeliverySurfaceDef as RecipeDeliverySurfaceDef
 from .types import RecipeBindingProjection as RecipeBindingProjection
+from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError
 from .types import RecipeNotFoundError as RecipeNotFoundError
@@ -629,6 +636,8 @@ from .types import TestRunner as TestRunner
 from .types import ToolDef as ToolDef
 from .types import ToolParamDef as ToolParamDef
 from .types import ToolWireType as ToolWireType
+from .types import VerifiedInputPreflightRequest as VerifiedInputPreflightRequest
+from .types import VerifiedInputPreflightResult as VerifiedInputPreflightResult
 from .types import TimingLog as TimingLog
 from .types import TokenFactory as TokenFactory
 from .types import TokenizerIdentity as TokenizerIdentity
@@ -651,6 +660,11 @@ from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_findings_digest as compute_findings_digest
+from .types import compute_invocation_template_digest as compute_invocation_template_digest
+from .types import (
+    compute_recipe_execution_snapshot_digest as compute_recipe_execution_snapshot_digest,
+)
+from .types import compute_runtime_binding_digest as compute_runtime_binding_digest
 from .types import compute_remaining as compute_remaining
 from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches

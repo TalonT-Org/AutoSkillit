@@ -25,16 +25,23 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
+    AdmissionStatus,
+    BindingMode,
+    BoundScalar,
+    ClaudeDirectoryConventions,
     ClosureAuthoritySpec,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
+    PreflightKind,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
     TerminationReason,
     ValidatedAddDir,
+    VerifiedInputPreflightRequest,
     WriteBehaviorSpec,
     closure_authority_spec_from_args,
+    compute_runtime_binding_digest,
     execution_marker,
     extract_skill_name,
     find_caller_session_id,
@@ -51,6 +58,7 @@ from autoskillit.execution import (
 )
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
+from autoskillit.recipe import RecipeStep, bind_step_invocation
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -72,6 +80,13 @@ from autoskillit.server._misc import (
     get_backend as _get_backend,
 )
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server._recipe_execution import (
+    RecipeExecutionAdmissionError,
+    bind_attested_runtime_invocation,
+    build_bound_child_prompt,
+    get_recipe_execution,
+    record_runtime_binding_digest,
+)
 from autoskillit.server._subprocess import _run_subprocess_captured
 from autoskillit.server.tools._backend_compat import (
     _check_backend_compat,
@@ -153,6 +168,16 @@ INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
 
 
 DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"
+
+
+def _recipe_execution_deny(code: str, message: str) -> str:
+    return json.dumps(
+        deny_envelope(
+            f"RECIPE EXECUTION REJECTED [{code}]: {message}",
+            stage="preflight:recipe_execution",
+            retriable=False,
+        )
+    )
 
 
 def _is_absolute_path(path: str) -> bool:
@@ -588,6 +613,8 @@ async def run_skill(
     cwd: str,
     model: str = "",
     step_name: str = "",
+    recipe_execution_id: str = "",
+    invocation_template_digest: str = "",
     step_provider: str = "",
     order_id: str = "",
     stale_threshold: int | None = None,
@@ -600,6 +627,7 @@ async def run_skill(
     closure_base_sha: str = "",
     closure_diff_sha: str = "",
     closure_target_sha: str = "",
+    skill_inputs: dict[str, str | int | float | bool] | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Delegate one already-selected recipe step to a separate L1 headless coding-agent worker.
@@ -660,6 +688,26 @@ async def run_skill(
                 retriable=False,
             )
         )
+    if (
+        step_name
+        and not resume_session_id
+        and (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None
+    ):
+        return _lock_denial
+    if (
+        step_name
+        and not resume_session_id
+        and (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None
+    ):
+        return _dep_denial
+    if (
+        step_name
+        and not resume_session_id
+        and not (recipe_execution_id or invocation_template_digest)
+        and (_plan_path_denial := _check_review_approach_plan_path(step_name, skill_command))
+        is not None
+    ):
+        return _plan_path_denial
     try:
         contract_lifecycle = _RunSkillContractLifecycle()
         _sn_token = _oid_token = None
@@ -667,6 +715,7 @@ async def run_skill(
 
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
+        _installed_execution = get_recipe_execution(tool_ctx)
         _contract_store = tool_ctx.skill_session_contract_store
         contract_lifecycle.store = _contract_store
         _stored_contract_entry = None
@@ -704,15 +753,6 @@ async def run_skill(
         else:
             if (cmd_error := _validate_skill_command(skill_command)) is not None:
                 return cmd_error
-            if step_name:
-                if (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None:
-                    return _lock_denial
-                if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
-                    return _dep_denial
-                if (
-                    _plan_path_denial := _check_review_approach_plan_path(step_name, skill_command)
-                ) is not None:
-                    return _plan_path_denial
             _effective_skill_resolver = tool_ctx.skill_resolver
             if _effective_skill_resolver is None:
                 _effective_skill_resolver = _make_project_skill_resolver()
@@ -741,7 +781,11 @@ async def run_skill(
                     skill_command=skill_command,
                     order_id=order_id,
                 ).to_json()
-            if not step_name and tool_ctx.active_recipe_steps:
+            if (
+                _installed_execution is None
+                and not step_name
+                and tool_ctx.active_recipe_steps
+            ):
                 _resolved, _ambiguous = _resolve_step_name_from_recipe(
                     skill_command, tool_ctx.active_recipe_steps
                 )
@@ -802,6 +846,167 @@ async def run_skill(
                     )
         if invocation is None or projection_context is None:
             raise SkillContractError("Skill dispatch branches did not produce a bound contract")
+
+        _preflight_result = None
+        _bound_recipe_inputs: tuple[tuple[str, BoundScalar], ...] = ()
+        child_skill_command = skill_command
+        _claims_recipe_execution = bool(recipe_execution_id or invocation_template_digest)
+        if _installed_execution is not None:
+            if not recipe_execution_id or not invocation_template_digest:
+                return _recipe_execution_deny(
+                    "recipe_execution_attestation_missing",
+                    (
+                        "an active recipe requires recipe_execution_id and "
+                        "invocation_template_digest"
+                    ),
+                )
+            if not step_name:
+                return _recipe_execution_deny(
+                    "recipe_execution_step_missing",
+                    "an attested recipe invocation requires its exact step_name",
+                )
+            _actual_mcp_kwargs: dict[str, BoundScalar] = {
+                "skill_command": skill_command,
+                "cwd": cwd,
+                "model": model,
+                "step_name": step_name,
+                "recipe_execution_id": recipe_execution_id,
+                "invocation_template_digest": invocation_template_digest,
+                "step_provider": step_provider,
+                "order_id": order_id,
+                "output_dir": output_dir,
+                "resume_session_id": resume_session_id,
+                "closure_authority_path": closure_authority_path,
+                "closure_authority_hash": closure_authority_hash,
+                "closure_plan_paths": closure_plan_paths,
+                "closure_base_sha": closure_base_sha,
+                "closure_diff_sha": closure_diff_sha,
+                "closure_target_sha": closure_target_sha,
+            }
+            if stale_threshold is not None:
+                _actual_mcp_kwargs["stale_threshold"] = stale_threshold
+            if idle_output_timeout is not None:
+                _actual_mcp_kwargs["idle_output_timeout"] = idle_output_timeout
+            try:
+                _bound_recipe_inputs, _invocation_template = bind_attested_runtime_invocation(
+                    _installed_execution,
+                    execution_id=recipe_execution_id,
+                    step_name=step_name,
+                    template_digest=invocation_template_digest,
+                    skill_command=skill_command,
+                    skill_inputs=skill_inputs,
+                    actual_mcp_kwargs=_actual_mcp_kwargs,
+                )
+            except RecipeExecutionAdmissionError as exc:
+                return _recipe_execution_deny(exc.code, str(exc))
+            _contract = (
+                tool_ctx.skill_contract_resolver(skill_command)
+                if tool_ctx.skill_contract_resolver is not None
+                else None
+            )
+            _preflight_name = getattr(_contract, "input_preflight", None)
+            if isinstance(_preflight_name, str) and _preflight_name:
+                if _preflight_name != PreflightKind.AUDIT_CYCLE_INVENTORY.value:
+                    return _recipe_execution_deny(
+                        "recipe_execution_preflight_unknown",
+                        f"unsupported input preflight {_preflight_name!r}",
+                    )
+                _bound_input_map = dict(_bound_recipe_inputs)
+                _plan_path = _bound_input_map.get("plan_path")
+                _audit_cycle_path = _bound_input_map.get("audit_cycle_path")
+                _plan_disposition_path = _bound_input_map.get("plan_disposition_path")
+                if not isinstance(_plan_path, str):
+                    return _recipe_execution_deny(
+                        "recipe_execution_preflight_input",
+                        "audit-cycle preflight requires a bound string plan_path",
+                    )
+                if _audit_cycle_path is not None and not isinstance(_audit_cycle_path, str):
+                    return _recipe_execution_deny(
+                        "recipe_execution_preflight_input",
+                        "audit_cycle_path must be a string when present",
+                    )
+                if _plan_disposition_path is not None and not isinstance(
+                    _plan_disposition_path, str
+                ):
+                    return _recipe_execution_deny(
+                        "recipe_execution_preflight_input",
+                        "plan_disposition_path must be a string when present",
+                    )
+                _preflight_result = _installed_execution.input_preflight_resolver.resolve(
+                    VerifiedInputPreflightRequest(
+                        execution_generation=recipe_execution_id,
+                        step_name=step_name,
+                        skill_name=_invocation_template.invocation.skill_name or "",
+                        plan_path=_plan_path,
+                        audit_cycle_path=_audit_cycle_path or None,
+                        plan_disposition_path=_plan_disposition_path or None,
+                    )
+                )
+                if _preflight_result.decision.status is AdmissionStatus.REJECT:
+                    return _recipe_execution_deny(
+                        f"input_preflight_{_preflight_result.decision.reason.value}",
+                        (
+                            _preflight_result.decision.details[0]
+                            if _preflight_result.decision.details
+                            else "verified input preflight rejected the invocation"
+                        ),
+                    )
+            child_skill_command = build_bound_child_prompt(
+                skill_command,
+                _bound_recipe_inputs,
+                _preflight_result,
+            )
+            _runtime_digest = compute_runtime_binding_digest(
+                execution_id=recipe_execution_id,
+                step_name=step_name,
+                template_digest=invocation_template_digest,
+                bound_inputs=_bound_recipe_inputs,
+                preflight=(_preflight_result.decision if _preflight_result is not None else None),
+            )
+            try:
+                record_runtime_binding_digest(
+                    tool_ctx,
+                    execution_id=recipe_execution_id,
+                    step_name=step_name,
+                    digest=_runtime_digest,
+                )
+            except RecipeExecutionAdmissionError as exc:
+                return _recipe_execution_deny(exc.code, str(exc))
+        elif _claims_recipe_execution:
+            return _recipe_execution_deny(
+                "recipe_execution_inactive",
+                "standalone mode cannot claim recipe attestation",
+            )
+        elif not resume_session_id:
+            _standalone_with: dict[str, object] = {
+                "skill_command": skill_command,
+                "cwd": cwd,
+            }
+            if skill_inputs is not None:
+                _standalone_with["skill_inputs"] = skill_inputs
+            _standalone_binding = bind_step_invocation(
+                "standalone",
+                RecipeStep(
+                    name="standalone",
+                    tool="run_skill",
+                    with_args=_standalone_with,
+                    declared_with_args=dict(_standalone_with),
+                ),
+                mode=BindingMode.STANDALONE,
+            )
+            if _standalone_binding.failures:
+                failure = _standalone_binding.failures[0]
+                return _recipe_execution_deny(
+                    f"standalone_{failure.code.value}",
+                    failure.message,
+                )
+            if skill_inputs is not None:
+                child_skill_command = build_bound_child_prompt(
+                    skill_command,
+                    _standalone_binding.canonical_child_invocation,
+                    None,
+                )
+
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
             await _notify(
@@ -821,7 +1026,7 @@ async def run_skill(
             # requiring recipe authors to thread it through every run_skill call.
             effective_order_id = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
-            if not resume_session_id:
+            if not resume_session_id and _installed_execution is None and skill_inputs is None:
                 if (
                     input_error := _check_input_contracts(
                         skill_command, cwd, tool_ctx.input_contract_resolver
@@ -829,7 +1034,7 @@ async def run_skill(
                 ) is not None:
                     return input_error
 
-            if _get_config().safety.require_dry_walkthrough:
+            if _get_config().safety.require_dry_walkthrough and _installed_execution is None:
                 if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
                     return gate_error
 
@@ -900,7 +1105,7 @@ async def run_skill(
             resolved_command = (
                 _stored_contract.resolved_command
                 if _stored_contract is not None
-                else skill_command
+                else child_skill_command
             )
             _effective_skill_contract = invocation if invocation is not None else _stored_contract
 

@@ -203,6 +203,7 @@ def load_and_validate(
     effective_backend_map: dict[str, str] | None = None,
     backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     backend_origin_map: dict[str, str] | None = None,
+    include_compiled_bindings: bool = False,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -303,7 +304,10 @@ def load_and_validate(
             and rs == cached.recipe_size
         ):
             logger.debug("load_recipe_cache_hit", recipe=name)
-            return cast(LoadRecipeResult, _api_cache._LOAD_CACHE.copy_result(cached.result))
+            cached_result = _api_cache._LOAD_CACHE.copy_result(cached.result)
+            if not include_compiled_bindings:
+                cached_result.pop("_compiled_bindings", None)
+            return cast(LoadRecipeResult, cached_result)
 
     t0 = time.perf_counter()
 
@@ -329,6 +333,7 @@ def load_and_validate(
     active_recipe = None
     _skip_resolutions: dict[str, bool | None] = {}
     _pre_prune_steps: dict[str, Any] = {}
+    _post_prune_bindings = None
     _dispatch_feasible = True
     _infeasible_steps: list[str] = []
 
@@ -685,6 +690,8 @@ def load_and_validate(
     if _deferred_guard_list:
         result["deferred_guards"] = _deferred_guard_list
     if active_recipe is not None:
+        if _post_prune_bindings is not None:
+            result["_compiled_bindings"] = _post_prune_bindings
         result["post_prune_step_names"] = list(active_recipe.steps.keys())
         _step_names_set = set(active_recipe.steps)
         result["post_prune_routing_edges"] = sorted(
@@ -715,4 +722,7 @@ def load_and_validate(
 
     if result.get("valid", False):
         _api_cache._refresh_staleness_baseline()
-    return cast(LoadRecipeResult, _api_cache._LOAD_CACHE.copy_result(result))
+    caller_result = _api_cache._LOAD_CACHE.copy_result(result)
+    if not include_compiled_bindings:
+        caller_result.pop("_compiled_bindings", None)
+    return cast(LoadRecipeResult, caller_result)

@@ -43,7 +43,12 @@ from autoskillit.server._response_budget import enforce_response_budget
 from autoskillit.server.recipe_section._lifecycle import notify_kitchen_retired
 
 if TYPE_CHECKING:
-    from autoskillit.core import RecipeDeliveryBudgetDef, RecipeDeliveryEvidenceDef
+    from autoskillit.core import (
+        RecipeBindingProjection,
+        RecipeDeliveryBudgetDef,
+        RecipeDeliveryEvidenceDef,
+        RecipeExecutionSnapshot,
+    )
     from autoskillit.pipeline import ToolContext
 
 RECIPE_ARTIFACT_DESCRIPTOR_VERSION = 1
@@ -113,6 +118,9 @@ class FinalizedRecipeResponse:
     decision: RecipeDeliveryDecision
     receipt_handle: RecipeReceiptHandle | None = None
     receipt_ledger: RecipeDeliveryReceiptLedger | None = None
+    artifact_generation: RecipeArtifactGeneration | None = None
+    execution_snapshot: RecipeExecutionSnapshot | None = None
+    tool_ctx: ToolContext | None = None
 
 
 def _qualified_sha256(data: bytes) -> str:
@@ -752,8 +760,48 @@ def finalize_recipe_delivery(
     supported_evidence: RecipeDeliveryEvidenceDef | None = None,
     receipt_ledger: RecipeDeliveryReceiptLedger | None = None,
     now_unix: int | None = None,
+    compiled_bindings: RecipeBindingProjection | None = None,
 ) -> FinalizedRecipeResponse:
     """Persist, decide, shape, and transactionally reserve one recipe response."""
+    execution_snapshot = None
+    candidate_payload = dict(payload)
+    if compiled_bindings is not None:
+        from autoskillit.server._recipe_execution import (
+            build_recipe_execution_snapshot,
+            clear_recipe_execution,
+        )
+
+        clear_recipe_execution(tool_ctx)
+        try:
+            execution_snapshot = build_recipe_execution_snapshot(
+                recipe_name=recipe_name,
+                content_hash=str(candidate_payload.get("content_hash", "")),
+                composite_hash=str(candidate_payload.get("composite_hash", "")),
+                projection=compiled_bindings,
+            )
+        except (TypeError, ValueError):
+            decision = _failure_decision(
+                producer=RECIPE_DELIVERY_SURFACE_REGISTRY[surface].producer_tool,
+                reason="recipe_execution_compilation_failed",
+                selected_limit=resolve_general_output_token_limit(
+                    tool_ctx.backend.capabilities
+                    if tool_ctx.backend is not None
+                    else CLAUDE_CODE_CAPABILITIES
+                ),
+                contract_digest="",
+            )
+            return FinalizedRecipeResponse(
+                rendered=json.dumps(
+                    {"success": False, "error": "recipe_execution_unavailable"},
+                    separators=(",", ":"),
+                ),
+                decision=decision,
+            )
+        candidate_payload["recipe_execution"] = {
+            "execution_id": execution_snapshot.execution_id,
+            "invocation_template_digests": dict(execution_snapshot.template_digests),
+            "snapshot_digest": execution_snapshot.snapshot_digest,
+        }
     surface_definition = RECIPE_DELIVERY_SURFACE_REGISTRY[surface]
     candidate_capabilities = (
         getattr(tool_ctx.backend, "capabilities", None) if tool_ctx.backend is not None else None
@@ -778,7 +826,7 @@ def finalize_recipe_delivery(
             kitchen_id=tool_ctx.kitchen_id,
             producer_tool=surface_definition.producer_tool,
             recipe_name=recipe_name,
-            payload=payload,
+            payload=candidate_payload,
         )
     except (OSError, RecipeArtifactError, TypeError, ValueError):
         decision = _failure_decision(
@@ -795,13 +843,17 @@ def finalize_recipe_delivery(
             decision=decision,
         )
 
-    ordinary_rendered = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    ordinary_rendered = json.dumps(
+        candidate_payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     candidate_evidence = supported_evidence if surface_definition.negotiation_eligible else None
     candidate_attestation = attestation if surface_definition.negotiation_eligible else None
     candidate_request = delivery_request if surface_definition.negotiation_eligible else None
     high_rendered = (
         _attested_render(
-            payload,
+            candidate_payload,
             generation,
             budget=delivery_budget,
             evidence_identity=(
@@ -900,7 +952,7 @@ def finalize_recipe_delivery(
             envelope_bound_bytes = min(envelope_bound_bytes, response_ceiling_bytes)
         rendered = json.dumps(
             build_recipe_envelope(
-                payload,
+                candidate_payload,
                 recipe_name=recipe_name,
                 generation=generation,
                 skeleton_source=tool_ctx,
@@ -914,6 +966,9 @@ def finalize_recipe_delivery(
         decision=decision,
         receipt_handle=receipt_handle,
         receipt_ledger=receipt_ledger if receipt_handle is not None else None,
+        artifact_generation=generation,
+        execution_snapshot=execution_snapshot,
+        tool_ctx=tool_ctx if execution_snapshot is not None else None,
     )
 
 
@@ -928,16 +983,43 @@ def complete_finalized_recipe_response(
     ledger = finalized.receipt_ledger
     if enforced == finalized.rendered:
         if handle is None:
-            return enforced
-        if ledger is not None and ledger.commit(
+            completed = enforced
+        elif ledger is not None and ledger.commit(
             handle,
             now_unix=int(time.time()) if now_unix is None else now_unix,
         ):
-            return enforced
-        enforced = json.dumps(
-            {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
-            separators=(",", ":"),
-        )
+            completed = enforced
+        else:
+            completed = json.dumps(
+                {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
+                separators=(",", ":"),
+            )
+        if completed == finalized.rendered:
+            if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
+                try:
+                    from autoskillit.server._recipe_execution import install_recipe_execution
+
+                    install_recipe_execution(
+                        finalized.tool_ctx,
+                        snapshot=finalized.execution_snapshot,
+                    )
+                except Exception:
+                    from autoskillit.server._recipe_execution import clear_recipe_execution
+
+                    clear_recipe_execution(finalized.tool_ctx)
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": "recipe_execution_install_failed",
+                        },
+                        separators=(",", ":"),
+                    )
+            return completed
+        enforced = completed
+    if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
+        from autoskillit.server._recipe_execution import clear_recipe_execution
+
+        clear_recipe_execution(finalized.tool_ctx)
     if handle is not None and (ledger is None or not ledger.abort(handle)):
         return json.dumps(
             {"success": False, "error": "recipe_delivery_receipt_abort_failed"},

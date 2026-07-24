@@ -39,6 +39,8 @@ def _run_skill() -> ToolDef:
         "cwd",
         "model",
         "step_name",
+        "recipe_execution_id",
+        "invocation_template_digest",
         "step_provider",
         "order_id",
         "output_dir",
@@ -58,7 +60,7 @@ def _run_skill() -> ToolDef:
         )
         for name in string_params
     ]
-    params[6:6] = [
+    params[8:8] = [
         ToolParamDef("stale_threshold", ToolWireType.INTEGER),
         ToolParamDef("idle_output_timeout", ToolWireType.INTEGER),
     ]
@@ -67,7 +69,7 @@ def _run_skill() -> ToolDef:
             "skill_inputs",
             ToolWireType.OBJECT,
             structured_skill_inputs=True,
-            handler_parameter=False,
+            handler_parameter=True,
         )
     )
     return ToolDef(name="run_skill", params=tuple(params))

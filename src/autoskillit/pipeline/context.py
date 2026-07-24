@@ -7,12 +7,14 @@ Replaces two mutable module-level singletons in server.py:
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    AuditCycleHeadStore,
     AuditLog,
     BackgroundSupervisor,
     CampaignProtector,
@@ -28,6 +30,8 @@ from autoskillit.core import (
     GitHubFetcher,
     HeadlessExecutor,
     InputContractResolver,
+    InputPreflightResolver,
+    InstalledRecipeExecution,
     McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
@@ -131,6 +135,8 @@ class ToolContext:
     active_recipe_ingredients: frozenset[str] | None — ingredient keys declared by the loaded
                           recipe (frozenset() when kitchen open but no recipe loaded; None when
                           closed)
+    active_recipe_execution: atomically installed compiled execution snapshot, runtime
+                          binding digests, trusted audit heads, and verified input resolver.
     temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
                           TypeError if not supplied explicitly. Use make_context() or pass
                           temp_dir=<path>.
@@ -171,6 +177,8 @@ class ToolContext:
     input_contract_resolver: InputContractResolver | None = field(default=None)
     completion_required_resolver: CompletionRequiredResolver | None = field(default=None)
     skill_contract_resolver: SkillContractResolver | None = field(default=None)
+    audit_cycle_head_store: AuditCycleHeadStore | None = field(default=None)
+    input_preflight_resolver: InputPreflightResolver | None = field(default=None)
     backend: CodingAgentBackend | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
@@ -192,6 +200,11 @@ class ToolContext:
     fleet_lock: FleetLock | None = field(default=None)
     build_protected_campaign_ids: CampaignProtector | None = field(default=None)
     ephemeral_root: Path | None = field(default_factory=lambda: None)
+    active_recipe_execution: InstalledRecipeExecution | None = field(default_factory=lambda: None)
+    recipe_execution_lock: threading.RLock = field(
+        default_factory=threading.RLock,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         if self.temp_dir is _MISSING:

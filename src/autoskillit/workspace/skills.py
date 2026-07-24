@@ -37,7 +37,11 @@ from autoskillit.workspace.skill_format import (
 logger = get_logger(__name__)
 
 
-def _contained_project_skill_path(search_root: Path, name: str) -> Path | None:
+def _contained_project_skill_path(
+    project_root: Path,
+    search_root: Path,
+    name: str,
+) -> Path | None:
     """Return a non-symlinked SKILL.md contained by its project search root."""
     entry = search_root / name
     skill_path = entry / "SKILL.md"
@@ -46,11 +50,14 @@ def _contained_project_skill_path(search_root: Path, name: str) -> Path | None:
     if not entry.is_dir() or not skill_path.is_file():
         return None
     try:
+        resolved_project_root = project_root.resolve(strict=True)
         resolved_root = search_root.resolve(strict=True)
         resolved_skill = skill_path.resolve(strict=True)
     except OSError:
         return None
-    if not resolved_skill.is_relative_to(resolved_root):
+    if not resolved_root.is_relative_to(
+        resolved_project_root
+    ) or not resolved_skill.is_relative_to(resolved_root):
         return None
     return skill_path
 
@@ -655,6 +662,7 @@ class DefaultSkillResolver:
         if normalized_root is not None:
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
                 skill_path = _contained_project_skill_path(
+                    normalized_root,
                     normalized_root / search_dir,
                     name,
                 )
@@ -690,7 +698,11 @@ class DefaultSkillResolver:
                 for entry in entries:
                     if entry.name in selected:
                         continue
-                    skill_path = _contained_project_skill_path(search_root, entry.name)
+                    skill_path = _contained_project_skill_path(
+                        normalized_root,
+                        search_root,
+                        entry.name,
+                    )
                     if skill_path is None:
                         continue
                     selected.add(entry.name)

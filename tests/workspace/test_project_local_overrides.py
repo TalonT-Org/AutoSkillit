@@ -360,6 +360,49 @@ def test_effective_resolution_rejects_symlinked_project_overrides(
     )
 
 
+def test_effective_resolution_rejects_external_symlinked_search_root(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    external = tmp_path / "external"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    bundled_path = _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=(),
+        execution_role="session",
+        body="trusted bundled body",
+    )
+    _write_effective_skill(
+        external / ".claude" / "skills",
+        "target",
+        capabilities=("github_api_write",),
+        execution_role="session",
+        body="external body",
+    )
+    (project / ".claude").symlink_to(
+        external / ".claude",
+        target_is_directory=True,
+    )
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+
+    effective = resolver.resolve_effective("target", project)
+
+    assert effective is not None
+    assert effective.path == bundled_path
+    assert "external body" not in effective.canonical_content
+
+
 def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path, monkeypatch):
     """Source precedence cannot mix policy metadata with bytes from a lower-priority source."""
     from autoskillit.workspace.skills import DefaultSkillResolver

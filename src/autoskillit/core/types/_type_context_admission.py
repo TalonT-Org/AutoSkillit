@@ -196,8 +196,8 @@ def _decode(value: object) -> object:
             _raise_invalid("unknown_serialized_enum")
         try:
             return _ENUM_REGISTRY[enum_name](enum_value)
-        except (TypeError, ValueError) as exc:
-            raise ContextAdmissionValidationError("invalid_serialized_enum") from exc
+        except (TypeError, ValueError):
+            raise ContextAdmissionValidationError("invalid_serialized_enum") from None
     if "__tuple__" in value:
         if set(value) != {"__tuple__"}:
             _raise_invalid("invalid_serialized_tuple")

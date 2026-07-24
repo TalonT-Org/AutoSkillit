@@ -864,6 +864,24 @@ def test_tagged_serialization_requires_exact_key_sets(
     assert reason_code in str(exc_info.value)
 
 
+def test_invalid_serialized_enum_suppresses_attacker_controlled_cause() -> None:
+    canary = "private-enum-value"
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        ContextSessionId.from_dict(
+            {
+                "value": {
+                    "__enum__": "ReserveClass",
+                    "value": canary,
+                }
+            }
+        )
+
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__suppress_context__
+    assert canary not in str(exc_info.value)
+    assert canary not in repr(exc_info.value)
+
+
 @pytest.mark.parametrize(
     "canary",
     [

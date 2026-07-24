@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -174,15 +173,6 @@ class TestRegisterAllBackendDispatch:
             lambda **kwargs: codex_calls.append("ensure_codex") or True,
         )
 
-        @contextmanager
-        def record_transaction(**kwargs):
-            codex_calls.append(("transaction", kwargs))
-            yield kwargs["source_codex_home"] / "config.toml"
-
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.codex_prelaunch_transaction",
-            record_transaction,
-        )
         # Override conftest's blanket patch on _is_plugin_installed to let real logic run
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._is_plugin_installed",
@@ -199,28 +189,23 @@ class TestRegisterAllBackendDispatch:
         mock_backend.capabilities.mcp_config_capable = backend_name == "codex"
         mock_backend.capabilities.plugin_install_capable = backend_name != "codex"
         mock_backend.capabilities.hook_config_format = "toml_nested"
+        mock_backend.ensure_pre_launch.side_effect = lambda: (
+            codex_calls.append("ensure_pre_launch") or []
+        )
         monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
         return codex_calls, mcp_calls
 
-    def test_codex_backend_calls_composed_codex_config_transaction(
+    def test_codex_backend_calls_backend_owned_prelaunch(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from autoskillit.cli._init_helpers import _register_all
 
         codex_calls, mcp_calls = self._setup_register_all(monkeypatch, tmp_path, "codex")
         _register_all("user", tmp_path)
-        assert codex_calls == [
-            (
-                "transaction",
-                {
-                    "source_codex_home": tmp_path / "codex-source",
-                    "hook_config_format": "toml_nested",
-                },
-            )
-        ]
+        assert codex_calls == ["ensure_pre_launch"]
         assert not mcp_calls, "_register_mcp_server must NOT be called for codex backend"
 
     def test_claude_code_backend_calls_register_mcp_server(
@@ -300,8 +285,8 @@ class TestRegisterAllCodexConfigTransaction:
 
     def _setup(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backend_name: str
-    ) -> tuple[list, list]:
-        """Shared setup: return (public MCP calls, composed transaction calls)."""
+    ) -> tuple[list, list, MagicMock]:
+        """Shared setup: return public calls, prelaunch calls, and backend."""
         from unittest.mock import MagicMock
 
         import autoskillit.cli._hooks as _hooks_mod
@@ -336,15 +321,6 @@ class TestRegisterAllCodexConfigTransaction:
             lambda **kwargs: codex_calls.append("ensure_codex") or True,
         )
 
-        @contextmanager
-        def record_transaction(**kwargs):
-            transaction_calls.append(kwargs)
-            yield kwargs["source_codex_home"] / "config.toml"
-
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.codex_prelaunch_transaction",
-            record_transaction,
-        )
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._is_plugin_installed",
             lambda **kwargs: False,
@@ -360,59 +336,40 @@ class TestRegisterAllCodexConfigTransaction:
         mock_backend.capabilities.mcp_config_capable = backend_name == "codex"
         mock_backend.capabilities.plugin_install_capable = backend_name != "codex"
         mock_backend.capabilities.hook_config_format = "toml_nested"
+        mock_backend.ensure_pre_launch.side_effect = lambda: transaction_calls.append({}) or []
         monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
-        return codex_calls, transaction_calls
+        return codex_calls, transaction_calls, mock_backend
 
-    def test_codex_backend_uses_one_composed_transaction_with_immutable_source_home(
+    def test_codex_backend_uses_backend_owned_prelaunch(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from autoskillit.cli._init_helpers import _register_all
 
-        codex_calls, transaction_calls = self._setup(monkeypatch, tmp_path, "codex")
+        codex_calls, transaction_calls, _ = self._setup(monkeypatch, tmp_path, "codex")
         _register_all("user", tmp_path)
         assert codex_calls == []
-        assert transaction_calls == [
-            {
-                "source_codex_home": tmp_path / "immutable-codex-source",
-                "hook_config_format": "toml_nested",
-            }
-        ]
+        assert transaction_calls == [{}]
 
     def test_non_codex_backend_keeps_the_lock_owning_public_mcp_facade(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from autoskillit.cli._init_helpers import _register_all
 
-        codex_calls, transaction_calls = self._setup(monkeypatch, tmp_path, "claude-code")
+        codex_calls, transaction_calls, _ = self._setup(monkeypatch, tmp_path, "claude-code")
         _register_all("user", tmp_path)
         assert transaction_calls == []
         assert codex_calls == ["ensure_codex"]
 
-    def test_composed_transaction_exception_propagates(
+    def test_backend_prelaunch_exception_propagates(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from autoskillit.cli._init_helpers import _register_all
 
-        codex_calls, _ = self._setup(monkeypatch, tmp_path, "codex")
-
-        class FailingTransaction:
-            def __enter__(self) -> None:
-                raise RuntimeError("config transaction failed")
-
-            def __exit__(self, *exc_info: object) -> None:
-                return None
-
-        def fail_transaction(**kwargs):
-            del kwargs
-            return FailingTransaction()
-
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.codex_prelaunch_transaction",
-            fail_transaction,
-        )
+        codex_calls, _, mock_backend = self._setup(monkeypatch, tmp_path, "codex")
+        mock_backend.ensure_pre_launch.side_effect = RuntimeError("config transaction failed")
         with pytest.raises(RuntimeError, match="config transaction failed"):
             _register_all("user", tmp_path)
         assert codex_calls == []
@@ -453,11 +410,14 @@ class TestRegisterAllBackendBranching:
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
         with (
-            patch("autoskillit.cli._init_helpers.codex_prelaunch_transaction") as mock_transaction,
+            patch(
+                "autoskillit.execution.backends.codex.CodexBackend.ensure_pre_launch",
+                return_value=[],
+            ) as mock_prelaunch,
             patch("autoskillit.execution.ensure_codex_mcp_registered") as mock_codex,
         ):
             _register_all("user", tmp_path)
-            mock_transaction.assert_called_once()
+            mock_prelaunch.assert_called_once_with()
             mock_codex.assert_not_called()
 
     def test_codex_path_skips_sync_hooks_to_settings(
@@ -483,7 +443,10 @@ class TestRegisterAllBackendBranching:
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
         with (
-            patch("autoskillit.cli._init_helpers.codex_prelaunch_transaction"),
+            patch(
+                "autoskillit.execution.backends.codex.CodexBackend.ensure_pre_launch",
+                return_value=[],
+            ),
             patch.object(_hooks_mod, "sync_hooks_to_settings") as mock_sync,
         ):
             _register_all("user", tmp_path)
@@ -582,26 +545,20 @@ class TestRegisterAllCodexMcpRegistration:
 
         codex_mock = MagicMock(return_value=True)
         monkeypatch.setattr("autoskillit.execution.ensure_codex_mcp_registered", codex_mock)
-        transaction_mock = MagicMock()
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.codex_prelaunch_transaction",
-            transaction_mock,
-        )
+        prelaunch_mock = mock_backend.ensure_pre_launch
+        prelaunch_mock.return_value = []
 
         (tmp_path / "pkg").mkdir(exist_ok=True)
-        return codex_mock, transaction_mock
+        return codex_mock, prelaunch_mock
 
-    def test_codex_backend_uses_composed_transaction_instead_of_public_facade(
+    def test_codex_backend_uses_prelaunch_instead_of_public_facade(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         from autoskillit.cli._init_helpers import _register_all
 
-        codex_mock, transaction_mock = self._setup(monkeypatch, tmp_path, "codex")
+        codex_mock, prelaunch_mock = self._setup(monkeypatch, tmp_path, "codex")
         _register_all("user", tmp_path)
-        transaction_mock.assert_called_once_with(
-            source_codex_home=tmp_path / "codex-source",
-            hook_config_format="toml_nested",
-        )
+        prelaunch_mock.assert_called_once_with()
         codex_mock.assert_not_called()
 
     def test_non_codex_backend_calls_ensure_codex_mcp_registered(
@@ -609,10 +566,10 @@ class TestRegisterAllCodexMcpRegistration:
     ) -> None:
         from autoskillit.cli._init_helpers import _register_all
 
-        codex_mock, transaction_mock = self._setup(monkeypatch, tmp_path, "claude-code")
+        codex_mock, prelaunch_mock = self._setup(monkeypatch, tmp_path, "claude-code")
         _register_all("user", tmp_path)
         codex_mock.assert_called_once()
-        transaction_mock.assert_not_called()
+        prelaunch_mock.assert_not_called()
 
 
 class TestRegisterAllDualRegistration:

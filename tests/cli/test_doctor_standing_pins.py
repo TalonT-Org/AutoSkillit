@@ -82,7 +82,10 @@ class TestStandingBackendPinsFeasibility:
 
         results = _check_standing_backend_pins_feasibility(project_dir=project_dir)
 
-        assert all(result.severity == Severity.OK for result in results)
+        assert len(results) == 1
+        result = results[0]
+        assert result.check == "standing_backend_pins_feasibility"
+        assert result.severity is Severity.OK
 
     def test_unknown_backend_degrades_to_warning(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

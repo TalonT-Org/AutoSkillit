@@ -32,6 +32,7 @@ def _run_interactive_session(
     required_env: frozenset[str] | None = None,
     backend: CodingAgentBackend | None = None,
     skill_catalog: EffectiveSkillCatalog | None = None,
+    default_base_branch: str = "main",
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -48,6 +49,9 @@ def _run_interactive_session(
 
         config = load_config()
         backend = get_backend(config.agent_backend.backend)
+        configured_base_branch = config.branching.default_base_branch
+        if isinstance(configured_base_branch, str):
+            default_base_branch = configured_base_branch
 
         from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled
 
@@ -104,7 +108,7 @@ def _run_interactive_session(
             plugin_source = project_default_plugin_source(
                 cwd=_project_dir,
                 backend=backend,
-                default_base_branch=config.branching.default_base_branch,
+                default_base_branch=default_base_branch,
                 skill_catalog=skill_catalog,
             )
         tools_arg: tuple[str, ...] = ("AskUserQuestion",)

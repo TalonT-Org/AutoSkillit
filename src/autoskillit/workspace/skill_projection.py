@@ -89,6 +89,11 @@ def _source_identity(skill: SkillContractRecord) -> SkillSourceIdentity:
     return skill.source_ref.identity
 
 
+def _default_base_branch(value: object) -> str:
+    """Return configured branch text or the installation default for test doubles."""
+    return value if isinstance(value, str) else "main"
+
+
 def _agent_skill_namespace(source: SkillSource) -> str:
     match source:
         case SkillSource.BUNDLED:
@@ -636,6 +641,7 @@ def project_direct_install(
     skill_catalog: EffectiveSkillCatalog | None = None,
 ) -> DirectInstall:
     """Return a stable, validated public projection for a direct plugin install."""
+    default_base_branch = _default_base_branch(default_base_branch)
     source_root = source.plugin_dir.resolve()
     bundled_root = source_root / "skills"
     if not source_root.is_dir():
@@ -818,6 +824,8 @@ def prepare_effective_skill_dispatch(
         cwd=cwd,
         backend=backend,
         catalog=catalog,
-        default_base_branch=config.branching.default_base_branch,
+        default_base_branch=_default_base_branch(
+            getattr(getattr(config, "branching", None), "default_base_branch", None)
+        ),
         project_root=project_root,
     )

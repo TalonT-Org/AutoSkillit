@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from bisect import bisect_right
 from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -251,6 +252,23 @@ def _utf8_prefix_offsets(value: str) -> list[int]:
     return offsets
 
 
+def _max_utf8_prefix_end(
+    offsets: list[int],
+    *,
+    start: int,
+    bound_bytes: int,
+) -> int:
+    """Return the largest end whose content bytes alone can fit the response bound."""
+    return (
+        bisect_right(
+            offsets,
+            offsets[start] + bound_bytes,
+            lo=start + 1,
+        )
+        - 1
+    )
+
+
 def _render_candidate(
     *,
     selected: SelectedRecipeSection,
@@ -381,22 +399,28 @@ def _raw_or_scalar_pages(
                 )
             return PlannedRecipeSectionPage(descriptor, content)
 
-        terminal_candidate = candidate_for(len(value))
-        if _fits(
-            selected=selected,
-            generation=generation,
-            section_sha256=section_sha256,
-            page=terminal_candidate,
-            part=part,
-            total_width=total_width,
-            terminal=True,
+        max_end = _max_utf8_prefix_end(
+            offsets,
+            start=start,
             bound_bytes=bound_bytes,
-        ):
-            pages.append(terminal_candidate)
-            break
+        )
+        if max_end == len(value):
+            terminal_candidate = candidate_for(max_end)
+            if _fits(
+                selected=selected,
+                generation=generation,
+                section_sha256=section_sha256,
+                page=terminal_candidate,
+                part=part,
+                total_width=total_width,
+                terminal=True,
+                bound_bytes=bound_bytes,
+            ):
+                pages.append(terminal_candidate)
+                break
 
         low = start + 1
-        high = len(value) - 1
+        high = min(max_end, len(value) - 1)
         accepted: PlannedRecipeSectionPage | None = None
         accepted_end = start
         while low <= high:
@@ -444,6 +468,30 @@ def _array_page(
     )
 
 
+def _canonical_array_prefix_bytes(canonical_elements: list[str]) -> list[int]:
+    prefix_bytes = [0]
+    for element in canonical_elements:
+        prefix_bytes.append(prefix_bytes[-1] + len(element.encode("utf-8")) + 1)
+    return prefix_bytes
+
+
+def _max_array_page_end(
+    prefix_bytes: list[int],
+    *,
+    start: int,
+    bound_bytes: int,
+) -> int:
+    """Bound one candidate by the bytes of its JSON array content alone."""
+    return (
+        bisect_right(
+            prefix_bytes,
+            prefix_bytes[start] + bound_bytes - 1,
+            lo=start + 1,
+        )
+        - 1
+    )
+
+
 def _fragment_pages(
     *,
     selected: SelectedRecipeSection,
@@ -485,8 +533,14 @@ def _fragment_pages(
             )
             return PlannedRecipeSectionPage(descriptor, content)
 
-        if element_index + 1 == element_total:
-            terminal_candidate = candidate_for(len(canonical_element))
+        max_end = _max_utf8_prefix_end(
+            offsets,
+            start=start,
+            bound_bytes=bound_bytes,
+        )
+        is_final_element = element_index + 1 == element_total
+        if is_final_element and max_end == len(canonical_element):
+            terminal_candidate = candidate_for(max_end)
             if _fits(
                 selected=selected,
                 generation=generation,
@@ -501,11 +555,7 @@ def _fragment_pages(
                 break
 
         low = start + 1
-        high = (
-            len(canonical_element) - 1
-            if element_index + 1 == element_total
-            else len(canonical_element)
-        )
+        high = min(max_end, len(canonical_element) - 1) if is_final_element else max_end
         accepted: PlannedRecipeSectionPage | None = None
         accepted_end = start
         while low <= high:
@@ -551,6 +601,7 @@ def _array_pages(
     bound_bytes: int,
 ) -> tuple[list[PlannedRecipeSectionPage], dict[int, int]]:
     canonical_elements = [canonical_recipe_section_json(value) for value in values]
+    prefix_bytes = _canonical_array_prefix_bytes(canonical_elements)
     if not values:
         page = _array_page(
             definition=selected.definition,
@@ -576,27 +627,33 @@ def _array_pages(
     start = 0
     while start < len(values):
         part = len(pages)
-        terminal_candidate = _array_page(
-            definition=selected.definition,
-            canonical_elements=canonical_elements,
+        max_end = _max_array_page_end(
+            prefix_bytes,
             start=start,
-            end=len(values),
-        )
-        if _fits(
-            selected=selected,
-            generation=generation,
-            section_sha256=section_sha256,
-            page=terminal_candidate,
-            part=part,
-            total_width=total_width,
-            terminal=True,
             bound_bytes=bound_bytes,
-        ):
-            pages.append(terminal_candidate)
-            break
+        )
+        if max_end == len(values):
+            terminal_candidate = _array_page(
+                definition=selected.definition,
+                canonical_elements=canonical_elements,
+                start=start,
+                end=max_end,
+            )
+            if _fits(
+                selected=selected,
+                generation=generation,
+                section_sha256=section_sha256,
+                page=terminal_candidate,
+                part=part,
+                total_width=total_width,
+                terminal=True,
+                bound_bytes=bound_bytes,
+            ):
+                pages.append(terminal_candidate)
+                break
 
         low = start + 1
-        high = len(values) - 1
+        high = min(max_end, len(values) - 1)
         accepted: PlannedRecipeSectionPage | None = None
         accepted_end = start
         while low <= high:

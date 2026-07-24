@@ -121,6 +121,30 @@ def test_page_descriptor_rejects_unknown_incomplete_and_mixed_range_families() -
         )
 
 
+def test_scalar_planning_never_serializes_the_whole_oversized_remainder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = pagination.canonical_recipe_section_json
+    serialized_string_bytes: list[int] = []
+
+    def _record_bounded_string(value: object) -> str:
+        if type(value) is str:
+            serialized_string_bytes.append(len(value.encode("utf-8")))
+        return original(value)
+
+    monkeypatch.setattr(pagination, "canonical_recipe_section_json", _record_bounded_string)
+    bound = 700
+    plan = _build(
+        _payload(ingredients_table="x" * 10_000),
+        "ingredients_table",
+        bound=bound,
+    )
+
+    assert plan.total_parts > 1
+    assert serialized_string_bytes
+    assert max(serialized_string_bytes) <= bound
+
+
 def _payload(**changes: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "content": "name: remediation\nsteps:\n  first:\n    action: stop\n",

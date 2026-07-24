@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import autoskillit.cli.session._session_cook as cook_module
+from autoskillit.config import AutomationConfig
 from autoskillit.core import BackendConventions, CmdSpec, SkillContractError
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -133,13 +133,8 @@ def test_profile_unknown_exits(capsys, _mock_mgr):
 
 def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
     """Direct cook composition validates configured tiers before materialization."""
-    cfg = SimpleNamespace(
-        skills=SimpleNamespace(
-            tier1=(),
-            tier2=("process-issues",),
-            tier3=(),
-        )
-    )
+    cfg = AutomationConfig()
+    cfg.skills.tier2 = ["process-issues"]
     mock_backend_cls, _ = _make_mock_backend_class()
     with (
         patch("autoskillit.config.load_config", return_value=cfg),

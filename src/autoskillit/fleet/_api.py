@@ -745,7 +745,6 @@ async def _run_dispatch(
     from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
 
     dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
-
     resolved_timeout = resolve_dispatch_timeout(
         timeout_sec, tool_ctx.config.fleet.default_timeout_sec
     )

@@ -87,29 +87,14 @@ class SkillInfo:
     def __post_init__(self) -> None:
         if self.source_ref is None:
             object.__setattr__(
-                self,
-                "source_ref",
-                SkillSourceRef(
-                    origin=self.source,
-                    logical_name=self.name,
-                    skill_path=self.path,
-                ),
+                self, "source_ref", SkillSourceRef(self.source, self.name, self.path)
             )
         else:
-            mismatched_fields = tuple(
-                field_name
-                for field_name, direct_value, referenced_value in (
-                    ("name", self.name, self.source_ref.logical_name),
-                    ("source", self.source, self.source_ref.origin),
-                    ("path", self.path, self.source_ref.skill_path),
-                )
-                if direct_value != referenced_value
+            self.source_ref.validate_identity(
+                self.source,
+                self.name,
+                self.path,
             )
-            if mismatched_fields:
-                raise SkillContractError(
-                    "SkillInfo source_ref does not match direct fields: "
-                    f"{', '.join(mismatched_fields)}"
-                )
         if not self.canonical_content and self.path.is_file():
             try:
                 object.__setattr__(

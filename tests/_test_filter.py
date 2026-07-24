@@ -267,7 +267,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "core", "execution", "fleet", "recipe", "server", "workspace"}
     ),
     "_type_skill_contract": frozenset(
-        {"cli", "core", "execution", "recipe", "server", "workspace"}
+        {"cli", "config", "core", "execution", "recipe", "server", "workspace"}
     ),
     "_type_phoropter": frozenset({"core"}),
     "_type_tradition_manifest": frozenset({"core"}),

@@ -5,12 +5,12 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from autoskillit import cli
+from autoskillit.config import AutomationConfig
 from autoskillit.core import ClaudeFlags, SkillContractError
 from tests.cli.conftest import _SCRIPT_YAML
 
@@ -33,13 +33,8 @@ def test_order_rejects_orchestrator_skill_in_l1_tier_before_launch(
     """Every order catalog branch validates configured L1 tier membership."""
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.chdir(tmp_path)
-    cfg = SimpleNamespace(
-        skills=SimpleNamespace(
-            tier1=("process-issues",),
-            tier2=(),
-            tier3=(),
-        )
-    )
+    cfg = AutomationConfig()
+    cfg.skills.tier1 = ["process-issues"]
     with (
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._session_order._launch_cook_session") as launch,

@@ -12,6 +12,7 @@ from ._type_constants_registries import (
     validate_skill_capability_roles,
 )
 from ._type_enums import SkillExecutionRole, SkillSource
+from ._type_exceptions import SkillContractError
 from ._type_results import WriteBehaviorSpec
 
 __all__ = [
@@ -66,6 +67,20 @@ class SkillSourceRef:
     skill_path: Path
     search_dir: str | None = None
     precedence: int | None = None
+
+    def validate_identity(
+        self,
+        origin: SkillSource,
+        logical_name: str,
+        skill_path: Path,
+    ) -> None:
+        """Reject a direct skill identity that conflicts with this source reference."""
+        if (origin, logical_name, skill_path) != (
+            self.origin,
+            self.logical_name,
+            self.skill_path,
+        ):
+            raise SkillContractError("SkillInfo source_ref does not match direct fields")
 
     @property
     def identity(self) -> SkillSourceIdentity:

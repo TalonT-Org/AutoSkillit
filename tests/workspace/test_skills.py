@@ -496,6 +496,28 @@ class TestSkillCategories:
         info = SkillInfo(name="test", source=SkillSource.BUNDLED, path=Path("/fake/SKILL.md"))
         assert info.categories == frozenset()
 
+    def test_direct_skill_info_rejects_invalid_canonical_frontmatter(self, tmp_path) -> None:
+        from autoskillit.core import SkillContractError
+        from autoskillit.workspace import EffectiveSkillInvocation
+        from autoskillit.workspace.skills import SkillInfo
+
+        info = SkillInfo(
+            name="invalid-direct",
+            source=SkillSource.PROJECT_LOCAL,
+            path=tmp_path / "SKILL.md",
+            canonical_content="missing frontmatter delimiters",
+        )
+
+        assert info.invalid_reason == "invalid frontmatter: missing_opening_delimiter"
+        with pytest.raises(SkillContractError, match="invalid effective invocation contract"):
+            EffectiveSkillInvocation(
+                root=info,
+                closure=(info,),
+                capability_union=frozenset(),
+                project_root=tmp_path,
+                execution_role=SkillExecutionRole.SESSION,
+            )
+
     def test_compose_pr_skill_has_github_category(self) -> None:
         info = DefaultSkillResolver().resolve("compose-pr")
         assert info is not None

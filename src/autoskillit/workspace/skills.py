@@ -104,6 +104,16 @@ class SkillInfo:
                 "frontmatter",
                 parse_frontmatter_content(self.canonical_content),
             )
+        if (
+            self.frontmatter is not None
+            and not self.frontmatter.is_valid
+            and self.invalid_reason is None
+        ):
+            object.__setattr__(
+                self,
+                "invalid_reason",
+                f"invalid frontmatter: {self.frontmatter.error}",
+            )
 
     @property
     def canonical_bytes(self) -> bytes:
@@ -206,6 +216,15 @@ class EffectiveSkillInvocation:
         if len(names) != len(set(names)):
             raise SkillContractError("effective invocation closure contains duplicate members")
         for member in self.closure:
+            if (
+                member.invalid_reason is not None
+                or member.frontmatter is None
+                or not member.frontmatter.is_valid
+            ):
+                raise SkillContractError(
+                    f"invalid effective invocation contract for {member.name!r}: "
+                    f"{member.invalid_reason or 'missing parsed frontmatter'}"
+                )
             if member.execution_role is not self.execution_role:
                 actual = (
                     member.execution_role.value if member.execution_role is not None else "invalid"

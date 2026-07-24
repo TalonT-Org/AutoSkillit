@@ -359,6 +359,12 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
         return None
     try:
         data = json.loads(payload)
+        read_only = data.get("read_only", False)
+        if not isinstance(read_only, bool):
+            raise ValueError("read_only must be a boolean")
+        completion_required = data.get("completion_required", False)
+        if not isinstance(completion_required, bool):
+            raise ValueError("completion_required must be a boolean")
         return SkillContract(
             inputs=[SkillInput(**item) for item in data["inputs"]],
             outputs=[SkillOutput(**item) for item in data["outputs"]],
@@ -366,8 +372,8 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
             pattern_examples=list(data.get("pattern_examples", [])),
             write_behavior=data.get("write_behavior"),
             write_expected_when=list(data.get("write_expected_when", [])),
-            read_only=bool(data.get("read_only", False)),
-            completion_required=bool(data.get("completion_required", False)),
+            read_only=read_only,
+            completion_required=completion_required,
             result_fields=[ResultFieldSpec(**item) for item in data.get("result_fields", [])],
             outcome_invariants=[
                 OutcomeInvariantEntry(**item) for item in data.get("outcome_invariants", [])

@@ -12,6 +12,25 @@ from autoskillit.server.tools.tools_execution import run_skill
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+def test_contract_lifecycle_cleans_provisional_and_failed_bound_state() -> None:
+    from unittest.mock import call
+
+    from autoskillit.server.tools.tools_execution import _RunSkillContractLifecycle
+
+    store = MagicMock()
+    lifecycle = _RunSkillContractLifecycle(
+        store=store,
+        correlation_key="provisional",
+        bound_session_id="bound",
+        retain_bound=False,
+        execution_started=True,
+    )
+
+    lifecycle.cleanup()
+
+    assert store.mock_calls == [call.discard("provisional"), call.delete("bound")]
+
+
 @pytest.mark.anyio
 async def test_resume_session_id_threaded_to_executor(tool_ctx_kitchen_open, monkeypatch) -> None:
     """resume_session_id flows from run_skill → executor.run()."""

@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,6 +31,7 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
+    SkillSessionContractStore,
     TerminationReason,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -151,6 +153,65 @@ INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
 
 
 DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"
+
+
+@dataclass(slots=True)
+class _RunSkillContractLifecycle:
+    """Own provisional and finalized contract state across run_skill exits."""
+
+    store: SkillSessionContractStore | None = None
+    correlation_key: str | None = None
+    bound_session_id: str | None = None
+    retain_bound: bool = True
+    execution_started: bool = False
+
+    def observe_candidate(self, candidate_session_id: str) -> None:
+        """Record a provider candidate while a provisional contract exists."""
+        if self.store is not None and self.correlation_key is not None:
+            self.store.observe_candidate(self.correlation_key, candidate_session_id)
+
+    def finalize(self, session_id: str) -> None:
+        """Finalize or discard the provisional contract after execution."""
+        if self.store is None or self.correlation_key is None:
+            return
+        if session_id:
+            self.store.finalize(self.correlation_key, session_id)
+            self.bound_session_id = session_id
+        else:
+            self.store.discard(self.correlation_key)
+        self.correlation_key = None
+
+    def apply_retention(self, needs_retry: bool) -> None:
+        """Retain only finalized contracts needed for a resumable result."""
+        self.retain_bound = needs_retry
+        if self.store is not None and self.bound_session_id is not None and not needs_retry:
+            self.store.delete(self.bound_session_id)
+            self.bound_session_id = None
+
+    def cleanup(self) -> None:
+        """Best-effort cleanup for every exit from the never-raises tool."""
+        if self.store is not None and self.correlation_key is not None:
+            try:
+                self.store.discard(self.correlation_key)
+            except Exception:
+                logger.warning(
+                    "skill_session_contract_discard_failed",
+                    exc_info=True,
+                )
+        if (
+            self.store is not None
+            and self.bound_session_id is not None
+            and self.execution_started
+            and not self.retain_bound
+        ):
+            try:
+                self.store.delete(self.bound_session_id)
+            except Exception:
+                logger.warning(
+                    "skill_session_contract_delete_failed",
+                    session_id=self.bound_session_id,
+                    exc_info=True,
+                )
 
 
 def _is_absolute_path(path: str) -> bool:
@@ -687,6 +748,7 @@ async def run_skill(
                 retriable=False,
             )
         )
+    contract_lifecycle = _RunSkillContractLifecycle()
     try:
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx  # circular-break
@@ -694,10 +756,7 @@ async def run_skill(
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
         _contract_store = tool_ctx.skill_session_contract_store
-        _contract_correlation_key: str | None = None
-        _bound_contract_session_id: str | None = None
-        _retain_bound_contract = True
-        _contract_execution_started = False
+        contract_lifecycle.store = _contract_store
         _stored_contract_entry = None
         _resume_backend_obj: CodingAgentBackend | None = None
         _effective_skill_resolver = None
@@ -728,7 +787,7 @@ async def run_skill(
                     skill_command=skill_command,
                     order_id=order_id,
                 ).to_json()
-            _bound_contract_session_id = resume_session_id
+            contract_lifecycle.bound_session_id = resume_session_id
             target_name = _stored_contract_entry.contract.root_name
         else:
             if (cmd_error := _validate_skill_command(skill_command)) is not None:
@@ -1329,7 +1388,7 @@ async def run_skill(
                     completion_required=completion_required,
                     skill_contract_json=_serialize_skill_contract(_skill_contract),
                 )
-                _contract_correlation_key = _contract_store.create_provisional(
+                contract_lifecycle.correlation_key = _contract_store.create_provisional(
                     contract=_session_contract,
                     snapshot=_session_snapshot,
                 )
@@ -1383,11 +1442,7 @@ async def run_skill(
             provider_extras = propagate_session_deadline(tool_ctx.project_dir, provider_extras)
 
             def _observe_contract_session_id(candidate_session_id: str) -> None:
-                if _contract_correlation_key is not None:
-                    _contract_store.observe_candidate(
-                        _contract_correlation_key,
-                        candidate_session_id,
-                    )
+                contract_lifecycle.observe_candidate(candidate_session_id)
 
             _start = time.monotonic()
             try:
@@ -1398,7 +1453,7 @@ async def run_skill(
                             _orchestrator_sid,
                             "run-skill",
                         ):
-                            _contract_execution_started = True
+                            contract_lifecycle.execution_started = True
                             skill_result = await tool_ctx.executor.run(
                                 resolved_command,
                                 _capability_contract.cwd,
@@ -1442,12 +1497,12 @@ async def run_skill(
                                 capability_contract=_capability_contract,
                                 on_session_id_resolved=(
                                     _observe_contract_session_id
-                                    if _contract_correlation_key is not None
+                                    if contract_lifecycle.correlation_key is not None
                                     else None
                                 ),
                             )
                 except TimeoutError as exc:
-                    _retain_bound_contract = False
+                    contract_lifecycle.retain_bound = False
                     logger.error(
                         "run_skill_mcp_tool_timeout",
                         timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
@@ -1462,16 +1517,7 @@ async def run_skill(
                         order_id=effective_order_id,
                     ).to_json()
 
-                if _contract_correlation_key is not None:
-                    if skill_result.session_id:
-                        _contract_store.finalize(
-                            _contract_correlation_key,
-                            skill_result.session_id,
-                        )
-                        _bound_contract_session_id = skill_result.session_id
-                    else:
-                        _contract_store.discard(_contract_correlation_key)
-                    _contract_correlation_key = None
+                contract_lifecycle.finalize(skill_result.session_id)
 
                 if (
                     _stored_contract_entry is not None
@@ -1481,10 +1527,7 @@ async def run_skill(
                     raise SkillContractError(
                         "Resumed execution returned a different final session ID"
                     )
-                _retain_bound_contract = skill_result.needs_retry
-                if _bound_contract_session_id is not None and not _retain_bound_contract:
-                    _contract_store.delete(_bound_contract_session_id)
-                    _bound_contract_session_id = None
+                contract_lifecycle.apply_retention(skill_result.needs_retry)
 
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)
@@ -1555,7 +1598,7 @@ async def run_skill(
                     work_dir=cwd,
                 )
             except Exception as exc:
-                _retain_bound_contract = False
+                contract_lifecycle.retain_bound = False
                 logger.error("run_skill executor raised unexpectedly", exc_info=True)
                 return SkillResult.crashed(
                     exception=exc,
@@ -1584,31 +1627,7 @@ async def run_skill(
             order_id=_oid,  # type: ignore[arg-type]
         ).to_json()
     finally:
-        _contract_store_for_cleanup = locals().get("_contract_store")
-        _correlation_key = locals().get("_contract_correlation_key")
-        if _contract_store_for_cleanup is not None and _correlation_key is not None:
-            try:
-                _contract_store_for_cleanup.discard(_correlation_key)
-            except Exception:
-                logger.warning(
-                    "skill_session_contract_discard_failed",
-                    exc_info=True,
-                )
-        _bound_session_id = locals().get("_bound_contract_session_id")
-        if (
-            _contract_store_for_cleanup is not None
-            and _bound_session_id is not None
-            and locals().get("_contract_execution_started", False)
-            and not locals().get("_retain_bound_contract", True)
-        ):
-            try:
-                _contract_store_for_cleanup.delete(_bound_session_id)
-            except Exception:
-                logger.warning(
-                    "skill_session_contract_delete_failed",
-                    session_id=_bound_session_id,
-                    exc_info=True,
-                )
+        contract_lifecycle.cleanup()
         if _sn_token is not None:
             _current_step_name.reset(_sn_token)  # type: ignore[possibly-undefined]
         if _oid_token is not None:

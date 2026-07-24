@@ -965,9 +965,16 @@ def _reserve(
         return _reject(state, event, "reservation-revision-mismatch")
     generation = event.generation_reservation
     generation_count = generation.maximum_allowance if generation is not None else 0
-    if generation is not None and any(
-        existing.generation_reservation_id == generation.generation_reservation_id
-        for existing in state.generation_reservations
+    if generation is not None and (
+        any(
+            existing.generation_reservation_id == generation.generation_reservation_id
+            for existing in state.generation_reservations
+        )
+        or any(
+            existing.generation_reservation_id == generation.generation_reservation_id
+            for audit in state.closed_epochs
+            for existing in audit.terminal_generation_reservations
+        )
     ):
         return _reject(
             state,

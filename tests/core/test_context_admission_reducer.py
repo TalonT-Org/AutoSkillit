@@ -623,6 +623,51 @@ def test_reserve_rejects_active_generation_reservation_id_reuse() -> None:
     _assert_rejection_unchanged(state, rejected.next_state)
 
 
+def test_reserve_rejects_generation_reservation_id_retained_in_closed_epoch() -> None:
+    state, batch, _, existing_generation = _reserved_batch(
+        name="closed-generation-id-owner",
+        input_count=5,
+        generation_count=5,
+    )
+    state = _prepare_dispatch(state, batch)
+    rolled = _rollover_with_receiver_fence(
+        state,
+        batch,
+        name="closed-generation-id-owner",
+    )
+    occurrence = _occurrence(
+        "closed-generation-id-collision",
+        maximum=5,
+        epoch=2,
+    )
+    rolled, _ = _propose(rolled, occurrence)
+    new_batch = _batch("batch-closed-generation-id-collision", (occurrence,))
+    _, event = _reserve(
+        rolled,
+        new_batch,
+        (occurrence,),
+        input_count=5,
+        generation_count=5,
+    )
+    assert event.generation_reservation is not None
+    collision = replace(
+        event,
+        generation_reservation=replace(
+            event.generation_reservation,
+            generation_reservation_id=existing_generation.generation_reservation_id,
+        ),
+    )
+
+    rejected = reduce_context_admission(rolled, collision)
+
+    assert rejected.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+    assert (
+        rejected.decision.reason_code == "generation-reservation-id-reuse-with-changed-descriptor"
+    )
+    assert isinstance(rejected.next_state, ActiveContextAdmissionState)
+    _assert_rejection_unchanged(rolled, rejected.next_state)
+
+
 def test_reserve_event_rejects_terminal_generation_record() -> None:
     state = _open_epoch()
     occurrence = _occurrence("terminal-generation-reserve", maximum=10)

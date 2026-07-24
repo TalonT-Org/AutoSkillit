@@ -276,6 +276,16 @@ def _write_history_profile(
     }
 
 
+def _stage_history_profile(source_root: Path, generated_home: Path) -> list[Path]:
+    staged: list[Path] = []
+    for source in _rollouts_from_root(source_root):
+        destination = generated_home / "sessions" / source.relative_to(source_root)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        os.link(source, destination)
+        staged.append(destination)
+    return staged
+
+
 def test_installed_codex_preserves_staged_rollout_inode_and_inherited_lease(
     tmp_path: Path,
 ) -> None:
@@ -416,7 +426,12 @@ def test_installed_codex_startup_profile_matrix_is_bounded_and_retained(
         generated_home = tmp_path / "homes" / f"{sequence:02d}-{profile_name}"
         generated_home.parent.mkdir(exist_ok=True)
         _prepare_home(generated_home)
-        assert _rollouts(generated_home) == []
+        staged_rollouts = _stage_history_profile(
+            tmp_path / "history" / profile_name,
+            generated_home,
+        )
+        assert len(staged_rollouts) == profile_metadata[profile_name]["file_count"]
+        assert _rollouts(generated_home) == staged_rollouts
         spec = backend.build_headless_cmd(
             "Respond with exactly: autoskillit startup profile canary"
         )
@@ -433,7 +448,7 @@ def test_installed_codex_startup_profile_matrix_is_bounded_and_retained(
             rollout_root=generated_home / "sessions",
         )
         assert duration <= 17.0
-        assert len(_rollouts(generated_home)) == 1
+        assert len(_rollouts(generated_home)) == len(staged_rollouts) + 1
         sample = {
             "sequence": sequence,
             "profile": profile_name,

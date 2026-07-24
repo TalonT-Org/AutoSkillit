@@ -360,6 +360,8 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
         return None
     try:
         data = json.loads(payload)
+        if not isinstance(data, dict):
+            raise ValueError("persisted skill execution contract must be an object")
         read_only = data.get("read_only", False)
         if not isinstance(read_only, bool):
             raise ValueError("read_only must be a boolean")

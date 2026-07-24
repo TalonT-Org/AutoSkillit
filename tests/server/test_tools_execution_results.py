@@ -40,6 +40,14 @@ def test_deserialize_skill_contract_rejects_non_boolean_authority(
         deserialize_skill_contract(payload)
 
 
+def test_deserialize_skill_contract_rejects_non_mapping_payload() -> None:
+    from autoskillit.core import SkillContractError
+    from autoskillit.server.tools._execution_helpers import deserialize_skill_contract
+
+    with pytest.raises(SkillContractError, match="Persisted skill execution contract"):
+        deserialize_skill_contract("[]")
+
+
 class TestGateErrorSchemaNormalization:
     """Gate errors use the standard 9-field response schema."""
 

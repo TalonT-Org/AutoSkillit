@@ -666,11 +666,7 @@ async def _run_report_session(
         cfg = config.report_bug
         skill_result = await executor.run(
             (direct_dispatch.resolved_command if direct_dispatch is not None else skill_command),
-            (
-                str(direct_dispatch.projection_context.execution_cwd)
-                if direct_dispatch is not None
-                else cwd
-            ),
+            (str(direct_dispatch.projection_context.cwd) if direct_dispatch is not None else cwd),
             model=model,
             step_name=step_name,
             timeout=float(cfg.timeout),

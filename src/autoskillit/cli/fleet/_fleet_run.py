@@ -113,7 +113,7 @@ async def _execute_fleet_run(
         project_agent_skill_document(
             sous_chef,
             SkillProjectionContext(
-                execution_cwd=ctx.project_dir.resolve(),
+                cwd=ctx.project_dir.resolve(),
                 catalog=orchestrator_catalog,
                 backend=effective_backend,
                 conventions=(

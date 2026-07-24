@@ -42,7 +42,7 @@ def _projected_sous_chef() -> str:
     return project_agent_skill_document(
         skill,
         SkillProjectionContext(
-            execution_cwd=project_root,
+            cwd=project_root,
             catalog=catalog,
             gating=False,
         ),

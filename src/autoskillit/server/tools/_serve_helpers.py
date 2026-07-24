@@ -75,7 +75,7 @@ def project_orchestrator_guidance(tool_ctx: Any) -> str:
     document = project_agent_skill_document(
         sous_chef,
         SkillProjectionContext(
-            execution_cwd=tool_ctx.project_dir,
+            cwd=tool_ctx.project_dir,
             catalog=catalog,
             backend=backend,
             conventions=backend.conventions if backend is not None else None,

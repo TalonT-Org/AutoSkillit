@@ -60,7 +60,7 @@ class SkillSessionContract:
     projected_digests: Mapping[str, str]
     projection_version: int
     project_root: str
-    execution_cwd: str
+    cwd: str
     backend: str
     resolved_command: str
     member_roles: Mapping[str, SkillExecutionRole]
@@ -420,8 +420,8 @@ def _validate_contract(contract: SkillSessionContract) -> None:
             f"unsupported projection_version {contract.projection_version}; "
             f"expected {SKILL_PROJECTION_VERSION}"
         )
-    if not contract.project_root or not contract.execution_cwd:
-        raise SkillContractError("project_root and execution_cwd are required")
+    if not contract.project_root or not contract.cwd:
+        raise SkillContractError("project_root and cwd are required")
     if not contract.backend or not contract.resolved_command:
         raise SkillContractError("backend and resolved_command are required")
     validate_skill_capability_roles(contract.capability_union, contract.execution_role)
@@ -505,7 +505,7 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
         "projected_digests": dict(sorted(contract.projected_digests.items())),
         "projection_version": contract.projection_version,
         "project_root": contract.project_root,
-        "execution_cwd": contract.execution_cwd,
+        "cwd": contract.cwd,
         "backend": contract.backend,
         "resolved_command": contract.resolved_command,
         "member_roles": {name: role.value for name, role in sorted(contract.member_roles.items())},
@@ -555,7 +555,7 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             },
             projection_version=int(data["projection_version"]),
             project_root=str(data["project_root"]),
-            execution_cwd=str(data["execution_cwd"]),
+            cwd=str(data["cwd"]),
             backend=str(data["backend"]),
             resolved_command=str(data["resolved_command"]),
             member_roles={

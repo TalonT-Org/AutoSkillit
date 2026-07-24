@@ -50,7 +50,7 @@ def validated_dispatch_cwd(
         return normalized_cwd
     if capability_contract.resolved_command != resolved_command:
         raise ValueError("headless command does not match capability dispatch contract")
-    if capability_contract.execution_cwd != normalized_cwd:
+    if capability_contract.cwd != normalized_cwd:
         raise ValueError("headless cwd does not match capability dispatch contract")
     members = set(capability_contract.member_names)
     if not members:
@@ -63,7 +63,7 @@ def validated_dispatch_cwd(
     ):
         if set(values) != members:
             raise ValueError(f"capability dispatch {field_name} do not match members")
-    return capability_contract.execution_cwd
+    return capability_contract.cwd
 
 
 def parse_outcome_fields(

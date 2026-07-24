@@ -168,7 +168,7 @@ async def test_pass_when_scope_covers_cwd(tool_ctx_kitchen_open, monkeypatch, tm
     call = executor.calls[0]
     assert call.capability_contract is not None
     assert call.capability_contract.resolved_command == call.skill_command
-    assert call.capability_contract.execution_cwd == str(worktree.resolve())
+    assert call.capability_contract.cwd == str(worktree.resolve())
     assert call.cwd == str(worktree.resolve())
 
 

@@ -122,7 +122,7 @@ def _ensure_marketplace() -> Path:
         public_plugin_root,
         catalog,
         SkillProjectionContext(
-            execution_cwd=Path.cwd().resolve(),
+            cwd=Path.cwd().resolve(),
             catalog=catalog,
         ),
     )

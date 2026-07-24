@@ -87,17 +87,42 @@ async def test_resume_rejects_unbound_contract_before_downstream_work(
     store.load.side_effect = FileNotFoundError("unbound")
     notify = AsyncMock()
     audit = MagicMock()
+    ingredient_guard = MagicMock(side_effect=AssertionError("fresh ingredient guard ran"))
+    dependency_guard = MagicMock(side_effect=AssertionError("fresh dependency guard ran"))
+    plan_path_guard = MagicMock(side_effect=AssertionError("fresh plan-path guard ran"))
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.session_skill_manager = manager
     tool_ctx_kitchen_open.skill_session_contract_store = store
     tool_ctx_kitchen_open.audit = audit
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr("autoskillit.server.tools.tools_execution._notify", notify)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution._check_ingredient_locks",
+        ingredient_guard,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution._check_pipeline_deps",
+        dependency_guard,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution._check_review_approach_plan_path",
+        plan_path_guard,
+    )
 
-    result = json.loads(await run_skill("/implement foo", "/tmp", resume_session_id="never-bound"))
+    result = json.loads(
+        await run_skill(
+            "/implement foo",
+            "/tmp",
+            step_name="review-step",
+            resume_session_id="never-bound",
+        )
+    )
 
     assert result["success"] is False
     assert "cannot resume" in result["result"].lower()
+    ingredient_guard.assert_not_called()
+    dependency_guard.assert_not_called()
+    plan_path_guard.assert_not_called()
     manager.materialize_invocation.assert_not_called()
     assert store.mock_calls == [call.load("never-bound")]
     notify.assert_not_awaited()

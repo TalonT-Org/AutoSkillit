@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import regex as re
 
-from autoskillit.core import YAMLError, get_logger, load_yaml
+from autoskillit.core import SkillExecutionRole, YAMLError, get_logger, load_yaml
 
 logger = get_logger(__name__)
 
@@ -31,6 +31,7 @@ SkillFrontmatterParseError = Literal[
     "missing_closing_delimiter",
     "malformed_yaml",
     "non_mapping",
+    "invalid_execution_role",
 ]
 
 
@@ -40,6 +41,7 @@ class SkillFrontmatterParseResult:
 
     content: str
     data: dict[str, Any] | None
+    execution_role: SkillExecutionRole | None = None
     frontmatter_text: str = ""
     body: str = ""
     error: SkillFrontmatterParseError | None = None
@@ -102,9 +104,20 @@ def parse_frontmatter_content(content: str) -> SkillFrontmatterParseResult:
             frontmatter_text=yaml_block,
             body=body,
         )
+    role_raw = loaded.get("execution_role", SkillExecutionRole.SESSION.value)
+    try:
+        execution_role = SkillExecutionRole(role_raw)
+    except (TypeError, ValueError):
+        return _parse_failure(
+            content,
+            "invalid_execution_role",
+            frontmatter_text=yaml_block,
+            body=body,
+        )
     return SkillFrontmatterParseResult(
         content=content,
         data=loaded,
+        execution_role=execution_role,
         frontmatter_text=yaml_block,
         body=body,
     )

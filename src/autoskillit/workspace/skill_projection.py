@@ -113,7 +113,7 @@ class AgentSkillDocument:
 class SkillProjectionContext:
     """Execution-local inputs that may affect an agent-visible projection."""
 
-    execution_cwd: Path
+    cwd: Path
     project_root: Path | None = None
     catalog: EffectiveSkillCatalog | None = None
     invocation: EffectiveSkillInvocation | None = None
@@ -129,7 +129,7 @@ class SkillProjectionContext:
             raise SkillContractError(
                 "projection context must bind exactly one effective catalog or invocation"
             )
-        object.__setattr__(self, "execution_cwd", self.execution_cwd.resolve())
+        object.__setattr__(self, "cwd", self.cwd.resolve())
         project_root = self.project_root
         if (
             project_root is None
@@ -173,7 +173,7 @@ class EffectiveSkillDispatchContract:
     projected_artifacts: Mapping[str, str]
     projection_version: int
     project_root: str | None
-    execution_cwd: str
+    cwd: str
     backend: str | None
     artifact_paths: tuple[str, ...] = ()
 
@@ -246,7 +246,7 @@ def build_effective_skill_dispatch_contract(
             if projection_context.project_root is not None
             else None
         ),
-        execution_cwd=str(projection_context.execution_cwd),
+        cwd=str(projection_context.cwd),
         backend=backend.name if backend is not None else None,
         artifact_paths=tuple(artifact_paths),
     )
@@ -677,7 +677,7 @@ def project_direct_install(
     ]
     destination = Path.home() / ".autoskillit" / "plugin-projections" / cache_key
     context = SkillProjectionContext(
-        execution_cwd=Path(cwd).resolve(),
+        cwd=Path(cwd).resolve(),
         catalog=catalog,
         backend=backend,
         conventions=backend.conventions,
@@ -759,7 +759,7 @@ def prepare_catalog_skill_dispatch(
     contract = build_effective_skill_dispatch_contract(
         resolved_command,
         SkillProjectionContext(
-            execution_cwd=cwd,
+            cwd=cwd,
             project_root=project_root,
             catalog=catalog,
             backend=backend,

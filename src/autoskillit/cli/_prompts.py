@@ -60,7 +60,7 @@ def _read_full_sous_chef(
     projected = project_agent_skill_document(
         sous_chef,
         SkillProjectionContext(
-            execution_cwd=effective_root,
+            cwd=effective_root,
             catalog=catalog,
             backend=backend,
             conventions=getattr(backend, "conventions", None),

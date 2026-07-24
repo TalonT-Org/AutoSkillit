@@ -965,7 +965,12 @@ class TestSkillInfoSchemaExhaustiveness:
 
         dc_fields = {f.name for f in dataclasses.fields(SkillInfo)}
         constructor_only = {"name", "source", "path", "source_ref"}
-        derived_fields = {"backend_requirements", "frontmatter", "invalid_reason"}
+        derived_fields = {
+            "backend_requirements",
+            "execution_role",
+            "frontmatter",
+            "invalid_reason",
+        }
         parseable_fields = dc_fields - constructor_only - derived_fields
 
         source = inspect.getsource(_skill_info_from_frontmatter)
@@ -1137,7 +1142,7 @@ def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypa
 
     document = project_agent_skill_document(
         entry,
-        SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog),
+        SkillProjectionContext(cwd=tmp_path, catalog=catalog),
     )
 
     assert document.content.endswith("body\n")
@@ -1193,7 +1198,7 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
 
     document = project_agent_skill_document(
         entry,
-        SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog),
+        SkillProjectionContext(cwd=tmp_path, catalog=catalog),
     )
     projected = parse_frontmatter_content(document.content)
 
@@ -1247,7 +1252,7 @@ def test_projection_namespace_is_exhaustive_for_every_source(
 
     projected = project_agent_skill_document(
         root,
-        SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog),
+        SkillProjectionContext(cwd=tmp_path, catalog=catalog),
     )
 
     assert f"Call {expected_reference} now." in projected.content
@@ -1297,7 +1302,7 @@ def test_projection_never_mutates_external_canonical_sources(
 
     document = project_agent_skill_document(
         entry,
-        SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog),
+        SkillProjectionContext(cwd=tmp_path, catalog=catalog),
     )
 
     assert "uses_capabilities:" not in document.content

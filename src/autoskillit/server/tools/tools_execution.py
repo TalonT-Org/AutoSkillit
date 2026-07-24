@@ -667,8 +667,6 @@ async def run_skill(
         return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
-    if not resume_session_id and (cmd_error := _validate_skill_command(skill_command)) is not None:
-        return cmd_error
     if cwd and not _is_absolute_path(cwd):
         return json.dumps(
             deny_envelope(
@@ -689,25 +687,6 @@ async def run_skill(
                 retriable=False,
             )
         )
-    if (
-        step_name
-        and not resume_session_id
-        and (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None
-    ):
-        return _lock_denial
-    if (
-        step_name
-        and not resume_session_id
-        and (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None
-    ):
-        return _dep_denial
-    if (
-        step_name
-        and not resume_session_id
-        and (_plan_path_denial := _check_review_approach_plan_path(step_name, skill_command))
-        is not None
-    ):
-        return _plan_path_denial
     try:
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx  # circular-break
@@ -752,6 +731,17 @@ async def run_skill(
             _bound_contract_session_id = resume_session_id
             target_name = _stored_contract_entry.contract.root_name
         else:
+            if (cmd_error := _validate_skill_command(skill_command)) is not None:
+                return cmd_error
+            if step_name:
+                if (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None:
+                    return _lock_denial
+                if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
+                    return _dep_denial
+                if (
+                    _plan_path_denial := _check_review_approach_plan_path(step_name, skill_command)
+                ) is not None:
+                    return _plan_path_denial
             _effective_skill_resolver = tool_ctx.skill_resolver
             if _effective_skill_resolver is None:
                 _effective_skill_resolver = _make_project_skill_resolver()
@@ -780,65 +770,67 @@ async def run_skill(
                     skill_command=skill_command,
                     order_id=order_id,
                 ).to_json()
-        if invocation is None or projection_context is None:
-            raise SkillContractError("Skill dispatch branches did not produce a bound contract")
-        if not step_name and not resume_session_id and tool_ctx.active_recipe_steps:
-            _resolved, _ambiguous = _resolve_step_name_from_recipe(
-                skill_command, tool_ctx.active_recipe_steps
-            )
-            if _resolved:
-                step_name = _resolved
-                logger.warning(
-                    "step_name_resolved_from_recipe",
-                    step=step_name,
-                    command=skill_command[:80],
+            if not step_name and tool_ctx.active_recipe_steps:
+                _resolved, _ambiguous = _resolve_step_name_from_recipe(
+                    skill_command, tool_ctx.active_recipe_steps
                 )
-                if (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None:
-                    return _lock_denial
-                if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
-                    return _dep_denial
-                if (
-                    _plan_path_denial := _check_review_approach_plan_path(step_name, skill_command)
-                ) is not None:
-                    return _plan_path_denial
-            elif _ambiguous:
-                if _has_active_deps():
+                if _resolved:
+                    step_name = _resolved
+                    logger.warning(
+                        "step_name_resolved_from_recipe",
+                        step=step_name,
+                        command=skill_command[:80],
+                    )
+                    if (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None:
+                        return _lock_denial
+                    if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
+                        return _dep_denial
+                    if (
+                        _plan_path_denial := _check_review_approach_plan_path(
+                            step_name, skill_command
+                        )
+                    ) is not None:
+                        return _plan_path_denial
+                elif _ambiguous:
+                    if _has_active_deps():
+                        return json.dumps(
+                            deny_envelope(
+                                (
+                                    f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and matched "
+                                    "multiple recipe steps by skill_command prefix (ambiguous). "
+                                    "Cannot verify dependency status. Pass step_name explicitly."
+                                ),
+                                stage="preflight:ambiguous_step",
+                                retriable=False,
+                            )
+                        )
+                elif _has_active_locks(order_id):
                     return json.dumps(
                         deny_envelope(
                             (
-                                f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and matched "
-                                "multiple recipe steps by skill_command prefix (ambiguous). "
-                                "Cannot verify dependency status. Pass step_name explicitly."
+                                f"{INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and could "
+                                "not be resolved from the recipe. Cannot verify lock "
+                                "status. Pass step_name explicitly or call "
+                                "lock_ingredients(unlock=[...]) to release all locks."
                             ),
-                            stage="preflight:ambiguous_step",
+                            stage="preflight:ingredient_locks",
                             retriable=False,
                         )
                     )
-            elif _has_active_locks(order_id):
-                return json.dumps(
-                    deny_envelope(
-                        (
-                            f"{INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and could "
-                            "not be resolved from the recipe. Cannot verify lock "
-                            "status. Pass step_name explicitly or call "
-                            "lock_ingredients(unlock=[...]) to release all locks."
-                        ),
-                        stage="preflight:ingredient_locks",
-                        retriable=False,
+                elif _has_active_deps():
+                    return json.dumps(
+                        deny_envelope(
+                            (
+                                f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
+                                "not be resolved from the recipe. Cannot verify dependency "
+                                "status. Pass step_name explicitly."
+                            ),
+                            stage="preflight:unresolved_step",
+                            retriable=False,
+                        )
                     )
-                )
-            elif _has_active_deps():
-                return json.dumps(
-                    deny_envelope(
-                        (
-                            f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
-                            "not be resolved from the recipe. Cannot verify dependency "
-                            "status. Pass step_name explicitly."
-                        ),
-                        stage="preflight:unresolved_step",
-                        retriable=False,
-                    )
-                )
+        if invocation is None or projection_context is None:
+            raise SkillContractError("Skill dispatch branches did not produce a bound contract")
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
             await _notify(
@@ -1404,7 +1396,7 @@ async def run_skill(
                             _contract_execution_started = True
                             skill_result = await tool_ctx.executor.run(
                                 resolved_command,
-                                _capability_contract.execution_cwd,
+                                _capability_contract.cwd,
                                 model=effective_model,
                                 add_dirs=skill_add_dirs,
                                 step_name=step_name,

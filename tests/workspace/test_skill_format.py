@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import SkillExecutionRole
 from autoskillit.workspace.skill_format import (
     SkillFrontmatterParseResult,
     parse_frontmatter_content,
@@ -90,9 +91,30 @@ class TestParseFrontmatterContent:
         assert result.is_valid
         assert result.error is None
         assert result.data == {"name": "my-skill", "description": "A skill"}
+        assert result.execution_role is SkillExecutionRole.SESSION
         assert result.frontmatter_text == "name: my-skill\ndescription: A skill"
         assert result.body == "Body"
         assert result.content == content
+
+    @pytest.mark.parametrize(
+        ("role", "expected"),
+        [
+            ("session", SkillExecutionRole.SESSION),
+            ("orchestrator", SkillExecutionRole.ORCHESTRATOR),
+            ("fleet", SkillExecutionRole.FLEET),
+        ],
+    )
+    def test_parse_frontmatter_content_returns_typed_explicit_role(
+        self, role: str, expected: SkillExecutionRole
+    ) -> None:
+        result = parse_frontmatter_content(
+            f"---\nname: my-skill\nexecution_role: {role}\n---\nBody"
+        )
+
+        assert result.is_valid
+        assert result.execution_role is expected
+        assert result.data is not None
+        assert result.data["execution_role"] == role
 
     @pytest.mark.parametrize(
         ("content", "error"),
@@ -101,6 +123,14 @@ class TestParseFrontmatterContent:
             ("---\nname: my-skill\nBody", "missing_closing_delimiter"),
             ("---\nname: [unterminated\n---\nBody", "malformed_yaml"),
             ("---\n- one\n- two\n---\nBody", "non_mapping"),
+            (
+                "---\nname: my-skill\nexecution_role: interactive\n---\nBody",
+                "invalid_execution_role",
+            ),
+            (
+                "---\nname: my-skill\nexecution_role: [session]\n---\nBody",
+                "invalid_execution_role",
+            ),
         ],
     )
     def test_invalid_frontmatter_has_typed_failure(self, content: str, error: str) -> None:
@@ -109,6 +139,7 @@ class TestParseFrontmatterContent:
         assert not result.is_valid
         assert result.error == error
         assert result.data is None
+        assert result.execution_role is None
         assert result.content == content
 
     def test_unreadable_frontmatter_is_distinct(self, tmp_path) -> None:
@@ -117,6 +148,7 @@ class TestParseFrontmatterContent:
         assert not result.is_valid
         assert result.error == "unreadable"
         assert result.data is None
+        assert result.execution_role is None
 
 
 class TestWritePathsValidation:

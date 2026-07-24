@@ -26,6 +26,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     get_logger,
     pkg_root,
+    validate_skill_capability_roles,
 )
 from autoskillit.workspace.skill_format import (
     SkillFrontmatterParseResult,
@@ -124,7 +125,7 @@ def _materialize_codex_profile_skill_infos(
         session_dir / backend.conventions.skills_subdir,
         catalog,
         SkillProjectionContext(
-            execution_cwd=Path.cwd().resolve(),
+            cwd=Path.cwd().resolve(),
             catalog=catalog,
             backend=backend,
             conventions=backend.conventions,
@@ -231,7 +232,7 @@ class SkillsDirectoryProvider:
         self,
         skill_info: SkillInfo,
         *,
-        execution_cwd: Path,
+        cwd: Path,
         gated: bool = True,
     ) -> str:
         """Project already-resolved SKILL.md content with optional gating.
@@ -245,14 +246,14 @@ class SkillsDirectoryProvider:
         """
         return self.project_skill_info(
             skill_info,
-            execution_cwd=execution_cwd,
+            cwd=cwd,
             gating=True if gated else None,
         )
 
     def projection_context(
         self,
         skill_info: SkillInfo,
-        execution_cwd: Path,
+        cwd: Path,
         *,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
@@ -264,7 +265,7 @@ class SkillsDirectoryProvider:
         )
         return self.catalog_projection_context(
             catalog,
-            execution_cwd,
+            cwd,
             gating=gating,
             backend=backend,
         )
@@ -272,14 +273,14 @@ class SkillsDirectoryProvider:
     def catalog_projection_context(
         self,
         catalog: EffectiveSkillCatalog,
-        execution_cwd: Path,
+        cwd: Path,
         *,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
     ) -> SkillProjectionContext:
         """Build one projection context bound to a resolved path-free catalog."""
         return SkillProjectionContext(
-            execution_cwd=execution_cwd,
+            cwd=cwd,
             catalog=catalog,
             backend=backend,
             conventions=backend.conventions if backend is not None else None,
@@ -295,14 +296,14 @@ class SkillsDirectoryProvider:
         self,
         skill_info: SkillInfo,
         *,
-        execution_cwd: Path,
+        cwd: Path,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
     ) -> str:
         """Project one already-resolved exact skill contract."""
         context = self.projection_context(
             skill_info,
-            execution_cwd,
+            cwd,
             gating=gating,
             backend=backend,
         )
@@ -357,6 +358,10 @@ class DefaultSessionSkillManager:
                 raise SkillContractError(
                     f"L1 materialization requires SESSION members; {member.name!r} is {actual}"
                 )
+            validate_skill_capability_roles(
+                member.uses_capabilities,
+                member.execution_role,
+            )
         if projection_context.invocation != invocation:
             raise SkillContractError(
                 "materialization projection must bind the exact effective invocation"
@@ -388,6 +393,10 @@ class DefaultSessionSkillManager:
                     f"L1 catalog materialization requires SESSION members; "
                     f"{member.name!r} is {member.execution_role.value}"
                 )
+            validate_skill_capability_roles(
+                member.uses_capabilities,
+                member.execution_role,
+            )
         if projection_context.catalog != catalog:
             raise SkillContractError(
                 "materialization projection must bind the exact effective catalog"

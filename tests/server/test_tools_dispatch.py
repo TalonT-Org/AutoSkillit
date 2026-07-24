@@ -156,9 +156,7 @@ class TestDispatchFoodTruckExecution:
         assert dispatch_call.capability_contract.resolved_command == (
             dispatch_call.orchestrator_prompt
         )
-        assert dispatch_call.capability_contract.execution_cwd == str(
-            tool_ctx.project_dir.resolve()
-        )
+        assert dispatch_call.capability_contract.cwd == str(tool_ctx.project_dir.resolve())
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_on_spawn_writes_pid(self, tool_ctx, monkeypatch):

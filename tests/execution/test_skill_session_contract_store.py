@@ -40,7 +40,7 @@ def _contract(tmp_path: Path, projected_text: str):
         projected_digests={"root": projected_digest},
         projection_version=1,
         project_root=str(tmp_path / "project"),
-        execution_cwd=str(tmp_path / "worktree"),
+        cwd=str(tmp_path / "worktree"),
         backend="claude-code",
         resolved_command="/root do work",
         member_roles={"root": SkillExecutionRole.SESSION},

@@ -70,7 +70,7 @@ def test_provider_injects_disable_model_invocation_for_tier2() -> None:
     provider = SkillsDirectoryProvider()
     skill = provider.resolver.resolve_effective("open-kitchen", Path.cwd())
     assert skill is not None
-    content = provider.get_skill_content(skill, execution_cwd=Path.cwd(), gated=True)
+    content = provider.get_skill_content(skill, cwd=Path.cwd(), gated=True)
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match, "Content must have YAML frontmatter"
     fm = load_yaml(fm_match.group(1))
@@ -85,7 +85,7 @@ def test_provider_does_not_inject_for_cook_session() -> None:
     provider = SkillsDirectoryProvider()
     skill = provider.resolver.resolve_effective("mermaid", Path.cwd())
     assert skill is not None
-    content = provider.get_skill_content(skill, execution_cwd=Path.cwd(), gated=False)
+    content = provider.get_skill_content(skill, cwd=Path.cwd(), gated=False)
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match, "Content must have YAML frontmatter"
     fm = load_yaml(fm_match.group(1))
@@ -125,7 +125,7 @@ def test_agent_skill_projector_preserves_public_document_and_stable_digest(
     )
     catalog_entry = SkillCatalogEntry.from_skill_info(skill_info)
     context = SkillProjectionContext(
-        execution_cwd=tmp_path,
+        cwd=tmp_path,
         catalog=EffectiveSkillCatalog(
             skills=(catalog_entry,),
             execution_role=SkillExecutionRole.SESSION,
@@ -152,7 +152,7 @@ def test_provider_string_api_returns_unified_agent_safe_projection() -> None:
     assert raw is not None
     assert "uses_capabilities:" in raw.path.read_text()
 
-    content = provider.get_skill_content(raw, execution_cwd=Path.cwd(), gated=False)
+    content = provider.get_skill_content(raw, cwd=Path.cwd(), gated=False)
 
     _assert_agent_safe(content)
     assert _frontmatter(content)["name"] == "make-arch-diag"
@@ -187,12 +187,54 @@ def test_materialization_rejects_wrong_role_before_filesystem_work(tmp_path: Pat
         execution_role=SkillExecutionRole.SESSION,
     )
     context = SkillProjectionContext(
-        execution_cwd=tmp_path,
+        cwd=tmp_path,
         invocation=invocation,
     )
 
     with pytest.raises(SkillContractError, match="SESSION"):
         manager.materialize_invocation("wrong-role", invocation, context)
+
+    assert not ephemeral_root.exists()
+
+
+def test_materialization_revalidates_capability_role_before_filesystem_work(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import SkillContractError, SkillExecutionRole, SkillSource
+    from autoskillit.workspace import (
+        EffectiveSkillInvocation,
+        SkillInfo,
+        SkillProjectionContext,
+    )
+
+    ephemeral_root = tmp_path / "ephemeral"
+    manager = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
+    skill = SkillInfo(
+        name="forged-session",
+        source=SkillSource.PROJECT_LOCAL,
+        path=tmp_path / "source" / "SKILL.md",
+        execution_role=SkillExecutionRole.SESSION,
+        uses_capabilities=frozenset({"run_skill"}),
+        canonical_content=(
+            "---\nname: forged-session\ndescription: Forged contract.\n"
+            "execution_role: session\nuses_capabilities: [run_skill]\n---\n"
+            'Call run_skill("child").\n'
+        ),
+    )
+    invocation = EffectiveSkillInvocation(
+        root=skill,
+        closure=(skill,),
+        capability_union=frozenset({"run_skill"}),
+        project_root=tmp_path,
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    context = SkillProjectionContext(
+        cwd=tmp_path,
+        invocation=invocation,
+    )
+
+    with pytest.raises(SkillContractError, match="run_skill.*session|session.*run_skill"):
+        manager.materialize_invocation("forged-capability", invocation, context)
 
     assert not ephemeral_root.exists()
 
@@ -237,7 +279,7 @@ def test_review_pr_four_way_metadata_transport_projection_matrix(tmp_path: Path)
             canonical_content=content,
         )
         context = SkillProjectionContext(
-            execution_cwd=tmp_path,
+            cwd=tmp_path,
             catalog=EffectiveSkillCatalog(
                 skills=(SkillCatalogEntry.from_skill_info(info),),
                 execution_role=SkillExecutionRole.SESSION,
@@ -280,7 +322,7 @@ def test_session_manager_materializes_exact_catalog(tmp_path: Path) -> None:
         skills=(entry,),
         execution_role=SkillExecutionRole.SESSION,
     )
-    context = SkillProjectionContext(execution_cwd=tmp_path, catalog=catalog)
+    context = SkillProjectionContext(cwd=tmp_path, catalog=catalog)
     manager = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
         ephemeral_root=tmp_path / "sessions",

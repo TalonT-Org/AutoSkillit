@@ -529,7 +529,7 @@ def bind_test_skill_resume_contract(
         projected_digests={skill_name: digest},
         projection_version=1,
         project_root=str(Path(tool_ctx.project_dir).resolve()),
-        execution_cwd=str(Path(cwd).resolve()),
+        cwd=str(Path(cwd).resolve()),
         backend=tool_ctx.backend.name,
         resolved_command=resolved_command or f"/{skill_name}",
         member_roles={skill_name: SkillExecutionRole.SESSION},

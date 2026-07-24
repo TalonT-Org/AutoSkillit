@@ -341,12 +341,7 @@ def _skill_info_from_frontmatter(
         caps_raw = []
     uses_capabilities = frozenset(str(c) for c in caps_raw)
 
-    role_raw = data.get("execution_role", SkillExecutionRole.SESSION.value)
-    try:
-        execution_role = SkillExecutionRole(role_raw)
-    except (TypeError, ValueError):
-        execution_role = None
-        invalid_reasons.append(f"invalid execution_role: {role_raw!r}")
+    execution_role = parsed.execution_role
 
     activate_deps_raw = data.get("activate_deps", [])
     if not isinstance(activate_deps_raw, list):
@@ -369,11 +364,11 @@ def _skill_info_from_frontmatter(
             skill=name,
             valid=sorted(SKILL_CAPABILITY_REGISTRY),
         )
-    if execution_role is not None:
-        try:
-            validate_skill_capability_roles(uses_capabilities, execution_role)
-        except SkillContractError as exc:
-            invalid_reasons.append(str(exc))
+    assert execution_role is not None
+    try:
+        validate_skill_capability_roles(uses_capabilities, execution_role)
+    except SkillContractError as exc:
+        invalid_reasons.append(str(exc))
 
     canonical_digest = hashlib.sha256(parsed.content.encode()).hexdigest()
 

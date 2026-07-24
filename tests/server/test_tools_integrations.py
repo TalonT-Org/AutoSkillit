@@ -414,9 +414,7 @@ class TestPrepareIssueTool:
         assert call_kwargs.get("expected_output_patterns") == ["---prepare-issue-result---"]
         capability_contract = call_kwargs["capability_contract"]
         assert capability_contract.resolved_command == mock_executor.run.call_args.args[0]
-        assert capability_contract.execution_cwd == str(
-            tool_ctx_kitchen_open.project_dir.resolve()
-        )
+        assert capability_contract.cwd == str(tool_ctx_kitchen_open.project_dir.resolve())
         assert capability_contract.member_names == ("prepare-issue",)
 
     @pytest.mark.anyio

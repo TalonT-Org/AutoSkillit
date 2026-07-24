@@ -394,9 +394,7 @@ def test_backend_rendering_uses_the_selected_effective_source(tmp_path, monkeypa
     assert rendered == "@target --flag"
 
 
-def test_prepare_effective_dispatch_separates_project_root_from_execution_cwd(
-    tmp_path, monkeypatch
-) -> None:
+def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, monkeypatch) -> None:
     """L2 source selection is project-root-bound while execution stays cwd-bound."""
     from pathlib import Path
 
@@ -405,8 +403,8 @@ def test_prepare_effective_dispatch_separates_project_root_from_execution_cwd(
     from autoskillit.workspace.skills import DefaultSkillResolver
 
     project_root = tmp_path / "source-project"
-    execution_cwd = tmp_path / "execution-worktree"
-    execution_cwd.mkdir()
+    cwd = tmp_path / "execution-worktree"
+    cwd.mkdir()
     _write_effective_skill(
         project_root / ".claude" / "skills",
         "process-issues",
@@ -415,7 +413,7 @@ def test_prepare_effective_dispatch_separates_project_root_from_execution_cwd(
         body='winning project-root body\nrun_skill("/test child")',
     )
     _write_effective_skill(
-        execution_cwd / ".claude" / "skills",
+        cwd / ".claude" / "skills",
         "process-issues",
         capabilities=("run_skill",),
         execution_role="orchestrator",
@@ -426,7 +424,7 @@ def test_prepare_effective_dispatch_separates_project_root_from_execution_cwd(
     _, contract = prepare_effective_skill_dispatch(
         resolved_command="dispatch",
         project_root=project_root,
-        cwd=execution_cwd,
+        cwd=cwd,
         backend=get_backend("codex"),
         resolver=DefaultSkillResolver(),
         config=None,
@@ -435,7 +433,7 @@ def test_prepare_effective_dispatch_separates_project_root_from_execution_cwd(
     )
 
     assert contract.project_root == str(project_root.resolve())
-    assert contract.execution_cwd == str(execution_cwd.resolve())
+    assert contract.cwd == str(cwd.resolve())
     assert "winning project-root body" in contract.projected_artifacts["process-issues"]
     assert "wrong execution-cwd body" not in contract.projected_artifacts["process-issues"]
 
@@ -495,7 +493,7 @@ def test_winning_override_identity_policy_projection_and_digests_are_atomic(
         project,
         SkillExecutionRole.SESSION,
     )
-    context = SkillProjectionContext(execution_cwd=tmp_path, invocation=invocation)
+    context = SkillProjectionContext(cwd=tmp_path, invocation=invocation)
     document = project_agent_skill_document(invocation.root, context)
     contract = build_effective_skill_dispatch_contract("/target", context)
 

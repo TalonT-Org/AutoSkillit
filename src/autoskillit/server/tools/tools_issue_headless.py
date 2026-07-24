@@ -327,7 +327,7 @@ async def prepare_issue(
             try:
                 result = await tool_ctx.executor.run(
                     dispatch.resolved_command,
-                    str(dispatch.projection_context.execution_cwd),
+                    str(dispatch.projection_context.cwd),
                     add_dirs=dispatch.add_dirs,
                     expected_output_patterns=expected_output_patterns,
                     write_behavior=write_spec,
@@ -459,7 +459,7 @@ async def enrich_issues(
             try:
                 result = await tool_ctx.executor.run(
                     dispatch.resolved_command,
-                    str(dispatch.projection_context.execution_cwd),
+                    str(dispatch.projection_context.cwd),
                     add_dirs=dispatch.add_dirs,
                     expected_output_patterns=expected_output_patterns,
                     write_behavior=write_spec,

@@ -35,5 +35,5 @@ multi-level orchestrator. The bundled recipes implement issue → plan → workt
 - [research/audit-trail-format.md](research/audit-trail-format.md) — audit/ artifact structure and lifecycle
 - [research/codex-delivery-conformance.md](research/codex-delivery-conformance.md) — Codex recipe envelope/pull conformance and protected-host blocker
 - [audit/surface-freeze-checklist.md](audit/surface-freeze-checklist.md) — commands.py public import surface freeze checklist
-- [verification/review-pr-immunity.md](verification/review-pr-immunity.md) — deterministic review-pr capability projection matrix
+- [verification/review-pr-immunity.md](verification/review-pr-immunity.md) — deterministic review-pr projection matrix and live provider-attempt record
 - [phoropter/](phoropter/README.md) — phoropter lens framework: execution contracts, recipe blocks, synthesis strategies, and authoring guide

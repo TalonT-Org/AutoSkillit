@@ -228,14 +228,14 @@ def _prepare_direct_skill_dispatch(
     if compatibility_error is not None:
         return None, compatibility_error
 
-    execution_cwd = Path(cwd).resolve()
+    normalized_cwd = Path(cwd).resolve()
     backend = tool_ctx.backend
     projection_context = SkillProjectionContext(
-        execution_cwd=execution_cwd,
+        cwd=normalized_cwd,
         invocation=invocation,
         backend=backend,
         conventions=backend.conventions if backend is not None else None,
-        substitutions={"{{AUTOSKILLIT_TEMP}}": str(execution_cwd / ".autoskillit" / "temp")},
+        substitutions={"{{AUTOSKILLIT_TEMP}}": str(normalized_cwd / ".autoskillit" / "temp")},
         gating=False,
     )
     session_id = f"direct-{uuid4().hex[:12]}"

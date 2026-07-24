@@ -29,7 +29,6 @@ from autoskillit.workspace import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,
     SkillProjectionContext,
-    bundled_skills_dir,
     default_skill_resolver,
     parse_frontmatter_content,
     project_agent_skill_document,
@@ -42,7 +41,10 @@ _SKILL_MD_TRUNCATE = 1500
 
 
 async def triage_staleness(
-    stale_items: list[StaleItem], *, backend: CodingAgentBackend
+    stale_items: list[StaleItem],
+    *,
+    project_root: Path | None = None,
+    backend: CodingAgentBackend,
 ) -> list[dict[str, Any]]:
     """Use Haiku to determine if stale contracts changed meaningfully.
 
@@ -75,12 +77,12 @@ async def triage_staleness(
         return results
 
     # Pre-project all skill documents synchronously before any async task starts.
+    effective_project_root = (project_root or Path.cwd()).resolve()
     skill_md_cache: dict[str, str] = {}
     resolver = default_skill_resolver()
-    resolver._dir = bundled_skills_dir()
     for item in hash_items:
         if item.skill not in skill_md_cache:
-            skill_info = resolver.resolve(item.skill)
+            skill_info = resolver.resolve_effective(item.skill, effective_project_root)
             if (
                 skill_info is not None
                 and skill_info.invalid_reason is not None
@@ -116,7 +118,7 @@ async def triage_staleness(
                 skill_md_cache[item.skill] = project_agent_skill_document(
                     entry,
                     SkillProjectionContext(
-                        execution_cwd=Path.cwd(),
+                        cwd=effective_project_root,
                         catalog=catalog,
                         backend=backend,
                         conventions=backend.conventions,
@@ -130,13 +132,24 @@ async def triage_staleness(
                     exc_info=True,
                 )
 
-    results.extend(await _triage_batch(hash_items, skill_md_cache, backend=backend))
+    results.extend(
+        await _triage_batch(
+            hash_items,
+            skill_md_cache,
+            cwd=effective_project_root,
+            backend=backend,
+        )
+    )
 
     return results
 
 
 async def _triage_batch(
-    batch: list[StaleItem], skill_md_cache: dict[str, str], *, backend: CodingAgentBackend
+    batch: list[StaleItem],
+    skill_md_cache: dict[str, str],
+    *,
+    cwd: Path,
+    backend: CodingAgentBackend,
 ) -> list[dict[str, Any]]:
     """Triage one batch of hash_mismatch items with a single Haiku subprocess call.
 
@@ -195,7 +208,7 @@ async def _triage_batch(
         _triage_env["NO_COLOR"] = "1"
         result: SubprocessResult = await run_managed_async(
             cmd=triage_cmd,
-            cwd=Path.cwd(),
+            cwd=cwd,
             timeout=30.0,
             env=_triage_env,
             pty_mode=False,

@@ -145,11 +145,11 @@ def build_fresh_projection_context(
     invocation: EffectiveSkillInvocation,
 ) -> SkillProjectionContext:
     """Bind a fresh invocation to normalized backend-neutral projection authority."""
-    execution_cwd = Path(cwd).resolve()
+    normalized_cwd = Path(cwd).resolve()
     return SkillProjectionContext(
-        execution_cwd=execution_cwd,
+        cwd=normalized_cwd,
         invocation=invocation,
-        substitutions={"{{AUTOSKILLIT_TEMP}}": str(execution_cwd / ".autoskillit" / "temp")},
+        substitutions={"{{AUTOSKILLIT_TEMP}}": str(normalized_cwd / ".autoskillit" / "temp")},
         gating=False,
     )
 
@@ -270,7 +270,7 @@ def build_skill_session_contract(
         projected_digests=projected_digests,
         projection_version=projection_context.projection_version,
         project_root=str(project_root.resolve()),
-        execution_cwd=str(projection_context.execution_cwd.resolve()),
+        cwd=str(projection_context.cwd.resolve()),
         backend=backend.name,
         resolved_command=resolved_command,
         member_roles=member_roles,
@@ -400,7 +400,7 @@ def rehydrate_skill_invocation(
         execution_role=contract.execution_role,
     )
     projection_context = SkillProjectionContext(
-        execution_cwd=Path(contract.execution_cwd),
+        cwd=Path(contract.cwd),
         invocation=invocation,
         backend=backend,
         conventions=backend.conventions,
@@ -429,7 +429,7 @@ def validate_resumed_skill_contract(
         raise SkillContractError(
             f"Resume contract role must be session, got {contract.execution_role.value!r}"
         )
-    if contract.execution_cwd != str(Path(cwd).resolve()) or contract.project_root != str(
+    if contract.cwd != str(Path(cwd).resolve()) or contract.project_root != str(
         project_root.resolve()
     ):
         raise SkillContractError(

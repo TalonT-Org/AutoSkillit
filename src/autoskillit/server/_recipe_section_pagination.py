@@ -26,6 +26,16 @@ from autoskillit.server._recipe_delivery import (
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RecipeArtifactGeneration,
 )
+from autoskillit.server.recipe_section._contracts import (
+    PlannedRecipeSectionPage,
+    RecipeSectionBoundError,
+    RecipeSectionPageDescriptor,
+    RecipeSectionPagePlan,
+    RecipeSectionPaginationError,
+    RecipeSectionPlanManifest,
+    RecipeSectionRequestState,
+    SelectedRecipeSection,
+)
 from autoskillit.server.recipe_section._lifecycle import register_kitchen_retirement_callback
 from autoskillit.server.recipe_section._verification import (
     verify_finalized_recipe_section_plan,
@@ -65,112 +75,6 @@ __all__ = [
     "resolve_recipe_section_bound_bytes",
     "select_recipe_section",
 ]
-
-
-class RecipeSectionPaginationError(RuntimeError):
-    """A verified immutable page plan could not be established."""
-
-
-class RecipeSectionBoundError(RecipeSectionPaginationError):
-    """The captured request bound cannot fit one progress-making page."""
-
-
-@dataclass(frozen=True, slots=True)
-class RecipeSectionRequestState:
-    """One captured request admission and byte-bound decision."""
-
-    admitted: bool
-    recipe_section_bound_bytes: int
-
-
-@dataclass(frozen=True, slots=True)
-class SelectedRecipeSection:
-    """A registry-selected section whose value remains typed."""
-
-    section: str
-    definition: RecipeSectionDef
-    value: object
-    present: bool
-
-
-@dataclass(frozen=True, slots=True)
-class RecipeSectionPageDescriptor:
-    """One immutable page boundary in a page-plan manifest."""
-
-    content_format: str
-    page_content_sha256: str
-    byte_start: int | None = None
-    byte_end: int | None = None
-    byte_total: int | None = None
-    element_start: int | None = None
-    element_end: int | None = None
-    element_total: int | None = None
-    scalar_byte_start: int | None = None
-    scalar_byte_end: int | None = None
-    scalar_byte_total: int | None = None
-    element_index: int | None = None
-    element_sha256: str | None = None
-    fragment_index: int | None = None
-    fragment_count: int | None = None
-    fragment_byte_start: int | None = None
-    fragment_byte_end: int | None = None
-    fragment_byte_total: int | None = None
-
-    def wire_ranges(self) -> dict[str, int | str]:
-        values: dict[str, int | str | None] = {
-            "byte_start": self.byte_start,
-            "byte_end": self.byte_end,
-            "byte_total": self.byte_total,
-            "element_start": self.element_start,
-            "element_end": self.element_end,
-            "element_total": self.element_total,
-            "scalar_byte_start": self.scalar_byte_start,
-            "scalar_byte_end": self.scalar_byte_end,
-            "scalar_byte_total": self.scalar_byte_total,
-            "element_index": self.element_index,
-            "element_sha256": self.element_sha256,
-            "fragment_index": self.fragment_index,
-            "fragment_count": self.fragment_count,
-            "fragment_byte_start": self.fragment_byte_start,
-            "fragment_byte_end": self.fragment_byte_end,
-            "fragment_byte_total": self.fragment_byte_total,
-        }
-        return {name: value for name, value in values.items() if value is not None}
-
-
-@dataclass(frozen=True, slots=True)
-class _PlannedPage:
-    descriptor: RecipeSectionPageDescriptor
-    content: str
-
-
-@dataclass(frozen=True, slots=True)
-class RecipeSectionPlanManifest:
-    """Sole non-self-referential preimage for one page-plan digest."""
-
-    pagination_version: int
-    section_registry_sha256: str
-    pagination_policy_sha256: str
-    generation: RecipeArtifactGeneration
-    section: str
-    section_strategy: str
-    section_sha256: str
-    recipe_section_bound_bytes: int
-    pages: tuple[RecipeSectionPageDescriptor, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class RecipeSectionPagePlan:
-    """A finalized immutable manifest and its exact rendered pages."""
-
-    manifest: RecipeSectionPlanManifest
-    page_plan_sha256: str
-    rendered_pages: tuple[str, ...]
-    cache_weight_bytes: int
-
-    @property
-    def total_parts(self) -> int:
-        return len(self.rendered_pages)
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,7 +256,7 @@ def _render_candidate(
     selected: SelectedRecipeSection,
     generation: RecipeArtifactGeneration,
     section_sha256: str,
-    page: _PlannedPage,
+    page: PlannedRecipeSectionPage,
     part: int,
     total_parts: int,
     page_plan_sha256: str,
@@ -389,7 +293,7 @@ def _fits(
     selected: SelectedRecipeSection,
     generation: RecipeArtifactGeneration,
     section_sha256: str,
-    page: _PlannedPage,
+    page: PlannedRecipeSectionPage,
     part: int,
     total_width: int,
     terminal: bool,
@@ -417,9 +321,9 @@ def _raw_or_scalar_pages(
     total_width: int,
     bound_bytes: int,
     scalar: bool,
-) -> list[_PlannedPage]:
+) -> list[PlannedRecipeSectionPage]:
     offsets = _utf8_prefix_offsets(value)
-    pages: list[_PlannedPage] = []
+    pages: list[PlannedRecipeSectionPage] = []
     if not value:
         content = canonical_recipe_section_json("") if scalar else ""
         if scalar:
@@ -438,7 +342,7 @@ def _raw_or_scalar_pages(
                 byte_end=0,
                 byte_total=0,
             )
-        page = _PlannedPage(descriptor, content)
+        page = PlannedRecipeSectionPage(descriptor, content)
         if not _fits(
             selected=selected,
             generation=generation,
@@ -456,7 +360,7 @@ def _raw_or_scalar_pages(
     while start < len(value):
         part = len(pages)
 
-        def candidate_for(end: int) -> _PlannedPage:
+        def candidate_for(end: int) -> PlannedRecipeSectionPage:
             chunk = value[start:end]
             content = canonical_recipe_section_json(chunk) if scalar else chunk
             if scalar:
@@ -475,7 +379,7 @@ def _raw_or_scalar_pages(
                     byte_end=offsets[end],
                     byte_total=offsets[-1],
                 )
-            return _PlannedPage(descriptor, content)
+            return PlannedRecipeSectionPage(descriptor, content)
 
         terminal_candidate = candidate_for(len(value))
         if _fits(
@@ -493,7 +397,7 @@ def _raw_or_scalar_pages(
 
         low = start + 1
         high = len(value) - 1
-        accepted: _PlannedPage | None = None
+        accepted: PlannedRecipeSectionPage | None = None
         accepted_end = start
         while low <= high:
             end = (low + high) // 2
@@ -526,9 +430,9 @@ def _array_page(
     canonical_elements: list[str],
     start: int,
     end: int,
-) -> _PlannedPage:
+) -> PlannedRecipeSectionPage:
     content = "[" + ",".join(canonical_elements[start:end]) + "]"
-    return _PlannedPage(
+    return PlannedRecipeSectionPage(
         RecipeSectionPageDescriptor(
             content_format=definition.ordinary_content_format,
             page_content_sha256=_qualified_content_digest(content),
@@ -553,10 +457,10 @@ def _fragment_pages(
     total_width: int,
     fragment_width: int,
     bound_bytes: int,
-) -> list[_PlannedPage]:
+) -> list[PlannedRecipeSectionPage]:
     offsets = _utf8_prefix_offsets(canonical_element)
     element_sha256 = recipe_section_element_digest(element)
-    pages: list[_PlannedPage] = []
+    pages: list[PlannedRecipeSectionPage] = []
     start = 0
     assumed_fragment_count = (10**fragment_width) - 1
     content_format = selected.definition.oversized_content_format
@@ -566,7 +470,7 @@ def _fragment_pages(
         part = part_start + len(pages)
         fragment_index = len(pages)
 
-        def candidate_for(end: int) -> _PlannedPage:
+        def candidate_for(end: int) -> PlannedRecipeSectionPage:
             content = canonical_recipe_section_json(canonical_element[start:end])
             descriptor = RecipeSectionPageDescriptor(
                 content_format=content_format,
@@ -579,7 +483,7 @@ def _fragment_pages(
                 fragment_byte_end=offsets[end],
                 fragment_byte_total=offsets[-1],
             )
-            return _PlannedPage(descriptor, content)
+            return PlannedRecipeSectionPage(descriptor, content)
 
         if element_index + 1 == element_total:
             terminal_candidate = candidate_for(len(canonical_element))
@@ -602,7 +506,7 @@ def _fragment_pages(
             if element_index + 1 == element_total
             else len(canonical_element)
         )
-        accepted: _PlannedPage | None = None
+        accepted: PlannedRecipeSectionPage | None = None
         accepted_end = start
         while low <= high:
             end = (low + high) // 2
@@ -628,7 +532,7 @@ def _fragment_pages(
         start = accepted_end
     fragment_count = len(pages)
     return [
-        _PlannedPage(
+        PlannedRecipeSectionPage(
             replace(page.descriptor, fragment_count=fragment_count),
             page.content,
         )
@@ -645,7 +549,7 @@ def _array_pages(
     total_width: int,
     fragment_widths: Mapping[int, int],
     bound_bytes: int,
-) -> tuple[list[_PlannedPage], dict[int, int]]:
+) -> tuple[list[PlannedRecipeSectionPage], dict[int, int]]:
     canonical_elements = [canonical_recipe_section_json(value) for value in values]
     if not values:
         page = _array_page(
@@ -667,7 +571,7 @@ def _array_pages(
             raise RecipeSectionBoundError("recipe section bound cannot fit an empty array")
         return [page], {}
 
-    pages: list[_PlannedPage] = []
+    pages: list[PlannedRecipeSectionPage] = []
     observed_fragments: dict[int, int] = {}
     start = 0
     while start < len(values):
@@ -693,7 +597,7 @@ def _array_pages(
 
         low = start + 1
         high = len(values) - 1
-        accepted: _PlannedPage | None = None
+        accepted: PlannedRecipeSectionPage | None = None
         accepted_end = start
         while low <= high:
             end = (low + high) // 2
@@ -757,7 +661,7 @@ def _plan_pages(
     total_width: int,
     fragment_widths: Mapping[int, int],
     bound_bytes: int,
-) -> tuple[list[_PlannedPage], dict[int, int]]:
+) -> tuple[list[PlannedRecipeSectionPage], dict[int, int]]:
     strategy = selected.definition.section_strategy
     if strategy in {"raw", "scalar"}:
         if type(selected.value) is not str:
@@ -804,7 +708,7 @@ def build_recipe_section_page_plan(
     total_width = 1
     fragment_widths: dict[int, int] = {}
     seen_states: set[tuple[int, tuple[tuple[int, int], ...]]] = set()
-    pages: list[_PlannedPage] = []
+    pages: list[PlannedRecipeSectionPage] = []
     for _ in range(_convergence_iteration_ceiling()):
         state = (total_width, tuple(sorted(fragment_widths.items())))
         if state in seen_states:

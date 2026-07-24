@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
 
 from autoskillit.core import recipe_section_element_digest
 from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
-
-if TYPE_CHECKING:
-    from autoskillit.server._recipe_section_pagination import (
-        SelectedRecipeSection,
-        _PlannedPage,
-    )
+from autoskillit.server.recipe_section._contracts import (
+    PlannedRecipeSectionPage,
+    RecipeSectionPaginationError,
+    SelectedRecipeSection,
+)
 
 _PAGE_RANGE_FIELDS = frozenset(
     {
@@ -38,10 +36,6 @@ _PAGE_RANGE_FIELDS = frozenset(
 
 
 def _pagination_error(message: str, *, cause: Exception | None = None) -> Exception:
-    from autoskillit.server._recipe_section_pagination import (  # circular-break
-        RecipeSectionPaginationError,
-    )
-
     error = RecipeSectionPaginationError(message)
     if cause is not None:
         error.__cause__ = cause
@@ -66,7 +60,7 @@ def _content_digest(content: str) -> str:
 
 def _verify_reconstruction(
     selected: SelectedRecipeSection,
-    pages: list[_PlannedPage],
+    pages: list[PlannedRecipeSectionPage],
 ) -> None:
     strategy = selected.definition.section_strategy
     reconstructed: object
@@ -99,7 +93,7 @@ def _verify_reconstruction(
 
 def _verify_string_descriptors(
     selected: SelectedRecipeSection,
-    pages: list[_PlannedPage],
+    pages: list[PlannedRecipeSectionPage],
 ) -> None:
     strategy = selected.definition.section_strategy
     value = selected.value
@@ -154,7 +148,7 @@ def _verify_string_descriptors(
 
 def _verify_array_descriptors(
     selected: SelectedRecipeSection,
-    pages: list[_PlannedPage],
+    pages: list[PlannedRecipeSectionPage],
 ) -> None:
     values = selected.value
     if type(values) is not list:
@@ -276,7 +270,7 @@ def verify_finalized_recipe_section_plan(
     *,
     selected: SelectedRecipeSection,
     generation: RecipeArtifactGeneration,
-    pages: list[_PlannedPage],
+    pages: list[PlannedRecipeSectionPage],
     rendered_pages: tuple[str, ...],
     page_plan_sha256: str,
     bound_bytes: int,

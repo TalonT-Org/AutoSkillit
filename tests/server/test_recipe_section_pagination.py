@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import math
 import subprocess
 import sys
 from dataclasses import replace
@@ -18,9 +19,13 @@ from autoskillit.core import (
     recipe_section_plan_digest,
 )
 from autoskillit.server import _recipe_section_pagination as pagination
-from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
+from autoskillit.server._recipe_delivery import (
+    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
+    RecipeArtifactGeneration,
+)
 from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
+    RecipeSectionPaginationError,
     build_recipe_section_page_plan,
     get_or_build_recipe_section_page_plan,
     render_recipe_section_page,
@@ -384,6 +389,89 @@ def test_production_like_ten_thousand_byte_bound_is_honored() -> None:
 
     assert len(pages) > 1
     assert _reconstruct(pages) == values
+
+
+@pytest.mark.parametrize("strategy", ["raw", "scalar", "array", "fragment"])
+def test_candidate_sizing_uses_binary_search_scale_oracle_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    strategy: str,
+) -> None:
+    if strategy == "raw":
+        payload = _payload(content="r" * 50_000)
+        section = "content"
+        search_space = 50_000
+    elif strategy == "scalar":
+        payload = _payload(ingredients_table="s" * 50_000)
+        section = "ingredients_table"
+        search_space = 50_000
+    elif strategy == "array":
+        values = [f"value-{index:04d}-" + ("a" * 40) for index in range(2_000)]
+        payload = _payload(warnings=values)
+        section = "warnings"
+        search_space = len(values)
+    else:
+        fragment = "f" * 50_000
+        payload = _payload(warnings=[fragment])
+        section = "warnings"
+        search_space = len(fragment)
+
+    oracle_calls = 0
+    original_fits = pagination._fits
+
+    def _counted_fits(**kwargs: Any) -> bool:
+        nonlocal oracle_calls
+        oracle_calls += 1
+        return original_fits(**kwargs)
+
+    monkeypatch.setattr(pagination, "_fits", _counted_fits)
+
+    plan = _build(payload, section, bound=1_000)
+
+    binary_search_scale = math.ceil(math.log2(search_space + 1))
+    assert oracle_calls <= 6 * plan.total_parts * (binary_search_scale + 2)
+    if strategy == "fragment":
+        assert {json.loads(page)["content_format"] for page in plan.rendered_pages} == {
+            "json-element-fragment"
+        }
+
+
+def test_convergence_ceiling_is_derived_from_artifact_policy() -> None:
+    max_count_digits = len(str(RECIPE_ARTIFACT_MAX_BLOB_BYTES))
+
+    assert pagination._convergence_iteration_ceiling() == 1 + (
+        (RECIPE_ARTIFACT_MAX_BLOB_BYTES + 1) * (max_count_digits - 1)
+    )
+    assert pagination._convergence_iteration_ceiling() > 32
+
+
+def test_final_digest_injection_revalidates_descriptor_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_render = pagination._render_candidate
+
+    def _corrupt_final_boundary(**kwargs: Any) -> str:
+        rendered = original_render(**kwargs)
+        if (
+            kwargs["page_plan_sha256"] != pagination._PLAN_DIGEST_PLACEHOLDER
+            and kwargs["part"] == 1
+        ):
+            response = json.loads(rendered)
+            response["byte_start"] += 1
+            return json.dumps(
+                response,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        return rendered
+
+    monkeypatch.setattr(pagination, "_render_candidate", _corrupt_final_boundary)
+
+    with pytest.raises(
+        RecipeSectionPaginationError,
+        match="changed plan identity or boundaries",
+    ):
+        _build(_payload(content="boundary-check-" * 500), "content", bound=1_000)
 
 
 def test_page_and_fragment_indices_cross_two_digit_boundaries() -> None:

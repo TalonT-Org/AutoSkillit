@@ -18,6 +18,8 @@ Sub-package: tools/ (see tools/AGENTS.md).
 | `_response_conformance.py` | Post-FastMCP-conversion conformance gate for registered string tool responses |
 | `_recipe_delivery.py` | Unified recipe finalization, content-addressed generations, pull integrity, and receipt completion |
 | `_recipe_section_pagination.py` | Typed recipe-section selection, deterministic byte-bounded page planning, rendering, and verified-plan caching |
+| `recipe_section/__init__.py` | Package marker for focused recipe-section planning support |
+| `recipe_section/_verification.py` | Post-digest descriptor, reconstruction, ordering, and rendered-bound invariant proof |
 | `_session_type.py` | Session-type tag visibility dispatcher — controls which tools are visible per session type |
 | `_state.py` | Mutable singleton state and context accessor functions (`_ctx` sentinel, `get_ctx`, `set_ctx`) |
 | `_subprocess.py` | Subprocess execution helpers for MCP tools |

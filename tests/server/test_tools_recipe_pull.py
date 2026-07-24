@@ -6,6 +6,7 @@ import hashlib
 import json
 import shutil
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -30,6 +31,8 @@ from autoskillit.execution import (
 )
 from autoskillit.execution.backends import CodexBackend
 from autoskillit.recipe import load_and_validate
+from autoskillit.server import _recipe_delivery as recipe_delivery
+from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server._recipe_delivery import (
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_BODY_END,
@@ -50,7 +53,13 @@ from autoskillit.server._recipe_delivery import (
     recipe_recreation_producers,
     retire_recipe_artifacts,
 )
-from autoskillit.server._recipe_section_pagination import resolve_recipe_section_bound_bytes
+from autoskillit.server._recipe_section_pagination import (
+    PagePlanCache,
+    RecipeSectionPaginationError,
+    get_or_build_recipe_section_page_plan,
+    resolve_recipe_section_bound_bytes,
+    select_recipe_section,
+)
 from autoskillit.server._response_budget import enforce_response_budget
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 
@@ -438,6 +447,96 @@ def test_kitchen_retirement_removes_only_that_namespace(tmp_path: Path) -> None:
     )
 
 
+def test_kitchen_retirement_evicts_only_matching_page_plans(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    cache = PagePlanCache()
+    monkeypatch.setattr(pagination, "_PAGE_PLAN_CACHE", cache)
+    generation = _persist(tmp_path)
+    selected = select_recipe_section(_payload("cached content"), "content")
+    common = {
+        "generation": generation,
+        "selected": selected,
+        "recipe_section_bound_bytes": 1_000,
+    }
+    retired = get_or_build_recipe_section_page_plan(
+        kitchen_id="kitchen-test",
+        **common,
+    )
+    retained = get_or_build_recipe_section_page_plan(
+        kitchen_id="other-kitchen",
+        **common,
+    )
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="kitchen-test") is True
+
+    assert get_or_build_recipe_section_page_plan(kitchen_id="other-kitchen", **common) is retained
+    assert (
+        get_or_build_recipe_section_page_plan(kitchen_id="kitchen-test", **common) is not retired
+    )
+
+
+def test_cold_kitchen_retirement_does_not_create_page_plan_cache(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(pagination, "_PAGE_PLAN_CACHE", None)
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="cold-kitchen") is True
+    assert pagination._PAGE_PLAN_CACHE is None
+
+
+def test_kitchen_retirement_evicts_after_generation_lock_exits(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    lock_active = False
+    original_lock = recipe_delivery._generation_lock
+
+    @contextmanager
+    def _tracked_lock(temp_dir: Path, *, exclusive: bool):
+        nonlocal lock_active
+        with original_lock(temp_dir, exclusive=exclusive):
+            lock_active = True
+            try:
+                yield
+            finally:
+                lock_active = False
+
+    evicted: list[str] = []
+
+    def _evict(kitchen_id: str) -> None:
+        assert lock_active is False
+        evicted.append(kitchen_id)
+
+    monkeypatch.setattr(recipe_delivery, "_generation_lock", _tracked_lock)
+    monkeypatch.setattr(pagination, "evict_kitchen", _evict)
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="lock-kitchen") is True
+    assert evicted == ["lock-kitchen"]
+
+
+def test_kitchen_retirement_eviction_is_success_only_and_nonthrowing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    evict = MagicMock(side_effect=RuntimeError("cache unavailable"))
+    monkeypatch.setattr(pagination, "evict_kitchen", evict)
+
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="successful-kitchen") is True
+    evict.assert_called_once_with("successful-kitchen")
+
+    evict.reset_mock()
+    monkeypatch.setattr(
+        recipe_delivery,
+        "atomic_write",
+        MagicMock(side_effect=OSError("retirement failed")),
+    )
+    assert retire_recipe_artifacts(tmp_path, kitchen_id="failed-kitchen") is False
+    evict.assert_not_called()
+
+
 @pytest.mark.parametrize("kitchen_id", [".", ".."])
 def test_kitchen_retirement_rejects_dot_path_components(tmp_path: Path, kitchen_id: str) -> None:
     sentinel = tmp_path / "unrelated-temp-data"
@@ -762,6 +861,48 @@ def _assert_section_response_bound(rendered: str, tool_ctx) -> None:
         CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit,
     )
     assert len(rendered.encode("utf-8")) <= bound
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    [
+        (
+            RecipeSectionPaginationError("forced nonconvergence"),
+            "recipe_section_pagination_nonconvergent",
+        ),
+        (RuntimeError("forced planner failure"), "recipe_section_internal_error"),
+    ],
+)
+async def test_pull_tool_maps_planner_failures_to_exact_bounded_codes(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_ctx_kitchen_open,
+    failure: Exception,
+    expected_code: str,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = f"planner-failure-{expected_code}"
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload(),
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+
+    def _fail_plan(**_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_recipe.get_or_build_recipe_section_page_plan",
+        _fail_plan,
+    )
+
+    rendered = await get_recipe_section(section="content", **kwargs)
+
+    _assert_section_response_bound(rendered, tool_ctx_kitchen_open)
+    assert json.loads(rendered) == {"error": expected_code, "success": False}
 
 
 @pytest.mark.parametrize(

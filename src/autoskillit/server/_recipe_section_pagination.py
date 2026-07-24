@@ -22,13 +22,28 @@ from autoskillit.core import (
     recipe_section_element_digest,
     recipe_section_plan_digest,
 )
-from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
+from autoskillit.server._recipe_delivery import (
+    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
+    RecipeArtifactGeneration,
+)
+from autoskillit.server.recipe_section._verification import (
+    verify_finalized_recipe_section_plan,
+)
 
 logger = get_logger(__name__)
 
 PAGE_PLAN_CACHE_MAX_ENTRIES = 8
 PAGE_PLAN_CACHE_MAX_BYTES = 32 * 1024 * 1024
 _PLAN_DIGEST_PLACEHOLDER = "sha256:" + ("0" * 64)
+
+
+def _convergence_iteration_ceiling() -> int:
+    """Derive the monotone width-growth ceiling from artifact policy."""
+    max_count_digits = len(str(RECIPE_ARTIFACT_MAX_BLOB_BYTES))
+    # One total width plus at most one fragment width per persisted byte;
+    # every nonterminal pass grows at least one width by one digit.
+    return 1 + (RECIPE_ARTIFACT_MAX_BLOB_BYTES + 1) * (max_count_digits - 1)
+
 
 __all__ = [
     "PAGE_PLAN_CACHE_MAX_BYTES",
@@ -231,7 +246,10 @@ def _page_plan_cache() -> PagePlanCache:
 def evict_kitchen(kitchen_id: str) -> None:
     """Best-effort idempotent eviction for a retired kitchen namespace."""
     try:
-        _page_plan_cache().evict_kitchen(kitchen_id)
+        with _PAGE_PLAN_CACHE_LOCK:
+            cache = _PAGE_PLAN_CACHE
+        if cache is not None:
+            cache.evict_kitchen(kitchen_id)
     except Exception:
         logger.warning(
             "recipe_section_cache_eviction_failed", kitchen_id=kitchen_id, exc_info=True
@@ -752,37 +770,6 @@ def _plan_pages(
     raise ValueError(f"unknown recipe section strategy: {strategy}")
 
 
-def _verify_reconstruction(
-    selected: SelectedRecipeSection,
-    pages: list[_PlannedPage],
-) -> None:
-    strategy = selected.definition.section_strategy
-    reconstructed: object
-    if strategy == "raw":
-        reconstructed = "".join(page.content for page in pages)
-    elif strategy == "scalar":
-        reconstructed = "".join(json.loads(page.content) for page in pages)
-    else:
-        reconstructed_values: list[object] = []
-        index = 0
-        while index < len(pages):
-            page = pages[index]
-            descriptor = page.descriptor
-            if descriptor.content_format == "json-array-page":
-                reconstructed_values.extend(json.loads(page.content))
-                index += 1
-                continue
-            count = descriptor.fragment_count or 0
-            canonical = "".join(
-                json.loads(pages[index + offset].content) for offset in range(count)
-            )
-            reconstructed_values.append(json.loads(canonical))
-            index += count
-        reconstructed = reconstructed_values
-    if reconstructed != selected.value:
-        raise RecipeSectionPaginationError("recipe section reconstruction mismatch")
-
-
 def build_recipe_section_page_plan(
     *,
     kitchen_id: str,
@@ -799,7 +786,7 @@ def build_recipe_section_page_plan(
     fragment_widths: dict[int, int] = {}
     seen_states: set[tuple[int, tuple[tuple[int, int], ...]]] = set()
     pages: list[_PlannedPage] = []
-    for _ in range(32):
+    for _ in range(_convergence_iteration_ceiling()):
         state = (total_width, tuple(sorted(fragment_widths.items())))
         if state in seen_states:
             raise RecipeSectionPaginationError("recipe section pagination did not converge")
@@ -828,7 +815,6 @@ def build_recipe_section_page_plan(
     else:
         raise RecipeSectionPaginationError("recipe section pagination did not converge")
 
-    _verify_reconstruction(selected, pages)
     manifest = RecipeSectionPlanManifest(
         pagination_version=RECIPE_SECTION_PAGINATION_VERSION,
         section_registry_sha256=RECIPE_SECTION_REGISTRY_DIGEST,
@@ -854,10 +840,17 @@ def build_recipe_section_page_plan(
         )
         for index, page in enumerate(pages)
     )
-    if any(
-        len(rendered.encode("utf-8")) > recipe_section_bound_bytes for rendered in rendered_pages
-    ):
-        raise RecipeSectionPaginationError("final recipe section page exceeds captured bound")
+    verify_finalized_recipe_section_plan(
+        selected=selected,
+        generation=generation,
+        pages=pages,
+        rendered_pages=rendered_pages,
+        page_plan_sha256=page_plan_sha256,
+        bound_bytes=recipe_section_bound_bytes,
+        pagination_version=RECIPE_SECTION_PAGINATION_VERSION,
+        section_registry_sha256=RECIPE_SECTION_REGISTRY_DIGEST,
+        section_sha256=section_sha256,
+    )
     cache_weight = sum(len(rendered.encode("utf-8")) for rendered in rendered_pages)
     cache_weight += len(canonical_recipe_section_json(manifest).encode("utf-8"))
     cache_weight += sum(len(page.content.encode("utf-8")) for page in pages)

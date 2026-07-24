@@ -738,6 +738,114 @@ def test_cache_entry_limit_evicts_oldest_plan() -> None:
     assert rebuilt is not first
 
 
+def test_cache_rejects_a_single_plan_over_its_byte_limit() -> None:
+    selected = select_recipe_section(_payload(content="overweight"), "content")
+    generation = _generation()
+    plan = _build(_payload(content="overweight"), "content", bound=1_000)
+    key = pagination._cache_key(
+        kitchen_id="kitchen-overweight",
+        generation=generation,
+        selected=selected,
+        recipe_section_bound_bytes=1_000,
+    )
+    cache = PagePlanCache(max_bytes=plan.cache_weight_bytes - 1)
+
+    cache.put(key, plan)
+
+    assert cache.get(key) is None
+    assert cache._weight_bytes == 0
+
+
+def test_cache_byte_limit_evicts_oldest_plan() -> None:
+    selected = select_recipe_section(_payload(content="byte eviction"), "content")
+    generation = _generation()
+    plan = dataclasses.replace(
+        _build(_payload(content="byte eviction"), "content", bound=1_000),
+        cache_weight_bytes=10,
+    )
+    keys = [
+        pagination._cache_key(
+            kitchen_id=f"kitchen-{index}",
+            generation=generation,
+            selected=selected,
+            recipe_section_bound_bytes=1_000,
+        )
+        for index in range(3)
+    ]
+    cache = PagePlanCache(max_entries=10, max_bytes=20)
+
+    for key in keys:
+        cache.put(key, plan)
+
+    assert cache.get(keys[0]) is None
+    assert cache.get(keys[1]) is plan
+    assert cache.get(keys[2]) is plan
+    assert cache._weight_bytes == 20
+
+
+def test_cache_replacement_subtracts_the_previous_plan_weight() -> None:
+    selected = select_recipe_section(_payload(content="replacement"), "content")
+    generation = _generation()
+    base_plan = _build(_payload(content="replacement"), "content", bound=1_000)
+    first = dataclasses.replace(base_plan, cache_weight_bytes=7)
+    replacement = dataclasses.replace(base_plan, cache_weight_bytes=3)
+    other = dataclasses.replace(base_plan, cache_weight_bytes=7)
+    key = pagination._cache_key(
+        kitchen_id="kitchen-replacement",
+        generation=generation,
+        selected=selected,
+        recipe_section_bound_bytes=1_000,
+    )
+    other_key = pagination._cache_key(
+        kitchen_id="kitchen-other",
+        generation=generation,
+        selected=selected,
+        recipe_section_bound_bytes=1_000,
+    )
+    cache = PagePlanCache(max_entries=10, max_bytes=10)
+
+    cache.put(key, first)
+    cache.put(key, replacement)
+    cache.put(other_key, other)
+
+    assert cache.get(key) is replacement
+    assert cache.get(other_key) is other
+    assert cache._weight_bytes == 10
+
+
+def test_cache_kitchen_eviction_subtracts_every_matching_plan_weight() -> None:
+    selected = select_recipe_section(_payload(content="kitchen eviction"), "content")
+    generation = _generation()
+    plan = dataclasses.replace(
+        _build(_payload(content="kitchen eviction"), "content", bound=1_000),
+        cache_weight_bytes=5,
+    )
+    retired_keys = [
+        pagination._cache_key(
+            kitchen_id="retired-kitchen",
+            generation=generation,
+            selected=selected,
+            recipe_section_bound_bytes=bound,
+        )
+        for bound in (1_000, 1_001)
+    ]
+    retained_key = pagination._cache_key(
+        kitchen_id="retained-kitchen",
+        generation=generation,
+        selected=selected,
+        recipe_section_bound_bytes=1_000,
+    )
+    cache = PagePlanCache(max_entries=10, max_bytes=20)
+    for key in (*retired_keys, retained_key):
+        cache.put(key, plan)
+
+    cache.evict_kitchen("retired-kitchen")
+
+    assert all(cache.get(key) is None for key in retired_keys)
+    assert cache.get(retained_key) is plan
+    assert cache._weight_bytes == plan.cache_weight_bytes
+
+
 def test_cross_process_plan_and_rendering_are_deterministic() -> None:
     payload = _payload(warnings=["alpha", "snowman-☃", 'quote-"', "slash-\\"] * 20)
     local = _build(payload, "warnings", bound=1_000)

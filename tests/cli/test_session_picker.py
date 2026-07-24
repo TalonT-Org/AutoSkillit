@@ -66,8 +66,12 @@ def test_pick_session_filters_cook(
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     entries = (
-        _summary("cook-uuid-1"),
-        _summary("order-uuid-1", first_prompt="Kitchen's open! Hello"),
+        _summary("cook-uuid-1", launch_id="lid-cook"),
+        _summary(
+            "order-uuid-1",
+            launch_id="lid-order",
+            first_prompt="Kitchen's open! Hello",
+        ),
     )
 
     write_registry_entry(project_dir, "lid-cook", "cook", None)
@@ -89,8 +93,12 @@ def test_pick_session_filters_order(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     entries = (
-        _summary("cook-uuid-1"),
-        _summary("order-uuid-1", first_prompt="Kitchen's open! Hello"),
+        _summary("cook-uuid-1", launch_id="lid-cook"),
+        _summary(
+            "order-uuid-1",
+            launch_id="lid-order",
+            first_prompt="Kitchen's open! Hello",
+        ),
     )
 
     write_registry_entry(project_dir, "lid-cook", "cook", None)
@@ -190,7 +198,7 @@ def test_codex_hint_classifies_unregistered_session_as_cook() -> None:
     assert _classify_session(entry, {}) == "cook"
 
 
-def test_claude_registry_bridge_precedes_greeting_hint(tmp_path: Path) -> None:
+def test_launch_id_registry_precedes_greeting_hint(tmp_path: Path) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     write_registry_entry(project_dir, "fedcba9876543210", "cook", None)
@@ -198,7 +206,11 @@ def test_claude_registry_bridge_precedes_greeting_hint(tmp_path: Path) -> None:
     from autoskillit.core.runtime.session_registry import bridge_claude_session_id
 
     bridge_claude_session_id(project_dir, "fedcba9876543210", "claude-uuid")
-    entry = _summary("claude-uuid", first_prompt="Kitchen's open!")
+    entry = _summary(
+        "claude-uuid",
+        launch_id="fedcba9876543210",
+        first_prompt="Kitchen's open!",
+    )
 
     assert _classify_session(entry, read_registry(project_dir)) == "cook"
 

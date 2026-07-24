@@ -5,11 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
-    SessionLocator,
-    SessionSummary,
-)
+from autoskillit.core import SessionLocator, SessionSummary
 
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
@@ -54,14 +50,9 @@ def _registry_entry(
     summary: SessionSummary,
     registry: _Registry,
 ) -> Mapping[str, object] | None:
-    if summary.launch_id is not None:
-        return registry.get(summary.launch_id)
-    if summary.backend_name != AGENT_BACKEND_CLAUDE_CODE:
+    if summary.launch_id is None:
         return None
-    for entry in registry.values():
-        if entry.get("claude_session_id") == summary.session_id:
-            return entry
-    return None
+    return registry.get(summary.launch_id)
 
 
 def _classify_session(summary: SessionSummary, registry: _Registry) -> str:

@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import SessionLocator, SessionSummary
+from autoskillit.core import (
+    SessionLocator,
+    SessionSummary,
+    bridge_claude_session_id,
+    write_registry_entry,
+)
 from autoskillit.execution.backends import ClaudeSessionLocator
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -17,6 +22,8 @@ class TestClaudeSessionLocator:
     ) -> None:
         project = tmp_path / "project"
         project.mkdir()
+        write_registry_entry(project, "0123456789abcdef", "cook", None)
+        bridge_claude_session_id(project, "0123456789abcdef", "claude-1")
         fake_home = tmp_path / "home"
         index_dir = fake_home / ".claude" / "projects" / "-ignored"
         index_dir.mkdir(parents=True)
@@ -46,7 +53,7 @@ class TestClaudeSessionLocator:
             SessionSummary(
                 backend_name="claude-code",
                 session_id="claude-1",
-                launch_id=None,
+                launch_id="0123456789abcdef",
                 cwd=str(project.resolve()),
                 first_prompt="What's the issue?",
                 summary="",

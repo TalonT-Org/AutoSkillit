@@ -57,6 +57,7 @@ from autoskillit.core import (
     fast_loads,
     load_yaml,
     pkg_root,
+    read_registry,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
@@ -145,6 +146,15 @@ class ClaudeSessionLocator(SessionLocator):
         if not isinstance(entries, list):
             return ()
 
+        launch_ids_by_session_id = {
+            claude_session_id: launch_id
+            for launch_id, registry_entry in read_registry(Path(normalized_cwd)).items()
+            if isinstance(registry_entry, Mapping)
+            and isinstance(
+                claude_session_id := registry_entry.get("claude_session_id"),
+                str,
+            )
+        }
         summaries: list[SessionSummary] = []
         for entry in entries:
             if not isinstance(entry, dict) or entry.get("isSidechain"):
@@ -168,7 +178,7 @@ class ClaudeSessionLocator(SessionLocator):
                 SessionSummary(
                     backend_name=AGENT_BACKEND_CLAUDE_CODE,
                     session_id=session_id,
-                    launch_id=None,
+                    launch_id=launch_ids_by_session_id.get(session_id),
                     cwd=resolved_entry_cwd,
                     first_prompt=normalized_prompt,
                     summary=summary if isinstance(summary, str) else "",

@@ -21,7 +21,7 @@ from ._type_backend import BackendConventions
 from ._type_constants import SKILL_COMMAND_PREFIX
 from ._type_constants_env import HEADLESS_ENV_VAR, SESSION_TYPE_ENV_VAR
 from ._type_constants_registries import FLEET_ERROR_CODES
-from ._type_enums import SessionType, SkillSource
+from ._type_enums import SessionType, SkillSource, WitnessKind
 from ._type_protocols_workspace import SkillResolver
 from ._type_skill_contract import SkillSourceRef
 
@@ -161,6 +161,85 @@ def _validate_git_revision(value: str) -> None:
 def _validate_freshness_policy(value: str) -> None:
     if not isinstance(value, str) or value not in _FRESHNESS_POLICIES:
         _raise_invalid("invalid_freshness_policy")
+    if value != "verify_on_version_or_configuration_change":
+        _raise_invalid("unsupported_coverage_freshness_policy")
+
+
+def _validate_expired_idempotency_tombstone(tombstone: Any) -> None:
+    descriptor = tombstone.original_descriptor
+    input_reservations = descriptor.input_reservations
+    batch = descriptor.batch
+    if (
+        tombstone.namespace != descriptor.idempotency_namespace
+        or tombstone.reservation_key.idempotency_namespace != tombstone.namespace
+        or len(input_reservations) != 1
+        or tombstone.reservation_key != input_reservations[0].key
+        or tombstone.reservation_key.batch_id != batch.batch_id
+        or tombstone.original_terminal_decision.window_epoch_id
+        != tombstone.reservation_key.window_epoch_id
+        or tombstone.original_terminal_decision.snapshot_sequence != descriptor.snapshot_sequence
+    ):
+        _raise_invalid("idempotency_tombstone_identity_mismatch")
+    witness = tombstone.expiry_witness
+    if (
+        witness.kind is not WitnessKind.IDEMPOTENCY_EXPIRY
+        or witness.window_epoch_id != tombstone.reservation_key.window_epoch_id
+        or witness.window_epoch_number != tombstone.reservation_key.window_epoch_number
+        or witness.snapshot_sequence != descriptor.snapshot_sequence
+        or witness.request_id != batch.request_id
+        or witness.batch_id != batch.batch_id
+        or witness.representation_revision != batch.manifest.representation_revision
+        or witness.representation_binding_id != batch.manifest.representation_binding_id
+        or witness.occurrence_ids != batch.occurrence_ids
+    ):
+        _raise_invalid("idempotency_tombstone_witness_mismatch")
+
+
+def _validate_context_admission_state_metadata(
+    aggregate_revision: Any,
+    admission_sequence: Any,
+    processed_events: tuple[Any, ...],
+    idempotency_records: tuple[Any, ...],
+    expired_tombstones: tuple[Any, ...],
+    closed_epochs: tuple[Any, ...],
+) -> None:
+    if len({record.event_id for record in processed_events}) != len(processed_events):
+        _raise_invalid("duplicate_processed_event")
+    processed_revisions = tuple(record.aggregate_revision.value for record in processed_events)
+    processed_sequences = tuple(record.admission_sequence.value for record in processed_events)
+    if (
+        len(set(processed_revisions)) != len(processed_revisions)
+        or any(revision > aggregate_revision.value for revision in processed_revisions)
+        or any(sequence > admission_sequence.value for sequence in processed_sequences)
+        or any(
+            later < earlier for earlier, later in zip(processed_sequences, processed_sequences[1:])
+        )
+    ):
+        _raise_invalid("invalid_processed_event_coordinates")
+    idempotency_keys = tuple(
+        (record.namespace, record.reservation_key) for record in idempotency_records
+    )
+    if len(set(idempotency_keys)) != len(idempotency_keys):
+        _raise_invalid("duplicate_idempotency_owner")
+    processed_by_event_id = {record.event_id: record for record in processed_events}
+    if any(
+        record.publication_revision.value > aggregate_revision.value
+        or (processed := processed_by_event_id.get(record.owning_event_id)) is None
+        or record.publication_revision != processed.aggregate_revision
+        for record in idempotency_records
+    ):
+        _raise_invalid("invalid_idempotency_publication_coordinates")
+    tombstone_keys = tuple(
+        (record.namespace, record.reservation_key) for record in expired_tombstones
+    )
+    if len(set(tombstone_keys)) != len(tombstone_keys):
+        _raise_invalid("duplicate_idempotency_tombstone")
+    epoch_keys = tuple(
+        (audit.snapshot.window_epoch_id, audit.snapshot.window_epoch_number)
+        for audit in closed_epochs
+    )
+    if len(set(epoch_keys)) != len(epoch_keys):
+        _raise_invalid("duplicate_closed_epoch")
 
 
 def _matches_declared_type(value: object, declared_type: object) -> bool:

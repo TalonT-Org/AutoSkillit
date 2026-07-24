@@ -38,6 +38,8 @@ from ._type_helpers import (
     _raise_invalid,
     _validate_bounded_text,
     _validate_canonical_tuple,
+    _validate_context_admission_state_metadata,
+    _validate_expired_idempotency_tombstone,
     _validate_freshness_policy,
     _validate_git_revision,
     _validate_iso_date,
@@ -879,33 +881,7 @@ class ExpiredIdempotencyTombstone(_ContractValue):
     original_terminal_decision: AdmissionDecision
 
     def __post_init__(self) -> None:
-        input_reservations = self.original_descriptor.input_reservations
-        batch = self.original_descriptor.batch
-        if (
-            self.namespace != self.original_descriptor.idempotency_namespace
-            or self.reservation_key.idempotency_namespace != self.namespace
-            or len(input_reservations) != 1
-            or self.reservation_key != input_reservations[0].key
-            or self.reservation_key.batch_id != batch.batch_id
-            or self.original_terminal_decision.window_epoch_id
-            != self.reservation_key.window_epoch_id
-            or self.original_terminal_decision.snapshot_sequence
-            != self.original_descriptor.snapshot_sequence
-        ):
-            _raise_invalid("idempotency_tombstone_identity_mismatch")
-        witness = self.expiry_witness
-        if (
-            witness.kind is not WitnessKind.IDEMPOTENCY_EXPIRY
-            or witness.window_epoch_id != self.reservation_key.window_epoch_id
-            or witness.window_epoch_number != self.reservation_key.window_epoch_number
-            or witness.snapshot_sequence != self.original_descriptor.snapshot_sequence
-            or witness.request_id != batch.request_id
-            or witness.batch_id != batch.batch_id
-            or witness.representation_revision != batch.manifest.representation_revision
-            or witness.representation_binding_id != batch.manifest.representation_binding_id
-            or witness.occurrence_ids != batch.occurrence_ids
-        ):
-            _raise_invalid("idempotency_tombstone_witness_mismatch")
+        _validate_expired_idempotency_tombstone(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1059,8 +1035,6 @@ class CoverageEvidence(_ContractValue):
         _validate_git_revision(self.tested_revision)
         _validate_iso_date(self.checked_at)
         _validate_freshness_policy(self.freshness_policy)
-        if self.freshness_policy != "verify_on_version_or_configuration_change":
-            _raise_invalid("unsupported_coverage_freshness_policy")
         _validate_bounded_text(
             self.source_locator,
             "invalid_source_locator",
@@ -1721,52 +1695,6 @@ class IdempotencyRecord(_ContractValue):
             _raise_invalid("idempotency_record_identity_mismatch")
 
 
-def _validate_state_metadata(
-    aggregate_revision: AggregateRevision,
-    admission_sequence: AdmissionSequence,
-    processed_events: tuple[ProcessedEventRecord, ...],
-    idempotency_records: tuple[IdempotencyRecord, ...],
-    expired_tombstones: tuple[ExpiredIdempotencyTombstone, ...],
-    closed_epochs: tuple[ClosedEpochAudit, ...],
-) -> None:
-    if len({record.event_id for record in processed_events}) != len(processed_events):
-        _raise_invalid("duplicate_processed_event")
-    processed_revisions = tuple(record.aggregate_revision.value for record in processed_events)
-    processed_sequences = tuple(record.admission_sequence.value for record in processed_events)
-    if (
-        len(set(processed_revisions)) != len(processed_revisions)
-        or any(revision > aggregate_revision.value for revision in processed_revisions)
-        or any(sequence > admission_sequence.value for sequence in processed_sequences)
-        or any(
-            later < earlier for earlier, later in zip(processed_sequences, processed_sequences[1:])
-        )
-    ):
-        _raise_invalid("invalid_processed_event_coordinates")
-    idempotency_keys = tuple(
-        (record.namespace, record.reservation_key) for record in idempotency_records
-    )
-    if len(set(idempotency_keys)) != len(idempotency_keys):
-        _raise_invalid("duplicate_idempotency_owner")
-    processed_by_event_id = {record.event_id: record for record in processed_events}
-    for record in idempotency_records:
-        processed = processed_by_event_id.get(record.owning_event_id)
-        if record.publication_revision.value > aggregate_revision.value or (
-            processed is None or record.publication_revision != processed.aggregate_revision
-        ):
-            _raise_invalid("invalid_idempotency_publication_coordinates")
-    tombstone_keys = tuple(
-        (record.namespace, record.reservation_key) for record in expired_tombstones
-    )
-    if len(set(tombstone_keys)) != len(tombstone_keys):
-        _raise_invalid("duplicate_idempotency_tombstone")
-    epoch_keys = tuple(
-        (audit.snapshot.window_epoch_id, audit.snapshot.window_epoch_number)
-        for audit in closed_epochs
-    )
-    if len(set(epoch_keys)) != len(epoch_keys):
-        _raise_invalid("duplicate_closed_epoch")
-
-
 @dataclass(frozen=True, slots=True)
 class UninitializedContextAdmissionState(_ContractValue):
     protocol_version: int
@@ -1805,7 +1733,7 @@ class UninitializedContextAdmissionState(_ContractValue):
             "noncanonical_closed_epochs",
             key=lambda audit: audit.snapshot.window_epoch_number,
         )
-        _validate_state_metadata(
+        _validate_context_admission_state_metadata(
             self.aggregate_revision,
             self.admission_sequence,
             self.processed_events,
@@ -1890,7 +1818,7 @@ class ActiveContextAdmissionState(_ContractValue):
             "noncanonical_closed_epochs",
             key=lambda audit: audit.snapshot.window_epoch_number,
         )
-        _validate_state_metadata(
+        _validate_context_admission_state_metadata(
             self.aggregate_revision,
             self.admission_sequence,
             self.processed_events,

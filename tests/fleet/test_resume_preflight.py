@@ -31,7 +31,7 @@ class TestResumeJSONLPreflight:
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         dispatches_dir.mkdir(parents=True, exist_ok=True)
-        prior_id = "prior-dispatch-missing-jsonl"
+        prior_id = "00000000-0000-0000-0000-000000000101"
         write_initial_state(
             dispatches_dir / f"{prior_id}.json",
             tool_ctx.kitchen_id,
@@ -109,7 +109,7 @@ class TestResumeJSONLPreflight:
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         dispatches_dir.mkdir(parents=True, exist_ok=True)
-        prior_id = "prior-dispatch-for-chain"
+        prior_id = "00000000-0000-0000-0000-000000000102"
         prev_state_path = dispatches_dir / f"{prior_id}.json"
         write_initial_state(
             prev_state_path,
@@ -229,7 +229,7 @@ class TestResumeSuccessGuard:
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         dispatches_dir.mkdir(parents=True, exist_ok=True)
-        prior_id = "prior-dispatch-succeeded"
+        prior_id = "00000000-0000-0000-0000-000000000103"
         state_path = dispatches_dir / f"{prior_id}.json"
         write_initial_state(
             state_path,
@@ -291,7 +291,7 @@ class TestResumeSuccessGuard:
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         dispatches_dir.mkdir(parents=True, exist_ok=True)
-        prior_id = "prior-dispatch-resumable"
+        prior_id = "00000000-0000-0000-0000-000000000104"
         state_path = dispatches_dir / f"{prior_id}.json"
         write_initial_state(
             state_path,
@@ -345,7 +345,7 @@ class TestResumeSuccessGuard:
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         dispatches_dir.mkdir(parents=True, exist_ok=True)
-        prior_id = "prior-dispatch-other-name"
+        prior_id = "00000000-0000-0000-0000-000000000105"
         state_path = dispatches_dir / f"{prior_id}.json"
         write_initial_state(
             state_path,
@@ -388,7 +388,7 @@ class TestResumeSuccessGuard:
             lambda **_: _make_no_sentinel(),
         )
 
-        prior_id = "prior-dispatch-nonexistent"
+        prior_id = "00000000-0000-0000-0000-000000000106"
 
         await execute_dispatch(
             tool_ctx=tool_ctx,

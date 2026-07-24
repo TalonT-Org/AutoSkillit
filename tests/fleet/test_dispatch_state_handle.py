@@ -141,7 +141,7 @@ class TestDispatchStateHandleFactory:
 
         d = _dispatches_dir(tmp_path)
         with pytest.raises(FileNotFoundError):
-            DispatchStateHandle.open_continued(d, "nonexistent-id-abc-123")
+            DispatchStateHandle.open_continued(d, "00000000-0000-0000-0000-000000000001")
 
     def test_dispatch_state_handle_open_continued_succeeds_with_existing_file(self, tmp_path):
         from autoskillit.fleet.state import DispatchStateHandle
@@ -161,8 +161,8 @@ class TestAllResumeCombinationsProduceValidHandle:
         "resume,prior,expect_fresh",
         [
             (None, None, True),
-            (None, "abc-def-ghi-jkl-mno", True),
-            ("sess-1", "abc-def-ghi-jkl-mno", False),
+            (None, "11111111-1111-1111-1111-111111111111", True),
+            ("sess-1", "11111111-1111-1111-1111-111111111111", False),
             ("sess-1", None, True),
             ("sess-1", "", True),
         ],
@@ -235,7 +235,7 @@ class TestCaptureChainAcrossResumeBoundary:
         dispatches_dir.mkdir(parents=True, exist_ok=True)
         campaign_id = tool_ctx.kitchen_id
 
-        prior_id = "prev-dispatch-abc123"
+        prior_id = "22222222-2222-2222-2222-222222222222"
         prev_state_path = dispatches_dir / f"{prior_id}.json"
         write_initial_state(
             prev_state_path, campaign_id, "camp", "", [DispatchRecord(name="dispatch-a")]
@@ -295,7 +295,7 @@ class TestSessionChainAccumulatesAcrossResume:
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         campaign_id = tool_ctx.kitchen_id
 
-        prior_id = "prior-dispatch-abc123"
+        prior_id = "33333333-3333-3333-3333-333333333333"
         prior_state_path = dispatches_dir / f"{prior_id}.json"
         write_initial_state(
             prior_state_path,

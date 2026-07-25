@@ -369,7 +369,7 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
         if not isinstance(completion_required, bool):
             raise ValueError("completion_required must be a boolean")
         return SkillContract(
-            inputs=[SkillInput(**item) for item in data["inputs"]],
+            inputs=tuple(SkillInput(**item) for item in data["inputs"]),
             outputs=[SkillOutput(**item) for item in data["outputs"]],
             expected_output_patterns=list(data.get("expected_output_patterns", [])),
             pattern_examples=list(data.get("pattern_examples", [])),

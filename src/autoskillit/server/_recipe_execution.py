@@ -18,7 +18,6 @@ from autoskillit.core import (
     AuditCycleHead,
     AuditCycleVerifier,
     AuditVerdict,
-    BindingFailureCode,
     BindingMode,
     BoundScalar,
     BoundValueOrigin,
@@ -555,12 +554,13 @@ def build_standalone_child_prompt(
     inputs require a canonical contract because their names and order otherwise
     cannot be validated safely.
     """
+    if skill_inputs is None:
+        return skill_command
     with_args: dict[str, object] = {
         "skill_command": skill_command,
         "cwd": cwd,
+        "skill_inputs": skill_inputs,
     }
-    if skill_inputs is not None:
-        with_args["skill_inputs"] = skill_inputs
     binding = bind_step_invocation(
         "standalone",
         RecipeStep(
@@ -573,14 +573,10 @@ def build_standalone_child_prompt(
     )
     if binding.failures:
         failure = binding.failures[0]
-        if failure.code is BindingFailureCode.UNKNOWN_SKILL and skill_inputs is None:
-            return skill_command
         raise RecipeExecutionAdmissionError(
             f"standalone_{failure.code.value}",
             failure.message,
         )
-    if skill_inputs is None:
-        return skill_command
     return build_bound_child_prompt(
         skill_command,
         binding.canonical_child_invocation,

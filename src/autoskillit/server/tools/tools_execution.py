@@ -27,7 +27,6 @@ from autoskillit.core import (
     WORKTREE_SKILLS,
     AdmissionStatus,
     BoundScalar,
-    ClaudeDirectoryConventions,
     ClosureAuthoritySpec,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
@@ -780,11 +779,7 @@ async def run_skill(
                     skill_command=skill_command,
                     order_id=order_id,
                 ).to_json()
-            if (
-                _installed_execution is None
-                and not step_name
-                and tool_ctx.active_recipe_steps
-            ):
+            if _installed_execution is None and not step_name and tool_ctx.active_recipe_steps:
                 _resolved, _ambiguous = _resolve_step_name_from_recipe(
                     skill_command, tool_ctx.active_recipe_steps
                 )

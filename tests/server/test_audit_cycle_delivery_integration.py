@@ -315,6 +315,9 @@ def test_bound_prompt_preserves_falsey_and_metacharacter_values() -> None:
         actual_mcp_kwargs={
             "skill_command": "/dry-walkthrough",
             "cwd": "/tmp/work tree",
+            "step_name": "dry",
+            "recipe_execution_id": "execution-1",
+            "invocation_template_digest": template.template_digest,
         },
     )
     prompt = build_bound_child_prompt("/dry-walkthrough", bound, None)
@@ -325,6 +328,64 @@ def test_bound_prompt_preserves_falsey_and_metacharacter_values() -> None:
         {"name": "audit_cycle_path", "value": "/tmp/audit-cycle.json"},
         {"name": "plan_disposition_path", "value": "/tmp/plan-disposition.json"},
     ]
+
+
+@pytest.mark.parametrize(
+    ("option_name", "option_value"),
+    [
+        ("model", "sonnet"),
+        ("output_dir", "/tmp/output"),
+        ("resume_session_id", "session-1"),
+        ("stale_threshold", 30),
+    ],
+)
+def test_runtime_binding_rejects_undeclared_effective_tool_options(
+    option_name: str,
+    option_value: str | int,
+) -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+    store = DefaultAuditCycleHeadStore()
+    from autoskillit.core import InstalledRecipeExecution
+
+    installed = InstalledRecipeExecution(
+        snapshot=snapshot,
+        runtime_binding_digests={},
+        audit_cycle_heads=store,
+        input_preflight_resolver=DefaultInputPreflightResolver(
+            allowed_root=Path("/tmp"),
+            head_store=store,
+        ),
+    )
+    template = snapshot.templates["dry"]
+    actual_mcp_kwargs: dict[str, str | int | float | bool] = {
+        "skill_command": "/dry-walkthrough",
+        "cwd": "/tmp",
+        option_name: option_value,
+    }
+
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        bind_attested_runtime_invocation(
+            installed,
+            execution_id="execution-1",
+            step_name="dry",
+            template_digest=template.template_digest,
+            skill_command="/dry-walkthrough",
+            skill_inputs={
+                "plan_path": "/tmp/plan.md",
+                "issue_url": "",
+                "audit_cycle_path": "/tmp/audit-cycle.json",
+                "plan_disposition_path": "/tmp/plan-disposition.json",
+            },
+            actual_mcp_kwargs=actual_mcp_kwargs,
+        )
+    assert exc_info.value.code == "recipe_execution_tool_shape"
+    assert option_name in str(exc_info.value)
 
 
 @pytest.mark.parametrize(

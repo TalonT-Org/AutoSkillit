@@ -461,6 +461,31 @@ def bind_attested_runtime_invocation(
             "recipe_execution_skill_mismatch",
             "runtime skill identity differs from the compiled template",
         )
+    compiled_mcp_names = frozenset(value.name for value in invocation.mcp_kwargs)
+    protocol_mcp_values = {
+        "step_name": step_name,
+        "recipe_execution_id": execution_id,
+        "invocation_template_digest": template_digest,
+    }
+    for name, expected in protocol_mcp_values.items():
+        if name in actual_mcp_kwargs and actual_mcp_kwargs[name] != expected:
+            raise RecipeExecutionAdmissionError(
+                "recipe_execution_tool_shape",
+                f"attestation parameter {name!r} differs from the active invocation",
+            )
+    undeclared_effective_names = sorted(
+        name
+        for name, value in actual_mcp_kwargs.items()
+        if name not in compiled_mcp_names and name not in protocol_mcp_values and value != ""
+    )
+    if undeclared_effective_names:
+        raise RecipeExecutionAdmissionError(
+            "recipe_execution_tool_shape",
+            (
+                "runtime tool parameters are absent from the compiled template: "
+                f"{undeclared_effective_names!r}"
+            ),
+        )
     contract = get_skill_contract(invocation.skill_name or "", load_bundled_manifest())
     if contract is None:
         raise RecipeExecutionAdmissionError(

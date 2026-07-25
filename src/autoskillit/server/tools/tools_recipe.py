@@ -625,6 +625,10 @@ async def get_recipe_section(
                     if (
                         installed_execution is not None
                         and installed_execution.snapshot.recipe_name == requested_recipe_name
+                        and installed_execution.snapshot.content_hash
+                        == _recreate.get("content_hash")
+                        and installed_execution.snapshot.composite_hash
+                        == _recreate.get("composite_hash")
                     ):
                         snapshot = installed_execution.snapshot
                         _recreate["recipe_execution"] = {

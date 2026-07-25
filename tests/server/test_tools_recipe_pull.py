@@ -1439,6 +1439,55 @@ async def test_pull_tool_recreates_missing_exact_generation(
     )
 
 
+async def test_recreation_does_not_attach_snapshot_for_different_recipe_hashes(
+    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-stale-snapshot"
+    payload = _payload()
+    payload["content_hash"] = "sha256:" + ("a" * 64)
+    payload["composite_hash"] = "sha256:" + ("b" * 64)
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=payload,
+    )
+    _remove_persisted_namespace(
+        tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
+    )
+    snapshot = MagicMock(
+        recipe_name="remediation",
+        content_hash="sha256:" + ("c" * 64),
+        composite_hash="sha256:" + ("d" * 64),
+    )
+    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: dict(payload))
+    monkeypatch.setattr(
+        tools_recipe,
+        "build_open_kitchen_recipe_payload",
+        lambda data, *, version: data,
+    )
+    monkeypatch.setattr(
+        tools_recipe,
+        "get_recipe_execution",
+        lambda _tool_ctx: MagicMock(snapshot=snapshot),
+    )
+
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+    response = json.loads(await get_recipe_section(section="content", **kwargs))
+
+    assert response["success"] is True
+    recreated = load_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        identity=generation,
+    )
+    assert "recipe_execution" not in recreated
+
+
 async def test_pull_tool_reports_invalid_missing_generation_recreation(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:

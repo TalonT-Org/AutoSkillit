@@ -512,7 +512,7 @@ def bind_step_invocation(
         return BoundStepInvocation(step_name, tool_name, mode, None, (), (), (failure,))
 
     failures: list[BindingFailure] = []
-    active_manifest = manifest or load_bundled_manifest()
+    active_manifest = manifest if manifest is not None else load_bundled_manifest()
     authorable_params = tool_def.param_set
     if tool_name == "run_python":
         callable_name = effective_with.get("callable")
@@ -768,7 +768,7 @@ def bind_recipe(
         for name, ingredient in (recipe.ingredients or {}).items()
         if getattr(ingredient, "hidden", False)
     )
-    active_manifest = manifest or load_bundled_manifest()
+    active_manifest = manifest if manifest is not None else load_bundled_manifest()
     invocations = {
         step_name: bind_step_invocation(
             step_name,

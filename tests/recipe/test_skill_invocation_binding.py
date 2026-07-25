@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+import autoskillit.recipe._binding as binding_module
 from autoskillit.core import (
     BindingFailureCode,
     BindingMode,
@@ -97,6 +99,31 @@ def test_structured_binding_uses_contract_order_not_mapping_order() -> None:
         "audit_cycle_path",
         "plan_disposition_path",
     )
+
+
+def test_explicit_empty_manifest_is_not_replaced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_bundled_manifest_load() -> dict[str, object]:
+        raise AssertionError("explicit manifest must remain authoritative")
+
+    monkeypatch.setattr(
+        binding_module,
+        "load_bundled_manifest",
+        unexpected_bundled_manifest_load,
+    )
+    step = _step(_required_inputs())
+
+    invocation = bind_step_invocation("verify", step, manifest={})
+    projection = bind_recipe(
+        SimpleNamespace(ingredients={}, steps={"verify": step}),
+        manifest={},
+    )
+
+    assert BindingFailureCode.UNKNOWN_SKILL in {failure.code for failure in invocation.failures}
+    projected = projection.for_step("verify")
+    assert projected is not None
+    assert BindingFailureCode.UNKNOWN_SKILL in {failure.code for failure in projected.failures}
 
 
 def test_single_inline_input_preserves_multiword_prose_tail() -> None:

@@ -108,6 +108,55 @@ def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, co
     assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
 
 
+def test_codex_generated_home_links_projected_catalog_into_discovery_root(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    mgr = make_session_skill_manager()
+    add_dir = _materialize(
+        mgr,
+        "sid",
+        backend=codex_env.backend,
+        names=frozenset({"investigate"}),
+    )
+
+    add_dir_path = Path(str(add_dir))
+    projected = add_dir_path / "skills" / "investigate"
+    discoverable = add_dir_path.parent / "skills" / "investigate"
+
+    assert discoverable.is_symlink()
+    assert not discoverable.readlink().is_absolute()
+    assert discoverable.resolve() == projected.resolve()
+
+
+def test_codex_generated_home_preserves_existing_profile_skill_on_collision(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    profile_content = "---\nname: investigate\ndescription: profile copy\n---\n"
+
+    def setup_session_dir(session_dir: Path) -> None:
+        profile_skill = session_dir / "skills" / "investigate"
+        profile_skill.mkdir(parents=True)
+        (profile_skill / "SKILL.md").write_text(profile_content)
+
+    codex_env.backend.setup_session_dir.side_effect = setup_session_dir
+    mgr = make_session_skill_manager()
+    add_dir = _materialize(
+        mgr,
+        "sid",
+        backend=codex_env.backend,
+        names=frozenset({"investigate"}),
+    )
+
+    add_dir_path = Path(str(add_dir))
+    discoverable = add_dir_path.parent / "skills" / "investigate"
+
+    assert not discoverable.is_symlink()
+    assert (discoverable / "SKILL.md").read_text() == profile_content
+    assert (add_dir_path / "skills" / "investigate" / "SKILL.md").is_file()
+
+
 def test_codex_init_session_delegates_to_setup_session_dir(
     make_session_skill_manager, codex_env
 ) -> None:

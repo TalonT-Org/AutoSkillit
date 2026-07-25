@@ -44,7 +44,7 @@ from autoskillit.recipe import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import AuditCycleHeadStore
+    from autoskillit.core import AuditCycleHeadStore, SkillResult
     from autoskillit.pipeline import ToolContext
 
 __all__ = [
@@ -59,6 +59,7 @@ __all__ = [
     "clear_recipe_execution",
     "get_recipe_execution",
     "install_recipe_execution",
+    "publish_audit_cycle_result",
     "publish_reported_audit_cycle",
     "publish_verified_audit_cycle",
     "record_runtime_binding_digest",
@@ -706,3 +707,21 @@ def publish_reported_audit_cycle(
         expected_parent_digest=(current.current_authority_digest if current is not None else None),
         expected_round=current.audit_round if current is not None else 0,
     )
+
+
+def publish_audit_cycle_result(
+    tool_ctx: ToolContext,
+    target_name: str | None,
+    skill_result: SkillResult,
+    installed: InstalledRecipeExecution | None,
+) -> None:
+    """Publish a successful attested audit child's declared authority."""
+    if not skill_result.success or target_name != "audit-impl" or installed is None:
+        return
+    authority_path = (skill_result.outcome_fields or {}).get("audit_cycle_path")
+    if not isinstance(authority_path, str) or not authority_path:
+        raise RecipeExecutionAdmissionError(
+            "recipe_execution_audit_output_missing",
+            "successful audit-impl result did not declare a valid audit_cycle_path",
+        )
+    publish_reported_audit_cycle(tool_ctx, authority_path=authority_path)

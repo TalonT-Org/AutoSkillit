@@ -62,9 +62,10 @@ from autoskillit.server._recipe_execution import (
     build_recipe_execution_snapshot,
     get_recipe_execution,
     install_recipe_execution,
+    publish_audit_cycle_result,
     publish_verified_audit_cycle,
 )
-from autoskillit.server.tools.tools_execution import _publish_audit_cycle_result, run_skill
+from autoskillit.server.tools.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -450,7 +451,7 @@ def test_successful_audit_result_publishes_protected_successor_identity(
         projection=_projection(),
         execution_id="execution-1",
     )
-    install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
     authority = _authority(
         Path(tool_ctx_kitchen_open.temp_dir),
         generation="execution-1",
@@ -474,10 +475,11 @@ def test_successful_audit_result_publishes_protected_successor_identity(
         outcome_fields={"audit_cycle_path": str(authority_path)},
     )
 
-    _publish_audit_cycle_result(
+    publish_audit_cycle_result(
         tool_ctx_kitchen_open,
-        target_name="audit-impl",
-        skill_result=result,
+        "audit-impl",
+        result,
+        installed,
     )
 
     installed = get_recipe_execution(tool_ctx_kitchen_open)

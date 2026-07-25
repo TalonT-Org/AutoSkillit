@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ClaudeFlags, DirectInstall, OutputFormat
+from autoskillit.core import ClaudeFlags, OutputFormat, ProjectedPluginRoot
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
@@ -35,7 +35,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
         lambda: ClaudeCodeBackend().build_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="You are an L3 orchestrator",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
@@ -46,7 +46,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
         ),
         lambda: CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="L3 orchestrator",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
@@ -82,7 +82,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
         lambda: ClaudeCodeBackend().build_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="You are an L3 orchestrator",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
@@ -93,7 +93,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
         ),
         lambda: CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="L3 orchestrator",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
@@ -166,7 +166,7 @@ class TestCompletionReminderPositionInvariant:
                 cwd="/repo",
                 completion_marker=marker,
                 model=None,
-                plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
                 output_format=OutputFormat.JSON,
                 profile_name="minimax",
             ),
@@ -175,14 +175,14 @@ class TestCompletionReminderPositionInvariant:
                 cwd="/repo",
                 completion_marker=marker,
                 model=None,
-                plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
                 output_format=OutputFormat.JSON,
                 profile_name="minimax",
                 resume_session_id="sess-abc",
             ),
             lambda marker: ClaudeCodeBackend().build_food_truck_cmd(
                 orchestrator_prompt="Run the campaign",
-                plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
                 cwd="/repo",
                 completion_marker=marker,
             ),
@@ -227,7 +227,7 @@ def test_cwd_in_headless_exclusive_vars() -> None:
         ),
         lambda: CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="L3 orchestrator",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),

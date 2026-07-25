@@ -11,9 +11,9 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     CodingAgentBackend,
-    DirectInstall,
     EnvPolicy,
     OutputFormat,
+    ProjectedPluginRoot,
     ResultParser,
     SessionLocator,
     StreamParser,
@@ -159,7 +159,7 @@ class TestClaudeCodeDynaconfBackendEnv:
 
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }

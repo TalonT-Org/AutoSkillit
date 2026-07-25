@@ -10,8 +10,8 @@ from autoskillit.core import (
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     CODEX_MCP_ENV_FORWARD_VARS,
     MCP_CLIENT_BACKEND_ENV_VAR,
-    DirectInstall,
     OutputFormat,
+    ProjectedPluginRoot,
 )
 from autoskillit.execution.backends.codex import _IMAGE_GENERATION_DISABLED, CodexBackend
 from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
@@ -37,7 +37,7 @@ def _build_skill_session():
 def _build_food_truck():
     return CodexBackend().build_food_truck_cmd(
         orchestrator_prompt="dispatch",
-        plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
+        plugin_source=ProjectedPluginRoot(plugin_dir=Path("/pkg")),
         cwd="/work",
         completion_marker="%%DONE%%",
     )

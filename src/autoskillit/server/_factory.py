@@ -17,19 +17,15 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
-    MARKETPLACE_PREFIX,
     DirectInstall,
     FleetLock,
-    MarketplaceInstall,
     PluginSource,
     SkillExecutionRole,
     SubprocessRunner,
     WriteBehaviorSpec,
-    _get_autoskillit_install_path,
-    detect_autoskillit_mcp_prefix,
     get_logger,
     is_feature_enabled,
-    pkg_root,
+    resolve_project_dir,
     resolve_temp_dir,
     temp_dir_display_str,
 )
@@ -75,7 +71,8 @@ from autoskillit.workspace import (
     DefaultSessionSkillManager,
     DefaultWorkspaceManager,
     SkillsDirectoryProvider,
-    project_plugin_source,
+    project_default_plugin_source,
+    project_direct_install,
     resolve_ephemeral_root,
     validate_skill_tier_roles,
 )
@@ -113,17 +110,6 @@ class _LazyTokenFactory:
         return self._resolved is not self._UNRESOLVED
 
 
-def _default_plugin_dir() -> Path:
-    """Resolve the autoskillit package root."""
-    return pkg_root()
-
-
-def _resolve_marketplace_cache_path() -> Path:
-    """Read the installPath for autoskillit from installed_plugins.json."""
-
-    return _get_autoskillit_install_path()
-
-
 def _gh_cli_token() -> str | None:
     """Try to obtain a GitHub token from the ``gh`` CLI.
 
@@ -143,27 +129,6 @@ def _gh_cli_token() -> str | None:
     except Exception:
         logger.debug("gh auth token unavailable", exc_info=True)
     return None
-
-
-def _check_plugin_installed() -> bool:
-    """Detect if autoskillit is marketplace-installed via installed_plugins.json."""
-    return detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
-
-
-def _resolve_project_dir() -> Path:
-    """Resolve the project root: git toplevel -> cwd."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip())
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return Path.cwd()
 
 
 def make_context(
@@ -189,18 +154,18 @@ def make_context(
         runner: Subprocess runner implementation. Defaults to DefaultSubprocessRunner()
                 for production use. Pass runner=None explicitly to disable the
                 tester (useful in tests that don't need real subprocess execution).
-        plugin_dir: Absolute path to the autoskillit plugin directory for a
-                    direct install. When omitted (sentinel), auto-detects via
-                    _check_plugin_installed(). When plugin_source is also provided,
-                    plugin_source takes precedence.
-        plugin_source: PluginSource override. When supplied, used directly
-                       without detection. For tests and CLI that construct
-                       install mode explicitly.
+        plugin_dir: Test-injection override for the projection *source* — project
+                    from this root instead of pkg_root(). Still projected, never
+                    handed to a session raw. When plugin_source is also provided,
+                    plugin_source wins.
+        plugin_source: Test-injection override for the fully-resolved PluginSource.
+                       When supplied, used verbatim with no projection.
         fleet_lock: FleetLock implementation to inject. Defaults to
                         FleetSemaphore(max_concurrent_dispatches) when None. Pass a
                         custom implementation in tests to substitute without monkey-patching.
         project_dir: Explicit project root path. When supplied, used directly.
-                     When None, _resolve_project_dir() is called (git toplevel → cwd).
+                     When None, resolve_project_dir() is called (git toplevel → cwd) —
+                     the same helper `autoskillit cook` uses.
                      Pass tmp_path in tests to avoid subprocess calls and ensure isolation.
 
     Returns:
@@ -291,27 +256,9 @@ def make_context(
         lambda: config.github.token or os.environ.get("GITHUB_TOKEN") or _gh_cli_token()
     )
 
-    resolved_plugin_source: PluginSource
-    if plugin_source is not _UNSET:
-        resolved_plugin_source = plugin_source  # type: ignore[assignment]
-    elif plugin_dir is not _UNSET and isinstance(plugin_dir, (str, Path)):
-        resolved_plugin_source = DirectInstall(plugin_dir=Path(plugin_dir))
-    elif _check_plugin_installed():
-        try:
-            resolved_plugin_source = MarketplaceInstall(
-                cache_path=_resolve_marketplace_cache_path()
-            )
-        except (KeyError, ValueError) as exc:
-            logger.warning(
-                "marketplace install path unavailable (%s) — falling back to direct install",
-                exc,
-            )
-            resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
-    else:
-        resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
     gate = DefaultGateState(enabled=False)
 
-    project_dir = project_dir if project_dir is not None else _resolve_project_dir()
+    project_dir = project_dir if project_dir is not None else resolve_project_dir()
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 
@@ -326,13 +273,28 @@ def make_context(
         SkillExecutionRole.SESSION,
         visibility=skill_visibility,
     )
-    plugin_source = project_plugin_source(
-        resolved_plugin_source,
-        cwd=project_dir,
-        backend=backend,
-        default_base_branch=config.branching.default_base_branch,
-        skill_catalog=session_catalog,
-    )
+    # Single resolution authority, shared with `autoskillit cook`: the plugin
+    # source is the projected running package. The two overrides exist only for
+    # test injection — nothing in production supplies them, and neither can name
+    # a path read out of installed_plugins.json.
+    resolved_plugin_source: PluginSource
+    if plugin_source is not _UNSET:
+        resolved_plugin_source = plugin_source  # type: ignore[assignment]
+    elif plugin_dir is not _UNSET and isinstance(plugin_dir, (str, Path)):
+        resolved_plugin_source = project_direct_install(
+            DirectInstall(plugin_dir=Path(plugin_dir)),
+            cwd=project_dir,
+            backend=backend,
+            default_base_branch=config.branching.default_base_branch,
+            skill_catalog=session_catalog,
+        )
+    else:
+        resolved_plugin_source = project_default_plugin_source(
+            cwd=project_dir,
+            backend=backend,
+            default_base_branch=config.branching.default_base_branch,
+            skill_catalog=session_catalog,
+        )
     ephemeral_root = resolve_ephemeral_root()
     codex_root = temp_dir / "codex-sessions"
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root, codex_root=codex_root)
@@ -346,7 +308,7 @@ def make_context(
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=gate,
-        plugin_source=plugin_source,
+        plugin_source=resolved_plugin_source,
         runner=runner,
         backend=backend,
         temp_dir=temp_dir,

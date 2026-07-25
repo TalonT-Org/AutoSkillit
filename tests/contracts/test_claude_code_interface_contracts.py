@@ -263,6 +263,9 @@ class TestCookAddDirStructure:
 
         monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
+        # cook() derives project_dir via the shared git-toplevel helper; fake_run
+        # above replaces subprocess.run wholesale, so pin the helper instead.
+        monkeypatch.setattr("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd)
         # cook() calls input() to confirm launch — mock it to auto-confirm.
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)

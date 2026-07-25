@@ -41,9 +41,9 @@ class TestRunSkillPluginDir:
         cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 
-        assert isinstance(tool_ctx_kitchen_open.plugin_source, DirectInstall)
+        assert isinstance(tool_ctx_kitchen_open.plugin_source, ProjectedPluginRoot)
         assert cmd[plugin_dir_idx + 1] == str(tool_ctx_kitchen_open.plugin_source.plugin_dir)
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"

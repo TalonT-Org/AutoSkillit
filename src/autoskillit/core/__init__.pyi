@@ -17,23 +17,26 @@ from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
 from ._json import fast_loads as fast_loads
+from ._plugin_cache import MAX_DEFER_HOURS as MAX_DEFER_HOURS
 from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import _retire_old_versions as _retire_old_versions
 from ._plugin_cache import any_kitchen_open as any_kitchen_open
 from ._plugin_cache import append_retiring_entry as append_retiring_entry
 from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
+from ._plugin_cache import drop_retiring_entries as drop_retiring_entries
 from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
 from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
+from ._plugin_cache import retiring_cache_entries as retiring_cache_entries
 from ._plugin_cache import sweep_retiring_cache as sweep_retiring_cache
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
 from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
-from ._plugin_ids import _get_autoskillit_install_path as _get_autoskillit_install_path
 from ._plugin_ids import _installed_plugins_path as _installed_plugins_path
 from ._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
+from ._plugin_ids import registered_install_paths as registered_install_paths
 from ._step_context import current_order_id as current_order_id
 from ._step_context import current_step_name as current_step_name
 from ._terminal_table import TerminalColumn as TerminalColumn
@@ -93,6 +96,7 @@ from .paths import GENERATED_FILES as GENERATED_FILES
 from .paths import claude_code_log_path as claude_code_log_path
 from .paths import claude_code_project_dir as claude_code_project_dir
 from .paths import default_log_dir as default_log_dir
+from .paths import destination_location as destination_location
 from .paths import find_latest_session_id as find_latest_session_id
 from .paths import is_generated_path as is_generated_path
 from .paths import is_git_main_checkout as is_git_main_checkout
@@ -100,6 +104,7 @@ from .paths import is_git_worktree as is_git_worktree
 from .paths import is_in_git_repo as is_in_git_repo
 from .paths import pkg_root as pkg_root
 from .paths import resolve_main_worktree as resolve_main_worktree
+from .paths import resolve_project_dir as resolve_project_dir
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
@@ -265,6 +270,9 @@ from .types import (
 from .types import RESUME_SESSION_BASELINE_KEYS as RESUME_SESSION_BASELINE_KEYS
 from .types import RETIRED_AGENT_NAMES as RETIRED_AGENT_NAMES
 from .types import RETIRED_FEATURES as RETIRED_FEATURES
+from .types import (
+    RETIRED_INSTALL_ARTIFACT_SHAPES as RETIRED_INSTALL_ARTIFACT_SHAPES,
+)
 from .types import RETIRED_READINESS_TOKENS as RETIRED_READINESS_TOKENS
 from .types import RETIRED_SKILL_NAMES as RETIRED_SKILL_NAMES
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
@@ -431,7 +439,6 @@ from .types import LabelDef as LabelDef
 from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
-from .types import MarketplaceInstall as MarketplaceInstall
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
 from .types import McpResponseLog as McpResponseLog
@@ -461,6 +468,7 @@ from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef
 from .types import ProducerInstanceId as ProducerInstanceId
 from .types import ProducerSurface as ProducerSurface
+from .types import ProjectedPluginRoot as ProjectedPluginRoot
 from .types import PromptContractError as PromptContractError
 from .types import ProposeOccurrenceEvent as ProposeOccurrenceEvent
 from .types import ProtectedPoolOwnerId as ProtectedPoolOwnerId
@@ -519,6 +527,7 @@ from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
+from .types import RetiredArtifactShape as RetiredArtifactShape
 from .types import RetryReason as RetryReason
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
 from .types import RolloverEpochEvent as RolloverEpochEvent

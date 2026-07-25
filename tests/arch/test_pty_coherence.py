@@ -76,7 +76,7 @@ class TestBoundaryPtyDispatchPaths:
     async def test_food_truck_dispatch_uses_pty_false(self, minimal_ctx, tmp_path: Path) -> None:
         """dispatch_food_truck passes pty_mode=False to the subprocess runner."""
         from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
@@ -100,7 +100,7 @@ class TestBoundaryPtyDispatchPaths:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)

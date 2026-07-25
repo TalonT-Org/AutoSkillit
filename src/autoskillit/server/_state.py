@@ -21,7 +21,7 @@ import asyncio
 from datetime import UTC
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import DirectInstall, MarketplaceInstall, get_logger
+from autoskillit.core import get_logger
 from autoskillit.execution import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
@@ -174,13 +174,10 @@ def _get_config() -> AutomationConfig:
 
 def _get_plugin_dir() -> str | None:
     """Return the plugin path from the current server context, or None if uninitialized."""
+    # The None guard stays: version_info() depends on it for an uninitialised context.
     if _ctx is None:
         return None
-    match _ctx.plugin_source:
-        case DirectInstall(plugin_dir=p):
-            return str(p)
-        case MarketplaceInstall(cache_path=cp):
-            return str(cp)
+    return str(_ctx.plugin_source.plugin_dir)
 
 
 def _check_rerun(log_dir: str, composite_hash: str) -> dict[str, object] | None:

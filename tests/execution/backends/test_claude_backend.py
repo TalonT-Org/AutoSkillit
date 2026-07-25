@@ -9,10 +9,10 @@ from autoskillit.core import (
     BareResume,
     ClaudeFlags,
     CmdSpec,
-    DirectInstall,
     NamedResume,
     NoResume,
     OutputFormat,
+    ProjectedPluginRoot,
     SessionCheckpoint,
     SkillSessionConfig,
 )
@@ -30,7 +30,7 @@ SKILL_BASE: dict[str, Any] = {
 
 FOOD_TRUCK_BASE: dict[str, Any] = {
     "orchestrator_prompt": "dispatch the work",
-    "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+    "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
     "cwd": "/work",
     "completion_marker": "%%DONE%%",
 }
@@ -91,7 +91,7 @@ class TestResumePromptPreservation:
         backend = ClaudeCodeBackend()
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="Deploy service X with config Y",
-            plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
             resume_session_id="sess-123",
@@ -104,7 +104,7 @@ class TestResumePromptPreservation:
         backend = ClaudeCodeBackend()
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="task context",
-            plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
             resume_session_id="sess-123",
@@ -116,7 +116,7 @@ class TestResumePromptPreservation:
         backend = ClaudeCodeBackend()
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="task context",
-            plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
             resume_session_id="sess-123",
@@ -132,7 +132,7 @@ class TestResumePromptPreservation:
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
             output_format=OutputFormat.STREAM_JSON,
             resume_session_id="sess-456",
         )
@@ -146,7 +146,7 @@ class TestResumePromptPreservation:
                 "build_food_truck_cmd",
                 dict(
                     orchestrator_prompt="UNIQUE_TASK_MARKER_12345",
-                    plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+                    plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
                     cwd="/tmp",
                     completion_marker="%%DONE%%",
                     resume_session_id="sess-inv",
@@ -159,7 +159,7 @@ class TestResumePromptPreservation:
                     cwd="/tmp",
                     completion_marker="%%DONE%%",
                     model=None,
-                    plugin_source=DirectInstall(plugin_dir=Path("/fake")),
+                    plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
                     output_format=OutputFormat.STREAM_JSON,
                     resume_session_id="sess-inv",
                 ),
@@ -245,7 +245,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
         config = SkillSessionConfig(
             completion_marker="%%MARKER%%",
             model="sonnet",
-            plugin_source=DirectInstall(plugin_dir=Path("/p")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
             output_format=OutputFormat.STREAM_JSON,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,
@@ -265,7 +265,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
             cwd="/tmp",
             completion_marker="%%MARKER%%",
             model="sonnet",
-            plugin_source=DirectInstall(plugin_dir=Path("/p")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
             output_format=OutputFormat.STREAM_JSON,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,

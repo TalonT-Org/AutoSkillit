@@ -1,4 +1,20 @@
-"""Projection of internal skill contracts into agent-visible documents."""
+"""Projection of internal skill contracts into agent-visible documents.
+
+Two module-wide policies, stated once so call sites cannot drift:
+
+**The projection source is always ``pkg_root()``.** It is the code currently
+executing, so it cannot be stale. Nothing here ever reads a plugin root out of
+third-party-owned mutable state (``installed_plugins.json``, the Claude Code
+plugin cache): such a path is a *derived copy* that its owner is free to
+version, relocate, or garbage-collect, and treating it as a source silently
+produces mixed-version sessions — old recipes/agents/hooks against new code.
+
+**A projection destination's prior content is always replaced; only its
+location is contract-relevant.** Containment checks therefore use
+``destination_location()``, never ``Path.resolve()`` — resolving follows a
+final-component symlink and turns "where may I write?" into "what does this
+currently point at?", which is a different and wrong question.
+"""
 
 from __future__ import annotations
 
@@ -22,8 +38,7 @@ from autoskillit.core import (
     DirectInstall,
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
-    MarketplaceInstall,
-    PluginSource,
+    ProjectedPluginRoot,
     ResolvedSkillAuthority,
     SkillAuthority,
     SkillContractError,
@@ -35,11 +50,18 @@ from autoskillit.core import (
     SkillVisibilitySpec,
     _InstallLock,
     atomic_write,
+    destination_location,
     dump_yaml_str,
     pkg_root,
     read_versioned_json,
     temp_dir_display_str,
     write_versioned_json,
+)
+from autoskillit.workspace._projection_cache import (
+    ProjectionCacheKey,
+    is_projected_asset,
+    prune_stale_projections,
+    public_plugin_asset_digest,
 )
 from autoskillit.workspace.skill_format import parse_frontmatter_content
 from autoskillit.workspace.skills import (
@@ -64,22 +86,7 @@ __all__ = [
     "project_plugin_source",
     "validate_sanitized_plugin_artifact",
 ]
-
 _SKILL_NAMESPACE_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
-_CANONICAL_SKILL_DIRS = frozenset({"skills", "skills_extended"})
-_PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
-    {
-        ".claude-plugin",
-        ".mcp.json",
-        "agents",
-        "assets",
-        "commands",
-        "hooks",
-        "recipes",
-        "scripts",
-        "settings.json",
-    }
-)
 
 
 SkillContractRecord = SkillAuthority
@@ -384,7 +391,7 @@ def materialize_agent_skill_tree(
     if not destination.name:
         raise SkillContractError("projected skill destination must not be a filesystem root")
     skills = _skill_sequence(skills_or_catalog)
-    resolved_destination = destination.resolve()
+    resolved_destination = destination_location(destination)
     for skill in skills:
         if (
             isinstance(skill, ResolvedSkillAuthority)
@@ -432,9 +439,7 @@ def _copy_non_skill_plugin_assets(
     top_level: bool = True,
 ) -> None:
     for entry in source_root.iterdir():
-        if entry.name in _CANONICAL_SKILL_DIRS:
-            continue
-        if top_level and entry.name not in _PUBLIC_PLUGIN_ASSET_NAMES:
+        if not is_projected_asset(entry, top_level=top_level):
             continue
         if entry.is_symlink():
             raise SkillContractError(f"plugin asset must not be a symlink: {entry}")
@@ -481,7 +486,7 @@ def materialize_sanitized_plugin_root(
     destination = Path(destination)
     if not destination.name:
         raise SkillContractError("sanitized plugin destination must not be a filesystem root")
-    resolved_destination = destination.resolve()
+    resolved_destination = destination_location(destination)
     if source_root == resolved_destination or source_root in resolved_destination.parents:
         raise SkillContractError("sanitized plugin destination must be outside its source root")
     if not source_root.is_dir():
@@ -655,7 +660,7 @@ def project_direct_install(
     backend: CodingAgentBackend,
     default_base_branch: str,
     skill_catalog: EffectiveSkillCatalogAuthority | None = None,
-) -> DirectInstall:
+) -> ProjectedPluginRoot:
     """Return a stable, validated public projection for a direct plugin install."""
     default_base_branch = _default_base_branch(default_base_branch)
     source_root = source.plugin_dir.resolve()
@@ -706,13 +711,17 @@ def project_direct_install(
     namespace_identity = "\n".join(
         f"{name}:{source.value}" for name, source in sorted(catalog.namespace_sources.items())
     )
-    cache_key = hashlib.sha256(
-        (
-            f"{source_root}\0{backend.name}\0{SKILL_PROJECTION_VERSION}\0"
-            f"{default_base_branch}\0{identity}\0{namespace_identity}"
-        ).encode()
-    ).hexdigest()[:24]
-    destination = Path.home() / ".autoskillit" / "plugin-projections" / cache_key
+    cache_key = ProjectionCacheKey(
+        source_root=str(source_root),
+        backend_name=backend.name,
+        projection_version=SKILL_PROJECTION_VERSION,
+        default_base_branch=default_base_branch,
+        skill_identity=identity,
+        namespace_identity=namespace_identity,
+        asset_digest=public_plugin_asset_digest(source_root),
+    ).digest()
+    projections_root = Path.home() / ".autoskillit" / "plugin-projections"
+    destination = projections_root / cache_key
     context = _direct_install_projection_context(
         cwd=Path(cwd),
         project_root=None,
@@ -723,10 +732,12 @@ def project_direct_install(
     )
     manifest_path = destination.parent / f".{destination.name}.autoskillit-projection.json"
     with _InstallLock():
+        # Policy (module docstring): a projection destination's prior content is
+        # always replaced. A stale symlink or file here is something to discard,
+        # not something to refuse — matching _replace_directory rather than
+        # contradicting it.
         if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
-            raise SkillContractError(
-                f"direct plugin projection cache is not a directory: {destination}"
-            )
+            destination.unlink()
         if not destination.exists():
             manifest_path = materialize_sanitized_plugin_root(
                 source_root,
@@ -766,27 +777,8 @@ def project_direct_install(
             raise SkillContractError(
                 "direct plugin projection validation failed: " + "; ".join(errors)
             )
-    return DirectInstall(plugin_dir=destination)
-
-
-def project_plugin_source(
-    source: PluginSource,
-    *,
-    cwd: Path,
-    backend: CodingAgentBackend,
-    default_base_branch: str,
-    skill_catalog: EffectiveSkillCatalogAuthority | None = None,
-) -> PluginSource:
-    """Project every plugin source into one sanitized direct-install tree."""
-    if isinstance(source, MarketplaceInstall):
-        source = DirectInstall(plugin_dir=source.cache_path)
-    return project_direct_install(
-        source,
-        cwd=cwd,
-        backend=backend,
-        default_base_branch=default_base_branch,
-        skill_catalog=skill_catalog,
-    )
+        prune_stale_projections(projections_root, active_key=cache_key)
+    return ProjectedPluginRoot(plugin_dir=destination)
 
 
 def project_default_plugin_source(
@@ -795,8 +787,14 @@ def project_default_plugin_source(
     backend: CodingAgentBackend,
     default_base_branch: str,
     skill_catalog: EffectiveSkillCatalogAuthority | None = None,
-) -> DirectInstall:
-    """Project the installed package without exposing its canonical root."""
+) -> ProjectedPluginRoot:
+    """Project the running package — the one source that cannot be stale.
+
+    ``pkg_root()`` is the code currently executing. Every other candidate (the
+    Claude Code plugin cache, the local marketplace tree) is a derived copy
+    owned by someone else, and resolving from one is what produced sessions
+    running eleven-versions-old recipes against current code.
+    """
     return project_direct_install(
         DirectInstall(plugin_dir=pkg_root()),
         cwd=cwd,
@@ -804,6 +802,12 @@ def project_default_plugin_source(
         default_base_branch=default_base_branch,
         skill_catalog=skill_catalog,
     )
+
+
+#: Historical alias. There is exactly one plugin source and one way to get it;
+#: this exists so callers reading "project whatever source applies" still land
+#: on the single authority.
+project_plugin_source = project_default_plugin_source
 
 
 def prepare_catalog_skill_dispatch(
@@ -814,7 +818,7 @@ def prepare_catalog_skill_dispatch(
     catalog: EffectiveSkillCatalogAuthority,
     default_base_branch: str,
     project_root: Path | None = None,
-) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
+) -> tuple[ProjectedPluginRoot, EffectiveSkillDispatchContract]:
     """Project a visible catalog and bind the artifact to executor authority."""
     default_base_branch = _default_base_branch(default_base_branch)
     plugin_source = project_default_plugin_source(
@@ -849,7 +853,7 @@ def prepare_effective_skill_dispatch(
     default_base_branch: str | None,
     recipe_packs: frozenset[str] | None,
     recipe_features: frozenset[str] | None,
-) -> tuple[DirectInstall, EffectiveSkillDispatchContract]:
+) -> tuple[ProjectedPluginRoot, EffectiveSkillDispatchContract]:
     """Resolve visible orchestrator skills, project them, and bind dispatch authority."""
     catalog = resolver.list_effective(
         project_root,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import termios
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -443,6 +444,9 @@ class TestCookTerminalGuard:
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: False
         )
+        # The KeyboardInterrupt must come from the *launch*, not from the
+        # git-toplevel probe cook() runs to derive project_dir.
+        monkeypatch.setattr("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd)
         # is_first_run is imported inside cook() body — patch the source module
         monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
         # cook() calls input() for launch confirmation before subprocess.run

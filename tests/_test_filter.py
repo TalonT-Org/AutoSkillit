@@ -174,7 +174,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"core", "cli", "config", "execution", "recipe", "server", "workspace"}
     ),
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
-    "_plugin_ids": frozenset({"core", "cli", "hook_registry", "server"}),
+    # +workspace: _install_state reads the plugin registry through
+    # registered_install_paths() (IL-005 forbids reaching for cli.InstalledPluginsFile).
+    "_plugin_ids": frozenset({"core", "cli", "hook_registry", "server", "workspace"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "_plugin_cache": frozenset({"core", "cli", "server", "workspace"}),
     "git_remote": frozenset({"core", "execution"}),
@@ -666,6 +668,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "infra/test_pretty_output_hook_infra.py",
             # file-level: Part C envelope-fit test imports execution.backends.BACKEND_REGISTRY
             "infra/test_pretty_output_recipe.py",
+            # file-level: the --plugin-dir emitter ratchet enumerates BACKEND_REGISTRY
+            # by reflection, so a new command builder must be covered automatically.
+            "infra/test_plugin_source_ratchets.py",
             "_llm_triage",
             "smoke_utils",
         }

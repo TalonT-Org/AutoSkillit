@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import SkillExecutionRole
+from autoskillit.core import SKILL_PROJECTION_VERSION, SkillExecutionRole
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -38,7 +38,7 @@ def _contract(tmp_path: Path, projected_text: str):
         capability_union=frozenset({"github_api_write"}),
         canonical_digests={"root": hashlib.sha256(projected_text.encode()).hexdigest()},
         projected_digests={"root": projected_digest},
-        projection_version=1,
+        projection_version=SKILL_PROJECTION_VERSION,
         project_root=str(tmp_path / "project"),
         cwd=str(tmp_path / "worktree"),
         backend="claude-code",

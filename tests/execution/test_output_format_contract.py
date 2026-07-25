@@ -18,8 +18,8 @@ import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
-    DirectInstall,
     OutputFormat,
+    ProjectedPluginRoot,
     SubprocessResult,
     TerminationReason,
 )
@@ -256,7 +256,7 @@ class TestAllBuildersEnforceOutputFormatFlags:
     def test_food_truck_builder_satisfies_format_requirements(self, fmt: OutputFormat):
         spec = ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="Orchestrator",
-            plugin_source=DirectInstall(plugin_dir=Path("/p")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
             output_format=fmt,

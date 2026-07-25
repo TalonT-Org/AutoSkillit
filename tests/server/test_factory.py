@@ -435,24 +435,26 @@ def test_gh_cli_token_not_called_during_make_context(monkeypatch, tmp_path):
     assert gh_calls == [], f"_gh_cli_token() called during make_context: {gh_calls}"
 
 
-def test_make_context_marketplace_install_yields_sanitized_direct_plugin_source(
+def test_make_context_plugin_source_derives_from_pkg_root_not_the_registry(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Marketplace installs are projected before entering ToolContext."""
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    """The default plugin source is a projection of the running package.
+
+    Even with installed_plugins.json naming a plugin cache directory, no part of
+    resolution reads it: a registry-named path can be stale, relocated, or
+    already garbage-collected. The projection must derive from pkg_root() and
+    must never be the canonical root itself.
+    """
+    from autoskillit.core import pkg_root
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 
     fake_cache = tmp_path / "cache" / "autoskillit-local" / "autoskillit" / "1.0.0"
     fake_cache.mkdir(parents=True)
 
-    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: True)
-    monkeypatch.setattr(
-        "autoskillit.server._factory._resolve_marketplace_cache_path",
-        lambda: fake_cache,
-    )
-
     ctx = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
-    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
     assert ctx.plugin_source.plugin_dir != fake_cache
+    assert ctx.plugin_source.plugin_dir != pkg_root()
     assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
 
 
@@ -460,14 +462,12 @@ def test_make_context_direct_install_yields_sanitized_direct_plugin_source(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Direct installs are projected before entering ToolContext."""
-    from autoskillit.core.types._type_plugin_source import DirectInstall
-
-    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 
     ctx = make_context(
         AutomationConfig(), runner=None, plugin_dir=str(tmp_path), project_dir=tmp_path
     )
-    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
     assert ctx.plugin_source.plugin_dir != tmp_path
     assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
 
@@ -507,43 +507,71 @@ def test_serve_passes_project_dir_env_to_make_context(monkeypatch, tmp_path):
     assert captured.get("project_dir") == tmp_path
 
 
-def test_make_context_project_dir_git_root_fallback(monkeypatch):
+def test_make_context_project_dir_git_root_fallback(monkeypatch, tmp_path):
     """make_context() without explicit project_dir falls back to git toplevel."""
     import subprocess as _subprocess
 
+    git_root = tmp_path / "git-root"
+    git_root.mkdir()
+
     def fake_run(cmd, *, capture_output, text, timeout):
-        return _subprocess.CompletedProcess(cmd, 0, stdout="/fake/git/root\n", stderr="")
+        return _subprocess.CompletedProcess(cmd, 0, stdout=f"{git_root}\n", stderr="")
 
-    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    monkeypatch.setattr("autoskillit.core.paths.subprocess.run", fake_run)
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.project_dir == Path("/fake/git/root")
+    assert ctx.project_dir == git_root
 
 
-# --- _resolve_project_dir unit tests ---
+# --- resolve_project_dir unit tests ---
+#
+# Lives in core/paths.py so `make_context` and `autoskillit cook` share one
+# derivation; they used to disagree, which made `cook` from a repo subdirectory
+# bind a different project_dir than the server on the same machine.
 
 
-def test_resolve_project_dir_git_root(monkeypatch):
+def test_resolve_project_dir_git_root(monkeypatch, tmp_path):
     import subprocess as _subprocess
 
-    from autoskillit.server._factory import _resolve_project_dir
+    from autoskillit.core import resolve_project_dir
+
+    git_root = tmp_path / "git-root"
+    git_root.mkdir()
 
     def fake_run(cmd, *, capture_output, text, timeout):
-        return _subprocess.CompletedProcess(cmd, 0, stdout="/fake/git/root\n", stderr="")
+        return _subprocess.CompletedProcess(cmd, 0, stdout=f"{git_root}\n", stderr="")
 
-    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
-    assert _resolve_project_dir() == Path("/fake/git/root")
+    monkeypatch.setattr("autoskillit.core.paths.subprocess.run", fake_run)
+    assert resolve_project_dir() == git_root
+
+
+def test_resolve_project_dir_ignores_a_toplevel_that_is_not_a_directory(monkeypatch):
+    """A toplevel that does not exist is not a project root — fall back to cwd.
+
+    Real git never returns one, but a test that mocks subprocess.run wholesale
+    does, and the resulting garbage path used to be materialised on disk by the
+    first mkdir(parents=True) downstream.
+    """
+    import subprocess as _subprocess
+
+    from autoskillit.core import resolve_project_dir
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 0, stdout="/no/such/toplevel\n", stderr="")
+
+    monkeypatch.setattr("autoskillit.core.paths.subprocess.run", fake_run)
+    assert resolve_project_dir() == Path.cwd()
 
 
 def test_resolve_project_dir_cwd_fallback(monkeypatch):
     import subprocess as _subprocess
 
-    from autoskillit.server._factory import _resolve_project_dir
+    from autoskillit.core import resolve_project_dir
 
     def fake_run(cmd, *, capture_output, text, timeout):
         return _subprocess.CompletedProcess(cmd, 1, stdout="", stderr="not a git repo")
 
-    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
-    assert _resolve_project_dir() == Path.cwd()
+    monkeypatch.setattr("autoskillit.core.paths.subprocess.run", fake_run)
+    assert resolve_project_dir() == Path.cwd()
 
 
 def test_make_context_ignores_ambient_provider_profile(monkeypatch, tmp_path):

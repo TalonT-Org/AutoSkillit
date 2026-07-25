@@ -5,7 +5,9 @@ Zero autoskillit imports.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from hashlib import sha256
+from types import MappingProxyType
 from typing import NamedTuple
 
 from ._type_constants_registries import SKILL_CAPABILITY_REGISTRY
@@ -21,6 +23,8 @@ __all__ = [
     "CODEX_INTAKE_DISCIPLINE_DIGEST",
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
+    "RETIRED_INSTALL_ARTIFACT_SHAPES",
+    "RetiredArtifactShape",
     "SKILL_COMMAND_PREFIX",
     "SKILL_COMMAND_DISPLAY_MAX",
     "AUTOSKILLIT_SKILL_PREFIX",
@@ -223,6 +227,53 @@ if any(n != n.lower() for n in RETIRED_AGENT_NAMES):
     raise AssertionError(
         "RETIRED_AGENT_NAMES entries must be lowercase. "
         f"Offending: {sorted(n for n in RETIRED_AGENT_NAMES if n != n.lower())}"
+    )
+
+
+class RetiredArtifactShape(NamedTuple):
+    """One on-disk install artifact whose *shape* was retired by a release.
+
+    ``~/.autoskillit/`` and ``~/.claude/plugins/`` persist across years of
+    versions, so changing the shape of an artifact we write there (symlink to
+    real directory, file to directory, …) strands every pre-existing install.
+    Declaring the retirement here is what gives the reconciler something to
+    repair and the guard test something to enforce.
+    """
+
+    shape: str
+    retired_in: str
+    reason: str
+
+
+# Artifact key -> the shape that was retired. Keys are ``Path.home()``-relative
+# POSIX strings and are resolved against ``Path.home()`` at use time, so the
+# registry works unchanged under the ``monkeypatch.setattr(Path, "home", ...)``
+# pattern the test suite depends on. Absolute keys are rejected by a guard test.
+#
+# Append-only, exactly like RETIRED_SKILL_NAMES / RETIRED_AGENT_NAMES: adding an
+# entry here is the *forcing function* that makes an artifact-shape change
+# mergeable. The reconciler in workspace/_install_state.py consumes this at
+# runtime — it must handle every entry, and nothing outside it.
+RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingProxyType(
+    {
+        ".autoskillit/marketplace/plugins/autoskillit": RetiredArtifactShape(
+            shape="symlink",
+            retired_in="0.10.892",
+            reason=(
+                "The public marketplace plugin root was a symlink to pkg_root() before "
+                "0.10.892 and is a materialized directory after it. A leftover symlink "
+                "makes the projection's containment check resolve the destination onto "
+                "its own source root."
+            ),
+        ),
+    }
+)
+
+_ABSOLUTE_ARTIFACT_KEYS = sorted(k for k in RETIRED_INSTALL_ARTIFACT_SHAPES if k.startswith("/"))
+if _ABSOLUTE_ARTIFACT_KEYS:
+    raise AssertionError(
+        "RETIRED_INSTALL_ARTIFACT_SHAPES keys must be Path.home()-relative. "
+        f"Offending: {_ABSOLUTE_ARTIFACT_KEYS}"
     )
 
 WORKTREE_SKILLS: frozenset[str] = frozenset(

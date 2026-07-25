@@ -36,7 +36,14 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
         "uses_capabilities",
     }
 )
-SKILL_PROJECTION_VERSION = 1
+# Bumped 1 -> 2: the projection's *source* changed (the running package rather
+# than a third-party cache snapshot) and its cache key gained a content digest
+# over the projected asset tree. Every existing projection and every stored
+# dispatch contract is therefore semantically stale. Bumping makes that
+# invalidation explicit instead of relying on the new digest to happen to
+# differ, and causes stale stored contracts to be refused loudly by the
+# assertion in _skill_session_contract_store rather than silently reused.
+SKILL_PROJECTION_VERSION = 2
 SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 2
 
 

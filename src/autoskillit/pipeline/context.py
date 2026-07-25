@@ -76,7 +76,9 @@ class ToolContext:
     timing_log:           TimingLog — per-step wall-clock duration tracking
     response_log:         McpResponseLog — per-tool MCP response size tracking
     gate:                 GateState — enables/disables gated tools
-    plugin_source:        PluginSource — DirectInstall (dev/editable) or MarketplaceInstall.
+    plugin_source:        PluginSource — the sanitized ProjectedPluginRoot this
+                          session loads. Always derived from pkg_root(), never from
+                          installed_plugins.json.
                           Encodes how autoskillit is loaded into Claude Code sessions.
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
                           MockSubprocessRunner in tests)

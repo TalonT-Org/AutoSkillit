@@ -760,7 +760,6 @@ _PIPELINE_FIXTURES = frozenset(
         "minimal_ctx",
         "tool_ctx",
         "tool_ctx_kitchen_open",
-        "tool_ctx_marketplace",
     }
 )
 

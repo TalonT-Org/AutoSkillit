@@ -83,10 +83,17 @@ def test_skill_command_guard_no_silent_broad_except():
 
 # CD5
 def test_doctor_py_under_line_limit():
-    """CD5: doctor/__init__.py must be ≤253 lines after split."""
+    """CD5: doctor/__init__.py stays a thin hub — checks live in _doctor_* spokes.
+
+    Budget raised 257 -> 261 for check 2f (install-state consistency), which
+    delegates wholly to verify_install_state() in workspace/ and adds only its
+    dispatch line here. Raise this only for a check that lives in a spoke; a
+    check whose *body* lands in the facade is the thing this guard exists to
+    prevent.
+    """
     p = SRC_ROOT / "cli" / "doctor" / "__init__.py"
     lines = p.read_text().splitlines()
-    assert len(lines) <= 257, f"doctor/__init__.py is {len(lines)} lines — split required"
+    assert len(lines) <= 261, f"doctor/__init__.py is {len(lines)} lines — split required"
 
 
 # CD6

@@ -119,6 +119,9 @@ def test_cook_command_env_excludes_ide_vars(
     monkeypatch.setenv("CLAUDE_CODE_SSE_PORT", "23270")
     monkeypatch.setenv("ENABLE_IDE_INTEGRATION", "true")
     monkeypatch.chdir(tmp_path)
+    # cook() derives project_dir via the same git-toplevel helper the MCP server
+    # uses; subprocess.run is patched wholesale below, so pin the helper instead.
+    monkeypatch.setattr("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd)
 
     fake_skills_dir = tmp_path / "skills"
     fake_skills_dir.mkdir()

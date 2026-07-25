@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 import pytest
 
-from autoskillit.core import BackendEventKind, DirectInstall, SessionEvent
+from autoskillit.core import BackendEventKind, ProjectedPluginRoot, SessionEvent
 from autoskillit.core.types import Severity
 from autoskillit.execution.backends import CompositeSessionLocator
 from autoskillit.execution.backends.codex import (
@@ -123,7 +123,7 @@ class TestCodexSmokeFoodTruckCmdBuild:
     """Verify CodexBackend.build_food_truck_cmd produces a valid CmdSpec."""
 
     def test_food_truck_cmd_has_required_flags(self) -> None:
-        plugin_source = DirectInstall(plugin_dir=Path("/tmp/fake-plugin"))
+        plugin_source = ProjectedPluginRoot(plugin_dir=Path("/tmp/fake-plugin"))
         cmd = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
             plugin_source=plugin_source,

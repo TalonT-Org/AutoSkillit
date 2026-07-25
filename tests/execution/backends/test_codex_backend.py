@@ -20,9 +20,9 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     CodingAgentBackend,
-    DirectInstall,
     EnvPolicy,
     OutputFormat,
+    ProjectedPluginRoot,
     ResultParser,
     SessionCheckpoint,
     SessionLocator,
@@ -775,7 +775,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         config = SkillSessionConfig(
             completion_marker="%%DONE%%",
             output_format=OutputFormat.STREAM_JSON,
-            plugin_source=DirectInstall(plugin_dir=Path("/p")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
         )
         spec = CodexBackend().build_skill_session_cmd("/test", cwd="/work", config=config)
         cmd_str = " ".join(spec.cmd)
@@ -871,10 +871,10 @@ class TestCodexBuildInteractiveCmd:
     def test_plugin_source_is_delivered_through_codex_home(self) -> None:
         from pathlib import Path
 
-        from autoskillit.core import DirectInstall
+        from autoskillit.core import ProjectedPluginRoot
 
         spec = CodexBackend().build_interactive_cmd(
-            plugin_source=DirectInstall(plugin_dir=Path("/x"))
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/x"))
         )
         assert "--plugin-dir" not in spec.cmd
         assert "/x" not in spec.cmd
@@ -936,7 +936,7 @@ class TestCodexDynaconfBackendEnv:
 
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -953,7 +953,7 @@ class TestCodexDynaconfBackendEnv:
 class TestCodexBuildFoodTruckCmd:
     BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -1448,7 +1448,7 @@ class TestCodexForwardVarsInjection:
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -1513,7 +1513,7 @@ class TestCodexMcpClientBackendRequired:
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -1613,7 +1613,7 @@ class TestCodexDiscardDispositions:
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "go",
-        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -1622,7 +1622,7 @@ class TestCodexDiscardDispositions:
         with structlog.testing.capture_logs() as cap_logs:
             spec = CodexBackend().build_skill_session_cmd(
                 **self.SKILL_BASE,
-                plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
+                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/pkg")),
             )
         events = [e for e in cap_logs if e.get("event") == "codex_plugin_source_discarded"]
         assert events == []

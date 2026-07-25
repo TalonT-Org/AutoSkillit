@@ -14,8 +14,8 @@ from autoskillit.core import (
     CapabilityNotSupportedError,
     CmdSpec,
     CodingAgentBackend,
-    DirectInstall,
     EnvPolicy,
+    ProjectedPluginRoot,
     ResultParser,
     SessionLocator,
     SkillSessionConfig,
@@ -272,7 +272,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         self._require_capability("food_truck_capable")
         result = self.backend.build_food_truck_cmd(
             orchestrator_prompt="x",
-            plugin_source=DirectInstall(plugin_dir=Path("/tmp")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
             cwd="/tmp",
             completion_marker="%%X%%",
         )

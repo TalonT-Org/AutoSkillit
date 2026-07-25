@@ -11,8 +11,8 @@ import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, BackendCapabilities
 from autoskillit.core.types import (
-    DirectInstall,
     OutputFormat,
+    ProjectedPluginRoot,
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
@@ -199,7 +199,7 @@ _BASE_CMD_ARGS = dict(
     cwd="/tmp",
     completion_marker="DONE",
     model=None,
-    plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+    plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
     output_format=OutputFormat.STREAM_JSON,
 )
 

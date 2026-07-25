@@ -262,7 +262,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
 
     # Build context with project_dir = different_dir, recipes = RealRecipeRepository
     from autoskillit.config.settings import AutomationConfig
-    from autoskillit.core.types import DirectInstall
+    from autoskillit.core.types import ProjectedPluginRoot
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.gate import DefaultGateState
@@ -279,7 +279,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=different_dir,

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, Severity, build_agent_env, get_logger
+from autoskillit.workspace import verify_install_state
 
 from ._doctor_types import DoctorResult
 
@@ -231,7 +232,13 @@ def _check_plugin_cache_exists(cache_dir: Path | None = None) -> DoctorResult:
 
 
 def _check_installed_plugins_entry(plugins_json_path: Path | None = None) -> DoctorResult:
-    """Check that installed_plugins.json contains the autoskillit entry."""
+    """Check that installed_plugins.json names a plugin directory that exists.
+
+    Key presence alone used to be enough to report OK, so on a machine whose
+    ``installPath`` named a deleted directory — the exact state that crashed
+    ``cook`` and MCP startup — ``doctor`` affirmatively reassured the user.
+    Dereferencing the path is the whole point of the check.
+    """
     from autoskillit.cli._installed_plugins import InstalledPluginsFile
 
     store = InstalledPluginsFile(plugins_json_path)
@@ -241,23 +248,49 @@ def _check_installed_plugins_entry(plugins_json_path: Path | None = None) -> Doc
             "installed_plugins_entry",
             "installed_plugins.json not found. Run `autoskillit install`.",
         )
-    if store.contains("autoskillit@autoskillit-local"):
+    if not store.contains("autoskillit@autoskillit-local"):
         return DoctorResult(
-            Severity.OK,
+            Severity.WARNING,
             "installed_plugins_entry",
-            "autoskillit entry present in installed_plugins.json",
+            "autoskillit entry missing from installed_plugins.json. "
+            "Run `autoskillit install` to fix.",
+        )
+    from autoskillit.core import registered_install_paths
+
+    dangling = [str(p) for p in registered_install_paths() if not p.is_dir()]
+    if dangling:
+        return DoctorResult(
+            Severity.ERROR,
+            "installed_plugins_entry",
+            "installed_plugins.json names installPath(s) that do not exist: "
+            f"{', '.join(dangling)}. Run `autoskillit install` to reinstall the plugin.",
         )
     return DoctorResult(
-        Severity.WARNING,
+        Severity.OK,
         "installed_plugins_entry",
-        "autoskillit entry missing from installed_plugins.json. Run `autoskillit install` to fix.",
+        "autoskillit entry present and its installPath resolves",
     )
 
 
 def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult:
-    """Validate that plugin cache hooks.json paths resolve to real files."""
+    """Validate that plugin cache hooks.json paths resolve to real files.
+
+    ``validate_plugin_cache_hooks`` returns ``[]`` for an *absent* cache
+    directory, which used to be reported as OK — "nothing is broken" and
+    "there is nothing to check" are not the same answer.
+    """
     from autoskillit.hook_registry import validate_plugin_cache_hooks
 
+    _cache_dir = cache_dir or (
+        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
+    )
+    if not _cache_dir.is_dir():
+        return DoctorResult(
+            Severity.WARNING,
+            "plugin_cache_integrity",
+            f"Plugin cache directory is absent, so hook paths could not be verified: "
+            f"{_cache_dir}. Run `autoskillit install` to rebuild it.",
+        )
     broken = validate_plugin_cache_hooks(cache_dir=cache_dir)
     if broken:
         broken_str = ", ".join(broken)
@@ -272,6 +305,28 @@ def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult
         "plugin_cache_integrity",
         "Plugin cache hook paths are valid",
     )
+
+
+def _check_install_state_consistency() -> list[DoctorResult]:
+    """Report every install-state invariant via the single consistency authority.
+
+    One finding per violated invariant, and one finding per *derived version
+    file* that disagrees with the running package — so a three-way drift names
+    all three files rather than collapsing into one ambiguous message.
+    """
+    findings = verify_install_state()
+    if not findings:
+        return [
+            DoctorResult(
+                Severity.OK,
+                "install_state_consistency",
+                "Install artifacts, registry, and versions agree",
+            )
+        ]
+    return [
+        DoctorResult(finding.severity, f"install_state:{finding.check}", finding.message)
+        for finding in findings
+    ]
 
 
 def _check_codex_mcp_timeouts(

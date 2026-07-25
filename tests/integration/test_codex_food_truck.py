@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CmdSpec, DirectInstall
+from autoskillit.core import CmdSpec, ProjectedPluginRoot
 from autoskillit.execution.backends.codex import CodexBackend
 
 pytestmark = [pytest.mark.small]
@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.small]
 class TestCodexFoodTruckCommand:
     BASE: dict[str, object] = {
         "orchestrator_prompt": "run the plan",
-        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }

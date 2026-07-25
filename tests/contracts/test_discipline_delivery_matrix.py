@@ -15,7 +15,7 @@ from autoskillit.core import (
     SESSION_TYPE_FLEET,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
-    DirectInstall,
+    ProjectedPluginRoot,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
@@ -90,7 +90,7 @@ class TestOrchestratorHeadless:
     def test_orchestrator_prompt_non_empty(self, backend) -> None:
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="Run the pipeline",
-            plugin_source=DirectInstall(plugin_dir=Path("/tmp")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         )
@@ -105,7 +105,7 @@ class TestOrchestratorHeadless:
     def test_session_type_orchestrator_in_env(self, backend) -> None:
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="Run the pipeline",
-            plugin_source=DirectInstall(plugin_dir=Path("/tmp")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
         )

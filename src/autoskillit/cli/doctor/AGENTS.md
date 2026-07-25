@@ -1,6 +1,6 @@
 # doctor/
 
-Diagnostic health checks for the autoskillit installation (48 checks).
+Diagnostic health checks for the autoskillit installation (49 checks).
 
 ## Files
 
@@ -14,7 +14,7 @@ Diagnostic health checks for the autoskillit installation (48 checks).
 | `_doctor_fleet.py` | Fleet infrastructure, campaign state, and sous-chef checks |
 | `_doctor_hooks.py` | Hook registration, executability, and registry drift checks |
 | `_doctor_install.py` | Install path, entry points, version drift, update dismissal checks |
-| `_doctor_mcp.py` | MCP server registration, dual registration, plugin cache checks |
+| `_doctor_mcp.py` | MCP server registration, dual registration, plugin cache, and install-state consistency checks |
 | `_doctor_runtime.py` | Quota cache schema version, claude process state, codex version, and codex graduation checks |
 | `_doctor_skills.py` | Bundled skill capability declaration authenticity checks |
 

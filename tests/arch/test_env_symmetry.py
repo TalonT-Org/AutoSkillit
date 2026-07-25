@@ -27,7 +27,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_skill_and_food_truck_share_required_env_vars() -> None:
     """build_skill_session_cmd and build_food_truck_cmd must both set the required base env vars."""  # noqa: E501
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
@@ -38,7 +38,7 @@ def test_skill_and_food_truck_share_required_env_vars() -> None:
         )
         food_truck_spec = backend.build_food_truck_cmd(
             orchestrator_prompt="test prompt",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="DONE",
         )
@@ -79,7 +79,7 @@ def test_interactive_cmd_has_baseline_env() -> None:
 
 def test_agent_backend_env_var_in_food_truck(monkeypatch: pytest.MonkeyPatch) -> None:
     """AUTOSKILLIT_AGENT_BACKEND must appear in build_food_truck_cmd env for every backend."""
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     # Ensure clean environment - remove any residual AGENT_BACKEND_ENV_VAR from host
@@ -90,7 +90,7 @@ def test_agent_backend_env_var_in_food_truck(monkeypatch: pytest.MonkeyPatch) ->
         backend = cls()
         food_truck_spec = backend.build_food_truck_cmd(
             orchestrator_prompt="test prompt",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="DONE",
         )
@@ -116,7 +116,7 @@ def test_dynaconf_backend_env_var_in_skill_session() -> None:
 
 def test_dynaconf_backend_env_var_in_food_truck_cmd() -> None:
     """Nested AUTOSKILLIT_AGENT_BACKEND__BACKEND in build_food_truck_cmd env for every backend."""  # noqa: E501
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
@@ -124,7 +124,7 @@ def test_dynaconf_backend_env_var_in_food_truck_cmd() -> None:
         backend = cls()
         food_truck_spec = backend.build_food_truck_cmd(
             orchestrator_prompt="test prompt",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="DONE",
         )
@@ -135,7 +135,7 @@ def test_dynaconf_backend_env_var_in_food_truck_cmd() -> None:
 
 def test_dynaconf_and_flat_backend_values_match() -> None:
     """Nested and flat AGENT_BACKEND env vars must carry the same value in all cmd builders."""
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
@@ -150,7 +150,7 @@ def test_dynaconf_and_flat_backend_values_match() -> None:
         ), f"{name}: nested and flat AGENT_BACKEND values differ in build_skill_session_cmd"
         food_truck_spec = backend.build_food_truck_cmd(
             orchestrator_prompt="test prompt",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="DONE",
         )
@@ -169,7 +169,7 @@ _ALL_GUARD_BUILDERS: list[str] = [
 
 
 def _call_builder(backend: object, builder_name: str) -> object:
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 
     if builder_name == "build_skill_session_cmd":
         return backend.build_skill_session_cmd(
@@ -178,7 +178,7 @@ def _call_builder(backend: object, builder_name: str) -> object:
     if builder_name == "build_food_truck_cmd":
         return backend.build_food_truck_cmd(
             orchestrator_prompt="test prompt",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="DONE",
         )

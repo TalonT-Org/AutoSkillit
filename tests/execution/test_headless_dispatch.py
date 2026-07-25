@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_plugin_source import DirectInstall, MarketplaceInstall
+from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -43,7 +43,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -83,7 +83,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -113,7 +113,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         spawned_pids: list[int] = []
@@ -145,7 +145,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -160,16 +160,23 @@ class TestDispatchFoodTruck:
         assert result.success is True
 
     @pytest.mark.anyio
-    async def test_dispatch_food_truck_marketplace_install_does_not_raise(
+    async def test_dispatch_food_truck_emits_projected_plugin_dir(
         self, minimal_ctx, tmp_path: Path
     ):
-        """dispatch_food_truck with MarketplaceInstall resolves cache_path — no ValueError."""
+        """Food-truck dispatch does not raise and does emit --plugin-dir.
+
+        Regression guard for the leak this replaced: dispatch used to receive an
+        *unprojected* source, hit the canonical-root guard, and was routed around
+        it by passing the raw marketplace cache path straight to --plugin-dir. The
+        source is now projected by construction, so the flag is emitted from a
+        sanitized path with no bypass.
+        """
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
 
-        cache = tmp_path / "marketplace_cache"
-        cache.mkdir()
+        projected = tmp_path / "projected-plugin"
+        projected.mkdir()
         runner = MockSubprocessRunner()
         runner.set_default(
             SubprocessResult(
@@ -181,7 +188,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = MarketplaceInstall(cache_path=cache)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=projected)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -193,7 +200,7 @@ class TestDispatchFoodTruck:
         )
         cmd, _cwd, _timeout, _kwargs = runner.call_args_list[0]
         assert "--plugin-dir" in cmd
-        assert str(cache) in cmd
+        assert str(projected) in cmd
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_passes_resume_session_id_to_cmd_builder(
@@ -228,7 +235,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -264,7 +271,7 @@ class TestDispatchFoodTruckPackInjection:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -299,7 +306,7 @@ class TestDispatchFoodTruckPackInjection:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -324,10 +331,10 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_l3_tool_tags_conflict_raises(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
 
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         with pytest.raises(ValueError, match="AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"):
@@ -346,7 +353,7 @@ class TestDispatchFoodTruckGuards:
         from unittest.mock import AsyncMock
 
         from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
 
@@ -367,7 +374,7 @@ class TestDispatchFoodTruckGuards:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
@@ -383,12 +390,12 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_raises_for_non_claude_code_backend(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
 
         minimal_ctx.backend = _mock_backend(food_truck_capable=False)
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         with pytest.raises(RuntimeError, match="food_truck_capable"):
@@ -402,11 +409,11 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_raises_for_none_backend(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
 
         minimal_ctx.backend = None
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         with pytest.raises(RuntimeError, match="dispatch_backend must be resolved"):
@@ -421,7 +428,7 @@ class TestDispatchFoodTruckGuards:
         self, minimal_ctx, tmp_path: Path
     ) -> None:
         from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
@@ -437,7 +444,7 @@ class TestDispatchFoodTruckGuards:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = _mock_backend(
             food_truck_capable=True, pty_required=True, channel_b_capable=True
         )
@@ -455,12 +462,12 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_raises_when_food_truck_capable_false(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
 
         minimal_ctx.backend = _mock_backend(food_truck_capable=False)
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         with pytest.raises(RuntimeError, match="food_truck_capable"):
@@ -475,7 +482,7 @@ class TestDispatchFoodTruckGuards:
         self, minimal_ctx, tmp_path: Path
     ) -> None:
         from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
@@ -491,7 +498,7 @@ class TestDispatchFoodTruckGuards:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         minimal_ctx.backend = _mock_backend(food_truck_capable=True)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)

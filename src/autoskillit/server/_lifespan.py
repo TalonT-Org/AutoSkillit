@@ -66,6 +66,7 @@ from autoskillit.hook_registry import (
 from autoskillit.pipeline import create_background_task
 from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
+from autoskillit.workspace import verify_install_state
 
 logger = get_logger(__name__)
 
@@ -126,6 +127,30 @@ def run_startup_hook_health_check() -> list[str]:
         return broken
     except Exception:
         logger.exception("startup_hook_health_check_failed")
+        return []
+
+
+def run_startup_install_state_check() -> list[str]:
+    """Report install-state inconsistencies on MCP startup.
+
+    The third consumer of ``verify_install_state()`` (alongside ``doctor`` and
+    post-install verification), so the authority cannot decay into a function
+    nobody calls. Diagnostic only: startup never fails on a finding, because
+    the projection no longer depends on any of the artifacts being checked.
+    Any failure is logged and swallowed.
+    """
+    try:
+        findings = verify_install_state()
+        for finding in findings:
+            logger.warning(
+                "install_state_inconsistent",
+                check=finding.check,
+                message=finding.message,
+                remediation="Run `autoskillit install` from an external terminal",
+            )
+        return [f.check for f in findings]
+    except Exception:
+        logger.exception("startup_install_state_check_failed")
         return []
 
 
@@ -192,6 +217,12 @@ async def _run_hook_health_check_async() -> None:
     """Offload blocking hook health check to a thread."""
     loop = _asyncio.get_running_loop()
     await loop.run_in_executor(None, run_startup_hook_health_check)
+
+
+async def _run_install_state_check_async() -> None:
+    """Offload the blocking install-state consistency check to a thread."""
+    loop = _asyncio.get_running_loop()
+    await loop.run_in_executor(None, run_startup_install_state_check)
 
 
 async def _run_deferred_init(ready_event: _asyncio.Event) -> None:
@@ -582,6 +613,9 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         bg_tasks.append(create_background_task(_run_retiring_sweep_async(), label="cache_sweep"))
         bg_tasks.append(
             create_background_task(_run_hook_health_check_async(), label="hook_health")
+        )
+        bg_tasks.append(
+            create_background_task(_run_install_state_check_async(), label="install_state")
         )
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
         bg_tasks.append(create_background_task(_cleanup_stale_loop(), label="cleanup_stale"))

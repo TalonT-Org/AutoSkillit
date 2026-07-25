@@ -48,6 +48,50 @@ def pkg_root() -> Path:
     return Path(str(ir.files("autoskillit")))
 
 
+def destination_location(destination: Path) -> Path:
+    """Resolve a write destination's location without following a final-component symlink.
+
+    ``Path.resolve()`` follows the final component, so a destination that is
+    *currently* a symlink resolves to its target. For a write destination that
+    is the wrong question: the destination is about to be replaced, so what
+    matters is where it lives, not what it happens to point at right now.
+    Every containment check over a write destination must use this helper.
+
+    ``core/path_containment.py`` is the read-side counterpart and deliberately
+    does the opposite (``strict=True``, symlinks rejected) — it validates
+    existing artifacts rather than future write targets.
+    """
+    destination = Path(destination)
+    if not destination.name:
+        return destination.resolve()
+    return destination.parent.resolve() / destination.name
+
+
+def resolve_project_dir() -> Path:
+    """Resolve the project root: git toplevel, falling back to cwd.
+
+    The single derivation shared by ``make_context`` and ``autoskillit cook``.
+    They used to disagree — the server took the git toplevel while ``cook`` took
+    bare ``Path.cwd()`` — so launching ``cook`` from a repository subdirectory
+    produced a different ``project_dir`` (and hence a different execution-bound
+    dispatch contract) than the MCP server derived on the same machine.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            toplevel = Path(result.stdout.strip())
+            if toplevel.is_dir():
+                return toplevel
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return Path.cwd()
+
+
 def claude_code_project_dir(cwd: str) -> Path:
     """Derive the Claude Code project log directory from a working directory path.
 

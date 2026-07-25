@@ -14,6 +14,19 @@ from autoskillit.workspace._clone_detect import (
     detect_unpublished_branch,
 )
 from autoskillit.workspace._clone_remote import CloneSourceResolution
+from autoskillit.workspace._install_state import (
+    InstallStateFinding,
+    marketplace_plugin_root,
+    reconcile_install_artifacts,
+    verify_install_state,
+)
+from autoskillit.workspace._projection_cache import (
+    PROJECTION_CACHE_KEY_EXCLUSIONS,
+    ProjectionCacheKey,
+    iter_public_plugin_asset_files,
+    prune_stale_projections,
+    public_plugin_asset_digest,
+)
 from autoskillit.workspace.cleanup import (
     CleanupResult,
     DefaultWorkspaceManager,
@@ -127,8 +140,17 @@ __all__ = [
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
     "SkillFrontmatterParseError",
+    "PROJECTION_CACHE_KEY_EXCLUSIONS",
+    "InstallStateFinding",
+    "ProjectionCacheKey",
     "SkillFrontmatterParseResult",
     "SkillProjectionContext",
+    "iter_public_plugin_asset_files",
+    "marketplace_plugin_root",
+    "prune_stale_projections",
+    "public_plugin_asset_digest",
+    "reconcile_install_artifacts",
+    "verify_install_state",
     "SkillsDirectoryProvider",
     "materialize_agent_skill_tree",
     "materialize_codex_profile_skills",

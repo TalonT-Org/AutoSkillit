@@ -18,10 +18,10 @@ _api_sim_mcp = pytest.importorskip("api_simulator.mcp")
 
 def _make_mock_ctx(tmp_path: Path) -> MagicMock:
     """Return a minimal mock ToolContext for _initialize tests."""
-    from autoskillit.core.types._type_plugin_source import MarketplaceInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 
     ctx = MagicMock()
-    ctx.plugin_source = MarketplaceInstall(cache_path=tmp_path)
+    ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
     # Provide a minimal linux_tracing config stub
     tracing_cfg = MagicMock()
     tracing_cfg.tmpfs_path = str(tmp_path / "tmpfs")

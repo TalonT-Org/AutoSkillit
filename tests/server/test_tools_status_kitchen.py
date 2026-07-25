@@ -64,14 +64,18 @@ class TestKitchenStatus:
         monkeypatch.chdir(tmp_path)
 
     @pytest.mark.anyio
-    async def test_status_returns_version_info(self, tool_ctx_kitchen_open):
-        import autoskillit
-        from autoskillit.core.types._type_plugin_source import DirectInstall
-
-        tool_ctx_kitchen_open.plugin_source = DirectInstall(
-            plugin_dir=Path(autoskillit.__file__).parent
-        )
+    async def test_status_returns_version_info(self, tmp_path, tool_ctx_kitchen_open):
         from autoskillit import __version__
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
+
+        # A projection carrying the live package version — the package root itself
+        # is not a representable plugin source any more.
+        projected = tmp_path / "projection"
+        (projected / ".claude-plugin").mkdir(parents=True)
+        (projected / ".claude-plugin" / "plugin.json").write_text(
+            json.dumps({"name": "autoskillit", "version": __version__})
+        )
+        tool_ctx_kitchen_open.plugin_source = ProjectedPluginRoot(plugin_dir=projected)
 
         result = json.loads(await kitchen_status())
         assert result["package_version"] == __version__
@@ -86,9 +90,9 @@ class TestKitchenStatus:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 
-        tool_ctx_kitchen_open.plugin_source = DirectInstall(plugin_dir=tmp_path)
+        tool_ctx_kitchen_open.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         result = json.loads(await kitchen_status())
         assert result["versions_match"] is False
         assert "warning" in result

@@ -10,7 +10,12 @@ import pytest
 if TYPE_CHECKING:
     from autoskillit.config.settings import AutomationConfig
 
-from autoskillit.core import InspectorCallback, InspectorEvidence, InspectorVerdict
+from autoskillit.core import (
+    SKILL_PROJECTION_VERSION,
+    InspectorCallback,
+    InspectorEvidence,
+    InspectorVerdict,
+)
 from autoskillit.core.types import (
     ChannelConfirmation,
     SubprocessResult,
@@ -359,7 +364,7 @@ def minimal_ctx(tmp_path):
     use tool_ctx instead.
     """
     from autoskillit.config import AutomationConfig
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.gate import DefaultGateState
@@ -373,7 +378,7 @@ def minimal_ctx(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
@@ -398,7 +403,7 @@ def tool_ctx(monkeypatch, tmp_path):
     migrations) are wired via make_context() so routing tests work correctly.
     """
     from autoskillit.config import AutomationConfig
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
     from tests.fakes import MockSubprocessRunner
@@ -407,7 +412,7 @@ def tool_ctx(monkeypatch, tmp_path):
     ctx = make_context(
         AutomationConfig(features={"fleet": True}),
         runner=mock_runner,
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         project_dir=tmp_path,
     )
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
@@ -432,35 +437,6 @@ def tool_ctx(monkeypatch, tmp_path):
             f"---\nname: {skill_name}\ndescription: Test fixture skill\n---\n"
             "# Test fixture skill\n"
         )
-    monkeypatch.setattr(_state, "_ctx", ctx)
-    monkeypatch.setattr(_state, "_startup_ready", None)
-    return ctx
-
-
-@pytest.fixture
-def tool_ctx_marketplace(monkeypatch, tmp_path):
-    """ToolContext simulating a marketplace install: plugin_source = MarketplaceInstall."""
-    from autoskillit.config import AutomationConfig
-    from autoskillit.core.types._type_plugin_source import MarketplaceInstall
-    from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.server import _state
-    from autoskillit.server._factory import make_context
-    from tests.fakes import MockSubprocessRunner
-
-    fake_cache = tmp_path / "marketplace_cache"
-    fake_cache.mkdir()
-
-    mock_runner = MockSubprocessRunner()
-    ctx = make_context(
-        AutomationConfig(features={"fleet": True}),
-        runner=mock_runner,
-        plugin_source=MarketplaceInstall(cache_path=fake_cache),
-        project_dir=tmp_path,
-    )
-    ctx.gate = DefaultGateState(enabled=False)
-    ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
-    ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
-    ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx
@@ -527,7 +503,7 @@ def bind_test_skill_resume_contract(
         capability_union=frozenset(),
         canonical_digests={skill_name: digest},
         projected_digests={skill_name: digest},
-        projection_version=1,
+        projection_version=SKILL_PROJECTION_VERSION,
         project_root=str(Path(tool_ctx.project_dir).resolve()),
         cwd=str(Path(cwd).resolve()),
         backend=tool_ctx.backend.name,

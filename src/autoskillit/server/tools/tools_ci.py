@@ -10,7 +10,7 @@ import httpx
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import DirectInstall, MarketplaceInstall, get_logger
+from autoskillit.core import get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import fetch_repo_merge_state, resolve_repo_from_remote
@@ -74,11 +74,10 @@ async def set_commit_status(
         if cwd:
             effective_cwd = cwd
         else:
-            match tool_ctx.plugin_source:
-                case DirectInstall(plugin_dir=p):
-                    effective_cwd = str(p)
-                case MarketplaceInstall(cache_path=cp):
-                    effective_cwd = str(cp)
+            # Recorded, not fixed here: using a *projection* directory as the cwd for
+            # git-remote resolution looks wrong regardless of variant — a projection is
+            # not a git repository. Pre-existing question, deliberately out of scope.
+            effective_cwd = str(tool_ctx.plugin_source.plugin_dir)
 
         # Resolve owner/repo if not provided
         owner_repo = repo

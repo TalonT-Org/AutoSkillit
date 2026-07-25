@@ -28,29 +28,41 @@ def _installed_plugins_path() -> Path:
     return Path.home() / ".claude" / "plugins" / "installed_plugins.json"
 
 
-def _get_autoskillit_install_path() -> Path:
-    """Return the installPath for autoskillit from installed_plugins.json.
+def registered_install_paths() -> tuple[Path, ...]:
+    """Return every ``installPath`` recorded for autoskillit, for diagnostics only.
 
-    The plugin value can be a dict {"installPath": ...} (old format) or
-    a list [{"installPath": ...}] (new scoped format). Raises KeyError if
-    the plugin is not present; raises ValueError if the file is unreadable,
-    unparseable, or the entry format is unexpected.
+    This is a *reporting* primitive, not a resolution one: no execution path may
+    derive a plugin source from ``installed_plugins.json``. That file is written,
+    versioned, and garbage-collected by Claude Code, so a path read from it can
+    name a directory that no longer exists — which is exactly how the registry
+    and the filesystem drift apart. ``verify_install_state()`` consumes this to
+    *report* the drift; the projection resolves from ``pkg_root()`` instead.
+
+    Lives in core/ (pure stdlib, importable from any layer) so IL-1 ``workspace``
+    can read the registry without importing ``cli.InstalledPluginsFile`` (IL-3),
+    which IL-005 forbids.
+
+    Never raises: an absent, unreadable, or malformed file yields ``()``.
     """
     try:
         data = json.loads(_installed_plugins_path().read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Cannot read installed_plugins.json: {exc}") from exc
-    entry = data["plugins"][_AUTOSKILLIT_PLUGIN_KEY]
-    if isinstance(entry, list):
-        if not entry:
-            raise ValueError(f"Empty install entry list for {_AUTOSKILLIT_PLUGIN_KEY!r}")
-        entry = entry[0]
-    install_path = entry.get("installPath") if isinstance(entry, dict) else None
-    if install_path is None:
-        raise ValueError(
-            f"Missing 'installPath' in entry for {_AUTOSKILLIT_PLUGIN_KEY!r}: {entry!r}"
-        )
-    return Path(install_path)
+    except (OSError, json.JSONDecodeError):
+        return ()
+    if not isinstance(data, dict):
+        return ()
+    plugins = data.get("plugins")
+    if not isinstance(plugins, dict):
+        return ()
+    entry = plugins.get(_AUTOSKILLIT_PLUGIN_KEY)
+    entries = entry if isinstance(entry, list) else [entry]
+    paths: list[Path] = []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        install_path = item.get("installPath")
+        if isinstance(install_path, str) and install_path:
+            paths.append(Path(install_path))
+    return tuple(paths)
 
 
 @functools.lru_cache(maxsize=1)

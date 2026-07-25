@@ -138,7 +138,7 @@ class CodingAgentBackend(Protocol):
         self,
         *,
         orchestrator_prompt: str,
-        plugin_source: PluginSource,
+        plugin_source: PluginSource | None,
         cwd: str,
         completion_marker: str,
         resume_session_id: str | None = None,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import os
 import shutil
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO
@@ -71,7 +72,25 @@ def append_retiring_entry(version: str, path: str) -> None:
         fh.close()
 
 
-def sweep_retiring_cache(grace_hours: int = 2) -> int:
+#: Hard ceiling on how long a registry-referenced retiring entry may be deferred.
+#: Past this age the directory is deleted anyway and the inconsistency is reported
+#: by ``verify_install_state()`` — the registry, not the sweeper, is the thing that
+#: is wrong. Without a ceiling a stale registry entry defers its directory forever
+#: (``retired_at`` is stamped once, so every later sweep re-defers it unchanged),
+#: trading a premature-delete bug for an unbounded-retention one.
+MAX_DEFER_HOURS = 72
+
+
+def sweep_retiring_cache(grace_hours: int = 2, max_defer_hours: int = MAX_DEFER_HOURS) -> int:
+    """Delete aged-out retiring cache directories; defer registry-referenced ones.
+
+    A directory still named by ``installed_plugins.json`` is *deferred* rather
+    than deleted, so our own sweeper can never be the thing that turns a live
+    registry entry into a dangling pointer. The defer is bounded by
+    ``max_defer_hours``; past that the directory goes and the drift is surfaced
+    as an operator-actionable finding instead. Deleting past the ceiling is safe
+    because no execution path resolves a plugin source from that path any more.
+    """
     cache = _retiring_cache_path()
     lock = _retiring_cache_lock()
     if not cache.exists():
@@ -83,9 +102,14 @@ def sweep_retiring_cache(grace_hours: int = 2) -> int:
             return 0
         entries: list[dict[str, str]] = data.get("retiring", [])
 
+        from ._plugin_ids import registered_install_paths
+
+        registered = {str(Path(p)) for p in registered_install_paths()}
+
         survivors: list[dict[str, str]] = []
         count = 0
         cutoff = timedelta(hours=grace_hours)
+        defer_ceiling = timedelta(hours=max_defer_hours)
         for entry in entries:
             retired_at_str = entry.get("retired_at")
             if not retired_at_str:
@@ -97,21 +121,73 @@ def sweep_retiring_cache(grace_hours: int = 2) -> int:
             except (ValueError, TypeError):
                 survivors.append(entry)
                 continue
-            if age >= cutoff:
-                path = entry.get("path", "")
-                if path and Path(path).is_dir():
-                    try:
-                        shutil.rmtree(path)
-                    except OSError as exc:
-                        logger.warning("sweep_retiring_cache: failed to remove %s: %s", path, exc)
-                        survivors.append(entry)
-                        continue
-                count += 1
-            else:
+            if age < cutoff:
                 survivors.append(entry)
+                continue
+            path = entry.get("path", "")
+            if path and str(Path(path)) in registered and age < defer_ceiling:
+                logger.info(
+                    "sweep_retiring_cache: deferring %s — still referenced by "
+                    "installed_plugins.json (age %.1fh, ceiling %dh)",
+                    path,
+                    age.total_seconds() / 3600.0,
+                    max_defer_hours,
+                )
+                survivors.append(entry)
+                continue
+            if path and Path(path).is_dir():
+                try:
+                    shutil.rmtree(path)
+                except OSError as exc:
+                    logger.warning("sweep_retiring_cache: failed to remove %s: %s", path, exc)
+                    survivors.append(entry)
+                    continue
+            count += 1
 
         write_versioned_json(cache, {"retiring": survivors}, schema_version=_SCHEMA_VERSION)
         return count
+    finally:
+        fh.close()
+
+
+def retiring_cache_entries() -> tuple[dict[str, str], ...]:
+    """Return the current retiring-cache entries (locked read), for diagnostics."""
+    cache = _retiring_cache_path()
+    if not cache.exists():
+        return ()
+    fh = _open_lock(_retiring_cache_lock())
+    try:
+        data = read_versioned_json(cache, _SCHEMA_VERSION, logger=logger)
+        if data is None:
+            return ()
+        return tuple(data.get("retiring", []))
+    finally:
+        fh.close()
+
+
+def drop_retiring_entries(paths: Iterable[str]) -> int:
+    """Remove retiring entries naming any of *paths*; return the number dropped.
+
+    The rollback half of ``install()``'s transaction: a failed install must not
+    leave the live cache queued for deletion.
+    """
+    targets = {str(Path(p)) for p in paths}
+    if not targets:
+        return 0
+    cache = _retiring_cache_path()
+    if not cache.exists():
+        return 0
+    fh = _open_lock(_retiring_cache_lock())
+    try:
+        data = read_versioned_json(cache, _SCHEMA_VERSION, logger=logger)
+        if data is None:
+            return 0
+        entries: list[dict[str, str]] = data.get("retiring", [])
+        survivors = [e for e in entries if str(Path(e.get("path", ""))) not in targets]
+        dropped = len(entries) - len(survivors)
+        if dropped:
+            write_versioned_json(cache, {"retiring": survivors}, schema_version=_SCHEMA_VERSION)
+        return dropped
     finally:
         fh.close()
 

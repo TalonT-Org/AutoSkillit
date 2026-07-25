@@ -39,7 +39,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_invariant_registry.py` | Invariant registry: `InvariantDef` dataclass and `INVARIANT_REGISTRY` mapping prose prohibitions to runtime gates |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |
-| `_type_plugin_source.py` | `PluginSource` discriminated union: `DirectInstall | MarketplaceInstall` |
+| `_type_plugin_source.py` | `DirectInstall` (projection input) and `ProjectedPluginRoot` (the sole `PluginSource`) |
 | `_type_tradition_manifest.py` | `TraditionManifest`, `LensEntry`, `DialingConfig` frozen dataclasses with `from_dict`/`from_yaml_path` loaders |
 | `_type_context_admission.py` | Frozen content-free identities, events, records, effects, states, and coverage definitions for context admission |
 

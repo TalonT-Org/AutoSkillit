@@ -13,6 +13,11 @@ import pytest
 
 import autoskillit
 from autoskillit.core.io import load_yaml
+from tests.cli._upgrade_fixtures import (
+    CONTAINED_STATES,
+    LEGACY_HOME_STATES,
+    seed_legacy_home,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -71,13 +76,17 @@ class TestVersionConsistency:
             f"(field is only for project-local recipes): {has_field}"
         )
 
-    def test_marketplace_json_version_field(self, tmp_path, monkeypatch):
-        import importlib as _importlib
+    @pytest.mark.parametrize("legacy_state", sorted(LEGACY_HOME_STATES - CONTAINED_STATES))
+    def test_marketplace_json_version_field(self, legacy_state, tmp_path, monkeypatch):
+        """Install-over-something, not just install-from-nothing.
 
-        _mkt_mod = _importlib.import_module("autoskillit.cli._marketplace")
-
+        Parameterized over the upgrade matrix because the clean-slate fixture is
+        exactly what hid F1: `~/.autoskillit/marketplace/plugins/autoskillit` had
+        existed on the reporting machine since 2026-02-19 and was a symlink since
+        2026-07-20, a state no test could construct.
+        """
+        seed_legacy_home(legacy_state, tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(_mkt_mod, "is_git_worktree", lambda path: False)
         from autoskillit.cli._marketplace import _ensure_marketplace
 
         _ensure_marketplace()
@@ -89,8 +98,15 @@ class TestVersionConsistency:
         assert len(plugins) == 1
         assert plugins[0]["version"] == autoskillit.__version__
 
-    def test_marketplace_public_projection_matches_private_contract(self, tmp_path, monkeypatch):
-        """Build guard: published skills are sanitized and manifest-complete."""
+    @pytest.mark.parametrize("legacy_state", sorted(LEGACY_HOME_STATES - CONTAINED_STATES))
+    def test_marketplace_public_projection_matches_private_contract(
+        self, legacy_state, tmp_path, monkeypatch
+    ):
+        """Build guard: published skills are sanitized and manifest-complete.
+
+        Runs over every pre-existing on-disk state an upgrade can land on, not
+        just an empty home directory.
+        """
         import importlib as _importlib
 
         from autoskillit.core import SkillSource, pkg_root
@@ -99,9 +115,9 @@ class TestVersionConsistency:
             validate_sanitized_plugin_artifact,
         )
 
+        seed_legacy_home(legacy_state, tmp_path)
         marketplace = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(marketplace, "is_git_worktree", lambda path: False)
         marketplace_root = marketplace._ensure_marketplace()
         public_root = marketplace_root / "plugins" / "autoskillit"
         private_manifest = (

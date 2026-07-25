@@ -214,15 +214,14 @@ def test_factory_make_context_returns_toolcontext(monkeypatch, tmp_path):
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.server._factory import make_context
 
-    monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
     ctx = make_context(AutomationConfig(), project_dir=tmp_path)
     assert isinstance(ctx, ToolContext)
     assert ctx.gate.enabled is False  # starts closed
     assert isinstance(ctx.audit, DefaultAuditLog)
     assert ctx.token_log is not None
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 
-    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
     assert ctx.plugin_source.plugin_dir != pkg_root()
     assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
     manifest = (
@@ -242,11 +241,11 @@ def test_factory_make_context_accepts_runner(tmp_path):
 
 def test_factory_make_context_accepts_plugin_dir(tmp_path):
     from autoskillit.config import AutomationConfig
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path), project_dir=tmp_path)
-    assert isinstance(ctx.plugin_source, DirectInstall)
+    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
     assert ctx.plugin_source.plugin_dir != tmp_path
     assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
 

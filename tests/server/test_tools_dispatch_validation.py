@@ -469,8 +469,8 @@ class TestDispatchFoodTruckSemanticValidation:
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketplace, monkeypatch):
-    """dispatch_food_truck does not raise when plugin_source is MarketplaceInstall."""
+async def test_dispatch_food_truck_projected_plugin_source_succeeds(tool_ctx, monkeypatch):
+    """dispatch_food_truck succeeds with the projected plugin source in ToolContext."""
     from autoskillit.fleet._api import execute_dispatch
     from autoskillit.fleet.result_parser import L3ParseResult
 
@@ -485,16 +485,16 @@ async def test_dispatch_food_truck_marketplace_install_succeeds(tool_ctx_marketp
         ),
     )
 
-    tool_ctx_marketplace.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)
     repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe", ["task"]))
-    tool_ctx_marketplace.recipes = repo
-    tool_ctx_marketplace.executor = InMemoryHeadlessExecutor()
+    tool_ctx.recipes = repo
+    tool_ctx.executor = InMemoryHeadlessExecutor()
 
     _dispatch_result = await execute_dispatch(
-        tool_ctx=tool_ctx_marketplace,
+        tool_ctx=tool_ctx,
         recipe="test-recipe",
         task="t",
         ingredients=None,

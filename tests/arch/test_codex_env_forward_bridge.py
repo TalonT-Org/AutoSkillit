@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -18,7 +20,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
     """Every var in CODEX_MCP_ENV_FORWARD_VARS must be injected by Codex cmd builders."""
-    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, DirectInstall, OutputFormat, pkg_root
+    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, OutputFormat, ProjectedPluginRoot
     from autoskillit.execution.backends.codex import CodexBackend
 
     backend = CodexBackend()
@@ -32,7 +34,7 @@ def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
     )
     food_truck_spec = backend.build_food_truck_cmd(
         orchestrator_prompt="dispatch",
-        plugin_source=DirectInstall(plugin_dir=pkg_root()),
+        plugin_source=ProjectedPluginRoot(plugin_dir=Path("/projected-plugin")),
         cwd="/work",
         completion_marker="%%DONE%%",
     )

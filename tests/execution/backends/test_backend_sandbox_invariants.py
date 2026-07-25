@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CmdSpec, DirectInstall, OutputFormat, SkillSessionConfig
+from autoskillit.core import CmdSpec, OutputFormat, ProjectedPluginRoot, SkillSessionConfig
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -32,7 +32,7 @@ class TestCodexSandboxInvariants:
     def test_build_food_truck_cmd_sandbox_read_only(self) -> None:
         spec: CmdSpec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="dispatch",
-            plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/pkg")),
             cwd="",
             completion_marker="%%DONE%%",
         )

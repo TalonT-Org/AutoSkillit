@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core.types._type_plugin_source import DirectInstall
+from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.server import _state
 from autoskillit.server._factory import make_context
@@ -28,7 +28,7 @@ async def test_kitchen_open_close_lifecycle(monkeypatch, tmp_path):
     ctx = make_context(
         AutomationConfig(),
         runner=None,
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         project_dir=tmp_path,
     )
     monkeypatch.setattr(_state, "_ctx", ctx)
@@ -79,7 +79,7 @@ async def test_open_kitchen_runs_reaper(monkeypatch, tmp_path):
     ctx = make_context(
         AutomationConfig(),
         runner=None,
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         project_dir=tmp_path,
     )
     monkeypatch.setattr(_state, "_ctx", ctx)
@@ -117,7 +117,7 @@ async def test_close_kitchen_removes_tracker_dir(monkeypatch, tmp_path):
     ctx = make_context(
         AutomationConfig(),
         runner=None,
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         project_dir=tmp_path,
     )
     monkeypatch.setattr(_state, "_ctx", ctx)
@@ -145,7 +145,7 @@ async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, t
     ctx = make_context(
         AutomationConfig(),
         runner=None,
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         project_dir=tmp_path,
     )
     monkeypatch.setattr(_state, "_ctx", ctx)
@@ -365,7 +365,7 @@ async def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_
     ctx = make_context(
         AutomationConfig(),
         runner=None,
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         project_dir=tmp_path,
     )
     monkeypatch.setattr(_state, "_ctx", ctx)
@@ -422,7 +422,7 @@ async def test_close_kitchen_removes_overlay_lock_sidecar(monkeypatch, tmp_path)
     ctx = make_context(
         AutomationConfig(),
         runner=None,
-        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
         project_dir=tmp_path,
     )
     monkeypatch.setattr(_state, "_ctx", ctx)

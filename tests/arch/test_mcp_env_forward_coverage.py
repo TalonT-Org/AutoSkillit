@@ -33,7 +33,7 @@ def test_mcp_env_forward_vars_in_skill_session_cmd() -> None:
 
 def test_mcp_env_forward_vars_in_food_truck_cmd() -> None:
     """mcp_env_forward_vars must appear in build_food_truck_cmd env."""
-    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     for name, cls in BACKEND_REGISTRY.items():
@@ -42,7 +42,7 @@ def test_mcp_env_forward_vars_in_food_truck_cmd() -> None:
             continue
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="test prompt",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="DONE",
         )

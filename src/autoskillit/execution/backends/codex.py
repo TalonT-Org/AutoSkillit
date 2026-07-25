@@ -41,8 +41,6 @@ from autoskillit.core import (
     ClaudeDirectoryConventions,
     CmdSpec,
     CodexEventType,
-    DirectInstall,
-    MarketplaceInstall,
     NamedResume,
     NoResume,
     OutputFormat,
@@ -87,11 +85,7 @@ from autoskillit.execution.backends._codex_parse import CodexResultParser, Codex
 def _codex_home_from_plugin_source(plugin_source: PluginSource | None) -> str | None:
     if plugin_source is None:
         return None
-    if isinstance(plugin_source, MarketplaceInstall):
-        raise ValueError("Codex requires a sanitized DirectInstall plugin projection")
-    if isinstance(plugin_source, DirectInstall):
-        return str(plugin_source.plugin_dir)
-    raise TypeError(f"Unsupported plugin source: {type(plugin_source).__name__}")
+    return str(plugin_source.plugin_dir)
 
 
 __all__ = [
@@ -840,7 +834,7 @@ class CodexBackend(BackendCmdBuilderBase):
         self,
         *,
         orchestrator_prompt: str,
-        plugin_source: PluginSource,
+        plugin_source: PluginSource | None,
         cwd: str,
         completion_marker: str,
         resume_session_id: str | None = None,

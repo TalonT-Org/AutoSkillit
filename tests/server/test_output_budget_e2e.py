@@ -24,7 +24,7 @@ from autoskillit.config import (
     AutomationConfig,
     QuotaGuardConfig,
 )
-from autoskillit.core import DirectInstall, pkg_root
+from autoskillit.core import ProjectedPluginRoot
 from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.process import DefaultSubprocessRunner
@@ -512,7 +512,7 @@ async def test_deep_investigate_completes_with_bounded_large_evidence(
     tool_ctx = make_context(
         config,
         runner=DefaultSubprocessRunner(),
-        plugin_source=DirectInstall(plugin_dir=pkg_root()),
+        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path / "projected-plugin"),
         project_dir=fixture_repo,
     )
     tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session-logs")

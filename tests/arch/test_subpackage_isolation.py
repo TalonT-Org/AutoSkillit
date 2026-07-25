@@ -899,7 +899,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core/types": 36,  # +_type_recipe_sections +_type_skill_contract +context admission
         "cli": 21,
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
-        "workspace": 12,  # +skill_capabilities semantic validation +skill_projection
+        "workspace": 14,  # +_install_state (single install-state consistency authority,
+        # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
+        # record, and orphan sweep — split out so staleness cannot drift from projection)
         "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_artifacts.py  # noqa: E501
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501

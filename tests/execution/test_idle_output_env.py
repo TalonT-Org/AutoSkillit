@@ -173,7 +173,7 @@ class TestDispatchFoodTruckIdleEnvInjection:
         from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
         from autoskillit.core.types import KillReason, RetryReason
         from autoskillit.core.types import SkillResult as _SkillResult
-        from autoskillit.core.types._type_plugin_source import DirectInstall
+        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
 
         minimal_ctx.config.fleet.idle_output_timeout = 120
@@ -206,7 +206,7 @@ class TestDispatchFoodTruckIdleEnvInjection:
             _fake_execute,
         )
 
-        minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path / "plugin")
+        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path / "plugin")
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
             orchestrator_prompt="test",

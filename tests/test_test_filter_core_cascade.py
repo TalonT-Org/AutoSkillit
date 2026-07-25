@@ -813,12 +813,14 @@ class TestClosureCoreNarrowCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "cli", "server"]:
+        # workspace joined _plugin_ids' cascade when _install_state started reading
+        # the plugin registry through registered_install_paths() — IL-005 forbids
+        # workspace reaching for cli.InstalledPluginsFile.
+        for pkg in ["core", "cli", "server", "workspace"]:
             assert pkg in dir_names, f"narrow cascade should include {pkg}"
         for excluded in [
             "execution",
             "pipeline",
-            "workspace",
             "recipe",
             "migration",
             "hooks",

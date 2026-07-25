@@ -59,11 +59,11 @@ class TestCodexBuildCmdTranslatesModel:
         assert spec.cmd[model_idx + 1] == CODEX_MODEL_ALIASES["sonnet"]
 
     def test_build_food_truck_cmd(self) -> None:
-        from autoskillit.core import DirectInstall
+        from autoskillit.core import ProjectedPluginRoot
 
         spec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=DirectInstall(plugin_dir="/tmp/plugin"),
+            plugin_source=ProjectedPluginRoot(plugin_dir="/tmp/plugin"),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="sonnet",
@@ -102,11 +102,11 @@ class TestClaudeBuildCmdTranslatesModel:
     def test_build_food_truck_cmd_preserves_suffix(self) -> None:
         from pathlib import Path
 
-        from autoskillit.core import DirectInstall
+        from autoskillit.core import ProjectedPluginRoot
 
         spec = ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=DirectInstall(plugin_dir=Path("/tmp/plugin")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp/plugin")),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="opus[1m]",
@@ -168,11 +168,11 @@ class TestCodexEffortInjectionInCmds:
         assert "model_reasoning_effort=high" in list(spec.cmd)
 
     def test_food_truck_cmd_has_effort(self) -> None:
-        from autoskillit.core import DirectInstall
+        from autoskillit.core import ProjectedPluginRoot
 
         spec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=DirectInstall(plugin_dir="/tmp/plugin"),
+            plugin_source=ProjectedPluginRoot(plugin_dir="/tmp/plugin"),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="sonnet",
@@ -180,11 +180,11 @@ class TestCodexEffortInjectionInCmds:
         assert "model_reasoning_effort=high" in list(spec.cmd)
 
     def test_food_truck_opus_suffix_uses_shared_model_with_xhigh_effort(self) -> None:
-        from autoskillit.core import DirectInstall
+        from autoskillit.core import ProjectedPluginRoot
 
         spec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=DirectInstall(plugin_dir="/tmp/plugin"),
+            plugin_source=ProjectedPluginRoot(plugin_dir="/tmp/plugin"),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="opus[1m]",

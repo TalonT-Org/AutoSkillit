@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.cli.ui._terminal import terminal_guard
-from autoskillit.core import is_feature_enabled
+from autoskillit.core import is_feature_enabled, resolve_project_dir
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -79,13 +79,17 @@ def cook(
         DefaultSessionSkillManager,
         DefaultSkillResolver,
         SkillsDirectoryProvider,
-        project_plugin_source,
+        project_default_plugin_source,
         resolve_ephemeral_root,
         validate_skill_tier_roles,
     )
 
     config = load_config()
-    project_dir = Path.cwd()
+    # Same derivation the MCP server uses (git toplevel -> cwd). Running `cook`
+    # from a repository subdirectory used to yield a different project_dir than
+    # the server derived on the same machine, and both values flow into the
+    # execution-bound dispatch contract.
+    project_dir = resolve_project_dir()
     skill_resolver = DefaultSkillResolver()
     skill_visibility = config.skill_visibility_spec()
     validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
@@ -152,31 +156,22 @@ def cook(
     if confirm.lower() in ("n", "no"):
         return
 
-    from autoskillit.cli._installed_plugins import InstalledPluginsFile
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
     from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK
     from autoskillit.core import (
-        _AUTOSKILLIT_PLUGIN_KEY,
         LAUNCH_ID_ENV_VAR,
         PROVIDER_PROFILE_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
         BareResume,
-        DirectInstall,
-        MarketplaceInstall,
         NamedResume,
         NoResume,
         SessionType,
         SkillExecutionRole,
-        _get_autoskillit_install_path,
         configure_logging,
-        get_logger,
-        pkg_root,
         resume_spec_from_cli,
         temp_dir_display_str,
         write_registry_entry,
     )
-
-    logger = get_logger(__name__)
 
     configure_logging()
 
@@ -213,20 +208,10 @@ def cook(
         projection_context,
     )
 
-    plugin_source: MarketplaceInstall | DirectInstall
-    if InstalledPluginsFile().contains(_AUTOSKILLIT_PLUGIN_KEY):
-        try:
-            plugin_source = MarketplaceInstall(cache_path=_get_autoskillit_install_path())
-        except (KeyError, ValueError) as exc:
-            logger.warning(
-                "marketplace install path unavailable (%s) — falling back to direct install",
-                exc,
-            )
-            plugin_source = DirectInstall(plugin_dir=pkg_root())
-    else:
-        plugin_source = DirectInstall(plugin_dir=pkg_root())
-    plugin_source = project_plugin_source(
-        plugin_source,
+    # Single resolution authority, shared with make_context: the running package,
+    # projected. Reading installed_plugins.json here is what made `cook` execute an
+    # eleven-versions-old snapshot of recipes/, agents/ and hooks/ against current code.
+    plugin_source = project_default_plugin_source(
         cwd=project_dir,
         backend=backend,
         default_base_branch=config.branching.default_base_branch,

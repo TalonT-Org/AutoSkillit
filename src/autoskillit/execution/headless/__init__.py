@@ -464,7 +464,7 @@ class DefaultHeadlessExecutor:
         backend = dispatch_backend
         cmd_spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
-            plugin_source=cast(PluginSource, plugin_source),
+            plugin_source=plugin_source,
             cwd=cwd,
             completion_marker=completion_marker,
             resume_session_id=resume_session_id,

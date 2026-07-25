@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BareResume, DirectInstall, NamedResume, NoResume, OutputFormat
+from autoskillit.core import BareResume, NamedResume, NoResume, OutputFormat, ProjectedPluginRoot
 from autoskillit.execution.backends.codex import (
     CODEX_EXEC_FLAGS,
     CODEX_TOP_LEVEL_ONLY_FLAGS,
@@ -31,7 +31,7 @@ SKILL_BASE: dict[str, object] = {
 
 FOOD_TRUCK_BASE: dict[str, object] = {
     "orchestrator_prompt": "dispatch the work",
-    "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+    "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
     "cwd": "/work",
     "completion_marker": "%%DONE%%",
 }

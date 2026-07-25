@@ -9,8 +9,8 @@ import pytest
 from autoskillit.core import (
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     SKILL_SESSION_REQUIRED_ENV,
-    DirectInstall,
     OutputFormat,
+    ProjectedPluginRoot,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
@@ -46,7 +46,7 @@ def test_food_truck_env_contains_required_vars(backend_factory) -> None:
     """Every backend's build_food_truck_cmd must inject all ORCHESTRATOR_SESSION_REQUIRED_ENV."""
     spec = backend_factory().build_food_truck_cmd(
         orchestrator_prompt="run the pipeline",
-        plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+        plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
         cwd="/tmp",
         completion_marker="%%DONE%%",
     )

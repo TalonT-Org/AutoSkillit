@@ -35,7 +35,7 @@ def test_skill_session_cmd_injects_write_guard_tool_names() -> None:
 
 
 def test_food_truck_cmd_injects_write_guard_tool_names() -> None:
-    from autoskillit.core import DirectInstall
+    from autoskillit.core import ProjectedPluginRoot
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty"
@@ -43,7 +43,7 @@ def test_food_truck_cmd_injects_write_guard_tool_names() -> None:
         backend = cls()
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="test prompt",
-            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
             cwd="/repo",
             completion_marker="DONE",
         )

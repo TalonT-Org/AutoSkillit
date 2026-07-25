@@ -34,14 +34,14 @@ class TestBackendCompliance:
     def test_all_backends_build_food_truck_cmd_returns_cmdspec(self):
         from pathlib import Path
 
-        from autoskillit.core import CmdSpec, DirectInstall
+        from autoskillit.core import CmdSpec, ProjectedPluginRoot
         from autoskillit.execution.backends import BACKEND_REGISTRY
         from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
 
         for cls in BACKEND_REGISTRY.values():
             result = cls().build_food_truck_cmd(
                 orchestrator_prompt="test",
-                plugin_source=DirectInstall(plugin_dir=Path("/tmp")),
+                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
                 cwd="/tmp",
                 completion_marker="%%TEST%%",
             )

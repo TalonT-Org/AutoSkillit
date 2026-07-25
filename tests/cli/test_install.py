@@ -512,19 +512,24 @@ class TestMigrateCommand:
 
 
 class TestInstallCommand:
-    def test_ensure_marketplace_raises_in_worktree(
+    def test_worktree_guard_raises_before_any_mutation(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """_ensure_marketplace() raises SystemExit when is_git_worktree() returns True."""
+        """The worktree guard raises SystemExit, and it now runs in install() preflight.
+
+        Hoisted out of _ensure_marketplace so it fires ahead of every persistent
+        mutation — the guard used to sit above _ensure_marketplace's first
+        atomic_write, which was correct but only by a few lines.
+        """
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         import importlib as _importlib
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: True)
-        from autoskillit.cli._marketplace import _ensure_marketplace
+        from autoskillit.cli._marketplace import _assert_not_worktree
 
         with pytest.raises(SystemExit, match="worktree"):
-            _ensure_marketplace()
+            _assert_not_worktree()
 
     def test_ensure_marketplace_succeeds_in_main_checkout(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -690,13 +695,20 @@ class TestGroupFInstall:
         assert remove_clone_1 == remove_clone_2
 
 
-def test_clear_plugin_cache_preserves_plugins_entry(
+def test_clear_plugin_cache_drops_plugins_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """_clear_plugin_cache retires old version dirs but preserves the plugins entry.
+    """_clear_plugin_cache retires old version dirs AND drops the plugins entry.
 
-    The installed_plugins.json entry is left intact — `claude plugin install`
-    overwrites it atomically. Old version directories survive under a grace period.
+    Deliberately inverted from the previous expectation. Retiring a cache
+    directory while leaving installed_plugins.json naming it is precisely how a
+    dangling registry pointer is manufactured — the sweeper deletes the
+    directory hours later and the next `cook` crashes on a path that no longer
+    exists. `claude plugin install` rewrites the entry moments later, and
+    install() restores the previous file verbatim if that step fails, so the
+    pair is atomic from the caller's point of view.
+
+    Old version directories still survive under the grace period.
     """
     from autoskillit.cli._marketplace import _clear_plugin_cache
 
@@ -724,7 +736,7 @@ def test_clear_plugin_cache_preserves_plugins_entry(
     _clear_plugin_cache()
 
     data = json.loads(installed_json.read_text())
-    assert "autoskillit@autoskillit-local" in data.get("plugins", {})
+    assert "autoskillit@autoskillit-local" not in data.get("plugins", {})
     assert data["version"] == 2
     # Old version dir survives under grace period
     assert old_version_dir.exists(), "Old version dir must survive under grace period"

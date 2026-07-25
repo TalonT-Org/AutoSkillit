@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -44,6 +45,9 @@ def _run_cook(profile, cfg, mock_mgr):
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("builtins.input", return_value=""),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
+        # cook() derives project_dir via the shared git-toplevel helper; pin it so
+        # the wholesale subprocess.run mock cannot stand in for the git probe.
+        patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
         patch("subprocess.run", return_value=MagicMock(returncode=0)),
         patch("autoskillit.core.write_registry_entry"),
         patch("autoskillit.config.load_config", return_value=cfg),
@@ -139,6 +143,9 @@ def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
     with (
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.workspace.DefaultSessionSkillManager") as manager_cls,
+        # project_dir comes from the shared git-toplevel helper; pin it so the
+        # "nothing launched" assertion below stays about launches.
+        patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
         patch("subprocess.run") as run,
     ):
         with pytest.raises(SkillContractError, match="process-issues.*ORCHESTRATOR"):

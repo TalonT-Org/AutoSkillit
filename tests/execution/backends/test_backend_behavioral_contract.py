@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import CapabilityNotSupportedError, DirectInstall
+from autoskillit.core import CapabilityNotSupportedError, ProjectedPluginRoot
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.execution.backends.codex import CodexBackend
 
@@ -17,7 +17,7 @@ CAPABILITY_METHOD_MAP: dict[str, tuple[str, dict]] = {
         "build_food_truck_cmd",
         {
             "orchestrator_prompt": "x",
-            "plugin_source": DirectInstall(plugin_dir=Path("/tmp")),
+            "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/tmp")),
             "cwd": "/tmp",
             "completion_marker": "%%X%%",
         },

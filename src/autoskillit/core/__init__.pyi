@@ -447,7 +447,6 @@ from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import ManagedSessionHome as ManagedSessionHome
-from .types import MarketplaceInstall as MarketplaceInstall
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
 from .types import McpResponseLog as McpResponseLog

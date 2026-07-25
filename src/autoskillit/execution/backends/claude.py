@@ -36,8 +36,6 @@ from autoskillit.core import (
     ClaudeFlags,
     CmdSpec,
     CookSessionHandle,
-    DirectInstall,
-    MarketplaceInstall,
     NamedResume,
     NoResume,
     OutputFormat,

@@ -1131,9 +1131,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
     ),
     "workspace/session_skills.py": (
         1400,
-        "REQ-CNST-010-E14: session skill materialization owns the generated-home lease and "
-        "cleanup transaction as well as backend-specific layout validation; keeping those "
-        "operations together preserves the create/validate/yield/delete ownership proof",
+        "REQ-CNST-010-E13/E14: ordering-sensitive session skill materialization owns "
+        "provider discovery, override precedence, filtering, dependency activation, the "
+        "generated-home lease and cleanup transaction, and backend-specific layout "
+        "validation; keeping those operations together preserves both assembly ordering "
+        "and the create/validate/yield/delete ownership proof",
     ),
     "rules_skill_content.py": (
         1200,
@@ -1163,13 +1165,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "delivery-bound summary); splitting would scatter the priority-tier "
         "algorithm across modules that must remain the single source of "
         "truth for the bound-vs-deprioritized budget allocation order.",
-    ),
-    "workspace/session_skills.py": (
-        1200,
-        "REQ-CNST-010-E13: ordering-sensitive session skill assembly — provider "
-        "discovery, override precedence, filtering, dependency activation, and lifecycle "
-        "cleanup remain in one manager; semantic validation and projection are already "
-        "isolated in dedicated workspace modules.",
     ),
     "core/context_admission.py": (
         2950,

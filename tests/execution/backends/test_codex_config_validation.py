@@ -5,13 +5,35 @@ from __future__ import annotations
 import json
 import multiprocessing
 import os
+import sys
 import tomllib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+_VALID_CONFIG_BYTES = (
+    b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\nargs = []\nenv_vars = []\n'
+)
+_VALID_INVENTORY_BYTES = json.dumps(
+    {
+        "servers": [
+            {
+                "name": "autoskillit",
+                "enabled": True,
+                "transport": {
+                    "type": "stdio",
+                    "command": "autoskillit",
+                    "args": [],
+                    "env_vars": [],
+                },
+            }
+        ]
+    }
+).encode()
 
 
 @pytest.mark.parametrize(
@@ -29,9 +51,6 @@ def test_mcp_inventory_rejects_non_string_array_fields(
 ) -> None:
     from autoskillit.execution.backends.codex import _validate_codex_mcp_inventory
 
-    config_bytes = (
-        b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\nargs = []\nenv_vars = []\n'
-    )
     transport: dict[str, object] = {
         "type": "stdio",
         "command": "autoskillit",
@@ -41,9 +60,172 @@ def test_mcp_inventory_rejects_non_string_array_fields(
     transport[field] = value
     stdout = json.dumps({"servers": [{"name": "autoskillit", "transport": transport}]}).encode()
 
-    errors = _validate_codex_mcp_inventory(stdout, config_bytes)
+    errors = _validate_codex_mcp_inventory(stdout, _VALID_CONFIG_BYTES)
 
     assert any(f"{field} are not an array of strings" in error for error in errors)
+
+
+def test_bounded_codex_probe_captures_success(tmp_path: Path) -> None:
+    from autoskillit.execution.backends.codex import _run_bounded_codex_probe
+
+    result = _run_bounded_codex_probe(
+        (sys.executable, "-c", "import os; os.write(1, b'probe-ok')"),
+        env=os.environ,
+        cwd=str(tmp_path),
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == b"probe-ok"
+    assert result.stderr == b""
+    assert result.failure is None
+
+
+def test_bounded_codex_probe_times_out_and_reaps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import codex
+
+    monkeypatch.setattr(codex, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
+
+    result = codex._run_bounded_codex_probe(
+        (sys.executable, "-c", "import time; time.sleep(60)"),
+        env=os.environ,
+        cwd=str(tmp_path),
+    )
+
+    assert result.returncode is None
+    assert result.failure == "timed out"
+
+
+def test_bounded_codex_probe_enforces_stream_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import codex
+
+    monkeypatch.setattr(codex, "_CODEX_PROBE_STREAM_LIMIT", 128)
+
+    result = codex._run_bounded_codex_probe(
+        (sys.executable, "-c", "import os; os.write(1, b'x' * 4096)"),
+        env=os.environ,
+        cwd=str(tmp_path),
+    )
+
+    assert result.returncode is None
+    assert result.failure == "stdout exceeded 128 bytes"
+    assert len(result.stdout) == 128
+
+
+@pytest.mark.parametrize(
+    ("program", "expected_error"),
+    [
+        ("raise SystemExit(7)", "exited with status 7"),
+        ("import os; os.write(1, b'not-json')", "returned malformed JSON"),
+    ],
+)
+def test_mcp_probe_normalizes_process_and_output_failures(
+    program: str,
+    expected_error: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import codex
+
+    monkeypatch.setattr(codex, "_CODEX_VALIDATION_CACHE", {})
+
+    errors = codex._validate_mcp_probe(
+        (sys.executable, "-c", program),
+        env=os.environ,
+        cwd=str(tmp_path),
+        config_bytes=_VALID_CONFIG_BYTES,
+    )
+
+    assert len(errors) == 1
+    assert expected_error in errors[0]
+
+
+def test_mcp_probe_caches_successful_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import codex
+
+    calls = 0
+
+    def run_probe(*_args: object, **_kwargs: object) -> codex._BoundedProbeResult:
+        nonlocal calls
+        calls += 1
+        return codex._BoundedProbeResult(
+            returncode=0,
+            stdout=_VALID_INVENTORY_BYTES,
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(codex, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(codex, "_run_bounded_codex_probe", run_probe)
+    command = ("codex", "mcp", "list", "--json")
+
+    assert (
+        codex._validate_mcp_probe(
+            command,
+            env=os.environ,
+            cwd=str(tmp_path),
+            config_bytes=_VALID_CONFIG_BYTES,
+        )
+        == []
+    )
+    assert (
+        codex._validate_mcp_probe(
+            command,
+            env=os.environ,
+            cwd=str(tmp_path),
+            config_bytes=_VALID_CONFIG_BYTES,
+        )
+        == []
+    )
+    assert calls == 1
+
+
+def test_real_interactive_validator_reaches_successful_native_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import codex
+
+    generated_home = tmp_path / "generated-home"
+    generated_home.mkdir()
+    (generated_home / "config.toml").write_bytes(_VALID_CONFIG_BYTES)
+    for name in ("sessions", "archived_sessions"):
+        target = generated_home / f".inert-{name}"
+        target.mkdir()
+        (generated_home / name).symlink_to(target)
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    backend = codex.CodexBackend(source_codex_home=source_home)
+    spec = replace(
+        backend.build_interactive_cmd(generated_home=generated_home),
+        cwd=str(tmp_path),
+    )
+    commands: list[tuple[str, ...]] = []
+
+    def run_probe(
+        command: tuple[str, ...],
+        **_kwargs: object,
+    ) -> codex._BoundedProbeResult:
+        commands.append(command)
+        return codex._BoundedProbeResult(
+            returncode=0,
+            stdout=_VALID_INVENTORY_BYTES,
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(codex, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(codex, "_run_bounded_codex_probe", run_probe)
+
+    assert backend.validate_interactive_invocation(spec) == []
+    assert len(commands) == 1
+    assert commands[0][-3:] == ("mcp", "list", codex.CodexFlags.JSON)
 
 
 def _config_writer(

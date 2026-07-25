@@ -554,7 +554,7 @@ def _patch_contract_for_push_rule(write_behavior: str, read_only: bool = False):
     from unittest.mock import patch as _patch
 
     contract = SkillContract(
-        inputs=[],
+        inputs=(),
         outputs=[],
         write_behavior=write_behavior,
         write_expected_when=["pat"] if write_behavior == "conditional" else [],

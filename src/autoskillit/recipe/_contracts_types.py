@@ -62,12 +62,6 @@ class SkillContract:
     success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
     input_preflight: str | None = None
 
-    def __post_init__(self) -> None:
-        # Tests and project integrations may still construct contracts from a
-        # list.  Canonicalize once at the boundary; consumers always observe an
-        # explicit immutable declaration order.
-        self.inputs = tuple(self.inputs)
-
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ToolOutputFieldSpec:

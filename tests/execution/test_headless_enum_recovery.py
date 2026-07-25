@@ -36,7 +36,7 @@ def _make_plan_contract(
 ) -> SkillContract:
     """Build a make-plan-shaped SkillContract (verdict enum bound to a conditional write)."""
     return SkillContract(
-        inputs=[],
+        inputs=(),
         outputs=[
             SkillOutput(
                 name="verdict",

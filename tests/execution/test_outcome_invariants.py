@@ -297,7 +297,7 @@ class TestParseOutcomeFields:
 
     def _contract(self) -> SkillContract:
         return SkillContract(
-            inputs=[],
+            inputs=(),
             outputs=[
                 SkillOutput(name="verdict", type="string"),
                 SkillOutput(name="accept_count", type="integer"),

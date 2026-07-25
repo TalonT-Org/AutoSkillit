@@ -126,7 +126,7 @@ def _make_contract(
     write_expected_when: list[str] | None = None,
 ) -> SkillContract:
     return SkillContract(
-        inputs=[],
+        inputs=(),
         outputs=[],
         write_behavior=write_behavior,
         write_expected_when=write_expected_when or [],
@@ -369,7 +369,7 @@ class TestResultFieldDriftRule:
             "/autoskillit:planner-generate-phases {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
         )
         contract = SkillContract(
-            inputs=[],
+            inputs=(),
             outputs=[],
             result_fields=[
                 ResultFieldSpec(name="id", type="str", required=True),
@@ -391,7 +391,7 @@ class TestResultFieldDriftRule:
             "/autoskillit:planner-generate-phases {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
         )
         contract = SkillContract(
-            inputs=[],
+            inputs=(),
             outputs=[],
             result_fields=[
                 ResultFieldSpec(name="id", type="str", required=True),
@@ -417,7 +417,7 @@ class TestResultFieldDriftRule:
             "/autoskillit:planner-generate-phases {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
         )
         contract = SkillContract(
-            inputs=[],
+            inputs=(),
             outputs=[],
             result_fields=[
                 ResultFieldSpec(name="id", type="str", required=True),
@@ -440,7 +440,7 @@ class TestResultFieldDriftRule:
             "/autoskillit:planner-generate-phases {{AUTOSKILLIT_TEMP}}/planner/analysis.json"
         )
         contract = SkillContract(
-            inputs=[],
+            inputs=(),
             outputs=[],
             result_fields=[
                 ResultFieldSpec(name="id", type="str", required=True),
@@ -708,7 +708,7 @@ def _make_write_contract(
     read_only: bool = False,
 ) -> SkillContract:
     return SkillContract(
-        inputs=[],
+        inputs=(),
         outputs=[],
         write_behavior=write_behavior,
         write_expected_when=["verdict\\s*=\\s*\\w+"] if write_behavior == "conditional" else [],

@@ -26,6 +26,7 @@ from autoskillit.core import (
     InventoryAdmissionDecision,
     InvocationTemplate,
     PreflightEvidence,
+    PreflightKind,
     RecipeBindingProjection,
     RecipeExecutionSnapshot,
     VerifiedInputPreflightRequest,
@@ -240,15 +241,21 @@ class DefaultInputPreflightResolver:
                     "authority is from another execution generation",
                 )
             )
+        if not (
+            request.expected_plan_set_id and request.expected_scope_id and request.expected_part_id
+        ):
+            return self._result(
+                InventoryAdmissionDecision.reject(
+                    AdmissionReason.INTERNAL_ERROR,
+                    "trusted preflight identity is missing from the invocation template",
+                )
+            )
         head = self._head_store.get(
             execution_generation=authority.execution_generation,
             plan_set_id=authority.plan_set_id,
             scope_id=authority.scope_id,
             part_id=authority.part_id,
         )
-        expected_plan_set_id = request.expected_plan_set_id or authority.plan_set_id
-        expected_scope_id = request.expected_scope_id or authority.scope_id
-        expected_part_id = request.expected_part_id or authority.part_id
         if authority.verdict is AuditVerdict.GO and report_path is not None:
             return self._result(
                 InventoryAdmissionDecision.reject(
@@ -262,9 +269,9 @@ class DefaultInputPreflightResolver:
             trusted_head=head,
             current_plan_path=request.plan_path,
             expected_generation=request.execution_generation,
-            expected_plan_set_id=expected_plan_set_id,
-            expected_scope_id=expected_scope_id,
-            expected_part_id=expected_part_id,
+            expected_plan_set_id=request.expected_plan_set_id,
+            expected_scope_id=request.expected_scope_id,
+            expected_part_id=request.expected_part_id,
         )
         return self._result(decision)
 
@@ -624,9 +631,33 @@ def publish_verified_audit_cycle(
     authority = AuditCycleVerifier(tool_ctx.temp_dir).load_authority(authority_path)
     if authority.execution_generation != installed.snapshot.execution_id:
         raise AuditCycleHeadConflict("authority crosses recipe execution generations")
-    return installed.audit_cycle_heads.publish(
+    head = installed.audit_cycle_heads.publish(
         authority,
         expected_parent_digest=expected_parent_digest,
         expected_round=expected_round,
         authorized_successor_part_id=authorized_successor_part_id,
     )
+    expected_identity = (
+        head.plan_set_id,
+        head.scope_id,
+        head.authorized_successor_part_id or head.part_id,
+    )
+    manifest = load_bundled_manifest()
+    preflight_identities = dict(installed.preflight_identities)
+    for step_name, template in installed.snapshot.templates.items():
+        contract = get_skill_contract(template.invocation.skill_name or "", manifest)
+        if (
+            contract is not None
+            and contract.input_preflight == PreflightKind.AUDIT_CYCLE_INVENTORY.value
+        ):
+            preflight_identities[step_name] = expected_identity
+    with tool_ctx.recipe_execution_lock:
+        if tool_ctx.active_recipe_execution is not installed:
+            raise AuditCycleHeadConflict(
+                "active recipe execution changed while publishing audit authority"
+            )
+        tool_ctx.active_recipe_execution = replace(
+            installed,
+            preflight_identities=preflight_identities,
+        )
+    return head

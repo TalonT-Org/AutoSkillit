@@ -9,7 +9,7 @@ payload's eventual hash.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
@@ -239,12 +239,24 @@ class InstalledRecipeExecution:
     runtime_binding_digests: Mapping[str, str]
     audit_cycle_heads: AuditCycleHeadStore
     input_preflight_resolver: InputPreflightResolver
+    preflight_identities: Mapping[str, tuple[str, str, str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
             "runtime_binding_digests",
             MappingProxyType(dict(self.runtime_binding_digests)),
+        )
+        identities = dict(self.preflight_identities)
+        if any(
+            len(identity) != 3 or not all(isinstance(value, str) and value for value in identity)
+            for identity in identities.values()
+        ):
+            raise ValueError("preflight identities must contain three non-empty strings")
+        object.__setattr__(
+            self,
+            "preflight_identities",
+            MappingProxyType(identities),
         )
 
 

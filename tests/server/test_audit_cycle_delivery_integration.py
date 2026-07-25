@@ -56,6 +56,7 @@ from autoskillit.server._recipe_execution import (
     build_recipe_execution_snapshot,
     get_recipe_execution,
     install_recipe_execution,
+    publish_verified_audit_cycle,
 )
 from autoskillit.server.tools.tools_execution import run_skill
 
@@ -328,6 +329,43 @@ def test_bound_prompt_preserves_falsey_and_metacharacter_values() -> None:
         {"name": "audit_cycle_path", "value": "/tmp/audit-cycle.json"},
         {"name": "plan_disposition_path", "value": "/tmp/plan-disposition.json"},
     ]
+
+
+def test_published_audit_head_binds_preflight_template_identity(
+    tool_ctx_kitchen_open,
+) -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+    install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    authority = _authority(
+        Path(tool_ctx_kitchen_open.temp_dir),
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.NO_GO,
+    )
+    authority_path = Path(tool_ctx_kitchen_open.temp_dir) / "authority.json"
+    authority_path.write_bytes(authority.canonical_bytes)
+
+    publish_verified_audit_cycle(
+        tool_ctx_kitchen_open,
+        authority_path=str(authority_path),
+        expected_parent_digest=None,
+        expected_round=0,
+    )
+
+    installed = get_recipe_execution(tool_ctx_kitchen_open)
+    assert installed is not None
+    assert installed.preflight_identities["dry"] == (
+        authority.plan_set_id,
+        authority.scope_id,
+        authority.part_id,
+    )
 
 
 @pytest.mark.parametrize(
@@ -795,6 +833,50 @@ def test_omit_preflight_performs_zero_artifact_reads(tmp_path: Path) -> None:
     assert reads == 0
 
 
+def test_preflight_never_derives_expected_identity_from_supplied_authority(
+    tmp_path: Path,
+) -> None:
+    store = DefaultAuditCycleHeadStore()
+    authority = _authority(
+        tmp_path,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.GO,
+    )
+    store.publish(authority, expected_parent_digest=None, expected_round=0)
+    authority_path = tmp_path / "authority.json"
+    authority_path.write_bytes(authority.canonical_bytes)
+    resolver = DefaultInputPreflightResolver(allowed_root=tmp_path, head_store=store)
+
+    missing = resolver.resolve(
+        VerifiedInputPreflightRequest(
+            execution_generation="execution-1",
+            step_name="dry",
+            skill_name="dry-walkthrough",
+            plan_path=str(tmp_path / "plan.md"),
+            audit_cycle_path=str(authority_path),
+            plan_disposition_path=None,
+        )
+    )
+    wrong_plan_set = resolver.resolve(
+        VerifiedInputPreflightRequest(
+            execution_generation="execution-1",
+            step_name="dry",
+            skill_name="dry-walkthrough",
+            plan_path=str(tmp_path / "plan.md"),
+            audit_cycle_path=str(authority_path),
+            plan_disposition_path=None,
+            expected_plan_set_id="plans-other",
+            expected_scope_id=authority.scope_id,
+            expected_part_id=authority.part_id,
+        )
+    )
+
+    assert missing.decision.reason is AdmissionReason.INTERNAL_ERROR
+    assert wrong_plan_set.decision.reason is AdmissionReason.PLAN_SET_MISMATCH
+
+
 @pytest.mark.anyio
 async def test_runtime_attestation_rejects_before_executor(
     tool_ctx_kitchen_open,
@@ -838,6 +920,9 @@ async def test_preflight_rejects_before_executor(
 ) -> None:
     class RejectingResolver:
         def resolve(self, request):
+            assert request.expected_plan_set_id == "plans-1"
+            assert request.expected_scope_id == "scope-1"
+            assert request.expected_part_id == "part-a"
             return VerifiedInputPreflightResult(
                 InventoryAdmissionDecision.reject(
                     AdmissionReason.PLAN_MISMATCH,
@@ -856,7 +941,11 @@ async def test_preflight_rejects_before_executor(
     monkeypatch.setattr(
         tool_ctx_kitchen_open,
         "active_recipe_execution",
-        replace(installed, input_preflight_resolver=RejectingResolver()),
+        replace(
+            installed,
+            input_preflight_resolver=RejectingResolver(),
+            preflight_identities={"dry": ("plans-1", "scope-1", "part-a")},
+        ),
     )
     monkeypatch.setattr(
         tool_ctx_kitchen_open,

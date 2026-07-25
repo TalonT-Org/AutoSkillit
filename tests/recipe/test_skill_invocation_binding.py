@@ -215,6 +215,64 @@ def test_unknown_tool_and_skill_namespaces_are_distinct() -> None:
     assert BindingFailureCode.UNKNOWN_SKILL_INPUT in {failure.code for failure in inner.failures}
 
 
+@pytest.mark.parametrize(
+    ("tool_name", "with_args", "expected_code", "expected_name"),
+    [
+        (
+            "run_cmd",
+            {"cwd": "/repo"},
+            BindingFailureCode.MISSING_TOOL_PARAMETER,
+            "cmd",
+        ),
+        (
+            "run_cmd",
+            {"cmd": "pwd"},
+            BindingFailureCode.MISSING_TOOL_PARAMETER,
+            "cwd",
+        ),
+        (
+            "run_skill",
+            {
+                "skill_command": "/autoskillit:dry-walkthrough",
+                "cwd": "/repo",
+                "stale_threshold": "30",
+                "skill_inputs": _required_inputs(),
+            },
+            BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+            "stale_threshold",
+        ),
+        (
+            "run_python",
+            {"callable": "module:function", "args": "not-an-object"},
+            BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+            "args",
+        ),
+        (
+            "bulk_close_issues",
+            {"issue_numbers": "42", "comment": "done", "cwd": "/repo"},
+            BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+            "issue_numbers",
+        ),
+    ],
+)
+def test_required_and_wire_typed_tool_parameters_reject_invalid_shapes(
+    tool_name: str,
+    with_args: dict[str, object],
+    expected_code: BindingFailureCode,
+    expected_name: str,
+) -> None:
+    invocation = bind_step_invocation(
+        "step",
+        RecipeStep(name="step", tool=tool_name, with_args=with_args),
+        manifest=_manifest(),
+    )
+
+    assert any(
+        failure.code is expected_code and failure.name == expected_name
+        for failure in invocation.failures
+    )
+
+
 def test_missing_and_inline_plus_structured_inputs_reject() -> None:
     missing = _required_inputs()
     del missing["plan_path"]

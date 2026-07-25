@@ -793,6 +793,43 @@ def _replace_closed_audit(
     )
 
 
+def _reconcile_deducted_closed_charge(
+    state: ActiveContextAdmissionState,
+    audit: ClosedEpochAudit,
+    *,
+    deducted_charge: int,
+    terminal_charge: int,
+) -> ActiveContextAdmissionState:
+    if audit.fence_proof is not None or deducted_charge == terminal_charge:
+        return state
+    snapshot = state.snapshot
+    charge_delta = deducted_charge - terminal_charge
+    if charge_delta > 0:
+        capacity_slack = max(
+            snapshot.hard_limit - snapshot.active_count - snapshot.remaining_count,
+            0,
+        )
+        active_credit = min(
+            max(charge_delta - capacity_slack, 0),
+            snapshot.active_count,
+        )
+        restored_count = min(charge_delta, capacity_slack + active_credit)
+        active_count = snapshot.active_count - active_credit
+        remaining_count = snapshot.remaining_count + restored_count
+    else:
+        additional_charge = min(-charge_delta, snapshot.remaining_count)
+        active_count = snapshot.active_count + additional_charge
+        remaining_count = snapshot.remaining_count - additional_charge
+    return replace(
+        state,
+        snapshot=replace(
+            snapshot,
+            active_count=active_count,
+            remaining_count=remaining_count,
+        ),
+    )
+
+
 def _open_epoch(
     state: ContextAdmissionState,
     event: OpenEpochEvent,
@@ -1444,6 +1481,12 @@ def _accept_closed_input(
         ),
     )
     next_state = _replace_closed_audit(state, index, updated_audit)
+    next_state = _reconcile_deducted_closed_charge(
+        next_state,
+        audit,
+        deducted_charge=_closed_retained_input_count(audit, (record,)),
+        terminal_charge=exact_charge,
+    )
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
     effects: tuple[AdmissionEffect, ...] = (
         ChargeCommittedEffect(
@@ -1648,6 +1691,7 @@ def _release_closed_batch(
     location: tuple[int, ClosedEpochAudit, AdmissionBatchRecord],
 ) -> AdmissionTransition:
     index, audit, record = location
+    released_input_count = _closed_retained_input_count(audit, (record,))
     is_release = isinstance(
         event,
         ReleaseNonAdmissionEvent | ResolveIndeterminateNonAdmissionEvent,
@@ -1748,6 +1792,7 @@ def _release_closed_batch(
         )
     generation_effects: tuple[AdmissionEffect, ...] = ()
     generation_records: list[GenerationReservationRecord] = []
+    invalidated_generation_count = 0
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
     for generation in audit.terminal_generation_reservations:
         if generation.batch_id == record.batch.batch_id and generation.state in {
@@ -1770,6 +1815,7 @@ def _release_closed_batch(
                     witness_ids=(event.witness.witness_id,),
                 ),
             )
+            invalidated_generation_count += generation.maximum_allowance
         else:
             generation_records.append(generation)
     if generation_effects:
@@ -1789,6 +1835,12 @@ def _release_closed_batch(
         )
         next_state = _replace_closed_audit(state, index, updated_audit)
         effects += generation_effects
+    next_state = _reconcile_deducted_closed_charge(
+        next_state,
+        audit,
+        deducted_charge=released_input_count + invalidated_generation_count,
+        terminal_charge=0,
+    )
     return _publish(
         state,
         next_state,
@@ -2198,6 +2250,12 @@ def _reconcile_closed_generation(
         retained_generation_count=retained_generation_count,
     )
     next_state = _replace_closed_audit(state, index, updated_audit)
+    next_state = _reconcile_deducted_closed_charge(
+        next_state,
+        audit,
+        deducted_charge=generation.maximum_allowance,
+        terminal_charge=event.exact_output_usage,
+    )
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
     effects: tuple[AdmissionEffect, ...] = (
         GenerationReconciledEffect(

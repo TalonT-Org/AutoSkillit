@@ -2430,6 +2430,108 @@ def test_closed_epoch_authority_mismatch_quarantines_exact_charge() -> None:
     }
 
 
+def test_no_fence_closed_reconciliation_restores_deducted_capacity() -> None:
+    state, batch, _, generation = _reserved_batch(
+        name="closed-capacity-reconciliation",
+        input_count=18,
+        generation_count=7,
+    )
+    state = _prepare_dispatch(state, batch)
+    rolled = reduce_context_admission(
+        state,
+        RolloverEpochEvent(
+            **_event_fields(state, "rollover-closed-capacity-reconciliation", "rollover-epoch"),
+            witness=_witness(batch, WitnessKind.EPOCH_ROLLOVER),
+            fence_proof=None,
+            new_snapshot=_snapshot(epoch=2, active_count=65, remaining_count=35),
+            protected_pools=(),
+        ),
+    )
+    assert isinstance(rolled.next_state, ActiveContextAdmissionState)
+
+    accepted = reduce_context_admission(
+        rolled.next_state,
+        AcceptInputEvent(
+            **_event_fields(
+                rolled.next_state,
+                "accept-closed-capacity-reconciliation",
+                "accept-input",
+            ),
+            batch_id=batch.batch_id,
+            witness=_witness(batch, WitnessKind.PROVIDER_ACCEPTED),
+            final_manifest_revision=batch.manifest.representation_revision,
+            final_manifest=batch.manifest,
+            exact_input_charge=17,
+            measurement_kind=MeasurementKind.PROVIDER_EXACT,
+            authority_source=AuthoritySourceId("authority-test"),
+            representation_binding_witness=_binding(batch),
+        ),
+    )
+    assert isinstance(accepted.next_state, ActiveContextAdmissionState)
+    assert accepted.next_state.snapshot.active_count == 64
+    assert accepted.next_state.snapshot.remaining_count == 36
+
+    reconciled = reduce_context_admission(
+        accepted.next_state,
+        ReconcileGenerationEvent(
+            **_event_fields(
+                accepted.next_state,
+                "reconcile-closed-capacity-generation",
+                "reconcile-generation",
+            ),
+            generation_reservation_id=generation.generation_reservation_id,
+            output_usage_witness=_witness(batch, WitnessKind.OUTPUT_USAGE),
+            exact_output_usage=5,
+        ),
+    )
+
+    assert reconciled.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(reconciled.next_state, ActiveContextAdmissionState)
+    assert reconciled.next_state.snapshot.active_count == 62
+    assert reconciled.next_state.snapshot.remaining_count == 38
+
+
+def test_no_fence_closed_release_restores_all_deducted_capacity() -> None:
+    state, batch, _, _ = _reserved_batch(
+        name="closed-capacity-release",
+        input_count=18,
+        generation_count=7,
+    )
+    state = _prepare_dispatch(state, batch)
+    rolled = reduce_context_admission(
+        state,
+        RolloverEpochEvent(
+            **_event_fields(state, "rollover-closed-capacity-release", "rollover-epoch"),
+            witness=_witness(batch, WitnessKind.EPOCH_ROLLOVER),
+            fence_proof=None,
+            new_snapshot=_snapshot(epoch=2, active_count=65, remaining_count=35),
+            protected_pools=(),
+        ),
+    )
+    assert isinstance(rolled.next_state, ActiveContextAdmissionState)
+
+    released = reduce_context_admission(
+        rolled.next_state,
+        ReleaseNonAdmissionEvent(
+            **_event_fields(
+                rolled.next_state,
+                "release-closed-capacity",
+                "release",
+            ),
+            batch_id=batch.batch_id,
+            witness=_witness(batch, WitnessKind.NON_ADMISSION),
+        ),
+    )
+
+    assert released.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(released.next_state, ActiveContextAdmissionState)
+    assert released.next_state.snapshot.active_count == 40
+    assert released.next_state.snapshot.remaining_count == 60
+    audit = released.next_state.closed_epochs[-1]
+    assert audit.retained_unresolved_count == 0
+    assert audit.retained_generation_count == 0
+
+
 def test_protected_release_uses_policy_from_rollover_created_epoch() -> None:
     owner = ProtectedPoolOwnerId("rollover-policy-owner")
     pool = ProtectedPoolSpec(

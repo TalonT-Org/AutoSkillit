@@ -5,6 +5,7 @@ Zero autoskillit imports outside this sub-package. IL-0 type contract.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -13,6 +14,15 @@ __all__ = ["DispatchIdentity", "PromptContractError", "assert_prompt_sentinel"]
 
 class PromptContractError(RuntimeError):
     """Raised when a prompt violates the sentinel contract."""
+
+
+_DISPATCH_ID = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\Z")
+
+
+def _validate_dispatch_id(dispatch_id: object) -> str:
+    if not isinstance(dispatch_id, str) or _DISPATCH_ID.fullmatch(dispatch_id) is None:
+        raise ValueError("invalid_dispatch_identity")
+    return dispatch_id
 
 
 def _build_sentinel_contract(dispatch_id: str, short: str) -> str:
@@ -51,6 +61,17 @@ class DispatchIdentity:
     sentinel_close: str
     sentinel_contract: str
 
+    def __post_init__(self) -> None:
+        did = _validate_dispatch_id(self.dispatch_id)
+        short = did[:8]
+        if (
+            self.completion_marker != f"%%L3_DONE::{short}%%"
+            or self.sentinel_open != f"---l3-result::{did}---"
+            or self.sentinel_close != f"---end-l3-result::{did}---"
+            or self.sentinel_contract != _build_sentinel_contract(did, short)
+        ):
+            raise ValueError("invalid_dispatch_identity")
+
     @classmethod
     def fresh(cls) -> DispatchIdentity:
         did = str(uuid4())
@@ -58,7 +79,7 @@ class DispatchIdentity:
 
     @classmethod
     def from_dispatch_id(cls, dispatch_id: str) -> DispatchIdentity:
-        return cls._from_id(dispatch_id)
+        return cls._from_id(_validate_dispatch_id(dispatch_id))
 
     @classmethod
     def _from_id(cls, did: str) -> DispatchIdentity:

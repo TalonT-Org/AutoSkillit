@@ -265,6 +265,33 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     assert len(calls) == 1  # validate_recipe called only once across two loads
 
 
+def test_default_cache_excludes_server_only_compiled_bindings(tmp_path, monkeypatch):
+    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache = cache_mod.LoadCache()
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    default_result = api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert "_compiled_bindings" not in default_result
+    assert len(cache._store) == 1
+    default_entry = next(iter(cache._store.values()))
+    assert "_compiled_bindings" not in default_entry.result
+
+    server_result = api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        include_compiled_bindings=True,
+    )
+
+    assert "_compiled_bindings" in server_result
+    assert len(cache._store) == 2
+
+
 def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, monkeypatch):
     """Changing the recipe file mtime causes a cache miss."""
     import autoskillit.recipe._api as api_mod

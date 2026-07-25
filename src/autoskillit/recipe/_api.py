@@ -306,8 +306,6 @@ def load_and_validate(
         ):
             logger.debug("load_recipe_cache_hit", recipe=name)
             cached_result = _api_cache._LOAD_CACHE.copy_result(cached.result)
-            if not include_compiled_bindings:
-                cached_result.pop("_compiled_bindings", None)
             return cast(LoadRecipeResult, cached_result)
 
     t0 = time.perf_counter()
@@ -691,7 +689,7 @@ def load_and_validate(
     if _deferred_guard_list:
         result["deferred_guards"] = _deferred_guard_list
     if active_recipe is not None:
-        if _post_prune_bindings is not None:
+        if include_compiled_bindings and _post_prune_bindings is not None:
             result["_compiled_bindings"] = _post_prune_bindings
         result["post_prune_step_names"] = list(active_recipe.steps.keys())
         _step_names_set = set(active_recipe.steps)
@@ -724,6 +722,4 @@ def load_and_validate(
     if result.get("valid", False):
         _api_cache._refresh_staleness_baseline()
     caller_result = _api_cache._LOAD_CACHE.copy_result(result)
-    if not include_compiled_bindings:
-        caller_result.pop("_compiled_bindings", None)
     return cast(LoadRecipeResult, caller_result)

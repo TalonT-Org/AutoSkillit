@@ -35,9 +35,11 @@ from autoskillit.core import (
     BoundValueState,
     InventoryAdmissionDecision,
     InventoryAdmissionEvaluator,
+    InvocationTemplate,
     PlanDispositionReport,
     PlanDispositionRow,
     RecipeBindingProjection,
+    RecipeExecutionSnapshot,
     VerifiedInputPreflightRequest,
     VerifiedInputPreflightResult,
 )
@@ -329,6 +331,33 @@ def test_bound_prompt_preserves_falsey_and_metacharacter_values() -> None:
         {"name": "audit_cycle_path", "value": "/tmp/audit-cycle.json"},
         {"name": "plan_disposition_path", "value": "/tmp/plan-disposition.json"},
     ]
+
+
+def test_snapshot_rejects_digest_that_does_not_attest_invocation() -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+    template = snapshot.templates["dry"]
+    tampered = InvocationTemplate(
+        invocation=replace(template.invocation, skill_name="different-skill"),
+        tool_contract_identity=template.tool_contract_identity,
+        skill_contract_identity=template.skill_contract_identity,
+        template_digest=template.template_digest,
+    )
+
+    with pytest.raises(ValueError, match="invocation template digest mismatch"):
+        RecipeExecutionSnapshot(
+            execution_id=snapshot.execution_id,
+            recipe_name=snapshot.recipe_name,
+            content_hash=snapshot.content_hash,
+            composite_hash=snapshot.composite_hash,
+            templates={"dry": tampered},
+            snapshot_digest=snapshot.snapshot_digest,
+        )
 
 
 def test_published_audit_head_binds_preflight_template_identity(

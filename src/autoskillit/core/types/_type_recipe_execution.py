@@ -149,6 +149,18 @@ class RecipeExecutionSnapshot:
         copied = dict(self.templates)
         if any(name != template.invocation.step_name for name, template in copied.items()):
             raise ValueError("recipe execution template keys must match step names")
+        for template in copied.values():
+            expected_template_digest = compute_invocation_template_digest(
+                execution_id=self.execution_id,
+                recipe_name=self.recipe_name,
+                content_hash=self.content_hash,
+                composite_hash=self.composite_hash,
+                invocation=template.invocation,
+                tool_contract_identity=template.tool_contract_identity,
+                skill_contract_identity=template.skill_contract_identity,
+            )
+            if template.template_digest != expected_template_digest:
+                raise ValueError("recipe execution invocation template digest mismatch")
         object.__setattr__(self, "templates", MappingProxyType(copied))
         expected = compute_recipe_execution_snapshot_digest(
             execution_id=self.execution_id,

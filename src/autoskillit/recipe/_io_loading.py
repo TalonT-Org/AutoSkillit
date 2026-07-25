@@ -24,6 +24,8 @@ def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
 
 def substitute_scripts_placeholder(text: str) -> str:
     """Replace the scripts placeholder with the bundled recipe scripts path."""
+    if _SCRIPTS_PLACEHOLDER not in text:
+        return text
     scripts_dir = pkg_root() / "recipes" / "scripts"
     return text.replace(_SCRIPTS_PLACEHOLDER, str(scripts_dir))
 

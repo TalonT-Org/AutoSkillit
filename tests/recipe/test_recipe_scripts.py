@@ -47,6 +47,18 @@ def test_autoskillit_scripts_placeholder_substituted_at_load_time():
             )
 
 
+def test_scripts_placeholder_absence_skips_package_lookup(monkeypatch):
+    """Plain recipe scalars must not resolve package resources."""
+    import autoskillit.recipe._io_loading as loading
+
+    def unexpected_pkg_root():
+        raise AssertionError("pkg_root must not run without a scripts placeholder")
+
+    monkeypatch.setattr(loading, "pkg_root", unexpected_pkg_root)
+
+    assert loading.substitute_scripts_placeholder("plain scalar") == "plain scalar"
+
+
 @pytest.mark.parametrize(
     "recipe_name",
     ["research", "research-design", "research-implement", "research-review", "research-archive"],

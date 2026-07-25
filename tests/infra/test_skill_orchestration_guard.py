@@ -83,13 +83,13 @@ def test_guard_permits_orchestrator_tier():
     assert not out.strip()
 
 
-def test_guard_permits_fleet_tier():
-    out = _run_guard(
+def test_guard_denies_run_skill_for_fleet_tier():
+    response = _run_guard_headless(
         {"tool_name": "mcp__autoskillit__run_skill"},
-        headless=True,
         session_type="fleet",
     )
-    assert not out.strip()
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "dispatch_food_truck" in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_guard_denies_when_session_type_unset():
@@ -138,8 +138,8 @@ def test_guard_fails_open_on_malformed_input():
     assert not out.strip()
 
 
-@pytest.mark.parametrize("tool_name", _ORCHESTRATION_TOOLS)
-def test_skill_orchestration_guard_permits_fleet_session(tool_name):
+@pytest.mark.parametrize("tool_name", ["run_cmd", "run_python"])
+def test_skill_orchestration_guard_permits_fleet_session_commands(tool_name):
     response = _run_guard_headless(
         {"tool_name": f"mcp__autoskillit__{tool_name}"}, session_type="fleet"
     )

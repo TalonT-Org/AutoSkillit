@@ -455,18 +455,12 @@ async def test_run_skill_no_provider_profile_injected_for_default_step(
 async def test_run_skill_backend_override_codex_with_anthropic_base_url(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    from unittest.mock import MagicMock
-
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.execution.backends import get_backend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    fake_backend = MagicMock(spec=CodingAgentBackend)
-    fake_backend.capabilities.anthropic_provider_capable = False
-    tool_ctx_kitchen_open.backend = fake_backend
-    # Skip Codex session init: copies ~/.codex/config.toml which is absent in CI
-    tool_ctx_kitchen_open.session_skill_manager = None
+    tool_ctx_kitchen_open.backend = get_backend("codex")
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
@@ -509,7 +503,6 @@ async def test_run_skill_backend_override_none_no_anthropic_base_url(
     fake_backend = MagicMock(spec=CodingAgentBackend)
     fake_backend.capabilities.anthropic_provider_capable = True
     tool_ctx_kitchen_open.backend = fake_backend
-    tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
@@ -585,7 +578,6 @@ async def test_run_skill_backend_override_none_providers_disabled(
     fake_backend = MagicMock(spec=CodingAgentBackend)
     fake_backend.capabilities.anthropic_provider_capable = False
     tool_ctx_kitchen_open.backend = fake_backend
-    tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: False)

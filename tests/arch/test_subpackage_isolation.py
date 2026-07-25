@@ -826,7 +826,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _type_invariant_registry.py adds InvariantDef frozen dataclass and
             INVARIANT_REGISTRY mapping 13 prose prohibitions to runtime gate targets,
             bringing the core/types count to 31.
-            Exempt at 35 files (core/types: 31).
+            _type_skill_contract.py adds the backend-neutral SkillSourceRef identity
+            consumed by workspace projections, bringing the core/types count to 34.
+            Exempt at 35 files (core/types: 34).
           cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -891,8 +893,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 25,  # +_delivery_bounds (resolve_general_output_token_limit)
-        "core/types": 34,  # +_type_recipe_sections schema and digest contracts
+        "core/types": 35,  # +_type_recipe_sections schema and digest contracts
+        # +_type_skill_contract backend-neutral source identity
         "cli": 21,
+        "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
+        "workspace": 12,  # +skill_capabilities semantic validation +skill_projection
         "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_artifacts.py  # noqa: E501
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
@@ -1135,6 +1140,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "delivery-bound summary); splitting would scatter the priority-tier "
         "algorithm across modules that must remain the single source of "
         "truth for the bound-vs-deprioritized budget allocation order.",
+    ),
+    "workspace/session_skills.py": (
+        1200,
+        "REQ-CNST-010-E13: ordering-sensitive session skill assembly — provider "
+        "discovery, override precedence, filtering, dependency activation, and lifecycle "
+        "cleanup remain in one manager; semantic validation and projection are already "
+        "isolated in dedicated workspace modules.",
     ),
 }
 

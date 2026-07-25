@@ -12,7 +12,17 @@ statements continue to work unchanged.
 
 from __future__ import annotations
 
-from autoskillit.core import pkg_root
+from pathlib import Path
+from typing import Any
+
+from autoskillit.core import SkillExecutionRole
+from autoskillit.workspace import (
+    DefaultSkillResolver,
+    EffectiveSkillCatalog,
+    SkillProjectionContext,
+    parse_frontmatter_content,
+    project_agent_skill_document,
+)
 
 # ── Shared helpers (used by sibling _prompts_*.py modules) ──────────────
 
@@ -26,18 +36,39 @@ _MCP_RETRY_INSTRUCTION: str = (
 )
 
 
-def _read_full_sous_chef() -> str:
-    """Read the full sous-chef SKILL.md for injection into L1/L2 orchestration sessions."""
-    path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    try:
-        content = path.read_text()
-    except OSError:
+def _read_full_sous_chef(
+    skill_catalog: EffectiveSkillCatalog | None = None,
+    *,
+    project_dir: Path | None = None,
+    backend: Any | None = None,
+) -> str:
+    """Project the effective sous-chef contract for an orchestrator prompt."""
+    effective_root = (project_dir or Path.cwd()).resolve()
+    catalog = skill_catalog or DefaultSkillResolver().list_effective(
+        effective_root,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    if catalog.execution_role is not SkillExecutionRole.ORCHESTRATOR:
+        raise ValueError("sous-chef projection requires an orchestrator skill catalog")
+    sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
+    if (
+        sous_chef is None
+        or sous_chef.invalid_reason is not None
+        or sous_chef.execution_role is not SkillExecutionRole.ORCHESTRATOR
+    ):
         return ""
-    if content.startswith("---"):
-        end = content.find("\n---\n", 3)
-        if end != -1:
-            content = content[end + 5 :].lstrip("\n")
-    return content
+    projected = project_agent_skill_document(
+        sous_chef,
+        SkillProjectionContext(
+            cwd=effective_root,
+            catalog=catalog,
+            backend=backend,
+            conventions=getattr(backend, "conventions", None),
+            gating=False,
+        ),
+    ).content
+    parsed = parse_frontmatter_content(projected)
+    return parsed.body.lstrip("\n") if parsed.is_valid else projected
 
 
 def _ingredient_table_display_instruction(source: str) -> str:

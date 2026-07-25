@@ -196,6 +196,12 @@ def _mock_git_write_resolver():
     info.backend_requirements = frozenset({"claude-code"})
     resolver = MagicMock()
     resolver.resolve.return_value = info
+    resolver.resolve_invocation.return_value = MagicMock(
+        root=info,
+        closure=(info,),
+        capability_union=info.uses_capabilities,
+        backend_requirements=info.backend_requirements,
+    )
     return resolver
 
 
@@ -220,6 +226,12 @@ def _mock_open_kitchen_resolver():
     info.backend_requirements = frozenset({"claude-code"})
     resolver = MagicMock()
     resolver.resolve.return_value = info
+    resolver.resolve_invocation.return_value = MagicMock(
+        root=info,
+        closure=(info,),
+        capability_union=info.uses_capabilities,
+        backend_requirements=info.backend_requirements,
+    )
     return resolver
 
 
@@ -560,6 +572,12 @@ def test_auto_overrides_git_ingredient_not_set_by_agent_capabilities(
     info.backend_requirements = frozenset({"claude-code"})
     resolver = MagicMock()
     resolver.resolve.return_value = info
+    resolver.resolve_invocation.return_value = MagicMock(
+        root=info,
+        closure=(info,),
+        capability_union=info.uses_capabilities,
+        backend_requirements=info.backend_requirements,
+    )
 
     step = MagicMock()
     step.tool = "run_skill"
@@ -601,6 +619,12 @@ def test_auto_overrides_git_ingredient_set_by_git_capability(
     info.backend_requirements = frozenset({"claude-code"})
     resolver = MagicMock()
     resolver.resolve.return_value = info
+    resolver.resolve_invocation.return_value = MagicMock(
+        root=info,
+        closure=(info,),
+        capability_union=info.uses_capabilities,
+        backend_requirements=info.backend_requirements,
+    )
 
     step = MagicMock()
     step.tool = "run_skill"
@@ -682,6 +706,12 @@ def test_admission_dispatch_agreement_with_explicit_pin(
     skill_info.path = Path("/nonexistent/SKILL.md")
     resolver = MagicMock()
     resolver.resolve.return_value = skill_info
+    resolver.resolve_invocation.return_value = MagicMock(
+        root=skill_info,
+        closure=(skill_info,),
+        capability_union=skill_info.uses_capabilities,
+        backend_requirements=skill_info.backend_requirements,
+    )
 
     codex_caps = BackendCapabilities(git_metadata_writable=False)
     codex_backend = MagicMock()
@@ -767,7 +797,7 @@ def test_admission_dispatch_agreement_with_explicit_pin(
         resolved_command=target_skill_name,
         effective_order_id="test-order",
         target_name=target_skill_name,
-        skill_info=skill_info,
+        skill_info=resolver.resolve_invocation.return_value,
         effective_backend_obj=codex_backend,
         skill_resolver=resolver,
     )

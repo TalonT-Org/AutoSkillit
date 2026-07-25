@@ -2,64 +2,36 @@
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
-from autoskillit.core import paths
+from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
-from autoskillit.workspace.skills import _read_skill_frontmatter
-from tests.arch._helpers import _strip_doc_fenced_blocks, _strip_frontmatter
+from autoskillit.workspace import (
+    DefaultSkillResolver,
+    validate_skill_capability_authenticity,
+)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_GENUINE_CLAUDE_CODE_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"Agent\(\s*subagent_type\s*="),
-    re.compile(r"Agent\(\s*model\s*="),
-)
-
-
-def _has_genuine_claude_code_dependency(body: str, skill_name: str) -> bool:
-    filtered = _strip_doc_fenced_blocks(body)
-    for pat in _GENUINE_CLAUDE_CODE_PATTERNS:
-        if pat.search(filtered):
-            return True
-    for line in filtered.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped.startswith("|"):
-            continue
-        if "autoskillit:" in stripped:
-            if f"autoskillit:{skill_name}" in stripped:
-                continue
-            cap = SKILL_CAPABILITY_REGISTRY["cross_skill_ref"]
-            if cap.required_backends:
-                return True
-    return False
-
 
 def test_annotated_skills_have_justified_annotation():
-    pkg = paths.pkg_root()
     over_annotated: list[str] = []
-
-    for skill_dir in (pkg / "skills", pkg / "skills_extended"):
-        if not skill_dir.is_dir():
+    for skill_info in DefaultSkillResolver().list_all():
+        if AGENT_BACKEND_CLAUDE_CODE not in skill_info.backend_requirements:
             continue
-        for entry in sorted(skill_dir.iterdir()):
-            if not entry.is_dir():
-                continue
-            skill_md = entry / "SKILL.md"
-            if not skill_md.is_file():
-                continue
-            fm = _read_skill_frontmatter(skill_md)
-            reqs = fm.get("backend_requirements", [])
-            if "claude-code" not in reqs:
-                continue
-            content = skill_md.read_text(encoding="utf-8")
-            body = _strip_frontmatter(content)
-            if not _has_genuine_claude_code_dependency(body, entry.name):
-                over_annotated.append(entry.name)
+        errors = validate_skill_capability_authenticity(skill_info)
+        required_declared = {
+            capability
+            for capability in skill_info.uses_capabilities
+            if AGENT_BACKEND_CLAUDE_CODE in SKILL_CAPABILITY_REGISTRY[capability].required_backends
+        }
+        if errors or not required_declared:
+            over_annotated.append(
+                f"{skill_info.name}: required_capabilities={sorted(required_declared)}, "
+                f"errors={list(errors)}"
+            )
 
     assert not over_annotated, (
-        f"{len(over_annotated)} skill(s) have backend_requirements: [claude-code] "
+        f"{len(over_annotated)} skill(s) derive a claude-code backend requirement "
         f"without genuine justification:\n" + "\n".join(f"  {s}" for s in over_annotated)
     )

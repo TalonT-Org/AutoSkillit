@@ -20,6 +20,34 @@ from tests.server.conftest import _SUCCESS_JSON, assert_no_timing, assert_step_t
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("read_only", "false"),
+        ("completion_required", 1),
+    ],
+)
+def test_deserialize_skill_contract_rejects_non_boolean_authority(
+    field: str,
+    value: object,
+) -> None:
+    from autoskillit.core import SkillContractError
+    from autoskillit.server.tools._execution_helpers import deserialize_skill_contract
+
+    payload = json.dumps({"inputs": [], "outputs": [], field: value})
+
+    with pytest.raises(SkillContractError, match="Persisted skill execution contract"):
+        deserialize_skill_contract(payload)
+
+
+def test_deserialize_skill_contract_rejects_non_mapping_payload() -> None:
+    from autoskillit.core import SkillContractError
+    from autoskillit.server.tools._execution_helpers import deserialize_skill_contract
+
+    with pytest.raises(SkillContractError, match="Persisted skill execution contract"):
+        deserialize_skill_contract("[]")
+
+
 class TestGateErrorSchemaNormalization:
     """Gate errors use the standard 9-field response schema."""
 

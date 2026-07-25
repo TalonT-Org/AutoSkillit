@@ -83,3 +83,42 @@ def test_agents_md_has_il_disambiguation():
     assert "Orchestration level" in text or "orchestration level" in text, (
         "Disambiguation table must explain L-N as orchestration level"
     )
+
+
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+def test_process_issues_l2_run_skill_child_crosses_to_l1_session(backend_name: str) -> None:
+    """Trace the real L2 contract through its child target and backend env boundary."""
+    from autoskillit.core import DirectInstall, SkillExecutionRole
+    from autoskillit.execution import get_backend
+    from autoskillit.workspace import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+    parent = resolver.resolve_invocation(
+        "process-issues",
+        REPO_ROOT,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    match = re.search(r'run_skill\("(/autoskillit:([\w-]+)[^"]*)"', parent.root.canonical_content)
+    assert match, "process-issues must dispatch at least one child through run_skill"
+    child = resolver.resolve_invocation(
+        match.group(2),
+        REPO_ROOT,
+        SkillExecutionRole.SESSION,
+    )
+    backend = get_backend(backend_name)
+    parent_spec = backend.build_food_truck_cmd(
+        orchestrator_prompt=parent.root.canonical_content,
+        plugin_source=DirectInstall(plugin_dir=Path("/projected-plugin")),
+        cwd=str(REPO_ROOT),
+        completion_marker="%%L2_DONE%%",
+    )
+    child_spec = backend.build_skill_session_cmd(
+        match.group(1),
+        str(REPO_ROOT),
+        completion_marker="%%L1_DONE%%",
+    )
+
+    assert parent.execution_role is SkillExecutionRole.ORCHESTRATOR
+    assert child.execution_role is SkillExecutionRole.SESSION
+    assert parent_spec.env["AUTOSKILLIT_SESSION_TYPE"] == "orchestrator"
+    assert child_spec.env["AUTOSKILLIT_SESSION_TYPE"] == "skill"

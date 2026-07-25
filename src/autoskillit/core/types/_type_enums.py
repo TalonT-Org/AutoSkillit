@@ -6,12 +6,14 @@ Zero autoskillit imports. Provides the shared enum vocabulary for all higher lay
 from __future__ import annotations
 
 from enum import StrEnum, unique
+from typing import assert_never
 
 __all__ = [
     "RetryReason",
     "MergeFailedStep",
     "MergeState",
     "RestartScope",
+    "SkillExecutionRole",
     "SkillSource",
     "RecipeSource",
     "ClaudeFlags",
@@ -28,6 +30,7 @@ __all__ = [
     "ChannelBStatus",
     "PRState",
     "SessionType",
+    "session_type_for_skill_execution_role",
     "FleetErrorCode",
     "FeatureLifecycle",
     "IssueLabelState",
@@ -120,9 +123,19 @@ class RestartScope(StrEnum):
     PARTIAL_RESTART = "partial_restart"
 
 
+class SkillExecutionRole(StrEnum):
+    """Exact orchestration role authorized to execute a skill contract."""
+
+    SESSION = "session"
+    ORCHESTRATOR = "orchestrator"
+    FLEET = "fleet"
+
+
 class SkillSource(StrEnum):
     BUNDLED = "bundled"
     BUNDLED_EXTENDED = "bundled_extended"
+    PROJECT_LOCAL = "project_local"
+    THIRD_PARTY = "third_party"
 
 
 class RecipeSource(StrEnum):
@@ -414,6 +427,19 @@ class SessionType(StrEnum):
     FLEET = "fleet"
     ORCHESTRATOR = "orchestrator"
     SKILL = "skill"
+
+
+def session_type_for_skill_execution_role(role: SkillExecutionRole) -> SessionType:
+    """Map a machine-contract role to its runtime session discriminator."""
+    match role:
+        case SkillExecutionRole.SESSION:
+            return SessionType.SKILL
+        case SkillExecutionRole.ORCHESTRATOR:
+            return SessionType.ORCHESTRATOR
+        case SkillExecutionRole.FLEET:
+            return SessionType.FLEET
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 @unique

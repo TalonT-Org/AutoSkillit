@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import shutil
@@ -59,12 +60,94 @@ class TestCLIInstall:
 
         marketplace_dir = _ensure_marketplace()
         assert (marketplace_dir / ".claude-plugin" / "marketplace.json").is_file()
-        assert (marketplace_dir / "plugins" / "autoskillit").is_symlink()
+        public_plugin = marketplace_dir / "plugins" / "autoskillit"
+        assert public_plugin.is_dir()
+        assert not public_plugin.is_symlink()
+        assert (marketplace_dir / "plugins" / ".autoskillit.autoskillit-projection.json").is_file()
 
-    def test_install_symlink_target_is_independent_of_test_file_location(
+    def test_install_public_documents_and_private_manifest_are_synchronized(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Symlink target verified using importlib.resources, not __file__ depth-counting."""
+        """Every installed public projection is safe and privately attested."""
+        import importlib as _importlib
+
+        from autoskillit.workspace import parse_frontmatter_content
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        marketplace = _importlib.import_module("autoskillit.cli._marketplace")
+        monkeypatch.setattr(marketplace, "is_git_worktree", lambda path: False)
+
+        marketplace_dir = marketplace._ensure_marketplace()
+        public_root = marketplace_dir / "plugins" / "autoskillit"
+        private_path = marketplace_dir / "plugins" / ".autoskillit.autoskillit-projection.json"
+        private = json.loads(private_path.read_text())
+        public_names = {path.name for path in (public_root / "skills").iterdir()}
+
+        assert set(private["skills"]) == public_names
+        for name, identity in private["skills"].items():
+            projected = (public_root / "skills" / name / "SKILL.md").read_text()
+            parsed = parse_frontmatter_content(projected)
+            assert parsed.is_valid and parsed.data is not None
+            assert {
+                "activate_deps",
+                "uses_capabilities",
+                "execution_role",
+                "backend_requirements",
+            }.isdisjoint(parsed.data)
+            assert {
+                "canonical_digest",
+                "projected_digest",
+                "source",
+                "logical_name",
+                "search_dir",
+                "precedence",
+                "uses_capabilities",
+                "execution_role",
+                "activate_deps",
+            } <= set(identity)
+            assert "source_path" not in identity
+            assert hashlib.sha256(projected.encode()).hexdigest() == identity["projected_digest"]
+
+    def test_install_rejects_role_incompatible_skill_contract(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import importlib as _importlib
+
+        from autoskillit.core import SkillContractError, SkillSource
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        invalid_md = tmp_path / "invalid" / "SKILL.md"
+        invalid_md.parent.mkdir()
+        invalid_md.write_text(
+            "---\n"
+            "name: invalid\n"
+            "description: Invalid package contract.\n"
+            "uses_capabilities: [run_skill]\n"
+            "execution_role: session\n"
+            "---\n"
+            'run_skill("/child")\n'
+        )
+        invalid = _skill_info_from_frontmatter(
+            "invalid",
+            SkillSource.BUNDLED,
+            invalid_md,
+        )
+        marketplace = _importlib.import_module("autoskillit.cli._marketplace")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr(marketplace, "is_git_worktree", lambda _path: False)
+        monkeypatch.setattr(
+            marketplace.DefaultSkillResolver,
+            "list_all",
+            lambda _self: [invalid],
+        )
+
+        with pytest.raises(SkillContractError, match="invalid|run_skill|role"):
+            marketplace._ensure_marketplace()
+
+    def test_install_projection_is_independent_of_test_file_location(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Published plugin metadata is projected from the installed package."""
         import importlib.resources as ir
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -75,9 +158,12 @@ class TestCLIInstall:
         from autoskillit.cli._marketplace import _ensure_marketplace
 
         marketplace_dir = _ensure_marketplace()
-        link = marketplace_dir / "plugins" / "autoskillit"
+        published = marketplace_dir / "plugins" / "autoskillit"
         expected = Path(ir.files("autoskillit"))
-        assert link.resolve() == expected.resolve()
+        assert published.resolve() != expected.resolve()
+        assert (published / ".claude-plugin" / "plugin.json").read_bytes() == (
+            expected / ".claude-plugin" / "plugin.json"
+        ).read_bytes()
 
     def test_install_marketplace_json_content(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -154,7 +240,7 @@ class TestCLIInstall:
     def test_install_idempotent_marketplace(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Running install twice recreates the symlink without error."""
+        """Running install twice recreates the sanitized projection without error."""
         import importlib as _importlib
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
@@ -171,7 +257,10 @@ class TestCLIInstall:
         install()
         install()  # second run should not fail
 
-        assert (tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit").is_symlink()
+        published = tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
+        assert published.is_dir()
+        assert not published.is_symlink()
+        assert (published / ".claude-plugin" / "plugin.json").is_file()
 
     def test_install_backend_guard_returns_false_for_non_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
@@ -451,12 +540,12 @@ class TestInstallCommand:
         result = _ensure_marketplace()
         assert result == tmp_path / ".autoskillit" / "marketplace"
 
-    def test_install_symlink_target_is_not_inside_git_worktree(
+    def test_install_projection_is_not_inside_git_worktree(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """After install, the symlink target must not be inside a git worktree.
+        """After install, the public projection must not be inside a git worktree.
 
-        This is the regression test for the broken-symlink-after-cleanup bug.
+        This is the regression test for transient source paths after cleanup.
         Skipped when running from a worktree install (which is the expected
         dev environment during worktree-based implementation).
         """
@@ -475,13 +564,14 @@ class TestInstallCommand:
         from autoskillit.cli._marketplace import _ensure_marketplace
 
         marketplace_dir = _ensure_marketplace()
-        link = marketplace_dir / "plugins" / "autoskillit"
+        published = marketplace_dir / "plugins" / "autoskillit"
 
-        target = link.resolve()
-        assert target.is_dir(), "Symlink target must exist and be a directory"
+        target = published.resolve()
+        assert target.is_dir(), "Published plugin must exist and be a directory"
+        assert not published.is_symlink()
         assert not is_git_worktree(target), (
-            f"Symlink target {target} is inside a git worktree — "
-            "it will break when the worktree is deleted."
+            f"Published plugin {target} is inside a git worktree — "
+            "it will not survive source cleanup."
         )
 
 

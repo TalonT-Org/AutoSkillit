@@ -395,6 +395,7 @@ def load_and_validate(
             # for this reason — see test_filter_pruning_scope.
             _pre_prune_val_ctx = make_validation_context(
                 active_recipe,
+                project_dir=_pdir,
                 backend_name=backend_name,
                 skill_resolver=_skill_resolver,
                 effective_backend_map=effective_backend_map,
@@ -540,7 +541,11 @@ def load_and_validate(
                 resolved_temp = temp_dir if temp_dir is not None else resolve_temp_dir(_pdir, None)
                 staleness_cache_path = resolved_temp / "recipe_staleness_cache.json"
                 stale = check_contract_staleness(
-                    contract, recipe_path=match.path, cache_path=staleness_cache_path
+                    contract,
+                    recipe_path=match.path,
+                    cache_path=staleness_cache_path,
+                    resolver=_skill_resolver,
+                    project_root=_pdir,
                 )
                 suggestions.extend(stale_to_suggestions(stale))
             t0 = _t("staleness_check", t0, name)

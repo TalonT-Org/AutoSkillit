@@ -15,6 +15,11 @@ _DEFAULT_DISABLED_TAGS: frozenset[str] = frozenset(
     tag for tag, pack_def in PACK_REGISTRY.items() if not pack_def.default_enabled
 )
 
+
+def _project_skill_document(name: str, body: str) -> str:
+    return f"---\nname: {name}\ndescription: Project-local {name} fixture.\n---\n{body}\n"
+
+
 # ---------------------------------------------------------------------------
 # T-OVR-001..006,019..021: detect_project_local_overrides() — pure detection function
 # ---------------------------------------------------------------------------
@@ -182,266 +187,510 @@ def test_detect_project_local_overrides_claude_code_backend_scoping(tmp_path):
     )
 
 
-# ---------------------------------------------------------------------------
-# T-OVR-007..011: init_session() — project_dir override filtering
-# ---------------------------------------------------------------------------
-
-
-def test_init_session_no_override_when_project_dir_none(tmp_path):
-    """T-OVR-007: init_session() with project_dir=None performs no override filtering."""
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
+def _write_effective_skill(
+    root,
+    name,
+    *,
+    capabilities: tuple[str, ...],
+    execution_role: str,
+    body: str,
+):
+    skill_path = root / name / "SKILL.md"
+    skill_path.parent.mkdir(parents=True, exist_ok=True)
+    skill_path.write_text(
+        "\n".join(
+            (
+                "---",
+                f"name: {name}",
+                "description: Effective source fixture.",
+                f"uses_capabilities: [{', '.join(capabilities)}]",
+                f"execution_role: {execution_role}",
+                "---",
+                body,
+                "",
+            )
+        )
     )
-
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-001", project_dir=None)
-    assert (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
+    return skill_path
 
 
-def test_init_session_delivers_project_local_override(tmp_path):
-    """T-OVR-008: init_session() delivers project-local override into ephemeral dir."""
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
-
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    override = project_dir / ".claude" / "skills" / "investigate"
-    override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom investigate")
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-002", project_dir=project_dir)
-    delivered = skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
-    assert delivered.exists(), "project-local override must be copied into ephemeral dir"
-    assert "# custom investigate" in delivered.read_text()
-
-
-def test_init_session_includes_non_overridden_skills(tmp_path):
-    """T-OVR-009: Non-overridden skills are still included."""
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
-
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    # Override "investigate" only
-    override = project_dir / ".claude" / "skills" / "investigate"
-    override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom")
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-003", project_dir=project_dir)
-    # "make-plan" must still be present
-    assert (skills_dir / ".claude" / "skills" / "make-plan" / "SKILL.md").exists()
-
-
-def test_init_session_subset_and_override_compose(tmp_path):
-    """T-OVR-010: Subset disable and override compose independently."""
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
-    from tests._helpers import make_subsetsconfig, make_test_config
-
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    # Project-local override for "review-pr"
-    override = project_dir / ".claude" / "skills" / "review-pr"
-    override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom")
-    # Config disables "github" subset (which covers open-pr)
-    config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-004", config=config, project_dir=project_dir)
-    # "open-pr" absent due to subset; "review-pr" present via Channel 2 project-local copy
-    delivered = skills_dir / ".claude" / "skills" / "review-pr" / "SKILL.md"
-    assert delivered.exists(), "project-local override must be copied into ephemeral dir"
-    assert "# custom" in delivered.read_text()
-    assert not (skills_dir / ".claude" / "skills" / "open-pr" / "SKILL.md").exists()
-
-
-def test_init_session_logs_override_skip(tmp_path):
-    """T-OVR-011: Debug log emitted for each overridden skill skipped."""
-    import structlog.testing
-
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
-
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    override = project_dir / ".claude" / "skills" / "investigate"
-    override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom")
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    with structlog.testing.capture_logs() as logs:
-        mgr.init_session("sess-005", project_dir=project_dir)
-    skip_events = [e for e in logs if e.get("event") == "init_session_override_skip"]
-    assert any(e.get("skill") == "investigate" for e in skip_events)
-
-
-def test_init_session_cook_session_delivers_project_local_overrides(tmp_path):
-    """T-OVR-012: cook_session=True delivers project-local overrides via Channel 2.
-
-    All project-local overrides are delivered via Channel 2 (copied into ephemeral dir).
-    Channel 3 (CWD) is no longer used for delivery.
-    """
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
-
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    override = project_dir / ".claude" / "skills" / "investigate"
-    override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom investigate")
-
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-cook", cook_session=True, project_dir=project_dir)
-    delivered = skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
-    assert delivered.exists(), (
-        "cook_session=True must deliver project-local override via Channel 2"
-    )
-    assert "# custom investigate" in delivered.read_text()
-
-
-def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
-    """T-OVR-013: cook_session=True includes subset-disabled skills."""
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
-    from tests._helpers import make_subsetsconfig, make_test_config
-
-    config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-cook2", cook_session=True, config=config)
-    assert (skills_dir / ".claude" / "skills" / "compose-pr" / "SKILL.md").exists(), (
-        "cook_session=True must include 'compose-pr' even when 'github' subset is disabled"
-    )
-
-
-def test_init_session_cook_full_skill_set_invariant(tmp_path):
-    """T-OVR-014: cook_session=True yields all BUNDLED_EXTENDED skills plus
-    project-local overrides, minus default-disabled pack skills — but never
-    BUNDLED (Tier 1) skills, which are already served by --plugin-dir.
-
-    Project-local overrides are delivered via Channel 2 (copied into ephemeral dir).
-    The cook bypasses explicit subset-disable filtering but NOT default pack gating.
-    """
-    from autoskillit.core.types import SkillSource
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
+def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
+    tmp_path, monkeypatch
+):
+    """A higher-priority source created between fresh dispatches is immediately effective."""
     from autoskillit.workspace.skills import DefaultSkillResolver
-    from tests._helpers import make_subsetsconfig, make_test_config
 
-    # Override exactly one extended skill
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    override = project_dir / ".claude" / "skills" / "investigate"
-    override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# override")
-
-    # Config disables all known categories — cook should bypass this
-    config = make_test_config(
-        subsets=make_subsetsconfig(disabled=["github", "audit", "arch-lens", "ci"]),
-        features={"fleet": True},
-    )
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session(
-        "sess-invariant", cook_session=True, config=config, project_dir=project_dir
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    bundled_path = _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("github_api_write", "agent_model"),
+        execution_role="session",
+        body="bundled body",
     )
 
     resolver = DefaultSkillResolver()
-    all_skills = resolver.list_all()
-    # Expected: all BUNDLED_EXTENDED skills (excluding default-disabled packs)
-    # PLUS project-local overrides (delivered via Channel 2).
-    # "investigate" is overridden but still present — the project-local copy replaces the bundled.
-    expected_names = {
-        s.name
-        for s in all_skills
-        if s.source != SkillSource.BUNDLED and not (s.categories & _DEFAULT_DISABLED_TAGS)
-    }
-    skills_base = skills_dir / ".claude" / "skills"
-    actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
-    assert actual_names == expected_names, (
-        f"cook_session=True ephemeral dir mismatch.\n"
-        f"  Missing: {sorted(expected_names - actual_names)}\n"
-        f"  Extra:   {sorted(actual_names - expected_names)}"
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+
+    first = resolver.resolve_effective("target", project)
+    assert first is not None
+    assert first.path == bundled_path
+    assert first.uses_capabilities == frozenset({"github_api_write", "agent_model"})
+
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("git_metadata_write", "run_skill"),
+        execution_role="orchestrator",
+        body="fresh override body",
     )
+    second = resolver.resolve_effective("target", project)
+
+    assert second is not None
+    assert second is not first
+    assert second.path == override_path
+    assert second.source.value == "project_local"
+    assert second.uses_capabilities == frozenset({"git_metadata_write", "run_skill"})
+    assert second.execution_role.value == "orchestrator"
 
 
-# ---------------------------------------------------------------------------
-# T-OVR-015..017: Channel-aware exclusion — Tier 1 deduplication
-# ---------------------------------------------------------------------------
-
-
-def test_cook_session_excludes_tier1_from_ephemeral_dir(tmp_path):
-    """T-OVR-015: init_session(cook_session=True) must NOT write BUNDLED skills
-    to the ephemeral dir — they are already served by --plugin-dir (Channel 1)."""
-    from autoskillit.core.types import SkillSource
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
+def test_resolve_effective_observes_removed_override_and_falls_back(tmp_path, monkeypatch):
+    """Removing a winning override exposes the lower-priority source on the next lookup."""
     from autoskillit.workspace.skills import DefaultSkillResolver
 
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session("sess-tier1", cook_session=True)
-
-    resolver = DefaultSkillResolver()
-    tier1_names = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED}
-    skills_base = skills_dir / ".claude" / "skills"
-    actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
-    overlap = tier1_names & actual_names
-    assert not overlap, (
-        f"BUNDLED (Tier 1) skills must NOT appear in ephemeral dir — "
-        f"already served by --plugin-dir. Found: {sorted(overlap)}"
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    bundled_path = _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("github_api_write", "agent_model"),
+        execution_role="session",
+        body="fallback bundled body",
     )
-
-
-def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
-    """T-OVR-017: Regression guard — cook_session=True still writes all
-    BUNDLED_EXTENDED skills that do NOT have project-local overrides and are
-    not in default-disabled packs."""
-    from autoskillit.core.types import SkillSource
-    from autoskillit.workspace.session_skills import (
-        DefaultSessionSkillManager,
-        SkillsDirectoryProvider,
-    )
-    from autoskillit.workspace.skills import DefaultSkillResolver
-    from tests._helpers import make_test_config
-
-    # Override exactly one extended skill
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    override = project_dir / ".claude" / "skills" / "investigate"
-    override.mkdir(parents=True)
-    (override / "SKILL.md").write_text("# custom")
-
-    config = make_test_config(features={"fleet": True})
-    mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
-    skills_dir = mgr.init_session(
-        "sess-retain", cook_session=True, config=config, project_dir=project_dir
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("git_metadata_write", "run_skill"),
+        execution_role="orchestrator",
+        body="temporary override body",
     )
 
     resolver = DefaultSkillResolver()
-    expected = {
-        s.name
-        for s in resolver.list_all()
-        if s.source != SkillSource.BUNDLED and not (s.categories & _DEFAULT_DISABLED_TAGS)
-    }
-    skills_base = skills_dir / ".claude" / "skills"
-    actual = {d.name for d in skills_base.iterdir() if d.is_dir()}
-    missing = expected - actual
-    assert not missing, (
-        f"cook_session=True must include all extended skills (including project-local overrides). "
-        f"Missing: {sorted(missing)}"
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+
+    first = resolver.resolve_effective("target", project)
+    assert first is not None
+    assert first.path == override_path
+    assert first.source.value == "project_local"
+    assert "temporary override body" in first.canonical_content
+
+    override_path.unlink()
+    second = resolver.resolve_effective("target", project)
+
+    assert second is not None
+    assert second is not first
+    assert second.path == bundled_path
+    assert second.source.value == "bundled"
+    assert second.source_ref is not None
+    assert second.source_ref.identity.origin.value == "bundled"
+    assert "fallback bundled body" in second.canonical_content
+    assert "temporary override body" not in second.canonical_content
+
+
+@pytest.mark.parametrize("symlink_kind", ["directory", "file"])
+def test_effective_resolution_rejects_symlinked_project_overrides(
+    tmp_path,
+    monkeypatch,
+    symlink_kind: str,
+) -> None:
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    external = tmp_path / "external"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    bundled_path = _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=(),
+        execution_role="session",
+        body="trusted bundled body",
     )
+    external_path = _write_effective_skill(
+        external,
+        "target",
+        capabilities=("github_api_write",),
+        execution_role="session",
+        body="external body",
+    )
+    override_entry = project / ".claude" / "skills" / "target"
+    override_entry.parent.mkdir(parents=True)
+    if symlink_kind == "directory":
+        override_entry.symlink_to(external_path.parent, target_is_directory=True)
+    else:
+        override_entry.mkdir()
+        (override_entry / "SKILL.md").symlink_to(external_path)
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+
+    effective = resolver.resolve_effective("target", project)
+    catalog = resolver.list_effective(project, SkillExecutionRole.SESSION)
+
+    assert effective is not None
+    assert effective.path == bundled_path
+    assert next(skill for skill in catalog.skills if skill.name == "target").source.value == (
+        "bundled"
+    )
+
+
+def test_effective_resolution_rejects_external_symlinked_search_root(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    external = tmp_path / "external"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    bundled_path = _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=(),
+        execution_role="session",
+        body="trusted bundled body",
+    )
+    _write_effective_skill(
+        external / ".claude" / "skills",
+        "target",
+        capabilities=("github_api_write",),
+        execution_role="session",
+        body="external body",
+    )
+    (project / ".claude").symlink_to(
+        external / ".claude",
+        target_is_directory=True,
+    )
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+
+    effective = resolver.resolve_effective("target", project)
+
+    assert effective is not None
+    assert effective.path == bundled_path
+    assert "external body" not in effective.canonical_content
+
+
+def test_effective_resolution_fails_closed_on_override_io_error(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from pathlib import Path
+
+    from autoskillit.core import SkillContractError
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=(),
+        execution_role="session",
+        body="bundled fallback must not run",
+    )
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=(),
+        execution_role="session",
+        body="selected override",
+    )
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    original_resolve = Path.resolve
+
+    def fail_override_resolution(path: Path, strict: bool = False) -> Path:
+        if path == override_path:
+            raise PermissionError("override unavailable")
+        return original_resolve(path, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", fail_override_resolution)
+
+    with pytest.raises(
+        SkillContractError,
+        match="cannot validate project-local skill 'target'",
+    ):
+        resolver.resolve_effective("target", project)
+
+
+def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path, monkeypatch):
+    """Source precedence cannot mix policy metadata with bytes from a lower-priority source."""
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("agent_model",),
+        execution_role="session",
+        body="bundled",
+    )
+    claude_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("github_api_write",),
+        execution_role="session",
+        body="first match",
+    )
+    _write_effective_skill(
+        project / ".autoskillit" / "skills",
+        "target",
+        capabilities=("git_metadata_write",),
+        execution_role="session",
+        body="lower priority",
+    )
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    effective = resolver.resolve_effective("target", project)
+
+    assert effective is not None
+    assert effective.path == claude_path
+    assert effective.path.read_text().endswith("first match\n")
+    assert effective.uses_capabilities == frozenset({"github_api_write"})
+
+
+def test_backend_rendering_uses_the_selected_effective_source(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from autoskillit.core import BackendConventions, render_target_skill_command
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("agent_model",),
+        execution_role="session",
+        body="bundled",
+    )
+    winning_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("github_api_write",),
+        execution_role="session",
+        body="selected override",
+    )
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    selected = resolver.resolve_effective("target", project)
+
+    assert selected is not None
+    assert selected.path == winning_path
+    assert selected.source_ref is not None
+    rendered = render_target_skill_command(
+        "/autoskillit:target --flag",
+        selected.source_ref,
+        BackendConventions(skills_subdir=Path("skills"), skill_sigil="@"),
+    )
+    assert rendered == "@target --flag"
+
+
+def test_project_local_internal_override_is_not_duplicated(tmp_path) -> None:
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    project = tmp_path / "project"
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "sous-chef",
+        capabilities=("run_skill",),
+        execution_role="orchestrator",
+        body='Call run_skill("child").',
+    )
+
+    catalog = DefaultSkillResolver().list_effective(
+        project,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    matches = [skill for skill in catalog.skills if skill.name == "sous-chef"]
+
+    assert len(matches) == 1
+    assert matches[0].source.value == "project_local"
+    assert matches[0].canonical_digest
+    assert override_path.read_text(encoding="utf-8").endswith('Call run_skill("child").\n')
+
+
+def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, monkeypatch) -> None:
+    """L2 source selection is project-root-bound while execution stays cwd-bound."""
+    from pathlib import Path
+
+    from autoskillit.execution.backends import get_backend
+    from autoskillit.workspace import prepare_effective_skill_dispatch
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    project_root = tmp_path / "source-project"
+    cwd = tmp_path / "execution-worktree"
+    cwd.mkdir()
+    _write_effective_skill(
+        project_root / ".claude" / "skills",
+        "process-issues",
+        capabilities=("run_skill",),
+        execution_role="orchestrator",
+        body=(
+            "winning project-root body\n"
+            "merge {{DEFAULT_BASE_BRANCH}} from {{AUTOSKILLIT_TEMP}}\n"
+            'run_skill("/test child")'
+        ),
+    )
+    _write_effective_skill(
+        cwd / ".claude" / "skills",
+        "process-issues",
+        capabilities=("run_skill",),
+        execution_role="orchestrator",
+        body='wrong execution-cwd body\nrun_skill("/test child")',
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+    plugin_source, contract = prepare_effective_skill_dispatch(
+        resolved_command="dispatch",
+        project_root=project_root,
+        cwd=cwd,
+        backend=get_backend("codex"),
+        resolver=DefaultSkillResolver(),
+        visibility=None,
+        default_base_branch=None,
+        recipe_packs=None,
+        recipe_features=None,
+    )
+
+    assert contract.project_root == str(project_root.resolve())
+    assert contract.cwd == str(cwd.resolve())
+    assert "winning project-root body" in contract.projected_artifacts["process-issues"]
+    assert "wrong execution-cwd body" not in contract.projected_artifacts["process-issues"]
+    assert "{{DEFAULT_BASE_BRANCH}}" not in contract.projected_artifacts["process-issues"]
+    assert "{{AUTOSKILLIT_TEMP}}" not in contract.projected_artifacts["process-issues"]
+    assert contract.projected_artifacts["process-issues"] == (
+        plugin_source.plugin_dir / "skills" / "process-issues" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_winning_override_identity_policy_projection_and_digests_are_atomic(
+    tmp_path, monkeypatch
+) -> None:
+    """No bundled SkillInfo can leak after a project override wins resolution."""
+    import hashlib
+
+    import autoskillit.workspace.skills as skills_module
+    from autoskillit.core import SkillExecutionRole, render_target_skill_command
+    from autoskillit.workspace import (
+        SkillProjectionContext,
+        build_effective_skill_dispatch_contract,
+        project_agent_skill_document,
+    )
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    bundled = tmp_path / "bundled"
+    extended = tmp_path / "extended"
+    project = tmp_path / "project"
+    bundled.mkdir()
+    extended.mkdir()
+    project.mkdir()
+    _write_effective_skill(
+        bundled,
+        "target",
+        capabilities=("agent_model",),
+        execution_role="session",
+        body="bundled sentinel body",
+    )
+    override_path = _write_effective_skill(
+        project / ".claude" / "skills",
+        "target",
+        capabilities=("github_api_write", "git_metadata_write"),
+        execution_role="session",
+        body=(
+            'winning override body\ngh issue edit 42 --body-file report.md\ngit commit -m "test"'
+        ),
+    )
+    source_before = override_path.read_bytes()
+
+    resolver = DefaultSkillResolver()
+    monkeypatch.setattr(resolver, "_dir", bundled)
+    monkeypatch.setattr(resolver, "_extended_dir", extended)
+    monkeypatch.setattr(skills_module, "_LIST_ALL_CACHE", None)
+    monkeypatch.setattr(skills_module, "_LIST_ALL_CACHE_KEY", None)
+    monkeypatch.setattr(
+        resolver,
+        "resolve",
+        lambda _name: pytest.fail("bundled resolver lookup leaked into effective flow"),
+    )
+
+    invocation = resolver.resolve_invocation(
+        "target",
+        project,
+        SkillExecutionRole.SESSION,
+    )
+    context = SkillProjectionContext(cwd=tmp_path, invocation=invocation)
+    document = project_agent_skill_document(invocation.root, context)
+    contract = build_effective_skill_dispatch_contract("/target", context)
+
+    assert invocation.root.path == override_path
+    assert invocation.root.execution_role is SkillExecutionRole.SESSION
+    assert invocation.capability_union == frozenset({"github_api_write", "git_metadata_write"})
+    assert "winning override body" in invocation.root.canonical_content
+    assert "bundled sentinel body" not in invocation.root.canonical_content
+    assert "winning override body" in document.content
+    assert contract.source_identities["target"].origin.value == "project_local"
+    assert contract.canonical_digests["target"] == hashlib.sha256(source_before).hexdigest()
+    assert (
+        contract.projected_digests["target"]
+        == hashlib.sha256(document.content.encode()).hexdigest()
+    )
+    assert (
+        render_target_skill_command("/autoskillit:target", invocation.root.source_ref) == "/target"
+    )
+    assert override_path.read_bytes() == source_before
+
+
+# ---------------------------------------------------------------------------

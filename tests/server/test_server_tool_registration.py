@@ -593,7 +593,11 @@ class TestSafetyConfigWiring:
 
         tool_ctx_kitchen_open.runner.push(_make_result(0, '{"result": "done"}', ""))
         result = json.loads(
-            await run_skill(f"/autoskillit:implement-worktree {plan}", str(tmp_path))
+            await run_skill(
+                f"/autoskillit:implement-worktree {plan}",
+                str(tmp_path),
+                output_dir=".",
+            )
         )
         assert result["subtype"] != "gate_error"
         assert result["exit_code"] == 0

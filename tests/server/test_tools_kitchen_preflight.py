@@ -90,10 +90,15 @@ def _make_claude_backend() -> MagicMock:
 
 
 def _make_skill_resolver_with_git_write() -> MagicMock:
-    """Resolver whose .resolve() returns a stub declaring git_metadata_write."""
+    """Resolver whose effective invocation declares git_metadata_write."""
+    capabilities = frozenset({"git_metadata_write"})
     resolver = MagicMock()
     resolver.resolve.return_value = SimpleNamespace(
-        uses_capabilities=frozenset({"git_metadata_write"}),
+        uses_capabilities=capabilities,
+        backend_requirements=frozenset(),
+    )
+    resolver.resolve_invocation.return_value = SimpleNamespace(
+        capability_union=capabilities,
         backend_requirements=frozenset(),
     )
     return resolver
@@ -232,6 +237,9 @@ class TestCheckDispatchFeasibilityUnit:
         )
         resolver = MagicMock()
         resolver.resolve.return_value = None
+        from autoskillit.core import SkillContractError
+
+        resolver.resolve_invocation.side_effect = SkillContractError("skill not found")
 
         with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
             result = _check_dispatch_feasibility(
@@ -246,7 +254,7 @@ class TestCheckDispatchFeasibilityUnit:
 
         assert result is not None
         parsed = json.loads(result)
-        assert parsed.get("error") == "skill_not_found_for_pinned_step"
+        assert parsed.get("error") == "invalid_skill_invocation_for_pinned_step"
         assert parsed.get("skill") == "missing-skill"
         assert parsed.get("step") == "unknown_step"
 

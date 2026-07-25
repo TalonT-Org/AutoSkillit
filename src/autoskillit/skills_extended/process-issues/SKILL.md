@@ -1,6 +1,7 @@
 ---
 name: process-issues
 uses_capabilities: [agent_model, cross_skill_ref, github_api_write, run_skill]
+execution_role: orchestrator
 description: Execute recipe sessions batch-by-batch for triaged GitHub issues. Reads the triage-issues output manifest, processes each batch sequentially, and launches the appropriate recipe for each issue. Use when user says "process issues", "run issues", or "execute pipeline for issues".
 hooks:
   PreToolUse:

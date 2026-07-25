@@ -113,6 +113,7 @@ class TestModuleCascadeCore:
             "_type_constants_features",
             "_type_constants_registries",
             "_type_exceptions",
+            "_type_skill_contract",
             "_step_context",
             "_execution_marker",
             "git_remote",
@@ -236,7 +237,7 @@ class TestModuleCascadeCore:
 
     def test_type_exceptions_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_exceptions"] == frozenset(
-            {"core", "execution", "fleet", "recipe", "server"}
+            {"cli", "core", "execution", "fleet", "recipe", "server", "workspace"}
         )
 
     def test_step_context_cascade(self) -> None:
@@ -706,7 +707,7 @@ class TestBuildTestScopeCoreCascade:
             )
 
     def test_type_exceptions_narrow_cascade(self, tmp_path: Path) -> None:
-        """_type_exceptions → narrow cascade of 5 dirs."""
+        """_type_exceptions → narrow cascade of 7 dirs."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_exceptions.py"},
@@ -715,14 +716,12 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "execution", "fleet", "recipe", "server"]:
+        for pkg in ["cli", "core", "execution", "fleet", "recipe", "server", "workspace"]:
             assert pkg in dir_names, f"_type_exceptions cascade should include {pkg}"
         for excluded in [
-            "cli",
             "config",
             "pipeline",
             "migration",
-            "workspace",
             "hooks",
         ]:
             assert excluded not in dir_names, (
@@ -847,13 +846,13 @@ class TestClosureCoreNarrowCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        # Union: _plugin_ids={core,cli,server} ∪ _plugin_cache={core,cli,server}
-        for pkg in ["core", "cli", "server"]:
+        # Union: _plugin_ids={core,cli,server}
+        # ∪ _plugin_cache={core,cli,server,workspace}
+        for pkg in ["core", "cli", "server", "workspace"]:
             assert pkg in dir_names, f"union cascade should include {pkg}"
         for excluded in [
             "execution",
             "pipeline",
-            "workspace",
             "recipe",
             "migration",
             "hooks",

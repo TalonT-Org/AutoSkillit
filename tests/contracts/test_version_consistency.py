@@ -88,3 +88,34 @@ class TestVersionConsistency:
         plugins = data.get("plugins", [])
         assert len(plugins) == 1
         assert plugins[0]["version"] == autoskillit.__version__
+
+    def test_marketplace_public_projection_matches_private_contract(self, tmp_path, monkeypatch):
+        """Build guard: published skills are sanitized and manifest-complete."""
+        import importlib as _importlib
+
+        from autoskillit.core import SkillSource, pkg_root
+        from autoskillit.workspace import (
+            DefaultSkillResolver,
+            validate_sanitized_plugin_artifact,
+        )
+
+        marketplace = _importlib.import_module("autoskillit.cli._marketplace")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(marketplace, "is_git_worktree", lambda path: False)
+        marketplace_root = marketplace._ensure_marketplace()
+        public_root = marketplace_root / "plugins" / "autoskillit"
+        private_manifest = (
+            marketplace_root / "plugins" / ".autoskillit.autoskillit-projection.json"
+        )
+        catalog = tuple(
+            skill
+            for skill in DefaultSkillResolver().list_all()
+            if skill.source is SkillSource.BUNDLED
+        )
+        errors = validate_sanitized_plugin_artifact(
+            pkg_root(),
+            public_root,
+            private_manifest,
+            catalog,
+        )
+        assert not errors, "\n".join(errors)

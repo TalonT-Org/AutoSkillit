@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import Severity, SkillSource
+from autoskillit.core import Severity, SkillContractError, SkillSource
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -41,10 +41,52 @@ def _make_recipe_with_skill_step(skill_command: str) -> Recipe:
     return Recipe(name="test-recipe", description="test", steps=steps)
 
 
+def test_recipe_validation_rejects_role_incompatible_effective_override(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.workspace import DefaultSkillResolver
+
+    override = tmp_path / ".claude" / "skills" / "investigate" / "SKILL.md"
+    override.parent.mkdir(parents=True)
+    override.write_text(
+        "---\n"
+        "name: investigate\n"
+        "description: Invalid effective override.\n"
+        "uses_capabilities: [run_skill]\n"
+        "execution_role: session\n"
+        "---\n"
+        'run_skill("/child")\n'
+    )
+    recipe = _make_recipe_with_skill_step("/investigate")
+    context = make_validation_context(
+        recipe,
+        project_dir=tmp_path,
+        backend_name="claude-code",
+        skill_resolver=DefaultSkillResolver(),
+    )
+
+    findings = run_semantic_rules(context)
+
+    incompatible = [
+        finding for finding in findings if finding.rule == "backend-incompatible-skill"
+    ]
+    assert len(incompatible) == 1
+    assert "no valid effective invocation" in incompatible[0].message
+
+
 def _mock_resolver(skill_info: SimpleNamespace | None) -> MagicMock:
     resolver = MagicMock()
     resolver.resolve.return_value = skill_info
     resolver.list_all.return_value = [skill_info] if skill_info else []
+    if skill_info is not None:
+        resolver.resolve_invocation.return_value = SimpleNamespace(
+            root=skill_info,
+            closure=(skill_info,),
+            capability_union=skill_info.uses_capabilities,
+            backend_requirements=skill_info.backend_requirements,
+        )
+    else:
+        resolver.resolve_invocation.side_effect = SkillContractError("skill not found")
     return resolver
 
 
@@ -194,6 +236,35 @@ class _FakeSkillResolver:
 
     def resolve(self, name: str) -> SimpleNamespace | None:
         return self._info if self._info and self._info.name == name else None
+
+    def resolve_effective(
+        self,
+        name: str,
+        _project_root: Path | None,
+    ) -> SimpleNamespace | None:
+        return self.resolve(name)
+
+    def list_effective(
+        self,
+        _project_root: Path | None,
+        _execution_role: object,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(skills=tuple(self.list_all()))
+
+    def resolve_invocation(
+        self,
+        name: str,
+        _project_root: Path | None,
+        _execution_role: object,
+    ) -> SimpleNamespace:
+        if self._info is None or self._info.name != name:
+            raise SkillContractError(f"skill {name!r} not found")
+        return SimpleNamespace(
+            root=self._info,
+            closure=(self._info,),
+            capability_union=self._info.uses_capabilities,
+            backend_requirements=self._info.backend_requirements,
+        )
 
 
 class TestBackendNameThreadingAPI:

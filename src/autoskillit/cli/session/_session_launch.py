@@ -13,6 +13,7 @@ from autoskillit.core import NamedResume, NoResume
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend, ResumeSpec
+    from autoskillit.workspace import EffectiveSkillCatalog
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,8 @@ def _run_interactive_session(
     project_dir: Path | None = None,
     required_env: frozenset[str] | None = None,
     backend: CodingAgentBackend | None = None,
+    skill_catalog: EffectiveSkillCatalog | None = None,
+    default_base_branch: str = "main",
 ) -> str | _InfraExitSignal | None:
     """Launch an interactive Claude Code session.
 
@@ -46,6 +49,9 @@ def _run_interactive_session(
 
         config = load_config()
         backend = get_backend(config.agent_backend.backend)
+        configured_base_branch = config.branching.default_base_branch
+        if isinstance(configured_base_branch, str):
+            default_base_branch = configured_base_branch
 
         from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled
 
@@ -86,19 +92,25 @@ def _run_interactive_session(
     from autoskillit.cli.ui._terminal import terminal_guard
     from autoskillit.core import (
         MARKETPLACE_PREFIX,
-        DirectInstall,
         InfraExitCategory,
+        PluginSource,
         detect_autoskillit_mcp_prefix,
-        pkg_root,
     )
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
+    plugin_source: PluginSource | None
     if backend.capabilities.skill_injection_capable:
-        plugin_source = (
-            None
-            if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
-            else DirectInstall(plugin_dir=pkg_root())
-        )
+        if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX:
+            plugin_source = None
+        else:
+            from autoskillit.workspace import project_default_plugin_source
+
+            plugin_source = project_default_plugin_source(
+                cwd=_project_dir,
+                backend=backend,
+                default_base_branch=default_base_branch,
+                skill_catalog=skill_catalog,
+            )
         tools_arg: tuple[str, ...] = ("AskUserQuestion",)
     else:
         plugin_source = None
@@ -165,6 +177,7 @@ def _launch_cook_session(
     project_dir: Path | None = None,
     required_env: frozenset[str],
     backend: CodingAgentBackend | None = None,
+    skill_catalog: EffectiveSkillCatalog | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""
     _max_reloads = 10
@@ -182,6 +195,7 @@ def _launch_cook_session(
             project_dir=project_dir,
             required_env=required_env,
             backend=backend,
+            skill_catalog=skill_catalog,
         )
         if session_signal is None:
             break

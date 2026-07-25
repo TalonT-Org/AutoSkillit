@@ -97,6 +97,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
         {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
     )()
     _agent_backend = type("AB", (), {"backend": "claude-code"})()
+    _branching = type("Branching", (), {"default_base_branch": "main"})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -107,6 +108,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
                 "experimental_enabled": False,
                 "fleet": _fleet,
                 "agent_backend": _agent_backend,
+                "branching": _branching,
             },
         )(),
     )
@@ -173,6 +175,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
         {"max_issues_per_food_truck": 3, "max_total_issues": 12, "max_concurrent_dispatches": 3},
     )()
     _agent_backend = type("AB", (), {"backend": "claude-code"})()
+    _branching = type("Branching", (), {"default_base_branch": "main"})()
     monkeypatch.setattr(
         "autoskillit.config.load_config",
         lambda path=None: type(
@@ -183,6 +186,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
                 "experimental_enabled": False,
                 "fleet": _fleet,
                 "agent_backend": _agent_backend,
+                "branching": _branching,
             },
         )(),
     )
@@ -307,23 +311,20 @@ def test_build_fleet_dispatch_prompt_lists_all_11_tools() -> None:
         )
 
 
-def test_build_fleet_dispatch_prompt_includes_admiral_sections() -> None:
-    """Dispatch prompt must include the 4 L3 admiral sections."""
+def test_build_fleet_dispatch_prompt_excludes_l2_admiral_sections() -> None:
+    """L3 dispatchers use fleet-native rules, not the L2 sous-chef subset."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
-    from autoskillit.fleet import _build_admiral_dispatch_block
 
-    admiral_block = _build_admiral_dispatch_block()
-    assert admiral_block
     prompt = _build_fleet_dispatch_prompt(DIRECT_PREFIX)
-    assert "ADMIRAL DISCIPLINE" in prompt
+    assert "ADMIRAL DISCIPLINE" not in prompt
     for section in (
         "CONTEXT LIMIT ROUTING",
         "STEP NAME IMMUTABILITY",
         "MERGE PHASE",
         "QUOTA WAIT PROTOCOL",
     ):
-        assert section in prompt, f"Expected admiral section {section!r} in dispatch prompt"
+        assert section not in prompt, f"Unexpected L2 admiral section {section!r} in L3 prompt"
 
 
 def test_build_fleet_dispatch_prompt_has_recipe_discovery_guidance() -> None:

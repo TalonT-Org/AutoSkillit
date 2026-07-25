@@ -485,9 +485,13 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
 @pytest.mark.anyio
 async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
     """Path B (no-name) must inject full sous-chef SKILL.md into response text."""
+    from autoskillit.workspace import SkillsDirectoryProvider
+
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.skill_resolver = SkillsDirectoryProvider().resolver
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -510,18 +514,13 @@ async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
 @pytest.mark.anyio
 async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monkeypatch):
     """When sous-chef SKILL.md is absent, Path B must return a valid response without raising."""
+    from types import SimpleNamespace
+
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
-
-    import autoskillit.server.tools.tools_kitchen as tk_mod
-
-    fake_pkg_root_dir = tmp_path / "fake_pkg"
-    (fake_pkg_root_dir / "skills" / "sous-chef").mkdir(parents=True)
-    # sous-chef SKILL.md is deliberately absent — directory exists, file does not
-
-    def fake_pkg_root() -> object:
-        return fake_pkg_root_dir
+    mock_ctx.skill_resolver.list_effective.return_value = SimpleNamespace(skills=())
+    mock_ctx.skill_resolver.resolve_effective.return_value = None
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -529,10 +528,9 @@ async def test_open_kitchen_degrades_gracefully_without_sous_chef(tmp_path, monk
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
             ):
                 with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch.object(tk_mod, "pkg_root", fake_pkg_root):
-                        from autoskillit.server.tools.tools_kitchen import open_kitchen
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                        result = await open_kitchen(ctx=mock_ctx)
+                    result = await open_kitchen(ctx=mock_ctx)
 
     parsed = json.loads(result)
     assert parsed["success"] is True

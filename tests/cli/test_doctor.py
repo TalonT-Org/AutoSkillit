@@ -5,13 +5,63 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from autoskillit import cli
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+@pytest.mark.parametrize(
+    ("role_name", "expected_severity"),
+    [
+        ("session", "error"),
+        ("orchestrator", "ok"),
+    ],
+)
+def test_doctor_enforces_exact_capability_role_for_genuine_evidence(
+    role_name: str,
+    expected_severity: str,
+    tmp_path: Path,
+) -> None:
+    """Genuine run_skill evidence is valid only for the exact ORCHESTRATOR role."""
+    from autoskillit.cli.doctor._doctor_skills import _check_skill_capability_authenticity
+    from autoskillit.core import Severity, SkillExecutionRole, SkillSource
+    from autoskillit.workspace import (
+        SkillInfo,
+        validate_skill_capability_authenticity,
+    )
+
+    content = (
+        "---\n"
+        "name: role-probe\n"
+        "uses_capabilities: [run_skill]\n"
+        f"execution_role: {role_name}\n"
+        "---\n"
+        '### Step 1\nrun_skill("investigate report.md")\n'
+    )
+    skill_path = tmp_path / "SKILL.md"
+    skill_path.write_text(content, encoding="utf-8")
+    skill = SkillInfo(
+        name="role-probe",
+        source=SkillSource.PROJECT_LOCAL,
+        path=skill_path,
+        uses_capabilities=frozenset({"run_skill"}),
+        execution_role=SkillExecutionRole(role_name),
+        canonical_content=content,
+    )
+    assert validate_skill_capability_authenticity(skill) == ()
+    resolver = MagicMock()
+    resolver.list_all.return_value = (skill,)
+
+    results = _check_skill_capability_authenticity(resolver)
+
+    expected = Severity(expected_severity)
+    assert {result.severity for result in results} == {expected}
+    if expected is Severity.ERROR:
+        assert "cannot declare capabilities ['run_skill']" in results[0].message
 
 
 class TestCLIDoctor:

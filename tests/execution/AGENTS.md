@@ -111,6 +111,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_session_content.py` | Tests for session content validation and token normalization (`_normalize_model_output`) |
 | `test_session_debug_logging.py` | Tests for debug logging instrumentation in session.py |
 | `test_session_env_contracts.py` | Cross-backend env contract tests: every build_*_cmd method must inject required env vars |
+| `test_skill_session_contract_store.py` | Tests for persisted effective skill contracts, projected snapshots, and backend session-ID binding |
 | `test_session_state_persistence.py` | Tests for persist_session_state, read_session_state, and clear_session_state |
 | `test_session_index_roundtrip.py` | Tests verifying sessions.jsonl keys match SessionIndexEntry annotations |
 | `test_session_log_backend_source.py` | Tests verifying backend_override_source is recorded in sessions.jsonl (REQ-EVD-001) |

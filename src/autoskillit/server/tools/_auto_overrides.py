@@ -9,6 +9,7 @@ helper returns a plain dict suitable for merging into the
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS, ProvidersConfig
@@ -19,8 +20,9 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
     CapabilityResolutionDetail,
-    extract_skill_name,
+    SkillExecutionRole,
     get_logger,
+    resolve_skill_name,
 )
 
 if TYPE_CHECKING:
@@ -30,6 +32,23 @@ if TYPE_CHECKING:
     from autoskillit.recipe.schema import RecipeStep
 
 logger = get_logger(__name__)
+
+
+def _resolve_capability_union(
+    skill_resolver: SkillResolver,
+    skill_name: str,
+    project_root: Path | None,
+) -> frozenset[str]:
+    """Resolve closure-wide capabilities from the effective project source."""
+    if "{" in skill_name or "}" in skill_name:
+        # Dynamic recipe-family targets are expanded after ingredient binding.
+        return frozenset()
+    invocation = skill_resolver.resolve_invocation(
+        skill_name,
+        project_root,
+        SkillExecutionRole.SESSION,
+    )
+    return frozenset(getattr(invocation, "capability_union", frozenset()))
 
 
 def _backend_capability_overrides(backend: CodingAgentBackend | None) -> dict[str, str]:
@@ -52,6 +71,7 @@ def _provider_aware_capability_overrides(
     *,
     skill_resolver: SkillResolver | None = None,
     config_backend: AgentBackendConfig | None = None,
+    project_root: Path | None = None,
 ) -> tuple[dict[str, str], CapabilityResolutionDetail]:
     """Return capability overrides with per-step provider awareness.
 
@@ -102,7 +122,7 @@ def _provider_aware_capability_overrides(
                 continue
             _wa = getattr(step, "with_args", None)
             skill_cmd = _wa.get("skill_command", "") if isinstance(_wa, dict) else ""
-            skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
+            skill_name = resolve_skill_name(skill_cmd) if skill_cmd else None
             if not skill_name:
                 continue
 
@@ -118,27 +138,31 @@ def _provider_aware_capability_overrides(
                 )
                 _explicit_be = _explicit_resolution.backend if _explicit_resolution else None
                 if _explicit_be == AGENT_BACKEND_CLAUDE_CODE:
-                    cap_resolved = skill_resolver.resolve(skill_name)
-                    if cap_resolved:
-                        for cap in getattr(cap_resolved, "uses_capabilities", frozenset()):
-                            cap_def = SKILL_CAPABILITY_REGISTRY.get(cap)
-                            if cap_def and cap_def.worker_routable:
-                                has_capability_requirement = True
-                                has_explicit_pin_capability = True
-                                if cap in CAPABILITY_INGREDIENT_MAP:
-                                    triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
+                    for cap in _resolve_capability_union(
+                        skill_resolver,
+                        skill_name,
+                        project_root,
+                    ):
+                        cap_def = SKILL_CAPABILITY_REGISTRY.get(cap)
+                        if cap_def and cap_def.worker_routable:
+                            has_capability_requirement = True
+                            has_explicit_pin_capability = True
+                            if cap in CAPABILITY_INGREDIENT_MAP:
+                                triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
                     continue
                 if _explicit_be is not None:
                     continue
 
-            cap_resolved = skill_resolver.resolve(skill_name)
-            if cap_resolved:
-                for cap in getattr(cap_resolved, "uses_capabilities", frozenset()):
-                    cap_def = SKILL_CAPABILITY_REGISTRY.get(cap)
-                    if cap_def and cap_def.worker_routable:
-                        has_capability_requirement = True
-                        if cap in CAPABILITY_INGREDIENT_MAP:
-                            triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
+            for cap in _resolve_capability_union(
+                skill_resolver,
+                skill_name,
+                project_root,
+            ):
+                cap_def = SKILL_CAPABILITY_REGISTRY.get(cap)
+                if cap_def and cap_def.worker_routable:
+                    has_capability_requirement = True
+                    if cap in CAPABILITY_INGREDIENT_MAP:
+                        triggered_ingredients.add(CAPABILITY_INGREDIENT_MAP[cap])
 
         if has_capability_requirement:
             # Explicit claude-code pins bypass the binary probe — the operator
@@ -236,6 +260,7 @@ def _compute_effective_backend_map(
     *,
     skill_resolver: SkillResolver | None = None,
     config_backend: AgentBackendConfig | None = None,
+    project_root: Path | None = None,
 ) -> tuple[dict[str, str] | None, dict[str, str]]:
     """Build a per-step effective backend map mirroring ``tools_execution`` dispatch logic.
 
@@ -300,13 +325,17 @@ def _compute_effective_backend_map(
         if skill_resolver is not None:
             _wa2 = getattr(step, "with_args", None)
             skill_cmd = _wa2.get("skill_command", "") if isinstance(_wa2, dict) else ""
-            skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
+            skill_name = resolve_skill_name(skill_cmd) if skill_cmd else None
             if skill_name:
-                resolved = skill_resolver.resolve(skill_name)
-                if resolved and any(
+                capabilities = _resolve_capability_union(
+                    skill_resolver,
+                    skill_name,
+                    project_root,
+                )
+                if any(
                     SKILL_CAPABILITY_REGISTRY.get(cap) is not None
                     and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
-                    for cap in getattr(resolved, "uses_capabilities", frozenset())
+                    for cap in capabilities
                 ):
                     result[step_name] = AGENT_BACKEND_CLAUDE_CODE
                     continue

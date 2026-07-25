@@ -42,7 +42,6 @@ EXPECTED_CROSS_LAYER_GUARDS: dict[str, frozenset[str]] = {
     "execution/linux_tracing.py": frozenset({"config"}),
     "execution/process/__init__.py": frozenset({"config"}),
     "execution/testing.py": frozenset({"config"}),
-    "workspace/session_skills.py": frozenset({"config"}),
 }
 
 

@@ -7,12 +7,14 @@ that is semantically indistinguishable from the nominal success verdict.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import autoskillit.recipe._skill_helpers as _sh
 import autoskillit.recipe.contracts as _contracts
 from autoskillit.core.types import Severity
+from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.schema import (
     Recipe,
     RecipeStep,
@@ -118,6 +120,16 @@ _MANIFEST: dict = {
 }
 
 
+class _EffectiveResolver:
+    def __init__(self, content: str) -> None:
+        self._content = content
+
+    def resolve_invocation(self, *_args, **_kwargs):
+        return SimpleNamespace(
+            root=SimpleNamespace(canonical_content=self._content),
+        )
+
+
 def _make_recipe() -> Recipe:
     return Recipe(
         name="test",
@@ -162,7 +174,12 @@ def test_verdict_ungated_degradation_fires_when_shared_verdict(
     monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: _MANIFEST)
 
     recipe = _make_recipe()
-    findings = run_semantic_rules(recipe)
+    findings = run_semantic_rules(
+        make_validation_context(
+            recipe,
+            skill_resolver=_EffectiveResolver(_SKILL_MD_SHARED_VERDICT),
+        )
+    )
     rule_findings = [f for f in findings if f.rule == "verdict-ungated-degradation"]
 
     assert len(rule_findings) >= 1, (
@@ -186,7 +203,12 @@ def test_verdict_ungated_degradation_does_not_fire_with_distinct_verdict(
     monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: _MANIFEST)
 
     recipe = _make_recipe()
-    findings = run_semantic_rules(recipe)
+    findings = run_semantic_rules(
+        make_validation_context(
+            recipe,
+            skill_resolver=_EffectiveResolver(_SKILL_MD_DISTINCT_VERDICT),
+        )
+    )
     rule_findings = [f for f in findings if f.rule == "verdict-ungated-degradation"]
 
     assert rule_findings == [], (

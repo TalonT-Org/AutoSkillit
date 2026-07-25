@@ -116,9 +116,6 @@ class TestCodexBackend:
     def test_capabilities_supports_context_exhaustion_detection_false(self) -> None:
         assert CodexBackend().capabilities.supports_context_exhaustion_detection is False
 
-    def test_capabilities_project_local_skills_capable_false(self) -> None:
-        assert CodexBackend().capabilities.project_local_skills_capable is False
-
     def test_capabilities_required_skill_fields(self) -> None:
         assert CodexBackend().capabilities.required_skill_fields == frozenset(
             {"name", "description"}
@@ -774,7 +771,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         assert isinstance(result, CmdSpec)
         assert isinstance(result.cmd, tuple)
 
-    def test_config_noop_fields(self) -> None:
+    def test_config_projects_plugin_source_into_codex_home(self) -> None:
         config = SkillSessionConfig(
             completion_marker="%%DONE%%",
             output_format=OutputFormat.STREAM_JSON,
@@ -785,6 +782,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         assert "--output-format" not in cmd_str
         assert "--plugin-dir" not in cmd_str
         assert "--json" in spec.cmd
+        assert spec.env["CODEX_HOME"] == "/p"
 
     def test_legacy_flat_params_still_work(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
@@ -870,7 +868,7 @@ class TestCodexBuildInteractiveCmd:
         spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
         assert spec.cmd[-1] == "hello"
 
-    def test_plugin_source_is_silently_ignored(self) -> None:
+    def test_plugin_source_is_delivered_through_codex_home(self) -> None:
         from pathlib import Path
 
         from autoskillit.core import DirectInstall
@@ -880,6 +878,7 @@ class TestCodexBuildInteractiveCmd:
         )
         assert "--plugin-dir" not in spec.cmd
         assert "/x" not in spec.cmd
+        assert spec.env["CODEX_HOME"] == "/x"
 
     def test_env_excludes_headless_vars(self, monkeypatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
@@ -1003,6 +1002,10 @@ class TestCodexBuildFoodTruckCmd:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "--plugin-dir" not in spec.cmd
 
+    def test_fresh_food_truck_receives_projected_catalog_home(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.env["CODEX_HOME"] == "/pkg"
+
     def test_mcp_tools_only_prompt_reinforcement(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "ORCHESTRATION DIRECTIVE" in spec.cmd[-1]
@@ -1072,6 +1075,12 @@ class TestCodexBuildFoodTruckCmd:
         )
         assert "resume" in spec.cmd
 
+    def test_resumed_food_truck_receives_same_projected_catalog_home(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **{**self.BASE, "resume_session_id": "sess-abc"},
+        )
+        assert spec.env["CODEX_HOME"] == "/pkg"
+
     def test_resume_session_id_follows_resume(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
             **{**self.BASE, "resume_session_id": "sess-abc"},
@@ -1121,6 +1130,7 @@ class TestCodexBuildFoodTruckCmd:
             "MAX_MCP_OUTPUT_TOKENS",
             "AUTOSKILLIT_CWD",
             "AUTOSKILLIT_COMPLETION_MARKER",
+            "CODEX_HOME",
         }
         leaking = (
             _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_MCP_ENV_FORWARD_VARS
@@ -1590,7 +1600,7 @@ class TestClaudeCodeBackendProcessIdleDefault:
 class TestCodexDiscardDispositions:
     """Codex builder parameter disposition contracts.
 
-    plugin_source -> logged warning when non-None.
+    plugin_source -> delivered as a sanitized CODEX_HOME.
     output_format -> logged warning when != JSON.
     exit_after_stop_delay_ms -> AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env injection via setdefault.
     stream_idle_timeout_ms -> routed to CmdSpec.process_idle_timeout_ms + env injection.
@@ -1608,22 +1618,22 @@ class TestCodexDiscardDispositions:
         "completion_marker": "%%DONE%%",
     }
 
-    def test_plugin_source_warning_skill_builder(self) -> None:
+    def test_plugin_source_delivered_by_skill_builder(self) -> None:
         with structlog.testing.capture_logs() as cap_logs:
-            CodexBackend().build_skill_session_cmd(
+            spec = CodexBackend().build_skill_session_cmd(
                 **self.SKILL_BASE,
                 plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
             )
         events = [e for e in cap_logs if e.get("event") == "codex_plugin_source_discarded"]
-        assert len(events) == 1
-        assert events[0]["log_level"] == "warning"
+        assert events == []
+        assert spec.env["CODEX_HOME"] == "/pkg"
 
-    def test_plugin_source_warning_food_truck_builder(self) -> None:
+    def test_plugin_source_delivered_by_food_truck_builder(self) -> None:
         with structlog.testing.capture_logs() as cap_logs:
-            CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+            spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
         events = [e for e in cap_logs if e.get("event") == "codex_plugin_source_discarded"]
-        assert len(events) == 1
-        assert events[0]["log_level"] == "warning"
+        assert events == []
+        assert spec.env["CODEX_HOME"] == "/pkg"
 
     def test_output_format_warning_skill_builder(self) -> None:
         with structlog.testing.capture_logs() as cap_logs:

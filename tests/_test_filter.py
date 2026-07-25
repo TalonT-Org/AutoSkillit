@@ -176,7 +176,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
     "_plugin_ids": frozenset({"core", "cli", "hook_registry", "server"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
-    "_plugin_cache": frozenset({"core", "cli", "server"}),
+    "_plugin_cache": frozenset({"core", "cli", "server", "workspace"}),
     "git_remote": frozenset({"core", "execution"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server"}),
     "paths": frozenset(
@@ -209,7 +209,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_invariant_registry": frozenset({"core"}),
     "_install_detect": frozenset({"core", "cli", "config"}),
     "_linux_proc": frozenset({"core", "execution", "fleet", "cli"}),
-    "_type_plugin_source": frozenset({"core", "execution", "pipeline", "server", "cli"}),
+    "_type_plugin_source": frozenset(
+        {"core", "execution", "pipeline", "server", "cli", "workspace"}
+    ),
     "kitchen_state": frozenset({"core", "server"}),
     "session_provenance": frozenset({"core", "execution"}),
     "readiness": frozenset({"core", "server"}),
@@ -261,7 +263,12 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "arch/test_serve_surface_registry.py",
         }
     ),
-    "_type_exceptions": frozenset({"core", "execution", "fleet", "recipe", "server"}),
+    "_type_exceptions": frozenset(
+        {"cli", "core", "execution", "fleet", "recipe", "server", "workspace"}
+    ),
+    "_type_skill_contract": frozenset(
+        {"cli", "config", "core", "execution", "recipe", "server", "workspace"}
+    ),
     "_type_phoropter": frozenset({"core"}),
     "_type_tradition_manifest": frozenset({"core"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
@@ -744,12 +751,18 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_sub_recipe_validation.py",
             # Server file-level entries:
             "server/test_backend_ingredient_injection.py",
+            "server/test_explicit_backend_override.py",
+            "server/test_preflight_explicit_backend.py",
             "server/test_factory.py",
+            "server/test_tools_issue_lifecycle.py",
+            "server/test_tools_report_bug.py",
+            "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_visibility.py",
             "server/test_tools_clone.py",
             "server/test_tools_execution_routing.py",
-            "server/test_tools_execution_write_prefix.py",
             "server/test_run_skill_add_dirs.py",
             "server/test_run_skill_backend_compat.py",
+            "server/test_tools_execution_backend_mixing.py",
             "server/test_tools_workspace.py",
             "server/test_admission_dispatch_agreement.py",
             "cli",

@@ -8,10 +8,17 @@ import subprocess
 import pytest
 
 from autoskillit.cli.session._session_launch import _run_interactive_session
-from autoskillit.core import ClaudeFlags
+from autoskillit.core import BackendConventions, ClaudeFlags
 from autoskillit.execution.backends.codex import CodexFlags
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+class _ProjectionBackendStub:
+    """Minimum projection-facing contract shared by local backend doubles."""
+
+    name = "claude-code"
+    conventions = BackendConventions()
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +62,7 @@ def _make_capturing_backend() -> tuple[object, list[dict]]:
 
     captured_kwargs: list[dict] = []
 
-    class _CapturingBackend:
+    class _CapturingBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -244,7 +251,7 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
         session_record_types=frozenset({"assistant"}),
     )
 
-    class _NoInjectBackend:
+    class _NoInjectBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -292,7 +299,7 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
 
     captured_which_arg: list = []
 
-    class _CustomBinaryBackend:
+    class _CustomBinaryBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "test-agent-binary"
 
@@ -338,7 +345,7 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
 
     build_called: list[dict] = []
 
-    class _InjectedBackend:
+    class _InjectedBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -379,7 +386,7 @@ def test_run_interactive_session_default_backend_calls_get_backend(
 
     get_backend_called: list = []
 
-    class _FakeBackend:
+    class _FakeBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -435,7 +442,7 @@ def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) 
         session_record_types=frozenset({"assistant"}),
     )
 
-    class _DIBackend:
+    class _DIBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -484,7 +491,7 @@ def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
         session_record_types=frozenset({"assistant"}),
     )
 
-    class _NoInjectDIBackend:
+    class _NoInjectDIBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -540,7 +547,7 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
 
     build_kwargs: list[dict] = []
 
-    class _CodexLikeBackend:
+    class _CodexLikeBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -589,7 +596,7 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
 
     backends_used: list[str] = []
 
-    class _ClaudeStub:
+    class _ClaudeStub(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -606,7 +613,7 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
         def ensure_pre_launch(self) -> list[str]:
             return []
 
-    class _CodexStub:
+    class _CodexStub(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -668,7 +675,7 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
 
     backends_used: list[str] = []
 
-    class _CodexStub:
+    class _CodexStub(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -727,7 +734,7 @@ def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPat
 
     build_calls: list[dict] = []
 
-    class _CapturingBackend:
+    class _CapturingBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "claude"
 
@@ -940,7 +947,7 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
         session_record_types=frozenset(),
     )
 
-    class _CodexBackendStub:
+    class _CodexBackendStub(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "codex"
 
@@ -988,7 +995,7 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
         session_record_types=frozenset(),
     )
 
-    class _FailingCodexBackend:
+    class _FailingCodexBackend(_ProjectionBackendStub):
         def binary_name(self) -> str:
             return "codex"
 

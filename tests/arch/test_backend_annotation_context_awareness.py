@@ -23,7 +23,7 @@ def _is_self_referential_only(body: str, skill_name: str) -> bool:
 
 def test_self_referential_autoskillit_not_classified_as_dependency():
     from autoskillit.core import paths
-    from autoskillit.workspace.skills import _read_skill_frontmatter
+    from autoskillit.workspace.skill_format import read_skill_frontmatter
 
     pkg = paths.pkg_root()
     false_positives: list[str] = []
@@ -56,8 +56,9 @@ def test_self_referential_autoskillit_not_classified_as_dependency():
             )
             if has_other_patterns:
                 continue
-            fm = _read_skill_frontmatter(skill_md)
-            if "claude-code" in fm.get("backend_requirements", []):
+            parsed = read_skill_frontmatter(skill_md)
+            assert parsed.data is not None
+            if "claude-code" in parsed.data.get("backend_requirements", []):
                 false_positives.append(entry.name)
 
     assert not false_positives, (
@@ -68,7 +69,7 @@ def test_self_referential_autoskillit_not_classified_as_dependency():
 
 def test_documentation_mentions_distinguished_from_usage():
     from autoskillit.core import paths
-    from autoskillit.workspace.skills import _read_skill_frontmatter
+    from autoskillit.workspace.skill_format import read_skill_frontmatter
 
     pkg = paths.pkg_root()
     false_positives: list[str] = []
@@ -95,8 +96,9 @@ def test_documentation_mentions_distinguished_from_usage():
                         prescribes_agent_call = True
 
             if mentions_agent_in_docs and not prescribes_agent_call:
-                fm = _read_skill_frontmatter(skill_md)
-                if "claude-code" in fm.get("backend_requirements", []):
+                parsed = read_skill_frontmatter(skill_md)
+                assert parsed.data is not None
+                if "claude-code" in parsed.data.get("backend_requirements", []):
                     false_positives.append(entry.name)
 
     assert not false_positives, (

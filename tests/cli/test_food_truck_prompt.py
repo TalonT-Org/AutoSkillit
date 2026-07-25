@@ -4,8 +4,8 @@ budget guidance, quota awareness, sentinel format."""
 from __future__ import annotations
 
 import json
-import pathlib
 import re
+from pathlib import Path
 
 import pytest
 
@@ -25,6 +25,30 @@ _CAMPAIGN_ID = "camp-001"
 _L3_TIMEOUT = 3600
 
 
+def _projected_sous_chef() -> str:
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        SkillProjectionContext,
+        project_agent_skill_document,
+    )
+
+    project_root = Path(__file__).resolve().parents[2]
+    catalog = DefaultSkillResolver().list_effective(
+        project_root,
+        SkillExecutionRole.ORCHESTRATOR,
+    )
+    skill = next(item for item in catalog.skills if item.name == "sous-chef")
+    return project_agent_skill_document(
+        skill,
+        SkillProjectionContext(
+            cwd=project_root,
+            catalog=catalog,
+            gating=False,
+        ),
+    ).content
+
+
 def _get_prompt() -> str:
     from autoskillit.fleet._prompts import _build_food_truck_prompt
 
@@ -36,13 +60,14 @@ def _get_prompt() -> str:
         dispatch_id=_DISPATCH_ID,
         campaign_id=_CAMPAIGN_ID,
         l3_timeout_sec=_L3_TIMEOUT,
+        projected_sous_chef=_projected_sous_chef(),
     )
 
 
 def _get_admiral_block() -> str:
     from autoskillit.fleet._prompts import _build_admiral_dispatch_block
 
-    return _build_admiral_dispatch_block()
+    return _build_admiral_dispatch_block(_projected_sous_chef())
 
 
 # --- Group E-1: Sous-Chef Subset Filter ---
@@ -83,12 +108,9 @@ class TestAdmiralDispatchBlock:
         ):
             assert phrase not in block, f"Dangling crossref: {phrase}"
 
-    def test_graceful_degradation(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-    ) -> None:
+    def test_graceful_degradation(self) -> None:
         from autoskillit.fleet import _prompts as _fleet_prompts
 
-        monkeypatch.setattr(_fleet_prompts, "pkg_root", lambda: tmp_path)
         result = _fleet_prompts._build_admiral_dispatch_block()
         assert result == ""
 

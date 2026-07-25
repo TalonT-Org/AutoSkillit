@@ -135,11 +135,18 @@ class TestSkillSession:
 class TestSousChefDelivery:
     def test_sous_chef_in_orchestrator_prompt(self) -> None:
         from autoskillit.cli._prompts import _build_orchestrator_prompt, _read_full_sous_chef
+        from autoskillit.execution import codex_recipe_delivery_calling_contract
 
         sous_chef = _read_full_sous_chef()
         assert sous_chef, "_read_full_sous_chef must return non-empty content"
         prompt = _build_orchestrator_prompt("test-recipe", "mcp__autoskillit__")
         assert sous_chef[:80] in prompt
+        assert "uses_capabilities:" not in sous_chef
+        assert "execution_role:" not in sous_chef
+        assert "activate_deps:" not in sous_chef
+        assert "backend_requirements:" not in sous_chef
+        calling_contract = codex_recipe_delivery_calling_contract(mcp_prefix="mcp__autoskillit__")
+        assert prompt.count(calling_contract) == 1
 
     def test_sous_chef_in_open_kitchen_prompt(self) -> None:
         from autoskillit.cli._prompts import _build_open_kitchen_prompt, _read_full_sous_chef
@@ -148,6 +155,10 @@ class TestSousChefDelivery:
         assert sous_chef, "_read_full_sous_chef must return non-empty content"
         prompt = _build_open_kitchen_prompt("mcp__autoskillit__")
         assert sous_chef[:80] in prompt
+        assert "uses_capabilities:" not in prompt
+        assert "execution_role:" not in prompt
+        assert "activate_deps:" not in prompt
+        assert "backend_requirements:" not in prompt
 
     def test_sous_chef_not_in_fleet_dispatch_prompt(self) -> None:
         from autoskillit.cli._prompts import _build_fleet_dispatch_prompt, _read_full_sous_chef
@@ -156,3 +167,43 @@ class TestSousChefDelivery:
         assert sous_chef, "_read_full_sous_chef must return non-empty content"
         prompt = _build_fleet_dispatch_prompt("mcp__autoskillit__")
         assert sous_chef[:80] not in prompt
+        assert "name: sous-chef" not in prompt
+
+
+@pytest.mark.anyio
+async def test_llm_triage_prompt_uses_projected_skill_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+    from autoskillit.core import SubprocessResult, TerminationReason
+    from autoskillit.recipe import StaleItem
+
+    run = AsyncMock(
+        return_value=SubprocessResult(
+            returncode=0,
+            stdout="not-json",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+    )
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", run)
+    await triage_staleness(
+        [
+            StaleItem(
+                skill="open-kitchen",
+                reason="hash_mismatch",
+                stored_value="old",
+                current_value="new",
+            )
+        ],
+        backend=ClaudeCodeBackend(),
+    )
+    prompt = run.await_args.kwargs["cmd"][2]
+    assert "name: open-kitchen" in prompt
+    assert "uses_capabilities:" not in prompt
+    assert "execution_role:" not in prompt
+    assert "activate_deps:" not in prompt
+    assert "backend_requirements:" not in prompt

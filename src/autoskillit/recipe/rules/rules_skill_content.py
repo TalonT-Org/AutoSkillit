@@ -74,7 +74,9 @@ def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFindin
         if skill_name is None:
             continue
 
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
 
@@ -147,7 +149,9 @@ def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
         try:
@@ -199,7 +203,9 @@ def _check_blind_git_add_in_skill(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:
@@ -251,7 +257,9 @@ def _check_no_interpreter_mediated_writes(ctx: ValidationContext) -> list[RuleFi
             continue
         if any(sname == skill_name for sname, _ in INTERPRETER_WRITE_ALLOWLIST):
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:
@@ -316,7 +324,9 @@ def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:
@@ -384,7 +394,9 @@ def _check_no_posix_char_class(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:
@@ -439,7 +451,9 @@ def _check_no_grep_bre_alternation(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
         try:
@@ -512,7 +526,9 @@ def _check_output_section_no_markdown_directive(ctx: ValidationContext) -> list[
         if not skill_data or not skill_data.get("expected_output_patterns"):
             continue  # Only check skills that have contracts with patterns
 
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
 
@@ -564,7 +580,9 @@ def _check_no_gh_issue_comment(ctx: ValidationContext) -> list[RuleFinding]:
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:
@@ -652,7 +670,9 @@ def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:
@@ -723,7 +743,9 @@ def _check_executable_field_content_validity(
             continue
         if skill_name not in _EXECUTABLE_FIELD_SKILLS:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:
@@ -783,7 +805,9 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
         try:
@@ -849,7 +873,9 @@ def _check_source_attribution_directive(ctx: ValidationContext) -> list[RuleFind
         if not skill_data or not skill_data.get("source_pin_fields"):
             continue
 
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
 
@@ -898,7 +924,9 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
         if skill_name is None:
             continue
 
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue
 
@@ -1002,7 +1030,9 @@ def _check_inline_content_in_subagent_prompt(ctx: ValidationContext) -> list[Rul
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name is None:
             continue
-        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md = _resolve_skill_md(
+            skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+        )
         if skill_md is None:
             continue  # unknown-skill-command rule handles missing skills
         try:

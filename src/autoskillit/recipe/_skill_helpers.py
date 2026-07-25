@@ -40,11 +40,16 @@ _SKILL_TOKEN_RE = re.compile(r"/(?:autoskillit:)?(\S+)")
 SKILL_SEARCH_DIRS: list[Path] | None = None
 
 
-def _resolve_skill_md(skill_name: str, *, resolver: SkillResolver | None = None) -> Path | None:
+def _resolve_skill_md(
+    skill_name: str,
+    *,
+    project_root: Path | None,
+    resolver: SkillResolver | None = None,
+) -> Path | None:
     """Resolve a skill name to its SKILL.md path.
 
     When SKILL_SEARCH_DIRS is set (e.g., in tests), searches those directories.
-    Otherwise uses SkillResolver to find the bundled skill.
+    Otherwise uses SkillResolver to select the effective project-aware source.
     """
     if SKILL_SEARCH_DIRS is not None:
         for search_dir in SKILL_SEARCH_DIRS:
@@ -56,10 +61,11 @@ def _resolve_skill_md(skill_name: str, *, resolver: SkillResolver | None = None)
         from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
         resolver = DefaultSkillResolver()
-    skill_info = resolver.resolve(skill_name)
+    skill_info = resolver.resolve_effective(skill_name, project_root)
     if skill_info is None:
         return None
-    return skill_info.path
+    skill_path = getattr(skill_info, "path", None)
+    return skill_path if isinstance(skill_path, Path) else None
 
 
 def _has_dynamic_skill_name(skill_cmd: str) -> bool:

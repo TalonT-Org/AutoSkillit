@@ -269,6 +269,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
     from autoskillit.recipe.repository import DefaultRecipeRepository
+    from tests.fakes import FakeSkillSessionContractStore
 
     real_repo = DefaultRecipeRepository()
 
@@ -283,6 +284,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=different_dir,
         recipes=real_repo,
+        skill_session_contract_store=FakeSkillSessionContractStore(),
     )
 
     mock_ctx = _make_mock_ctx()

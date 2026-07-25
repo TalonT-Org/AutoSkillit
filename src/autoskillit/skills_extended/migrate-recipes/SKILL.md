@@ -1,6 +1,6 @@
 ---
 name: migrate-recipes
-uses_capabilities: [cross_skill_ref, run_skill]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [write-recipe]
 description: Apply versioned migration notes to an AutoSkillit recipe. Use when user confirms migration, called by agent or autoskillit migrate CLI, or invoked directly.
 hooks:

@@ -1,7 +1,7 @@
 ---
 name: enrich-issues
 categories: [github]
-uses_capabilities: [agent_model, github_api_write, open_kitchen]
+uses_capabilities: [agent_model, github_api_write]
 description: >
   Backfill structured requirements on existing GitHub issues triaged with
   recipe:implementation labels. Scans candidates, skips already-enriched issues,

@@ -1,6 +1,6 @@
 ---
 name: implement-worktree-no-merge
-uses_capabilities: [agent_model, run_skill, git_metadata_write]
+uses_capabilities: [agent_model, git_metadata_write]
 activate_deps: [write-recipe]
 description: Implementation executor. ALWAYS invoke this skill when instructed to implement a plan in a worktree. Do not read the plan or edit files directly — use this skill first to load the full implementation workflow.
 hooks:

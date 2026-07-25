@@ -15,7 +15,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
 from autoskillit.server._notify import _notify, track_response_size
-from autoskillit.server.tools._backend_compat import _resolve_and_check_backend_compat
+from autoskillit.server.tools._backend_compat import _prepare_direct_skill_dispatch
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 if TYPE_CHECKING:
@@ -315,16 +315,26 @@ async def prepare_issue(
             if tool_ctx.write_expected_resolver:
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
-            # Backend compatibility gate — must precede executor.run().
-            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
-                return _compat_err
-
-            result = await tool_ctx.executor.run(
+            dispatch, dispatch_error = _prepare_direct_skill_dispatch(
                 skill_command,
-                str(tool_ctx.project_dir),
-                expected_output_patterns=expected_output_patterns,
-                write_behavior=write_spec,
+                tool_ctx.project_dir,
+                tool_ctx,
             )
+            if dispatch_error is not None or dispatch is None:
+                return dispatch_error or json.dumps(
+                    {"success": False, "error": "Direct skill dispatch preparation failed"}
+                )
+            try:
+                result = await tool_ctx.executor.run(
+                    dispatch.resolved_command,
+                    str(dispatch.projection_context.cwd),
+                    add_dirs=dispatch.add_dirs,
+                    expected_output_patterns=expected_output_patterns,
+                    write_behavior=write_spec,
+                    capability_contract=dispatch.capability_contract,
+                )
+            finally:
+                dispatch.cleanup(tool_ctx)
 
             if not result.success:
                 extra = _extract_partial_issue_data(result.result) if result.result else {}
@@ -437,16 +447,26 @@ async def enrich_issues(
             if tool_ctx.write_expected_resolver:
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
-            # Backend compatibility gate — must precede executor.run().
-            if _compat_err := _resolve_and_check_backend_compat(skill_command, tool_ctx):
-                return _compat_err
-
-            result = await tool_ctx.executor.run(
+            dispatch, dispatch_error = _prepare_direct_skill_dispatch(
                 skill_command,
-                str(tool_ctx.project_dir),
-                expected_output_patterns=expected_output_patterns,
-                write_behavior=write_spec,
+                tool_ctx.project_dir,
+                tool_ctx,
             )
+            if dispatch_error is not None or dispatch is None:
+                return dispatch_error or json.dumps(
+                    {"success": False, "error": "Direct skill dispatch preparation failed"}
+                )
+            try:
+                result = await tool_ctx.executor.run(
+                    dispatch.resolved_command,
+                    str(dispatch.projection_context.cwd),
+                    add_dirs=dispatch.add_dirs,
+                    expected_output_patterns=expected_output_patterns,
+                    write_behavior=write_spec,
+                    capability_contract=dispatch.capability_contract,
+                )
+            finally:
+                dispatch.cleanup(tool_ctx)
 
             if not result.success:
                 extra = _extract_partial_enrich_data(result.result) if result.result else {}

@@ -12,7 +12,9 @@ IL-1 workspace management — clone lifecycle, worktrees, skill resolution.
 | `_clone_detect.py` | `detect_*` helpers + `RUNS_DIR` + `classify_remote_url` |
 | `_clone_remote.py` | `CloneSourceResolution` + probe/isolate remotes |
 | `session_skills.py` | Per-session ephemeral skill dirs; subset filtering |
+| `skill_capabilities.py` | Semantic classification and validation of skill capability evidence |
 | `skill_format.py` | SKILL.md frontmatter validation per agentskills.io spec |
+| `skill_projection.py` | Agent-safe projections of typed skill machine contracts |
 | `clone_registry.py` | Shared file-based coordination for deferred cleanup |
 | `skills.py` | `SkillResolver` — bundled skill listing |
 | `worktree.py` | Git worktree creation and teardown helpers |

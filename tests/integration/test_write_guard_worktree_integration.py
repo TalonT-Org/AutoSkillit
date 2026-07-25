@@ -121,52 +121,25 @@ class TestWriteGuardWorktreeIntegration:
     ):
         """run_skill for a skill with deps declaring write_paths includes dep paths in prefixes."""
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-        from unittest.mock import MagicMock
-
-        from autoskillit.workspace.skills import SkillInfo, SkillSource
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
 
         # Create a synthetic SKILL.md for the dep skill with write_paths
-        dep_dir = tmp_path / "dep-skill"
-        dep_dir.mkdir()
+        skills_dir = tmp_path / ".claude" / "skills"
+        dep_dir = skills_dir / "dep-skill"
+        dep_dir.mkdir(parents=True)
         dep_skill_md = dep_dir / "SKILL.md"
         dep_skill_md.write_text(
             "---\nname: dep-skill\ndescription: A dep.\n"
             'write_paths: ["{{AUTOSKILLIT_TEMP}}/dep-skill/"]\n---\nbody\n'
         )
-
-        # Mock skill_resolver to return the dep's SkillInfo
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = lambda name: (
-            SkillInfo(
-                name="dep-skill",
-                source=SkillSource.BUNDLED_EXTENDED,
-                path=dep_skill_md,
-            )
-            if name == "dep-skill"
-            else SkillInfo(
-                name=name,
-                source=SkillSource.BUNDLED_EXTENDED,
-                path=dep_dir / "SKILL.md",
-            )
-        )
-        tool_ctx_kitchen_open.skill_resolver = mock_resolver
-
-        # Mock session_skill_manager to return a closure containing dep-skill
-        mock_ssm = MagicMock()
-        mock_ssm.compute_skill_closure.return_value = frozenset({"target-skill", "dep-skill"})
-        session_dir = tmp_path / "session"
-        mock_ssm.init_session.return_value = MagicMock(path=str(session_dir))
-        mock_ssm.activate_skill_deps.return_value = True
-        tool_ctx_kitchen_open.session_skill_manager = mock_ssm
-
-        # Create the expected skill file in the session directory
-        (session_dir / ".claude" / "skills" / "target-skill").mkdir(parents=True)
-        (session_dir / ".claude" / "skills" / "target-skill" / "SKILL.md").write_text(
-            "---\nname: target-skill\ndescription: Target.\n---\nbody\n"
+        target_dir = skills_dir / "target-skill"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / "SKILL.md").write_text(
+            "---\nname: target-skill\ndescription: Target.\n"
+            "activate_deps: [dep-skill]\n---\nbody\n"
         )
 
         monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)

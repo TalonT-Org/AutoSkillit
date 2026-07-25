@@ -194,6 +194,9 @@ from .types import KNOWN_CI_EVENTS as KNOWN_CI_EVENTS
 from .types import LABEL_LIFECYCLE_REGISTRY as LABEL_LIFECYCLE_REGISTRY
 from .types import LABEL_TRANSITIONS as LABEL_TRANSITIONS
 from .types import LAUNCH_ID_ENV_VAR as LAUNCH_ID_ENV_VAR
+from .types import (
+    MACHINE_ONLY_SKILL_FRONTMATTER_KEYS as MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
+)
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
 from .types import ORCHESTRATOR_SESSION_REQUIRED_ENV as ORCHESTRATOR_SESSION_REQUIRED_ENV
@@ -258,6 +261,8 @@ from .types import SKILL_CAPABILITY_REGISTRY as SKILL_CAPABILITY_REGISTRY
 from .types import SKILL_COMMAND_DISPLAY_MAX as SKILL_COMMAND_DISPLAY_MAX
 from .types import SKILL_COMMAND_PREFIX as SKILL_COMMAND_PREFIX
 from .types import SKILL_FILE_ADVISORY_MAP as SKILL_FILE_ADVISORY_MAP
+from .types import SKILL_PROJECTION_VERSION as SKILL_PROJECTION_VERSION
+from .types import SKILL_SESSION_CONTRACT_SCHEMA_VERSION as SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 from .types import SKILL_SESSION_REQUIRED_ENV as SKILL_SESSION_REQUIRED_ENV
 from .types import SKILL_TOOLS as SKILL_TOOLS
 from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
@@ -315,6 +320,8 @@ from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
+from .types import EffectiveSkillCatalogAuthority as EffectiveSkillCatalogAuthority
+from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocationAuthority
 from .types import EnvPolicy as EnvPolicy
 from .types import FailureRecord as FailureRecord
 from .types import FeatureDef as FeatureDef
@@ -328,6 +335,7 @@ from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
+from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InputContractResolver as InputContractResolver
@@ -385,6 +393,7 @@ from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDe
 from .types import RecipeSectionDef as RecipeSectionDef
 from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
+from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
@@ -399,16 +408,27 @@ from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
+from .types import SkillAuthority as SkillAuthority
 from .types import SkillCapabilityDef as SkillCapabilityDef
+from .types import SkillContractError as SkillContractError
 from .types import SkillContractResolver as SkillContractResolver
+from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
+from .types import SkillFrontmatterAuthority as SkillFrontmatterAuthority
 from .types import SkillLister as SkillLister
+from .types import SkillProjectionContextAuthority as SkillProjectionContextAuthority
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig
+from .types import SkillSessionContract as SkillSessionContract
+from .types import SkillSessionContractStore as SkillSessionContractStore
 from .types import SkillSource as SkillSource
+from .types import SkillSourceIdentity as SkillSourceIdentity
+from .types import SkillSourceRef as SkillSourceRef
+from .types import SkillVisibilitySpec as SkillVisibilitySpec
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
+from .types import StoredSkillSessionContract as StoredSkillSessionContract
 from .types import StreamParser as StreamParser
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner
@@ -433,6 +453,7 @@ from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_remaining as compute_remaining
+from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
@@ -445,13 +466,16 @@ from .types import parse_plan_paths as parse_plan_paths
 from .types import recipe_section_digest as recipe_section_digest
 from .types import recipe_section_element_digest as recipe_section_element_digest
 from .types import recipe_section_plan_digest as recipe_section_plan_digest
+from .types import render_target_skill_command as render_target_skill_command
 from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
+from .types import session_type_for_skill_execution_role as session_type_for_skill_execution_role
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
 from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import validate_label_transition as validate_label_transition
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
+from .types import validate_skill_capability_roles as validate_skill_capability_roles

@@ -175,7 +175,7 @@ The contract nudge exclusively targets `session/resume`; it never invokes
 ## Section 3: Capabilities Translation
 
 `BackendCapabilities` (`src/autoskillit/core/types/_type_backend.py`,
-frozen dataclass, 41 fields total) declares feature flags the orchestrator
+frozen dataclass, 40 fields total) declares feature flags the orchestrator
 consumes when selecting an ACP rung or backend-specific code path. Each field
 falls into one of three categories:
 
@@ -186,7 +186,7 @@ falls into one of three categories:
   outside the exemption set. Membership is validated against `_FORWARD_DECLARED`
   in `tests/arch/test_capability_consumption.py`.
 
-The counts below are **17 ACP-Mappable + 6 Forward-Declared + 18 autoskillit-Local = 41 total**.
+The counts below are **17 ACP-Mappable + 6 Forward-Declared + 17 autoskillit-Local = 40 total**.
 
 ### 3.1 Category 1: ACP-Mappable (17 fields)
 
@@ -210,11 +210,10 @@ The counts below are **17 ACP-Mappable + 6 Forward-Declared + 18 autoskillit-Loc
 | `record_capable` | ACP scenario recording |
 | `inspector_capable` | ACP health monitoring callback (Health Inspector per issue #3533) |
 
-### 3.2 Category 2: autoskillit-Local Extension (18 fields)
+### 3.2 Category 2: autoskillit-Local Extension (17 fields)
 
 | Field | autoskillit-specific contract |
 |---|---|
-| `project_local_skills_capable` | autoskillit `.claude/skills/` discovery (Claude: `True`; Codex: `False`) |
 | `supports_tool_list_changed` | autoskillit kitchen reveal timing (tool list notification) |
 | `required_skill_fields` | autoskillit `SKILL.md` validation (`frozenset({"name", "description"})`) |
 | `applicable_guards` | autoskillit guard script enforcement (Claude: `{"skill_load_guard"}`; Codex: `{"write_guard"}`) |
@@ -362,7 +361,7 @@ warning (the others are static no-ops with no observable behavior).
 | §2 RetryReason enum | `RetryReason` | `src/autoskillit/core/types/_type_enums.py` lines 44–64 |
 | §2 Retry routing | `_compute_retry`, `_build_skill_result` overrides | `src/autoskillit/execution/session/_retry_fsm.py`, `src/autoskillit/execution/headless/_headless_result.py` |
 | §2 Contract nudge | `_attempt_contract_nudge`, `_merge_token_usage` | `src/autoskillit/execution/headless/_headless_recovery.py` |
-| §3 Capabilities | `BackendCapabilities` (41 fields) | `src/autoskillit/core/types/_type_backend.py` |
+| §3 Capabilities | `BackendCapabilities` (40 fields) | `src/autoskillit/core/types/_type_backend.py` |
 | §3 Forward-declared | `_FORWARD_DECLARED` | `tests/arch/test_capability_consumption.py` |
 | §4 Codex flags | `CodexFlags` | `src/autoskillit/execution/backends/codex.py` lines 98–107 |
 | §4 Codex discard sites | `codex.py` F841 / warning sites | `src/autoskillit/execution/backends/codex.py` |

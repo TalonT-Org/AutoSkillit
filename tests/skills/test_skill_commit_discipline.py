@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.workspace.skills import _read_skill_frontmatter
+from autoskillit.workspace.skill_format import read_skill_frontmatter
 from tests.arch._helpers import _strip_doc_fenced_blocks, _strip_frontmatter
 
 pytestmark = [pytest.mark.small]
@@ -74,8 +74,9 @@ def test_git_commit_skills_declare_metadata_write(skill_dir: Path) -> None:
     body = _strip_doc_fenced_blocks(_strip_frontmatter(content))
     if not _GIT_COMMIT_INSTRUCTION_RE.search(body):
         return
-    fm = _read_skill_frontmatter(skill_dir / "SKILL.md")
-    caps = set(fm.get("uses_capabilities", []))
+    parsed = read_skill_frontmatter(skill_dir / "SKILL.md")
+    assert parsed.data is not None
+    caps = set(parsed.data.get("uses_capabilities", []))
     assert "git_metadata_write" in caps, (
         f"Skill {skill_dir.name!r} contains 'git commit -m' instructions but does not "
         "declare 'git_metadata_write' in uses_capabilities. "

@@ -270,7 +270,7 @@ def _check_standing_backend_pins_feasibility(
                 skill_name = target_step.skill_name
                 if not skill_name:
                     continue
-                skill_info = resolver.resolve(skill_name)
+                skill_info = resolver.resolve_effective(skill_name, root)
                 if skill_info is None:
                     results.append(
                         DoctorResult(

@@ -1,7 +1,7 @@
 ---
 name: open-integration-pr
 categories: [github]
-uses_capabilities: [agent_model, cross_skill_ref, github_api_write, run_skill]
+uses_capabilities: [agent_model, cross_skill_ref, github_api_write]
 activate_deps: [arch-lens]
 description: >
   Create an integration PR for the merge-prs. Reads pr_order_file JSON, generates

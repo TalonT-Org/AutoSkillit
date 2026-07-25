@@ -23,12 +23,13 @@ from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
-    SKILL_CAPABILITY_REGISTRY,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
-    ClaudeDirectoryConventions,
     ClosureAuthoritySpec,
     CodingAgentBackend,
+    EffectiveSkillInvocationAuthority,
+    SkillContractError,
+    SkillExecutionRole,
     SkillResult,
     TerminationReason,
     ValidatedAddDir,
@@ -39,9 +40,8 @@ from autoskillit.core import (
     find_caller_session_id,
     get_logger,
     is_feature_enabled,
-    is_git_worktree,
     parse_plan_paths,
-    resolve_target_skill,
+    render_target_skill_command,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
@@ -58,11 +58,13 @@ from autoskillit.server._guards import (
     _check_recipe_read_prohibition,
     _check_write_target_boundary,
     _require_enabled,
+    _require_orchestrator_exact,
     _require_orchestrator_or_higher,
     _validate_skill_command,
 )
 from autoskillit.server._misc import (
     SCENARIO_STEP_NAME_ENV,
+    SkillProjectionContext,
     _hook_config_overlay_path,
     resolve_closure_write_dirs,
 )
@@ -78,17 +80,62 @@ from autoskillit.server.tools._backend_compat import (
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
+    _RunSkillContractLifecycle,
     _spill_spec,
     _summarize_streams,
+    bind_projection_backend,
+    build_fresh_projection_context,
+    build_validated_skill_dispatch_contract,
     clear_run_skill_state,
+    invocation_member_names,
     maybe_promote_work_dir,
     persist_run_skill_state,
     propagate_session_deadline,
     resolve_relative_path_args,
+    resolve_skill_dispatch_metadata,
     run_cmd_artifact_root,
     shape_execution_response,
     spill_run_cmd_result,
     validate_path_arg_anchoring,
+)
+from autoskillit.server.tools._execution_helpers import (
+    aggregate_sandbox_overrides as _aggregate_sandbox_overrides,
+)
+from autoskillit.server.tools._execution_helpers import (
+    build_skill_session_contract as _build_skill_session_contract,
+)
+from autoskillit.server.tools._execution_helpers import (
+    check_review_approach_plan_path as _check_review_approach_plan_path,
+)
+from autoskillit.server.tools._execution_helpers import (
+    compute_write_prefixes as _compute_write_prefixes,
+)
+from autoskillit.server.tools._execution_helpers import (
+    derive_run_cmd_write_prefixes as _derive_run_cmd_write_prefixes,
+)
+from autoskillit.server.tools._execution_helpers import (
+    get_routing_caps as _get_routing_caps,
+)
+from autoskillit.server.tools._execution_helpers import (
+    has_routing_capability as _has_routing_capability,
+)
+from autoskillit.server.tools._execution_helpers import (
+    make_project_skill_resolver as _make_project_skill_resolver,
+)
+from autoskillit.server.tools._execution_helpers import (
+    rehydrate_skill_invocation as _rehydrate_skill_invocation,
+)
+from autoskillit.server.tools._execution_helpers import (
+    resolve_step_name_from_recipe as _resolve_step_name_from_recipe,
+)
+from autoskillit.server.tools._execution_helpers import (
+    scope_covers_cwd as _scope_covers_cwd,
+)
+from autoskillit.server.tools._execution_helpers import (
+    serialize_skill_contract as _serialize_skill_contract,
+)
+from autoskillit.server.tools._execution_helpers import (
+    validate_resumed_skill_contract as _validate_resumed_skill_contract,
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
@@ -213,33 +260,6 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     )
 
 
-def _resolve_step_name_from_recipe(
-    skill_command: str,
-    active_recipe_steps: dict[str, object],
-) -> tuple[str, bool]:
-    """Resolve step_name from active_recipe_steps by matching skill_command prefix.
-
-    Returns (step_name, is_ambiguous):
-    - (name, False) when exactly one recipe step matches
-    - ("", True) when multiple steps match (ambiguous)
-    - ("", False) when no steps match
-    """
-    cmd_prefix = skill_command.split()[0] if skill_command.strip() else ""
-    if not cmd_prefix:
-        return ("", False)
-    matches: list[str] = []
-    for step_key, step_obj in active_recipe_steps.items():
-        with_args = getattr(step_obj, "with_args", None)
-        if not isinstance(with_args, dict):
-            continue
-        step_sc = with_args.get("skill_command", "")
-        if step_sc and step_sc.split()[0] == cmd_prefix:
-            matches.append(step_key)
-    if len(matches) == 1:
-        return (matches[0], False)
-    return ("", len(matches) > 1)
-
-
 def _has_active_locks(order_id: str) -> bool:
     """Return True if any ingredient locks are actively denying steps."""
     from autoskillit.server import _get_ctx  # circular-break
@@ -280,51 +300,6 @@ def _has_active_deps() -> bool:
     except (json.JSONDecodeError, OSError):
         return False
     return bool(tracker.get("dependencies"))
-
-
-def _check_review_approach_plan_path(step_name: str, skill_command: str) -> str | None:
-    """Return a deny JSON if review_approach is invoked without a plan-path argument.
-
-    review_approach requires a plan file path produced by rectify/make_plan.
-    Heuristic: the first argument after the skill name must not be a bare
-    issue URL, which would otherwise fall back to ambiguous "conversation
-    context" inference instead of failing loudly.
-    """
-    if _canonical_step_name(step_name) != "review_approach":
-        return None
-    parts = skill_command.split()
-    if len(parts) < 2:
-        return None
-    first_arg = parts[1]
-    if first_arg.startswith("https://") or first_arg.startswith("http://"):
-        return json.dumps(
-            deny_envelope(
-                (
-                    "review_approach requires a plan file path argument (a path "
-                    "under the project's temp directory produced by "
-                    "rectify/make_plan), not an issue URL."
-                ),
-                stage="preflight:plan_path",
-                retriable=False,
-            )
-        )
-    return None
-
-
-def _derive_run_cmd_write_prefixes() -> tuple[str, ...]:
-    """Read allowed write prefixes from environment.
-
-    Mirrors the env-var resolution logic in hooks/guards/write_guard.py:
-    AUTOSKILLIT_ALLOWED_WRITE_PREFIXES (colon-separated) takes precedence over
-    AUTOSKILLIT_ALLOWED_WRITE_PREFIX (single value).
-    """
-    multi = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
-    if multi:
-        return tuple(p for p in multi.split(":") if p)
-    single = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
-    if single:
-        return (single,)
-    return ()
 
 
 def _mark_step_complete_server_side(
@@ -605,75 +580,6 @@ async def run_python(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-def _compute_write_prefixes(
-    write_watch_dirs: list[Path],
-    cwd: str,
-    skill_command: str,
-) -> tuple[str, tuple[str, ...]]:
-
-    worktree_write_prefixes: list[str] = []
-    extracted = extract_skill_name(skill_command)
-    if write_watch_dirs and extracted and extracted in WORKTREE_SKILLS:
-        resolved_cwd = Path(cwd).resolve()
-        if is_git_worktree(resolved_cwd):
-            # cwd IS the worktree — include cwd itself and its parent (the worktrees/ dir)
-            worktree_write_prefixes.append(str(resolved_cwd) + "/")
-            worktree_write_prefixes.append(str(resolved_cwd.parent) + "/")
-        else:
-            nested_wt = resolved_cwd / "worktrees"
-            sibling_wt = resolved_cwd.parent / "worktrees"
-            if nested_wt.is_dir():
-                worktree_write_prefixes.append(str(nested_wt) + "/")
-            if sibling_wt.is_dir():
-                worktree_write_prefixes.append(str(sibling_wt) + "/")
-            if not nested_wt.is_dir() and not sibling_wt.is_dir():
-                worktree_write_prefixes.append(str(sibling_wt) + "/")
-
-    base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
-    all_prefixes = base_prefixes + worktree_write_prefixes
-    return base_prefixes[0] if base_prefixes else "", tuple(all_prefixes)
-
-
-def _scope_covers_cwd(allowed_write_prefixes: tuple[str, ...], cwd: str) -> bool:
-    """Return True if any allowed_write_prefix covers cwd (lexical prefix match)."""
-    if not allowed_write_prefixes or not cwd:
-        return False
-    resolved_cwd_str = str(Path(cwd).resolve()).rstrip("/") + "/"
-    for pfx in allowed_write_prefixes:
-        if resolved_cwd_str.startswith(pfx):
-            return True
-    return False
-
-
-def _aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
-    """Aggregate required_sandbox_overrides from all declared capabilities."""
-    return frozenset().union(
-        *(
-            SKILL_CAPABILITY_REGISTRY[cap].required_sandbox_overrides
-            for cap in skill_caps
-            if cap in SKILL_CAPABILITY_REGISTRY
-        )
-    )
-
-
-def _has_routing_capability(skill_caps: frozenset[str]) -> bool:
-    """Return True if any declared capability is worker_routable (triggers backend reroute)."""
-    return any(
-        SKILL_CAPABILITY_REGISTRY.get(cap) is not None
-        and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
-        for cap in skill_caps
-    )
-
-
-def _get_routing_caps(skill_caps: frozenset[str]) -> list[str]:
-    """Return sorted list of worker_routable capabilities that trigger backend reroute."""
-    return sorted(
-        cap
-        for cap in skill_caps
-        if SKILL_CAPABILITY_REGISTRY.get(cap) and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
-    )
-
-
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("run_skill")
@@ -759,12 +665,10 @@ async def run_skill(
 
     Never raises.
     """
-    if (tier_gate := _require_orchestrator_or_higher("run_skill")) is not None:
+    if (tier_gate := _require_orchestrator_exact("run_skill")) is not None:
         return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
-    if not resume_session_id and (cmd_error := _validate_skill_command(skill_command)) is not None:
-        return cmd_error
     if cwd and not _is_absolute_path(cwd):
         return json.dumps(
             deny_envelope(
@@ -785,43 +689,51 @@ async def run_skill(
                 retriable=False,
             )
         )
-    if (
-        step_name
-        and not resume_session_id
-        and (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None
-    ):
-        return _lock_denial
-    if (
-        step_name
-        and not resume_session_id
-        and (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None
-    ):
-        return _dep_denial
-    if (
-        step_name
-        and not resume_session_id
-        and (_plan_path_denial := _check_review_approach_plan_path(step_name, skill_command))
-        is not None
-    ):
-        return _plan_path_denial
     try:
+        contract_lifecycle = _RunSkillContractLifecycle()
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx  # circular-break
 
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
-
-        if not step_name and not resume_session_id and tool_ctx.active_recipe_steps:
-            _resolved, _ambiguous = _resolve_step_name_from_recipe(
-                skill_command, tool_ctx.active_recipe_steps
-            )
-            if _resolved:
-                step_name = _resolved
-                logger.warning(
-                    "step_name_resolved_from_recipe",
-                    step=step_name,
-                    command=skill_command[:80],
+        _contract_store = tool_ctx.skill_session_contract_store
+        contract_lifecycle.store = _contract_store
+        _stored_contract_entry = None
+        _resume_backend_obj: CodingAgentBackend | None = None
+        _effective_skill_resolver = None
+        invocation: EffectiveSkillInvocationAuthority | None = None
+        projection_context: SkillProjectionContext | None = None
+        target_name: str | None = None
+        if resume_session_id:
+            try:
+                _stored_contract_entry = _contract_store.load(resume_session_id)
+                _resume_backend_obj = _get_backend(_stored_contract_entry.contract.backend)
+                _validate_resumed_skill_contract(
+                    _stored_contract_entry.contract,
+                    cwd=cwd,
+                    project_root=tool_ctx.project_dir,
+                    backend=_resume_backend_obj,
                 )
+                if _resume_backend_obj is None:
+                    raise SkillContractError("Resume contract backend is unavailable")
+                invocation, projection_context = _rehydrate_skill_invocation(
+                    _stored_contract_entry.contract,
+                    _resume_backend_obj,
+                )
+            except (OSError, ValueError, SkillContractError) as exc:
+                return SkillResult.crashed(
+                    exception=SkillContractError(
+                        f"Cannot resume session {resume_session_id!r}: {exc}"
+                    ),
+                    skill_command=skill_command,
+                    order_id=order_id,
+                ).to_json()
+            contract_lifecycle.bound_session_id = resume_session_id
+            target_name = _stored_contract_entry.contract.root_name
+        else:
+            if (cmd_error := _validate_skill_command(skill_command)) is not None:
+                return cmd_error
+            if step_name:
                 if (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None:
                     return _lock_denial
                 if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
@@ -830,45 +742,95 @@ async def run_skill(
                     _plan_path_denial := _check_review_approach_plan_path(step_name, skill_command)
                 ) is not None:
                     return _plan_path_denial
-            elif _ambiguous:
-                if _has_active_deps():
+            _effective_skill_resolver = tool_ctx.skill_resolver
+            if _effective_skill_resolver is None:
+                _effective_skill_resolver = _make_project_skill_resolver()
+            target_name = extract_skill_name(skill_command)
+            if target_name is None:
+                return SkillResult.crashed(
+                    exception=SkillContractError(
+                        f"Cannot resolve a logical skill target from {skill_command!r}"
+                    ),
+                    skill_command=skill_command,
+                    order_id=order_id,
+                ).to_json()
+            try:
+                invocation = _effective_skill_resolver.resolve_invocation(
+                    target_name,
+                    tool_ctx.project_dir,
+                    SkillExecutionRole.SESSION,
+                    visibility=tool_ctx.config.skill_visibility_spec(),
+                    recipe_packs=tool_ctx.active_recipe_packs,
+                    recipe_features=tool_ctx.active_recipe_features,
+                )
+                projection_context = build_fresh_projection_context(cwd, invocation)
+            except SkillContractError as exc:
+                return SkillResult.crashed(
+                    exception=exc,
+                    skill_command=skill_command,
+                    order_id=order_id,
+                ).to_json()
+            if not step_name and tool_ctx.active_recipe_steps:
+                _resolved, _ambiguous = _resolve_step_name_from_recipe(
+                    skill_command, tool_ctx.active_recipe_steps
+                )
+                if _resolved:
+                    step_name = _resolved
+                    logger.warning(
+                        "step_name_resolved_from_recipe",
+                        step=step_name,
+                        command=skill_command[:80],
+                    )
+                    if (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None:
+                        return _lock_denial
+                    if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
+                        return _dep_denial
+                    if (
+                        _plan_path_denial := _check_review_approach_plan_path(
+                            step_name, skill_command
+                        )
+                    ) is not None:
+                        return _plan_path_denial
+                elif _ambiguous:
+                    if _has_active_deps():
+                        return json.dumps(
+                            deny_envelope(
+                                (
+                                    f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and matched "
+                                    "multiple recipe steps by skill_command prefix (ambiguous). "
+                                    "Cannot verify dependency status. Pass step_name explicitly."
+                                ),
+                                stage="preflight:ambiguous_step",
+                                retriable=False,
+                            )
+                        )
+                elif _has_active_locks(order_id):
                     return json.dumps(
                         deny_envelope(
                             (
-                                f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and matched "
-                                "multiple recipe steps by skill_command prefix (ambiguous). "
-                                "Cannot verify dependency status. Pass step_name explicitly."
+                                f"{INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and could "
+                                "not be resolved from the recipe. Cannot verify lock "
+                                "status. Pass step_name explicitly or call "
+                                "lock_ingredients(unlock=[...]) to release all locks."
                             ),
-                            stage="preflight:ambiguous_step",
+                            stage="preflight:ingredient_locks",
                             retriable=False,
                         )
                     )
-            elif _has_active_locks(order_id):
-                return json.dumps(
-                    deny_envelope(
-                        (
-                            f"{INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and could "
-                            "not be resolved from the recipe. Cannot verify lock "
-                            "status. Pass step_name explicitly or call "
-                            "lock_ingredients(unlock=[...]) to release all locks."
-                        ),
-                        stage="preflight:ingredient_locks",
-                        retriable=False,
+                elif _has_active_deps():
+                    return json.dumps(
+                        deny_envelope(
+                            (
+                                f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
+                                "not be resolved from the recipe. Cannot verify dependency "
+                                "status. Pass step_name explicitly."
+                            ),
+                            stage="preflight:unresolved_step",
+                            retriable=False,
+                        )
                     )
-                )
-            elif _has_active_deps():
-                return json.dumps(
-                    deny_envelope(
-                        (
-                            f"{DEPENDENCY_DENY_PREFIX}: step_name is empty and could "
-                            "not be resolved from the recipe. Cannot verify dependency "
-                            "status. Pass step_name explicitly."
-                        ),
-                        stage="preflight:unresolved_step",
-                        retriable=False,
-                    )
-                )
-
+        if invocation is None or projection_context is None:
+            raise SkillContractError("Skill dispatch branches did not produce a bound contract")
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
             await _notify(
@@ -958,29 +920,18 @@ async def run_skill(
                         if _step_mo:
                             effective_model = _step_mo
 
-            # Resolve correct namespace and prepare for tier2 activation.
-            # Must precede backend_override — _skill_info feeds skill-requirement check.
-            resolved_command = skill_command
-            target_name: str | None = None
-            if tool_ctx.skill_resolver is not None:
-                resolved_command, target_name = resolve_target_skill(
-                    skill_command, tool_ctx.skill_resolver
-                )
-            _skill_info = (
-                tool_ctx.skill_resolver.resolve(target_name)
-                if tool_ctx.skill_resolver and target_name
-                else None
+            # The fresh branch resolved the complete effective invocation before any
+            # notification or provider/executor work. Backend-specific rendering waits
+            # until capability-driven backend selection is complete.
+            _stored_contract = (
+                _stored_contract_entry.contract if _stored_contract_entry is not None else None
             )
-            if target_name and _skill_info is None:
-                return SkillResult.crashed(
-                    exception=RuntimeError(
-                        f"Skill '{target_name}' not found in any discovery source "
-                        f"(bundled skills/, skills_extended/, or project-local). "
-                        f"Cannot launch session for undiscoverable skill name."
-                    ),
-                    skill_command=resolved_command,
-                    order_id=effective_order_id,
-                ).to_json()
+            resolved_command = (
+                _stored_contract.resolved_command
+                if _stored_contract is not None
+                else skill_command
+            )
+            _effective_skill_contract = invocation if invocation is not None else _stored_contract
 
             _provider_override = (
                 provider_extras
@@ -1003,8 +954,10 @@ async def run_skill(
             )
 
             _skill_caps: frozenset[str] = (
-                getattr(_skill_info, "uses_capabilities", frozenset())
-                if _skill_info
+                invocation.capability_union
+                if invocation is not None
+                else _stored_contract.capability_union
+                if _stored_contract is not None
                 else frozenset()
             )
             _sandbox_overrides = _aggregate_sandbox_overrides(_skill_caps)
@@ -1020,7 +973,11 @@ async def run_skill(
             # When an explicit backend override pins a step to a non-claude
             # backend, capability-driven routing must NOT crash on the missing
             # claude binary — the operator has explicitly chosen the backend.
-            if _skill_requires_claude and _explicit_backend_override is None:
+            if (
+                _stored_contract is None
+                and _skill_requires_claude
+                and _explicit_backend_override is None
+            ):
                 if shutil.which("claude") is None:
                     return SkillResult.crashed(
                         exception=RuntimeError(
@@ -1035,8 +992,11 @@ async def run_skill(
 
             # If an explicit override points to a non-claude backend whose
             # binary is absent, fail closed with a clear message.
-            if _explicit_backend_override is not None and _explicit_backend_override != (
-                tool_ctx.backend.name if tool_ctx.backend else None
+            if (
+                _stored_contract is None
+                and _explicit_backend_override is not None
+                and _explicit_backend_override
+                != (tool_ctx.backend.name if tool_ctx.backend else None)
             ):
                 try:
                     _explicit_backend_obj_check = _get_backend(_explicit_backend_override)
@@ -1071,7 +1031,9 @@ async def run_skill(
                             order_id=effective_order_id,
                         ).to_json()
 
-            if _explicit_backend_override is not None:
+            if _stored_contract is not None:
+                backend_override = _stored_contract.backend
+            elif _explicit_backend_override is not None:
                 backend_override = _explicit_backend_override
             elif _provider_override or _skill_requires_claude:
                 backend_override = AGENT_BACKEND_CLAUDE_CODE
@@ -1079,13 +1041,33 @@ async def run_skill(
                 backend_override = None
 
             _effective_backend_obj: CodingAgentBackend | None = (
-                _get_backend(backend_override)
+                _resume_backend_obj
+                if _stored_contract is not None
+                else _get_backend(backend_override)
                 if backend_override is not None and tool_ctx.backend is not None
                 else tool_ctx.backend
             )
+            if _stored_contract is None:
+                projection_context = bind_projection_backend(
+                    projection_context, _effective_backend_obj
+                )
+            if invocation is not None and _stored_contract is None:
+                if invocation.root.source_ref is None:
+                    raise SkillContractError("Effective skill source identity is missing")
+                resolved_command = render_target_skill_command(
+                    skill_command,
+                    invocation.root.source_ref,
+                    (
+                        _effective_backend_obj.conventions
+                        if _effective_backend_obj is not None
+                        else None
+                    ),
+                )
 
             _backend_override_source: str | None = None
-            if _explicit_resolution is not None:
+            if _stored_contract is not None:
+                _backend_override_source = "stored_contract"
+            elif _explicit_resolution is not None:
                 _backend_override_source = _explicit_resolution.key_path
             elif _skill_requires_claude:
                 _backend_override_source = "skill_requirement"
@@ -1107,19 +1089,9 @@ async def run_skill(
                     routing_capabilities=_routing_caps,
                 )
 
-            # Look up artifact validation patterns from skill contract
-            expected_output_patterns: list[str] = []
-            if tool_ctx.output_pattern_resolver:
-                expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-            # Look up write-expectation metadata from skill contract
-            write_spec: WriteBehaviorSpec | None = None
-            if tool_ctx.write_expected_resolver:
-                write_spec = tool_ctx.write_expected_resolver(skill_command)
-
-            _skill_contract = None
-            if tool_ctx.skill_contract_resolver:
-                _skill_contract = tool_ctx.skill_contract_resolver(skill_command)
+            expected_output_patterns, write_spec, _skill_contract = (
+                resolve_skill_dispatch_metadata(tool_ctx, skill_command, _stored_contract)
+            )
 
             # Resolve closure spec from explicit MCP tool parameters.
             # Closure args are first-class parameters (not embedded in skill_command text)
@@ -1143,9 +1115,13 @@ async def run_skill(
                 resolved_command=resolved_command,
                 effective_order_id=effective_order_id,
                 target_name=target_name,
-                skill_info=_skill_info,
+                skill_info=_effective_skill_contract,
                 effective_backend_obj=_effective_backend_obj,
-                skill_resolver=tool_ctx.skill_resolver,
+                skill_resolver=(
+                    _effective_skill_resolver
+                    if _effective_skill_resolver is not None
+                    else _stored_contract_entry
+                ),
             ):
                 return compat_error
 
@@ -1218,19 +1194,28 @@ async def run_skill(
                 if _default_temp:
                     write_watch_dirs.append(_default_temp)
 
-            is_read_only = bool(
-                tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
-            )
-            completion_required = bool(
-                tool_ctx.completion_required_resolver
-                and tool_ctx.completion_required_resolver(skill_command)
-            )
+            if _stored_contract is not None:
+                is_read_only = _stored_contract.read_only
+                completion_required = _stored_contract.completion_required
+            else:
+                is_read_only = bool(
+                    tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
+                )
+                completion_required = bool(
+                    tool_ctx.completion_required_resolver
+                    and tool_ctx.completion_required_resolver(skill_command)
+                )
             invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
 
             skill_add_dirs: list[ValidatedAddDir] = []
             replay_snapshot_used = False
             _runner = tool_ctx.runner
-            if (
+            if _stored_contract_entry is not None:
+                skill_add_dirs.append(
+                    ValidatedAddDir(path=str(_stored_contract_entry.snapshot_dir))
+                )
+                replay_snapshot_used = True
+            elif (
                 step_name
                 and _runner is not None
                 and getattr(_runner, "skill_snapshots", None)
@@ -1238,6 +1223,15 @@ async def run_skill(
                 and tool_ctx.ephemeral_root is not None
             ):
                 _ephemeral_root = tool_ctx.ephemeral_root
+                if invocation is None:
+                    raise SkillContractError(
+                        "Fresh replay requires a validated effective invocation"
+                    )
+                if hasattr(_runner, "validate_skill_snapshot"):
+                    _runner.validate_skill_snapshot(  # type: ignore[attr-defined]
+                        step_name,
+                        invocation_member_names(invocation),
+                    )
                 session_id = f"headless-{uuid4().hex[:12]}"
                 _cleanup_session_id = session_id
                 _restored = _runner.restore_skill_snapshot(  # type: ignore[attr-defined]
@@ -1268,34 +1262,28 @@ async def run_skill(
                     )
 
             if not replay_snapshot_used and tool_ctx.session_skill_manager is not None:
-                allow_only: frozenset[str] | None = None
-                closure: frozenset[str] = frozenset()
-                if target_name:
-                    closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
-                    if not closure:
-                        return SkillResult.crashed(
-                            exception=RuntimeError(
-                                f"Skill '{target_name}' resolved to an empty closure. "
-                                f"This indicates the skill exists but has no injectable content."
-                            ),
-                            skill_command=resolved_command,
-                            order_id=effective_order_id,
-                        ).to_json()
-                    allow_only = closure
-
-                session_id = f"headless-{uuid4().hex[:12]}"
-                _cleanup_session_id = session_id
-                session_root = tool_ctx.session_skill_manager.init_session(
-                    session_id,
-                    cook_session=False,
-                    config=tool_ctx.config,
-                    project_dir=tool_ctx.project_dir,
-                    recipe_packs=tool_ctx.active_recipe_packs,
-                    recipe_features=tool_ctx.active_recipe_features,
-                    allow_only=allow_only,
-                    backend=_effective_backend_obj,
-                )
-                if not tool_ctx.session_skill_manager.validate_session_exists(session_id):
+                if _stored_contract_entry is not None:
+                    assert resume_session_id is not None
+                    session_root = ValidatedAddDir(path=str(_stored_contract_entry.snapshot_dir))
+                    session_id = resume_session_id
+                elif invocation is not None:
+                    session_id = f"headless-{uuid4().hex[:12]}"
+                    _cleanup_session_id = session_id
+                    if projection_context is None:
+                        raise SkillContractError("Projection context was not prepared")
+                    session_root = tool_ctx.session_skill_manager.materialize_invocation(
+                        session_id,
+                        invocation,
+                        projection_context,
+                    )
+                else:
+                    raise SkillContractError(
+                        "Fresh execution requires a resolved skill invocation"
+                    )
+                if _stored_contract_entry is None and (
+                    not session_id
+                    or not tool_ctx.session_skill_manager.validate_session_exists(session_id)
+                ):
                     logger.warning(
                         "stale_session_path",
                         session_id=session_id,
@@ -1312,65 +1300,46 @@ async def run_skill(
                     ).to_json()
                 skill_add_dirs.append(session_root)
 
-                if target_name:
-                    tool_ctx.session_skill_manager.activate_skill_deps(session_id, target_name)
-                    _is_known_skill = (
-                        tool_ctx.skill_resolver is not None
-                        and tool_ctx.skill_resolver.resolve(target_name) is not None
+            # Both fresh and rehydrated invocations extend scope from their
+            # validated closure, independent of whether a snapshot was replayed.
+            if invocation is not None:
+                write_watch_dirs.extend(
+                    resolve_closure_write_dirs(
+                        invocation.closure,
+                        cwd,
+                        write_watch_dirs,
                     )
-                    if _is_known_skill:
-                        _skills_subdir = (
-                            _effective_backend_obj.conventions.skills_subdir
-                            if _effective_backend_obj is not None
-                            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-                        )
-                        _skill_md = (
-                            Path(session_root.path) / _skills_subdir / target_name / "SKILL.md"
-                        )
-                        if not _skill_md.exists():
-                            logger.error(
-                                "target_skill_not_in_session",
-                                target=target_name,
-                                session_id=session_id,
-                                session_root=str(session_root.path),
-                            )
-                            return SkillResult.crashed(
-                                exception=RuntimeError(
-                                    f"Target skill {target_name!r} not available in session "
-                                    f"{session_id!r}: SKILL.md not found after init_session + "
-                                    f"activate_skill_deps. Check tier/feature/pack gating."
-                                ),
-                                skill_command=resolved_command,
-                                session_id=session_id,
-                                order_id=effective_order_id,
-                            ).to_json()
-                    else:
-                        # Defense-in-depth: should be unreachable after the pre-init
-                        # existence gate (3a), but if reached, reject rather than proceed.
-                        logger.error(
-                            "unknown_skill_reached_init",
-                            target=target_name,
-                            session_id=session_id,
-                        )
-                        return SkillResult.crashed(
-                            exception=RuntimeError(
-                                f"Skill '{target_name}' unknown to resolver after session init. "
-                                f"This should have been caught by the pre-init existence gate."
-                            ),
-                            skill_command=resolved_command,
-                            session_id=session_id,
-                            order_id=effective_order_id,
-                        ).to_json()
-                    # Replay-path sessions inherit write scope from their original
-                    # snapshot — they don't need re-augmentation because the snapshot
-                    # was built from a live session that already had the full prefix set.
-                    if closure and tool_ctx.skill_resolver is not None:
-                        write_watch_dirs.extend(
-                            resolve_closure_write_dirs(
-                                closure, tool_ctx.skill_resolver, cwd, write_watch_dirs
-                            )
-                        )
+                )
 
+            if invocation is not None and _stored_contract is None:
+                if not skill_add_dirs:
+                    raise SkillContractError(
+                        "Fresh execution requires a materialized skill snapshot"
+                    )
+                if projection_context is None:
+                    raise SkillContractError("Projection context was not prepared")
+                _session_contract, _session_snapshot = _build_skill_session_contract(
+                    session_root=skill_add_dirs[0],
+                    invocation=invocation,
+                    projection_context=projection_context,
+                    resolved_command=resolved_command,
+                    expected_output_patterns=tuple(expected_output_patterns),
+                    write_behavior=write_spec or WriteBehaviorSpec(),
+                    read_only=is_read_only,
+                    completion_required=completion_required,
+                    skill_contract_json=_serialize_skill_contract(_skill_contract),
+                )
+                contract_lifecycle.correlation_key = _contract_store.create_provisional(
+                    contract=_session_contract,
+                    snapshot=_session_snapshot,
+                )
+
+            _capability_contract = build_validated_skill_dispatch_contract(
+                resolved_command,
+                projection_context,
+                skill_add_dirs,
+                _stored_contract,
+            )
             allowed_write_prefix = ""
             allowed_write_prefixes: tuple[str, ...] = ()
             if write_watch_dirs:
@@ -1388,7 +1357,6 @@ async def run_skill(
                         "read_only_skill_no_target_name",
                         skill_command=skill_command[:SKILL_COMMAND_DISPLAY_MAX],
                     )
-
             # Preflight: for WORKTREE_SKILLS dispatches, the computed scope must cover cwd
             # so the session can write to its own tracked tree. Fail-fast BEFORE spawning
             # a session — otherwise the session locks itself out and burns N turns.
@@ -1414,6 +1382,9 @@ async def run_skill(
             # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
             provider_extras = propagate_session_deadline(tool_ctx.project_dir, provider_extras)
 
+            def _observe_contract_session_id(candidate_session_id: str) -> None:
+                contract_lifecycle.observe_candidate(candidate_session_id)
+
             _start = time.monotonic()
             try:
                 try:
@@ -1423,9 +1394,10 @@ async def run_skill(
                             _orchestrator_sid,
                             "run-skill",
                         ):
+                            contract_lifecycle.execution_started = True
                             skill_result = await tool_ctx.executor.run(
                                 resolved_command,
-                                cwd,
+                                _capability_contract.cwd,
                                 model=effective_model,
                                 add_dirs=skill_add_dirs,
                                 step_name=step_name,
@@ -1463,8 +1435,15 @@ async def run_skill(
                                 closure_spec=closure_spec,
                                 closure_report_root=closure_report_root,
                                 skill_contract=_skill_contract,
+                                capability_contract=_capability_contract,
+                                on_session_id_resolved=(
+                                    _observe_contract_session_id
+                                    if contract_lifecycle.correlation_key is not None
+                                    else None
+                                ),
                             )
                 except TimeoutError as exc:
+                    contract_lifecycle.retain_bound = False
                     logger.error(
                         "run_skill_mcp_tool_timeout",
                         timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
@@ -1478,6 +1457,19 @@ async def run_skill(
                         skill_command=resolved_command,
                         order_id=effective_order_id,
                     ).to_json()
+
+                contract_lifecycle.finalize(skill_result.session_id)
+
+                if (
+                    _stored_contract_entry is not None
+                    and skill_result.session_id
+                    and skill_result.session_id != resume_session_id
+                ):
+                    raise SkillContractError(
+                        "Resumed execution returned a different final session ID"
+                    )
+                contract_lifecycle.apply_retention(skill_result.needs_retry)
+
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)
                     clear_run_skill_state(tool_ctx.project_dir)
@@ -1547,6 +1539,7 @@ async def run_skill(
                     work_dir=cwd,
                 )
             except Exception as exc:
+                contract_lifecycle.retain_bound = False
                 logger.error("run_skill executor raised unexpectedly", exc_info=True)
                 return SkillResult.crashed(
                     exception=exc,
@@ -1575,6 +1568,7 @@ async def run_skill(
             order_id=_oid,  # type: ignore[arg-type]
         ).to_json()
     finally:
+        contract_lifecycle.cleanup()
         if _sn_token is not None:
             _current_step_name.reset(_sn_token)  # type: ignore[possibly-undefined]
         if _oid_token is not None:

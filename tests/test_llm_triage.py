@@ -12,6 +12,19 @@ from autoskillit.recipe.contracts import StaleItem
 
 pytestmark = [pytest.mark.medium]
 
+
+def _patch_skill_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+    bundled_root: Path,
+) -> None:
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+    resolver._dir = bundled_root
+    resolver._extended_dir = bundled_root / "missing-extended"
+    monkeypatch.setattr("autoskillit._llm_triage.default_skill_resolver", lambda: resolver)
+
+
 # ---------------------------------------------------------------------------
 # T-P1-7-A: SKILL.md cached per unique skill
 # ---------------------------------------------------------------------------
@@ -40,7 +53,7 @@ async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
         return real_read_text(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "read_text", tracking_read_text)
-    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+    _patch_skill_resolver(monkeypatch, tmp_path)
 
     fake_result = SubprocessResult(
         returncode=0,
@@ -68,10 +81,79 @@ async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
             current_value="new2",
         ),
     ]
-    await triage_staleness(items, backend=ClaudeCodeBackend())
+    await triage_staleness(items, project_root=tmp_path, backend=ClaudeCodeBackend())
     assert len(read_calls) == 1, (
         f"SKILL.md read {len(read_calls)} times; expected exactly 1 (cache hit on second item)"
     )
+
+
+@pytest.mark.anyio
+async def test_triage_staleness_projects_the_project_effective_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+    from autoskillit.core import SubprocessResult, TerminationReason
+
+    project_root = tmp_path / "project"
+    skill_dir = project_root / ".claude" / "skills" / "implement-worktree"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: implement-worktree\n"
+        "description: Project-effective triage override.\n"
+        "---\n"
+        "PROJECT-EFFECTIVE-TRIAGE-CONTENT\n"
+    )
+    response = json.dumps(
+        [
+            {
+                "index": 1,
+                "skill": "implement-worktree",
+                "meaningful_change": False,
+                "summary": "project override observed",
+            }
+        ]
+    )
+    mock_run = AsyncMock(
+        return_value=SubprocessResult(
+            returncode=0,
+            stdout=(
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": response,
+                        "session_id": "triage-project-override",
+                    }
+                )
+                + "\n"
+            ),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+    )
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    await triage_staleness(
+        [
+            StaleItem(
+                skill="implement-worktree",
+                reason="hash_mismatch",
+                stored_value="old",
+                current_value="new",
+            )
+        ],
+        project_root=project_root,
+        backend=ClaudeCodeBackend(),
+    )
+
+    command = mock_run.call_args.kwargs["cmd"]
+    assert "PROJECT-EFFECTIVE-TRIAGE-CONTENT" in command[2]
+    assert mock_run.call_args.kwargs["cwd"] == project_root.resolve()
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +178,7 @@ class TestTriageStaleness:
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
 
-        monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+        _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
             "autoskillit._llm_triage.run_managed_async",
             AsyncMock(
@@ -116,7 +198,7 @@ class TestTriageStaleness:
             stored_value="abc123",
             current_value="def456",
         )
-        result = await triage_staleness([item], backend=ClaudeCodeBackend())
+        result = await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
         assert len(result) == 1
         assert result[0]["meaningful"] is True
@@ -138,7 +220,7 @@ class TestTriageStaleness:
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
 
-        monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+        _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
             "autoskillit._llm_triage.run_managed_async",
             AsyncMock(
@@ -160,7 +242,7 @@ class TestTriageStaleness:
         )
 
         with structlog.testing.capture_logs() as logs:
-            await triage_staleness([item], backend=ClaudeCodeBackend())
+            await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
         assert any(log["log_level"] == "warning" for log in logs), (
             "A warning log must be emitted on timeout"
@@ -186,7 +268,7 @@ class TestTriageStaleness:
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Test Skill\nDummy content.")
 
-        monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+        _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
             "autoskillit._llm_triage.run_managed_async",
             AsyncMock(
@@ -208,7 +290,9 @@ class TestTriageStaleness:
         )
 
         with structlog.testing.capture_logs() as logs:
-            result = await triage_staleness([item], backend=ClaudeCodeBackend())
+            result = await triage_staleness(
+                [item], project_root=tmp_path, backend=ClaudeCodeBackend()
+            )
 
         assert result[0]["meaningful"] is True
         assert any(log["log_level"] == "warning" for log in logs), (
@@ -253,7 +337,7 @@ class TestTriageStaleness:
             ]
         )
 
-        monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+        _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
             "autoskillit._llm_triage.run_managed_async",
             AsyncMock(
@@ -273,7 +357,7 @@ class TestTriageStaleness:
             stored_value="abc123",
             current_value="def456",
         )
-        result = await triage_staleness([item], backend=ClaudeCodeBackend())
+        result = await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
         assert result[0]["meaningful"] is False
         assert result[0]["summary"] == "ok"
@@ -288,7 +372,7 @@ class TestTriageStaleness:
         from autoskillit._llm_triage import triage_staleness
 
         # Do NOT create SKILL.md — the directory doesn't exist
-        monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+        _patch_skill_resolver(monkeypatch, tmp_path)
         mock_run = AsyncMock()
         monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
 
@@ -298,7 +382,7 @@ class TestTriageStaleness:
             stored_value="abc123",
             current_value="def456",
         )
-        result = await triage_staleness([item], backend=ClaudeCodeBackend())
+        result = await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
         assert len(result) == 1
         assert result[0]["meaningful"] is True
@@ -351,7 +435,7 @@ class TestTriageStaleness:
             ]
         )
 
-        monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+        _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
             "autoskillit._llm_triage.run_managed_async",
             AsyncMock(
@@ -371,7 +455,7 @@ class TestTriageStaleness:
             stored_value="abc123",
             current_value="def456",
         )
-        result = await triage_staleness([item], backend=ClaudeCodeBackend())
+        result = await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
         assert result[0]["meaningful"] is False, (
             f"triage_staleness must parse NDJSON via parse_session_result, not json.loads. "
@@ -403,7 +487,7 @@ async def test_triage_staleness_batch_fallback_on_malformed_response(
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text(f"# Skill {i}\nContent.")
 
-    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+    _patch_skill_resolver(monkeypatch, tmp_path)
 
     # Return an array of length 2 for a batch of 3 → length mismatch → fallback
     truncated_response = _json.dumps(
@@ -438,7 +522,7 @@ async def test_triage_staleness_batch_fallback_on_malformed_response(
         )
         for i in range(n)
     ]
-    results = await triage_staleness(items, backend=ClaudeCodeBackend())
+    results = await triage_staleness(items, project_root=tmp_path, backend=ClaudeCodeBackend())
 
     assert len(results) == n
     assert all(r["meaningful"] is True for r in results), (
@@ -464,7 +548,7 @@ async def test_triage_command_includes_format_required_flags(
     skill_dir = tmp_path / "test-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("# test skill")
-    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+    _patch_skill_resolver(monkeypatch, tmp_path)
 
     result_payload = json.dumps([{"skill": "test-skill", "meaningful": False, "summary": "ok"}])
     ndjson = (
@@ -487,7 +571,7 @@ async def test_triage_command_includes_format_required_flags(
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
     )
-    await triage_staleness([item], backend=ClaudeCodeBackend())
+    await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
     # Verify the command passed to run_managed_async includes format-required flags
     cmd = mock_run.call_args.kwargs["cmd"]
@@ -510,7 +594,7 @@ async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.
     skill_dir = tmp_path / "test-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("# Test\nContent.")
-    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+    _patch_skill_resolver(monkeypatch, tmp_path)
 
     ndjson = (
         json.dumps(
@@ -541,7 +625,7 @@ async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
     )
-    await triage_staleness([item], backend=ClaudeCodeBackend())
+    await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
     env = mock_run.call_args.kwargs["env"]
     assert env is not None
@@ -568,7 +652,7 @@ async def test_triage_command_uses_backend_binary_name(
     skill_dir = tmp_path / "test-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("# test skill")
-    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+    _patch_skill_resolver(monkeypatch, tmp_path)
 
     ndjson = (
         __import__("json").dumps(
@@ -599,7 +683,7 @@ async def test_triage_command_uses_backend_binary_name(
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
     )
-    await triage_staleness([item], backend=ClaudeCodeBackend())
+    await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
     cmd = mock_run.call_args.kwargs["cmd"]
     expected_binary = ClaudeCodeBackend().binary_name()
@@ -622,7 +706,7 @@ async def test_triage_staleness_does_not_use_pty(
     skill_dir = tmp_path / "test-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("# test skill")
-    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+    _patch_skill_resolver(monkeypatch, tmp_path)
 
     ndjson = (
         json.dumps(
@@ -653,7 +737,7 @@ async def test_triage_staleness_does_not_use_pty(
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
     )
-    await triage_staleness([item], backend=ClaudeCodeBackend())
+    await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
     assert mock_run.called
     pty_mode = mock_run.call_args.kwargs.get("pty_mode")

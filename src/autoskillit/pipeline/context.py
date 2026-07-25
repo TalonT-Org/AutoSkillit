@@ -40,6 +40,7 @@ from autoskillit.core import (
     SessionSkillManager,
     SkillContractResolver,
     SkillResolver,
+    SkillSessionContractStore,
     SubprocessRunner,
     TestRunner,
     TimingLog,
@@ -115,6 +116,8 @@ class ToolContext:
                           log retention purge.
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
     skill_resolver:       SkillResolver — resolves skill names to source tier
+    skill_session_contract_store: SkillSessionContractStore — binds projected skill
+                          contracts and snapshots to resumable backend session IDs.
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
                           to the current kitchen session lifetime.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
@@ -169,6 +172,7 @@ class ToolContext:
     backend: CodingAgentBackend | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
+    skill_session_contract_store: SkillSessionContractStore = field(default=_MISSING)
     recipe_name: str = field(default="")
     recipe_content_hash: str = field(default="")
     recipe_composite_hash: str = field(default="")
@@ -197,6 +201,11 @@ class ToolContext:
             raise TypeError(
                 "project_dir must be supplied explicitly — do not rely on defaults. "
                 "Use make_context() or pass project_dir=<path> directly."
+            )
+        if self.skill_session_contract_store is _MISSING:
+            raise TypeError(
+                "skill_session_contract_store must be supplied explicitly. "
+                "Use make_context() or pass an isolated store directly."
             )
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)

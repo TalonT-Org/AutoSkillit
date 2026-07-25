@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
+from ._type_enums import SkillExecutionRole
+from ._type_plugin_source import PluginSource
 from ._type_results import (
     ClosureAuthoritySpec,
     InputSpec,
@@ -15,15 +17,78 @@ from ._type_results import (
     ValidatedAddDir,
     WriteBehaviorSpec,
 )
+from ._type_skill_contract import (
+    SkillSessionContract,
+    SkillSourceIdentity,
+    StoredSkillSessionContract,
+)
 
 __all__ = [
     "CompletionRequiredResolver",
     "InputContractResolver",
     "TestRunner",
     "HeadlessExecutor",
+    "HeadlessSkillDispatchContract",
     "OutputPatternResolver",
+    "SkillSessionContractStore",
     "WriteExpectedResolver",
 ]
+
+
+@runtime_checkable
+class HeadlessSkillDispatchContract(Protocol):
+    """Immutable capability/source/projection authority for headless skill work."""
+
+    @property
+    def resolved_command(self) -> str: ...
+
+    @property
+    def projection_context(self) -> object: ...
+
+    @property
+    def invocation(self) -> object | None: ...
+
+    @property
+    def catalog(self) -> object | None: ...
+
+    @property
+    def root_name(self) -> str | None: ...
+
+    @property
+    def member_names(self) -> tuple[str, ...]: ...
+
+    @property
+    def execution_role(self) -> SkillExecutionRole: ...
+
+    @property
+    def capability_union(self) -> frozenset[str]: ...
+
+    @property
+    def source_identities(self) -> Mapping[str, SkillSourceIdentity]: ...
+
+    @property
+    def canonical_digests(self) -> Mapping[str, str]: ...
+
+    @property
+    def projected_digests(self) -> Mapping[str, str]: ...
+
+    @property
+    def projected_artifacts(self) -> Mapping[str, str]: ...
+
+    @property
+    def projection_version(self) -> int: ...
+
+    @property
+    def project_root(self) -> str | None: ...
+
+    @property
+    def cwd(self) -> str: ...
+
+    @property
+    def backend(self) -> str | None: ...
+
+    @property
+    def artifact_paths(self) -> tuple[str, ...]: ...
 
 
 @runtime_checkable
@@ -36,6 +101,28 @@ class TestRunner(Protocol):
     def check_infrastructure(self, cwd: Path) -> str | None: ...
 
     async def run(self, cwd: Path) -> TestResult: ...
+
+
+@runtime_checkable
+class SkillSessionContractStore(Protocol):
+    """Persistence boundary for skill-session contract ownership."""
+
+    def create_provisional(
+        self,
+        *,
+        contract: SkillSessionContract,
+        snapshot: Mapping[str, str],
+    ) -> str: ...
+
+    def observe_candidate(self, correlation_key: str, session_id: str) -> None: ...
+
+    def finalize(self, correlation_key: str, session_id: str) -> None: ...
+
+    def load(self, session_id: str) -> StoredSkillSessionContract: ...
+
+    def delete(self, session_id: str) -> None: ...
+
+    def discard(self, correlation_key: str) -> None: ...
 
 
 @runtime_checkable
@@ -84,7 +171,9 @@ class HeadlessExecutor(Protocol):
         network_access: bool = False,
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
         skill_contract: Any | None = None,
+        capability_contract: HeadlessSkillDispatchContract | None = None,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(
@@ -93,6 +182,7 @@ class HeadlessExecutor(Protocol):
         cwd: str,
         *,
         completion_marker: str,
+        plugin_source: PluginSource | None = None,
         prior_completion_markers: Sequence[str] | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
@@ -122,6 +212,7 @@ class HeadlessExecutor(Protocol):
         resume_message: str | None = None,
         backend_override: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        capability_contract: HeadlessSkillDispatchContract | None = None,
     ) -> SkillResult: ...
 
 

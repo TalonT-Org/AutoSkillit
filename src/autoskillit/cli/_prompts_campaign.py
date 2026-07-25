@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.cli._prompts import (
     _backend_supplement,
     _ingredient_table_display_instruction,
-    _read_full_sous_chef,
 )
 from autoskillit.core import ROUTING_AUTHORITY_CLAUSE, RetryReason
 
@@ -134,8 +133,6 @@ def _build_fleet_campaign_prompt(
     progress markers.
     """
     dispatch_count = len(campaign_recipe.dispatches)
-    admiral_content = _read_full_sous_chef()
-    admiral_section = f"\n## ADMIRAL DISCIPLINE\n\n{admiral_content}\n" if admiral_content else ""
 
     has_gate_dispatches = any(d.gate for d in campaign_recipe.dispatches)
 
@@ -257,7 +254,7 @@ claim failure), follow the STALE-ARTIFACT RECOVERY section.
     return f"""\
 You are a fleet campaign dispatcher. Execute campaign '{campaign_recipe.name}' autonomously.
 Campaign ID: {campaign_id}. Dispatches: {dispatch_count}.
-{admiral_section}
+
 ## CAMPAIGN OVERVIEW
 
 - Name: {campaign_recipe.name}

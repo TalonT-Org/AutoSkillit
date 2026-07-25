@@ -77,11 +77,18 @@ def cook(
     from autoskillit.execution import get_backend
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
+        DefaultSkillResolver,
         SkillsDirectoryProvider,
+        project_plugin_source,
         resolve_ephemeral_root,
+        validate_skill_tier_roles,
     )
 
     config = load_config()
+    project_dir = Path.cwd()
+    skill_resolver = DefaultSkillResolver()
+    skill_visibility = config.skill_visibility_spec()
+    validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
     if backend is None:
         backend = get_backend(config.agent_backend.backend)
 
@@ -159,11 +166,13 @@ def cook(
         NamedResume,
         NoResume,
         SessionType,
+        SkillExecutionRole,
         _get_autoskillit_install_path,
         configure_logging,
         get_logger,
         pkg_root,
         resume_spec_from_cli,
+        temp_dir_display_str,
         write_registry_entry,
     )
 
@@ -173,7 +182,6 @@ def cook(
 
     resume_spec = resume_spec_from_cli(resume=resume, session_id=session_id)
 
-    project_dir = Path.cwd()
     initial_prompt: str | None = None
     _first_run = is_first_run(project_dir)
     if _first_run:
@@ -182,14 +190,27 @@ def cook(
     session_id_local = uuid.uuid4().hex[:16]
     write_registry_entry(project_dir, session_id_local, SESSION_TYPE_COOK, None)
     ephemeral_root = resolve_ephemeral_root()
-    session_mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), ephemeral_root)
+    skills_provider = SkillsDirectoryProvider(
+        temp_dir_relpath=temp_dir_display_str(config.workspace.temp_dir),
+        default_base_branch=config.branching.default_base_branch,
+    )
+    session_mgr = DefaultSessionSkillManager(skills_provider, ephemeral_root)
     session_mgr.cleanup_stale()
+    session_catalog = skill_resolver.list_effective(
+        project_dir,
+        SkillExecutionRole.SESSION,
+        visibility=skill_visibility,
+        cook_session=True,
+    )
+    projection_context = skills_provider.catalog_projection_context(
+        session_catalog,
+        project_dir,
+        backend=backend,
+    )
     skills_dir = session_mgr.init_session(
         session_id_local,
-        cook_session=True,
-        config=config,
-        project_dir=project_dir,
-        backend=backend,
+        session_catalog,
+        projection_context,
     )
 
     plugin_source: MarketplaceInstall | DirectInstall
@@ -204,6 +225,13 @@ def cook(
             plugin_source = DirectInstall(plugin_dir=pkg_root())
     else:
         plugin_source = DirectInstall(plugin_dir=pkg_root())
+    plugin_source = project_plugin_source(
+        plugin_source,
+        cwd=project_dir,
+        backend=backend,
+        default_base_branch=config.branching.default_base_branch,
+        skill_catalog=session_catalog,
+    )
 
     if isinstance(resume_spec, BareResume):
         from autoskillit.cli.session._session_picker import pick_session

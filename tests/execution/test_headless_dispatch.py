@@ -51,6 +51,7 @@ class TestDispatchFoodTruck:
             "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
+            plugin_source=minimal_ctx.plugin_source,
         )
 
         assert runner.call_args_list, "runner was never called"
@@ -188,6 +189,7 @@ class TestDispatchFoodTruck:
             "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
+            plugin_source=minimal_ctx.plugin_source,
         )
         cmd, _cwd, _timeout, _kwargs = runner.call_args_list[0]
         assert "--plugin-dir" in cmd

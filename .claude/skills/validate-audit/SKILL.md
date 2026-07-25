@@ -1,6 +1,7 @@
 ---
 name: validate-audit
 categories: [audit]
+uses_capabilities: [agent_model, github_api_write]
 description: Validate audit findings from audit-arch, audit-tests, or audit-cohesion against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
 hooks:
   PreToolUse:

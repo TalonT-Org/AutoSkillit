@@ -22,6 +22,7 @@ from autoskillit.core import (
     FleetLock,
     MarketplaceInstall,
     PluginSource,
+    SkillExecutionRole,
     SubprocessRunner,
     WriteBehaviorSpec,
     _get_autoskillit_install_path,
@@ -43,6 +44,7 @@ from autoskillit.execution import (
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
     DefaultMergeQueueWatcher,
+    DefaultSkillSessionContractStore,
     DefaultSubprocessRunner,
     DefaultTestRunner,
     RecordingSubprocessRunner,
@@ -73,7 +75,9 @@ from autoskillit.workspace import (
     DefaultSessionSkillManager,
     DefaultWorkspaceManager,
     SkillsDirectoryProvider,
+    project_plugin_source,
     resolve_ephemeral_root,
+    validate_skill_tier_roles,
 )
 
 logger = get_logger(__name__)
@@ -305,7 +309,6 @@ def make_context(
             resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
     else:
         resolved_plugin_source = DirectInstall(plugin_dir=_default_plugin_dir())
-    plugin_source = resolved_plugin_source
     gate = DefaultGateState(enabled=False)
 
     project_dir = project_dir if project_dir is not None else _resolve_project_dir()
@@ -315,6 +318,20 @@ def make_context(
     provider = SkillsDirectoryProvider(
         temp_dir_relpath=temp_dir_relpath,
         default_base_branch=config.branching.default_base_branch,
+    )
+    skill_visibility = config.skill_visibility_spec()
+    validate_skill_tier_roles(skill_visibility, provider.resolver, project_dir)
+    session_catalog = provider.resolver.list_effective(
+        project_dir,
+        SkillExecutionRole.SESSION,
+        visibility=skill_visibility,
+    )
+    plugin_source = project_plugin_source(
+        resolved_plugin_source,
+        cwd=project_dir,
+        backend=backend,
+        default_base_branch=config.branching.default_base_branch,
+        skill_catalog=session_catalog,
     )
     ephemeral_root = resolve_ephemeral_root()
     codex_root = temp_dir / "codex-sessions"
@@ -345,6 +362,7 @@ def make_context(
         github_api_log=github_api_log,
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
+        skill_session_contract_store=DefaultSkillSessionContractStore(),
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         session_serve_overrides=None,

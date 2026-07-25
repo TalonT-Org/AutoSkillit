@@ -108,9 +108,8 @@ def test_feature_depends_on_references_valid_features():
     assert not violations, "\n".join(violations)
 
 
-def test_every_feature_with_skill_categories_has_recipe_enablement_path():
-    """Every FEATURE_REGISTRY entry with non-empty skill_categories must have
-    init_session accept recipe_features so it is testable via recipe-level enablement."""
+def test_session_materialization_accepts_only_prevalidated_catalogs():
+    """Feature selection must finish before the materialization boundary."""
     import inspect
 
     from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
@@ -122,10 +121,13 @@ def test_every_feature_with_skill_categories_has_recipe_enablement_path():
     )
 
     sig = inspect.signature(DefaultSessionSkillManager.init_session)
-    assert "recipe_features" in sig.parameters, (
-        "DefaultSessionSkillManager.init_session must accept recipe_features parameter "
-        "so recipes can enable feature-gated skill categories"
+    assert tuple(sig.parameters) == (
+        "self",
+        "session_id",
+        "catalog",
+        "projection_context",
     )
+    assert "recipe_features" not in sig.parameters
 
 
 def test_feature_skill_categories_match_real_skills():

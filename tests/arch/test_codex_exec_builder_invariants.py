@@ -89,6 +89,7 @@ _REINJECTED_BY_BUILDER: dict[str, set[str]] = {
         "MAX_MCP_OUTPUT_TOKENS",
         "AUTOSKILLIT_CWD",
         "AUTOSKILLIT_COMPLETION_MARKER",
+        "CODEX_HOME",
     },
     "resume": {"MAX_MCP_OUTPUT_TOKENS"},
 }

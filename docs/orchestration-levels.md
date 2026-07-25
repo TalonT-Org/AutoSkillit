@@ -55,7 +55,7 @@ Key properties:
 
 - Interactive variant: `autoskillit order` (CLI label `"order"`; headless equivalent carries SessionType `ORCHESTRATOR`)
 - Headless variant: food truck (dispatched by L3, SessionType `ORCHESTRATOR`)
-- Spawns L1 workers via `run_skill`
+- Owns `run_skill` exactly and spawns L1 workers through it
 - Has full kitchen access (38 kitchen-tagged MCP tools)
 
 ```
@@ -77,12 +77,13 @@ Key properties:
 
 - Interactive only: `autoskillit fleet` (SessionType `FLEET`)
 - No headless variant (nothing above L3 to dispatch it)
-- Dispatches L2 food trucks via `run_skill`
+- Dispatches L2 food trucks via `dispatch_food_truck`
+- Cannot call `run_skill`; doing so would skip the L2 boundary
 - Manages campaign state via the sidecar JSONL file
 
 ```
 L3 (interactive fleet)
-└── L2 food truck  (run_skill → headless L2)
+└── L2 food truck  (dispatch_food_truck)
     └── L1 worker  (run_skill)
         └── L0 subagent  (Agent/Task tool)
 ```
@@ -104,17 +105,19 @@ L3 (interactive fleet)
 
 ## Key Rules
 
-- **Headless L1 workers cannot call `run_skill`.** The boundary is enforced three ways:
-  FastMCP visibility tags, the `skill_orchestration_guard.py` PreToolUse hook,
-  and the `_require_orchestrator_or_higher()` runtime guard in
-  `tools_execution.py`. All three must independently agree.
+- **`run_skill` is exact-L2.** Headless L1 and L3 sessions are denied. The boundary is
+  enforced by visibility, `skill_orchestration_guard.py`, and the
+  `_require_orchestrator_exact()` runtime guard in `tools_execution.py`.
+- **`run_cmd` and `run_python` remain L2-or-higher.** L2 and L3 may call them; headless
+  L1 may not. Interactive sessions retain the existing headless-guard bypass.
 - **L0 agents cannot launch anything.** They are terminal nodes — they cannot
   call `run_skill`, cannot invoke the Agent tool to spawn sub-agents, and
   cannot open sub-sessions. (L0 agents are themselves spawned via Agent/Task
   by an L1 — the constraint is on outbound calls only.)
 - **L3 has no headless variant.** There is no L4 to dispatch an L3. Fleet
   always runs interactively.
-- **Spawning is strictly downward.** An L2 dispatches L1, an L1 spawns L0.
+- **Spawning is strictly downward.** L3 dispatches L2 with `dispatch_food_truck`, L2
+  dispatches L1 with `run_skill`, and L1 spawns L0.
   No level can spawn a peer or a higher level.
 - **food trucks are L2, not L1.** A food truck is a headless L2 session
   dispatched by an L3 fleet. It retains full orchestrator capabilities

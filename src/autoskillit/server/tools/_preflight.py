@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CodingAgentBackend,
+    SkillContractError,
+    SkillExecutionRole,
     describe_capability_mismatches,
     unsatisfied_backend_capabilities,
 )
@@ -66,6 +68,7 @@ def _check_dispatch_feasibility(
     *,
     config_backend: AgentBackendConfig | None = None,
     skill_resolver: SkillResolver | None,
+    project_root: Path | None = None,
 ) -> str | None:
     """Fail-closed dispatch-feasibility preflight.
 
@@ -140,26 +143,48 @@ def _check_dispatch_feasibility(
                     getattr(_step_obj, "skill_name", None) if _step_obj is not None else None
                 )
                 if _skill_name:
-                    _skill_info = skill_resolver.resolve(_skill_name)
-                    if _skill_info is None:
+                    try:
+                        _skill_invocation = skill_resolver.resolve_invocation(
+                            _skill_name,
+                            project_root,
+                            SkillExecutionRole.SESSION,
+                        )
+                    except SkillContractError as exc:
                         return json.dumps(
                             {
                                 "success": False,
                                 "kitchen": "preflight_failed",
                                 "user_visible_message": (
                                     f"Cannot verify capability feasibility for explicitly-pinned "
-                                    f"step '{step_name}': skill '{_skill_name}' could not be "
-                                    "resolved."
+                                    f"step '{step_name}': skill '{_skill_name}' has no valid "
+                                    f"effective invocation. {exc}"
                                 ),
-                                "error": "skill_not_found_for_pinned_step",
+                                "error": "invalid_skill_invocation_for_pinned_step",
                                 "stage": "dispatch_feasibility_preflight",
                                 "step": step_name,
                                 "skill": _skill_name,
                             }
                         )
-                    _skill_caps: frozenset[str] = getattr(
-                        _skill_info, "uses_capabilities", frozenset()
-                    )
+                    _requirements: frozenset[str] = _skill_invocation.backend_requirements
+                    if _requirements and _pinned_backend.name not in _requirements:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "kitchen": "preflight_failed",
+                                "user_visible_message": (
+                                    f"Cannot dispatch step '{step_name}': explicitly pinned "
+                                    f"to backend '{_explicit}', but effective skill "
+                                    f"invocation '{_skill_name}' requires "
+                                    f"{sorted(_requirements)}."
+                                ),
+                                "error": "backend_requirements_unsatisfied",
+                                "stage": "dispatch_feasibility_preflight",
+                                "backend": _explicit,
+                                "step": step_name,
+                                "skill": _skill_name,
+                            }
+                        )
+                    _skill_caps = _skill_invocation.capability_union
                     if _skill_caps:
                         hard_cap_err = check_hard_capability_feasibility(
                             _skill_caps, _pinned_backend

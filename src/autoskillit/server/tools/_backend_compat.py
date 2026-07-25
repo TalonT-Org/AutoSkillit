@@ -3,27 +3,68 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     CodingAgentBackend,
+    SkillContractError,
+    SkillExecutionRole,
     SkillResult,
+    ValidatedAddDir,
     extract_skill_name,
-    resolve_target_skill,
+    render_target_skill_command,
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,
     check_hard_capability_feasibility,
+)
+from autoskillit.workspace import (
+    EffectiveSkillDispatchContract,
+    SkillProjectionContext,
+    build_effective_skill_dispatch_contract,
 )
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 
-def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool:
-    """Return True if skill's backend_requirements exclude effective_backend."""
-    reqs = getattr(skill_info, "backend_requirements", None)
+@dataclass(frozen=True, slots=True)
+class DirectSkillDispatch:
+    """Projected materialization retained for one direct headless dispatch."""
+
+    add_dirs: tuple[ValidatedAddDir, ...]
+    session_id: str
+    capability_contract: EffectiveSkillDispatchContract
+
+    def __post_init__(self) -> None:
+        if self.capability_contract.invocation is None:
+            raise SkillContractError("direct skill dispatch must bind an invocation")
+
+    @property
+    def resolved_command(self) -> str:
+        return self.capability_contract.resolved_command
+
+    @property
+    def invocation(self) -> object:
+        assert self.capability_contract.invocation is not None
+        return self.capability_contract.invocation
+
+    @property
+    def projection_context(self) -> SkillProjectionContext:
+        return self.capability_contract.projection_context
+
+    def cleanup(self, tool_ctx: ToolContext) -> None:
+        if tool_ctx.session_skill_manager is not None:
+            tool_ctx.session_skill_manager.cleanup_session(self.session_id)
+
+
+def _is_backend_incompatible(skill_invocation: object, effective_backend: str) -> bool:
+    """Return True if the closure's derived requirements exclude the backend."""
+    reqs = getattr(skill_invocation, "backend_requirements", None)
     return bool(reqs and effective_backend not in reqs)
 
 
@@ -36,7 +77,13 @@ def _check_backend_compat(
     effective_backend_obj: CodingAgentBackend | None,
     skill_resolver: object | None,
 ) -> str | None:
-    """Fail closed when a skill is incompatible with its effective backend."""
+    """Fail closed when an effective skill invocation is backend-incompatible.
+
+    ``skill_info`` retains its compatibility-facing parameter name because
+    ``tools_execution`` still calls this helper by keyword. The value is an
+    ``EffectiveSkillInvocation``; policy reads its closure-wide capability union
+    and derived backend requirements.
+    """
     if target_name is None:
         return None
     if skill_resolver is None:
@@ -69,7 +116,7 @@ def _check_backend_compat(
             skill_command=resolved_command,
             order_id=effective_order_id,
         ).to_json()
-    skill_capabilities: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
+    skill_capabilities: frozenset[str] = getattr(skill_info, "capability_union", frozenset())
     if skill_capabilities:
         hard_capability_error = check_hard_capability_feasibility(
             skill_capabilities, effective_backend_obj
@@ -107,21 +154,130 @@ def _resolve_and_check_backend_compat(
     """Resolve a direct skill invocation and run the fail-closed compatibility gate."""
     resolved_command = skill_command
     target_name = extract_skill_name(skill_command)
-    skill_info: object | None = None
-    if tool_ctx.skill_resolver is not None:
-        resolved_command, target_name = resolve_target_skill(
-            skill_command,
-            tool_ctx.skill_resolver,
-        )
-        if target_name is not None:
-            skill_info = tool_ctx.skill_resolver.resolve(target_name)
+    skill_invocation: object | None = None
+    if tool_ctx.skill_resolver is not None and target_name is not None:
+        try:
+            skill_invocation = tool_ctx.skill_resolver.resolve_invocation(
+                target_name,
+                tool_ctx.project_dir,
+                SkillExecutionRole.SESSION,
+                visibility=tool_ctx.config.skill_visibility_spec(),
+                recipe_packs=tool_ctx.active_recipe_packs,
+                recipe_features=tool_ctx.active_recipe_features,
+            )
+        except SkillContractError as exc:
+            return SkillResult.crashed(
+                exception=exc,
+                skill_command=resolved_command,
+                order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
+            ).to_json()
 
     return _check_backend_compat(
         skill_command=skill_command,
         resolved_command=resolved_command,
         effective_order_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),
         target_name=target_name,
-        skill_info=skill_info,
+        skill_info=skill_invocation,
         effective_backend_obj=tool_ctx.backend,
         skill_resolver=tool_ctx.skill_resolver,
     )
+
+
+def _prepare_direct_skill_dispatch(
+    skill_command: str,
+    cwd: str | Path,
+    tool_ctx: ToolContext,
+) -> tuple[DirectSkillDispatch | None, str | None]:
+    """Resolve policy once, then materialize its agent-safe projection."""
+    target_name = extract_skill_name(skill_command)
+    order_id = os.environ.get(DISPATCH_ID_ENV_VAR, "")
+    if target_name is None:
+        return None, SkillResult.crashed(
+            exception=SkillContractError("Direct dispatch requires a skill command"),
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+    if tool_ctx.skill_resolver is None:
+        return None, SkillResult.crashed(
+            exception=SkillContractError(
+                f"Cannot resolve direct skill {target_name!r}: skill resolver is unavailable"
+            ),
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+    if tool_ctx.session_skill_manager is None:
+        return None, SkillResult.crashed(
+            exception=SkillContractError(
+                f"Cannot materialize direct skill {target_name!r}: "
+                "session skill manager is unavailable"
+            ),
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+    try:
+        invocation = tool_ctx.skill_resolver.resolve_invocation(
+            target_name,
+            tool_ctx.project_dir,
+            SkillExecutionRole.SESSION,
+            visibility=tool_ctx.config.skill_visibility_spec(),
+            recipe_packs=tool_ctx.active_recipe_packs,
+            recipe_features=tool_ctx.active_recipe_features,
+        )
+    except SkillContractError as exc:
+        return None, SkillResult.crashed(
+            exception=exc,
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+
+    compatibility_error = _check_backend_compat(
+        skill_command=skill_command,
+        resolved_command=skill_command,
+        effective_order_id=order_id,
+        target_name=target_name,
+        skill_info=invocation,
+        effective_backend_obj=tool_ctx.backend,
+        skill_resolver=tool_ctx.skill_resolver,
+    )
+    if compatibility_error is not None:
+        return None, compatibility_error
+
+    normalized_cwd = Path(cwd).resolve()
+    backend = tool_ctx.backend
+    projection_context = SkillProjectionContext(
+        cwd=normalized_cwd,
+        invocation=invocation,
+        backend=backend,
+        conventions=backend.conventions if backend is not None else None,
+        substitutions={"{{AUTOSKILLIT_TEMP}}": str(normalized_cwd / ".autoskillit" / "temp")},
+        gating=False,
+    )
+    session_id = f"direct-{uuid4().hex[:12]}"
+    try:
+        add_dir = tool_ctx.session_skill_manager.materialize_invocation(
+            session_id,
+            invocation,
+            projection_context,
+        )
+    except (OSError, RuntimeError, ValueError, SkillContractError) as exc:
+        tool_ctx.session_skill_manager.cleanup_session(session_id)
+        return None, SkillResult.crashed(
+            exception=exc,
+            skill_command=skill_command,
+            order_id=order_id,
+        ).to_json()
+    resolved_command = render_target_skill_command(
+        skill_command,
+        invocation.root.source_ref or invocation.root.source,
+        backend.conventions if backend is not None else None,
+    )
+    capability_contract = build_effective_skill_dispatch_contract(
+        resolved_command,
+        projection_context,
+        artifact_paths=(add_dir.path,),
+    )
+    return DirectSkillDispatch(
+        add_dirs=(add_dir,),
+        session_id=session_id,
+        capability_contract=capability_contract,
+    ), None

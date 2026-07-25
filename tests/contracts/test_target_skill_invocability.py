@@ -10,91 +10,16 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.config import AutomationConfig, load_config
 from autoskillit.core import SkillSource, extract_skill_name, resolve_target_skill
 from autoskillit.recipe import load_recipe
 from autoskillit.recipe.io import all_validated_recipe_paths
 from autoskillit.workspace import (
-    DefaultSessionSkillManager,
     DefaultSkillResolver,
-    SkillsDirectoryProvider,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-
-
-def _make_session(
-    tmp_path: Path,
-    target_skill: str,
-    config: AutomationConfig | None = None,
-) -> tuple[DefaultSessionSkillManager, str, str]:
-    """Create an ephemeral session and activate the target skill if Tier 2.
-
-    Returns (manager, session_id, ephemeral_root_str).
-    """
-    provider = SkillsDirectoryProvider()
-    mgr = DefaultSessionSkillManager(provider, tmp_path)
-    if config is None:
-        config = load_config()
-    session_id = "test-session-001"
-    closure = mgr.compute_skill_closure(target_skill)
-    mgr.init_session(
-        session_id,
-        cook_session=False,
-        config=config,
-        allow_only=closure if closure else None,
-    )
-    tier2 = frozenset(config.skills.tier2)
-    if target_skill in tier2:
-        mgr.activate_skill_deps(session_id, target_skill)
-    return mgr, session_id, str(tmp_path)
-
-
-def _read_skill_md(tmp_path: Path, session_id: str, skill_name: str) -> str:
-    """Read the ephemeral SKILL.md for a given skill in a session."""
-    return (tmp_path / session_id / ".claude" / "skills" / skill_name / "SKILL.md").read_text()
-
-
-class TestTargetSkillNotGatedAfterActivation:
-    """Tier 2 target skills must have disable-model-invocation removed after activation."""
-
-    def test_tier2_target_skill_not_gated_after_activation(self, tmp_path: Path) -> None:
-        config = load_config()
-        tier2 = list(config.skills.tier2)
-        assert len(tier2) > 0, "No Tier 2 skills configured"
-        target = tier2[0]
-
-        _make_session(tmp_path, target, config)
-        content = _read_skill_md(tmp_path, "test-session-001", target)
-        assert "disable-model-invocation: true" not in content
-
-    def test_other_tier2_skills_remain_gated(self, tmp_path: Path) -> None:
-        config = load_config()
-        tier2 = list(config.skills.tier2)
-        assert len(tier2) > 1, "Need at least 2 Tier 2 skills"
-        target = tier2[0]
-
-        _make_session(tmp_path, target, config)
-        for other in tier2[1:]:
-            path = tmp_path / "test-session-001" / ".claude" / "skills" / other / "SKILL.md"
-            if path.exists():
-                content = path.read_text()
-                assert "disable-model-invocation: true" in content, (
-                    f"Non-target Tier 2 skill '{other}' should remain gated"
-                )
-
-    def test_tier3_target_skill_never_gated(self, tmp_path: Path) -> None:
-        config = load_config()
-        tier3 = list(config.skills.tier3)
-        if not tier3:
-            pytest.skip("No Tier 3 skills configured")
-        target = tier3[0]
-
-        _make_session(tmp_path, target, config)
-        content = _read_skill_md(tmp_path, "test-session-001", target)
-        assert "disable-model-invocation: true" not in content
 
 
 class TestResolvedNamespaceMatchesSkillLocation:
@@ -105,7 +30,9 @@ class TestResolvedNamespaceMatchesSkillLocation:
         info = resolver.resolve("make-plan")
         assert info is not None
         assert info.source == SkillSource.BUNDLED_EXTENDED
-        resolved, name = resolve_target_skill("/autoskillit:make-plan arg1", resolver)
+        resolved, name = resolve_target_skill(
+            "/autoskillit:make-plan arg1", resolver, _PROJECT_ROOT
+        )
         assert name == "make-plan"
         assert resolved == "/make-plan arg1"
 
@@ -114,114 +41,117 @@ class TestResolvedNamespaceMatchesSkillLocation:
         info = resolver.resolve("open-kitchen")
         assert info is not None
         assert info.source == SkillSource.BUNDLED
-        resolved, name = resolve_target_skill("/open-kitchen", resolver)
+        resolved, name = resolve_target_skill("/open-kitchen", resolver, _PROJECT_ROOT)
         assert name == "open-kitchen"
         assert resolved == "/autoskillit:open-kitchen"
 
     def test_already_correct_namespace_is_preserved(self) -> None:
         resolver = DefaultSkillResolver()
-        resolved, name = resolve_target_skill("/make-plan arg1 arg2", resolver)
+        resolved, name = resolve_target_skill("/make-plan arg1 arg2", resolver, _PROJECT_ROOT)
         assert name == "make-plan"
         assert resolved == "/make-plan arg1 arg2"
 
     def test_non_slash_command_passes_through(self) -> None:
         resolver = DefaultSkillResolver()
-        resolved, name = resolve_target_skill("Fix the bug", resolver)
+        resolved, name = resolve_target_skill("Fix the bug", resolver, _PROJECT_ROOT)
         assert name is None
         assert resolved == "Fix the bug"
 
-
-class TestDepSkillsNotGatedAfterActivation:
-    """After activating a target with activate_deps, dependency skills are also ungated."""
-
-    def test_dep_skills_not_gated_after_activation(self, tmp_path: Path) -> None:
-        """Activating make-plan delivers and ungates only its retained dependency."""
-        config = load_config()
-        provider = SkillsDirectoryProvider()
-        mgr = DefaultSessionSkillManager(provider, tmp_path)
-        session_id = "test-dep-activation"
-        closure = mgr.compute_skill_closure("make-plan")
-        assert closure == frozenset({"make-plan", "write-recipe"})
-        mgr.init_session(
-            session_id,
-            cook_session=False,
-            config=config,
-            allow_only=closure if closure else None,
+    def test_project_override_controls_target_namespace(self, tmp_path: Path) -> None:
+        override = tmp_path / ".claude" / "skills" / "open-kitchen" / "SKILL.md"
+        override.parent.mkdir(parents=True)
+        override.write_text(
+            "---\n"
+            "name: open-kitchen\n"
+            "description: Project-local target.\n"
+            "execution_role: session\n"
+            "---\n"
+            "override\n"
         )
-        mgr.activate_skill_deps(session_id, "make-plan")
 
-        skills_base = tmp_path / session_id / ".claude" / "skills"
-        delivered = {path.parent.name for path in skills_base.glob("*/SKILL.md")}
-        assert delivered == set(closure)
-        for name in closure:
-            content = (skills_base / name / "SKILL.md").read_text()
-            assert "disable-model-invocation: true" not in content
+        resolved, name = resolve_target_skill(
+            "/autoskillit:open-kitchen",
+            DefaultSkillResolver(),
+            tmp_path,
+        )
+
+        assert name == "open-kitchen"
+        assert resolved == "/open-kitchen"
+
+
+class TestRoleDerivedInvocability:
+    def test_process_issues_only_appears_in_orchestrator_catalog(self) -> None:
+        from autoskillit.core import SkillExecutionRole
+
+        resolver = DefaultSkillResolver()
+        session_names = {
+            skill.name
+            for skill in resolver.list_effective(_PROJECT_ROOT, SkillExecutionRole.SESSION).skills
+        }
+        orchestrator_names = {
+            skill.name
+            for skill in resolver.list_effective(
+                _PROJECT_ROOT, SkillExecutionRole.ORCHESTRATOR
+            ).skills
+        }
+
+        assert "process-issues" not in session_names
+        assert "process-issues" in orchestrator_names
+
+    def test_direct_session_invocation_cannot_target_process_issues(self) -> None:
+        from autoskillit.core import SkillContractError, SkillExecutionRole
+
+        resolver = DefaultSkillResolver()
+        with pytest.raises(SkillContractError, match="process-issues|ORCHESTRATOR"):
+            resolver.resolve_invocation(
+                "process-issues",
+                _PROJECT_ROOT,
+                SkillExecutionRole.SESSION,
+            )
+
+        assert (
+            resolver.resolve_invocation(
+                "process-issues",
+                _PROJECT_ROOT,
+                SkillExecutionRole.ORCHESTRATOR,
+            )
+            is not None
+        )
 
 
 class TestAllRecipeSkillCommandsInvocable:
-    """Every run_skill step in bundled recipes must resolve to an invocable form."""
+    """Every static run_skill target must resolve to an exact SESSION invocation."""
 
-    def test_all_bundled_recipes_skill_commands_invocable_after_init_session(
-        self, tmp_path: Path
-    ) -> None:
-        config = load_config()
-        tier2 = frozenset(config.skills.tier2)
+    def test_all_bundled_recipe_targets_resolve_exact_invocations(self) -> None:
+        from autoskillit.core import SkillExecutionRole
+
         resolver = DefaultSkillResolver()
-        provider = SkillsDirectoryProvider()
-
-        _bundled_only = [
-            p
-            for p in all_validated_recipe_paths(_PROJECT_ROOT)
-            if "src/autoskillit/recipes" in str(p)
+        bundled_recipes = [
+            path
+            for path in all_validated_recipe_paths(_PROJECT_ROOT)
+            if "src/autoskillit/recipes" in str(path)
         ]
-        for yaml_path in _bundled_only:
+        for yaml_path in bundled_recipes:
             recipe = load_recipe(yaml_path)
             for step_name, step in recipe.steps.items():
                 if step.tool != "run_skill":
                     continue
-                sc = step.with_args.get("skill_command", "")
-                if "${{" in sc:
-                    continue  # skip dynamic skill commands
-
-                name = extract_skill_name(sc)
+                skill_command = step.with_args.get("skill_command", "")
+                if "{" in skill_command:
+                    continue
+                name = extract_skill_name(skill_command)
                 if name is None:
                     continue
 
-                # Verify namespace resolution
-                resolved, resolved_name = resolve_target_skill(sc, resolver)
-                info = resolver.resolve(name)
-                if info is None:
-                    continue  # covered by unknown-skill-command rule
-
-                if info.source == SkillSource.BUNDLED_EXTENDED:
-                    assert not resolved.startswith("/autoskillit:"), (
-                        f"Recipe '{yaml_path.stem}' step '{step_name}': "
-                        f"skill '{name}' is BUNDLED_EXTENDED but resolved to "
-                        f"'{resolved}' (should use bare /name namespace)"
-                    )
-                elif info.source == SkillSource.BUNDLED:
-                    assert resolved.startswith("/autoskillit:"), (
-                        f"Recipe '{yaml_path.stem}' step '{step_name}': "
-                        f"skill '{name}' is BUNDLED but resolved to "
-                        f"'{resolved}' (should use /autoskillit: namespace)"
-                    )
-
-                # Verify activation: after init_session + activate_skill_deps, target is invocable
-                session_id = f"test-{yaml_path.stem}-{step_name}"
-                mgr = DefaultSessionSkillManager(provider, tmp_path)
-                closure = mgr.compute_skill_closure(name)
-                mgr.init_session(
-                    session_id,
-                    cook_session=False,
-                    config=config,
-                    allow_only=closure if closure else None,
+                invocation = resolver.resolve_invocation(
+                    name,
+                    _PROJECT_ROOT,
+                    SkillExecutionRole.SESSION,
                 )
-                if name in tier2:
-                    mgr.activate_skill_deps(session_id, name)
-                skill_md_path = tmp_path / session_id / ".claude" / "skills" / name / "SKILL.md"
-                if skill_md_path.exists():
-                    content = skill_md_path.read_text()
-                    assert "disable-model-invocation: true" not in content, (
-                        f"Recipe '{yaml_path.stem}' step '{step_name}': "
-                        f"target skill '{name}' still gated after activation"
-                    )
+
+                assert invocation is not None, (
+                    f"Recipe {yaml_path.stem!r} step {step_name!r} has "
+                    f"unresolvable target {name!r}"
+                )
+                assert invocation.root.name == name
+                assert invocation.root in invocation.closure

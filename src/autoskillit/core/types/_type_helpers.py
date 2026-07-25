@@ -11,13 +11,16 @@ import os
 import re
 import shlex
 import warnings
-from typing import Any
+from pathlib import Path
+from typing import Any, assert_never
 
-from ._type_constants import AUTOSKILLIT_SKILL_PREFIX, SKILL_COMMAND_PREFIX
+from ._type_backend import BackendConventions
+from ._type_constants import SKILL_COMMAND_PREFIX
 from ._type_constants_env import HEADLESS_ENV_VAR, SESSION_TYPE_ENV_VAR
 from ._type_constants_registries import FLEET_ERROR_CODES
 from ._type_enums import SessionType, SkillSource
 from ._type_protocols_workspace import SkillResolver
+from ._type_skill_contract import SkillSourceRef
 
 __all__ = [
     "is_path_like_token",
@@ -25,6 +28,7 @@ __all__ = [
     "extract_positional_args",
     "extract_skill_name",
     "fleet_error",
+    "render_target_skill_command",
     "resolve_skill_name",
     "resolve_target_skill",
     "session_type",
@@ -117,6 +121,7 @@ def resolve_skill_name(skill_command: str) -> str | None:
 def resolve_target_skill(
     skill_command: str,
     resolver: SkillResolver,
+    project_root: Path | None,
 ) -> tuple[str, str | None]:
     """Resolve a skill_command to the correct invocation namespace.
 
@@ -130,15 +135,41 @@ def resolve_target_skill(
     if name is None:
         return skill_command, None
 
-    info = resolver.resolve(name)
+    info = resolver.resolve_effective(name, project_root)
     if info is None:
         return skill_command, name
 
-    # Determine correct prefix based on physical location
-    if info.source == SkillSource.BUNDLED:
-        correct_prefix = AUTOSKILLIT_SKILL_PREFIX + name
-    else:
-        correct_prefix = SKILL_COMMAND_PREFIX + name
+    return render_target_skill_command(
+        skill_command,
+        info.source_ref or info.source,
+    ), name
+
+
+def render_target_skill_command(
+    skill_command: str,
+    source_ref: SkillSourceRef | SkillSource,
+    conventions: BackendConventions | None = None,
+) -> str:
+    """Render a logical target from its effective source and backend conventions."""
+    name = extract_skill_name(skill_command)
+    if name is None:
+        return skill_command
+
+    source = source_ref.origin if isinstance(source_ref, SkillSourceRef) else source_ref
+    configured_sigil = conventions.skill_sigil if conventions is not None else SKILL_COMMAND_PREFIX
+    sigil = (
+        configured_sigil
+        if isinstance(configured_sigil, str) and configured_sigil
+        else SKILL_COMMAND_PREFIX
+    )
+    match source:
+        case SkillSource.BUNDLED:
+            namespace = "autoskillit:" if sigil == SKILL_COMMAND_PREFIX else ""
+        case SkillSource.BUNDLED_EXTENDED | SkillSource.PROJECT_LOCAL | SkillSource.THIRD_PARTY:
+            namespace = ""
+        case _ as unreachable:
+            assert_never(unreachable)
+    correct_prefix = f"{sigil}{namespace}{name}"
 
     # Reconstruct: replace the skill reference, preserve trailing arguments
     stripped = skill_command.strip()
@@ -146,7 +177,7 @@ def resolve_target_skill(
     if m is None:
         raise RuntimeError(f"regex failed after extract_skill_name succeeded: {stripped!r}")
     remainder = stripped[m.end() :]
-    return correct_prefix + remainder, name
+    return correct_prefix + remainder
 
 
 def truncate_text(text: str, max_len: int = 5000) -> str:

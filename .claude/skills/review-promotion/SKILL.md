@@ -1,6 +1,7 @@
 ---
 name: review-promotion
 categories: [github]
+uses_capabilities: [agent_model]
 description: >
   Reviewer-facing deep analysis of an integration-to-main promotion. Performs domain
   risk scoring, breaking change audit, regression risk assessment, test coverage delta,

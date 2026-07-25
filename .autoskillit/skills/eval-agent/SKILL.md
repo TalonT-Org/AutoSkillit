@@ -1,6 +1,7 @@
 ---
 name: eval-agent
 categories: [eval]
+uses_capabilities: [agent_subagent]
 description: >
   Invoke a named agent definition against a provided prompt and capture its output.
   Execution primitive for the agent-eval recipe — isolates a single agent invocation.

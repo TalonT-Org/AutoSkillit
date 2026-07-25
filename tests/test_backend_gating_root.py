@@ -18,6 +18,7 @@ pytestmark = [pytest.mark.small]
 
 @pytest.mark.anyio
 async def test_triage_batch_non_claude_backend_returns_all_meaningful(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Non-claude-code backend returns meaningful=True without spawning a subprocess."""
@@ -36,7 +37,7 @@ async def test_triage_batch_non_claude_backend_returns_all_meaningful(
     mock_run = AsyncMock()
     monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
 
-    results = await _triage_batch(items, cache, backend=CodexBackend())
+    results = await _triage_batch(items, cache, cwd=tmp_path, backend=CodexBackend())
 
     assert len(results) == 1
     assert results[0]["meaningful"] is True
@@ -50,11 +51,10 @@ async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
 ):
     """triage_staleness with non-claude-code backend skips subprocess and returns meaningful."""
 
-    skill_dir = tmp_path / "my-skill"
-    skill_dir.mkdir()
+    skill_dir = tmp_path / ".claude" / "skills" / "my-skill"
+    skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# dummy\nContent.")
 
-    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
     mock_run = AsyncMock()
     monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
 
@@ -67,7 +67,11 @@ async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
         ),
     ]
 
-    results = await triage_staleness(items, backend=CodexBackend())
+    results = await triage_staleness(
+        items,
+        project_root=tmp_path,
+        backend=CodexBackend(),
+    )
 
     assert len(results) == 1
     assert results[0]["meaningful"] is True
@@ -77,6 +81,7 @@ async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
 
 @pytest.mark.anyio
 async def test_triage_batch_claude_code_backend_does_call_subprocess(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """claude-code backend reaches the subprocess call."""
@@ -125,7 +130,7 @@ async def test_triage_batch_claude_code_backend_does_call_subprocess(
     mock_run = AsyncMock(return_value=fake_result)
     monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
 
-    results = await _triage_batch(items, cache, backend=ClaudeCodeBackend())
+    results = await _triage_batch(items, cache, cwd=tmp_path, backend=ClaudeCodeBackend())
 
     mock_run.assert_called_once()
     assert len(results) == 1

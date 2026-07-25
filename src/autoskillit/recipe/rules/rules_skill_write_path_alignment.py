@@ -93,7 +93,11 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
         if skill_name is None:
             continue
 
-        skill_md_path = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        skill_md_path = _resolve_skill_md(
+            skill_name,
+            project_root=ctx.project_dir,
+            resolver=ctx.skill_resolver,
+        )
         if skill_md_path is None:
             continue
 

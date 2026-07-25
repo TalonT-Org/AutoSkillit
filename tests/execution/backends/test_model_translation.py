@@ -100,11 +100,13 @@ class TestClaudeBuildCmdTranslatesModel:
         assert spec.cmd[model_idx + 1] == "sonnet[1m]"
 
     def test_build_food_truck_cmd_preserves_suffix(self) -> None:
+        from pathlib import Path
+
         from autoskillit.core import DirectInstall
 
         spec = ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=DirectInstall(plugin_dir="/tmp/plugin"),
+            plugin_source=DirectInstall(plugin_dir=Path("/tmp/plugin")),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="opus[1m]",

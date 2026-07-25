@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import SkillSource
 from autoskillit.server.tools._preflight import check_hard_capability_feasibility
 from autoskillit.server.tools.tools_execution import _is_backend_incompatible
-from autoskillit.workspace.skills import SkillInfo
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -19,30 +16,21 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 class TestBackendCompatGate:
     def test_incompatible_skill_is_blocked(self):
         """Production gate blocks skill when backend not in requirements."""
-        skill_info = SkillInfo(
-            name="investigate",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=Path("/nonexistent-test-path"),
+        skill_info = SimpleNamespace(
             backend_requirements=frozenset({"claude-code"}),
         )
         assert _is_backend_incompatible(skill_info, "codex") is True
 
     def test_compatible_skill_passes(self):
         """Production gate allows skill when backend is in requirements."""
-        skill_info = SkillInfo(
-            name="investigate",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=Path("/nonexistent-test-path"),
+        skill_info = SimpleNamespace(
             backend_requirements=frozenset({"claude-code"}),
         )
         assert _is_backend_incompatible(skill_info, "claude-code") is False
 
     def test_no_requirements_passes_any_backend(self):
         """Empty backend_requirements means any backend is allowed."""
-        skill_info = SkillInfo(
-            name="make-req",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=Path("/nonexistent-test-path"),
+        skill_info = SimpleNamespace(
             backend_requirements=frozenset(),
         )
         assert _is_backend_incompatible(skill_info, "codex") is False
@@ -50,15 +38,41 @@ class TestBackendCompatGate:
 
     def test_multi_backend_requirements(self):
         """Skill with multiple backends passes only listed ones."""
-        skill_info = SkillInfo(
-            name="multi",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=Path("/nonexistent-test-path"),
+        skill_info = SimpleNamespace(
             backend_requirements=frozenset({"claude-code", "codex"}),
         )
         assert _is_backend_incompatible(skill_info, "claude-code") is False
         assert _is_backend_incompatible(skill_info, "codex") is False
         assert _is_backend_incompatible(skill_info, "other") is True
+
+
+def test_direct_skill_dispatch_derives_authority_from_capability_contract() -> None:
+    from dataclasses import fields
+
+    from autoskillit.server.tools._backend_compat import DirectSkillDispatch
+
+    invocation = object()
+    projection_context = object()
+    capability_contract = MagicMock(
+        resolved_command="/autoskillit:prepare-issue",
+        invocation=invocation,
+        projection_context=projection_context,
+    )
+
+    dispatch = DirectSkillDispatch(
+        add_dirs=(),
+        session_id="direct-test",
+        capability_contract=capability_contract,
+    )
+
+    assert {field.name for field in fields(DirectSkillDispatch)} == {
+        "add_dirs",
+        "session_id",
+        "capability_contract",
+    }
+    assert dispatch.resolved_command == capability_contract.resolved_command
+    assert dispatch.invocation is invocation
+    assert dispatch.projection_context is projection_context
 
 
 class TestBackendCompatGateFailClosed:
@@ -207,7 +221,7 @@ class TestHardCapabilityFeasibilityPredicate:
         assert result is None
 
     def test_check_backend_compat_rejects_explicit_pin_to_incapable_backend(self):
-        """Test 1c: _check_backend_compat must reject when uses_capabilities requires
+        """Test 1c: _check_backend_compat must reject when capability_union requires
         a BackendCapabilities property the backend lacks (the explicit-pin bypass)."""
         import json
 
@@ -215,7 +229,7 @@ class TestHardCapabilityFeasibilityPredicate:
 
         skill_info = SimpleNamespace(
             backend_requirements=frozenset(),
-            uses_capabilities=frozenset({"git_metadata_write"}),
+            capability_union=frozenset({"git_metadata_write"}),
         )
         backend = self._make_backend("codex", git_metadata_writable=False)
         result = _check_backend_compat(
@@ -241,7 +255,7 @@ class TestHardCapabilityFeasibilityPredicate:
 
         skill_info = SimpleNamespace(
             backend_requirements=frozenset(),
-            uses_capabilities=frozenset({"git_metadata_write"}),
+            capability_union=frozenset({"git_metadata_write"}),
         )
         backend = self._make_backend("claude-code", git_metadata_writable=True)
         result = _check_backend_compat(
@@ -266,9 +280,15 @@ class TestHardCapabilityFeasibilityPredicate:
         import json
         from unittest.mock import MagicMock
 
-        from autoskillit.core import ValidatedAddDir
+        from autoskillit.core import (
+            SkillExecutionRole,
+            SkillSource,
+            SkillSourceRef,
+            ValidatedAddDir,
+        )
         from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
         from autoskillit.server.tools.tools_execution import run_skill
+        from autoskillit.workspace import EffectiveSkillInvocation, SkillInfo
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
@@ -283,17 +303,36 @@ class TestHardCapabilityFeasibilityPredicate:
         session_dir.mkdir()
         skill_md = session_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
         skill_md.parent.mkdir(parents=True)
-        skill_md.write_text("name: investigate\n")
+        skill_md.write_text("---\nname: investigate\ndescription: Test skill.\n---\n# Test\n")
 
         fake_validated = ValidatedAddDir(path=str(session_dir))
         mock_ssm = MagicMock()
-        mock_ssm.init_session.return_value = fake_validated
+        mock_ssm.materialize_invocation.return_value = fake_validated
+        mock_ssm.validate_session_exists.return_value = True
         tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
-        mock_skill_info = MagicMock()
-        mock_skill_info.backend_requirements = frozenset({"claude-code"})
+        mock_skill_info = SkillInfo(
+            name="investigate",
+            source=SkillSource.BUNDLED_EXTENDED,
+            path=skill_md,
+            source_ref=SkillSourceRef(
+                origin=SkillSource.BUNDLED_EXTENDED,
+                logical_name="investigate",
+                skill_path=skill_md,
+            ),
+            execution_role=SkillExecutionRole.SESSION,
+            uses_capabilities=frozenset({"open_kitchen"}),
+        )
+        mock_invocation = EffectiveSkillInvocation(
+            root=mock_skill_info,
+            closure=(mock_skill_info,),
+            capability_union=frozenset({"open_kitchen"}),
+            project_root=tmp_path,
+            execution_role=SkillExecutionRole.SESSION,
+        )
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = mock_skill_info
+        mock_resolver.resolve_invocation.return_value = mock_invocation
         tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
         monkeypatch.setattr(
@@ -310,18 +349,14 @@ class TestHardCapabilityFeasibilityPredicate:
                 },
             ),
         )
-        monkeypatch.setattr(
-            "autoskillit.server.tools.tools_execution.resolve_target_skill",
-            lambda cmd, resolver: ("/autoskillit:investigate", "investigate"),
-        )
-
         result = json.loads(await run_skill("/autoskillit:investigate", str(tmp_path)))
         assert (
             result.get("subtype") != "crashed"
             or "incompatible" not in result.get("error", "").lower()
         ), f"Provider override should have rerouted codex→claude-code; got: {result}"
-        assert mock_ssm.init_session.called, (
-            "Expected init_session to be called after provider override rerouted codex→claude-code"
+        assert mock_ssm.materialize_invocation.called, (
+            "Expected the effective invocation to be materialized after provider override "
+            "rerouted codex→claude-code"
         )
 
 

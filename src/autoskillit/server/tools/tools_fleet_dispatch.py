@@ -23,6 +23,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     FleetErrorCode,
     SessionCheckpoint,
+    SkillExecutionRole,
     detect_autoskillit_mcp_prefix,
     find_caller_session_id,
     fleet_error,
@@ -49,7 +50,12 @@ from autoskillit.fleet import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
-from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
+from autoskillit.server._misc import (
+    SkillProjectionContext,
+    project_agent_skill_document,
+    resolve_backend_override,
+    resolve_log_dir,
+)
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
@@ -146,6 +152,7 @@ def _write_dispatch_to_campaign_state(
 
 def _get_food_truck_prompt_builder(
     has_unguarded_filesystem_access: bool = False,
+    projected_sous_chef: str = "",
 ) -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
 
@@ -154,7 +161,37 @@ def _get_food_truck_prompt_builder(
         _build_food_truck_prompt,
         mcp_prefix=mcp_prefix,
         has_unguarded_filesystem_access=has_unguarded_filesystem_access,
+        projected_sous_chef=projected_sous_chef,
     )
+
+
+def _project_food_truck_sous_chef(
+    tool_ctx: Any,
+    backend: CodingAgentBackend | None,
+) -> str:
+    """Project L2 orchestration guidance before crossing into the fleet layer."""
+    if tool_ctx.skill_resolver is None:
+        return ""
+    catalog = tool_ctx.skill_resolver.list_effective(
+        tool_ctx.project_dir,
+        SkillExecutionRole.ORCHESTRATOR,
+        visibility=tool_ctx.config.skill_visibility_spec(),
+        recipe_packs=tool_ctx.active_recipe_packs,
+        recipe_features=tool_ctx.active_recipe_features,
+    )
+    sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
+    if sous_chef is None:
+        return ""
+    return project_agent_skill_document(
+        sous_chef,
+        SkillProjectionContext(
+            cwd=tool_ctx.project_dir.resolve(),
+            catalog=catalog,
+            backend=backend,
+            conventions=backend.conventions if backend is not None else None,
+            gating=False,
+        ),
+    ).content
 
 
 @mcp.tool(
@@ -364,6 +401,7 @@ async def dispatch_food_truck(
                     _preflight_raw_steps,
                     skill_resolver=tool_ctx.skill_resolver,
                     config_backend=tool_ctx.config.agent_backend,
+                    project_root=tool_ctx.project_dir,
                 )
                 _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
                 _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
@@ -373,6 +411,7 @@ async def dispatch_food_truck(
                     recipe,
                     skill_resolver=tool_ctx.skill_resolver,
                     config_backend=tool_ctx.config.agent_backend,
+                    project_root=tool_ctx.project_dir,
                 )
                 _preflight_backend_capabilities_map = build_backend_capabilities_map(
                     _effective_backend_map, _override_backend
@@ -447,6 +486,7 @@ async def dispatch_food_truck(
                 recipe_name=recipe,
                 config_backend=tool_ctx.config.agent_backend,
                 skill_resolver=tool_ctx.skill_resolver,
+                project_root=tool_ctx.project_dir,
             )
             if _preflight_err is not None:
                 return _preflight_err
@@ -469,6 +509,10 @@ async def dispatch_food_truck(
                             _override_backend.capabilities.has_unguarded_filesystem_access
                             if _override_backend
                             else False
+                        ),
+                        projected_sous_chef=_project_food_truck_sous_chef(
+                            tool_ctx,
+                            _override_backend,
                         ),
                     ),
                     quota_checker=lambda cfg: check_and_sleep_if_needed(

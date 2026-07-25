@@ -1,8 +1,8 @@
 """Food truck prompt builder for L2 food truck sessions.
 
-Moved from autoskillit.cli._prompts — this module
-depends only on autoskillit.core and stdlib, making it importable from both
-the server and CLI layers without introducing cross-L3 coupling.
+Moved from autoskillit.cli._prompts — this module depends only on
+autoskillit.core and stdlib, making it importable from both server and CLI
+layers without introducing cross-L3 coupling.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from autoskillit.core import (
     ROUTING_AUTHORITY_CLAUSE,
     CaptureEntrySpec,
     get_logger,
-    pkg_root,
     resolve_payload_field,
 )
 
@@ -42,23 +41,21 @@ def _backend_supplement(has_unguarded_filesystem_access: bool) -> str:
     return ""
 
 
-def _build_admiral_dispatch_block() -> str:
-    """Extract the dispatch-relevant subset of sous-chef SKILL.md.
+def _build_admiral_dispatch_block(
+    projected_sous_chef: str = "",
+) -> str:
+    """Extract the dispatch-relevant subset of the projected sous-chef document.
 
     Uses regex to split on ``## `` section headers and retains only sections
     whose title starts with one of the ADMIRAL_DISPATCH_SECTIONS prefixes.
-    Returns empty string if SKILL.md is absent (graceful degradation).
+    Projection is performed by the L3 composition caller before this IL-2
+    prompt builder receives the document.
     """
-    path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
-    if not path.exists():
-        return ""
-    try:
-        content = path.read_text()
-    except OSError:
+    if not projected_sous_chef:
         return ""
 
     # Split into sections on ## boundaries (keeping the delimiter via lookahead)
-    sections = re.split(r"(?=^## )", content, flags=re.MULTILINE)
+    sections = re.split(r"(?=^## )", projected_sous_chef, flags=re.MULTILINE)
 
     retained: list[str] = []
     for section in sections:
@@ -81,6 +78,7 @@ def _build_food_truck_prompt(
     capture: dict[str, CaptureEntrySpec] | None = None,
     caller_instructions: str | None = None,
     has_unguarded_filesystem_access: bool = False,
+    projected_sous_chef: str = "",
 ) -> str:
     """Build the system prompt for an L2 food truck headless session.
 
@@ -97,7 +95,7 @@ def _build_food_truck_prompt(
     ingredients_json = json.dumps(ingredients)
     ingredients_pretty_json = json.dumps(ingredients, indent=2)
 
-    admiral_block = _build_admiral_dispatch_block()
+    admiral_block = _build_admiral_dispatch_block(projected_sous_chef)
 
     capture_field_pairs: list[tuple[str, str, str]] = []
     if capture:

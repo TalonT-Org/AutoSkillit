@@ -502,7 +502,11 @@ def _strip_doc_fenced_blocks(body: str) -> str:
 
         if stripped.startswith("#") and not in_fence:
             heading_text = stripped.lstrip("#").strip()
-            in_step_section = bool(_STEP_HEADING_RE.match(heading_text))
+            heading_level = len(stripped) - len(stripped.lstrip("#"))
+            if _STEP_HEADING_RE.match(heading_text):
+                in_step_section = True
+            elif heading_level <= 3:
+                in_step_section = False
 
         if stripped.startswith("```"):
             if not in_fence:

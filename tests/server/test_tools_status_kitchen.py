@@ -183,7 +183,6 @@ class TestGetPipelineReport:
     @pytest.mark.anyio
     async def test_accumulates_failures_from_run_skill(self, tool_ctx):
         tool_ctx.gate = DefaultGateState(enabled=True)
-        tool_ctx.skill_resolver = None
         tool_ctx.runner.push(
             _make_result(
                 returncode=1,
@@ -194,7 +193,7 @@ class TestGetPipelineReport:
         await run_skill(skill_command="/autoskillit:test", cwd="/tmp")
         result = json.loads(await get_pipeline_report())
         assert result["total_failures"] == 1
-        assert result["failures"][0]["skill_command"].startswith("/autoskillit:test")
+        assert result["failures"][0]["skill_command"].startswith("/test")
 
     @pytest.mark.anyio
     async def test_clear_true_resets_after_returning(self, tool_ctx_kitchen_open):

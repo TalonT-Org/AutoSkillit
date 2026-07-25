@@ -15,35 +15,41 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import regex as re
-
 from autoskillit.core import (
-    FEATURE_REGISTRY,
-    PACK_REGISTRY,
     ClaudeDirectoryConventions,
-    PackDef,
+    EffectiveSkillCatalogAuthority,
+    EffectiveSkillInvocationAuthority,
+    ResolvedSkillAuthority,
+    SkillAuthority,
+    SkillContractError,
+    SkillExecutionRole,
+    SkillFrontmatterAuthority,
+    SkillProjectionContextAuthority,
     SkillResolver,
     SkillSource,
+    SkillSourceRef,
     ValidatedAddDir,
-    atomic_write,
     get_logger,
-    is_feature_enabled,
     pkg_root,
+    validate_skill_capability_roles,
 )
-from autoskillit.workspace.skill_format import (
-    parse_frontmatter_content,
-    validate_skill_frontmatter,
+from autoskillit.workspace.skill_projection import (
+    SkillProjectionContext,
+    materialize_agent_skill_tree,
+    project_agent_skill_document,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
-    ProjectLocalOverride,
+    EffectiveSkillCatalog,
+    SkillCatalogEntry,
     SkillInfo,
-    detect_project_local_overrides,
-    override_names,
+    _skill_info_from_frontmatter,
+)
+from autoskillit.workspace.skills import (
+    compute_skill_closure as compute_skill_closure,
 )
 
 if TYPE_CHECKING:
-    from autoskillit.config import AutomationConfig
     from autoskillit.core import CodingAgentBackend
 
 # Candidate ephemeral roots, tried in order.
@@ -53,9 +59,88 @@ _CANDIDATE_ROOTS: list[Path] = [
     Path("/tmp"),
 ]
 
-_FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
-
 logger = get_logger(__name__)
+
+
+def _codex_profile_skill_infos(
+    backend: CodingAgentBackend,
+) -> tuple[SkillInfo, ...]:
+    profile_skills_root = Path.home() / ".codex" / "skills"
+    if not profile_skills_root.is_dir():
+        return ()
+    result: list[SkillInfo] = []
+    for entry in sorted(profile_skills_root.iterdir(), key=lambda item: item.name):
+        skill_md = entry / "SKILL.md"
+        if (
+            entry.is_symlink()
+            or skill_md.is_symlink()
+            or not entry.is_dir()
+            or not skill_md.is_file()
+        ):
+            continue
+        info = _skill_info_from_frontmatter(
+            entry.name,
+            SkillSource.THIRD_PARTY,
+            skill_md,
+            source_ref=SkillSourceRef(
+                origin=SkillSource.THIRD_PARTY,
+                logical_name=entry.name,
+                skill_path=skill_md,
+                search_dir=str(profile_skills_root),
+            ),
+        )
+        if (
+            info.invalid_reason is not None
+            or info.execution_role is not SkillExecutionRole.SESSION
+        ):
+            logger.warning(
+                "codex_profile_skill_contract_rejected",
+                skill=entry.name,
+                reason=info.invalid_reason or "non-session execution role",
+            )
+            continue
+        if info.backend_requirements and backend.name not in info.backend_requirements:
+            logger.debug(
+                "codex_profile_skill_backend_skip",
+                skill=entry.name,
+                backend=backend.name,
+            )
+            continue
+        result.append(info)
+    return tuple(result)
+
+
+def _materialize_codex_profile_skill_infos(
+    session_dir: Path,
+    backend: CodingAgentBackend,
+) -> tuple[SkillInfo, ...]:
+    profile_skills_root = Path.home() / ".codex" / "skills"
+    if not profile_skills_root.is_dir():
+        return ()
+    infos = _codex_profile_skill_infos(backend)
+    catalog = EffectiveSkillCatalog(
+        skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in infos),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    materialize_agent_skill_tree(
+        session_dir / backend.conventions.skills_subdir,
+        catalog,
+        SkillProjectionContext(
+            cwd=Path.cwd().resolve(),
+            catalog=catalog,
+            backend=backend,
+            conventions=backend.conventions,
+        ),
+    )
+    return infos
+
+
+def materialize_codex_profile_skills(
+    session_dir: Path,
+    backend: CodingAgentBackend,
+) -> int:
+    """Project profile skills into a Codex session without exposing machine fields."""
+    return len(_materialize_codex_profile_skill_infos(session_dir, backend))
 
 
 def resolve_ephemeral_root() -> Path:
@@ -79,348 +164,33 @@ def resolve_ephemeral_root() -> Path:
     raise RuntimeError("No writable ephemeral root found for session skill dirs")
 
 
-def _inject_disable_model_invocation(content: str) -> str:
-    """Ensure disable-model-invocation: true is present in SKILL.md frontmatter."""
-    m = _FM_PATTERN.match(content)
-    if m:
-        fm_text = m.group(1)
-        body = m.group(2)
-        if re.search(r"^disable-model-invocation:", fm_text, re.MULTILINE):
-            fm_text = re.sub(
-                r"^(disable-model-invocation:).*$",
-                r"\1 true",
-                fm_text,
-                flags=re.MULTILINE,
-            )
-        else:
-            fm_text = fm_text + "\ndisable-model-invocation: true"
-        return f"---\n{fm_text}\n---\n{body}"
-    # No frontmatter — prepend one
-    return f"---\ndisable-model-invocation: true\n---\n{content}"
-
-
-def _remove_disable_model_invocation(content: str) -> str:
-    """Remove disable-model-invocation from SKILL.md frontmatter if present."""
-    m = _FM_PATTERN.match(content)
-    if not m:
-        return content
-    fm_text = m.group(1)
-    body = m.group(2)
-    if not re.search(r"^disable-model-invocation:", fm_text, re.MULTILINE):
-        return content
-    fm_text = re.sub(r"\ndisable-model-invocation:.*", "", fm_text)
-    fm_text = re.sub(r"^disable-model-invocation:.*\n?", "", fm_text, flags=re.MULTILINE)
-    fm_text = fm_text.rstrip("\n")
-    if not fm_text.strip():
-        return body
-    return f"---\n{fm_text}\n---\n{body}"
-
-
-_ORDER_UP_LINE = re.compile(r"^.*%%ORDER_UP%%.*\n?", re.MULTILINE)
-
-
-def _strip_marker_from_body(content: str, marker: str = "%%ORDER_UP%%") -> str:
-    """Remove completion marker lines from SKILL.md body content."""
-    m = _FM_PATTERN.match(content)
-    if not m:
-        return _ORDER_UP_LINE.sub("", content) if marker in content else content
-    fm_text = m.group(1)
-    body = m.group(2)
-    if marker not in body:
-        return content
-    body = _ORDER_UP_LINE.sub("", body)
-    return f"---\n{fm_text}\n---\n{body}"
-
-
-_ACTIVATE_DEPS_PATTERN = re.compile(r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE)
-
-_SKILL_NS_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
-
-
-def _rewrite_skill_namespace_refs(content: str, resolver: SkillResolver) -> str:
-    """Rewrite /autoskillit:<name> → /<name> for BUNDLED_EXTENDED targets.
-
-    BUNDLED_EXTENDED skills are delivered via --add-dir as bare /name; the
-    /autoskillit: prefix only works for BUNDLED skills delivered via --plugin-dir.
-    """
-
-    def _replace(m: re.Match) -> str:  # type: ignore[type-arg]
-        name = m.group(1)
-        info = resolver.resolve(name)
-        if info is not None and info.source == SkillSource.BUNDLED_EXTENDED:
-            return f"/{name}"
-        return m.group(0)
-
-    return _SKILL_NS_REF_RE.sub(_replace, content)
-
-
-def _parse_activate_deps(content: str) -> list[str]:
-    """Extract activate_deps list from SKILL.md frontmatter.
-
-    Parses ``activate_deps: [item1, item2]`` from YAML frontmatter.
-    Each item is either a PACK_REGISTRY key (pack dependency) or a
-    bare skill name (individual dependency).
-    """
-    m = _FM_PATTERN.match(content)
-    if not m:
+def _parse_write_paths(parsed: SkillFrontmatterAuthority) -> list[str]:
+    """Extract write paths from the contract's single frontmatter parse."""
+    if not parsed.is_valid or parsed.data is None:
         return []
-    fm_text = m.group(1)
-    match = _ACTIVATE_DEPS_PATTERN.search(fm_text)
-    if not match:
-        return []
-    items = match.group(1).strip()
-    if not items:
-        return []
-    return [item.strip() for item in items.split(",") if item.strip()]
-
-
-def _parse_write_paths(content: str) -> list[str]:
-    """Extract write_paths list from SKILL.md content.
-
-    Uses proper YAML parsing via ``parse_frontmatter_content`` to handle
-    both inline ``write_paths: ["path1", "path2"]`` and multi-line YAML
-    list syntax. Returns raw template strings (may contain ``{{AUTOSKILLIT_TEMP}}``).
-    """
-    fm = parse_frontmatter_content(content)
-    raw = fm.get("write_paths", [])
+    raw = parsed.data.get("write_paths", [])
     if not isinstance(raw, list):
         return []
     return [str(p) for p in raw if p and isinstance(p, str)]
 
 
-def _is_skill_disabled(
-    skill_info: SkillInfo,
-    disabled: list[str],
-    custom_tags: dict[str, list[str]],
-    features: dict[str, bool],
-    *,
-    experimental_enabled: bool = False,
-    allow_only: frozenset[str] | None = None,
-) -> bool:
-    """Return True if skill should be excluded due to a disabled subset.
-
-    For each tag in disabled:
-    - If the tag is a custom_tag key: check if skill.name is in custom_tags[tag]
-    - Otherwise (built-in category): check if tag is in skill_info.categories
-
-    Feature-gate branch: for each feature in FEATURE_REGISTRY that is disabled
-    in `features`, suppress any skill whose categories intersect the feature's
-    skill_categories. An empty `features` dict uses each feature's default_enabled.
-
-    Policy layering: when `allow_only` is set and `skill_info.name` is in it, both
-    the FEATURE_REGISTRY branch and any feature-gate-derived tool tags in the
-    `disabled` list (injected via disabled_feature_tags) are bypassed. Explicit
-    `disabled` entries from user config and packs are never bypassed.
-    """
-    _feature_tool_tags: frozenset[str] = (
-        frozenset(
-            tag
-            for feat_name, feat_def in FEATURE_REGISTRY.items()
-            for tag in feat_def.tool_tags
-            if not is_feature_enabled(
-                feat_name, features, experimental_enabled=experimental_enabled
-            )
-        )
-        if allow_only is not None and skill_info.name in allow_only
-        else frozenset()
-    )
-    for tag in disabled:
-        if tag in custom_tags:
-            if skill_info.name in custom_tags[tag]:
-                return True
-        elif tag in skill_info.categories:
-            if tag in _feature_tool_tags:
-                logger.info(
-                    "feature_gate_bypassed_by_allow_only",
-                    skill=skill_info.name,
-                    category=tag,
-                )
-                continue
-            return True
-
-    # Union model: suppress a category only when ALL features that gate it are disabled.
-    _in_allow_only: bool = allow_only is not None and skill_info.name in allow_only
-    enabled_cats: set[str] = set()
-    disabled_cats: set[str] = set()
-    for feat_name, feat_def in FEATURE_REGISTRY.items():
-        if is_feature_enabled(feat_name, features, experimental_enabled=experimental_enabled):
-            enabled_cats |= feat_def.skill_categories
-        else:
-            disabled_cats |= feat_def.skill_categories
-    for cat in disabled_cats - enabled_cats:
-        if cat in skill_info.categories:
-            if _in_allow_only:
-                logger.info(
-                    "feature_gate_bypassed_by_allow_only",
-                    skill=skill_info.name,
-                    category=cat,
-                )
-                continue
-            return True
-
-    return False
-
-
-def _resolve_effective_disabled(
-    explicit_disabled: list[str],
-    pack_registry: dict[str, PackDef],
-    packs_enabled: list[str],
-    recipe_packs: frozenset[str] | None,
-    disabled_feature_tags: frozenset[str] | None = None,
-) -> frozenset[str]:
-    """Compute the merged effective disabled set from all visibility sources.
-
-    Formula:
-      effective = (explicit_disabled ∪ default_disabled_packs ∪ disabled_feature_tags)
-                − (packs_enabled ∪ recipe_packs)
-
-    Precedence: explicit_disabled and disabled_feature_tags always stay.
-    Default-disabled packs CAN be overridden by packs_enabled/recipe_packs.
-    """
-    default_disabled = frozenset(
-        tag for tag, pack_def in pack_registry.items() if not pack_def.default_enabled
-    )
-    enabled = frozenset(packs_enabled) | (recipe_packs or frozenset())
-    # Default-disabled packs that are not explicitly enabled
-    default_disabled_effective = default_disabled - enabled
-    return (
-        frozenset(explicit_disabled)
-        | default_disabled_effective
-        | (disabled_feature_tags or frozenset())
-    )
-
-
-def _should_inject_skill(
-    skill_info: SkillInfo,
-    *,
-    overrides: frozenset[str],
-    effective_disabled: frozenset[str],
-    effective_custom_tags: dict[str, list[str]],
-    features: dict[str, bool],
-    experimental_enabled: bool = False,
-    allow_only: frozenset[str] | None = None,
-    backend_name: str | None = None,
-) -> bool:
-    """Return True if this skill should be written to the ephemeral session dir.
-
-    Two-stage decision:
-    1. Channel deduplication (unconditional): BUNDLED skills served via --plugin-dir;
-       project-local overrides visible via CWD auto-discovery.
-    2. Effective disable filtering (already accounts for cook session, packs, recipe).
-    """
-    if (
-        skill_info.backend_requirements
-        and backend_name is not None
-        and backend_name not in skill_info.backend_requirements
-    ):
-        return False
-    # Channel deduplication — unconditional
-    if skill_info.source == SkillSource.BUNDLED:
-        return False
-    if skill_info.name in overrides:
-        return False
-    # Apply effective filtering
-    if _is_skill_disabled(
-        skill_info,
-        list(effective_disabled),
-        effective_custom_tags,
-        features,
-        experimental_enabled=experimental_enabled,
-        allow_only=allow_only,
-    ):
-        return False
-    return True
-
-
-def _build_pack_index(provider: SkillsDirectoryProvider) -> dict[str, set[str]]:
-    """Build a pack-name → set of member skill names index from the provider."""
-    index: dict[str, set[str]] = {}
-    for skill in provider.list_skills():
-        for cat in skill.categories:
-            index.setdefault(cat, set()).add(skill.name)
-    return index
-
-
-def compute_skill_closure(
-    skill_name: str,
-    provider: SkillsDirectoryProvider,
-) -> frozenset[str]:
-    """Return the transitive activate_deps closure for a skill, including the skill itself.
-
-    Returns ``frozenset()`` if ``skill_name`` does not resolve to a real skill.
-    Pack-name dependencies are expanded to all pack members. Unknown deps are silently dropped.
-    """
-    if provider.resolver.resolve(skill_name) is None:
-        return frozenset()
-    pack_index: dict[str, set[str]] | None = None
-    visited: set[str] = set()
-    resolved: set[str] = set()
-    queue: list[str] = [skill_name]
-    while queue:
-        name = queue.pop()
-        if name in visited:
-            continue
-        visited.add(name)
-        info = provider.resolver.resolve(name)
-        if info is None:
-            continue
-        try:
-            content = info.path.read_text()
-        except OSError:
-            continue
-        resolved.add(name)
-        for dep in _parse_activate_deps(content):
-            if dep in PACK_REGISTRY:
-                if pack_index is None:
-                    pack_index = _build_pack_index(provider)
-                for member in pack_index.get(dep, ()):
-                    if member not in visited:
-                        queue.append(member)
-            elif dep not in visited:
-                queue.append(dep)
-    return frozenset(resolved)
-
-
-def collect_closure_write_paths(
-    closure: frozenset[str],
-    resolver: SkillResolver,
-) -> tuple[str, ...]:
-    """Collect write_paths from all skills in a pre-computed closure.
-
-    Returns a deduplicated tuple of raw template paths (may contain
-    ``{{AUTOSKILLIT_TEMP}}``). Unresolvable or unreadable skills are
-    silently skipped.
-    """
-    paths: list[str] = []
-    seen: set[str] = set()
-    for name in sorted(closure):
-        info = resolver.resolve(name)
-        if info is None:
-            continue
-        try:
-            content = info.path.read_text()
-        except OSError:
-            continue
-        for wp in _parse_write_paths(content):
-            if wp not in seen:
-                seen.add(wp)
-                paths.append(wp)
-    return tuple(paths)
-
-
 def resolve_closure_write_dirs(
-    closure: frozenset[str],
-    resolver: SkillResolver,
+    closure: tuple[ResolvedSkillAuthority, ...],
     cwd: str,
     existing: list[Path] | None = None,
 ) -> list[Path]:
-    """Collect and resolve write_paths from closure skills into absolute Paths.
+    """Resolve write_paths from an exact effective closure into absolute Paths.
 
     Substitutes ``{{AUTOSKILLIT_TEMP}}`` with ``cwd/.autoskillit/temp`` and
     returns deduplicated resolved Paths ready to extend ``write_watch_dirs``.
     Paths already present in ``existing`` are excluded from the result.
     """
-    raw_paths = collect_closure_write_paths(closure, resolver)
+    raw_paths = tuple(
+        write_path
+        for info in closure
+        if info.frontmatter is not None
+        for write_path in _parse_write_paths(info.frontmatter)
+    )
     if not raw_paths:
         return []
     temp_prefix = os.path.join(cwd, ".autoskillit", "temp")
@@ -459,8 +229,14 @@ class SkillsDirectoryProvider:
         """List all public bundled skills."""
         return self._resolver.list_all()
 
-    def get_skill_content(self, name: str, *, gated: bool = True) -> str:
-        """Return SKILL.md content with gating frontmatter injected when required.
+    def get_skill_content(
+        self,
+        skill_info: SkillInfo,
+        *,
+        cwd: Path,
+        gated: bool = True,
+    ) -> str:
+        """Project already-resolved SKILL.md content with optional gating.
 
         - gated=True  → ensure disable-model-invocation: true is present
           (used only by the activate path — init_session omits gated skills entirely)
@@ -469,18 +245,75 @@ class SkillsDirectoryProvider:
         Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
         Tier 1 skills (which contain no placeholder) are unaffected.
         """
-        skill_info = self._resolver.resolve(name)
-        if skill_info is None:
-            raise FileNotFoundError(f"Skill not found: {name}")
-        content = skill_info.path.read_text()
-        if gated:
-            content = _inject_disable_model_invocation(content)
-        content = content.replace("{{AUTOSKILLIT_TEMP}}", self._temp_dir_relpath)
-        content = content.replace(
-            "{{AUTOSKILLIT_SCRIPTS}}",
-            str(pkg_root() / "recipes" / "scripts"),
+        return self.project_skill_info(
+            skill_info,
+            cwd=cwd,
+            gating=True if gated else None,
         )
-        return content.replace("{{DEFAULT_BASE_BRANCH}}", self._default_base_branch)
+
+    def projection_context(
+        self,
+        skill_info: SkillInfo,
+        cwd: Path,
+        *,
+        gating: bool | None = None,
+        backend: CodingAgentBackend | None = None,
+    ) -> SkillProjectionContext:
+        """Build the shared execution-local projection context."""
+        catalog = EffectiveSkillCatalog(
+            skills=(SkillCatalogEntry.from_skill_info(skill_info),),
+            execution_role=skill_info.execution_role or SkillExecutionRole.SESSION,
+        )
+        return self.catalog_projection_context(
+            catalog,
+            cwd,
+            gating=gating,
+            backend=backend,
+        )
+
+    def catalog_projection_context(
+        self,
+        catalog: EffectiveSkillCatalog,
+        cwd: Path,
+        *,
+        gating: bool | None = None,
+        backend: CodingAgentBackend | None = None,
+    ) -> SkillProjectionContext:
+        """Build one projection context bound to a resolved path-free catalog."""
+        return SkillProjectionContext(
+            cwd=cwd,
+            catalog=catalog,
+            backend=backend,
+            conventions=backend.conventions if backend is not None else None,
+            substitutions={
+                "{{AUTOSKILLIT_TEMP}}": self._temp_dir_relpath,
+                "{{AUTOSKILLIT_SCRIPTS}}": str(pkg_root() / "recipes" / "scripts"),
+                "{{DEFAULT_BASE_BRANCH}}": self._default_base_branch,
+            },
+            gating=gating,
+        )
+
+    def project_skill_info(
+        self,
+        skill_info: SkillInfo,
+        *,
+        cwd: Path,
+        gating: bool | None = None,
+        backend: CodingAgentBackend | None = None,
+    ) -> str:
+        """Project one already-resolved exact skill contract."""
+        context = self.projection_context(
+            skill_info,
+            cwd,
+            gating=gating,
+            backend=backend,
+        )
+        return project_agent_skill_document(context.skills[0], context).content
+
+
+def default_skill_resolver() -> DefaultSkillResolver:
+    """Construct the standard resolver for non-injected session dispatch."""
+    return DefaultSkillResolver()
 
 
 class DefaultSessionSkillManager:
@@ -497,34 +330,89 @@ class DefaultSessionSkillManager:
         self._root = ephemeral_root
         self._codex_root = codex_root
         self._session_roots: dict[str, Path] = {}
+        self._session_skill_infos: dict[str, dict[str, SkillAuthority]] = {}
+        self._available_skill_infos = {skill.name: skill for skill in provider.list_skills()}
         self._skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
-    def compute_skill_closure(self, skill_name: str) -> frozenset[str]:
-        """Return the transitive activate_deps closure for ``skill_name``.
-
-        See :func:`compute_skill_closure` for semantics.
-        """
-        return compute_skill_closure(skill_name, self._provider)
+    def materialize_invocation(
+        self,
+        session_id: str,
+        invocation: EffectiveSkillInvocationAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ) -> ValidatedAddDir:
+        """Write only a prevalidated closure from its captured canonical content."""
+        self._validate_session_id(session_id)
+        if not invocation.closure or invocation.root not in invocation.closure:
+            raise ValueError("Effective invocation closure must contain its root")
+        if invocation.execution_role is not SkillExecutionRole.SESSION:
+            raise SkillContractError("L1 materialization requires an exact SESSION invocation")
+        for member in invocation.closure:
+            if member.invalid_reason is not None:
+                raise SkillContractError(
+                    f"invalid materialization contract for {member.name!r}: "
+                    f"{member.invalid_reason}"
+                )
+            if member.execution_role is not SkillExecutionRole.SESSION:
+                actual = (
+                    member.execution_role.value if member.execution_role is not None else "invalid"
+                )
+                raise SkillContractError(
+                    f"L1 materialization requires SESSION members; {member.name!r} is {actual}"
+                )
+            validate_skill_capability_roles(
+                member.uses_capabilities,
+                member.execution_role,
+            )
+        if projection_context.invocation != invocation:
+            raise SkillContractError(
+                "materialization projection must bind the exact effective invocation"
+            )
+        return self._materialize_bound_records(
+            session_id,
+            invocation.closure,
+            projection_context,
+        )
 
     def init_session(
         self,
         session_id: str,
-        *,
-        cook_session: bool = False,
-        config: AutomationConfig | None = None,
-        project_dir: Path | None = None,
-        recipe_packs: frozenset[str] | None = None,
-        recipe_features: frozenset[str] | None = None,
-        allow_only: frozenset[str] | None = None,
-        backend: CodingAgentBackend | None = None,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
     ) -> ValidatedAddDir:
-        """Create ephemeral skill dir for session_id.
+        """Initialize a session from one prevalidated, path-free SESSION catalog."""
+        self._validate_session_id(session_id)
+        if catalog.execution_role is not SkillExecutionRole.SESSION:
+            raise SkillContractError("L1 catalog materialization requires SESSION contracts")
+        for member in catalog.skills:
+            if member.invalid_reason is not None:
+                raise SkillContractError(
+                    f"invalid materialization contract for {member.name!r}: "
+                    f"{member.invalid_reason}"
+                )
+            if member.execution_role is not SkillExecutionRole.SESSION:
+                actual = (
+                    member.execution_role.value if member.execution_role is not None else "invalid"
+                )
+                raise SkillContractError(
+                    f"L1 catalog materialization requires SESSION members; "
+                    f"{member.name!r} is {actual}"
+                )
+            validate_skill_capability_roles(
+                member.uses_capabilities,
+                member.execution_role,
+            )
+        if projection_context.catalog != catalog:
+            raise SkillContractError(
+                "materialization projection must bind the exact effective catalog"
+            )
+        return self._materialize_bound_records(
+            session_id,
+            catalog.skills,
+            projection_context,
+        )
 
-        Returns path to the created skills directory.
-        For non-cook sessions, Tier 2 skills (from config.skills.tier2) get
-        disable-model-invocation injected. Unknown skill names in config are
-        logged as warnings and ignored.
-        """
+    @staticmethod
+    def _validate_session_id(session_id: str) -> None:
         if (
             not session_id
             or "\x00" in session_id
@@ -534,319 +422,63 @@ class DefaultSessionSkillManager:
         ):
             raise ValueError(f"Invalid session_id: {session_id!r}")
 
-        if config is None:
-            tier2_skills: frozenset[str] = frozenset()
-        else:
-            all_known = {s.name for s in self._provider.list_skills()}
-            configured = (
-                set(config.skills.tier1) | set(config.skills.tier2) | set(config.skills.tier3)
-            )
-            unknown = configured - all_known
-            if unknown:
-                logger.warning("Unknown skill names in tier config (ignored): %s", sorted(unknown))
-            tier2_skills = frozenset(config.skills.tier2)
-
-        # Extract subset info based on session mode
-        if cook_session:
-            explicit_disabled: list[str] = []
-            effective_custom_tags: dict[str, list[str]] = {}
-        elif config is None:
-            explicit_disabled = []
-            effective_custom_tags = {}
-        else:
-            explicit_disabled = list(config.subsets.disabled)
-            effective_custom_tags = dict(config.subsets.custom_tags)
-
-        packs_enabled: list[str] = [] if config is None else list(config.packs.enabled)
-        from autoskillit.core import FeatureLifecycle
-
-        session_features: dict[str, bool] = (
-            {
-                name: True
-                for name, defn in FEATURE_REGISTRY.items()
-                if defn.lifecycle != FeatureLifecycle.DISABLED
-            }
-            if cook_session
-            else (config.features if config is not None else {})
-        )
-
-        # Merge recipe-level feature requirements: features declared by the active recipe
-        # are injected into session_features when not already set by the user config.
-        # This allows recipes to enable feature-gated skill categories without requiring
-        # the user to configure each feature explicitly.
-        if recipe_features and not cook_session:
-            for feat_name in recipe_features:
-                if feat_name in FEATURE_REGISTRY and feat_name not in session_features:
-                    session_features = {**session_features, feat_name: True}
-
-        disabled_feature_tags: frozenset[str] = frozenset()
-        if config is not None and not cook_session:
-            enabled_tool_tags: set[str] = set()
-            disabled_tool_tags: set[str] = set()
-            for feature_name, feature_def in FEATURE_REGISTRY.items():
-                if is_feature_enabled(
-                    feature_name,
-                    session_features,
-                    experimental_enabled=config.experimental_enabled,
-                ):
-                    enabled_tool_tags |= feature_def.tool_tags
-                else:
-                    disabled_tool_tags |= feature_def.tool_tags
-            disabled_feature_tags = frozenset(disabled_tool_tags - enabled_tool_tags)
-
-        effective_disabled = _resolve_effective_disabled(
-            explicit_disabled=explicit_disabled,
-            pack_registry=PACK_REGISTRY,
-            packs_enabled=packs_enabled,
-            recipe_packs=recipe_packs,
-            disabled_feature_tags=disabled_feature_tags,
-        )
-
-        # Compute project-local overrides (REQ-OVR-001..004)
-        _plsc = backend is None or backend.capabilities.project_local_skills_capable
-        _search_dirs: tuple[str, ...] | None = (
-            backend.conventions.project_local_skill_search_dirs or None
-            if backend is not None
-            else None
-        )
-        overrides: frozenset[ProjectLocalOverride] = (
-            detect_project_local_overrides(project_dir, search_dirs=_search_dirs)
-            if project_dir is not None and _plsc
-            else frozenset()
-        )
-        _override_name_set: frozenset[str] = override_names(overrides)
-        self._skills_subdir = (
-            backend.conventions.skills_subdir
-            if backend is not None
+    def _materialize_bound_records(
+        self,
+        session_id: str,
+        records: tuple[SkillAuthority, ...],
+        projection_context: SkillProjectionContextAuthority,
+    ) -> ValidatedAddDir:
+        conventions = projection_context.conventions
+        skills_subdir = (
+            conventions.skills_subdir
+            if conventions is not None
             else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
         )
-
         effective_root = self._root
+        backend = projection_context.backend
         if (
             backend is not None
             and backend.capabilities.session_dir_persistent
             and self._codex_root is not None
         ):
             effective_root = self._codex_root
-        self._session_roots[session_id] = effective_root
+        if backend is not None:
+            if (
+                projection_context.gating is True
+                and not backend.capabilities.supports_model_invocation_gating
+            ):
+                raise SkillContractError(
+                    f"backend {backend.name!r} does not support model invocation gating"
+                )
 
-        session_skills_dir = effective_root / session_id
-        skills_base = session_skills_dir / self._skills_subdir
-        skills_base.mkdir(parents=True, exist_ok=True)
+        self._session_roots[session_id] = effective_root
+        self._skills_subdir = skills_subdir
+        session_dir = effective_root / session_id
+        skills_base = session_dir / skills_subdir
 
         if backend is not None and backend.capabilities.mcp_config_capable:
             pre_launch_errors = backend.ensure_pre_launch()
             if pre_launch_errors:
-                msg = "; ".join(pre_launch_errors)
-                raise RuntimeError(f"Pre-launch check failed: {msg}")
-
+                raise RuntimeError(f"Pre-launch check failed: {'; '.join(pre_launch_errors)}")
         if backend is not None:
-            backend.setup_session_dir(session_skills_dir)
-        format_rejected: set[str] = set()
-        for skill_info in self._provider.list_skills():
-            if allow_only is not None and skill_info.name not in allow_only:
-                logger.debug("init_session_allow_only_skip", skill=skill_info.name)
-                continue
-            if not _should_inject_skill(
-                skill_info,
-                overrides=_override_name_set,
-                effective_disabled=effective_disabled,
-                effective_custom_tags=effective_custom_tags,
-                features=session_features,
-                experimental_enabled=(
-                    config.experimental_enabled
-                    if config is not None and not cook_session
-                    else False
-                ),
-                allow_only=allow_only,
-                backend_name=backend.name if backend is not None else None,
-            ):
-                if skill_info.source == SkillSource.BUNDLED:
-                    logger.debug("init_session_plugin_dir_skip", skill=skill_info.name)
-                elif skill_info.name in _override_name_set:
-                    logger.debug("init_session_override_skip", skill=skill_info.name)
-                else:
-                    logger.debug("init_session_subset_skip", skill=skill_info.name)
-                continue
-            if (
-                not cook_session
-                and skill_info.name in tier2_skills
-                and backend is not None
-                and not backend.capabilities.supports_model_invocation_gating
-            ):
-                logger.debug(
-                    "init_session_tier2_capability_omit",
-                    skill=skill_info.name,
-                    backend=backend.name,
-                )
-                continue
-            gated = (not cook_session) and (skill_info.name in tier2_skills)
-            if gated and (allow_only is None or skill_info.name not in allow_only):
-                logger.debug("init_session_tier2_omit", skill=skill_info.name)
-                continue
-            try:
-                content = self._provider.get_skill_content(skill_info.name, gated=False)
-            except FileNotFoundError:
-                logger.warning("init_session_skill_content_missing", skill=skill_info.name)
-                continue
-            fm = parse_frontmatter_content(content)
-            fm_errors = validate_skill_frontmatter(fm, skill_info.name)
-            if fm_errors:
-                for err in fm_errors:
-                    logger.warning(
-                        "skill_format_validation",
-                        skill=skill_info.name,
-                        error=err,
-                        backend=backend.name if backend is not None else "unknown",
-                    )
-                format_rejected.add(skill_info.name)
-                continue
-            content = _rewrite_skill_namespace_refs(content, self._provider.resolver)
-            skill_dir = skills_base / skill_info.name
-            skill_dir.mkdir(exist_ok=True)
-            atomic_write(skill_dir / "SKILL.md", content)
-        for override in overrides:
-            if allow_only is not None and allow_only and override.name not in allow_only:
-                logger.debug("init_session_override_allow_only_skip", skill=override.name)
-                continue
-            dest_dir = skills_base / override.name
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                shutil.copy2(override.skill_path, dest_dir / "SKILL.md")
-            except OSError:
-                logger.warning(
-                    "init_session_project_local_copy_failed",
-                    skill=override.name,
-                    source=str(override.skill_path),
-                )
-                continue
-            logger.debug(
-                "init_session_project_local_copy",
-                skill=override.name,
-                source=str(override.skill_path),
-                search_dir=override.search_dir,
-            )
-        if allow_only is not None and allow_only:
-            written = {p.name for p in skills_base.iterdir() if p.is_dir()}
-            bundled_names = {
-                s.name for s in self._provider.list_skills() if s.source == SkillSource.BUNDLED
-            }
-            gated_omitted = tier2_skills & allow_only
-            achievable = (
-                allow_only - _override_name_set - bundled_names - gated_omitted - format_rejected
-            )
-            if achievable and not (written & achievable):
-                raise RuntimeError(
-                    f"init_session: allow_only={sorted(allow_only)!r} specified but "
-                    f"zero skills were written to {skills_base}. "
-                    f"This indicates a gating conflict — check feature gates, "
-                    f"disabled categories, or pack visibility."
-                )
-        if backend is not None:
-            layout_errors = backend.validate_session_layout(session_skills_dir)
-            for err in layout_errors:
-                logger.warning(
-                    "session_layout_validation",
-                    session_id=session_id,
-                    error=err,
-                    backend=backend.name,
-                )
-        return ValidatedAddDir(path=str(session_skills_dir))
-
-    def activate_skill_deps(self, session_id: str, skill_name: str) -> bool:
-        """Remove disable-model-invocation from a skill and its declared dependencies.
-
-        Reads ``activate_deps`` from the target skill's frontmatter and transitively
-        activates all dependencies:
-        - Pack names (keys in PACK_REGISTRY) -> activate all session skills with that category
-        - Skill names -> activate the specific named skill
-
-        Cycle-safe: tracks already-activated skills to prevent infinite recursion.
-        """
-        for value, label in ((session_id, "session_id"), (skill_name, "skill_name")):
-            if not value or any(c in value for c in ("/", "\\", "\x00")):
-                raise ValueError(f"Invalid {label}: {value!r}")
-            if value in (".", ".."):
-                raise ValueError(f"Invalid {label}: {value!r}")
-
-        activated: set[str] = set()
-        return self._activate_with_deps(session_id, skill_name, activated)
-
-    def _activate_with_deps(
-        self, session_id: str, skill_name: str, activated: set[str], *, _is_root: bool = True
-    ) -> bool:
-        """Activate a single skill and recursively activate its dependencies."""
-        if skill_name in activated:
-            return False
-        activated.add(skill_name)
-
-        skill_dir = (
-            self._session_roots.get(session_id, self._root)
-            / session_id
-            / self._skills_subdir
-            / skill_name
+            session_dir.mkdir(parents=True, exist_ok=True)
+            backend.setup_session_dir(session_dir)
+        ungated_context = SkillProjectionContext(
+            cwd=projection_context.cwd,
+            project_root=projection_context.project_root,
+            catalog=projection_context.catalog,
+            invocation=projection_context.invocation,
+            backend=projection_context.backend,
+            conventions=projection_context.conventions,
+            substitutions=projection_context.substitutions,
+            gating=False,
+            namespace=projection_context.namespace,
+            projection_version=projection_context.projection_version,
         )
-        skill_md = skill_dir / "SKILL.md"
-        if not skill_md.exists():
-            try:
-                fetched = self._provider.get_skill_content(skill_name, gated=False)
-            except FileNotFoundError:
-                return False
-            fm = parse_frontmatter_content(fetched)
-            fm_errors = validate_skill_frontmatter(fm, skill_name)
-            if fm_errors:
-                for err in fm_errors:
-                    logger.warning(
-                        "skill_format_validation",
-                        skill=skill_name,
-                        error=err,
-                        context="activate_deps",
-                    )
-                return False
-            skill_dir.mkdir(parents=True, exist_ok=True)
-            fetched = _rewrite_skill_namespace_refs(fetched, self._provider.resolver)
-            atomic_write(skill_md, fetched)
-            logger.debug("activate_deps_materialise", skill=skill_name)
+        materialize_agent_skill_tree(skills_base, records, ungated_context)
+        self._session_skill_infos[session_id] = {member.name: member for member in records}
 
-        content = skill_md.read_text()
-        new_content = _remove_disable_model_invocation(content)
-        if not _is_root:
-            new_content = _strip_marker_from_body(new_content)
-        if new_content != content:
-            atomic_write(skill_md, new_content)
-
-        deps = _parse_activate_deps(content)
-        for dep in deps:
-            if dep in PACK_REGISTRY:
-                self._activate_pack_deps(session_id, dep, activated)
-            else:
-                self._activate_with_deps(session_id, dep, activated, _is_root=False)
-
-        return True
-
-    def _activate_pack_deps(self, session_id: str, pack_name: str, activated: set[str]) -> None:
-        """Activate all session skills whose category matches *pack_name*."""
-        skills_base = (
-            self._session_roots.get(session_id, self._root) / session_id / self._skills_subdir
-        )
-        on_disk: set[str] = set()
-        if skills_base.is_dir():
-            for skill_dir in sorted(skills_base.iterdir()):
-                if not skill_dir.is_dir():
-                    continue
-                name = skill_dir.name
-                on_disk.add(name)
-                if name in activated:
-                    continue
-                info = self._provider.resolver.resolve(name)
-                if info and pack_name in info.categories:
-                    self._activate_with_deps(session_id, name, activated, _is_root=False)
-        for info in self._provider.list_skills():
-            if pack_name not in info.categories:
-                continue
-            if info.name in on_disk or info.name in activated:
-                continue
-            self._activate_with_deps(session_id, info.name, activated, _is_root=False)
+        return ValidatedAddDir(path=str(session_dir))
 
     def cleanup_session(self, session_id: str) -> bool:
         """Remove the session skill directory for a completed session.
@@ -854,6 +486,7 @@ class DefaultSessionSkillManager:
         Returns True if the directory was found and removed, False otherwise.
         """
         effective_root = self._session_roots.pop(session_id, None)
+        self._session_skill_infos.pop(session_id, None)
         if effective_root is not None:
             session_dir = effective_root / session_id
             if session_dir.is_dir():

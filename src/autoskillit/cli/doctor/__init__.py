@@ -73,6 +73,7 @@ from ._doctor_runtime import (
     _check_quota_cache_schema,
     _check_script_binary,
 )
+from ._doctor_skills import _check_skill_capability_authenticity
 from ._doctor_types import _NON_PROBLEM, DoctorResult
 
 logger = get_logger(__name__)
@@ -224,15 +225,14 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 36: Codex model-alias staleness
     results.append(_check_codex_model_alias_staleness())
-
     # Check 37: Standing backend pin feasibility
     results.extend(_check_standing_backend_pins_feasibility())
     # Check 38: Local recipe validity
     results.extend(_check_local_recipe_validity())
-
     # Check 39: Codex limits version pin freshness
     results.append(_check_codex_limits_verified(backend=_backend))
-
+    # Check 40: Bundled skill capability declarations match authentic source evidence
+    results.extend(_check_skill_capability_authenticity())
     # Output
     if output_json:
         print(

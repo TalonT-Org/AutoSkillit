@@ -435,6 +435,7 @@ async def run_managed_async(
                         max_suppression_seconds,
                         marker_dir,
                         session_id,
+                        on_session_id_resolved,
                     )
                 if idle_output_timeout is not None and idle_output_timeout > 0:
                     tg.start_soon(

@@ -7,7 +7,9 @@ semantic comparison of SKILL.md changes.
 
 from __future__ import annotations
 
+import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,7 @@ from autoskillit.core import (
     ClaudeFlags,
     CodingAgentBackend,
     OutputFormat,
+    SkillExecutionRole,
     SubprocessResult,
     TerminationReason,
     build_agent_env,
@@ -22,7 +25,14 @@ from autoskillit.core import (
 )
 from autoskillit.execution import parse_session_result, run_managed_async
 from autoskillit.recipe import StaleItem, load_bundled_manifest
-from autoskillit.workspace import bundled_skills_dir
+from autoskillit.workspace import (
+    EffectiveSkillCatalog,
+    SkillCatalogEntry,
+    SkillProjectionContext,
+    default_skill_resolver,
+    parse_frontmatter_content,
+    project_agent_skill_document,
+)
 
 logger = get_logger(__name__)
 
@@ -31,7 +41,10 @@ _SKILL_MD_TRUNCATE = 1500
 
 
 async def triage_staleness(
-    stale_items: list[StaleItem], *, backend: CodingAgentBackend
+    stale_items: list[StaleItem],
+    *,
+    project_root: Path | None = None,
+    backend: CodingAgentBackend,
 ) -> list[dict[str, Any]]:
     """Use Haiku to determine if stale contracts changed meaningfully.
 
@@ -63,22 +76,80 @@ async def triage_staleness(
     if not hash_items:
         return results
 
-    # Pre-load all SKILL.md content synchronously before any async task starts.
-    # Path.read_text() is blocking I/O and must not run inside async tasks.
+    # Pre-project all skill documents synchronously before any async task starts.
+    effective_project_root = (project_root or Path.cwd()).resolve()
     skill_md_cache: dict[str, str] = {}
+    resolver = default_skill_resolver()
     for item in hash_items:
         if item.skill not in skill_md_cache:
-            skill_md_path = bundled_skills_dir() / item.skill / "SKILL.md"
-            if skill_md_path.is_file():
-                skill_md_cache[item.skill] = skill_md_path.read_text()
+            skill_info = resolver.resolve_effective(item.skill, effective_project_root)
+            if (
+                skill_info is not None
+                and skill_info.invalid_reason is not None
+                and skill_info.invalid_reason.startswith("invalid frontmatter:")
+            ):
+                synthetic_content = (
+                    "---\n"
+                    f"name: {skill_info.name}\n"
+                    "description: Skill document used for contract staleness comparison.\n"
+                    "---\n"
+                    f"{skill_info.canonical_content}"
+                )
+                skill_info = replace(
+                    skill_info,
+                    canonical_content=synthetic_content,
+                    canonical_digest=hashlib.sha256(synthetic_content.encode()).hexdigest(),
+                    frontmatter=parse_frontmatter_content(synthetic_content),
+                    execution_role=SkillExecutionRole.SESSION,
+                    invalid_reason=None,
+                )
+            if (
+                skill_info is None
+                or skill_info.invalid_reason is not None
+                or skill_info.execution_role is None
+            ):
+                continue
+            try:
+                entry = SkillCatalogEntry.from_skill_info(skill_info)
+                catalog = EffectiveSkillCatalog(
+                    skills=(entry,),
+                    execution_role=entry.execution_role,
+                )
+                skill_md_cache[item.skill] = project_agent_skill_document(
+                    entry,
+                    SkillProjectionContext(
+                        cwd=effective_project_root,
+                        catalog=catalog,
+                        backend=backend,
+                        conventions=backend.conventions,
+                        gating=False,
+                    ),
+                ).content
+            except ValueError:
+                logger.warning(
+                    "triage_skill_projection_failed",
+                    skill=item.skill,
+                    exc_info=True,
+                )
 
-    results.extend(await _triage_batch(hash_items, skill_md_cache, backend=backend))
+    results.extend(
+        await _triage_batch(
+            hash_items,
+            skill_md_cache,
+            cwd=effective_project_root,
+            backend=backend,
+        )
+    )
 
     return results
 
 
 async def _triage_batch(
-    batch: list[StaleItem], skill_md_cache: dict[str, str], *, backend: CodingAgentBackend
+    batch: list[StaleItem],
+    skill_md_cache: dict[str, str],
+    *,
+    cwd: Path,
+    backend: CodingAgentBackend,
 ) -> list[dict[str, Any]]:
     """Triage one batch of hash_mismatch items with a single Haiku subprocess call.
 
@@ -137,7 +208,7 @@ async def _triage_batch(
         _triage_env["NO_COLOR"] = "1"
         result: SubprocessResult = await run_managed_async(
             cmd=triage_cmd,
-            cwd=Path.cwd(),
+            cwd=cwd,
             timeout=30.0,
             env=_triage_env,
             pty_mode=False,

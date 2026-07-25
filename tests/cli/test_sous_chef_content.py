@@ -20,6 +20,7 @@ def test_sous_chef_content_no_frontmatter():
     assert content, "_read_full_sous_chef returned empty string"
     assert not content.startswith("---"), "Frontmatter delimiter still present"
     assert "uses_capabilities:" not in content, "Frontmatter field leaked into content"
+    assert "activate_deps:" not in content, "Dependency authority leaked into content"
 
 
 def test_sous_chef_documents_exhaustive_recipe_section_reconstruction() -> None:

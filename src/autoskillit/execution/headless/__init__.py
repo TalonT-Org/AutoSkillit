@@ -1,11 +1,4 @@
-"""Headless Claude Code session orchestration.
-
-IL-1 module (execution/). Owns the full lifecycle of a headless claude CLI session:
-command preparation, subprocess invocation via the injected runner, and
-SkillResult construction.
-
-Public API: run_headless_core(skill_command, cwd, ctx, *, ...) -> SkillResult
-"""
+"""IL-1 headless session lifecycle and food-truck dispatch."""
 
 from __future__ import annotations
 
@@ -20,6 +13,8 @@ from autoskillit.core import (
     SKILL_COMMAND_DISPLAY_MAX,
     ClosureAuthoritySpec,
     CodingAgentBackend,
+    HeadlessSkillDispatchContract,
+    PluginSource,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     SkillSessionConfig,
@@ -56,6 +51,7 @@ from autoskillit.execution.headless._headless_helpers import (
     assert_interactive_ordering,
     resolve_model_identity,
 )
+from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _BRANCH_NAME_PATTERN,
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
@@ -152,20 +148,25 @@ async def run_headless_core(
     network_access: bool = False,
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
+    on_session_id_resolved: Callable[[str], None] | None = None,
     skill_contract: SkillContract | None = None,
+    capability_contract: HeadlessSkillDispatchContract | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
     Does NOT check open_kitchen gate — callers in server.py are responsible.
     Accepts explicit ToolContext so this module has no server.py dependency.
     """
+    cwd = validated_dispatch_cwd(
+        capability_contract,
+        resolved_command=skill_command,
+        cwd=cwd,
+    )
     cfg = ctx.config.run_skill
     effective_marker = completion_marker or cfg.completion_marker
     original_skill_command = skill_command
-
     if not step_name and isinstance(ctx.runner, RecordingSubprocessRunner):
         step_name = _derive_step_name_from_skill_command(skill_command)
-
     with structlog.contextvars.bound_contextvars(
         skill_command=original_skill_command[:SKILL_COMMAND_DISPLAY_MAX],
         step_name=step_name or None,
@@ -190,7 +191,6 @@ async def run_headless_core(
                 step_backend=step_backend.name,
                 ctx_backend=ctx.backend.name,
             )
-
         _cmd_backend = step_backend if step_backend is not None else ctx.backend
         config = SkillSessionConfig(
             completion_marker=effective_marker,
@@ -219,7 +219,6 @@ async def run_headless_core(
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
-
         logger.debug(
             "run_headless_core_entry",
             cwd=cwd,
@@ -229,7 +228,6 @@ async def run_headless_core(
             plugin_source=repr(ctx.plugin_source),
             add_dirs=list(add_dirs) if add_dirs else None,
         )
-
         effective_provider = provider_name or profile_name
         return await _execute_claude_headless(
             spec,
@@ -268,6 +266,7 @@ async def run_headless_core(
             backend_override_source=backend_override_source,
             closure_spec=closure_spec,
             closure_report_root=closure_report_root,
+            on_session_id_resolved=on_session_id_resolved,
             skill_contract=skill_contract,
         )
 
@@ -320,7 +319,9 @@ class DefaultHeadlessExecutor:
         network_access: bool = False,
         closure_spec: ClosureAuthoritySpec | None = None,
         closure_report_root: Path | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
         skill_contract: SkillContract | None = None,
+        capability_contract: HeadlessSkillDispatchContract | None = None,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -366,7 +367,9 @@ class DefaultHeadlessExecutor:
             network_access=network_access,
             closure_spec=closure_spec,
             closure_report_root=closure_report_root,
+            on_session_id_resolved=on_session_id_resolved,
             skill_contract=skill_contract,
+            capability_contract=capability_contract,
         )
 
     async def dispatch_food_truck(
@@ -375,6 +378,7 @@ class DefaultHeadlessExecutor:
         cwd: str,
         *,
         completion_marker: str,
+        plugin_source: PluginSource | None = None,
         prior_completion_markers: Sequence[str] | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
@@ -404,7 +408,13 @@ class DefaultHeadlessExecutor:
         resume_message: str | None = None,
         backend_override: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        capability_contract: HeadlessSkillDispatchContract | None = None,
     ) -> SkillResult:
+        cwd = validated_dispatch_cwd(
+            capability_contract,
+            resolved_command=orchestrator_prompt,
+            cwd=cwd,
+        )
         dispatch_backend: CodingAgentBackend | None
         if backend_override is not None:
             from autoskillit.execution.backends import get_backend
@@ -412,7 +422,6 @@ class DefaultHeadlessExecutor:
             dispatch_backend = get_backend(backend_override)
         else:
             dispatch_backend = self._ctx.backend
-
         if dispatch_backend is not None and not dispatch_backend.capabilities.food_truck_capable:
             raise RuntimeError(
                 f"backend does not support food truck dispatch "
@@ -426,13 +435,11 @@ class DefaultHeadlessExecutor:
                     f"Pre-launch check failed for dispatch backend "
                     f"{dispatch_backend.name!r}: {'; '.join(pre_launch_errors)}"
                 )
-
         cfg = self._ctx.config
         model_identity = resolve_model_identity(
             model, cfg, step_name=step_name, profile_name=profile_name
         )
         fleet_cfg = cfg.fleet
-
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
         if requires_packs:
             if FOOD_TRUCK_TOOL_TAGS_ENV_VAR in merged_extras:
@@ -441,7 +448,6 @@ class DefaultHeadlessExecutor:
                     f"{FOOD_TRUCK_TOOL_TAGS_ENV_VAR} — use requires_packs exclusively"
                 )
             merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
-
         fleet_idle = fleet_cfg.idle_output_timeout
         if idle_output_timeout is not None:
             merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
@@ -451,7 +457,6 @@ class DefaultHeadlessExecutor:
             idle_cfg_val = cfg.run_skill.idle_output_timeout
             if idle_cfg_val > 0:
                 merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
-
         if dispatch_backend is None:
             raise RuntimeError(
                 "dispatch_backend must be resolved before dispatch_food_truck execution"
@@ -459,7 +464,7 @@ class DefaultHeadlessExecutor:
         backend = dispatch_backend
         cmd_spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
-            plugin_source=self._ctx.plugin_source,
+            plugin_source=cast(PluginSource, plugin_source),
             cwd=cwd,
             completion_marker=completion_marker,
             resume_session_id=resume_session_id,
@@ -477,14 +482,12 @@ class DefaultHeadlessExecutor:
             resume_message=resume_message,
         )
         spec = cmd_spec
-
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
         effective_stale = (
             stale_threshold if stale_threshold is not None else cfg.run_skill.stale_threshold
         )
         effective_deadline_ext = fleet_cfg.enable_deadline_extension
         effective_max_ext = float(fleet_cfg.max_extension_seconds)
-
         effective_idle_out: float | None = (
             idle_output_timeout
             if idle_output_timeout is not None
@@ -492,13 +495,11 @@ class DefaultHeadlessExecutor:
             if fleet_idle > 0
             else None
         )
-
         effective_marker_dir: Path | None = marker_dir or (
             _resolve_session_log_dir(cwd, cast(CodingAgentBackend, dispatch_backend))
             if cwd
             else None
         )
-
         return await _execute_claude_headless(
             spec,
             cwd,

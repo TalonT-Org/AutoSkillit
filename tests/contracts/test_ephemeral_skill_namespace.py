@@ -5,8 +5,9 @@ namespace that matches how those skills are delivered in the session:
 - BUNDLED_EXTENDED skills are delivered via --add-dir as bare /name
 - BUNDLED skills are delivered via --plugin-dir as /autoskillit:name
 
-A /autoskillit:<ref> reference in an ephemeral SKILL.md for a BUNDLED_EXTENDED target
-is wrong — the agent will not find it.
+A /autoskillit:<ref> reference in an ephemeral SKILL.md for an available
+BUNDLED_EXTENDED target is wrong — the agent will not find it. Disabled or
+otherwise unavailable targets are intentionally not projected as invocable.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ClaudeDirectoryConventions, SkillSource
+from autoskillit.core import ClaudeDirectoryConventions, SkillExecutionRole, SkillSource
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
@@ -31,10 +32,12 @@ _PREFIXED_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
 def test_ephemeral_skill_md_namespace_matches_session_delivery(tmp_path: Path) -> None:
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
-    session_path = mgr.init_session("ns-check-session", cook_session=True)
+    resolver = DefaultSkillResolver()
+    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+    context = provider.catalog_projection_context(catalog, tmp_path)
+    session_path = mgr.init_session("ns-check-session", catalog, context)
 
     skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-    resolver = DefaultSkillResolver()
     violations: list[str] = []
 
     for skill_md in sorted(skills_base.glob("*/SKILL.md")):
@@ -42,8 +45,7 @@ def test_ephemeral_skill_md_namespace_matches_session_delivery(tmp_path: Path) -
         body = skill_md.read_text()
         for m in _PREFIXED_REF_RE.finditer(body):
             ref_name = m.group(1)
-            info = resolver.resolve(ref_name)
-            if info is not None and info.source == SkillSource.BUNDLED_EXTENDED:
+            if catalog.namespace_sources.get(ref_name) == SkillSource.BUNDLED_EXTENDED:
                 line_no = body[: m.start()].count("\n") + 1
                 violations.append(
                     f"{skill_name}/SKILL.md:{line_no}: /autoskillit:{ref_name} "

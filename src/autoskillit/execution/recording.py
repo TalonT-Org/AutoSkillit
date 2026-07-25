@@ -30,6 +30,7 @@ from autoskillit.execution._recording_skills import (
     _extract_ephemeral_add_dir,
     scan_skill_snapshots,
     snapshot_skill_dir,
+    validate_skill_snapshot_members,
 )
 from autoskillit.execution._recording_skills import (
     restore_skill_snapshot as _restore_skill_snapshot,
@@ -180,6 +181,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     step_name=step_name,
                     completion_record_types=completion_record_types,
                     session_record_types=session_record_types,
+                    on_session_id_resolved=on_session_id_resolved,
                     child_deferral_ceiling=child_deferral_ceiling,
                     capture_dir=capture_dir,
                 )
@@ -207,6 +209,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 stream_parser=stream_parser,
                 completion_record_types=completion_record_types,
                 session_record_types=session_record_types,
+                on_session_id_resolved=on_session_id_resolved,
                 child_deferral_ceiling=child_deferral_ceiling,
                 capture_dir=capture_dir,
             )
@@ -244,6 +247,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             stream_parser=stream_parser,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
+            on_session_id_resolved=on_session_id_resolved,
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
         )
@@ -321,6 +325,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         step_name: str,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
+        on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
     ) -> SubprocessResult:
@@ -347,6 +352,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             stream_parser=stream_parser,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
+            on_session_id_resolved=on_session_id_resolved,
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
         )
@@ -418,6 +424,17 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         if snap_path is None:
             return None
         return _restore_skill_snapshot(snap_path, ephemeral_root, session_id)
+
+    def validate_skill_snapshot(
+        self,
+        step_name: str,
+        expected_names: frozenset[str],
+    ) -> None:
+        """Reject replay snapshot drift before any restore-side filesystem work."""
+        snap_path = self.skill_snapshots.get(step_name)
+        if snap_path is None:
+            return
+        validate_skill_snapshot_members(snap_path, expected_names)
 
     async def __call__(
         self,

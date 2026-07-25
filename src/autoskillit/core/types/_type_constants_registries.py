@@ -19,7 +19,8 @@ from typing import Literal, NamedTuple
 # not introduce a circular or cross-layer dependency.
 from ._type_backend import BackendCapabilities
 from ._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
-from ._type_enums import FleetErrorCode
+from ._type_enums import FleetErrorCode, SkillExecutionRole
+from ._type_exceptions import SkillContractError
 
 __all__ = [
     "PIPELINE_FORBIDDEN_TOOLS",
@@ -64,6 +65,7 @@ __all__ = [
     "SKILL_CAPABILITY_REGISTRY",
     "describe_capability_mismatches",
     "unsatisfied_backend_capabilities",
+    "validate_skill_capability_roles",
 ]
 
 # Native Claude Code tools that pipeline orchestrators must NEVER use directly.
@@ -759,6 +761,7 @@ class SkillCapabilityDef:
 
     description: str
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"]
+    allowed_execution_roles: frozenset[SkillExecutionRole]
     required_sandbox_overrides: frozenset[str] = frozenset()
     worker_routable: bool = False
     # Name of a Boolean field on `BackendCapabilities` that must be True
@@ -800,41 +803,51 @@ class HardCapabilityMismatch(NamedTuple):
 # because the capability is documentary about the feature being incomplete, not a hard
 # blocker. agent_subagent / agent_model / cross_skill_ref are routed via worker_routable
 # rather than fix-required. Do not conflate the two registries' semantics.
+_ALL_SKILL_EXECUTION_ROLES = frozenset(SkillExecutionRole)
+
 SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
     "agent_subagent": SkillCapabilityDef(
         description="Agent(subagent_type=...) tool — delegates to specialized subagent",
         codex_status="not-applicable",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
         worker_routable=True,
     ),
     "agent_model": SkillCapabilityDef(
         description="Agent(model=...) tool — spawns model-specific subagent",
         codex_status="not-applicable",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
         worker_routable=True,
     ),
     "open_kitchen": SkillCapabilityDef(
         description="open_kitchen / close_kitchen lifecycle tools",
         codex_status="not-applicable",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
     ),
     "run_skill": SkillCapabilityDef(
         description="run_skill MCP tool call (headless session dispatch)",
         codex_status="works-as-is",
+        allowed_execution_roles=frozenset({SkillExecutionRole.ORCHESTRATOR}),
     ),
     "test_check": SkillCapabilityDef(
         description="test_check MCP tool (headless test runner)",
         codex_status="works-as-is",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
     ),
     "claude_dir": SkillCapabilityDef(
         description="Reads/writes .claude/ directory structure",
         codex_status="works-as-is",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
     ),
     "cross_skill_ref": SkillCapabilityDef(
         description="Cross-skill /autoskillit: invocation via Skill tool",
         codex_status="not-applicable",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
         worker_routable=True,
     ),
     "commit_files": SkillCapabilityDef(
         description="commit_files MCP tool — server-side git stage/commit",
         codex_status="works-as-is",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
     ),
     "git_metadata_write": SkillCapabilityDef(
         description=(
@@ -842,6 +855,7 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
             "git worktree add, git checkout -b)"
         ),
         codex_status="not-applicable",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
         worker_routable=True,
         required_backend_property="git_metadata_writable",
         required_recipe_ingredient="backend_supports_git_write",
@@ -853,9 +867,33 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
             "access. On Codex workers, enables network_access=true in the workspace-write sandbox."
         ),
         codex_status="fix-required",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
         required_sandbox_overrides=frozenset({"sandbox_workspace_write.network_access=true"}),
     ),
 }
+
+
+def validate_skill_capability_roles(
+    uses_capabilities: frozenset[str],
+    execution_role: SkillExecutionRole,
+) -> None:
+    """Reject unknown capabilities and declarations not owned by ``execution_role``."""
+    unknown = uses_capabilities - SKILL_CAPABILITY_REGISTRY.keys()
+    if unknown:
+        raise SkillContractError(
+            f"unknown skill capabilities for {execution_role.value}: {sorted(unknown)}"
+        )
+
+    incompatible = sorted(
+        capability
+        for capability in uses_capabilities
+        if execution_role not in SKILL_CAPABILITY_REGISTRY[capability].allowed_execution_roles
+    )
+    if incompatible:
+        raise SkillContractError(
+            f"execution role {execution_role.value!r} cannot declare capabilities {incompatible}"
+        )
+
 
 _VALID_CODEX_STATUSES = {"works-as-is", "degraded", "fix-required", "not-applicable"}
 for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
@@ -864,6 +902,14 @@ for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
             f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}].codex_status="
             f"{_cap_def.codex_status!r} is not valid. "
             f"Must be one of {sorted(_VALID_CODEX_STATUSES)}."
+        )
+    if (
+        not _cap_def.allowed_execution_roles
+        or not _cap_def.allowed_execution_roles <= _ALL_SKILL_EXECUTION_ROLES
+    ):
+        raise RuntimeError(
+            f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}].allowed_execution_roles "
+            "must be a non-empty subset of SkillExecutionRole."
         )
 
 # Boot-time validation: every `required_backend_property` must name a real

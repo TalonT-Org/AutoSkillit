@@ -41,6 +41,8 @@ from autoskillit.core import (
     ClaudeDirectoryConventions,
     CmdSpec,
     CodexEventType,
+    DirectInstall,
+    MarketplaceInstall,
     NamedResume,
     NoResume,
     OutputFormat,
@@ -80,6 +82,17 @@ from autoskillit.execution.backends._codex_config import (
 )
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
+
+
+def _codex_home_from_plugin_source(plugin_source: PluginSource | None) -> str | None:
+    if plugin_source is None:
+        return None
+    if isinstance(plugin_source, MarketplaceInstall):
+        raise ValueError("Codex requires a sanitized DirectInstall plugin projection")
+    if isinstance(plugin_source, DirectInstall):
+        return str(plugin_source.plugin_dir)
+    raise TypeError(f"Unsupported plugin source: {type(plugin_source).__name__}")
+
 
 __all__ = [
     "CODEX_EXEC_FLAGS",
@@ -514,51 +527,6 @@ def _register_agent_tomls(session_dir: Path) -> int:
     return len(registrations) // 4
 
 
-def _materialize_profile_skills(session_dir: Path) -> int:
-    """Symlink ~/.codex/skills/<name> dirs into session_dir/skills/<name>.
-
-    Scans Path.home() / ".codex" / "skills" for subdirectories containing
-    SKILL.md. Each is symlinked into session_dir/skills/<name>. Falls back
-    to shutil.copytree if symlink creation fails. Subdirectories without
-    SKILL.md are skipped. Returns the number of skills materialized.
-    """
-    profile_skills_root = Path.home() / ".codex" / "skills"
-    if not profile_skills_root.is_dir():
-        return 0
-    count = 0
-    skills_base = session_dir / "skills"
-    skills_base.mkdir(parents=True, exist_ok=True)
-    try:
-        entries = list(profile_skills_root.iterdir())
-    except OSError:
-        return 0
-    for entry in entries:
-        if not entry.is_dir() or not (entry / "SKILL.md").is_file():
-            continue
-        target = skills_base / entry.name
-        if target.exists() or target.is_symlink():
-            continue
-        try:
-            target.symlink_to(entry.resolve())
-        except OSError:
-            logger.debug(
-                "codex_profile_skill_symlink_failed_using_copytree",
-                skill=entry.name,
-                exc_info=True,
-            )
-            try:
-                shutil.copytree(entry, target)
-            except OSError:
-                logger.warning(
-                    "codex_profile_skill_copy_failed",
-                    skill=entry.name,
-                    exc_info=True,
-                )
-                continue
-        count += 1
-    return count
-
-
 @dataclass(frozen=True, slots=True)
 class CodexBackend(BackendCmdBuilderBase):
     def _binary(self) -> str:
@@ -600,7 +568,6 @@ class CodexBackend(BackendCmdBuilderBase):
             session_record_types=frozenset({"item.completed"}),
             triage_capable=False,
             supports_context_exhaustion_detection=False,
-            project_local_skills_capable=False,
             supports_tool_list_changed=False,
             required_skill_fields=frozenset({"name", "description"}),
             required_session_files=frozenset({"config.toml"}),
@@ -650,6 +617,7 @@ class CodexBackend(BackendCmdBuilderBase):
         return BackendConventions(
             skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
             project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
+            skill_sigil=self.capabilities.skill_sigil,
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
@@ -762,8 +730,7 @@ class CodexBackend(BackendCmdBuilderBase):
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]
             network_access = cfg.get("network_access", False)
-        if plugin_source is not None:
-            logger.warning("codex_plugin_source_discarded", plugin_source=str(plugin_source))
+        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
         if output_format != OutputFormat.JSON:
             logger.warning("codex_output_format_coerced")
         _has_prefix = (
@@ -826,6 +793,8 @@ class CodexBackend(BackendCmdBuilderBase):
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
         if add_dirs:
             extras["CODEX_HOME"] = add_dirs[0].path
+        elif projected_codex_home is not None:
+            extras["CODEX_HOME"] = projected_codex_home
         if exit_after_stop_delay_ms:
             extras.setdefault(
                 "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
@@ -888,8 +857,7 @@ class CodexBackend(BackendCmdBuilderBase):
         sentinel_contract: str = "",
         resume_message: str | None = None,
     ) -> CmdSpec:
-        if plugin_source is not None:
-            logger.warning("codex_plugin_source_discarded", plugin_source=str(plugin_source))
+        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
         if output_format != OutputFormat.STREAM_JSON:
             logger.warning("codex_output_format_coerced")
 
@@ -936,6 +904,8 @@ class CodexBackend(BackendCmdBuilderBase):
             for k, v in env_extras.items():
                 if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:
                     extras[k] = v
+        if projected_codex_home is not None:
+            extras["CODEX_HOME"] = projected_codex_home
         if exit_after_stop_delay_ms:
             extras.setdefault(
                 "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
@@ -1039,6 +1009,10 @@ class CodexBackend(BackendCmdBuilderBase):
             merged_extras.update(env_extras)
         if add_dirs:
             merged_extras.setdefault("CODEX_HOME", str(add_dirs[0]))
+        else:
+            projected_codex_home = _codex_home_from_plugin_source(plugin_source)
+            if projected_codex_home is not None:
+                merged_extras.setdefault("CODEX_HOME", projected_codex_home)
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
         env = CodexEnvPolicy().build_env(
             base_env, extras=merged_extras, required=effective_required
@@ -1073,6 +1047,9 @@ class CodexBackend(BackendCmdBuilderBase):
         )
         if env_extras:
             resume_extras.update(env_extras)
+        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
+        if projected_codex_home is not None:
+            resume_extras["CODEX_HOME"] = projected_codex_home
         env = self.env_policy().build_env(
             filtered_base,
             extras=resume_extras,
@@ -1156,11 +1133,6 @@ class CodexBackend(BackendCmdBuilderBase):
             logger.debug("codex_agents_registered", count=registered)
         except Exception:
             logger.warning("codex_agent_toml_generation_failed", exc_info=True)
-
-        try:
-            _materialize_profile_skills(session_dir)
-        except Exception:
-            logger.warning("codex_profile_skills_materialization_failed", exc_info=True)
 
     def validate_skill_content(self, content: str) -> list[str]:
         return []

@@ -250,14 +250,31 @@ class TestResumeWithStepNameMarksCompleteOnSuccess:
             {"review_approach": ["rectify"]},
         )
         tool_ctx_kitchen_open.executor = AsyncMock()
-        tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
-
-        await run_skill(
-            "continue the work",
-            str(tmp_path),
-            step_name="rectify",
-            resume_session_id="existing-session-123",
+        tool_ctx_kitchen_open.executor.run = AsyncMock(
+            return_value=dataclasses.replace(
+                _SUCCESS_RESULT,
+                session_id="existing-session-123",
+            )
         )
+        from tests.conftest import bind_test_skill_resume_contract
+
+        bind_test_skill_resume_contract(
+            tool_ctx_kitchen_open,
+            session_id="existing-session-123",
+            cwd=tmp_path,
+            skill_name="rectify",
+            resolved_command="/rectify",
+        )
+
+        result = json.loads(
+            await run_skill(
+                "continue the work",
+                str(tmp_path),
+                step_name="rectify",
+                resume_session_id="existing-session-123",
+            )
+        )
+        assert result["success"] is True, result["result"]
 
         tracker = _read_tracker(tmp_path)
         assert tracker["steps"]["rectify"]["status"] == "complete"

@@ -60,33 +60,28 @@ def test_session_skill_manager_managed_session_signature():
     import inspect
     import typing
     from contextlib import AbstractContextManager
-    from pathlib import Path
 
     from autoskillit.core import (
-        CodingAgentBackend,
+        EffectiveSkillCatalogAuthority,
         ManagedSessionHome,
         SessionSkillManager,
+        SkillProjectionContextAuthority,
     )
 
     signature = inspect.signature(SessionSkillManager.managed_session)
     assert tuple(signature.parameters) == (
         "self",
         "session_id",
-        "cook_session",
-        "config",
-        "project_dir",
-        "backend",
+        "catalog",
+        "projection_context",
     )
-    assert signature.parameters["session_id"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    for name in ("cook_session", "config", "project_dir", "backend"):
-        assert signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
+    for name in ("session_id", "catalog", "projection_context"):
+        assert signature.parameters[name].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
         assert signature.parameters[name].default is inspect.Parameter.empty
     assert typing.get_type_hints(SessionSkillManager.managed_session) == {
         "session_id": str,
-        "cook_session": bool,
-        "config": typing.Any,
-        "project_dir": Path,
-        "backend": CodingAgentBackend,
+        "catalog": EffectiveSkillCatalogAuthority,
+        "projection_context": SkillProjectionContextAuthority,
         "return": AbstractContextManager[ManagedSessionHome],
     }
 

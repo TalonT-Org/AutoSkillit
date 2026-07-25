@@ -1375,6 +1375,35 @@ def test_closed_epoch_audits_survive_state_serialization() -> None:
     assert restored.closed_epochs == (empty_audit,)
 
 
+def test_closed_epoch_audit_rejects_excessive_occurrence_cardinality() -> None:
+    occurrence = _occurrence("occurrence-cardinality", span_id="span-cardinality")
+    record = AdmissionOccurrenceRecord(
+        occurrence=occurrence,
+        state=AdmissionState.PROPOSED,
+        batch_id=None,
+        reservation_id=None,
+        accepted_witness_ids=(),
+        indeterminate_reason_code=None,
+        quarantine_reason_code=None,
+    )
+
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        ClosedEpochAudit(
+            snapshot=_snapshot(),
+            terminal_occurrence_records=(record,) * 10_001,
+            terminal_batch_records=(),
+            terminal_reservations=(),
+            terminal_generation_reservations=(),
+            closure_witness_id=AdmissionWitnessId("closure-witness-cardinality"),
+            fence_proof=None,
+            processed_event_tombstones=(),
+            retained_unresolved_count=0,
+            retained_generation_count=0,
+        )
+
+    assert "closed_epoch_occurrence_limit_exceeded" in str(exc_info.value)
+
+
 @pytest.mark.parametrize(
     "non_dispatch_surface",
     [

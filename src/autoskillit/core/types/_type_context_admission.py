@@ -50,6 +50,7 @@ from ._type_helpers import (
 from ._type_results import ModelIdentity
 
 _TYPE_REGISTRY: dict[str, type[_ContractValue]] = {}
+_MAX_CLOSED_EPOCH_OCCURRENCES = 10_000
 _ENUM_REGISTRY: dict[str, type[StrEnum]] = {
     enum_type.__name__: enum_type
     for enum_type in (
@@ -903,6 +904,8 @@ class ClosedEpochAudit(_ContractValue):
             self.retained_generation_count,
             "invalid_retained_generation_charge",
         )
+        if len(self.terminal_occurrence_records) > _MAX_CLOSED_EPOCH_OCCURRENCES:
+            _raise_invalid("closed_epoch_occurrence_limit_exceeded")
         _validate_canonical_tuple(
             self.terminal_occurrence_records,
             "noncanonical_terminal_occurrences",

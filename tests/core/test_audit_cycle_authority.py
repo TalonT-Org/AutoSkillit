@@ -133,6 +133,52 @@ def test_authority_and_rows_are_frozen_and_digest_bound(tmp_path: Path) -> None:
         replace(authority, cycle_id="forged")
 
 
+def test_authority_normalizes_mutable_typed_collections(tmp_path: Path) -> None:
+    audited_plan_refs = [_ref(tmp_path / "plan.md")]
+    assessments = [_row()]
+    authority = AuditCycleAuthority.create(
+        execution_generation="generation-1",
+        cycle_id="cycle-1",
+        plan_set_id="plans-1",
+        scope_id="scope-1",
+        part_id="part-a",
+        audit_round=2,
+        parent_authority_digest=_HASH_B,
+        audited_plan_refs=audited_plan_refs,  # type: ignore[arg-type]
+        inventory_ref=_ref(tmp_path / "inventory.json", _HASH_B),
+        assessments=assessments,  # type: ignore[arg-type]
+        verdict=AuditVerdict.GO,
+        remediation_ref=None,
+        generated_at="2026-07-23T00:00:00Z",
+    )
+
+    audited_plan_refs.append(_ref(tmp_path / "other-plan.md", _HASH_C))
+    assessments.append(_row("REQ-002"))
+
+    assert isinstance(authority.audited_plan_refs, tuple)
+    assert isinstance(authority.assessments, tuple)
+    assert len(authority.audited_plan_refs) == 1
+    assert len(authority.assessments) == 1
+    assert authority.authority_digest == authority.compute_digest()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_type"),
+    [
+        ("audited_plan_refs", [object()], "ArtifactRef"),
+        ("assessments", [object()], "AuditAssessmentRow"),
+    ],
+)
+def test_authority_rejects_invalid_collection_elements(
+    tmp_path: Path,
+    field: str,
+    value: list[object],
+    expected_type: str,
+) -> None:
+    with pytest.raises(ValueError, match=expected_type):
+        replace(_authority(tmp_path), **{field: value})
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -257,6 +303,32 @@ def test_plan_disposition_report_is_bound_to_full_identity(tmp_path: Path) -> No
     assert PlanDispositionReport.from_dict(report.to_dict()) == report
     with pytest.raises(ValueError, match="report content"):
         replace(report, cycle_id="forged-cycle")
+    mutable_dispositions = [disposition]
+    normalized = PlanDispositionReport.create(
+        execution_generation=authority.execution_generation,
+        cycle_id=authority.cycle_id,
+        plan_set_id=authority.plan_set_id,
+        scope_id=authority.scope_id,
+        part_id=authority.part_id,
+        audit_round=authority.audit_round,
+        parent_authority_digest=authority.authority_digest,
+        inventory_digest=authority.inventory_ref.content_digest,
+        findings_digest=authority.findings_digest,
+        current_plan_ref=_ref(tmp_path / "other-current-plan.md", _HASH_C),
+        dispositions=mutable_dispositions,  # type: ignore[arg-type]
+        generated_at="2026-07-23T00:01:00Z",
+    )
+    mutable_dispositions.append(
+        PlanDispositionRow.create(
+            requirement_id="REQ-002",
+            disposition="satisfied-by-round-1",
+        )
+    )
+    assert isinstance(normalized.dispositions, tuple)
+    assert len(normalized.dispositions) == 1
+    assert normalized.report_digest == normalized.compute_digest()
+    with pytest.raises(ValueError, match="PlanDispositionRow"):
+        replace(normalized, dispositions=[object()])
 
 
 def test_head_allows_successor_only_for_go() -> None:

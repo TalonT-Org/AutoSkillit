@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, TypeVar
 
 from ..closure_hashing import HASH_RE, canonical_json_bytes, compute_canonical_hash
 
@@ -34,6 +34,20 @@ _DISPOSITION_ROW_DOMAIN = "autoskillit:audit-cycle:disposition-row:v1:sha256"
 _FINDINGS_DOMAIN = "autoskillit:audit-cycle:findings:v1:sha256"
 _REPORT_DOMAIN = "autoskillit:audit-cycle:plan-disposition:v1:sha256"
 _SATISFIED_RE = re.compile(r"^satisfied-by-round-([1-9][0-9]*)$")
+_T = TypeVar("_T")
+
+
+def _immutable_typed_tuple(
+    name: str,
+    values: object,
+    item_type: type[_T],
+) -> tuple[_T, ...]:
+    if not isinstance(values, (list, tuple)):
+        raise ValueError(f"{name} must be a tuple")
+    normalized = tuple(values)
+    if not all(isinstance(value, item_type) for value in normalized):
+        raise ValueError(f"{name} must contain only {item_type.__name__} values")
+    return normalized
 
 
 class AuditVerdict(StrEnum):
@@ -258,6 +272,24 @@ class AuditCycleAuthority:
     authority_digest: str
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "audited_plan_refs",
+            _immutable_typed_tuple(
+                "AuditCycleAuthority.audited_plan_refs",
+                self.audited_plan_refs,
+                ArtifactRef,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "assessments",
+            _immutable_typed_tuple(
+                "AuditCycleAuthority.assessments",
+                self.assessments,
+                AuditAssessmentRow,
+            ),
+        )
         if (
             isinstance(self.schema_version, bool)
             or not isinstance(self.schema_version, int)
@@ -319,6 +351,16 @@ class AuditCycleAuthority:
         remediation_ref: ArtifactRef | None,
         generated_at: str,
     ) -> Self:
+        audited_plan_refs = _immutable_typed_tuple(
+            "AuditCycleAuthority.audited_plan_refs",
+            audited_plan_refs,
+            ArtifactRef,
+        )
+        assessments = _immutable_typed_tuple(
+            "AuditCycleAuthority.assessments",
+            assessments,
+            AuditAssessmentRow,
+        )
         values: dict[str, Any] = {
             "assessments": [row.to_dict() for row in assessments],
             "audit_round": audit_round,
@@ -540,6 +582,15 @@ class PlanDispositionReport:
     report_digest: str
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "dispositions",
+            _immutable_typed_tuple(
+                "PlanDispositionReport.dispositions",
+                self.dispositions,
+                PlanDispositionRow,
+            ),
+        )
         if (
             isinstance(self.schema_version, bool)
             or not isinstance(self.schema_version, int)
@@ -578,6 +629,11 @@ class PlanDispositionReport:
         dispositions: tuple[PlanDispositionRow, ...],
         generated_at: str,
     ) -> Self:
+        dispositions = _immutable_typed_tuple(
+            "PlanDispositionReport.dispositions",
+            dispositions,
+            PlanDispositionRow,
+        )
         values: dict[str, Any] = {
             "audit_round": audit_round,
             "current_plan_ref": current_plan_ref.to_dict(),

@@ -2366,6 +2366,158 @@ def test_rollover_moves_old_work_to_resolvable_closed_epoch_audit() -> None:
     assert reconciled_audit.terminal_generation_reservations[0].state is GenerationState.RECONCILED
 
 
+def _rollover_closed_work(
+    state: ActiveContextAdmissionState,
+    batch: AdmissionBatch,
+    *,
+    name: str,
+) -> ActiveContextAdmissionState:
+    receiver = AuthoritySourceId(f"receiver-{name}")
+    rolled = reduce_context_admission(
+        state,
+        RolloverEpochEvent(
+            **_event_fields(state, f"rollover-{name}", "rollover-epoch"),
+            witness=replace(
+                _witness(batch, WitnessKind.EPOCH_ROLLOVER),
+                authority_source_id=receiver,
+            ),
+            fence_proof=EpochFenceProof(
+                old_window_epoch_id=state.snapshot.window_epoch_id,
+                old_window_epoch_number=state.snapshot.window_epoch_number,
+                new_window_epoch_id=WindowEpochId("epoch-2"),
+                new_window_epoch_number=2,
+                receiver_authority_source_id=receiver,
+                fence_witness_id=AdmissionWitnessId(f"fence-{name}"),
+                highest_admitted_dispatch_sequence=1,
+            ),
+            new_snapshot=_snapshot(epoch=2),
+            protected_pools=(),
+        ),
+    )
+    assert rolled.decision.kind is AdmissionDecisionKind.WOULD_ADMIT
+    assert isinstance(rolled.next_state, ActiveContextAdmissionState)
+    return rolled.next_state
+
+
+def test_closed_epoch_input_overage_quarantines_and_clears_retained_charge() -> None:
+    state, batch, _, _ = _reserved_batch(
+        name="closed-input-overage",
+        input_count=18,
+        generation_count=0,
+    )
+    state = _prepare_dispatch(state, batch)
+    state = _rollover_closed_work(state, batch, name="closed-input-overage")
+
+    quarantined = reduce_context_admission(
+        state,
+        AcceptInputEvent(
+            **_event_fields(state, "accept-closed-input-overage", "accept-input"),
+            batch_id=batch.batch_id,
+            witness=_witness(batch, WitnessKind.PROVIDER_ACCEPTED),
+            final_manifest_revision=batch.manifest.representation_revision,
+            final_manifest=batch.manifest,
+            exact_input_charge=19,
+            measurement_kind=MeasurementKind.PROVIDER_EXACT,
+            authority_source=AuthoritySourceId("authority-test"),
+            representation_binding_witness=_binding(batch),
+        ),
+    )
+
+    assert quarantined.decision.kind is AdmissionDecisionKind.QUARANTINED
+    assert quarantined.decision.reason_code == "provider-charge-exceeds-reservation"
+    assert isinstance(quarantined.next_state, ActiveContextAdmissionState)
+    audit = quarantined.next_state.closed_epochs[-1]
+    assert audit.retained_unresolved_count == 0
+    assert audit.terminal_batch_records[0].state is AdmissionState.QUARANTINED
+    assert "QuarantineRecordedEffect" in {type(effect).__name__ for effect in quarantined.effects}
+
+
+def test_closed_epoch_incomplete_span_ownership_quarantines() -> None:
+    state, batch, _, _ = _reserved_batch(
+        name="closed-incomplete-spans",
+        input_count=18,
+        generation_count=0,
+    )
+    state = _prepare_dispatch(state, batch)
+    state = _rollover_closed_work(state, batch, name="closed-incomplete-spans")
+    audit = state.closed_epochs[-1]
+    occurrence_record = audit.terminal_occurrence_records[0]
+    incomplete_audit = replace(
+        audit,
+        terminal_occurrence_records=(
+            replace(
+                occurrence_record,
+                occurrence=replace(
+                    occurrence_record.occurrence,
+                    owned_span_ids=(
+                        *occurrence_record.occurrence.owned_span_ids,
+                        CanonicalSpanId("span-missing-from-closed-manifest"),
+                    ),
+                ),
+            ),
+        ),
+    )
+    state = replace(state, closed_epochs=(incomplete_audit,))
+
+    quarantined = reduce_context_admission(
+        state,
+        AcceptInputEvent(
+            **_event_fields(state, "accept-closed-incomplete-spans", "accept-input"),
+            batch_id=batch.batch_id,
+            witness=_witness(batch, WitnessKind.PROVIDER_ACCEPTED),
+            final_manifest_revision=batch.manifest.representation_revision,
+            final_manifest=batch.manifest,
+            exact_input_charge=17,
+            measurement_kind=MeasurementKind.PROVIDER_EXACT,
+            authority_source=AuthoritySourceId("authority-test"),
+            representation_binding_witness=_binding(batch),
+        ),
+    )
+
+    assert quarantined.decision.kind is AdmissionDecisionKind.QUARANTINED
+    assert quarantined.decision.reason_code == "incomplete-canonical-span-ownership"
+    assert isinstance(quarantined.next_state, ActiveContextAdmissionState)
+    closed_audit = quarantined.next_state.closed_epochs[-1]
+    assert closed_audit.retained_unresolved_count == 0
+    assert closed_audit.terminal_batch_records[0].state is AdmissionState.QUARANTINED
+    assert "QuarantineRecordedEffect" in {type(effect).__name__ for effect in quarantined.effects}
+
+
+def test_closed_epoch_generation_overage_quarantines_and_clears_retained_charge() -> None:
+    state, batch, _, generation = _reserved_batch(
+        name="closed-generation-overage",
+        input_count=18,
+        generation_count=7,
+    )
+    state = _prepare_dispatch(state, batch)
+    state = _rollover_closed_work(state, batch, name="closed-generation-overage")
+
+    quarantined = reduce_context_admission(
+        state,
+        ReconcileGenerationEvent(
+            **_event_fields(
+                state,
+                "reconcile-closed-generation-overage",
+                "reconcile-generation",
+            ),
+            generation_reservation_id=generation.generation_reservation_id,
+            output_usage_witness=_witness(batch, WitnessKind.OUTPUT_USAGE),
+            exact_output_usage=8,
+        ),
+    )
+
+    assert quarantined.decision.kind is AdmissionDecisionKind.QUARANTINED
+    assert quarantined.decision.reason_code == "generation-usage-exceeds-allowance"
+    assert isinstance(quarantined.next_state, ActiveContextAdmissionState)
+    audit = quarantined.next_state.closed_epochs[-1]
+    assert audit.retained_generation_count == 0
+    assert audit.terminal_generation_reservations[0].state is GenerationState.QUARANTINED
+    assert {type(effect).__name__ for effect in quarantined.effects} == {
+        "GenerationReconciledEffect",
+        "QuarantineRecordedEffect",
+    }
+
+
 def test_closed_epoch_authority_mismatch_quarantines_exact_charge() -> None:
     state, batch, _, _ = _reserved_batch(
         name="closed-authority-mismatch",

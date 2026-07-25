@@ -285,6 +285,34 @@ def materialize_codex_profile_skills(
     return len(_materialize_codex_profile_skill_infos(session_dir, backend))
 
 
+def _link_generated_home_skill_view(
+    generated_home: Path,
+    projected_skills: Path,
+    *,
+    skills_subdir: Path,
+) -> int:
+    """Expose projected skills at a persistent backend's home discovery root."""
+    discovery_root = generated_home / skills_subdir
+    discovery_root.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for source in sorted(projected_skills.iterdir(), key=lambda entry: entry.name):
+        skill_md = source / "SKILL.md"
+        if source.is_symlink() or not source.is_dir() or not skill_md.is_file():
+            raise SkillContractError(f"invalid projected session skill directory: {source}")
+        target = discovery_root / source.name
+        if os.path.lexists(target):
+            logger.debug(
+                "generated_home_skill_collision_preserved",
+                skill=source.name,
+                target=str(target),
+            )
+            continue
+        relative_source = Path(os.path.relpath(source, start=discovery_root))
+        target.symlink_to(relative_source, target_is_directory=True)
+        count += 1
+    return count
+
+
 def resolve_ephemeral_root() -> Path:
     """Return a writable ephemeral root directory for session skill dirs.
 
@@ -772,6 +800,13 @@ class DefaultSessionSkillManager:
             else tuple(record for record in records if record.source is not SkillSource.BUNDLED)
         )
         materialize_agent_skill_tree(skills_base, session_records, ungated_context)
+        if backend is not None and backend.capabilities.session_dir_persistent:
+            linked = _link_generated_home_skill_view(
+                generated_home,
+                skills_base,
+                skills_subdir=skills_subdir,
+            )
+            logger.debug("generated_home_skill_view_linked", count=linked)
         if backend is not None and backend.capabilities.session_dir_persistent:
             self._create_inert_rollout_paths(generated_home, backend)
         if backend is not None:

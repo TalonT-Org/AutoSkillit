@@ -779,7 +779,14 @@ def finalize_recipe_delivery(
                 composite_hash=str(candidate_payload.get("composite_hash", "")),
                 projection=compiled_bindings,
             )
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
+            get_logger(__name__).warning(
+                "recipe_execution_compilation_failed",
+                recipe_name=recipe_name,
+                surface=surface,
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
             decision = _failure_decision(
                 producer=RECIPE_DELIVERY_SURFACE_REGISTRY[surface].producer_tool,
                 reason="recipe_execution_compilation_failed",

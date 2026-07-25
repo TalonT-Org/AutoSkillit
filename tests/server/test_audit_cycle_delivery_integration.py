@@ -6,6 +6,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from hypothesis import settings
@@ -18,6 +19,7 @@ from hypothesis.stateful import (
     rule,
 )
 
+import autoskillit.server._recipe_delivery as recipe_delivery_module
 import autoskillit.server._recipe_execution as recipe_execution_module
 from autoskillit.core import (
     AdmissionReason,
@@ -278,6 +280,44 @@ def test_transformed_delivery_never_installs_execution(minimal_ctx) -> None:
         "bounded replacement"
     )
     assert get_recipe_execution(minimal_ctx) is None
+
+
+def test_recipe_execution_compilation_failure_logs_exception_context(
+    minimal_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_logger = MagicMock()
+    monkeypatch.setattr(recipe_delivery_module, "get_logger", lambda _name: mock_logger)
+    monkeypatch.setattr(
+        recipe_execution_module,
+        "build_recipe_execution_snapshot",
+        MagicMock(side_effect=ValueError("invalid template")),
+    )
+
+    finalized = finalize_recipe_delivery(
+        {
+            "content": "name: demo\n",
+            "content_hash": _HASH_A,
+            "composite_hash": _HASH_B,
+            "valid": True,
+        },
+        surface="load_recipe",
+        recipe_name="demo",
+        tool_ctx=minimal_ctx,
+        compiled_bindings=_projection(),
+    )
+
+    assert json.loads(finalized.rendered) == {
+        "success": False,
+        "error": "recipe_execution_unavailable",
+    }
+    mock_logger.warning.assert_called_once_with(
+        "recipe_execution_compilation_failed",
+        recipe_name="demo",
+        surface="load_recipe",
+        error_type="ValueError",
+        exc_info=True,
+    )
 
 
 def test_bound_prompt_preserves_falsey_and_metacharacter_values() -> None:

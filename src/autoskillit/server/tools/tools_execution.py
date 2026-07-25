@@ -926,14 +926,14 @@ async def run_skill(
                         "recipe_execution_preflight_input",
                         "plan_disposition_path must be a string when present",
                     )
-                _expected_preflight_identity = _installed_execution.preflight_identities.get(
-                    step_name
-                )
+                _preflight_identities = _installed_execution.preflight_identities
+                _expected_preflight_identity = _preflight_identities.get(step_name)
                 if _audit_cycle_path and _expected_preflight_identity is None:
                     return _recipe_execution_deny(
                         "recipe_execution_preflight_identity_missing",
                         "authority-bearing preflight requires a trusted template identity",
                     )
+                _expected_preflight_identity = _expected_preflight_identity or ("", "", "")
                 _preflight_result = _installed_execution.input_preflight_resolver.resolve(
                     VerifiedInputPreflightRequest(
                         execution_generation=recipe_execution_id,
@@ -942,21 +942,9 @@ async def run_skill(
                         plan_path=_plan_path,
                         audit_cycle_path=_audit_cycle_path or None,
                         plan_disposition_path=_plan_disposition_path or None,
-                        expected_plan_set_id=(
-                            _expected_preflight_identity[0]
-                            if _expected_preflight_identity is not None
-                            else ""
-                        ),
-                        expected_scope_id=(
-                            _expected_preflight_identity[1]
-                            if _expected_preflight_identity is not None
-                            else ""
-                        ),
-                        expected_part_id=(
-                            _expected_preflight_identity[2]
-                            if _expected_preflight_identity is not None
-                            else ""
-                        ),
+                        expected_plan_set_id=_expected_preflight_identity[0],
+                        expected_scope_id=_expected_preflight_identity[1],
+                        expected_part_id=_expected_preflight_identity[2],
                     )
                 )
                 if _preflight_result.decision.status is AdmissionStatus.REJECT:

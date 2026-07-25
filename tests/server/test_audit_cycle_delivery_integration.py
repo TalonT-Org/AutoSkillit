@@ -350,6 +350,7 @@ def test_published_audit_head_binds_preflight_template_identity(
         verdict=AuditVerdict.NO_GO,
     )
     authority_path = Path(tool_ctx_kitchen_open.temp_dir) / "authority.json"
+    authority_path.parent.mkdir(parents=True, exist_ok=True)
     authority_path.write_bytes(authority.canonical_bytes)
 
     publish_verified_audit_cycle(

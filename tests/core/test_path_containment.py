@@ -3,16 +3,32 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from autoskillit.core.path_containment import (
     ContainmentError,
     check_metadata_stable,
+    read_stable_contained_bytes,
     resolve_contained_path,
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
+
+def _with_metadata_drift(metadata: os.stat_result, field: str) -> SimpleNamespace:
+    values = {
+        "st_dev": metadata.st_dev,
+        "st_ino": metadata.st_ino,
+        "st_mode": metadata.st_mode,
+        "st_mtime_ns": metadata.st_mtime_ns,
+        "st_nlink": metadata.st_nlink,
+        "st_size": metadata.st_size,
+    }
+    values[field] = values[field] ^ 0o100 if field == "st_mode" else values[field] + 1
+    return SimpleNamespace(**values)
 
 
 class TestResolveContainedPath:
@@ -102,3 +118,56 @@ class TestCheckMetadataStable:
         post = os.stat(f)
         with pytest.raises(ContainmentError):
             check_metadata_stable(f, pre, post)
+
+
+class TestReadStableContainedBytes:
+    @pytest.mark.parametrize("field", ("st_dev", "st_mode", "st_nlink"))
+    def test_detects_open_file_metadata_drift(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        field: str,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        real_fstat = os.fstat
+        calls = 0
+
+        def drifting_fstat(fd: int):
+            nonlocal calls
+            metadata = real_fstat(fd)
+            calls += 1
+            return _with_metadata_drift(metadata, field) if calls == 2 else metadata
+
+        monkeypatch.setattr(os, "fstat", drifting_fstat)
+
+        with pytest.raises(ContainmentError, match="TOCTOU"):
+            read_stable_contained_bytes(artifact, tmp_path)
+        assert calls == 2
+
+    @pytest.mark.parametrize("field", ("st_dev", "st_mode", "st_nlink"))
+    def test_detects_path_metadata_drift_after_read(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        field: str,
+    ) -> None:
+        artifact = tmp_path / "artifact.txt"
+        artifact.write_text("stable")
+        real_stat = Path.stat
+        artifact_stat_calls = 0
+
+        def drifting_stat(path: Path, *args, **kwargs):
+            nonlocal artifact_stat_calls
+            metadata = real_stat(path, *args, **kwargs)
+            if path == artifact:
+                artifact_stat_calls += 1
+                if artifact_stat_calls == 3:
+                    return _with_metadata_drift(metadata, field)
+            return metadata
+
+        monkeypatch.setattr(Path, "stat", drifting_stat)
+
+        with pytest.raises(ContainmentError, match="TOCTOU"):
+            read_stable_contained_bytes(artifact, tmp_path)
+        assert artifact_stat_calls == 3

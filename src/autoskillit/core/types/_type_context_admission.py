@@ -10,12 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from enum import StrEnum
-from typing import (
-    Any,
-    ClassVar,
-    TypeAlias,
-    get_type_hints,
-)
+from typing import Any, ClassVar, TypeAlias, get_type_hints
 
 from ._type_dispatch_identity import DispatchIdentity
 from ._type_enums import (
@@ -898,6 +893,29 @@ class ClosedEpochAudit(_ContractValue):
     retained_unresolved_count: int
     retained_generation_count: int
 
+    def reservation_for(self, record: AdmissionBatchRecord) -> AdmissionReservation | None:
+        if record.reservation_id is None:
+            return None
+        return next(
+            (
+                reservation
+                for reservation in self.terminal_reservations
+                if reservation.reservation_id == record.reservation_id
+            ),
+            None,
+        )
+
+    def retained_input_count(self, records: tuple[AdmissionBatchRecord, ...]) -> int:
+        return sum(
+            record.charged_input_count(self.reservation_for(record))
+            for record in records
+            if record.state
+            in {
+                AdmissionState.REQUEST_DISPATCHED,
+                AdmissionState.INDETERMINATE,
+            }
+        )
+
     def __post_init__(self) -> None:
         _validate_non_negative(self.retained_unresolved_count, "invalid_retained_charge")
         _validate_non_negative(
@@ -983,19 +1001,7 @@ class ClosedEpochAudit(_ContractValue):
                 or generation.occurrence_ids != generation_batch.batch.occurrence_ids
             ):
                 _raise_invalid("inconsistent_closed_epoch_generation")
-        retained_input = 0
-        for record in self.terminal_batch_records:
-            if record.state not in {
-                AdmissionState.REQUEST_DISPATCHED,
-                AdmissionState.INDETERMINATE,
-            }:
-                continue
-            charge = record.unresolved_input_count
-            if charge == 0 and record.reservation_id is not None:
-                reservation = reservation_by_id.get(record.reservation_id)
-                if reservation is not None:
-                    charge = reservation.reserved_count
-            retained_input += charge
+        retained_input = self.retained_input_count(self.terminal_batch_records)
         retained_generation = sum(
             record.maximum_allowance
             for record in self.terminal_generation_reservations

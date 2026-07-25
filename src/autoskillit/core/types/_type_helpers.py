@@ -93,6 +93,23 @@ def _validate_non_negative(value: int, reason_code: str) -> None:
         _raise_invalid(reason_code)
 
 
+def _reconciled_snapshot_counts(
+    active_count: int,
+    remaining_count: int,
+    hard_limit: int,
+    deducted_charge: int,
+    terminal_charge: int,
+) -> tuple[int, int]:
+    charge_delta = deducted_charge - terminal_charge
+    if charge_delta > 0:
+        capacity_slack = max(hard_limit - active_count - remaining_count, 0)
+        active_credit = min(max(charge_delta - capacity_slack, 0), active_count)
+        restored_count = min(charge_delta, capacity_slack + active_credit)
+        return active_count - active_credit, remaining_count + restored_count
+    additional_charge = min(-charge_delta, remaining_count)
+    return active_count + additional_charge, remaining_count - additional_charge
+
+
 def _validate_bounded_text(
     value: str,
     reason_code: str,

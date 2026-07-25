@@ -5,12 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import assert_never
 
-from ._closed_epoch_accounting import (
-    _closed_reservation_for,
-    _closed_retained_input_count,
-    _reconcile_deducted_closed_charge,
-    _replace_closed_audit,
-)
 from .types._type_context_admission import (
     CONTEXT_ADMISSION_COVERAGE,
     AcceptInputEvent,
@@ -89,6 +83,7 @@ from .types._type_enums import (
     ReserveClass,
     WitnessKind,
 )
+from .types._type_helpers import _reconciled_snapshot_counts
 
 __all__ = [
     "ContextAdmissionValidationError",
@@ -749,6 +744,43 @@ def _closed_generation_location(
     return None
 
 
+def _replace_closed_audit(
+    state: ActiveContextAdmissionState,
+    index: int,
+    audit: ClosedEpochAudit,
+) -> ActiveContextAdmissionState:
+    return replace(
+        state,
+        closed_epochs=tuple(
+            audit if item_index == index else item
+            for item_index, item in enumerate(state.closed_epochs)
+        ),
+    )
+
+
+def _reconcile_deducted_closed_charge(
+    state: ActiveContextAdmissionState,
+    audit: ClosedEpochAudit,
+    *,
+    deducted_charge: int,
+    terminal_charge: int,
+) -> ActiveContextAdmissionState:
+    if audit.fence_proof is not None or deducted_charge == terminal_charge:
+        return state
+    snapshot = state.snapshot
+    active_count, remaining_count = _reconciled_snapshot_counts(
+        snapshot.active_count,
+        snapshot.remaining_count,
+        snapshot.hard_limit,
+        deducted_charge,
+        terminal_charge,
+    )
+    return replace(
+        state,
+        snapshot=replace(snapshot, active_count=active_count, remaining_count=remaining_count),
+    )
+
+
 def _open_epoch(
     state: ContextAdmissionState,
     event: OpenEpochEvent,
@@ -1324,7 +1356,7 @@ def _accept_closed_input(
         or binding.batch_id != record.batch.batch_id
     ):
         return _reject(state, event, "invalid-closed-epoch-acceptance")
-    reservation = _closed_reservation_for(audit, record)
+    reservation = audit.reservation_for(record)
     if reservation is None:
         return _reject(state, event, "missing-closed-epoch-reservation")
     member_ids = set(record.batch.occurrence_ids)
@@ -1394,16 +1426,13 @@ def _accept_closed_input(
         audit,
         terminal_occurrence_records=occurrence_records,
         terminal_batch_records=batch_records,
-        retained_unresolved_count=_closed_retained_input_count(
-            audit,
-            batch_records,
-        ),
+        retained_unresolved_count=audit.retained_input_count(batch_records),
     )
     next_state = _replace_closed_audit(state, index, updated_audit)
     next_state = _reconcile_deducted_closed_charge(
         next_state,
         audit,
-        deducted_charge=_closed_retained_input_count(audit, (record,)),
+        deducted_charge=audit.retained_input_count((record,)),
         terminal_charge=exact_charge,
     )
     revision, sequence = _effect_coordinates(state, capacity_changed=True)
@@ -1610,7 +1639,7 @@ def _release_closed_batch(
     location: tuple[int, ClosedEpochAudit, AdmissionBatchRecord],
 ) -> AdmissionTransition:
     index, audit, record = location
-    released_input_count = _closed_retained_input_count(audit, (record,))
+    released_input_count = audit.retained_input_count((record,))
     is_release = isinstance(
         event,
         ReleaseNonAdmissionEvent | ResolveIndeterminateNonAdmissionEvent,
@@ -1676,13 +1705,10 @@ def _release_closed_batch(
         audit,
         terminal_occurrence_records=occurrence_records,
         terminal_batch_records=batch_records,
-        retained_unresolved_count=_closed_retained_input_count(
-            audit,
-            batch_records,
-        ),
+        retained_unresolved_count=audit.retained_input_count(batch_records),
     )
     next_state = _replace_closed_audit(state, index, updated_audit)
-    reservation = _closed_reservation_for(audit, record)
+    reservation = audit.reservation_for(record)
     effects: tuple[AdmissionEffect, ...] = _occurrence_effects(
         state,
         event,

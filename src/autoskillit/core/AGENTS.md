@@ -32,7 +32,6 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 | `closure_hashing.py` | Canonical hash utilities for closure-mode verdict verification (stdlib-only, IL-0) |
 | `path_containment.py` | Path containment guards — symlink/hardlink check, TOCTOU guard (stdlib-only, IL-0) |
 | `closure_verifier.py` | Independent verifier for closure-mode reports (stdlib-only, IL-0) |
-| `_closed_epoch_accounting.py` | Closed-epoch retained-charge and snapshot-capacity accounting helpers |
 | `context_admission.py` | Pure protocol-v1 cumulative context-admission reducer, replay, and coverage resolution |
 
 ## Architecture Notes

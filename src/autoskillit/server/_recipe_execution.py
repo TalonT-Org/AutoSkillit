@@ -462,6 +462,13 @@ def bind_attested_runtime_invocation(
             "recipe_execution_skill_mismatch",
             "runtime skill identity differs from the compiled template",
         )
+    contract = get_skill_contract(invocation.skill_name or "", load_bundled_manifest())
+    if contract is None:
+        raise RecipeExecutionAdmissionError(
+            "recipe_execution_contract_unavailable",
+            "the compiled skill contract is unavailable at runtime",
+        )
+    contract_inputs = {input_def.name: input_def for input_def in contract.inputs}
     supplied = dict(skill_inputs or {})
     if any(
         not isinstance(value, (str, int, float, bool)) or value is None
@@ -484,6 +491,17 @@ def bind_attested_runtime_invocation(
         if value.state is not BoundValueState.PRESENT:
             continue
         actual = supplied[value.name]
+        input_def = contract_inputs.get(value.name)
+        if input_def is None:
+            raise RecipeExecutionAdmissionError(
+                "recipe_execution_contract_mismatch",
+                f"compiled skill input {value.name!r} is absent from the runtime contract",
+            )
+        if not input_def.accepts(actual):
+            raise RecipeExecutionAdmissionError(
+                "recipe_execution_input_type",
+                f"runtime skill input {value.name!r} expects {input_def.type!r}",
+            )
         if not _is_dynamic(value) and actual != value.effective_value:
             raise RecipeExecutionAdmissionError(
                 "recipe_execution_static_input_mismatch",

@@ -18,6 +18,7 @@ from hypothesis.stateful import (
     rule,
 )
 
+import autoskillit.server._recipe_execution as recipe_execution_module
 from autoskillit.core import (
     AdmissionReason,
     AdmissionStatus,
@@ -49,6 +50,7 @@ from autoskillit.server._recipe_execution import (
     AuditCycleHeadConflict,
     DefaultAuditCycleHeadStore,
     DefaultInputPreflightResolver,
+    RecipeExecutionAdmissionError,
     bind_attested_runtime_invocation,
     build_bound_child_prompt,
     build_recipe_execution_snapshot,
@@ -103,8 +105,8 @@ def _projection() -> RecipeBindingProjection:
                 dependencies=("plan_path",),
             ),
             _present("issue_url", ""),
-            _present("audit_cycle_path", False),
-            _present("plan_disposition_path", 0),
+            _present("audit_cycle_path", "/tmp/audit-cycle.json"),
+            _present("plan_disposition_path", "/tmp/plan-disposition.json"),
         ),
     )
     return RecipeBindingProjection({"dry": invocation})
@@ -300,8 +302,8 @@ def test_bound_prompt_preserves_falsey_and_metacharacter_values() -> None:
     values = {
         "plan_path": "/tmp/a path/$(touch nope);x.md",
         "issue_url": "",
-        "audit_cycle_path": False,
-        "plan_disposition_path": 0,
+        "audit_cycle_path": "/tmp/audit-cycle.json",
+        "plan_disposition_path": "/tmp/plan-disposition.json",
     }
     bound, _ = bind_attested_runtime_invocation(
         installed,
@@ -320,9 +322,96 @@ def test_bound_prompt_preserves_falsey_and_metacharacter_values() -> None:
     assert encoded["skill_inputs"] == [
         {"name": "plan_path", "value": values["plan_path"]},
         {"name": "issue_url", "value": ""},
-        {"name": "audit_cycle_path", "value": False},
-        {"name": "plan_disposition_path", "value": 0},
+        {"name": "audit_cycle_path", "value": "/tmp/audit-cycle.json"},
+        {"name": "plan_disposition_path", "value": "/tmp/plan-disposition.json"},
     ]
+
+
+@pytest.mark.parametrize(
+    ("invalid_name", "invalid_value"),
+    (("count", "3"), ("enabled", "false")),
+)
+def test_runtime_binding_rejects_declared_contract_type_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_name: str,
+    invalid_value: str,
+) -> None:
+    manifest = {
+        "skills": {
+            "typed-skill": {
+                "inputs": [
+                    {"name": "count", "type": "integer", "required": True},
+                    {"name": "enabled", "type": "boolean", "required": True},
+                ]
+            }
+        }
+    }
+    monkeypatch.setattr(
+        recipe_execution_module,
+        "load_bundled_manifest",
+        lambda: manifest,
+    )
+    invocation = BoundStepInvocation(
+        step_name="typed",
+        tool_name="run_skill",
+        mode=BindingMode.RECIPE,
+        skill_name="typed-skill",
+        mcp_kwargs=(
+            _present("skill_command", "/typed-skill"),
+            _present("cwd", "/tmp"),
+        ),
+        skill_inputs=(
+            _present(
+                "count",
+                "${{ context.count }}",
+                origin=BoundValueOrigin.CONTEXT,
+                dependencies=("count",),
+            ),
+            _present(
+                "enabled",
+                "${{ context.enabled }}",
+                origin=BoundValueOrigin.CONTEXT,
+                dependencies=("enabled",),
+            ),
+        ),
+    )
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=RecipeBindingProjection({"typed": invocation}),
+        execution_id="execution-1",
+    )
+    store = DefaultAuditCycleHeadStore()
+    resolver = DefaultInputPreflightResolver(
+        allowed_root=Path("/tmp"),
+        head_store=store,
+    )
+    from autoskillit.core import InstalledRecipeExecution
+
+    installed = InstalledRecipeExecution(
+        snapshot=snapshot,
+        runtime_binding_digests={},
+        audit_cycle_heads=store,
+        input_preflight_resolver=resolver,
+    )
+    values: dict[str, str | int | float | bool] = {"count": 3, "enabled": False}
+    values[invalid_name] = invalid_value
+
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        bind_attested_runtime_invocation(
+            installed,
+            execution_id="execution-1",
+            step_name="typed",
+            template_digest=snapshot.templates["typed"].template_digest,
+            skill_command="/typed-skill",
+            skill_inputs=values,
+            actual_mcp_kwargs={
+                "skill_command": "/typed-skill",
+                "cwd": "/tmp",
+            },
+        )
+    assert exc_info.value.code == "recipe_execution_input_type"
 
 
 def test_head_publication_is_monotonic_compare_and_swap(tmp_path: Path) -> None:

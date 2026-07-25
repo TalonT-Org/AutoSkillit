@@ -172,23 +172,7 @@ def _wire_value_is_valid(value: object, param: ToolParamDef) -> bool:
 
 
 def _skill_value_is_valid(value: BoundScalar, input_def: SkillInput) -> bool:
-    normalized = input_def.type
-    if normalized in {
-        "str",
-        "string",
-        "optional_string",
-        "file_path",
-        "file_path_list",
-        "directory_path",
-    }:
-        return isinstance(value, str)
-    if normalized == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if normalized in {"number", "float"}:
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    if normalized in {"boolean", "bool"}:
-        return isinstance(value, bool)
-    return False
+    return input_def.accepts(value)
 
 
 def _resolve_hidden_value(

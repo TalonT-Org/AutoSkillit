@@ -20,6 +20,25 @@ class SkillInput:
     recommended: bool = False
     nullable: bool = True
 
+    def accepts(self, value: object) -> bool:
+        normalized = self.type
+        if normalized in {
+            "str",
+            "string",
+            "optional_string",
+            "file_path",
+            "file_path_list",
+            "directory_path",
+        }:
+            return isinstance(value, str)
+        if normalized == "integer":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if normalized in {"number", "float"}:
+            return isinstance(value, (int, float)) and not isinstance(value, bool)
+        if normalized in {"boolean", "bool"}:
+            return isinstance(value, bool)
+        return False
+
 
 @dataclasses.dataclass
 class SkillOutput:

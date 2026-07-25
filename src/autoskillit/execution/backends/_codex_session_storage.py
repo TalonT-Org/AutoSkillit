@@ -262,6 +262,8 @@ class _FileLease:
         )
         operation = fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0)
         try:
+            if not stat.S_ISREG(os.fstat(instance.fd).st_mode):
+                raise RuntimeError(f"Lock path is not a regular file: {lock_path}")
             fcntl.flock(instance.fd, operation)
             owner = {
                 "pid": os.getpid(),

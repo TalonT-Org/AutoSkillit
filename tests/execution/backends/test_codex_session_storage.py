@@ -76,6 +76,14 @@ def test_file_lease_rejects_non_lock_path(tmp_path: Path) -> None:
     assert not invalid_path.exists()
 
 
+def test_file_lease_rejects_non_regular_lock_inode(tmp_path: Path) -> None:
+    lock_path = tmp_path / "lease.lock"
+    os.mkfifo(lock_path)
+
+    with pytest.raises(RuntimeError, match="not a regular file"):
+        storage._FileLease.acquire(lock_path)
+
+
 def test_file_lease_closes_descriptor_when_owner_diagnostic_write_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

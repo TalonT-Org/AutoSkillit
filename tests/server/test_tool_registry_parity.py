@@ -12,8 +12,12 @@ from autoskillit.core import TOOL_REGISTRY
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-def _handler_signatures() -> dict[str, tuple[tuple[str, bool], ...]]:
-    tools_dir = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "server" / "tools"
+def _handler_signatures(
+    tools_dir: Path | None = None,
+) -> dict[str, tuple[tuple[str, bool], ...]]:
+    tools_dir = tools_dir or (
+        Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "server" / "tools"
+    )
     handlers: dict[str, tuple[tuple[str, bool], ...]] = {}
     for path in sorted(tools_dir.glob("tools_*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -34,12 +38,23 @@ def _handler_signatures() -> dict[str, tuple[tuple[str, bool], ...]]:
                 *zip(positional, defaults, strict=True),
                 *zip(node.args.kwonlyargs, node.args.kw_defaults, strict=True),
             ]
+            assert node.name not in handlers, f"duplicate MCP tool registration: {node.name}"
             handlers[node.name] = tuple(
                 (argument.arg, default is None)
                 for argument, default in pairs
                 if argument.arg != "ctx"
             )
     return handlers
+
+
+def test_handler_collection_rejects_duplicate_registrations(tmp_path: Path) -> None:
+    (tmp_path / "tools_duplicate.py").write_text(
+        "@mcp.tool()\ndef duplicate(): ...\n\n@mcp.tool()\nasync def duplicate(): ...\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AssertionError, match="duplicate MCP tool registration: duplicate"):
+        _handler_signatures(tmp_path)
 
 
 def test_registry_matches_handler_names_bidirectionally() -> None:

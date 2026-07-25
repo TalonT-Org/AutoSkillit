@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import multiprocessing
 import os
 import tomllib
@@ -11,6 +12,38 @@ from typing import Any
 import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("args", "--flag"),
+        ("args", [1]),
+        ("env_vars", {"TOKEN": "secret"}),
+        ("env_vars", [None]),
+    ],
+)
+def test_mcp_inventory_rejects_non_string_array_fields(
+    field: str,
+    value: object,
+) -> None:
+    from autoskillit.execution.backends.codex import _validate_codex_mcp_inventory
+
+    config_bytes = (
+        b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\nargs = []\nenv_vars = []\n'
+    )
+    transport: dict[str, object] = {
+        "type": "stdio",
+        "command": "autoskillit",
+        "args": [],
+        "env_vars": [],
+    }
+    transport[field] = value
+    stdout = json.dumps({"servers": [{"name": "autoskillit", "transport": transport}]}).encode()
+
+    errors = _validate_codex_mcp_inventory(stdout, config_bytes)
+
+    assert any(f"{field} are not an array of strings" in error for error in errors)
 
 
 def _config_writer(

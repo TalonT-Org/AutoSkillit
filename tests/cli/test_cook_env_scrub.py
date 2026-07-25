@@ -192,3 +192,14 @@ def test_cook_command_env_has_max_mcp_output_tokens(
     spec = _capture_cook_spec(monkeypatch, tmp_path)
     env = spec.env
     assert env["MAX_MCP_OUTPUT_TOKENS"] == SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"]
+
+
+def test_claude_cook_command_env_excludes_codex_home_overrides(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    spec = _capture_cook_spec(monkeypatch, tmp_path)
+
+    assert "CODEX_HOME" not in spec.env
+    assert "CODEX_SQLITE_HOME" not in spec.env

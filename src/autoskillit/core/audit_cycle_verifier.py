@@ -610,10 +610,15 @@ class AuditCycleVerifier:
     ) -> InventoryAdmissionDecision:
         evaluator = InventoryAdmissionEvaluator()
         if authority_path is None:
+            if report_path is not None:
+                return _reject(
+                    AdmissionReason.REPORT_WITHOUT_AUTHORITY,
+                    "a disposition report cannot activate without authority",
+                )
             return evaluator.evaluate(
                 authority=None,
                 trusted_head=trusted_head,
-                report=None if report_path is None else self.load_report(report_path),
+                report=None,
                 expected_generation=expected_generation,
                 expected_plan_set_id=expected_plan_set_id,
                 expected_scope_id=expected_scope_id,

@@ -317,6 +317,34 @@ def test_satisfied_row_must_name_current_audit_round(tmp_path: Path) -> None:
     assert decision.reason is AdmissionReason.SATISFIED_ROUND_MISMATCH
 
 
+def test_report_without_authority_rejects_without_read(tmp_path: Path) -> None:
+    reads: list[Path] = []
+
+    def reader(
+        path: str | Path,
+        root: str | Path,
+        *,
+        max_size_bytes: int,
+    ) -> tuple[Path, bytes]:
+        del root, max_size_bytes
+        reads.append(Path(path))
+        raise AssertionError(f"unexpected report read: {path}")
+
+    decision = AuditCycleVerifier(tmp_path, reader=reader).evaluate_paths(
+        authority_path=None,
+        report_path=tmp_path.parent / "escaped-report.json",
+        trusted_head=None,
+        current_plan_path=tmp_path / "plan.md",
+        expected_generation="generation-1",
+        expected_plan_set_id="plans-1",
+        expected_scope_id="scope-1",
+        expected_part_id="part-a",
+    )
+    assert decision.status is AdmissionStatus.REJECT
+    assert decision.reason is AdmissionReason.REPORT_WITHOUT_AUTHORITY
+    assert reads == []
+
+
 def test_trusted_go_successor_omits_without_inventory_read(tmp_path: Path) -> None:
     authority = _authority(
         tmp_path,

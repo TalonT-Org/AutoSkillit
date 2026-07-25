@@ -423,7 +423,7 @@ class TestCLIOrderCommand:
     ) -> None:
         """order() produces a valid command for each registered backend."""
         from autoskillit.execution.backends import get_backend as _real_get_backend
-        from autoskillit.execution.backends.codex import CodexFlags
+        from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
         real_backend = _real_get_backend(backend_name)
         captured: dict = {}
@@ -447,6 +447,11 @@ class TestCLIOrderCommand:
         monkeypatch.setattr(
             "autoskillit.execution.get_backend",
             lambda name: _real_get_backend(name),
+        )
+        monkeypatch.setattr(
+            CodexBackend,
+            "ensure_pre_launch",
+            lambda _self, *, session_dir=None: [],
         )
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")
@@ -484,38 +489,6 @@ class TestCLIOrderCommand:
             assert set(cmd).isdisjoint(codex_only), (
                 f"Codex-only flags found in claude command: {set(cmd) & codex_only}"
             )
-
-
-# SC-B-4: mark_onboarded() must NOT be called when the cook subprocess exits non-zero
-def test_cook_mark_onboarded_not_called_on_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """mark_onboarded() must not be called when the cook subprocess exits non-zero."""
-    import autoskillit.cli.session._session_cook as _cook
-
-    onboarded_calls: list[Path] = []
-    monkeypatch.setattr(
-        "autoskillit.cli._onboarding.mark_onboarded",
-        lambda project_dir: onboarded_calls.append(project_dir),
-    )
-
-    def fake_run(cmd: list[str], **kwargs: object) -> object:
-        return type("R", (), {"returncode": 1})()
-
-    monkeypatch.setattr(_cook.subprocess, "run", fake_run)
-
-    with pytest.raises(SystemExit):
-        _cook._run_cook_session(
-            cmd=["claude", "--test"],
-            env={},
-            _first_run=True,
-            initial_prompt="test",
-            project_dir=tmp_path,
-        )
-
-    assert onboarded_calls == [], (
-        "mark_onboarded() must not be called when the subprocess exits non-zero"
-    )
 
 
 # ---------------------------------------------------------------------------

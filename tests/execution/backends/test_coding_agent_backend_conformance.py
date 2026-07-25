@@ -9,6 +9,7 @@ from typing import Literal
 import pytest
 
 from autoskillit.core import (
+    CODEX_SESSIONS_SUBDIR,
     BackendCapabilities,
     BackendConventions,
     CapabilityNotSupportedError,
@@ -53,6 +54,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "github_api_callable": "OPTIONAL",
     "has_unguarded_filesystem_access": "REQUIRED",
     "hook_config_format": "REQUIRED",
+    "hook_trust_policy": "REQUIRED",
     "inspector_capable": "OPTIONAL",
     "mcp_config_capable": "OPTIONAL",
     "mcp_env_forward_vars": "OPTIONAL",
@@ -68,6 +70,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "replay_capable": "OPTIONAL",
     "required_session_files": "OPTIONAL",
     "required_skill_fields": "REQUIRED",
+    "cook_startup_observer_capable": "OPTIONAL",
     "session_dir_persistent": "OPTIONAL",
     "session_dir_symlinks": "OPTIONAL",
     "session_record_types": "REQUIRED",
@@ -117,11 +120,18 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         Fields cited: applicable_guards, default_skill_sandbox_mode,
         unnegotiated_tool_result_token_limit, git_metadata_writable,
         has_unguarded_filesystem_access, process_name_aliases,
-        record_capable, replay_capable, session_dir_persistent,
+        record_capable, replay_capable,
+        cook_startup_observer_capable, session_dir_persistent,
         supports_context_window_suffix,
         supports_tool_list_changed, triage_capable, write_detection_strategy.
         """
         assert isinstance(self.backend.capabilities, BackendCapabilities)
+
+    def test_hook_trust_policy_is_typed(self) -> None:
+        """BackendCapabilities.hook_trust_policy — interactive hook review policy."""
+        from autoskillit.core import HookTrustPolicy
+
+        assert isinstance(self.backend.capabilities.hook_trust_policy, HookTrustPolicy)
 
     def test_conventions_returns_backend_conventions(self) -> None:
         assert isinstance(self.backend.conventions, BackendConventions)
@@ -177,6 +187,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         locator = self.backend.session_locator()
         assert locator.locate_session("") is None
 
+    def test_session_locator_has_typed_listing(self) -> None:
+        locator = self.backend.session_locator()
+        assert callable(locator.list_sessions)
+
     # --- Group 3: Command-builder Contracts ---
 
     def test_build_cmd_returns_cmd_spec(self) -> None:
@@ -200,8 +214,16 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert isinstance(result.cmd, tuple)
 
     def test_validate_session_layout_returns_list(self, tmp_path: Path) -> None:
-        result = self.backend.validate_session_layout(tmp_path)
+        result = self.backend.validate_session_layout(tmp_path, project_dir=tmp_path)
         assert isinstance(result, list)
+
+    def test_validate_interactive_invocation_returns_list(self) -> None:
+        spec = self.backend.build_interactive_cmd()
+        assert isinstance(self.backend.validate_interactive_invocation(spec), list)
+
+    def test_cook_lifecycle_boundaries_are_implemented(self) -> None:
+        assert callable(self.backend.recover_cook_history)
+        assert callable(self.backend.cook_session_context)
 
     def test_validate_skill_content_returns_list(self) -> None:
         """BackendCapabilities.hook_config_format and skills_subdir — skill content validation."""
@@ -333,14 +355,13 @@ class TestCodingAgentBackendConformance(BackendContractBase):
                 lambda: fake_log_dir,
             )
             (fake_home / ".codex").mkdir()
-            (fake_home / ".codex" / "config.toml").write_text('[model_provider]\nname = "fake"\n')
             session_dir = tmp_path / "session"
             session_dir.mkdir()
+            (session_dir / "config.toml").write_text('[model_provider]\nname = "fake"\n')
             self.backend.setup_session_dir(session_dir)
-            sessions_symlink = session_dir / "sessions"
-            assert sessions_symlink.is_symlink()
-            sessions_target = sessions_symlink.resolve()
-            date_dir = sessions_target / "2026" / "01" / "01"
+            assert not (session_dir / "sessions").exists()
+            assert not (session_dir / "archived_sessions").exists()
+            date_dir = fake_log_dir / CODEX_SESSIONS_SUBDIR / "2026" / "01" / "01"
             date_dir.mkdir(parents=True)
             rollout_path = date_dir / "rollout-fake.jsonl"
             event = {

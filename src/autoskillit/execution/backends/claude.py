@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 from collections.abc import Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from autoskillit.core import (
     NON_VARIADIC_CLAUDE_FLAGS,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     PROVIDER_PROFILE_ENV_VAR,
+    SESSION_ADD_DIR_SUBDIR,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
@@ -33,6 +35,7 @@ from autoskillit.core import (
     ClaudeEventData,
     ClaudeFlags,
     CmdSpec,
+    CookSessionHandle,
     NamedResume,
     NoResume,
     OutputFormat,
@@ -41,6 +44,7 @@ from autoskillit.core import (
     SessionCheckpoint,
     SessionEvent,
     SessionLocator,
+    SessionSummary,
     SkillSessionConfig,
     ValidatedAddDir,
     YAMLError,
@@ -51,6 +55,7 @@ from autoskillit.core import (
     fast_loads,
     load_yaml,
     pkg_root,
+    read_registry,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
@@ -75,6 +80,16 @@ from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import parse_session_result
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
+
+_ORDER_GREETING_PREFIXES = (
+    "Today's special:",
+    "Order up! Today's special:",
+    "Order up! The kitchen",
+    "Kitchen's open!",
+    "Table for one!",
+    "Fresh off the menu",
+    "Welcome to Good Burger, home of the Good Burger, can I take your order?",
+)
 
 __all__ = [
     "ClaudeCodeBackend",
@@ -118,6 +133,64 @@ class ClaudeSessionLocator(SessionLocator):
 
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         return claude_code_log_path(cwd, session_id)
+
+    def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
+        normalized_cwd = str(Path(cwd).expanduser().resolve(strict=False))
+        index_path = self.project_log_dir(normalized_cwd) / "sessions-index.json"
+        try:
+            entries = json.loads(index_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return ()
+        if not isinstance(entries, list):
+            return ()
+
+        launch_ids_by_session_id = {
+            claude_session_id: launch_id
+            for launch_id, registry_entry in read_registry(Path(normalized_cwd)).items()
+            if isinstance(registry_entry, Mapping)
+            and isinstance(
+                claude_session_id := registry_entry.get("claude_session_id"),
+                str,
+            )
+        }
+        summaries: list[SessionSummary] = []
+        for entry in entries:
+            if not isinstance(entry, dict) or entry.get("isSidechain"):
+                continue
+            entry_cwd = entry.get("cwd")
+            if not isinstance(entry_cwd, str):
+                continue
+            resolved_entry_cwd = str(Path(entry_cwd).expanduser().resolve(strict=False))
+            if resolved_entry_cwd != normalized_cwd:
+                continue
+
+            session_id = entry.get("sessionId")
+            if not isinstance(session_id, str) or not session_id:
+                continue
+            first_prompt = entry.get("firstPrompt")
+            normalized_prompt = first_prompt if isinstance(first_prompt, str) else ""
+            summary = entry.get("summary")
+            git_branch = entry.get("gitBranch")
+            modified = entry.get("modified")
+            summaries.append(
+                SessionSummary(
+                    backend_name=AGENT_BACKEND_CLAUDE_CODE,
+                    session_id=session_id,
+                    launch_id=launch_ids_by_session_id.get(session_id),
+                    cwd=resolved_entry_cwd,
+                    first_prompt=normalized_prompt,
+                    summary=summary if isinstance(summary, str) else "",
+                    git_branch=git_branch if isinstance(git_branch, str) else None,
+                    modified=modified if isinstance(modified, str) else None,
+                    is_sidechain=False,
+                    session_type_hint=(
+                        "order"
+                        if normalized_prompt.startswith(_ORDER_GREETING_PREFIXES)
+                        else "cook"
+                    ),
+                )
+            )
+        return tuple(summaries)
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,6 +452,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         model: str | None = None,
         plugin_source: PluginSource | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+        generated_home: Path | None = None,
         resume_spec: ResumeSpec = NoResume(),
         system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
@@ -425,6 +499,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         an interactive session is determined at runtime by kitchen state, not by a
         ``SESSION_TYPE`` env variable.
         """
+        del generated_home
         builder = CmdBuilder("claude")
         builder.mode_flag(ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS)
         match resume_spec:
@@ -696,9 +771,17 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
 
         return CmdSpec(cmd=tuple(cmd), env=spec.env, is_resume=bool(resume_session_id))
 
-    def validate_session_layout(self, session_dir: Path) -> list[str]:
+    def validate_session_layout(
+        self,
+        session_dir: Path,
+        *,
+        project_dir: Path | None = None,
+    ) -> list[str]:
+        del project_dir
         errors: list[str] = []
-        skills_dir = session_dir / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        skills_dir = (
+            session_dir / SESSION_ADD_DIR_SUBDIR / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        )
         if not skills_dir.is_dir():
             errors.append(f"skills directory does not exist: {skills_dir}")
         else:
@@ -783,11 +866,42 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             log.warning("list_plugins() failed", exc_info=True)
             return []
 
-    def ensure_pre_launch(self) -> list[str]:
+    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+        del spec
         return []
+
+    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
+        del session_dir
+        return []
+
+    def recover_cook_history(self) -> None:
+        return None
+
+    def cook_session_context(
+        self,
+        *,
+        session_home: Path,
+        project_dir: Path,
+        launch_id: str,
+        attempt: int,
+        current_resume_spec: ResumeSpec,
+    ) -> AbstractContextManager[CookSessionHandle]:
+        del session_home, project_dir, launch_id, attempt, current_resume_spec
+        return nullcontext(
+            CookSessionHandle(
+                view_id="",
+                pass_fds=(),
+                _record_spawn=_ignore_child_identity,
+                _record_reaped=_ignore_child_identity,
+            )
+        )
 
     def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
         if not self.capabilities.inspector_capable:
             raise CapabilityNotSupportedError("inspector_capable", self.name)
         msg = "inspector_capable is True but build_inspector_cmd has no implementation"
         raise AssertionError(msg)
+
+
+def _ignore_child_identity(pid: int, pgid: int) -> None:
+    del pid, pgid

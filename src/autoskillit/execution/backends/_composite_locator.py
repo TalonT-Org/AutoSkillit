@@ -2,13 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from autoskillit.core import get_logger
-
-if TYPE_CHECKING:
-    from autoskillit.core import SessionLocator
-
+from autoskillit.core import SessionLocator, SessionSummary, get_logger
 
 logger = get_logger(__name__)
 
@@ -58,6 +53,25 @@ class CompositeSessionLocator:
 
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         return self.locate_session(session_id)
+
+    def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
+        summaries: list[SessionSummary] = []
+        if self._locators:
+            for locator in self._locators:
+                try:
+                    summaries.extend(locator.list_sessions(cwd))
+                except Exception:
+                    logger.debug("session_list_failed", exc_info=True)
+            return tuple(summaries)
+
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+
+        for backend_name, cls in BACKEND_REGISTRY.items():
+            try:
+                summaries.extend(cls().session_locator().list_sessions(cwd))
+            except Exception:
+                logger.debug("session_list_failed", backend=backend_name, exc_info=True)
+        return tuple(summaries)
 
     def locator_for(self, backend_name: str) -> SessionLocator:
         from autoskillit.execution.backends import BACKEND_REGISTRY

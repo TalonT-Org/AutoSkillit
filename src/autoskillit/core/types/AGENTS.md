@@ -7,7 +7,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Re-export hub — aggregates `__all__` from all `_type_*.py` modules |
-| `_type_enums.py` | All `StrEnum` discriminators (`RetryReason`, `KillReason`, `Severity`, etc.) |
+| `_type_enums.py` | All `StrEnum` discriminators (`RetryReason`, `KillReason`, `Severity`, `ObserverStatus`, etc.) |
 | `_type_exceptions.py` | Exception hierarchy for recipe loading: `RecipeLoadError`, `ProcessStaleError`, `RecipeNotFoundError` |
 | `_type_figure_spec.py` | `FigureSpec` TypedDict and consumer/producer field sets for `yaml:figure-spec` contracts |
 | `_type_constants.py` | Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants |
@@ -27,7 +27,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_protocols_workspace.py` | Protocols: `WorkspaceManager`, `CloneManager`, `SessionSkillManager`, `SkillLister`, `SkillResolver` |
 | `_type_protocols_recipe.py` | Protocols: `RecipeRepository`, `MigrationService`, `DatabaseReader`, `ReadOnlyResolver` |
 | `_type_protocols_infra.py` | Protocols: `GateState`, `BackgroundSupervisor`, `FleetLock`, `QuotaRefreshTask`, `TokenFactory`, `CampaignProtector` |
-| `_type_protocols_backend.py` | Protocols: `StreamParser`, `ResultParser`, `EnvPolicy`, `SessionLocator`, `CodingAgentBackend` |
+| `_type_protocols_backend.py` | Protocols: `StreamParser`, `ResultParser`, `EnvPolicy`, `ReadinessProbe`, `SessionLocator`, `CodingAgentBackend` |
 | `_type_checkpoint.py` | `SessionCheckpoint` frozen dataclass and `compute_remaining()` helper for session resume |
 | `_type_backend.py` | `BackendCapabilities` frozen dataclass, `CLAUDE_CODE_CAPABILITIES` constant, `CmdSpec`, `SkillSessionConfig`, `ClaudeEventData`, `CodexEventData`, `SessionEvent`, `AgentSessionResult` |
 | `_type_recipe_delivery.py` | Typed Codex recipe budgets, protected-host evidence definitions, requests, attestations, and delivery decisions |

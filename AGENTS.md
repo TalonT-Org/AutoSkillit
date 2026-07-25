@@ -105,7 +105,7 @@ generic_automation_mcp/
 | `fleet/` | IL-2 | Campaign dispatch, semaphore, sidecar, liveness, state persistence |
 | `server/` | IL-3 | FastMCP server — tools/, kitchen gating, session-type dispatch |
 | `server/recipe_section/` | IL-3 | Final invariant verification for schema-driven recipe-section page plans |
-| `cli/` | IL-3 | CLI — doctor/, update/, fleet/ subcommands, ui/, session/ management |
+| `cli/` | IL-3 | CLI — doctor/, update/, fleet/ subcommands, ui/, session/ management (including session/pty/) |
 | `hooks/` | — | coding-agent hook scripts — guards/, formatters/ |
 | `agents/` | — | Bundled agent definition markdown files served as MCP resources |
 | `recipes/` | — | Bundled recipe YAML + contracts, diagrams, sub-recipes |

@@ -129,11 +129,33 @@ class TestExplicitOverrideProviderPrecedence:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
 
-        # Non-Claude backend (anthropic_provider_capable=False triggers _provider_override)
+        # Non-Claude backend (anthropic_provider_capable=False triggers _provider_override).
+        # Keep the test backend and generated-home manager aligned: Codex session
+        # projection is persistent and therefore requires a persistent root.
+        from autoskillit.execution.backends.codex import CodexBackend
+        from autoskillit.workspace import (
+            DefaultSessionSkillManager,
+            SkillsDirectoryProvider,
+        )
+
+        concrete_backend = CodexBackend()
         fake_backend = MagicMock(spec=CodingAgentBackend)
         fake_backend.name = "codex"
-        fake_backend.capabilities.anthropic_provider_capable = False
+        fake_backend.capabilities = concrete_backend.capabilities
+        fake_backend.conventions = concrete_backend.conventions
+        fake_backend.ensure_pre_launch.return_value = []
+        fake_backend.validate_session_layout.return_value = []
+        fake_backend.session_locator.return_value.project_log_dir.return_value = None
         tool_ctx_kitchen_open.backend = fake_backend
+        tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
+            SkillsDirectoryProvider(),
+            ephemeral_root=tmp_path / "ephemeral-sessions",
+            persistent_root=tmp_path / "persistent-sessions",
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution._get_backend",
+            lambda _name: fake_backend,
+        )
 
         # Explicit backend override: pin this step to codex
         tool_ctx_kitchen_open.config.agent_backend = AgentBackendConfig(
@@ -194,7 +216,7 @@ class TestExplicitOverrideProviderPrecedence:
 
         monkeypatch.setattr(executor, "run", spy_run)
 
-        result = json.loads(
+        response = json.loads(
             await run_skill(
                 "/autoskillit:investigate",
                 str(tmp_path),
@@ -205,7 +227,8 @@ class TestExplicitOverrideProviderPrecedence:
         # NOT "claude-code" from the provider routing
         assert captured.get("backend_override") == "codex", (
             f"Expected explicit override 'codex' to beat provider routing, "
-            f"got backend_override={captured.get('backend_override')!r}: {result}"
+            f"got backend_override={captured.get('backend_override')!r}; "
+            f"response={response!r}"
         )
 
 

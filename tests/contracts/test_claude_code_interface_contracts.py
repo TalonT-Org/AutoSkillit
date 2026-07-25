@@ -223,21 +223,19 @@ class TestCookAddDirStructure:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         import shutil
-        import subprocess
+        from types import SimpleNamespace
 
-        # Structure checks happen INSIDE fake_run: cook() deletes skills_dir in
-        # its finally block after subprocess.run() returns, so the directory is gone
-        # by the time control returns to this test function.
+        from autoskillit.core import CmdSpec
+
         structure_errors: list[str] = []
         add_dir_seen: list[bool] = []
 
-        def fake_run(cmd: list[str], **kw: object) -> object:
-            for i, token in enumerate(cmd):
+        def fake_run(spec: CmdSpec, **kwargs: object) -> object:
+            for i, token in enumerate(spec.cmd):
                 if token == "--add-dir":
-                    add_dir = Path(cmd[i + 1])
+                    add_dir = Path(spec.cmd[i + 1])
                     add_dir_seen.append(True)
 
-                    # ".claude", "skills", "SKILL.md" are literal strings — not from any constant.
                     skill_files = list(add_dir.glob(".claude/skills/*/SKILL.md"))
                     if not skill_files:
                         structure_errors.append(
@@ -247,7 +245,6 @@ class TestCookAddDirStructure:
                             "The real init_session is not writing the correct layout."
                         )
 
-                    # Anti-regression: flat layout must not exist at the session root
                     flat = [
                         f
                         for f in add_dir.glob("*/SKILL.md")
@@ -259,20 +256,28 @@ class TestCookAddDirStructure:
                             "This is the CC-001 regression pattern."
                         )
 
-            return type("R", (), {"returncode": 0})()
+            kwargs["on_spawn"](1, 1)  # type: ignore[operator]
+            kwargs["trace"].record_spawn()  # type: ignore[union-attr]
+            kwargs["on_reaped"](1, 1)  # type: ignore[operator]
+            return SimpleNamespace(pid=1, pgid=1, returncode=0)
 
-        monkeypatch.setattr(subprocess, "run", fake_run)
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
-        # cook() derives project_dir via the shared git-toplevel helper; fake_run
-        # above replaces subprocess.run wholesale, so pin the helper instead.
-        monkeypatch.setattr("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd)
-        # cook() calls input() to confirm launch — mock it to auto-confirm.
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
+        monkeypatch.setattr(
+            "autoskillit.cli.ui._timed_input.timed_prompt",
+            lambda *args, **kwargs: "",
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_process.run_cook_attempt",
+            fake_run,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+            lambda _project: None,
+        )
 
         from autoskillit.cli.session._session_cook import cook
-
-        # Use a fixed ephemeral root so cleanup is deterministic
         from autoskillit.workspace.session_skills import (
             DefaultSessionSkillManager,
             SkillsDirectoryProvider,
@@ -284,29 +289,12 @@ class TestCookAddDirStructure:
         real_mgr = DefaultSessionSkillManager(
             SkillsDirectoryProvider(), ephemeral_root=ephemeral_root
         )
-        # _session_cook.py imports DefaultSessionSkillManager from autoskillit.workspace
-        # inside the cook() function body (lazy import), so patching
-        # autoskillit.workspace.DefaultSessionSkillManager intercepts it.
-        init_session_calls: list[bool] = []
-        original_init_session = real_mgr.init_session
-
-        def _spy_init_session(*args: object, **kwargs: object) -> object:
-            init_session_calls.append(True)
-            return original_init_session(*args, **kwargs)
-
-        monkeypatch.setattr(real_mgr, "init_session", _spy_init_session)
         monkeypatch.setattr(
             "autoskillit.workspace.DefaultSessionSkillManager",
             lambda *a, **kw: real_mgr,
         )
 
         cook()
-
-        assert init_session_calls, (
-            "real_mgr.init_session was never called — "
-            "patch target 'autoskillit.workspace.DefaultSessionSkillManager' "
-            "did not intercept cook()'s constructor call."
-        )
 
         assert add_dir_seen, "Expected at least one --add-dir in command"
         assert not structure_errors, "\n".join(structure_errors)

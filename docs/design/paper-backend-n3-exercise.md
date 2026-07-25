@@ -114,14 +114,15 @@ The capability profile in Sections 2–5 derives from three sources:
 The `acp-session-contract.md` document (produced by P6-A4-WP1, issue #4053)
 provides:
 
-- **Section 1 (Lifecycle Mapping)** — the canonical 23-row `CodingAgentBackend`
+- **Section 1 (Lifecycle Mapping)** — the canonical 26-row `CodingAgentBackend`
   method enumeration, which this exercise inherits as Section 2's row order.
 - **Section 2 (Recovery Ladder)** — the `RetryReason`-to-ACP-rung mapping
   that bounds which rows in Section 6 require new Protocol affordances
   (e.g., a GAP on `build_resume_cmd` implies a new `RetryReason`-to-rung
   pathway for opencode's session model).
-- **Section 3 (Capabilities Translation)** — the 17 ACP-Mappable / 6
-  Forward-Declared / 17 autoskillit-Local = 40 total taxonomy that this
+- **Section 3 (Capabilities Translation)** — the mechanically verified
+  17 ACP-Mappable / 7 Forward-Declared / 23 autoskillit-Local = 47 total
+  taxonomy that this
   exercise's Section 3 adopts and re-applies per-field.
 
 ### 1.3 Classification legend
@@ -142,8 +143,8 @@ Each row in Sections 2–5 carries one of three classifications:
 ## Section 2: Protocol Method Classification
 
 The `CodingAgentBackend` protocol (`src/autoskillit/core/types/_type_protocols_backend.py`,
-23 methods) and the four sub-protocols (`StreamParser`, `ResultParser`,
-`EnvPolicy`, `SessionLocator`; 7 methods total) yield 30 rows below. The row
+26 methods) and the four sub-protocols (`StreamParser`, `ResultParser`,
+`EnvPolicy`, `SessionLocator`; 8 methods total) yield 34 rows below. The row
 order and per-method groupings follow `acp-session-contract.md` Section 1
 (Claude Code and Codex columns are omitted; the rightmost column is the
 opencode classification).
@@ -157,7 +158,7 @@ opencode classification).
 | 5 | CodingAgentBackend | `stream_parser` | SHIM-REQUIRED | No NDJSON streaming — adapter must consume bulk JSON or terminal-formatted output and emit `SessionEvent` values. |
 | 6 | CodingAgentBackend | `result_parser` | SHIM-REQUIRED | Aggregates adapted events into `AgentSessionResult`; token fields must be extracted from SQLite since they are not in stdout. |
 | 7 | CodingAgentBackend | `env_policy` | TRIVIAL | Standard env construction; opencode consumes provider config via env vars (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). |
-| 8 | CodingAgentBackend | `session_locator` | SHIM-REQUIRED | Sessions live in SQLite (`ses_<ulid>`), not filesystem JSONL/NDJSON. The three locator methods require a SQLite-backed adapter. |
+| 8 | CodingAgentBackend | `session_locator` | SHIM-REQUIRED | Sessions live in SQLite (`ses_<ulid>`), not filesystem JSONL/NDJSON. The four locator methods require a SQLite-backed adapter. |
 | 9 | CodingAgentBackend | `write_tool_names` | SHIM-REQUIRED | opencode's write tool vocabulary is undocumented; needs investigation before the `frozenset` can be populated. Codex returns `frozenset({"apply_patch", "Bash", "run_cmd"})`; opencode likely surfaces a different set. |
 | 10 | CodingAgentBackend | `binary_name` | TRIVIAL | Returns `"opencode"`. |
 | 11 | CodingAgentBackend | `build_resume_cmd` | GAP | No `--resume <session_id>` flag surfaced; SQLite session IDs are not first-class CLI arguments. Maps to PCR-002. |
@@ -165,21 +166,36 @@ opencode classification).
 | 13 | CodingAgentBackend | `build_food_truck_cmd` | GAP | Same sandbox constraint blocks orchestrator-level L2 sessions. Maps to PCR-001 and PCR-003. |
 | 14 | CodingAgentBackend | `build_interactive_cmd` | SHIM-REQUIRED | `opencode run` exists for interactive use; sandbox restrictions apply but interactive flows can tolerate a tighter sandbox. |
 | 15 | CodingAgentBackend | `validate_session_layout` | TRIVIAL | Returns `[]` (Codex pattern); no session directory to validate when sessions are SQLite-backed. |
-| 16 | CodingAgentBackend | `validate_skill_content` | TRIVIAL | Returns `[]` (Codex pattern); no frontmatter requirement when no skill injection is documented. |
-| 17 | CodingAgentBackend | `version` | TRIVIAL | `opencode --version` returns the release string; daily cadence but parseable. |
-| 18 | CodingAgentBackend | `list_plugins` | TRIVIAL | Returns `[]`; no plugin system documented. |
-| 19 | CodingAgentBackend | `ensure_pre_launch` | SHIM-REQUIRED | Pre-launch check that the SQLite database is initialised and the configured provider env vars are present. |
-| 20 | CodingAgentBackend | `translate_model` | SHIM-REQUIRED | AI SDK model identifiers differ from autoskillit's canonical aliases (`sonnet` / `opus` / `haiku`). Mapping table needed; precedent is `CODEX_MODEL_ALIASES` in `_type_backend.py:174–176`. |
-| 21 | CodingAgentBackend | `model_config_overrides` | TRIVIAL | Returns `()` or a minimal per-model override tuple (analogous to Codex's effort-mapping for `sonnet`/`opus`/`haiku`). |
-| 22 | CodingAgentBackend | `build_inspector_cmd` | TRIVIAL | Raises `CapabilityNotSupportedError` (same as both existing backends; `inspector_capable=False`). |
-| 23 | CodingAgentBackend | `setup_session_dir` | SHIM-REQUIRED | Bridges SQLite session storage to the filesystem session dir contract; copies the SQLite session row to a session-dir stub so downstream consumers see a directory. |
-| 24 | StreamParser | `parse_line` | SHIM-REQUIRED | Adapts non-NDJSON output (bulk JSON or terminal blocks) to `SessionEvent`. Per-line semantics do not apply; the parser operates on whole-output blocks. |
-| 25 | ResultParser | `parse_result` | SHIM-REQUIRED | Aggregates adapted `SessionEvent` values into `AgentSessionResult`; identical to existing backends once events are shaped. |
-| 26 | ResultParser | `parse_stdout` | SHIM-REQUIRED | Bulk JSON or terminal output parsing; token extraction deferred to SQLite lookup. |
-| 27 | EnvPolicy | `build_env` | TRIVIAL | Standard env construction; no denylist required unless opencode leaks through sandbox-bypass env vars. |
-| 28 | SessionLocator | `locate_session` | SHIM-REQUIRED | SQLite query by ULID session ID; returns a synthetic `Path` (e.g., the SQLite DB path) for callers that expect filesystem semantics. |
-| 29 | SessionLocator | `project_log_dir` | SHIM-REQUIRED | Maps to `~/.local/share/opencode/` (the SQLite directory); per-project logic is opaque since opencode is global-session. |
-| 30 | SessionLocator | `session_log_path` | SHIM-REQUIRED | SQLite-backed; no real path exists. Returning the SQLite DB path is the closest analogue. |
+| 16 | CodingAgentBackend | `validate_interactive_invocation` | SHIM-REQUIRED | Validates the finalized command, project cwd, and any SQLite/config authority before attempt-owned mutation. |
+| 17 | CodingAgentBackend | `validate_skill_content` | TRIVIAL | Returns `[]` (Codex pattern); no frontmatter requirement when no skill injection is documented. |
+| 18 | CodingAgentBackend | `version` | TRIVIAL | `opencode --version` returns the release string; daily cadence but parseable. |
+| 19 | CodingAgentBackend | `list_plugins` | TRIVIAL | Returns `[]`; no plugin system documented. |
+| 20 | CodingAgentBackend | `ensure_pre_launch` | SHIM-REQUIRED | Pre-launch check that the SQLite database is initialised and the configured provider env vars are present. |
+| 21 | CodingAgentBackend | `recover_cook_history` | SHIM-REQUIRED | Performs explicit SQLite/session-index recovery before bare-resume listing; listing itself remains read-only. |
+| 22 | CodingAgentBackend | `cook_session_context` | SHIM-REQUIRED | Adapts opencode's SQLite ownership into an attempt context returning spawn/reap callbacks and inherited ownership descriptors where required. |
+| 23 | CodingAgentBackend | `translate_model` | SHIM-REQUIRED | AI SDK model identifiers differ from autoskillit's canonical aliases (`sonnet` / `opus` / `haiku`). Mapping table needed; precedent is `CODEX_MODEL_ALIASES` in `_type_backend.py:174–176`. |
+| 24 | CodingAgentBackend | `model_config_overrides` | TRIVIAL | Returns `()` or a minimal per-model override tuple (analogous to Codex's effort-mapping for `sonnet`/`opus`/`haiku`). |
+| 25 | CodingAgentBackend | `build_inspector_cmd` | TRIVIAL | Raises `CapabilityNotSupportedError` (same as both existing backends; `inspector_capable=False`). |
+| 26 | CodingAgentBackend | `setup_session_dir` | SHIM-REQUIRED | Bridges SQLite session storage to the filesystem session dir contract; copies the SQLite session row to a session-dir stub so downstream consumers see a directory. |
+| 27 | StreamParser | `parse_line` | SHIM-REQUIRED | Adapts non-NDJSON output (bulk JSON or terminal blocks) to `SessionEvent`. Per-line semantics do not apply; the parser operates on whole-output blocks. |
+| 28 | ResultParser | `parse_result` | SHIM-REQUIRED | Aggregates adapted `SessionEvent` values into `AgentSessionResult`; identical to existing backends once events are shaped. |
+| 29 | ResultParser | `parse_stdout` | SHIM-REQUIRED | Bulk JSON or terminal output parsing; token extraction deferred to SQLite lookup. |
+| 30 | EnvPolicy | `build_env` | TRIVIAL | Standard env construction; no denylist required unless opencode leaks through sandbox-bypass env vars. |
+| 31 | SessionLocator | `list_sessions` | SHIM-REQUIRED | Returns typed `SessionSummary` records from SQLite in source order, filtered by project and sidechain status without recovery mutation. |
+| 32 | SessionLocator | `locate_session` | SHIM-REQUIRED | SQLite query by ULID session ID; returns a synthetic `Path` (e.g., the SQLite DB path) for callers that expect filesystem semantics. |
+| 33 | SessionLocator | `project_log_dir` | SHIM-REQUIRED | Maps to `~/.local/share/opencode/` (the SQLite directory); per-project logic is opaque since opencode is global-session. |
+| 34 | SessionLocator | `session_log_path` | SHIM-REQUIRED | SQLite-backed; no real path exists. Returning the SQLite DB path is the closest analogue. |
+
+The candidate must also preserve the backend-neutral ownership records.
+`SessionSummary.session_id` remains the opencode `ses_<ulid>` while optional
+`launch_id` joins AutoSkillit classification. `ManagedSessionHome` owns one
+logical launch and its inherited lease descriptors; `CookSessionHandle` owns
+one attempt and exposes the only valid spawn/reap proof callbacks. A future
+adapter must keep `launch_id`, reload `attempt`, store-derived `view_id`, and
+backend session ID distinct even if SQLite could encode them in one row.
+Configuration snapshotting, durable session storage, and process-group
+cleanup remain separate owners. `HookTrustPolicy` is translated only at
+command construction, not inferred from `mcp_config_capable`.
 
 ### Method-cluster rollup
 
@@ -187,12 +203,12 @@ opencode classification).
 |---|---|---|---|
 | Identity / introspection (`name`, `capabilities`, `conventions`, `binary_name`, `version`, `list_plugins`, `model_config_overrides`, `build_inspector_cmd`, `translate_model`) | 8 | 1 | 0 |
 | Command builders (`build_cmd`, `build_skill_session_cmd`, `build_food_truck_cmd`, `build_interactive_cmd`, `build_resume_cmd`) | 0 | 1 | 4 |
-| Validation (`validate_session_layout`, `validate_skill_content`, `ensure_pre_launch`) | 2 | 1 | 0 |
+| Validation (`validate_session_layout`, `validate_interactive_invocation`, `validate_skill_content`, `ensure_pre_launch`) | 2 | 2 | 0 |
 | Parsing (`stream_parser`, `result_parser`) | 0 | 2 | 0 |
-| Session storage (`session_locator`, `setup_session_dir`, `write_tool_names`) | 0 | 3 | 0 |
+| Session storage (`session_locator`, `setup_session_dir`, `write_tool_names`, `recover_cook_history`, `cook_session_context`) | 0 | 5 | 0 |
 | Environment (`env_policy`) | 1 | 0 | 0 |
-| Sub-protocols (`StreamParser`, `ResultParser`, `EnvPolicy`, `SessionLocator`) | 1 | 6 | 0 |
-| **Total (30 rows)** | **12** | **14** | **4** |
+| Sub-protocols (`StreamParser`, `ResultParser`, `EnvPolicy`, `SessionLocator`) | 1 | 7 | 0 |
+| **Total (34 rows)** | **12** | **18** | **4** |
 
 The 4 GAP rows map to 3 distinct root causes (sandbox blocker, resume
 absence, orchestrator session absence), consolidated into PCR-001, PCR-002,
@@ -205,13 +221,13 @@ and PCR-003 in Section 6.
 The taxonomy below mirrors `acp-session-contract.md` Section 3:
 
 - **ACP-Mappable** — 17 fields with a direct or close ACP analogue.
-- **autoskillit-Local Extension** — 17 fields with no ACP analogue but
+- **autoskillit-Local Extension** — 23 fields with no ACP analogue but
   required for autoskillit's extended contract.
-- **Forward-Declared** — 6 fields with no current production consumer
+- **Forward-Declared** — 7 fields with no current production consumer
   outside the exemption set in `_FORWARD_DECLARED`
   (`tests/arch/test_capability_consumption.py:26–63`).
 
-All 40 fields appear in exactly one row below. The "opencode value" column
+All 47 fields appear in exactly one row below. The "opencode value" column
 records what the field would hold for an `OpencodeBackend.capabilities`
 instance; the classification column is TRIVIAL / SHIM-REQUIRED / GAP with the
 same legend as Section 2.
@@ -238,7 +254,7 @@ same legend as Section 2.
 | 16 | `record_capable` | `False` | GAP | Same as row 15. Maps to PCR-009. |
 | 17 | `inspector_capable` | `False` | TRIVIAL | Same as both existing backends; raises `CapabilityNotSupportedError`. |
 
-### 3.2 autoskillit-Local Extension fields (17)
+### 3.2 autoskillit-Local Extension fields (23)
 
 | # | Field | opencode value | Classification | Rationale |
 |---|---|---|---|---|
@@ -259,26 +275,33 @@ same legend as Section 2.
 | 32 | `git_metadata_writable` | `True` | TRIVIAL | opencode's `--sandbox deny` is write-blocked at the user level, not at the kernel level; `.git/worktrees/` remains writable. |
 | 33 | `skill_sigil` | `"$"` (defaulted) | SHIM-REQUIRED | No documented invocation prefix; defaulting to Codex's `"$"` until research surfaces an opencode-native convention. Maps to PCR-011. |
 | 34 | `session_dir_persistent` | `True` | SHIM-REQUIRED | SQLite-backed sessions are persistent by construction; filesystem bridge must produce a persistent dir (analogous to Codex's `session_dir_persistent=True`). |
+| 35 | `cook_startup_observer_capable` | `False` | TRIVIAL | No guarded interactive-startup observer is documented for opencode. |
+| 36 | `supports_model_invocation_gating` | `False` | TRIVIAL | With no skill injection, gated skill materialization must fail closed rather than relying on unsupported frontmatter. |
+| 37 | `unnegotiated_tool_result_token_limit` | `10000` | TRIVIAL | Uses the conservative default until backend-specific conformance establishes a lower bound. |
+| 38 | `protected_recipe_delivery_capable` | `False` | TRIVIAL | No protected host-attestation channel is documented. |
+| 39 | `recipe_delivery_budget` | `None` | TRIVIAL | No version-pinned protected recipe-delivery contract exists. |
+| 40 | `hook_trust_policy` | `HookTrustPolicy.AUTOMATED` | TRIVIAL | No per-generated-config hook review surface is documented; interactive builders therefore use the default automated policy. |
 
-### 3.3 Forward-Declared fields (6)
+### 3.3 Forward-Declared fields (7)
 
 | # | Field | Forward-declared issue | opencode value | Classification | Rationale |
 |---|---|---|---|---|---|
-| 35 | `supports_thinking_blocks` | #3497 (Claude + Codex pre-existing) | `False` | TRIVIAL | No thinking-block format documented. |
-| 36 | `required_session_files` | #3134 (Codex pre-existing) | `frozenset()` | TRIVIAL | No session-dir contract; SQLite-only. |
-| 37 | `session_dir_symlinks` | #3134 (Codex pre-existing) | `frozenset()` | TRIVIAL | No symlink targets. |
-| 38 | `patch_format` | #3776 (Codex pre-existing) | `""` | SHIM-REQUIRED | Write-detection adapter must surface patch evidence before a format string can be set. Maps to PCR-010. |
-| 39 | `min_version` | #3122 (Codex pre-existing) | `""` | TRIVIAL | Version policy deferred; daily cadence makes pinning fragile. |
-| 40 | `mcp_env_forward_vars` | #3458 (Codex pre-existing) | `frozenset()` | TRIVIAL | No MCP wiring; empty set. |
+| 41 | `supports_thinking_blocks` | #3497 (Claude + Codex pre-existing) | `False` | TRIVIAL | No thinking-block format documented. |
+| 42 | `required_session_files` | #3134 (Codex pre-existing) | `frozenset()` | TRIVIAL | No session-dir contract; SQLite-only. |
+| 43 | `session_dir_symlinks` | #3134 (Codex pre-existing) | `frozenset()` | TRIVIAL | No symlink targets. |
+| 44 | `patch_format` | #3776 (Codex pre-existing) | `""` | SHIM-REQUIRED | Write-detection adapter must surface patch evidence before a format string can be set. Maps to PCR-010. |
+| 45 | `min_version` | #3122 (Codex pre-existing) | `""` | TRIVIAL | Version policy deferred; daily cadence makes pinning fragile. |
+| 46 | `mcp_env_forward_vars` | #3458 (Codex pre-existing) | `frozenset()` | TRIVIAL | No MCP wiring; empty set. |
+| 47 | `github_api_callable` | #4204 | `False` | TRIVIAL | No sandbox-permitted outbound GitHub API write path is documented. |
 
 ### 3.4 Capabilities rollup
 
 | Category | TRIVIAL | SHIM-REQUIRED | GAP |
 |---|---|---|---|
 | ACP-Mappable (17) | 6 | 3 | 8 |
-| autoskillit-Local Extension (17) | 11 | 5 | 1 |
-| Forward-Declared (6) | 5 | 1 | 0 |
-| **Total (40)** | **22** | **9** | **9** |
+| autoskillit-Local Extension (23) | 17 | 5 | 1 |
+| Forward-Declared (7) | 6 | 1 | 0 |
+| **Total (47)** | **29** | **9** | **9** |
 
 The 9 GAP rows consolidate into 8 PCRs (PCR-001 through PCR-005 and PCR-007
 through PCR-009); the sandbox-policy mismatch in row 27 maps to PCR-001. The
@@ -322,7 +345,7 @@ add a fixture directory under `tests/execution/backends/fixtures/`.
 
 **opencode classification: GAP.** opencode has no NDJSON streaming — output
 is either bulk JSON or terminal-formatted. The fixture-based conformance
-probe category requires a new output-format adapter (Section 2 rows 5, 24)
+probe category requires a new output-format adapter (Section 2 rows 5, 27)
 before any probe can be authored. The probe category itself remains valid
 as a contract surface; only the authoring pattern changes.
 
@@ -414,7 +437,7 @@ semantics.
 | Section | Source of truth | File |
 |---|---|---|
 | §2 method enumeration | `CodingAgentBackend` Protocol + 4 sub-protocols | `src/autoskillit/core/types/_type_protocols_backend.py` |
-| §3 capability taxonomy | `BackendCapabilities` (40 fields) + `_FORWARD_DECLARED` | `src/autoskillit/core/types/_type_backend.py`, `tests/arch/test_capability_consumption.py` |
+| §3 capability taxonomy | `BackendCapabilities` (47 fields) + `_FORWARD_DECLARED` | `src/autoskillit/core/types/_type_backend.py`, `tests/arch/test_capability_consumption.py` |
 | §3 capability categories | ACP-Mappable / autoskillit-Local / Forward-Declared counts | `docs/design/acp-session-contract.md` Section 3 |
 | §4 conventions | `BackendConventions` (2 fields) | `src/autoskillit/core/types/_type_backend.py:38–49` |
 | §5 B3a pattern | Codex NDJSON fixtures | `tests/execution/backends/fixtures/codex_ndjson/` |

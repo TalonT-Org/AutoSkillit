@@ -155,11 +155,13 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_backend.py` | Tests for CodexFlags, CodexBackend protocol conformance, headless/resume command builders, skill session cmd config adapter, food truck cmd builder |
 | `test_codex_interactive.py` | Parametrized structural validation of CodexBackend.build_interactive_cmd plus the required installed-CLI parse gate for exact fresh config overrides |
 | `test_codex_session_locator.py` | Tests for CodexSessionLocator: locate_session walk, read_session decompression, codex_home constructor-field priority over env var, protocol conformance |
+| `test_codex_session_storage.py` | Tests for isolated attempt views, leases, promotion, recovery, canonical rollouts, and derived index behavior |
 | `test_codex_env_policy.py` | Tests for CodexEnvPolicy three-layer scrub |
 | `test_codex_mcp_registration.py` | Tests for ensure_codex_mcp_registered: file creation, TOML fields, idempotency, foreign section preservation, dir creation |
 | `test_codex_stream_parser.py` | Full test suite for CodexStreamParser: happy-path, item parsing, degradation, fixture-driven integration, protocol conformance |
 | `test_codex_result_parser.py` | Tests for CodexResultParser |
 | `test_codex_config.py` | Tests for TOML read/write primitives, _is_autoskillit_registered, and ensure_codex_mcp_registered |
+| `test_codex_config_validation.py` | Tests for locked Codex source-config composition, snapshots, and exact native-validation context |
 | `test_codex_recipe_delivery.py` | Protected Codex recipe-delivery attestation and durable receipt-ledger tests |
 | `test_codex_recipe_delivery_fixtures.py` | Protected and diagnostic Codex recipe-delivery fixture ratchets |
 | `test_codex_recipe_delivery_conformance.py` | Dedicated recipe-delivery conformance matrix plus credentialed Code Mode envelope/pull retention probe |

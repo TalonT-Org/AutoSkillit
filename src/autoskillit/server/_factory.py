@@ -74,6 +74,7 @@ from autoskillit.workspace import (
     project_default_plugin_source,
     project_direct_install,
     resolve_ephemeral_root,
+    resolve_persistent_session_root,
     validate_skill_tier_roles,
 )
 
@@ -296,8 +297,12 @@ def make_context(
             skill_catalog=session_catalog,
         )
     ephemeral_root = resolve_ephemeral_root()
-    codex_root = temp_dir / "codex-sessions"
-    session_mgr = DefaultSessionSkillManager(provider, ephemeral_root, codex_root=codex_root)
+    persistent_root = resolve_persistent_session_root(temp_dir, backend)
+    session_mgr = DefaultSessionSkillManager(
+        provider,
+        ephemeral_root,
+        persistent_root=persistent_root,
+    )
 
     audit = DefaultAuditLog()
     github_api_log = DefaultGitHubApiLog()

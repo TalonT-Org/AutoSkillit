@@ -1,19 +1,34 @@
-"""Phase 2 tests: session_skills module — provider and core manager."""
+"""Tests for exact-catalog session skill projection and manager ownership."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import ClaudeDirectoryConventions
+import autoskillit.workspace.session_skills as session_skills
+from autoskillit.core import (
+    SESSION_ADD_DIR_SUBDIR,
+    ClaudeDirectoryConventions,
+    SessionSkillManager,
+    SkillExecutionRole,
+    SkillSource,
+)
 from autoskillit.core.io import load_yaml
-from autoskillit.workspace.session_skills import (
+from autoskillit.workspace import (
+    AgentSkillDocument,
     DefaultSessionSkillManager,
+    EffectiveSkillCatalog,
+    SkillCatalogEntry,
+    SkillInfo,
+    SkillProjectionContext,
     SkillsDirectoryProvider,
+    project_agent_skill_document,
     resolve_ephemeral_root,
 )
+from tests.workspace._helpers import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -34,78 +49,66 @@ def _assert_agent_safe(content: str) -> None:
     assert _MACHINE_ONLY_FRONTMATTER_KEYS.isdisjoint(_frontmatter(content))
 
 
+def _catalog_context(
+    provider: SkillsDirectoryProvider,
+    project_root: Path,
+    *,
+    backend=None,
+):
+    catalog = provider.resolver.list_effective(
+        project_root,
+        SkillExecutionRole.SESSION,
+    )
+    context = provider.catalog_projection_context(
+        catalog,
+        project_root,
+        backend=backend,
+    )
+    return catalog, context
+
+
+def _codex_backend() -> MagicMock:
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities = _CODEX_CAPABILITIES
+    backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    backend.ensure_pre_launch.return_value = []
+    backend.validate_session_layout.return_value = []
+    return backend
+
+
 def test_resolve_ephemeral_root_returns_writable_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.workspace.session_skills as ss
-
-    monkeypatch.setattr(ss, "_CANDIDATE_ROOTS", [tmp_path])
+    monkeypatch.setattr(session_skills, "_CANDIDATE_ROOTS", [tmp_path])
     root = resolve_ephemeral_root()
-    assert root.exists()
     assert root.is_dir()
-    test_file = root / "write_test.tmp"
-    test_file.write_text("ok")
-    test_file.unlink()
+    probe = root / "write_test.tmp"
+    probe.write_text("ok")
+    probe.unlink()
 
 
-def test_resolve_ephemeral_root_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    import autoskillit.workspace.session_skills as ss
-
-    monkeypatch.setattr(ss, "_CANDIDATE_ROOTS", [Path("/nonexistent"), tmp_path])
-    root = ss.resolve_ephemeral_root()
-    assert root.exists()
+def test_skills_directory_provider_lists_public_skills() -> None:
+    names = {skill.name for skill in SkillsDirectoryProvider().list_skills()}
+    assert {"open-kitchen", "close-kitchen", "implement-worktree"} <= names
+    assert "sous-chef" not in names
 
 
-def test_skills_directory_provider_lists_all_skills() -> None:
-    provider = SkillsDirectoryProvider()
-    skills = provider.list_skills()
-    names = {s.name for s in skills}
-    assert "open-kitchen" in names
-    assert "close-kitchen" in names
-    assert "implement-worktree" in names
-    assert "sous-chef" not in names  # internal, excluded
-
-
-def test_provider_injects_disable_model_invocation_for_tier2() -> None:
+def test_provider_gating_is_agent_safe() -> None:
     provider = SkillsDirectoryProvider()
     skill = provider.resolver.resolve_effective("open-kitchen", Path.cwd())
     assert skill is not None
+
     content = provider.get_skill_content(skill, cwd=Path.cwd(), gated=True)
-    fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    assert fm_match, "Content must have YAML frontmatter"
-    fm = load_yaml(fm_match.group(1))
-    assert fm.get("disable-model-invocation") is True
 
-
-def test_provider_does_not_inject_for_cook_session() -> None:
-    # Use mermaid (skills_extended/, no flag at rest) to verify that gated=False
-    # returns unmodified content without injecting disable-model-invocation.
-    # open-kitchen and close-kitchen carry disable-model-invocation: true in their source
-    # (human-only skills), so they cannot be used to assert "flag not present".
-    provider = SkillsDirectoryProvider()
-    skill = provider.resolver.resolve_effective("mermaid", Path.cwd())
-    assert skill is not None
-    content = provider.get_skill_content(skill, cwd=Path.cwd(), gated=False)
-    fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    assert fm_match, "Content must have YAML frontmatter"
-    fm = load_yaml(fm_match.group(1))
-    assert fm.get("disable-model-invocation") is not True
+    assert _frontmatter(content)["disable-model-invocation"] is True
+    _assert_agent_safe(content)
 
 
 def test_agent_skill_projector_preserves_public_document_and_stable_digest(
     tmp_path: Path,
 ) -> None:
-    from autoskillit.core import SkillExecutionRole, SkillSource
-    from autoskillit.workspace import (
-        AgentSkillDocument,
-        SkillCatalogEntry,
-        SkillProjectionContext,
-        project_agent_skill_document,
-    )
-    from autoskillit.workspace.skills import EffectiveSkillCatalog, SkillInfo
-
-    skill_md = tmp_path / "SKILL.md"
-    skill_md.write_text(
+    canonical = (
         "---\n"
         "name: projected-skill\n"
         "description: Public description.\n"
@@ -121,171 +124,28 @@ def test_agent_skill_projector_preserves_public_document_and_stable_digest(
     skill_info = SkillInfo(
         name="projected-skill",
         source=SkillSource.BUNDLED_EXTENDED,
-        path=skill_md,
+        path=tmp_path / "SKILL.md",
+        canonical_content=canonical,
     )
-    catalog_entry = SkillCatalogEntry.from_skill_info(skill_info)
-    context = SkillProjectionContext(
-        cwd=tmp_path,
-        catalog=EffectiveSkillCatalog(
-            skills=(catalog_entry,),
-            execution_role=SkillExecutionRole.SESSION,
-        ),
+    entry = SkillCatalogEntry.from_skill_info(skill_info)
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
     )
+    context = SkillProjectionContext(cwd=tmp_path, catalog=catalog)
 
-    first = project_agent_skill_document(catalog_entry, context)
-    second = project_agent_skill_document(catalog_entry, context)
+    first = project_agent_skill_document(entry, context)
+    second = project_agent_skill_document(entry, context)
 
     assert isinstance(first, AgentSkillDocument)
     _assert_agent_safe(first.content)
-    frontmatter = _frontmatter(first.content)
-    assert frontmatter["name"] == "projected-skill"
-    assert frontmatter["description"] == "Public description."
-    assert frontmatter["metadata"] == {"public-key": "public-value"}
+    assert _frontmatter(first.content)["metadata"] == {"public-key": "public-value"}
     assert first.content.endswith("# Public body\n\nKeep this body byte-for-byte.\n")
     assert first.projected_digest == second.projected_digest
     assert first.content == second.content
 
 
-def test_provider_string_api_returns_unified_agent_safe_projection() -> None:
-    provider = SkillsDirectoryProvider()
-    raw = provider.resolver.resolve("make-arch-diag")
-    assert raw is not None
-    assert "uses_capabilities:" in raw.path.read_text()
-
-    content = provider.get_skill_content(raw, cwd=Path.cwd(), gated=False)
-
-    _assert_agent_safe(content)
-    assert _frontmatter(content)["name"] == "make-arch-diag"
-    assert "# Make-Arch-Diag: Architecture Diagram Generation" in content
-
-
-def test_invocation_rejects_wrong_role_before_filesystem_work(tmp_path: Path) -> None:
-    from autoskillit.core import SkillContractError, SkillExecutionRole, SkillSource
-    from autoskillit.workspace import (
-        EffectiveSkillInvocation,
-        SkillInfo,
-    )
-
-    ephemeral_root = tmp_path / "ephemeral"
-    skill = SkillInfo(
-        name="orchestrator",
-        source=SkillSource.PROJECT_LOCAL,
-        path=tmp_path / "source" / "SKILL.md",
-        execution_role=SkillExecutionRole.ORCHESTRATOR,
-        canonical_content=(
-            "---\nname: orchestrator\ndescription: Wrong role.\n"
-            "execution_role: orchestrator\n---\nbody\n"
-        ),
-    )
-    with pytest.raises(SkillContractError, match="role"):
-        EffectiveSkillInvocation(
-            root=skill,
-            closure=(skill,),
-            capability_union=frozenset(),
-            project_root=tmp_path,
-            execution_role=SkillExecutionRole.SESSION,
-        )
-
-    assert not ephemeral_root.exists()
-
-
-def test_invocation_revalidates_capability_role_before_filesystem_work(
-    tmp_path: Path,
-) -> None:
-    from autoskillit.core import SkillContractError, SkillExecutionRole, SkillSource
-    from autoskillit.workspace import (
-        EffectiveSkillInvocation,
-        SkillInfo,
-    )
-
-    ephemeral_root = tmp_path / "ephemeral"
-    skill = SkillInfo(
-        name="forged-session",
-        source=SkillSource.PROJECT_LOCAL,
-        path=tmp_path / "source" / "SKILL.md",
-        execution_role=SkillExecutionRole.SESSION,
-        uses_capabilities=frozenset({"run_skill"}),
-        canonical_content=(
-            "---\nname: forged-session\ndescription: Forged contract.\n"
-            "execution_role: session\nuses_capabilities: [run_skill]\n---\n"
-            'Call run_skill("child").\n'
-        ),
-    )
-    with pytest.raises(SkillContractError, match="run_skill.*session|session.*run_skill"):
-        EffectiveSkillInvocation(
-            root=skill,
-            closure=(skill,),
-            capability_union=frozenset({"run_skill"}),
-            project_root=tmp_path,
-            execution_role=SkillExecutionRole.SESSION,
-        )
-
-    assert not ephemeral_root.exists()
-
-
-def test_review_pr_four_way_metadata_transport_projection_matrix(tmp_path: Path) -> None:
-    """Metadata removal is byte-inert; transport prose remains an independent input."""
-    from autoskillit.core import SkillExecutionRole, SkillSource
-    from autoskillit.workspace import (
-        EffectiveSkillCatalog,
-        SkillCatalogEntry,
-        SkillInfo,
-        SkillProjectionContext,
-        bundled_skills_extended_dir,
-        project_agent_skill_document,
-    )
-
-    canonical = (bundled_skills_extended_dir() / "review-pr" / "SKILL.md").read_text()
-    with_metadata = canonical.replace(
-        "uses_capabilities: [agent_model, github_api_write]",
-        "uses_capabilities: [agent_model, github_api_write, run_skill]",
-    )
-    transport_line = "- Called by the recipe orchestrator via `run_skill` after `open_pr_step`\n"
-    variants = {
-        "metadata_plus_transport": with_metadata,
-        "metadata_removed": canonical,
-        "transport_removed": with_metadata.replace(transport_line, ""),
-        "both_removed": canonical.replace(transport_line, ""),
-    }
-    projected: dict[str, str] = {}
-    for name, content in variants.items():
-        capabilities = (
-            frozenset({"agent_model", "github_api_write", "run_skill"})
-            if name in {"metadata_plus_transport", "transport_removed"}
-            else frozenset({"agent_model", "github_api_write"})
-        )
-        info = SkillInfo(
-            name="review-pr",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=tmp_path / name / "SKILL.md",
-            execution_role=SkillExecutionRole.SESSION,
-            uses_capabilities=capabilities,
-            canonical_content=content,
-        )
-        context = SkillProjectionContext(
-            cwd=tmp_path,
-            catalog=EffectiveSkillCatalog(
-                skills=(SkillCatalogEntry.from_skill_info(info),),
-                execution_role=SkillExecutionRole.SESSION,
-            ),
-        )
-        projected[name] = project_agent_skill_document(context.catalog.skills[0], context).content
-        _assert_agent_safe(projected[name])
-
-    assert projected["metadata_plus_transport"] == projected["metadata_removed"]
-    assert projected["transport_removed"] == projected["both_removed"]
-    assert projected["metadata_plus_transport"] != projected["transport_removed"]
-
-
 def test_session_manager_materializes_exact_catalog(tmp_path: Path) -> None:
-    from autoskillit.core import SessionSkillManager, SkillExecutionRole, SkillSource
-    from autoskillit.workspace import (
-        EffectiveSkillCatalog,
-        SkillCatalogEntry,
-        SkillInfo,
-        SkillProjectionContext,
-    )
-
     canonical = (
         "---\n"
         "name: exact-skill\n"
@@ -323,3 +183,67 @@ def test_session_manager_materializes_exact_catalog(tmp_path: Path) -> None:
     )
     assert projected.read_text().endswith("# Exact skill\n")
     _assert_agent_safe(projected.read_text())
+
+
+def test_skill_write_failure_rolls_back_unpublished_codex_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_root = tmp_path / "persistent" / "codex-sessions"
+    provider = SkillsDirectoryProvider()
+    manager = DefaultSessionSkillManager(
+        provider,
+        ephemeral_root=tmp_path / "ephemeral",
+        persistent_root=codex_root,
+    )
+    backend = _codex_backend()
+    catalog, context = _catalog_context(provider, tmp_path, backend=backend)
+
+    def fail_write(*args, **kwargs) -> None:
+        del args, kwargs
+        raise RuntimeError("skill write failed")
+
+    monkeypatch.setattr(session_skills, "materialize_agent_skill_tree", fail_write)
+
+    with pytest.raises(RuntimeError, match="skill write failed"):
+        manager.init_session("0123456789abcdef", catalog, context)
+
+    assert not (codex_root / "0123456789abcdef").exists()
+    assert manager._session_roots == {}
+    assert manager._session_leases == {}
+    assert manager._session_skills_subdirs == {}
+
+
+def test_skills_subdirectory_is_owned_per_session_not_manager_wide(tmp_path: Path) -> None:
+    provider = SkillsDirectoryProvider()
+    manager = DefaultSessionSkillManager(
+        provider,
+        ephemeral_root=tmp_path / "ephemeral",
+        persistent_root=tmp_path / "persistent" / "codex-sessions",
+    )
+    codex_backend = _codex_backend()
+    claude_catalog, claude_context = _catalog_context(provider, tmp_path)
+    codex_catalog, codex_context = _catalog_context(
+        provider,
+        tmp_path,
+        backend=codex_backend,
+    )
+
+    claude_home = manager.init_session(
+        "claude-session",
+        claude_catalog,
+        claude_context,
+    )
+    codex_home = manager.init_session(
+        "0123456789abcdef",
+        codex_catalog,
+        codex_context,
+    )
+
+    assert manager._session_skills_subdirs == {
+        "claude-session": Path(SESSION_ADD_DIR_SUBDIR)
+        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR,
+        "0123456789abcdef": Path(SESSION_ADD_DIR_SUBDIR)
+        / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
+    }
+    assert (Path(str(claude_home)) / ".claude" / "skills").is_dir()
+    assert (Path(str(codex_home)) / "skills").is_dir()

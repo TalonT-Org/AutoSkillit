@@ -129,12 +129,52 @@ def test_prompt_recipe_choice_noninteractive_exits(
 
 def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """cook() launch-confirm prompt must raise SystemExit(1) when not interactive."""
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+
     from autoskillit.cli.session._session_cook import cook
+    from autoskillit.core import (
+        EffectiveSkillCatalogAuthority,
+        ManagedSessionHome,
+        SkillProjectionContextAuthority,
+        ValidatedAddDir,
+    )
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+    generated_home = tmp_path / "managed-home"
+    skills_dir = generated_home / "skills"
+    skills_dir.mkdir(parents=True)
+    manager = MagicMock()
+
+    @contextmanager
+    def managed_session(
+        launch_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ):
+        assert projection_context.catalog == catalog
+        yield ManagedSessionHome(
+            launch_id=launch_id,
+            generated_home=generated_home,
+            skills_dir=ValidatedAddDir(str(skills_dir)),
+            pass_fds=(),
+        )
+
+    manager.managed_session.side_effect = managed_session
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_cook.shutil.which",
+        lambda _name: "/usr/bin/claude",
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager",
+        lambda *args, **kwargs: manager,
+    )
+    monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
     with pytest.raises(SystemExit) as exc_info:
-        cook()
+        cook(backend=ClaudeCodeBackend())
     assert exc_info.value.code == 1
 
 

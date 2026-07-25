@@ -19,6 +19,23 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _CORE_DIR = SRC_ROOT / "core"
 
 
+def test_cook_lifecycle_contracts_are_explicitly_exported_by_stub() -> None:
+    pyi_path = _CORE_DIR / "__init__.pyi"
+    tree = ast.parse(pyi_path.read_text(encoding="utf-8"), filename=str(pyi_path))
+    imported = {
+        alias.name
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    assert {
+        "CookSessionHandle",
+        "HookTrustPolicy",
+        "ManagedSessionHome",
+        "SessionSummary",
+    } <= imported
+
+
 def test_pyi_stub_covers_submodule_public_symbols() -> None:
     """Every public symbol in a core submodule must appear in __init__.pyi."""
     import autoskillit.core as core

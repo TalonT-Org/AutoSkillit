@@ -516,7 +516,19 @@ async def test_github_api_write_capability_skill_not_auto_routed(
     fake_backend.capabilities = concrete_backend.capabilities
     fake_backend.conventions = concrete_backend.conventions
     fake_backend.ensure_pre_launch.return_value = []
+    fake_backend.validate_session_layout.return_value = []
+    fake_backend.session_locator.return_value.project_log_dir.return_value = None
     tool_ctx_kitchen_open.backend = fake_backend
+    from autoskillit.workspace import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+    )
+
+    tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_root=tmp_path / "persistent-sessions",
+    )
     _install_skill_invocation(
         tool_ctx_kitchen_open,
         name="test-skill",

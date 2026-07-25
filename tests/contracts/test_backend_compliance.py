@@ -6,9 +6,20 @@ and asserts return types or isinstance for all registered backends.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from autoskillit.core import SESSION_ADD_DIR_SUBDIR
+
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
+
+def _create_inert_rollout_links(generated_home: Path) -> None:
+    for public_name in ("sessions", "archived_sessions"):
+        target = generated_home / f".inert-{public_name}"
+        target.mkdir()
+        (generated_home / public_name).symlink_to(target)
 
 
 class TestBackendCompliance:
@@ -133,6 +144,27 @@ class TestBackendCompliance:
                 f"{type(locator).__name__}.session_log_path must return Path or None"
             )
 
+    def test_all_backends_session_locator_has_typed_listing(self):
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            locator = cls().session_locator()
+            assert callable(locator.list_sessions)
+
+    def test_all_backends_have_cook_lifecycle_methods(self):
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            backend = cls()
+            for method_name in (
+                "validate_interactive_invocation",
+                "recover_cook_history",
+                "cook_session_context",
+            ):
+                assert callable(getattr(backend, method_name))
+
     def test_all_backends_capabilities_is_backend_capabilities(self):
         from autoskillit.core import BackendCapabilities
         from autoskillit.execution.backends import BACKEND_REGISTRY
@@ -146,7 +178,10 @@ class TestBackendCompliance:
         from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
 
         for cls in BACKEND_REGISTRY.values():
-            assert isinstance(cls().validate_session_layout(tmp_path), list)
+            assert isinstance(
+                cls().validate_session_layout(tmp_path, project_dir=tmp_path),
+                list,
+            )
 
     def test_all_backends_conventions_is_backend_conventions(self):
         from autoskillit.core import BackendConventions
@@ -166,7 +201,7 @@ class TestBackendCompliance:
     def test_claude_backend_validate_session_layout_accepts_valid_dir(self, tmp_path):
         from autoskillit.execution.backends import ClaudeCodeBackend
 
-        skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
+        skill_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / ".claude" / "skills" / "test-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
         assert ClaudeCodeBackend().validate_session_layout(tmp_path) == []
@@ -174,10 +209,11 @@ class TestBackendCompliance:
     def test_codex_backend_validate_session_layout_accepts_valid_dir(self, tmp_path):
         from autoskillit.execution.backends import CodexBackend
 
-        skill_dir = tmp_path / "skills" / "test-skill"
+        skill_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills" / "test-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+        _create_inert_rollout_links(tmp_path)
         assert CodexBackend().validate_session_layout(tmp_path) == []
 
     def test_validate_session_layout_empty_dir_returns_errors(self, tmp_path):
@@ -198,10 +234,11 @@ class TestBackendCompliance:
             work_dir = tmp_path / cls.__name__
             work_dir.mkdir()
             skills_subdir = cls().conventions.skills_subdir
-            skill_dir = work_dir / str(skills_subdir) / "test-skill"
+            skill_dir = work_dir / SESSION_ADD_DIR_SUBDIR / str(skills_subdir) / "test-skill"
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
             if issubclass(cls, CodexBackend):
                 (work_dir / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+                _create_inert_rollout_links(work_dir)
             errors = cls().validate_session_layout(work_dir)
             assert errors == [], f"{cls.__name__}: {errors}"

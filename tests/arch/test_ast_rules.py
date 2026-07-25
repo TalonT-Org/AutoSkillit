@@ -876,7 +876,7 @@ def test_expand_functions_call_validators() -> None:
 
 
 def test_fcntl_import_allowlist() -> None:
-    """Only the five allowlisted modules may import fcntl.
+    """Only explicitly allowlisted modules may import fcntl.
 
     Unauthorized fcntl usage bypasses the CampaignStateMutator lock gateway,
     creating cross-process race conditions on state files. This test enforces
@@ -907,6 +907,36 @@ def test_fcntl_import_allowlist() -> None:
     assert not violations, (
         "Unauthorized fcntl imports found — all fcntl usage must go through "
         "CampaignStateMutator or the other allowlisted lock utilities:\n" + "\n".join(violations)
+    )
+
+
+def test_codex_unlocked_config_mutators_are_private_to_prelaunch() -> None:
+    """Only the composed prelaunch transaction may import unlocked mutators."""
+    unlocked_names = {
+        "_ensure_codex_mcp_registered_unlocked",
+        "_sync_hooks_to_codex_config_unlocked",
+    }
+    allowed_path = SRC_ROOT / "execution" / "backends" / "_codex_prelaunch.py"
+    violations: list[str] = []
+
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        if py_file == allowed_path:
+            continue
+        try:
+            tree = ast.parse(py_file.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            for alias in node.names:
+                if alias.name in unlocked_names:
+                    rel = py_file.relative_to(SRC_ROOT)
+                    violations.append(f"  {rel}:{node.lineno}: imports {alias.name}")
+
+    assert not violations, (
+        "Unlocked Codex config mutators bypass the composed source-config lock; "
+        "only _codex_prelaunch.py may import them:\n" + "\n".join(violations)
     )
 
 

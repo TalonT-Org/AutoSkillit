@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.hook_registry import HOOKS_DIR
+from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
@@ -89,6 +90,7 @@ class TestRequiredSessionFilesCreated:
         backend = backend_cls()
         session_dir = tmp_path / "session"
         session_dir.mkdir()
+        assert backend.ensure_pre_launch(session_dir=session_dir) == []
         backend.setup_session_dir(session_dir)
         for filename in sorted(backend.capabilities.required_session_files):
             assert (session_dir / filename).is_file(), (
@@ -120,7 +122,10 @@ class TestSessionDirSymlinksAreSymlinks:
         backend = backend_cls()
         session_dir = tmp_path / "session"
         session_dir.mkdir()
+        assert backend.ensure_pre_launch(session_dir=session_dir) == []
         backend.setup_session_dir(session_dir)
+        if backend.capabilities.session_dir_persistent:
+            DefaultSessionSkillManager._create_inert_rollout_paths(session_dir, backend)
 
         missing: list[str] = []
         violations: list[str] = []
@@ -145,3 +150,15 @@ class TestSessionDirSymlinksAreSymlinks:
             )
         if violations:
             pytest.xfail(f"Known bug: {violations} use shutil.copy2 instead of symlink_to")
+
+
+def test_backend_hook_trust_policies_and_codex_history_links_are_explicit() -> None:
+    from autoskillit.core import HookTrustPolicy
+
+    claude = BACKEND_REGISTRY["claude-code"]().capabilities
+    codex = BACKEND_REGISTRY["codex"]().capabilities
+
+    assert claude.hook_trust_policy is HookTrustPolicy.AUTOMATED
+    assert codex.hook_trust_policy is HookTrustPolicy.REVIEW_EACH_SESSION
+    assert claude.session_dir_symlinks == frozenset()
+    assert codex.session_dir_symlinks == frozenset({"sessions", "archived_sessions"})

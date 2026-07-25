@@ -26,7 +26,9 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_cook_order_command.py` | Tests: cook CLI order command — script validation, command building, env injection |
 | `test_cook_order_picker.py` | Tests: cook CLI order command — recipe picker, resume flows, session parsing |
 | `test_cook_order_prompt.py` | Tests: cook CLI order command — system prompt content, MCP prefix selection, ownership |
+| `test_cook_process_lifecycle.py` | Tests for owned cook process groups, inherited descriptors, and spawn/reap callbacks |
 | `test_cook_profile.py` | Tests for --profile flag in cook command — env injection and validation |
+| `test_cook_startup_observability.py` | Tests for Codex startup tracing, PTY observation, readiness, and timing budgets |
 | `test_cook_workspace.py` | Tests: cook CLI workspace init and clean commands |
 | `test_doctor.py` | Tests for CLI doctor command and related utilities |
 | `test_doctor_backend_guards.py` | Tests for doctor backend guard checks (stale MCP, MCP registered, process state, codex graduation) and run_doctor backend wiring |

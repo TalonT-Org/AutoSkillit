@@ -78,6 +78,9 @@ def test_backend_capabilities_field_count():
     frozenset_fields = {f.name for f in fields if hints[f.name] == frozenset[str]}
     str_fields = {f.name for f in fields if hints[f.name] is str}
     tuple_fields = {f.name for f in fields if hints[f.name] == tuple[str, ...]}
+    hook_policy_fields = {
+        f.name for f in fields if getattr(hints[f.name], "__name__", "") == "HookTrustPolicy"
+    }
     assert bool_fields == {
         "channel_b_capable",
         "has_unguarded_filesystem_access",
@@ -100,6 +103,7 @@ def test_backend_capabilities_field_count():
         "supports_context_window_suffix",
         "git_metadata_writable",
         "session_dir_persistent",
+        "cook_startup_observer_capable",
         "supports_model_invocation_gating",
         "github_api_callable",
         "protected_recipe_delivery_capable",
@@ -127,6 +131,7 @@ def test_backend_capabilities_field_count():
         "skill_sigil",
     }
     assert tuple_fields == {"env_denylist_prefixes"}
+    assert hook_policy_fields == {"hook_trust_policy"}
 
 
 def test_backend_capabilities_field_names_locked():
@@ -174,11 +179,13 @@ def test_backend_capabilities_field_names_locked():
         "skill_sigil",
         "process_name_aliases",
         "session_dir_persistent",
+        "cook_startup_observer_capable",
         "supports_model_invocation_gating",
         "github_api_callable",
         "unnegotiated_tool_result_token_limit",
         "protected_recipe_delivery_capable",
         "recipe_delivery_budget",
+        "hook_trust_policy",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected
@@ -186,7 +193,7 @@ def test_backend_capabilities_field_names_locked():
 
 def test_claude_code_capabilities_field_values():
     """CLAUDE_CODE_CAPABILITIES field values match the Part 13.2 design."""
-    from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+    from autoskillit.core import CLAUDE_CODE_CAPABILITIES, HookTrustPolicy
 
     assert CLAUDE_CODE_CAPABILITIES.channel_b_capable is True
     assert CLAUDE_CODE_CAPABILITIES.pty_required is True
@@ -228,6 +235,13 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.default_skill_sandbox_mode == ""
     assert CLAUDE_CODE_CAPABILITIES.skill_sigil == "/"
     assert CLAUDE_CODE_CAPABILITIES.supports_model_invocation_gating is True
+    assert CLAUDE_CODE_CAPABILITIES.hook_trust_policy is HookTrustPolicy.AUTOMATED
+
+
+def test_backend_capabilities_hook_policy_default_is_automated():
+    from autoskillit.core import BackendCapabilities, HookTrustPolicy
+
+    assert BackendCapabilities().hook_trust_policy is HookTrustPolicy.AUTOMATED
 
 
 def test_backend_capabilities_frozenset_defaults():

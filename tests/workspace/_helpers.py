@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import BackendCapabilities
+from autoskillit.core import BackendCapabilities, HookTrustPolicy
 
 _CODEX_CAPABILITIES = BackendCapabilities(
     channel_b_capable=False,
@@ -17,8 +17,9 @@ _CODEX_CAPABILITIES = BackendCapabilities(
     completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
     session_record_types=frozenset({"item.completed"}),
     required_session_files=frozenset({"config.toml"}),
-    session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
+    session_dir_symlinks=frozenset({"sessions", "archived_sessions"}),
     skills_subdir="skills",
     session_dir_persistent=True,
     supports_model_invocation_gating=False,
+    hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
 )

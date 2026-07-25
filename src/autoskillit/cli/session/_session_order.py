@@ -166,8 +166,12 @@ def order(
         if isinstance(resume_spec, BareResume):
             _cfg_resume = _load_config_resume(Path.cwd())
             _backend_resume = _get_backend_resume(_cfg_resume.agent_backend.backend)
-            _log_dir = _backend_resume.session_locator().project_log_dir(str(Path.cwd()))
-            _sel = _pick_session("order", Path.cwd(), _log_dir)
+            _backend_resume.recover_cook_history()
+            _sel = _pick_session(
+                "order",
+                Path.cwd(),
+                _backend_resume.session_locator(),
+            )
             resume_spec = NamedResume(session_id=_sel) if _sel else NoResume()
         _launch_cook_session(
             "",

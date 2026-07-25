@@ -132,15 +132,13 @@ def test_triage_uses_capability_field():
 
 
 def test_skills_subdir_uses_conventions_field():
-    """session_skills.py must read backend.conventions.skills_subdir, not module constants."""
+    """Session initialization must read backend conventions, not infer a backend layout."""
     import inspect
     import textwrap
 
     from autoskillit.workspace import session_skills
 
-    source = inspect.getsource(
-        session_skills.DefaultSessionSkillManager._materialize_bound_records
-    )
+    source = inspect.getsource(session_skills.DefaultSessionSkillManager._initialize_bound_records)
     tree = ast.parse(textwrap.dedent(source))
     has_skills_subdir = any(
         isinstance(node, ast.Attribute) and node.attr == "skills_subdir" for node in ast.walk(tree)

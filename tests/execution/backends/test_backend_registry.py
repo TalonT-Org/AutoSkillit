@@ -66,6 +66,7 @@ class TestBackendRegistry:
             "CodexResultParser",
             "CodexScenarioPlayer",
             "CodexSessionLocator",
+            "CodexStateReadinessProbe",
             "CodexStreamParser",
             "NON_VARIADIC_CODEX_FLAGS",
             "NullProtectedHostAttestationProvider",

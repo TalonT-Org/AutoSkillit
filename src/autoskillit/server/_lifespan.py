@@ -21,7 +21,7 @@ import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
@@ -44,11 +44,7 @@ from autoskillit.core import (
 from autoskillit.core import (
     session_type as _resolve_session_type,
 )
-from autoskillit.execution import (
-    BACKEND_REGISTRY,
-    RecordingSubprocessRunner,
-    ensure_codex_mcp_registered,
-)
+from autoskillit.execution import BACKEND_REGISTRY, RecordingSubprocessRunner
 from autoskillit.fleet import (
     discover_campaign_state_files,
     reap_stale_dispatches_async,
@@ -67,6 +63,9 @@ from autoskillit.pipeline import create_background_task
 from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 from autoskillit.workspace import verify_install_state
+
+if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
 
@@ -567,15 +566,19 @@ _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | No
 }
 
 
-async def _run_codex_mcp_registration_async() -> None:
-    """Offload ensure_codex_mcp_registered() to a thread executor — fail-open."""
+async def _run_backend_mcp_registration_async(backend: CodingAgentBackend) -> None:
+    """Offload backend-owned MCP configuration to an executor — fail-open."""
+
+    def _run_prelaunch() -> None:
+        errors = backend.ensure_pre_launch()
+        if errors:
+            raise RuntimeError("; ".join(errors))
+
     try:
         loop = _asyncio.get_running_loop()
-        written = await loop.run_in_executor(None, ensure_codex_mcp_registered)
-        if written:
-            logger.warning("codex_mcp_registration_repaired_at_runtime")
+        await loop.run_in_executor(None, _run_prelaunch)
     except Exception:
-        logger.warning("codex_mcp_registration_failed", exc_info=True)
+        logger.warning("backend_mcp_registration_failed", exc_info=True)
 
 
 @asynccontextmanager
@@ -628,8 +631,8 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         ):
             bg_tasks.append(
                 create_background_task(
-                    _run_codex_mcp_registration_async(),
-                    label="codex_mcp_registration",
+                    _run_backend_mcp_registration_async(_boot_ctx.backend),
+                    label="backend_mcp_registration",
                 )
             )
 

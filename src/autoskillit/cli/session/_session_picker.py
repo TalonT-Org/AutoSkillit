@@ -2,27 +2,32 @@
 
 from __future__ import annotations
 
-import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-_ORDER_GREETING_PREFIXES = (
-    "Today's special:",
-    "Order up! Today's special:",
-    "Order up! The kitchen",
-    "Kitchen's open!",
-    "Table for one!",
-    "Fresh off the menu",
-    "Welcome to Good Burger, home of the Good Burger, can I take your order?",
-)
+from autoskillit.core import SessionLocator, SessionSummary
+
+_Registry = Mapping[str, Mapping[str, object]]
 
 
-def pick_session(session_type: str, project_dir: Path, project_log_dir: Path) -> str | None:
-    """Show filtered picker. Returns selected Claude session UUID or None (fresh start)."""
+def pick_session(
+    session_type: str,
+    project_dir: Path,
+    summaries_or_locator: Sequence[SessionSummary] | SessionLocator,
+) -> str | None:
+    """Show the filtered picker and return the selected backend session ID."""
     from autoskillit.core import read_registry
 
     registry = read_registry(project_dir)
-    sessions = _load_sessions_index(project_log_dir)
-    filtered = [s for s in sessions if _classify_session(s, registry) == session_type]
+    if isinstance(summaries_or_locator, Sequence):
+        summaries = summaries_or_locator
+    else:
+        summaries = summaries_or_locator.list_sessions(str(project_dir))
+    filtered = [
+        summary
+        for summary in summaries
+        if not summary.is_sidechain and _classify_session(summary, registry) == session_type
+    ]
 
     if not filtered:
         print(f"No {session_type} sessions found. Starting fresh.")
@@ -31,42 +36,40 @@ def pick_session(session_type: str, project_dir: Path, project_log_dir: Path) ->
     return _run_picker(filtered, session_type, registry)
 
 
-def _load_sessions_index(project_log_dir: Path) -> list[dict]:
-    """Load sessions-index.json, filtering out sidechain entries."""
-    index_path = project_log_dir / "sessions-index.json"
-    try:
-        entries: list[dict] = json.loads(index_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-
-    return [e for e in entries if not e.get("isSidechain")]
+def _registry_entry(
+    summary: SessionSummary,
+    registry: _Registry,
+) -> Mapping[str, object] | None:
+    if summary.launch_id is None:
+        return None
+    return registry.get(summary.launch_id)
 
 
-def _classify_session(entry: dict, registry: dict[str, dict]) -> str:
+def _classify_session(summary: SessionSummary, registry: _Registry) -> str:
     """Classify session as 'cook' or 'order'.
 
-    Uses registry lookup first, then greeting heuristic fallback.
+    Uses registry lookup first, then the backend locator's classification.
     """
-    session_id = entry.get("sessionId", "")
-    for reg_entry in registry.values():
-        if reg_entry.get("claude_session_id") == session_id:
-            return str(reg_entry.get("session_type", "cook"))
+    registry_entry = _registry_entry(summary, registry)
+    if registry_entry is not None:
+        return str(registry_entry.get("session_type", "cook"))
 
-    first_prompt = entry.get("firstPrompt", "")
-    for prefix in _ORDER_GREETING_PREFIXES:
-        if first_prompt.startswith(prefix):
-            return "order"
+    if summary.session_type_hint is not None:
+        return summary.session_type_hint
     return "cook"
 
 
-def _format_session_row(entry: dict, session_type: str, registry: dict[str, dict]) -> str:
+def _format_session_row(
+    summary: SessionSummary,
+    session_type: str,
+    registry: _Registry,
+) -> str:
     """Format a session entry as a display row."""
     recipe_name: str | None = None
-    session_id = entry.get("sessionId", "")
-    for reg_entry in registry.values():
-        if reg_entry.get("claude_session_id") == session_id:
-            recipe_name = reg_entry.get("recipe_name")
-            break
+    registry_entry = _registry_entry(summary, registry)
+    if registry_entry is not None:
+        raw_recipe_name = registry_entry.get("recipe_name")
+        recipe_name = raw_recipe_name if isinstance(raw_recipe_name, str) else None
 
     if session_type == "order" and recipe_name:
         badge = f"[order: {recipe_name}]"
@@ -75,11 +78,11 @@ def _format_session_row(entry: dict, session_type: str, registry: dict[str, dict
     else:
         badge = "[cook]"
 
-    summary = (entry.get("summary") or entry.get("firstPrompt", ""))[:60]
-    branch = entry.get("gitBranch", "")
-    modified = entry.get("modified", "")
+    display_summary = (summary.summary or summary.first_prompt)[:60]
+    branch = summary.git_branch or ""
+    modified = summary.modified or ""
 
-    parts = [badge, summary]
+    parts = [badge, display_summary]
     if branch:
         parts.append(branch)
     if modified:
@@ -87,10 +90,14 @@ def _format_session_row(entry: dict, session_type: str, registry: dict[str, dict
     return "  ".join(p for p in parts if p)
 
 
-def _run_picker(sessions: list[dict], session_type: str, registry: dict[str, dict]) -> str | None:
+def _run_picker(
+    sessions: Sequence[SessionSummary],
+    session_type: str,
+    registry: _Registry,
+) -> str | None:
     """Print numbered list and prompt user for selection.
 
-    Returns sessions[n-1]["sessionId"] on valid selection, None on 0.
+    Returns the selected backend session ID on valid selection, None on 0.
     Re-prompts on invalid input (max 3 retries, then returns None).
     """
     print(f"\nResume a {session_type} session:")
@@ -121,7 +128,7 @@ def _run_picker(sessions: list[dict], session_type: str, registry: dict[str, dic
         if choice == 0:
             return None
         if 1 <= choice <= len(sessions):
-            return str(sessions[choice - 1]["sessionId"])
+            return sessions[choice - 1].session_id
         print(f"Out of range. Enter a number between 0 and {len(sessions)}.")
 
     return None

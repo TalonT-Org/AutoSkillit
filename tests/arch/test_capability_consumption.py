@@ -47,14 +47,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         ),
         added_date=date(2026, 6, 2),
     ),
-    "session_dir_symlinks": ForwardDeclaredField(
-        issue=3134,
-        rationale=(
-            "production consumer moved to CodexBackend.setup_session_dir — "
-            "field retained for validate_session_layout"
-        ),
-        added_date=date(2026, 6, 2),
-    ),
     "patch_format": ForwardDeclaredField(
         issue=3776,
         rationale="patch path extraction routing — P2-A3-WP1 (#3787) co-lands consumer",
@@ -106,6 +98,49 @@ def test_all_capability_fields_have_production_consumers():
         f"ForwardDeclaredField(issue=NNNN, rationale='...', added_date=date(YYYY, M, D))): "
         f"{sorted(unconsumed)}"
     )
+
+
+def test_hook_trust_policy_has_a_real_production_consumer() -> None:
+    from autoskillit.core import paths
+
+    codex_path = paths.pkg_root() / "execution" / "backends" / "codex.py"
+    tree = ast.parse(codex_path.read_text(encoding="utf-8"), filename=str(codex_path))
+    backend_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "CodexBackend"
+    )
+    interactive_builder = next(
+        node
+        for node in backend_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "build_interactive_cmd"
+    )
+    translation_calls = [
+        call
+        for call in ast.walk(interactive_builder)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "_should_bypass_hook_trust"
+    ]
+
+    assert "hook_trust_policy" not in _FORWARD_DECLARED
+    assert len(translation_calls) == 1
+    translation_call = translation_calls[0]
+    assert len(translation_call.args) == 1
+    policy_arg = translation_call.args[0]
+    assert (
+        isinstance(policy_arg, ast.Attribute)
+        and policy_arg.attr == "hook_trust_policy"
+        and isinstance(policy_arg.value, ast.Attribute)
+        and policy_arg.value.attr == "capabilities"
+        and isinstance(policy_arg.value.value, ast.Name)
+        and policy_arg.value.value.id == "self"
+    ), "interactive launch must translate self.capabilities.hook_trust_policy"
+    automated_keyword = next(
+        keyword for keyword in translation_call.keywords if keyword.arg == "automated_session"
+    )
+    assert isinstance(automated_keyword.value, ast.Constant)
+    assert automated_keyword.value.value is False
 
 
 def test_forward_declared_has_linked_issues():

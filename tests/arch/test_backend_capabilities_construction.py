@@ -85,3 +85,30 @@ def test_construction_sites_list_is_exhaustive() -> None:
         f"_CONSTRUCTION_SITES: {sorted(undeclared)}. "
         f"Add them to _CONSTRUCTION_SITES to ensure they are checked."
     )
+
+
+def test_backend_construction_sites_explicitly_select_hook_trust_policy() -> None:
+    from autoskillit.core import pkg_root
+
+    expected_members = {
+        "core/types/_type_backend.py": "AUTOMATED",
+        "execution/backends/codex.py": "REVIEW_EACH_SESSION",
+    }
+    for relpath, expected_member in expected_members.items():
+        tree = ast.parse((pkg_root() / relpath).read_text(encoding="utf-8"))
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "BackendCapabilities"
+        ]
+        assert len(calls) == 1
+        values = {
+            keyword.arg: keyword.value for keyword in calls[0].keywords if keyword.arg is not None
+        }
+        hook_policy = values["hook_trust_policy"]
+        assert isinstance(hook_policy, ast.Attribute)
+        assert isinstance(hook_policy.value, ast.Name)
+        assert hook_policy.value.id == "HookTrustPolicy"
+        assert hook_policy.attr == expected_member

@@ -18,7 +18,7 @@ Four sections cover:
 2. **Recovery Ladder** — mapping of the 16 `RetryReason` enum values to ACP
    session rungs (`session/resume`, `session/load`, `session/new`) and
    terminal/wait-and-retry handling, plus the contract-nudge mechanism.
-3. **Capabilities Translation** — field-by-field categorization of all 41
+3. **Capabilities Translation** — field-by-field categorization of all 47
    `BackendCapabilities` fields into ACP-mappable, autoskillit-local extension,
    and forward-declared buckets (validated against `_FORWARD_DECLARED` in
    `tests/arch/test_capability_consumption.py`).
@@ -35,8 +35,11 @@ routing fields (`recipe/schema.py` lines 119–121).
 
 ## Section 1: Lifecycle Mapping
 
-The `CodingAgentBackend` protocol (`src/autoskillit/core/types/_type_protocols_backend.py`,
-lines 81–189) defines 23 methods. The per-method table below maps each protocol
+The `CodingAgentBackend` protocol
+(`src/autoskillit/core/types/_type_protocols_backend.py`) defines 26 methods.
+Its four sub-protocols define another 8 (`StreamParser` 1, `ResultParser` 2,
+`EnvPolicy` 1, and `SessionLocator` 4), for 34 documented protocol methods.
+The per-method table below maps each backend protocol
 method to its ACP session method analogue for both `ClaudeCodeBackend` and
 `CodexBackend`, with explicit notes where the Codex implementation deviates.
 
@@ -53,18 +56,49 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `build_inspector_cmd` | No ACP analogue (lightweight probe, not a session) | Raises `CapabilityNotSupportedError` (`inspector_capable=False` in `CLAUDE_CODE_CAPABILITIES`; unreachable `AssertionError` stub at line 875 is dead code) | Raises `CapabilityNotSupportedError` when `inspector_capable=False` | — (both backends gate via `inspector_capable=False`) |
 | `setup_session_dir` | ACP pre-session initialization | No-op | Substantial setup: copies `config.toml`, symlinks `auth.json` + `.env` + `sessions/`, generates agent TOMLs, materializes profile skills (lines 1021–1072) | Codex: rich setup with multiple failure-logged steps. |
 | `validate_session_layout` | ACP session validation (post-setup) | Validates session directory layout | Validates session directory layout (includes `required_session_files={"config.toml"}`) | — |
+| `validate_interactive_invocation` | ACP launch admission | Validates the finalized interactive `CmdSpec` | Validates the exact finalized project-cwd command and immutable generated config before an attempt view exists | Codex validates config and reserved home/state overrides before storage mutation. |
 | `validate_skill_content` | ACP skill-content validation | YAML frontmatter validation (`required_skill_fields={"name", "description"}`) | Returns `[]` unconditionally (no frontmatter requirement) | Codex: structural discard — entire validation is a no-op. |
 | `stream_parser` | ACP event stream consumption | Returns a `StreamParser` for stdout/JSONL events | Returns a `StreamParser` for NDJSON events (`thread.started`, `turn.completed`, `turn.failed`) | Codex events are NDJSON with `thread_id` resolution for `CodexSessionLocator`. |
 | `result_parser` | ACP event aggregation | Returns a `ResultParser` aggregating events into `AgentSessionResult` | Returns a `ResultParser` aggregating Codex events; populated `jsonl_context_exhausted` when `error_code == CODEX_CONTEXT_EXHAUSTION_MARKER` (lines 105–108 of `_headless_evidence.py`) | Codex surfaces context-exhaustion via `error_code` rather than API `needs_retry`. |
 | `env_policy` | ACP environment contract | Returns `EnvPolicy` for subprocess env (injects MCP env-forward vars per Env Forwarding Contract) | Returns `EnvPolicy`; env-denylist prefixes via `CODEX_ENV_PREFIX_DENYLIST` | Codex applies a denylist; Claude Code does not. |
-| `session_locator` | ACP session discovery / `session/load` | Returns a `SessionLocator` resolving session log dirs from Channel B JSONL | Returns `CodexSessionLocator` searching `rollout-*.jsonl` in `default_log_dir()/codex-sessions/` and `$CODEX_HOME/sessions/`, matching by `thread_id` from `thread.started` | Codex: dual-location search; ephemeral symlink from `$CODEX_HOME/sessions/` to permanent storage during `init_session()`. |
+| `session_locator` | ACP session discovery / `session/load` | Returns a `SessionLocator` resolving session log dirs from Channel B JSONL | Returns `CodexSessionLocator`; `list_sessions` reads the derived typed index while `locate_session` searches canonical active/archive stores and validated active views by real `thread_id` | Listing is read-only; explicit recovery, not listing, rebuilds the derived index. |
 | `write_tool_names` | (write-detection contract) | `frozenset({"Write", "Edit", "Bash", "apply_patch"})` | `frozenset({"apply_patch", "Bash", "run_cmd"})` | Different write-tool vocabularies; Codex uses `apply_patch` + `run_cmd`. |
 | `binary_name` | (process identity) | `"claude"` | `"codex"` | — |
 | `version` | (capability introspection) | Returns backend version string | Returns backend version string | — |
 | `list_plugins` | (plugin enumeration) | Lists known plugins as dicts | Lists known plugins as dicts | — |
 | `ensure_pre_launch` | (pre-flight checks) | Pre-launch checks/setup | Pre-launch checks/setup | — |
+| `recover_cook_history` | ACP durable-session recovery | No-op | Explicitly recovers safely owned attempt views, then rebuilds the derived index before bare-resume selection | Recovery is never hidden in `SessionLocator.list_sessions`. |
+| `cook_session_context` | ACP attempt ownership | Null context | Acquires the per-attempt view/thread ownership contract and returns `CookSessionHandle` | Context exit requires durable spawn/reap proof before promotion. |
 | `translate_model` | (model alias resolution) | Translates canonical model name to backend-specific name | Translates canonical model name to backend-specific name | — |
 | `model_config_overrides` | (model-specific CLI overrides) | Returns CLI overrides tuple for a given model | Returns CLI overrides tuple for a given model | — |
+
+### Interactive lifecycle data and ownership
+
+The backend-neutral records separate user-visible identity from launch
+ownership:
+
+| Contract | Meaning |
+|---|---|
+| `SessionSummary` | Read-only picker record. `session_id` is the backend's resumable ID, optional `launch_id` joins the AutoSkillit registry, `cwd` is the project discriminator, and `session_type_hint` is used only when no registry classification exists. |
+| `ManagedSessionHome` | One logical interactive launch: immutable `launch_id`, generated home, separately typed `skills_dir`, and inherited generated-home lease descriptors in `pass_fds`. Its context owns transactional setup, exactly-once verified cleanup, and unconditional lease release across all reload attempts. |
+| `CookSessionHandle` | One attempt view: store-derived `view_id`, inherited view/thread descriptors, and one-shot `record_spawn(pid, pgid)` / `record_reaped(pid, pgid)` callbacks. Reap proof is recorded only after the complete process group is empty and the direct child is reaped. |
+| `HookTrustPolicy` | `REVIEW_EACH_SESSION` emits no hook-trust bypass for interactive fresh, named-resume, bare-resume, or reload commands. Automated skill and food-truck builders retain their explicit bypass. |
+
+Identifier scopes are intentionally disjoint: `launch_id` spans one `cook()`
+and its reload loop; `attempt` increments for each child launch; `view_id` is
+derived once by storage from `(launch_id, attempt)`; and Codex `thread_id` is
+the backend resume identity. None may be substituted for another.
+
+Ownership is similarly layered. The managed-home context owns generated-home
+materialization and its lease. The prelaunch transaction owns synchronized MCP
+and hook mutation plus the immutable config snapshot. `CodexSessionStore`
+owns inert rollout targets, active views, manifests, locks, promotion,
+recovery, and the rebuildable listing index; SQLite stays disposable inside
+the generated home. The cook process owner alone owns PID/PGID creation,
+terminal transfer, TERM/KILL cleanup, direct-child reap, and the callbacks
+that allow storage finalization. The child command's finalized `cwd` remains
+the canonical project directory; generated-home paths are reserved only for
+configuration and state.
 
 ### Method-grouping rationale
 
@@ -175,7 +209,7 @@ The contract nudge exclusively targets `session/resume`; it never invokes
 ## Section 3: Capabilities Translation
 
 `BackendCapabilities` (`src/autoskillit/core/types/_type_backend.py`,
-frozen dataclass, 40 fields total) declares feature flags the orchestrator
+frozen dataclass, 47 fields total) declares feature flags the orchestrator
 consumes when selecting an ACP rung or backend-specific code path. Each field
 falls into one of three categories:
 
@@ -186,7 +220,9 @@ falls into one of three categories:
   outside the exemption set. Membership is validated against `_FORWARD_DECLARED`
   in `tests/arch/test_capability_consumption.py`.
 
-The counts below are **17 ACP-Mappable + 6 Forward-Declared + 17 autoskillit-Local = 40 total**.
+The mechanically verified counts are **17 ACP-Mappable + 7 Forward-Declared
++ 23 autoskillit-Local = 47 total**. They supersede the earlier 41-field
+snapshot.
 
 ### 3.1 Category 1: ACP-Mappable (17 fields)
 
@@ -210,7 +246,7 @@ The counts below are **17 ACP-Mappable + 6 Forward-Declared + 17 autoskillit-Loc
 | `record_capable` | ACP scenario recording |
 | `inspector_capable` | ACP health monitoring callback (Health Inspector per issue #3533) |
 
-### 3.2 Category 2: autoskillit-Local Extension (17 fields)
+### 3.2 Category 2: autoskillit-Local Extension (23 fields)
 
 | Field | autoskillit-specific contract |
 |---|---|
@@ -231,8 +267,14 @@ The counts below are **17 ACP-Mappable + 6 Forward-Declared + 17 autoskillit-Loc
 | `git_metadata_writable` | autoskillit git metadata safety (Claude: `True`; Codex: `False` — codex-rs sandbox) |
 | `skill_sigil` | autoskillit skill invocation prefix (Claude: `"/"`; Codex: `"$"`) |
 | `session_dir_persistent` | autoskillit session directory lifecycle (Codex retains `codex-sessions/`; Claude uses session JSONL rotation) |
+| `cook_startup_observer_capable` | autoskillit guarded startup observation for interactive cook launches |
+| `supports_model_invocation_gating` | autoskillit skill materialization policy when a backend cannot enforce model-invocation frontmatter |
+| `unnegotiated_tool_result_token_limit` | Backend-owned conservative delivery bound when no protected host evidence is present |
+| `protected_recipe_delivery_capable` | Whether a protected host channel can attest a larger recipe-delivery result limit |
+| `recipe_delivery_budget` | Version-pinned backend authority for ordinary and protected recipe delivery |
+| `hook_trust_policy` | Interactive hook-review policy translated at command construction; Codex uses `REVIEW_EACH_SESSION` |
 
-### 3.3 Category 3: Forward-Declared (6 fields)
+### 3.3 Category 3: Forward-Declared (7 fields)
 
 Membership in this category is **authoritative from `_FORWARD_DECLARED`** in
 `tests/arch/test_capability_consumption.py`. Fields here are declared for
@@ -242,10 +284,11 @@ future use and have no current production consumer outside the exemption set.
 |---|---|
 | `supports_thinking_blocks` | Thinking-block rendering (currently `True` for Claude; `False` for Codex — no production rendering path yet) |
 | `required_session_files` | Session directory contract enforcement (Codex: `frozenset({"config.toml"})`; Claude: `frozenset()`) |
-| `session_dir_symlinks` | Session directory layout (Codex: `frozenset({"auth.json", ".env", "sessions"})`; Claude: `frozenset()`) |
+| `session_dir_symlinks` | Session directory layout (Codex: `frozenset({"sessions", "archived_sessions"})`; Claude: `frozenset()`) |
 | `patch_format` | Write-guard path extraction (Claude: `"unified_diff"`; Codex: `"codex_star_update"`) |
 | `min_version` | Version validation in doctor (Codex: `"0.130.0"`; Claude: `""`) |
 | `mcp_env_forward_vars` | MCP env forwarding (Codex: `CODEX_MCP_ENV_FORWARD_VARS`; Claude: `frozenset()`) |
+| `github_api_callable` | Future network-capability gate for outbound GitHub API writes |
 
 
 ## Section 4: Codex Shim Deviations
@@ -260,11 +303,13 @@ where Codex silently drops a parameter the protocol accepts.
 | Backend | Flag(s) | Source |
 |---|---|---|
 | Claude Code | `--dangerously-skip-permissions` (non-variadic flag) | `build_cmd` / `build_skill_session_cmd` |
-| Codex | `--dangerously-bypass-approvals-and-sandbox` + `--dangerously-bypass-hook-trust` | Two separate flags; `CodexFlags.DANGEROUSLY_BYPASS` and `CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST` (lines 98–107) |
+| Codex interactive cook | `--dangerously-bypass-approvals-and-sandbox`; no hook-trust bypass | `HookTrustPolicy.REVIEW_EACH_SESSION` requires review of every generated config |
+| Codex automated skill / food truck | `--dangerously-bypass-hook-trust` | Explicit automation policy after AutoSkillit has vetted generated hook source |
 
-Codex splits the single Claude approval-bypass flag into two: one bypasses
-approvals and sandbox, the other bypasses hook trust. Both must be passed to
-fully replicate Claude's `--dangerously-skip-permissions` behavior.
+Codex splits approval/sandbox bypass from hook trust. Interactive cook never
+combines them: every fresh, named-resume, bare-resume, and reload config is
+reviewed independently. The hook-trust bypass is limited to automated
+builders.
 
 ### 4.2 developer_instructions
 
@@ -299,15 +344,15 @@ The Channel B gap means Codex cannot use Channel-B-confirmed completion for
 the `COMPLETED` termination reason at `_retry_fsm.py:183`; Codex sessions
 must rely on `CHANNEL_A` / `UNMONITORED` / `DIR_MISSING` branches.
 
-### 4.5 No PTY
+### 4.5 PTY Is Not Backend-Required
 
 | Backend | PTY | Notes |
 |---|---|---|
 | Claude Code | `pty_required=True` per `CLAUDE_CODE_CAPABILITIES` (line 219); `ClaudeCodeBackend` delegates PTY allocation to the runner | The constant sets `True` but the backend itself does not allocate the PTY |
-| Codex | `pty_required=False` — no pseudo-TTY allocation | Codex uses pipe-based stdio exclusively |
+| Codex | `pty_required=False` — the backend does not require a PTY | Interactive cook may enable its transparent PTY observer; the process owner controls the group and terminal while the observer owns relay, resize, and raw-mode behavior |
 
-The PTY distinction affects how subprocess output is buffered and how
-signal-handling interacts with the watchdog (IDLE_STALL detection).
+The capability means “not required,” not “prohibited.” Direct and observed
+paths share the same finalized `CmdSpec` and process-group cleanup contract.
 
 ### 4.6 Inspector RuntimeError
 
@@ -361,7 +406,7 @@ warning (the others are static no-ops with no observable behavior).
 | §2 RetryReason enum | `RetryReason` | `src/autoskillit/core/types/_type_enums.py` lines 44–64 |
 | §2 Retry routing | `_compute_retry`, `_build_skill_result` overrides | `src/autoskillit/execution/session/_retry_fsm.py`, `src/autoskillit/execution/headless/_headless_result.py` |
 | §2 Contract nudge | `_attempt_contract_nudge`, `_merge_token_usage` | `src/autoskillit/execution/headless/_headless_recovery.py` |
-| §3 Capabilities | `BackendCapabilities` (40 fields) | `src/autoskillit/core/types/_type_backend.py` |
+| §3 Capabilities | `BackendCapabilities` (47 fields) | `src/autoskillit/core/types/_type_backend.py` |
 | §3 Forward-declared | `_FORWARD_DECLARED` | `tests/arch/test_capability_consumption.py` |
 | §4 Codex flags | `CodexFlags` | `src/autoskillit/execution/backends/codex.py` lines 98–107 |
 | §4 Codex discard sites | `codex.py` F841 / warning sites | `src/autoskillit/execution/backends/codex.py` |

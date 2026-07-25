@@ -21,6 +21,7 @@ async def test_lifespan_calls_finalize_on_recording_runner():
     mock_runner.recorder = mock_recorder
     mock_ctx = MagicMock()
     mock_ctx.runner = mock_runner
+    mock_ctx.backend.capabilities.mcp_config_capable = False
 
     with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
@@ -36,6 +37,7 @@ async def test_lifespan_skips_finalize_when_not_recording():
 
     mock_ctx = MagicMock()
     mock_ctx.runner = MagicMock()  # plain runner, not RecordingSubprocessRunner
+    mock_ctx.backend.capabilities.mcp_config_capable = False
 
     with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
@@ -67,6 +69,7 @@ async def test_lifespan_calls_finalize_on_cancellation():
     mock_runner.recorder = mock_recorder
     mock_ctx = MagicMock()
     mock_ctx.runner = mock_runner
+    mock_ctx.backend.capabilities.mcp_config_capable = False
 
     with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
         with pytest.raises(asyncio.CancelledError):
@@ -83,6 +86,7 @@ async def test_lifespan_sets_startup_ready_event(monkeypatch):
 
     mock_ctx = MagicMock()
     mock_ctx.runner = MagicMock()
+    mock_ctx.backend.capabilities.mcp_config_capable = False
     mock_ctx.config.linux_tracing.tmpfs_path = "/tmp"
     mock_ctx.config.linux_tracing.log_dir = None
     mock_ctx.audit = MagicMock()
@@ -200,7 +204,7 @@ def test_lifespan_boot_registry_covers_all_session_types() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lifespan_launches_codex_registration_for_codex_backend():
+async def test_lifespan_launches_backend_owned_registration_for_capable_backend():
     from autoskillit.server import _autoskillit_lifespan
 
     mock_ctx = MagicMock()
@@ -213,14 +217,26 @@ async def test_lifespan_launches_codex_registration_for_codex_backend():
     with (
         patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx),
         patch(
-            "autoskillit.server._lifespan._run_codex_mcp_registration_async",
+            "autoskillit.server._lifespan._run_backend_mcp_registration_async",
             reg_mock,
         ),
     ):
         async with _autoskillit_lifespan(MagicMock()):
             pass
 
-    reg_mock.assert_called_once()
+    reg_mock.assert_called_once_with(mock_ctx.backend)
+
+
+@pytest.mark.asyncio
+async def test_backend_registration_dispatches_through_prelaunch() -> None:
+    import autoskillit.server._lifespan as lifespan
+
+    backend = MagicMock()
+    backend.ensure_pre_launch.return_value = []
+
+    await lifespan._run_backend_mcp_registration_async(backend)
+
+    backend.ensure_pre_launch.assert_called_once_with()
 
 
 @pytest.mark.asyncio
@@ -237,7 +253,7 @@ async def test_lifespan_skips_codex_registration_for_non_codex_backend():
     with (
         patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx),
         patch(
-            "autoskillit.server._lifespan._run_codex_mcp_registration_async",
+            "autoskillit.server._lifespan._run_backend_mcp_registration_async",
             reg_mock,
         ),
     ):

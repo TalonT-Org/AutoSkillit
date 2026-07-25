@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import re as _re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
-from ._type_enums import BackendEventKind, OutputFormat
+from ._type_enums import BackendEventKind, HookTrustPolicy, OutputFormat
 from ._type_plugin_source import PluginSource
 from ._type_recipe_delivery import RecipeDeliveryBudgetDef
 from ._type_results import ValidatedAddDir
@@ -27,7 +27,9 @@ __all__ = [
     "CODEX_VALID_MODEL_IDS",
     "CmdOrigin",
     "CmdSpec",
+    "CookSessionHandle",
     "ModelTranslation",
+    "SessionSummary",
     "SkillSessionConfig",
     "ClaudeEventData",
     "CodexEventData",
@@ -52,6 +54,8 @@ class BackendConventions:
     skills_subdir: Path = Path("skills")
     #: Project-relative directories to scan for project-local skills.
     project_local_skill_search_dirs: tuple[str, ...] = ()
+    #: Persistent generated-home root below the configured project temp directory.
+    persistent_session_root_subdir: Path | None = None
     #: Native model-facing skill invocation sigil.
     skill_sigil: str = "/"
 
@@ -158,6 +162,8 @@ class BackendCapabilities:
     # This is necessary when subagents inherit the session directory path as an
     # environment variable and may access it after the parent process exits.
     session_dir_persistent: bool = False
+    # True when interactive cook launches support the guarded startup observer.
+    cook_startup_observer_capable: bool = False
     # True when backend honors the disable-model-invocation SKILL.md frontmatter
     # key. When False, tier-2 skills are structurally omitted from the session
     # directory rather than written with gating frontmatter that the backend
@@ -183,6 +189,9 @@ class BackendCapabilities:
     # None means the backend has no version-pinned recipe-delivery contract;
     # protected delivery must then fail closed even if capability data drifts.
     recipe_delivery_budget: RecipeDeliveryBudgetDef | None = None
+    # Interactive hook trust behavior. Automated builders retain their explicit
+    # bypass policy; interactive launchers translate this policy into CLI flags.
+    hook_trust_policy: HookTrustPolicy = HookTrustPolicy.AUTOMATED
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
@@ -310,11 +319,45 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     github_api_callable=True,
     skill_sigil="/",
     session_dir_persistent=False,
+    cook_startup_observer_capable=False,
     supports_model_invocation_gating=True,
     unnegotiated_tool_result_token_limit=46_500,
     protected_recipe_delivery_capable=False,
     recipe_delivery_budget=None,
+    hook_trust_policy=HookTrustPolicy.AUTOMATED,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class SessionSummary:
+    """Backend-neutral summary of a resumable coding-agent session."""
+
+    backend_name: str
+    session_id: str
+    launch_id: str | None
+    cwd: str
+    first_prompt: str
+    summary: str
+    git_branch: str | None
+    modified: str | None
+    is_sidechain: bool
+    session_type_hint: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CookSessionHandle:
+    """Ownership handle for one durable interactive-cook attempt."""
+
+    view_id: str
+    pass_fds: tuple[int, ...]
+    _record_spawn: Callable[[int, int], None] = field(repr=False, compare=False)
+    _record_reaped: Callable[[int, int], None] = field(repr=False, compare=False)
+
+    def record_spawn(self, pid: int, pgid: int) -> None:
+        self._record_spawn(pid, pgid)
+
+    def record_reaped(self, pid: int, pgid: int) -> None:
+        self._record_reaped(pid, pgid)
 
 
 @dataclass(frozen=True, slots=True)

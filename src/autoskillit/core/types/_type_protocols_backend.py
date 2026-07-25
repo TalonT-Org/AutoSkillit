@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -11,11 +12,13 @@ from ._type_backend import (
     BackendCapabilities,
     BackendConventions,
     CmdSpec,
+    CookSessionHandle,
     SessionEvent,
+    SessionSummary,
     SkillSessionConfig,
 )
 from ._type_checkpoint import SessionCheckpoint
-from ._type_enums import OutputFormat
+from ._type_enums import ObserverStatus, OutputFormat
 from ._type_plugin_source import PluginSource
 from ._type_results import ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
@@ -24,6 +27,7 @@ __all__ = [
     "StreamParser",
     "ResultParser",
     "EnvPolicy",
+    "ReadinessProbe",
     "SessionLocator",
     "CodingAgentBackend",
 ]
@@ -62,8 +66,28 @@ class EnvPolicy(Protocol):
 
 
 @runtime_checkable
+class ReadinessProbe(Protocol):
+    """Backend-owned readiness adapter consumed by generic observers."""
+
+    def check(self) -> ObserverStatus:
+        """Perform one non-blocking readiness observation."""
+        ...
+
+    def wait(
+        self,
+        *,
+        timeout_seconds: float,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> ObserverStatus:
+        """Wait within a bounded interval for a terminal readiness outcome."""
+        ...
+
+
+@runtime_checkable
 class SessionLocator(Protocol):
     """Protocol for locating session log directories for a given backend."""
+
+    def list_sessions(self, cwd: str) -> Sequence[SessionSummary]: ...
 
     def locate_session(self, session_id: str) -> Path | None: ...
 
@@ -163,6 +187,7 @@ class CodingAgentBackend(Protocol):
         model: str | None = None,
         plugin_source: PluginSource | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+        generated_home: Path | None = None,
         resume_spec: ResumeSpec = NoResume(),
         system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
@@ -170,7 +195,14 @@ class CodingAgentBackend(Protocol):
         tools: Sequence[str] = (),
     ) -> CmdSpec: ...
 
-    def validate_session_layout(self, session_dir: Path) -> list[str]: ...
+    def validate_session_layout(
+        self,
+        session_dir: Path,
+        *,
+        project_dir: Path | None = None,
+    ) -> list[str]: ...
+
+    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]: ...
 
     def validate_skill_content(self, content: str) -> list[str]: ...
 
@@ -178,7 +210,19 @@ class CodingAgentBackend(Protocol):
 
     def list_plugins(self) -> list[dict[str, Any]]: ...
 
-    def ensure_pre_launch(self) -> list[str]: ...
+    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]: ...
+
+    def recover_cook_history(self) -> None: ...
+
+    def cook_session_context(
+        self,
+        *,
+        session_home: Path,
+        project_dir: Path,
+        launch_id: str,
+        attempt: int,
+        current_resume_spec: ResumeSpec,
+    ) -> AbstractContextManager[CookSessionHandle]: ...
 
     def translate_model(self, model: str) -> str: ...
 

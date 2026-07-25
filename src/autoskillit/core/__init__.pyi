@@ -173,7 +173,10 @@ from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
 from .types import CLAUDE_MODEL_ALIASES as CLAUDE_MODEL_ALIASES
 from .types import CLOSURE_REPORT_SCHEMA_VERSION as CLOSURE_REPORT_SCHEMA_VERSION
+from .types import CODEX_ACTIVE_VIEWS_SUBDIR as CODEX_ACTIVE_VIEWS_SUBDIR
+from .types import CODEX_ARCHIVED_SESSIONS_SUBDIR as CODEX_ARCHIVED_SESSIONS_SUBDIR
 from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_MARKER
+from .types import CODEX_COOK_RESERVED_ENV_VARS as CODEX_COOK_RESERVED_ENV_VARS
 from .types import CODEX_EFFORT_MAPPING as CODEX_EFFORT_MAPPING
 from .types import CODEX_INTAKE_DISCIPLINE_DIGEST as CODEX_INTAKE_DISCIPLINE_DIGEST
 from .types import CODEX_INTAKE_DISCIPLINE_VERSION as CODEX_INTAKE_DISCIPLINE_VERSION
@@ -183,6 +186,7 @@ from .types import CODEX_MODEL_ALIASES as CODEX_MODEL_ALIASES
 from .types import CODEX_MODEL_ALIASES_LAST_VERIFIED as CODEX_MODEL_ALIASES_LAST_VERIFIED
 from .types import CODEX_SCHEMA_VERSION as CODEX_SCHEMA_VERSION
 from .types import CODEX_SESSIONS_SUBDIR as CODEX_SESSIONS_SUBDIR
+from .types import CODEX_STARTUP_TRACE_ENV_VAR as CODEX_STARTUP_TRACE_ENV_VAR
 from .types import CODEX_VALID_MODEL_IDS as CODEX_VALID_MODEL_IDS
 from .types import CONFIG_AUTHORITY_KEYS as CONFIG_AUTHORITY_KEYS
 from .types import CONTEXT_ADMISSION_COVERAGE as CONTEXT_ADMISSION_COVERAGE
@@ -279,6 +283,7 @@ from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import RUN_PYTHON_SENTINEL_KEYS as RUN_PYTHON_SENTINEL_KEYS
 from .types import SCOPE_DIRECTION_SOURCE_TYPES as SCOPE_DIRECTION_SOURCE_TYPES
+from .types import SESSION_ADD_DIR_SUBDIR as SESSION_ADD_DIR_SUBDIR
 from .types import SESSION_TYPE_ENV_VAR as SESSION_TYPE_ENV_VAR
 from .types import SESSION_TYPE_FLEET as SESSION_TYPE_FLEET
 from .types import SESSION_TYPE_ORCHESTRATOR as SESSION_TYPE_ORCHESTRATOR
@@ -381,6 +386,7 @@ from .types import ContextLineage as ContextLineage
 from .types import ContextSessionId as ContextSessionId
 from .types import ContextThreadId as ContextThreadId
 from .types import ContextWindowSnapshot as ContextWindowSnapshot
+from .types import CookSessionHandle as CookSessionHandle
 from .types import CoverageEvidence as CoverageEvidence
 from .types import CoverageEvidenceKind as CoverageEvidenceKind
 from .types import CoverageState as CoverageState
@@ -421,6 +427,7 @@ from .types import GitHubFetcher as GitHubFetcher
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract
+from .types import HookTrustPolicy as HookTrustPolicy
 from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect
 from .types import IdempotencyNamespace as IdempotencyNamespace
 from .types import IdempotencyRecord as IdempotencyRecord
@@ -439,6 +446,7 @@ from .types import LabelDef as LabelDef
 from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
+from .types import ManagedSessionHome as ManagedSessionHome
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
 from .types import McpResponseLog as McpResponseLog
@@ -454,6 +462,7 @@ from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
 from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
+from .types import ObserverStatus as ObserverStatus
 from .types import OccurrenceStateChangedEffect as OccurrenceStateChangedEffect
 from .types import OpenEpochEvent as OpenEpochEvent
 from .types import OutputFormat as OutputFormat
@@ -478,6 +487,7 @@ from .types import PRState as PRState
 from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
+from .types import ReadinessProbe as ReadinessProbe
 from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver
 from .types import RecipeDeliveryAttestation as RecipeDeliveryAttestation
@@ -537,6 +547,7 @@ from .types import SessionEvent as SessionEvent
 from .types import SessionLocator as SessionLocator
 from .types import SessionOutcome as SessionOutcome
 from .types import SessionSkillManager as SessionSkillManager
+from .types import SessionSummary as SessionSummary
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity

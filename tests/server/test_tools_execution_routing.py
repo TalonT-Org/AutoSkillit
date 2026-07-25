@@ -727,9 +727,13 @@ async def test_process_issues_l2_parent_executes_session_child_on_each_backend(
     import json
     from unittest.mock import MagicMock
 
-    from autoskillit.core import SkillExecutionRole
+    from autoskillit.core import CodingAgentBackend, SkillExecutionRole
     from autoskillit.execution.backends import get_backend
-    from autoskillit.workspace import DefaultSkillResolver
+    from autoskillit.workspace import (
+        DefaultSessionSkillManager,
+        DefaultSkillResolver,
+        SkillsDirectoryProvider,
+    )
     from tests.fakes import InMemoryHeadlessExecutor
 
     resolver = DefaultSkillResolver()
@@ -741,12 +745,26 @@ async def test_process_issues_l2_parent_executes_session_child_on_each_backend(
     assert parent.root.execution_role is SkillExecutionRole.ORCHESTRATOR
     assert "run_skill" in parent.capability_union
 
-    manager = MagicMock(wraps=tool_ctx_kitchen_open.session_skill_manager)
+    concrete_backend = get_backend(backend_name)
+    backend = MagicMock(spec=CodingAgentBackend)
+    backend.name = concrete_backend.name
+    backend.capabilities = concrete_backend.capabilities
+    backend.conventions = concrete_backend.conventions
+    backend.ensure_pre_launch.return_value = []
+    backend.validate_session_layout.return_value = []
+    backend.session_locator.return_value.project_log_dir.return_value = None
+    manager = MagicMock(
+        wraps=DefaultSessionSkillManager(
+            SkillsDirectoryProvider(),
+            ephemeral_root=tmp_path / "ephemeral-sessions",
+            persistent_root=tmp_path / "persistent-sessions",
+        )
+    )
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.skill_resolver = resolver
     tool_ctx_kitchen_open.session_skill_manager = manager
     tool_ctx_kitchen_open.executor = executor
-    tool_ctx_kitchen_open.backend = get_backend(backend_name)
+    tool_ctx_kitchen_open.backend = backend
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)

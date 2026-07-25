@@ -48,6 +48,21 @@ class TestCodexEnvPolicy:
             assert var not in result
         assert result["PATH"] == "/usr/bin"
 
+    def test_interactive_cook_home_and_trace_state_are_scrubbed_from_base(self) -> None:
+        policy = CodexEnvPolicy()
+        result = policy.build_env(
+            {
+                "PATH": "/usr/bin",
+                "CODEX_HOME": "/tmp/ambient-codex",
+                "CODEX_SQLITE_HOME": "/tmp/ambient-codex",
+                "AUTOSKILLIT_CODEX_STARTUP_TRACE": "1",
+            }
+        )
+
+        assert "CODEX_HOME" not in result
+        assert "CODEX_SQLITE_HOME" not in result
+        assert "AUTOSKILLIT_CODEX_STARTUP_TRACE" not in result
+
     def test_claude_code_auto_connect_ide_not_injected(self) -> None:
         policy = CodexEnvPolicy()
         result = policy.build_env({"PATH": "/usr/bin"})

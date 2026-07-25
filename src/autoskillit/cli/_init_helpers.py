@@ -508,12 +508,13 @@ def _register_all(
             backend = get_backend("claude-code")
 
     if backend.capabilities.mcp_config_capable:
-        from autoskillit.cli._hooks_codex import sync_hooks_to_codex_config
-
-        sync_hooks_to_codex_config(
-            hook_config_format=backend.capabilities.hook_config_format,
-        )
+        prelaunch_errors = backend.ensure_pre_launch()
+        if prelaunch_errors:
+            raise RuntimeError(
+                "Backend pre-launch configuration failed: " + "; ".join(prelaunch_errors)
+            )
         plugin_ok = None
+        codex_status = "ok"
     else:
         settings_path = _claude_settings_path(scope)
         _evict_stale_autoskillit_hooks(settings_path)
@@ -525,14 +526,14 @@ def _register_all(
         else:
             evict_direct_mcp_entry(_user_claude_json_path())
 
-    from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
+        from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
 
-    try:
-        codex_registered = ensure_codex_mcp_registered()
-        codex_status = "registered" if codex_registered else "ok"
-    except Exception:
-        codex_status = "failed"
-        logger.warning("Codex MCP registration failed", exc_info=True)
+        try:
+            codex_registered = ensure_codex_mcp_registered()
+            codex_status = "registered" if codex_registered else "ok"
+        except Exception:
+            codex_status = "failed"
+            logger.warning("Codex MCP registration failed", exc_info=True)
 
     # Prompt for github.default_repo if running interactively
     github_repo = None

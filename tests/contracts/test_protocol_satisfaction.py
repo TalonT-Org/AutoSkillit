@@ -209,6 +209,25 @@ def test_default_workspace_manager_satisfies_workspace_manager():
     assert isinstance(DefaultWorkspaceManager(), WorkspaceManager)
 
 
+def test_default_session_skill_manager_satisfies_managed_session_protocol(tmp_path):
+    from autoskillit.core import SessionSkillManager
+    from autoskillit.workspace.session_skills import DefaultSessionSkillManager
+
+    manager = DefaultSessionSkillManager(lambda _name: None, ephemeral_root=tmp_path)
+    assert isinstance(manager, SessionSkillManager)
+    assert callable(manager.managed_session)
+
+
+def test_session_skill_manager_managed_session_is_context_manager_boundary():
+    import typing
+    from contextlib import AbstractContextManager
+
+    from autoskillit.core import ManagedSessionHome, SessionSkillManager
+
+    hints = typing.get_type_hints(SessionSkillManager.managed_session)
+    assert hints["return"] == AbstractContextManager[ManagedSessionHome]
+
+
 def test_default_database_reader_satisfies_database_reader():
     from autoskillit.core import DatabaseReader
     from autoskillit.execution.db import DefaultDatabaseReader

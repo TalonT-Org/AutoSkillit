@@ -60,6 +60,85 @@ def test_session_locator_has_session_log_path_method():
     assert callable(getattr(SessionLocator, "session_log_path", None))
 
 
+def test_session_locator_list_sessions_exact_signature():
+    import inspect
+    import typing
+    from collections.abc import Sequence
+
+    from autoskillit.core import SessionLocator, SessionSummary
+
+    signature = inspect.signature(SessionLocator.list_sessions)
+    assert tuple(signature.parameters) == ("self", "cwd")
+    assert signature.parameters["cwd"].annotation == "str"
+    hints = typing.get_type_hints(SessionLocator.list_sessions)
+    assert hints == {"cwd": str, "return": Sequence[SessionSummary]}
+
+
+def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
+    import inspect
+    import typing
+    from contextlib import AbstractContextManager
+    from pathlib import Path
+
+    from autoskillit.core import (
+        CmdSpec,
+        CodingAgentBackend,
+        CookSessionHandle,
+        ResumeSpec,
+    )
+
+    layout = inspect.signature(CodingAgentBackend.validate_session_layout)
+    assert tuple(layout.parameters) == ("self", "session_dir", "project_dir")
+    assert layout.parameters["project_dir"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert layout.parameters["project_dir"].default is None
+    assert typing.get_type_hints(CodingAgentBackend.validate_session_layout) == {
+        "session_dir": Path,
+        "project_dir": Path | None,
+        "return": list[str],
+    }
+
+    native = inspect.signature(CodingAgentBackend.validate_interactive_invocation)
+    assert tuple(native.parameters) == ("self", "spec")
+    assert typing.get_type_hints(CodingAgentBackend.validate_interactive_invocation) == {
+        "spec": CmdSpec,
+        "return": list[str],
+    }
+
+    pre_launch = inspect.signature(CodingAgentBackend.ensure_pre_launch)
+    assert tuple(pre_launch.parameters) == ("self", "session_dir")
+    assert pre_launch.parameters["session_dir"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert pre_launch.parameters["session_dir"].default is None
+    assert typing.get_type_hints(CodingAgentBackend.ensure_pre_launch) == {
+        "session_dir": Path | None,
+        "return": list[str],
+    }
+
+    recovery = inspect.signature(CodingAgentBackend.recover_cook_history)
+    assert tuple(recovery.parameters) == ("self",)
+    assert typing.get_type_hints(CodingAgentBackend.recover_cook_history) == {"return": type(None)}
+
+    context = inspect.signature(CodingAgentBackend.cook_session_context)
+    assert tuple(context.parameters) == (
+        "self",
+        "session_home",
+        "project_dir",
+        "launch_id",
+        "attempt",
+        "current_resume_spec",
+    )
+    for name in tuple(context.parameters)[1:]:
+        assert context.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
+    hints = typing.get_type_hints(CodingAgentBackend.cook_session_context)
+    assert hints == {
+        "session_home": Path,
+        "project_dir": Path,
+        "launch_id": str,
+        "attempt": int,
+        "current_resume_spec": ResumeSpec,
+        "return": AbstractContextManager[CookSessionHandle],
+    }
+
+
 def test_no_autoskillit_imports_in_protocols_backend():
     from autoskillit.core import paths
 
@@ -165,6 +244,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             model: str | None = None,
             plugin_source: PluginSource | None = None,
             add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+            generated_home: Path | None = None,
             resume_spec: ResumeSpec = NoResume(),
             system_prompt: str | None = None,
             env_extras: Mapping[str, str] | None = None,
@@ -172,7 +252,15 @@ def test_stub_class_satisfies_coding_agent_backend():
             tools: Sequence[str] = (),
         ) -> CmdSpec: ...
 
-        def validate_session_layout(self, session_dir: Path) -> list[str]: ...
+        def validate_session_layout(
+            self,
+            session_dir: Path,
+            *,
+            project_dir: Path | None = None,
+        ) -> list[str]: ...
+
+        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+            return []
 
         def validate_skill_content(self, content: str) -> list[str]: ...
 
@@ -180,8 +268,34 @@ def test_stub_class_satisfies_coding_agent_backend():
 
         def list_plugins(self) -> list[dict[str, Any]]: ...
 
-        def ensure_pre_launch(self) -> list[str]:
+        def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
             return []
+
+        def recover_cook_history(self) -> None:
+            return None
+
+        def cook_session_context(
+            self,
+            *,
+            session_home: Path,
+            project_dir: Path,
+            launch_id: str,
+            attempt: int,
+            current_resume_spec: ResumeSpec,
+        ):
+            del project_dir
+            from contextlib import nullcontext
+
+            from autoskillit.core import CookSessionHandle
+
+            return nullcontext(
+                CookSessionHandle(
+                    view_id=f"{launch_id}-{attempt}",
+                    pass_fds=(),
+                    _record_spawn=lambda _pid, _pgid: None,
+                    _record_reaped=lambda _pid, _pgid: None,
+                )
+            )
 
         def translate_model(self, model: str) -> str: ...
 

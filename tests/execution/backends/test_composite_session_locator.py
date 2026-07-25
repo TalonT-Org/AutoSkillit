@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import SessionLocator
+from autoskillit.core import SessionLocator, SessionSummary
 from autoskillit.execution.backends import CompositeSessionLocator
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -20,9 +20,15 @@ def _fake_backend(locator: SessionLocator) -> type:
 
 
 class _StubLocator:
-    def __init__(self, locate_result: Path | None = None, log_dir: Path | None = None):
+    def __init__(
+        self,
+        locate_result: Path | None = None,
+        log_dir: Path | None = None,
+        summaries: tuple[SessionSummary, ...] = (),
+    ):
         self._locate = locate_result
         self._log_dir = log_dir or Path("/stub")
+        self._summaries = summaries
 
     def locate_session(self, session_id: str) -> Path | None:
         return self._locate
@@ -32,6 +38,24 @@ class _StubLocator:
 
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         return self._locate
+
+    def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
+        return self._summaries
+
+
+def _summary(backend_name: str, session_id: str, cwd: str) -> SessionSummary:
+    return SessionSummary(
+        backend_name=backend_name,
+        session_id=session_id,
+        launch_id=None,
+        cwd=cwd,
+        first_prompt="prompt",
+        summary="summary",
+        git_branch=None,
+        modified=None,
+        is_sidechain=False,
+        session_type_hint="cook",
+    )
 
 
 class TestLocateSession:
@@ -110,6 +134,52 @@ class TestSessionLogPath:
         monkeypatch.setattr(backends_mod, "BACKEND_REGISTRY", registry)
 
         assert CompositeSessionLocator().session_log_path("/cwd", "sid") == hit
+
+
+class TestListSessions:
+    def test_preserves_backend_registry_and_source_order(self, monkeypatch, tmp_path):
+        cwd = str(tmp_path.resolve())
+        registry = {
+            "claude-code": _fake_backend(
+                _StubLocator(summaries=(_summary("claude-code", "claude-new", cwd),))
+            ),
+            "codex": _fake_backend(
+                _StubLocator(
+                    summaries=(
+                        _summary("codex", "codex-new", cwd),
+                        _summary("codex", "codex-old", cwd),
+                    )
+                )
+            ),
+        }
+        import autoskillit.execution.backends as backends_mod
+
+        monkeypatch.setattr(backends_mod, "BACKEND_REGISTRY", registry)
+
+        result = CompositeSessionLocator().list_sessions(cwd)
+        assert [(item.backend_name, item.session_id) for item in result] == [
+            ("claude-code", "claude-new"),
+            ("codex", "codex-new"),
+            ("codex", "codex-old"),
+        ]
+
+    def test_skips_failing_locator_without_reordering_other_sources(self, monkeypatch, tmp_path):
+        class _FailLocator(_StubLocator):
+            def list_sessions(self, cwd):
+                raise ValueError("corrupt backend index")
+
+        cwd = str(tmp_path.resolve())
+        registry = {
+            "broken": _fake_backend(_FailLocator()),
+            "codex": _fake_backend(_StubLocator(summaries=(_summary("codex", "survives", cwd),))),
+        }
+        import autoskillit.execution.backends as backends_mod
+
+        monkeypatch.setattr(backends_mod, "BACKEND_REGISTRY", registry)
+
+        assert [item.session_id for item in CompositeSessionLocator().list_sessions(cwd)] == [
+            "survives"
+        ]
 
 
 class TestLocatorFor:

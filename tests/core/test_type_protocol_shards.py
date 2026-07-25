@@ -56,6 +56,36 @@ def test_workspace_shard_all():
     }
 
 
+def test_session_skill_manager_managed_session_signature():
+    import inspect
+    import typing
+    from contextlib import AbstractContextManager
+
+    from autoskillit.core import (
+        EffectiveSkillCatalogAuthority,
+        ManagedSessionHome,
+        SessionSkillManager,
+        SkillProjectionContextAuthority,
+    )
+
+    signature = inspect.signature(SessionSkillManager.managed_session)
+    assert tuple(signature.parameters) == (
+        "self",
+        "session_id",
+        "catalog",
+        "projection_context",
+    )
+    for name in ("session_id", "catalog", "projection_context"):
+        assert signature.parameters[name].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+        assert signature.parameters[name].default is inspect.Parameter.empty
+    assert typing.get_type_hints(SessionSkillManager.managed_session) == {
+        "session_id": str,
+        "catalog": EffectiveSkillCatalogAuthority,
+        "projection_context": SkillProjectionContextAuthority,
+        "return": AbstractContextManager[ManagedSessionHome],
+    }
+
+
 def test_recipe_shard_all():
     from autoskillit.core.types._type_protocols_recipe import __all__
 
@@ -90,6 +120,7 @@ def test_backend_shard_all():
         "StreamParser",
         "ResultParser",
         "EnvPolicy",
+        "ReadinessProbe",
         "SessionLocator",
         "CodingAgentBackend",
     }
@@ -114,6 +145,7 @@ def test_all_protocols_reachable_via_types():
         "CampaignProtector",
         "CodingAgentBackend",
         "StreamParser",
+        "SessionSkillManager",
     ]:
         assert hasattr(types, name), f"Missing from types: {name}"
 

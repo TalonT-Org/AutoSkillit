@@ -911,7 +911,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
         "hooks/guards": 32,  # -output_budget_guard (#4286)
-        "execution/backends": 13,  # +_codex_recipe_delivery protected attestation broker
+        # Three private Codex ownership modules keep lock, prelaunch transaction,
+        # and per-attempt storage concerns out of the public backend gateway:
+        # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
+        "execution/backends": 16,
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []
@@ -1084,7 +1087,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(#4293 pipeline tracker split-brain, +65 net lines)",
     ),
     "execution/backends/codex.py": (
-        1212,
+        1800,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1114,7 +1117,25 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; output-discipline delivery for fresh interactive sessions and generated agent "
         "TOMLs (+12 net lines)"
         "; _register_agent_tomls session-config registration for generated roles "
-        "(+39 net lines)",
+        "(+39 net lines)"
+        "; interactive Codex startup validation, explicit generated-home construction, "
+        "profile probing, and durable cook-storage adapter integration remain co-located "
+        "with the backend whose command grammar they validate",
+    ),
+    "execution/backends/_codex_session_storage.py": (
+        1400,
+        "REQ-CNST-010-E13: Codex interactive rollout storage is one transaction boundary "
+        "covering inode-preserving staging, process/thread/view leases, promotion, index "
+        "publication, manifest validation, and crash recovery; splitting those state "
+        "transitions would duplicate invariants across independently mutable modules",
+    ),
+    "workspace/session_skills.py": (
+        1400,
+        "REQ-CNST-010-E13/E14: ordering-sensitive session skill materialization owns "
+        "provider discovery, override precedence, filtering, dependency activation, the "
+        "generated-home lease and cleanup transaction, and backend-specific layout "
+        "validation; keeping those operations together preserves both assembly ordering "
+        "and the create/validate/yield/delete ownership proof",
     ),
     "rules_skill_content.py": (
         1200,
@@ -1144,13 +1165,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "delivery-bound summary); splitting would scatter the priority-tier "
         "algorithm across modules that must remain the single source of "
         "truth for the bound-vs-deprioritized budget allocation order.",
-    ),
-    "workspace/session_skills.py": (
-        1200,
-        "REQ-CNST-010-E13: ordering-sensitive session skill assembly — provider "
-        "discovery, override precedence, filtering, dependency activation, and lifecycle "
-        "cleanup remain in one manager; semantic validation and projection are already "
-        "isolated in dedicated workspace modules.",
     ),
     "core/context_admission.py": (
         2950,

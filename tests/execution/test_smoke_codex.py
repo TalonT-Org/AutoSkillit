@@ -266,6 +266,9 @@ class TestCodexSmokeRecipeComposition:
             def session_log_path(self, cwd: str, session_id: str) -> Path:
                 return self._path
 
+            def list_sessions(self, cwd: str) -> tuple:
+                return ()
+
         flush_session_log(
             log_dir=str(tmp_path),
             backend="codex",
@@ -307,6 +310,9 @@ class TestCodexSmokeRecipeComposition:
 
             def session_log_path(self, cwd: str, session_id: str) -> Path:
                 return self._path
+
+            def list_sessions(self, cwd: str) -> tuple:
+                return ()
 
         def _fake_backend(locator):
             from unittest.mock import Mock

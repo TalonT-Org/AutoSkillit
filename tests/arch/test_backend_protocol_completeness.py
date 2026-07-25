@@ -122,6 +122,51 @@ def test_all_backends_implement_ensure_pre_launch():
         )
 
 
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "validate_interactive_invocation",
+        "recover_cook_history",
+        "cook_session_context",
+    ],
+)
+def test_coding_agent_backend_protocol_includes_cook_lifecycle_method(
+    method_name: str,
+) -> None:
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert callable(getattr(CodingAgentBackend, method_name, None)), (
+        f"CodingAgentBackend protocol must define {method_name}"
+    )
+
+
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "validate_interactive_invocation",
+        "recover_cook_history",
+        "cook_session_context",
+    ],
+)
+def test_all_backends_implement_cook_lifecycle_method(method_name: str) -> None:
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        assert callable(getattr(cls, method_name, None)), (
+            f"{name} backend must implement {method_name}"
+        )
+
+
+def test_all_backend_locators_implement_list_sessions() -> None:
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        locator = cls().session_locator()
+        assert callable(getattr(locator, "list_sessions", None)), (
+            f"{name} session locator must implement list_sessions"
+        )
+
+
 def test_coding_agent_backend_protocol_includes_translate_model():
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
 

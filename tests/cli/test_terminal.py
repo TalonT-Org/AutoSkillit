@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import os
 import termios
-from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -420,8 +419,10 @@ class TestCookTerminalGuard:
     """cook() and _launch_cook_session() apply terminal_guard correctly."""
 
     def test_cook_restores_terminal_on_keyboard_interrupt(self, monkeypatch, tmp_path):
-        """cook() must restore terminal even when subprocess.run raises KeyboardInterrupt."""
-        import autoskillit.cli.session._session_cook as cook_mod
+        """The cook process owner restores terminal state when Popen is interrupted."""
+        import autoskillit.cli.session._session_process as process_mod
+        from autoskillit.cli.session._session_process import run_cook_attempt
+        from autoskillit.core import CmdSpec
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         monkeypatch.setattr("sys.stdin.fileno", lambda: 0)
@@ -437,39 +438,19 @@ class TestCookTerminalGuard:
         )
         monkeypatch.setattr("autoskillit.cli.ui._terminal.termios.error", termios.error)
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_cook.subprocess.run",
+            process_mod.subprocess,
+            "Popen",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
-        monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: False
-        )
-        # The KeyboardInterrupt must come from the *launch*, not from the
-        # git-toplevel probe cook() runs to derive project_dir.
-        monkeypatch.setattr("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd)
-        # is_first_run is imported inside cook() body — patch the source module
-        monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
-        # cook() calls input() for launch confirmation before subprocess.run
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        # cook() calls init_session to create a skills directory
-        fake_skills_dir = tmp_path / "fake-skills"
-        fake_skills_dir.mkdir()
-
-        def _fake_init_session(
-            self,
-            session_id,
-            catalog,
-            projection_context,
-        ):
-            return fake_skills_dir
-
-        monkeypatch.setattr(
-            "autoskillit.workspace.session_skills.DefaultSessionSkillManager.init_session",
-            _fake_init_session,
-        )
-
         with pytest.raises(KeyboardInterrupt):
-            cook_mod.cook()
+            run_cook_attempt(
+                CmdSpec(cmd=("ignored",), env={}, cwd=str(tmp_path.resolve())),
+                pass_fds=(),
+                on_spawn=lambda _pid, _pgid: None,
+                on_reaped=lambda _pid, _pgid: None,
+                trace=Mock(),
+                observer=None,
+            )
 
         assert tcsetattr_calls, (
             "tcsetattr must be called even when subprocess raises KeyboardInterrupt"

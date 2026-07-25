@@ -76,6 +76,24 @@ def test_file_lease_rejects_non_lock_path(tmp_path: Path) -> None:
     assert not invalid_path.exists()
 
 
+def test_file_lease_closes_descriptor_when_owner_diagnostic_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lock_path = tmp_path / "lease.lock"
+
+    def fail_ftruncate(_fd: int, _length: int) -> None:
+        raise OSError("diagnostic write failed")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(storage.os, "ftruncate", fail_ftruncate)
+        with pytest.raises(OSError, match="diagnostic write failed"):
+            storage._FileLease.acquire(lock_path)
+
+    lease = storage._FileLease.acquire(lock_path, nonblocking=True)
+    lease.release()
+
+
 def test_fresh_attempt_exposes_empty_view_and_no_child_abort_restores_inert_links(
     tmp_path: Path,
 ) -> None:

@@ -263,17 +263,18 @@ class _FileLease:
         operation = fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0)
         try:
             fcntl.flock(instance.fd, operation)
+            owner = {
+                "pid": os.getpid(),
+                "host": socket.gethostname(),
+                "acquired_ns": time.time_ns(),
+            }
+            os.ftruncate(instance.fd, 0)
+            os.write(instance.fd, json.dumps(owner, sort_keys=True).encode())
+            os.fsync(instance.fd)
         except BaseException:
-            os.close(instance.fd)
+            fd, instance.fd = instance.fd, -1
+            os.close(fd)
             raise
-        owner = {
-            "pid": os.getpid(),
-            "host": socket.gethostname(),
-            "acquired_ns": time.time_ns(),
-        }
-        os.ftruncate(instance.fd, 0)
-        os.write(instance.fd, json.dumps(owner, sort_keys=True).encode())
-        os.fsync(instance.fd)
         return instance
 
     def release(self) -> None:

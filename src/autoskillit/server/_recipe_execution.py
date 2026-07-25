@@ -59,6 +59,7 @@ __all__ = [
     "clear_recipe_execution",
     "get_recipe_execution",
     "install_recipe_execution",
+    "publish_reported_audit_cycle",
     "publish_verified_audit_cycle",
     "record_runtime_binding_digest",
 ]
@@ -616,19 +617,15 @@ def build_standalone_child_prompt(
     )
 
 
-def publish_verified_audit_cycle(
+def _publish_loaded_audit_cycle(
     tool_ctx: ToolContext,
     *,
-    authority_path: str,
+    installed: InstalledRecipeExecution,
+    authority: AuditCycleAuthority,
     expected_parent_digest: str | None,
     expected_round: int,
     authorized_successor_part_id: str | None = None,
 ) -> AuditCycleHead:
-    """Verify an explicit child output, then CAS-publish it as trusted."""
-    installed = get_recipe_execution(tool_ctx)
-    if installed is None:
-        raise AuditCycleHeadConflict("no active recipe execution")
-    authority = AuditCycleVerifier(tool_ctx.temp_dir).load_authority(authority_path)
     if authority.execution_generation != installed.snapshot.execution_id:
         raise AuditCycleHeadConflict("authority crosses recipe execution generations")
     head = installed.audit_cycle_heads.publish(
@@ -661,3 +658,51 @@ def publish_verified_audit_cycle(
             preflight_identities=preflight_identities,
         )
     return head
+
+
+def publish_verified_audit_cycle(
+    tool_ctx: ToolContext,
+    *,
+    authority_path: str,
+    expected_parent_digest: str | None,
+    expected_round: int,
+    authorized_successor_part_id: str | None = None,
+) -> AuditCycleHead:
+    """Verify an explicit child output, then CAS-publish it as trusted."""
+    installed = get_recipe_execution(tool_ctx)
+    if installed is None:
+        raise AuditCycleHeadConflict("no active recipe execution")
+    authority = AuditCycleVerifier(tool_ctx.temp_dir).load_authority(authority_path)
+    return _publish_loaded_audit_cycle(
+        tool_ctx,
+        installed=installed,
+        authority=authority,
+        expected_parent_digest=expected_parent_digest,
+        expected_round=expected_round,
+        authorized_successor_part_id=authorized_successor_part_id,
+    )
+
+
+def publish_reported_audit_cycle(
+    tool_ctx: ToolContext,
+    *,
+    authority_path: str,
+) -> AuditCycleHead:
+    """Verify and publish the authority path reported by a successful audit child."""
+    installed = get_recipe_execution(tool_ctx)
+    if installed is None:
+        raise AuditCycleHeadConflict("no active recipe execution")
+    authority = AuditCycleVerifier(tool_ctx.temp_dir).load_authority(authority_path)
+    current = installed.audit_cycle_heads.get(
+        execution_generation=authority.execution_generation,
+        plan_set_id=authority.plan_set_id,
+        scope_id=authority.scope_id,
+        part_id=authority.part_id,
+    )
+    return _publish_loaded_audit_cycle(
+        tool_ctx,
+        installed=installed,
+        authority=authority,
+        expected_parent_digest=(current.current_authority_digest if current is not None else None),
+        expected_round=current.audit_round if current is not None else 0,
+    )

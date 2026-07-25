@@ -83,6 +83,7 @@ from autoskillit.server._recipe_execution import (
     build_bound_child_prompt,
     build_standalone_child_prompt,
     get_recipe_execution,
+    publish_reported_audit_cycle,
     record_runtime_binding_digest,
 )
 from autoskillit.server._subprocess import _run_subprocess_captured
@@ -176,6 +177,23 @@ def _recipe_execution_deny(code: str, message: str) -> str:
             retriable=False,
         )
     )
+
+
+def _publish_audit_cycle_result(
+    tool_ctx: ToolContext,
+    *,
+    target_name: str | None,
+    skill_result: SkillResult,
+) -> None:
+    """Publish a successful audit child's declared authority before step completion."""
+    if not skill_result.success or target_name != "audit-impl":
+        return
+    authority_path = (skill_result.outcome_fields or {}).get("audit_cycle_path")
+    if not isinstance(authority_path, str) or not authority_path:
+        raise SkillContractError(
+            "Successful audit-impl result did not declare a valid audit_cycle_path"
+        )
+    publish_reported_audit_cycle(tool_ctx, authority_path=authority_path)
 
 
 def _is_absolute_path(path: str) -> bool:
@@ -1634,6 +1652,12 @@ async def run_skill(
                     )
                 contract_lifecycle.apply_retention(skill_result.needs_retry)
 
+                if _installed_execution is not None:
+                    _publish_audit_cycle_result(
+                        tool_ctx,
+                        target_name=target_name,
+                        skill_result=skill_result,
+                    )
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)
                     clear_run_skill_state(tool_ctx.project_dir)

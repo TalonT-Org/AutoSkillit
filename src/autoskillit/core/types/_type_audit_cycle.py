@@ -675,10 +675,30 @@ class InventoryAdmissionDecision:
             raise ValueError("InventoryAdmissionDecision.status must be an AdmissionStatus")
         if not isinstance(self.reason, AdmissionReason):
             raise ValueError("InventoryAdmissionDecision.reason must be an AdmissionReason")
-        if self.status is AdmissionStatus.PASS and self.reason is not AdmissionReason.ADMITTED:
-            raise ValueError("PASS admission requires the admitted reason")
-        if self.status is AdmissionStatus.OMIT and self.dispositions:
-            raise ValueError("OMIT admission cannot carry disposition rows")
+        omit_reasons = {
+            AdmissionReason.NO_AUTHORITY,
+            AdmissionReason.TRUSTED_GO,
+            AdmissionReason.TRUSTED_GO_SUCCESSOR,
+        }
+        if self.status is AdmissionStatus.OMIT:
+            if self.reason not in omit_reasons:
+                raise ValueError("OMIT admission requires an omission reason")
+            if self.dispositions or self.details:
+                raise ValueError("OMIT admission cannot carry payload")
+        elif self.status is AdmissionStatus.PASS:
+            if self.reason is not AdmissionReason.ADMITTED:
+                raise ValueError("PASS admission requires the admitted reason")
+            if self.details:
+                raise ValueError("PASS admission cannot carry rejection details")
+        else:
+            if self.reason is AdmissionReason.ADMITTED or self.reason in omit_reasons:
+                raise ValueError("REJECT admission requires a rejection reason")
+            if self.dispositions:
+                raise ValueError("REJECT admission cannot carry disposition rows")
+            if not self.details or any(
+                not isinstance(detail, str) or not detail.strip() for detail in self.details
+            ):
+                raise ValueError("REJECT admission requires non-empty rejection details")
 
     @classmethod
     def omit(cls, reason: AdmissionReason) -> Self:

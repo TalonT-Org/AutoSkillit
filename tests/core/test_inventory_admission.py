@@ -206,6 +206,50 @@ def test_report_without_authority_rejects(tmp_path: Path) -> None:
     assert decision.reason is AdmissionReason.REPORT_WITHOUT_AUTHORITY
 
 
+@pytest.mark.parametrize(
+    "decision",
+    (
+        lambda: InventoryAdmissionDecision(
+            status=AdmissionStatus.REJECT,
+            reason=AdmissionReason.ADMITTED,
+            details=("invalid",),
+        ),
+        lambda: InventoryAdmissionDecision(
+            status=AdmissionStatus.REJECT,
+            reason=AdmissionReason.NO_AUTHORITY,
+            details=("invalid",),
+        ),
+        lambda: InventoryAdmissionDecision(
+            status=AdmissionStatus.REJECT,
+            reason=AdmissionReason.INTERNAL_ERROR,
+        ),
+        lambda: InventoryAdmissionDecision(
+            status=AdmissionStatus.REJECT,
+            reason=AdmissionReason.INTERNAL_ERROR,
+            dispositions=_dispositions(),
+            details=("invalid",),
+        ),
+        lambda: InventoryAdmissionDecision(
+            status=AdmissionStatus.PASS,
+            reason=AdmissionReason.ADMITTED,
+            details=("invalid",),
+        ),
+        lambda: InventoryAdmissionDecision(
+            status=AdmissionStatus.OMIT,
+            reason=AdmissionReason.INTERNAL_ERROR,
+        ),
+        lambda: InventoryAdmissionDecision(
+            status=AdmissionStatus.OMIT,
+            reason=AdmissionReason.NO_AUTHORITY,
+            details=("invalid",),
+        ),
+    ),
+)
+def test_admission_decision_rejects_contradictory_status_matrix(decision) -> None:
+    with pytest.raises(ValueError):
+        decision()
+
+
 def test_complete_two_disposition_truth_table_passes(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     report = _report(tmp_path, authority)

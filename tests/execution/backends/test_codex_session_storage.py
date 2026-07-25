@@ -381,39 +381,47 @@ def test_recovery_scans_and_rebuilds_index_inside_lifecycle_lock(
         args=(str(store.locks_root / "lifecycle.lock"), ready, release),
     )
     holder.start()
-    assert ready.wait(5)
-
-    lifecycle_requested = threading.Event()
-    original_acquire = storage._FileLease.acquire.__func__
-
-    def notifying_acquire(
-        cls: type[storage._FileLease],
-        path: Path,
-        *,
-        nonblocking: bool = False,
-    ) -> storage._FileLease:
-        if path.name == "lifecycle.lock":
-            lifecycle_requested.set()
-        return original_acquire(cls, path, nonblocking=nonblocking)
-
-    monkeypatch.setattr(storage._FileLease, "acquire", classmethod(notifying_acquire))
+    recovery: threading.Thread | None = None
     failures: list[BaseException] = []
+    try:
+        assert ready.wait(5)
 
-    def recover() -> None:
-        try:
-            store.recover()
-        except BaseException as exc:
-            failures.append(exc)
+        lifecycle_requested = threading.Event()
+        original_acquire = storage._FileLease.acquire.__func__
 
-    recovery = threading.Thread(target=recover)
-    recovery.start()
-    assert lifecycle_requested.wait(5)
-    second = store.archive_root / "2026/07/rollout-second.jsonl"
-    _rollout(second, "thread-second", cwd=tmp_path)
-    release.set()
-    recovery.join(10)
-    holder.join(10)
+        def notifying_acquire(
+            cls: type[storage._FileLease],
+            path: Path,
+            *,
+            nonblocking: bool = False,
+        ) -> storage._FileLease:
+            if path.name == "lifecycle.lock":
+                lifecycle_requested.set()
+            return original_acquire(cls, path, nonblocking=nonblocking)
 
+        monkeypatch.setattr(storage._FileLease, "acquire", classmethod(notifying_acquire))
+
+        def recover() -> None:
+            try:
+                store.recover()
+            except BaseException as exc:
+                failures.append(exc)
+
+        recovery = threading.Thread(target=recover, daemon=True)
+        recovery.start()
+        assert lifecycle_requested.wait(5)
+        second = store.archive_root / "2026/07/rollout-second.jsonl"
+        _rollout(second, "thread-second", cwd=tmp_path)
+    finally:
+        release.set()
+        holder.join(10)
+        if holder.is_alive():
+            holder.terminate()
+            holder.join(5)
+        if recovery is not None:
+            recovery.join(10)
+
+    assert recovery is not None
     assert not recovery.is_alive()
     assert holder.exitcode == 0
     assert failures == []

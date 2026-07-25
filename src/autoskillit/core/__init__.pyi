@@ -505,6 +505,7 @@ from .types import ReservationRecordedEffect as ReservationRecordedEffect
 from .types import ReservationReleasedEffect as ReservationReleasedEffect
 from .types import ReserveClass as ReserveClass
 from .types import ReserveRequestEvent as ReserveRequestEvent
+from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
 from .types import (
     ResolveIndeterminateAcceptedEvent as ResolveIndeterminateAcceptedEvent,
 )
@@ -514,7 +515,6 @@ from .types import (
 from .types import (
     ResolveIndeterminateRollbackEvent as ResolveIndeterminateRollbackEvent,
 )
-from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
 from .types import ResponseBackstopExemptionDef as ResponseBackstopExemptionDef
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser

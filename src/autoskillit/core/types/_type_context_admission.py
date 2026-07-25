@@ -171,8 +171,8 @@ def _decode(value: object) -> object:
     kwargs = {key: _decode(item) for key, item in value.items() if key != "__type__"}
     try:
         return contract_type(**kwargs)
-    except TypeError as exc:
-        raise ContextAdmissionValidationError("invalid_serialized_contract") from exc
+    except TypeError:
+        raise ContextAdmissionValidationError("invalid_serialized_contract") from None
 
 
 class _ContractMeta(type):

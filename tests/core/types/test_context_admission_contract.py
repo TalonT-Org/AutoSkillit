@@ -899,6 +899,20 @@ def test_invalid_serialized_enum_suppresses_attacker_controlled_cause() -> None:
     assert canary not in repr(exc_info.value)
 
 
+def test_invalid_serialized_contract_suppresses_attacker_controlled_cause() -> None:
+    canary = "private-attacker-field"
+    serialized = ContextSessionId("session-1").to_dict()
+    serialized[canary] = "private-attacker-value"
+
+    with pytest.raises(ContextAdmissionValidationError) as exc_info:
+        ContextSessionId.from_dict(serialized)
+
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__suppress_context__
+    assert canary not in str(exc_info.value)
+    assert canary not in repr(exc_info.value)
+
+
 @pytest.mark.parametrize(
     "field_name",
     ["configured_model", "effective_model", "profile_name"],

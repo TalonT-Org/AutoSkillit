@@ -1042,12 +1042,7 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             slot, occurrence = slot_and_occurrence
             batch = self.batches[slot]
             record = self._find_batch(batch.batch_id)
-            if record is None or record.state not in {
-                AdmissionState.HISTORY_STAGED,
-                AdmissionState.REQUEST_DISPATCHED,
-                AdmissionState.COMMITTED,
-                AdmissionState.QUARANTINED,
-            }:
+            if record is None or record.state is not AdmissionState.REQUEST_DISPATCHED:
                 continue
             start = StartGenerationEvent(
                 **self._fields("start-generation"),

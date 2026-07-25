@@ -121,6 +121,34 @@ class TestCheckMetadataStable:
 
 
 class TestReadStableContainedBytes:
+    def test_rejects_intermediate_symlink_swap(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        allowed = tmp_path / "root"
+        nested = allowed / "nested"
+        nested.mkdir(parents=True)
+        artifact = nested / "artifact.txt"
+        artifact.write_text("stable")
+        relocated = tmp_path / "relocated"
+        real_open = os.open
+        swapped = False
+
+        def swapping_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if not swapped:
+                nested.rename(relocated)
+                nested.symlink_to(relocated, target_is_directory=True)
+                swapped = True
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(os, "open", swapping_open)
+
+        with pytest.raises(ContainmentError, match="[Ss]ymlink|component"):
+            read_stable_contained_bytes(artifact, allowed)
+        assert swapped
+
     @pytest.mark.parametrize("field", ("st_dev", "st_mode", "st_nlink"))
     def test_detects_open_file_metadata_drift(
         self,

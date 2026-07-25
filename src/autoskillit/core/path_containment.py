@@ -68,6 +68,38 @@ def check_metadata_stable(path: Path, pre_stat: os.stat_result, post_stat: os.st
         raise ContainmentError(f"File {path} modified between reads (TOCTOU)")
 
 
+def _open_beneath_root_without_symlinks(
+    path: str | Path,
+    allowed_root: str | Path,
+    resolved: Path,
+) -> int:
+    """Open a child through a trusted root descriptor without following symlinks."""
+    if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
+        raise ContainmentError("Secure component-wise open is unavailable")
+
+    resolved_root = Path(allowed_root).resolve(strict=True)
+    try:
+        relative = Path(path).absolute().relative_to(Path(allowed_root).absolute())
+    except ValueError:
+        relative = resolved.relative_to(resolved_root)
+    if not relative.parts:
+        raise ContainmentError("Regular file required")
+
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    file_flags = os.O_RDONLY | os.O_NOFOLLOW
+    directory_fds: list[int] = []
+    try:
+        directory_fds.append(os.open(resolved_root, directory_flags))
+        for component in relative.parts[:-1]:
+            directory_fds.append(os.open(component, directory_flags, dir_fd=directory_fds[-1]))
+        return os.open(relative.parts[-1], file_flags, dir_fd=directory_fds[-1])
+    except OSError as exc:
+        raise ContainmentError("Symlink or unsafe path component not allowed") from exc
+    finally:
+        for directory_fd in reversed(directory_fds):
+            os.close(directory_fd)
+
+
 def read_stable_contained_bytes(
     path: str | Path,
     allowed_root: str | Path,
@@ -77,8 +109,7 @@ def read_stable_contained_bytes(
     """Read one bounded buffer while detecting containment and metadata drift."""
     resolved = resolve_contained_path(path, allowed_root, max_size_bytes=max_size_bytes)
     pre_stat = resolved.stat()
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(resolved, flags)
+    fd = _open_beneath_root_without_symlinks(path, allowed_root, resolved)
     try:
         opened_stat = os.fstat(fd)
         check_metadata_stable(resolved, pre_stat, opened_stat)

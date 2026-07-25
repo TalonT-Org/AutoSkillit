@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import multiprocessing
 import os
+import signal
 import sys
 import tomllib
 from dataclasses import replace
@@ -96,6 +97,42 @@ def test_bounded_codex_probe_times_out_and_reaps(
 
     assert result.returncode is None
     assert result.failure == "timed out"
+
+
+def test_bounded_codex_probe_owns_and_kills_process_group(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import codex
+
+    original_popen = codex.subprocess.Popen
+    original_killpg = codex.os.killpg
+    processes: list[codex.subprocess.Popen[bytes]] = []
+    group_signals: list[tuple[int, signal.Signals]] = []
+
+    def recording_popen(*args: object, **kwargs: Any) -> codex.subprocess.Popen[bytes]:
+        assert kwargs["start_new_session"] is True
+        process = original_popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    def recording_killpg(pgid: int, sig: signal.Signals) -> None:
+        group_signals.append((pgid, sig))
+        original_killpg(pgid, sig)
+
+    monkeypatch.setattr(codex, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(codex.subprocess, "Popen", recording_popen)
+    monkeypatch.setattr(codex.os, "killpg", recording_killpg)
+
+    result = codex._run_bounded_codex_probe(
+        (sys.executable, "-c", "import time; time.sleep(60)"),
+        env=os.environ,
+        cwd=str(tmp_path),
+    )
+
+    assert result.failure == "timed out"
+    assert group_signals == [(processes[0].pid, signal.SIGKILL)]
+    assert processes[0].poll() is not None
 
 
 def test_bounded_codex_probe_enforces_stream_limit(

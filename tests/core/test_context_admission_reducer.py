@@ -2366,6 +2366,70 @@ def test_rollover_moves_old_work_to_resolvable_closed_epoch_audit() -> None:
     assert reconciled_audit.terminal_generation_reservations[0].state is GenerationState.RECONCILED
 
 
+def test_closed_epoch_authority_mismatch_quarantines_exact_charge() -> None:
+    state, batch, _, _ = _reserved_batch(
+        name="closed-authority-mismatch",
+        input_count=18,
+        generation_count=0,
+    )
+    state = _prepare_dispatch(state, batch)
+    receiver = AuthoritySourceId("receiver-closed-authority-mismatch")
+    rolled = reduce_context_admission(
+        state,
+        RolloverEpochEvent(
+            **_event_fields(state, "rollover-closed-authority-mismatch", "rollover-epoch"),
+            witness=replace(
+                _witness(batch, WitnessKind.EPOCH_ROLLOVER),
+                authority_source_id=receiver,
+            ),
+            fence_proof=EpochFenceProof(
+                old_window_epoch_id=state.snapshot.window_epoch_id,
+                old_window_epoch_number=state.snapshot.window_epoch_number,
+                new_window_epoch_id=WindowEpochId("epoch-2"),
+                new_window_epoch_number=2,
+                receiver_authority_source_id=receiver,
+                fence_witness_id=AdmissionWitnessId("fence-closed-authority-mismatch"),
+                highest_admitted_dispatch_sequence=1,
+            ),
+            new_snapshot=_snapshot(epoch=2),
+            protected_pools=(),
+        ),
+    )
+    assert isinstance(rolled.next_state, ActiveContextAdmissionState)
+
+    quarantined = reduce_context_admission(
+        rolled.next_state,
+        AcceptInputEvent(
+            **_event_fields(
+                rolled.next_state,
+                "accept-closed-authority-mismatch",
+                "accept-input",
+            ),
+            batch_id=batch.batch_id,
+            witness=_witness(batch, WitnessKind.PROVIDER_ACCEPTED),
+            final_manifest_revision=batch.manifest.representation_revision,
+            final_manifest=batch.manifest,
+            exact_input_charge=20,
+            measurement_kind=MeasurementKind.PROVIDER_EXACT,
+            authority_source=AuthoritySourceId("different-authority"),
+            representation_binding_witness=_binding(batch),
+        ),
+    )
+
+    assert quarantined.decision.kind is AdmissionDecisionKind.QUARANTINED
+    assert quarantined.decision.reason_code == "authority-source-mismatch"
+    assert isinstance(quarantined.next_state, ActiveContextAdmissionState)
+    audit = quarantined.next_state.closed_epochs[-1]
+    assert audit.retained_unresolved_count == 0
+    assert audit.terminal_batch_records[0].state is AdmissionState.QUARANTINED
+    assert audit.terminal_batch_records[0].committed_input_count == 20
+    assert {type(effect).__name__ for effect in quarantined.effects} == {
+        "ChargeCommittedEffect",
+        "OccurrenceStateChangedEffect",
+        "QuarantineRecordedEffect",
+    }
+
+
 def test_protected_release_uses_policy_from_rollover_created_epoch() -> None:
     owner = ProtectedPoolOwnerId("rollover-policy-owner")
     pool = ProtectedPoolSpec(

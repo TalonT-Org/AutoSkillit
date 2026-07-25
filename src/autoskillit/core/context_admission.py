@@ -1366,8 +1366,6 @@ def _accept_closed_input(
         or binding.representation_binding_id != record.batch.manifest.representation_binding_id
         or binding.request_id != record.batch.request_id
         or binding.batch_id != record.batch.batch_id
-        or event.authority_source != event.witness.authority_source_id
-        or event.authority_source != binding.authority_source_id
     ):
         return _reject(state, event, "invalid-closed-epoch-acceptance")
     reservation = _closed_reservation_for(audit, record)
@@ -1388,13 +1386,20 @@ def _accept_closed_input(
         or set(manifest_pairs) != set(expected_owned_pairs)
         or len(manifest_pairs) != len(expected_owned_pairs)
     )
+    authority_mismatch = (
+        event.authority_source != event.witness.authority_source_id
+        or event.authority_source != binding.authority_source_id
+    )
     quarantined = (
-        exact_charge > reservation.reserved_count
+        authority_mismatch
+        or exact_charge > reservation.reserved_count
         or exact_charge > audit.snapshot.hard_limit
         or manifest_invalid
     )
     reason_code = (
-        "incomplete-canonical-span-ownership"
+        "authority-source-mismatch"
+        if authority_mismatch
+        else "incomplete-canonical-span-ownership"
         if manifest_invalid
         else "provider-charge-exceeds-reservation"
         if quarantined

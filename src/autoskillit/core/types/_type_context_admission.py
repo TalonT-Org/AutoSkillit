@@ -182,8 +182,8 @@ class _ContractMeta(type):
             instance = super().__call__(*args, **kwargs)
         except ContextAdmissionValidationError:
             raise
-        except (AttributeError, TypeError, ValueError) as exc:
-            raise ContextAdmissionValidationError("invalid_contract_field_type") from exc
+        except (AttributeError, TypeError, ValueError):
+            raise ContextAdmissionValidationError("invalid_contract_field_type") from None
         _validate_declared_field_types(instance)
         _validate_deep_immutability(instance)
         return instance

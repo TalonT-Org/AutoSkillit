@@ -73,6 +73,7 @@ class ValidationContext:
     recipe: Recipe
     step_graph: dict[str, set[str]]
     dataflow: DataFlowReport
+    binding_projection: RecipeBindingProjection
     available_recipes: frozenset[str] = field(default_factory=frozenset)
     available_skills: frozenset[str] = field(default_factory=frozenset)
     available_sub_recipes: frozenset[str] = field(default_factory=frozenset)
@@ -89,9 +90,6 @@ class ValidationContext:
     backend_origin_map: dict[str, str] | None = None
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
     predecessors: dict[str, set[str]] = field(default_factory=dict)
-    binding_projection: RecipeBindingProjection = field(
-        default_factory=lambda: RecipeBindingProjection({})
-    )
 
 
 # ---------------------------------------------------------------------------

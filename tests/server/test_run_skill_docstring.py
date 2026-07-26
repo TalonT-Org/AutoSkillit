@@ -23,6 +23,7 @@ class TestRunSkillDocstring:
             "success",
             "result",
             "session_id",
+            "subtype",
             "is_error",
             "exit_code",
             "needs_retry",

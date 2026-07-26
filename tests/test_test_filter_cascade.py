@@ -524,3 +524,38 @@ class TestPipelineCascadeNarrowing:
             assert fname in result_names, (
                 f"execution/{fname} must appear in pipeline cascade result"
             )
+
+
+class TestServerStateCrossLayerCascade:
+    """Startup recovery changes select both server and ledger verification."""
+
+    def test_state_change_selects_pipeline_and_server(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for directory in ("arch", "contracts", "pipeline", "server", "cli"):
+            (tests_root / directory).mkdir(parents=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/server/_state.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+
+        assert isinstance(result, set)
+        dir_names = {path.name for path in result if path.is_dir()}
+        assert {"pipeline", "server"} <= dir_names
+
+    def test_other_server_change_does_not_add_pipeline(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for directory in ("arch", "contracts", "pipeline", "server", "cli"):
+            (tests_root / directory).mkdir(parents=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/server/_misc.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+
+        assert isinstance(result, set)
+        dir_names = {path.name for path in result if path.is_dir()}
+        assert "server" in dir_names
+        assert "pipeline" not in dir_names

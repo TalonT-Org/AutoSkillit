@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from pathlib import Path
+from typing import cast, get_args
 
 import pytest
 
@@ -13,6 +16,7 @@ from autoskillit.core import (
     CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS,
     AdmissionDecision,
     AdmissionDecisionKind,
+    AdmissionEffect,
     AdmissionEventId,
     AdmissionSequence,
     AdmissionTransition,
@@ -21,6 +25,8 @@ from autoskillit.core import (
     AuthorityUnavailableEvent,
     ContextAdmissionAccountingResult,
     ContextAdmissionAccountingStatus,
+    ContextAdmissionEvent,
+    ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
@@ -29,6 +35,7 @@ from autoskillit.core import (
     CoverageState,
     ForkOccurrenceId,
     IdempotencyNamespace,
+    ModelIdentity,
     ShadowContextAdmissionRecord,
     StoredContextAdmissionEnvelope,
     UninitializedContextAdmissionState,
@@ -40,8 +47,16 @@ from autoskillit.core import (
     reduce_context_admission,
     validate_context_admission_persistence_value,
 )
+from tests.fixtures.context_admission import snapshot
 
-pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
+
+_GOLDEN_JOURNAL = (
+    Path(__file__).parents[2]
+    / "fixtures"
+    / "context_admission_journals"
+    / "protocol_v1_encoding_v1.json"
+)
 
 
 def _stream_key() -> ContextAdmissionStreamKey:
@@ -150,6 +165,93 @@ def test_shadow_publication_is_a_released_top_level_envelope() -> None:
     assert "ShadowContextAdmissionRecord" in CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS
 
 
+def test_top_level_discriminator_allowlist_matches_released_unions_exactly() -> None:
+    expected = {
+        value_type.__name__
+        for value_type in (
+            *get_args(ContextAdmissionEvent),
+            *get_args(AdmissionEffect),
+            *get_args(ContextAdmissionState),
+            AdmissionDecision,
+            ShadowContextAdmissionRecord,
+        )
+    }
+    assert CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS == expected
+
+
+def test_protocol_v1_golden_journal_replays_byte_identically() -> None:
+    fixture = json.loads(_GOLDEN_JOURNAL.read_text(encoding="utf-8"))
+    assert fixture["schema_version"] == 1
+    assert fixture["encoding_version"] == CONTEXT_ADMISSION_ENCODING_VERSION
+    assert fixture["protocol_version"] == CONTEXT_ADMISSION_PROTOCOL_VERSION
+    assert ContextAdmissionStreamKey.from_dict(fixture["stream_key"]) == ContextAdmissionStreamKey(
+        root_session_id=ContextSessionId("session-root"),
+        current_session_id=ContextSessionId("session-root"),
+        root_agent_id=AgentInstanceId("agent-root"),
+        current_agent_id=AgentInstanceId("agent-root"),
+        root_thread_id=ContextThreadId("thread-root"),
+        current_thread_id=ContextThreadId("thread-root"),
+        fork_occurrence_id=None,
+    )
+
+    reducer = context_admission_reducer_for_protocol(CONTEXT_ADMISSION_PROTOCOL_VERSION)
+    replayed_states = []
+    for _ in range(2):
+        state: ContextAdmissionState = _uninitialized()
+        for expected_sequence, publication in enumerate(fixture["publications"], start=1):
+            assert publication["journal_sequence"] == expected_sequence
+            event_envelope = decode_stored_context_admission_envelope(
+                publication["event_envelope"].encode("utf-8")
+            )
+            decision_envelope = decode_stored_context_admission_envelope(
+                publication["decision_envelope"].encode("utf-8")
+            )
+            shadow_envelope = decode_stored_context_admission_envelope(
+                publication["shadow_envelope"].encode("utf-8")
+            )
+            assert (
+                encode_stored_context_admission_envelope(event_envelope).decode("utf-8")
+                == publication["event_envelope"]
+            )
+            assert (
+                encode_stored_context_admission_envelope(decision_envelope).decode("utf-8")
+                == publication["decision_envelope"]
+            )
+            assert (
+                encode_stored_context_admission_envelope(shadow_envelope).decode("utf-8")
+                == publication["shadow_envelope"]
+            )
+
+            transition = reducer.reduce_transition(
+                state,
+                cast(ContextAdmissionEvent, event_envelope.payload),
+            )
+            assert transition.decision == decision_envelope.payload
+            stored_effects = tuple(
+                decode_stored_context_admission_envelope(
+                    effect["envelope"].encode("utf-8")
+                ).payload
+                for effect in publication["effect_envelopes"]
+            )
+            assert transition.effects == stored_effects
+            assert isinstance(shadow_envelope.payload, ShadowContextAdmissionRecord)
+            assert shadow_envelope.payload.journal_sequence == expected_sequence
+            assert shadow_envelope.payload.decision == transition.decision
+            state = transition.next_state
+
+        final_envelope = decode_stored_context_admission_envelope(
+            fixture["final_state_envelope"].encode("utf-8")
+        )
+        assert final_envelope.payload == state
+        assert (
+            encode_stored_context_admission_envelope(final_envelope).decode("utf-8")
+            == fixture["final_state_envelope"]
+        )
+        replayed_states.append(state)
+
+    assert replayed_states[0] == replayed_states[1]
+
+
 def test_envelope_rejects_unknown_or_noncanonical_routes() -> None:
     encoded = encode_stored_context_admission_envelope(
         make_stored_context_admission_envelope(_authority_event())
@@ -170,6 +272,10 @@ def test_envelope_rejects_unknown_or_noncanonical_routes() -> None:
         "password=visible",
         "a" * 64,
         {"nested": "ghp_visible"},
+        replace(
+            snapshot(),
+            model_identity=ModelIdentity.anthropic("ghp_visible"),
+        ),
     ],
 )
 def test_recursive_persistence_boundary_rejects_sensitive_values(

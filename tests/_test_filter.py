@@ -309,6 +309,12 @@ MODULE_CASCADE_PIPELINE: dict[str, frozenset[str]] = {
     ),
 }
 
+# Server modules listed here retain the ordinary server cascade and add only the
+# cross-layer consumers that exercise their integration boundary.
+MODULE_CASCADE_SERVER_CROSS_LAYER: dict[str, frozenset[str]] = {
+    "_state": frozenset({"pipeline"}),
+}
+
 # Narrow per-module cascade for execution/. Modules not listed here fall through
 # to LAYER_CASCADE_CONSERVATIVE["execution"] (fail-open).
 MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
@@ -1749,6 +1755,9 @@ def build_test_scope(
                     test_dirs.update(MODULE_CASCADE_PIPELINE[stem])
                 else:
                     test_dirs.update(cascade_map["pipeline"])  # fail-open
+            elif pkg == "server" and mode == FilterMode.CONSERVATIVE:
+                test_dirs.update(cascade_map["server"])
+                test_dirs.update(MODULE_CASCADE_SERVER_CROSS_LAYER.get(Path(f).stem, ()))
             elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
                 stem = Path(f).stem
                 if stem in MODULE_CASCADE_RECIPE:
@@ -1874,6 +1883,9 @@ def build_test_scope(
                             test_dirs.update(MODULE_CASCADE_PIPELINE[stem])
                         else:
                             test_dirs.update(cascade_map["pipeline"])  # fail-open
+                    elif pkg == "server" and mode == FilterMode.CONSERVATIVE:
+                        test_dirs.update(cascade_map["server"])
+                        test_dirs.update(MODULE_CASCADE_SERVER_CROSS_LAYER.get(Path(f).stem, ()))
                     elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
                         stem = Path(f).stem
                         if stem == "__init__":

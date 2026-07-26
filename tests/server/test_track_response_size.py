@@ -91,6 +91,32 @@ class TestTrackResponseSize:
         assert report[0]["response_bytes"] == len(json.dumps(response_dict).encode("utf-8"))
 
     @pytest.mark.anyio
+    async def test_injected_context_admission_ledger_does_not_mutate_response_path(self):
+        """C2 remains an injected shadow service until producer integration lands."""
+        from autoskillit.server._notify import track_response_size
+
+        original = {"success": True, "value": "unchanged"}
+        context_admission_ledger = MagicMock()
+        ctx = _tracking_ctx()
+        ctx.context_admission_ledger = context_admission_ledger
+
+        @track_response_size("shadow_unintegrated_tool")
+        async def fake_handler():
+            return original
+
+        with (
+            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
+            patch(
+                "autoskillit.server._notify.enforce_response_budget",
+                return_value=original,
+            ),
+        ):
+            result = await fake_handler()
+
+        assert result is original
+        assert context_admission_ledger.mock_calls == []
+
+    @pytest.mark.anyio
     async def test_decorator_noop_when_ctx_unavailable(self):
         """When _get_ctx_or_none() returns None, decorator is silent."""
         from autoskillit.server._notify import track_response_size

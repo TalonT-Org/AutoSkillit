@@ -12,13 +12,18 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    ActiveContextAdmissionState,
     AdmissionDecisionKind,
+    AdmissionEventId,
+    AdmissionState,
+    AuthorityUnavailableEvent,
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     ContextAdmissionStoreAuthority,
     ContextAdmissionStreamKey,
     ContextThreadId,
+    CoverageState,
 )
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
@@ -27,20 +32,31 @@ from tests.fixtures.context_admission import (
     accept_event,
     batch,
     dispatch_event,
+    event_fields,
+    mark_indeterminate_event,
     occurrence,
     open_event,
     prepare_event,
     propose_event,
     reconcile_generation_event,
+    release_non_admission_event,
     reserve_event,
     rollover_event,
     snapshot,
     stage_event,
     start_generation_event,
     stream_key,
+    uninitialized_state,
 )
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
+
+_GOLDEN_JOURNAL = (
+    Path(__file__).parents[1]
+    / "fixtures"
+    / "context_admission_journals"
+    / "protocol_v1_encoding_v1.json"
+)
 
 
 def _authority(tmp_path: Path) -> ContextAdmissionStoreAuthority:
@@ -173,6 +189,70 @@ def test_recovery_is_idempotent_for_an_empty_healthy_store(tmp_path: Path) -> No
     first = ledger.recover_all()
     second = ledger.recover_all()
     assert first == second
+
+
+def test_ledger_publication_matches_protocol_v1_golden_journal(tmp_path: Path) -> None:
+    fixture = json.loads(_GOLDEN_JOURNAL.read_text(encoding="utf-8"))
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(authority)
+    event = AuthorityUnavailableEvent(
+        **event_fields(
+            uninitialized_state(),
+            "event-authority-unavailable",
+            "authority-unavailable",
+        ),
+        reason_code="authoritative-watermark-unavailable",
+        authority_state=CoverageState.PARTIAL,
+    )
+
+    recorded = ledger.apply(stream_key(), event)
+    assert recorded.status is ContextAdmissionAccountingStatus.SEMANTIC_REJECTION
+    assert recorded.transition is not None
+
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        journal = connection.execute(
+            """
+            SELECT journal_sequence, event_envelope, decision_envelope
+            FROM journal_events ORDER BY journal_sequence
+            """
+        ).fetchall()
+        effects = connection.execute(
+            """
+            SELECT journal_sequence, effect_ordinal, effect_envelope
+            FROM effect_outbox ORDER BY journal_sequence, effect_ordinal
+            """
+        ).fetchall()
+        shadows = connection.execute(
+            """
+            SELECT journal_sequence, shadow_envelope
+            FROM shadow_decisions ORDER BY journal_sequence
+            """
+        ).fetchall()
+        final_state = connection.execute("SELECT state_envelope FROM streams").fetchone()
+    finally:
+        connection.close()
+
+    publication = fixture["publications"][0]
+    assert journal == [
+        (
+            publication["journal_sequence"],
+            publication["event_envelope"].encode("utf-8"),
+            publication["decision_envelope"].encode("utf-8"),
+        )
+    ]
+    assert effects == []
+    assert shadows == [
+        (
+            publication["journal_sequence"],
+            publication["shadow_envelope"].encode("utf-8"),
+        )
+    ]
+    assert final_state == (fixture["final_state_envelope"].encode("utf-8"),)
+
+    reopened = DefaultContextAdmissionLedger(authority)
+    assert reopened.recover_all().status is ContextAdmissionStorageHealthStatus.HEALTHY
+    assert reopened.replay(stream_key()).state == recorded.transition.next_state
 
 
 def test_recovery_replays_nonempty_stream_and_surfaces_unresolved_work(
@@ -580,6 +660,179 @@ def test_changed_intent_under_existing_event_id_is_conflict_without_append(
         connection.close()
 
 
+def test_reservation_key_retry_appends_one_noop_then_exact_replays(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(authority)
+    key = stream_key()
+    occurrence_value = occurrence()
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    original_event = reserve_event(
+        proposed.transition.next_state,
+        batch(occurrence_value),
+        occurrence_value,
+    )
+    reserved = ledger.reserve(key, original_event)
+    assert reserved.transition is not None
+
+    retry_event = replace(
+        original_event,
+        event_id=AdmissionEventId("event-reserve-new-event-id"),
+        expected_aggregate_revision=reserved.transition.next_state.aggregate_revision,
+    )
+    noop = ledger.reserve(key, retry_event)
+
+    assert noop.status is ContextAdmissionAccountingStatus.RECORDED
+    assert noop.transition is not None
+    assert noop.transition.decision.kind is AdmissionDecisionKind.NOOP_IDEMPOTENT
+    assert noop.transition.effects == ()
+    assert noop.journal_sequence == 4
+    exact = ledger.reserve(key, retry_event)
+    assert exact.status is ContextAdmissionAccountingStatus.EXACT_REPLAY
+    assert exact.journal_sequence == 4
+
+    inspection = ledger.inspect_stream(key)
+    assert inspection.latest_journal_sequence == 4
+    assert inspection.state == noop.transition.next_state
+
+
+def test_unretained_reservation_conflict_exact_replays_stored_decision(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(authority)
+    key = stream_key()
+    occurrence_value = occurrence()
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    original_event = reserve_event(
+        proposed.transition.next_state,
+        batch(occurrence_value),
+        occurrence_value,
+    )
+    reserved = ledger.reserve(key, original_event)
+    assert reserved.transition is not None
+
+    changed_reservation = replace(
+        original_event.input_reservations[0],
+        reserved_count=original_event.input_reservations[0].reserved_count + 1,
+    )
+    conflict_event = replace(
+        original_event,
+        event_id=AdmissionEventId("event-reserve-conflict"),
+        expected_aggregate_revision=reserved.transition.next_state.aggregate_revision,
+        input_reservations=(changed_reservation,),
+    )
+    conflict = ledger.reserve(key, conflict_event)
+
+    assert conflict.status is ContextAdmissionAccountingStatus.SEMANTIC_REJECTION
+    assert conflict.transition is not None
+    assert conflict.transition.decision.kind is AdmissionDecisionKind.CONFLICT
+    assert conflict.journal_sequence == 4
+    replayed = ledger.reserve(key, conflict_event)
+    assert replayed.status is ContextAdmissionAccountingStatus.EXACT_REPLAY
+    assert replayed.journal_sequence == 4
+    assert replayed.transition is not None
+    assert replayed.transition.decision == conflict.transition.decision
+    assert replayed.transition.effects == ()
+
+
+def test_explicit_non_admission_witness_releases_reserved_capacity(
+    tmp_path: Path,
+) -> None:
+    ledger = DefaultContextAdmissionLedger(_authority(tmp_path))
+    key = stream_key()
+    occurrence_value = occurrence()
+    batch_value = batch(occurrence_value)
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    reserved = ledger.reserve(
+        key,
+        reserve_event(proposed.transition.next_state, batch_value, occurrence_value),
+    )
+    assert reserved.transition is not None
+
+    released = ledger.release(
+        key,
+        release_non_admission_event(reserved.transition.next_state, batch_value),
+    )
+
+    assert released.status is ContextAdmissionAccountingStatus.RECORDED
+    assert released.transition is not None
+    batch_record = released.transition.next_state.batch_records[0]
+    assert batch_record.state is AdmissionState.RELEASED
+    assert released.transition.decision.available_ordinary_count == 40
+
+
+def test_dispatched_indeterminate_work_remains_charged_across_recovery(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(authority)
+    key = stream_key()
+    occurrence_value = occurrence()
+    batch_value = batch(occurrence_value)
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    reserved = ledger.reserve(
+        key,
+        reserve_event(proposed.transition.next_state, batch_value, occurrence_value),
+    )
+    assert reserved.transition is not None
+    prepared = ledger.apply(
+        key,
+        prepare_event(reserved.transition.next_state, batch_value),
+    )
+    assert prepared.transition is not None
+    staged = ledger.apply(
+        key,
+        stage_event(prepared.transition.next_state, batch_value),
+    )
+    assert staged.transition is not None
+    dispatched = ledger.apply(
+        key,
+        dispatch_event(staged.transition.next_state, batch_value),
+    )
+    assert dispatched.transition is not None
+    marked = ledger.apply(
+        key,
+        mark_indeterminate_event(dispatched.transition.next_state, batch_value),
+    )
+    assert marked.status is ContextAdmissionAccountingStatus.RECONCILIATION_REQUIRED
+    assert marked.transition is not None
+
+    reopened = DefaultContextAdmissionLedger(authority)
+    recovered = reopened.recover_all()
+    state = reopened.inspect_stream(key).state
+
+    assert recovered.unresolved_streams == (key,)
+    assert isinstance(state, ActiveContextAdmissionState)
+    assert state.batch_records[0].state is AdmissionState.INDETERMINATE
+    assert sum(reservation.reserved_count for reservation in state.reservations) == 10
+
+
 def test_busy_begin_is_transient_and_retry_succeeds_without_poisoning_health(
     tmp_path: Path,
 ) -> None:
@@ -658,14 +911,25 @@ def test_postcommit_fault_has_unknown_outcome_but_exact_retry_finds_publication(
 @pytest.mark.parametrize(
     ("fault_name", "expected_status"),
     [
-        ("before_commit", ContextAdmissionAccountingStatus.RECORDED),
+        ("before_commit", ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED),
         ("after_commit", ContextAdmissionAccountingStatus.EXACT_REPLAY),
+    ],
+)
+@pytest.mark.parametrize(
+    "sqlite_code",
+    [
+        sqlite3.SQLITE_FULL,
+        sqlite3.SQLITE_IOERR,
+        sqlite3.SQLITE_IOERR_READ,
+        sqlite3.SQLITE_INTERRUPT,
+        sqlite3.SQLITE_NOMEM,
     ],
 )
 def test_sqlite_result_class_recovery_reopens_and_resolves_publication(
     tmp_path: Path,
     fault_name: str,
     expected_status: ContextAdmissionAccountingStatus,
+    sqlite_code: int,
 ) -> None:
     authority = _authority(tmp_path)
     fired = False
@@ -675,7 +939,7 @@ def test_sqlite_result_class_recovery_reopens_and_resolves_publication(
         if not fired and getattr(point, "value") == fault_name:
             fired = True
             error = sqlite3.OperationalError(fault_name)
-            error.sqlite_errorcode = sqlite3.SQLITE_IOERR
+            error.sqlite_errorcode = sqlite_code
             raise error
 
     result = DefaultContextAdmissionLedger(
@@ -684,10 +948,17 @@ def test_sqlite_result_class_recovery_reopens_and_resolves_publication(
     ).apply(stream_key(), open_event())
 
     assert result.status is expected_status
-    assert result.journal_sequence == 1
+    expected_journal_sequence = 1 if fault_name == "after_commit" else None
+    assert result.journal_sequence == expected_journal_sequence
+    if fault_name == "before_commit":
+        assert result.failure_reason is ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY
+        assert result.reason_code == "sqlite-publication-absent"
     connection = sqlite3.connect(authority.database_path)
     try:
-        assert connection.execute("SELECT COUNT(*) FROM journal_events").fetchone() == (1,)
+        expected_rows = 1 if fault_name == "after_commit" else 0
+        assert connection.execute("SELECT COUNT(*) FROM journal_events").fetchone() == (
+            expected_rows,
+        )
     finally:
         connection.close()
 

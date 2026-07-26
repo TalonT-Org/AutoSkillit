@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import dataclasses
 import inspect
+import os
 import re
 from pathlib import Path
 
@@ -116,6 +117,17 @@ def test_default_timing_log_satisfies_timing_store_protocol():
     from autoskillit.pipeline.timings import DefaultTimingLog
 
     assert isinstance(DefaultTimingLog(), TimingLog)
+
+
+def test_default_context_admission_ledger_satisfies_protocol(tmp_path: Path) -> None:
+    from autoskillit.core import ContextAdmissionLedger, ContextAdmissionStoreAuthority
+    from autoskillit.pipeline import DefaultContextAdmissionLedger
+
+    authority = ContextAdmissionStoreAuthority(
+        database_path=tmp_path / "context-admission" / "ledger.sqlite3",
+        expected_owner_id=os.getuid(),
+    )
+    assert isinstance(DefaultContextAdmissionLedger(authority), ContextAdmissionLedger)
 
 
 def test_default_github_api_log_satisfies_github_api_log():

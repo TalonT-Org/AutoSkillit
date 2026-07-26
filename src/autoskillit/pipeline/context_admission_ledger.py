@@ -521,9 +521,7 @@ class DefaultContextAdmissionLedger:
         stream_key: ContextAdmissionStreamKey,
         event: ContextAdmissionEvent,
     ) -> ContextAdmissionAccountingResult:
-        transaction_was_active = connection.in_transaction
         _rollback(connection)
-        rollback_confirmed = not connection.in_transaction
         connection.close()
         self._recovered = False
         self._store_health = ContextAdmissionStoreHealth(
@@ -545,11 +543,9 @@ class DefaultContextAdmissionLedger:
         inspection = self.inspect_stream(stream_key)
         if any(stored_event.event_id == event.event_id for stored_event in inspection.events):
             return self.apply(stream_key, event)
-        if transaction_was_active and rollback_confirmed:
-            return self.apply(stream_key, event)
         self._set_store_failure(
             ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY,
-            "sqlite-result-ambiguous",
+            "sqlite-publication-absent",
         )
         return self._storage_failure_result(stream_key)
 

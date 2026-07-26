@@ -203,6 +203,7 @@ tests/
 ├── test_test_filter_core_cascade.py
 ├── test_test_filter_coverage_map.py
 ├── test_test_filter_execution_cascade.py
+├── test_test_filter_pipeline_cascade.py   # Focused ledger/ToolContext/server-recovery routes
 ├── test_test_filter_local_diff.py
 ├── test_test_filter_plugin.py
 ├── test_test_filter_scope_extras.py
@@ -222,6 +223,9 @@ tests/
 ├── hooks/                               # Hook script tests (see hooks/AGENTS.md)
 ├── infra/                               # CI/CD and security configuration tests (see infra/AGENTS.md)
 ├── integration/                         # Cross-layer integration tests
+├── fixtures/
+│   ├── context_admission.py             # Pure deterministic context-admission builders
+│   └── context_admission_journals/      # Versioned content-free golden journal vectors
 ├── migration/                           # Migration engine and store tests (see migration/AGENTS.md)
 ├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests (see pipeline/AGENTS.md)
 ├── planner/                             # Planner manifest, validation, and compilation tests (see planner/AGENTS.md)

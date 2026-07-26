@@ -14,7 +14,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_capability_admission_e2e.py` | End-to-end chain tests for capability admission control: backend → load_and_validate → dispatch_feasible signal |
 | `test_admission_dispatch_agreement.py` | Admission ↔ dispatch agreement contract test — every bundled-recipe × backend combination must produce admitting runs whose surviving run_skill steps pass the runtime `_is_backend_incompatible` gate |
 | `test_editable_guard.py` | Unit tests for server/_editable_guard.py — scan_editable_installs_for_worktree |
-| `test_factory.py` | Tests for server/_factory.py make_context() composition root |
+| `test_factory.py` | Tests for server/_factory.py make_context() composition root, including isolated context-admission ledger authority |
 | `test_factory_recording.py` | Tests for make_context recording/replay runner wiring |
 | `test_factory_backend_coherence.py` | Tests for backend coherence enforcement in make_context() |
 | `test_factory_codex_backend_gate.py` | Tests for codex_backend feature flag gating in make_context() |
@@ -65,7 +65,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_set_commit_status.py` | Tests for the set_commit_status MCP tool handler |
 | `test_smoke_pipeline.py` | Smoke-test pipeline: structural validation and end-to-end execution tests |
 | `test_smoke_recipe_scope_guard.py` | Structural guard: smoke_recipe fixture must not use scope='module' |
-| `test_state.py` | Tests for server/_state.py: server initialization |
+| `test_state.py` | Tests for server/_state.py initialization and deferred context-admission ledger recovery |
 | `test_tool_annotation_completeness.py` | Runtime annotation test shield for MCP tool readOnlyHint semantics (layers 2, 3, 4) |
 | `test_tool_exception_boundary.py` | Tests for the exception boundary in track_response_size |
 | `test_tools_ci.py` | Tests for wait_for_ci, get_ci_status, and wait_for_merge_queue MCP tool handlers |

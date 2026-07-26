@@ -58,7 +58,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_issue_body_discipline.py` | Cross-skill contract: no SKILL.md may append validation summaries to issue bodies |
 | `test_issue_content_fidelity.py` | Cross-skill contract: content fidelity for issue body assembly |
 | `test_issue_splitter_contracts.py` | Contract tests: issue-splitter skill correctness and triage-issues integration |
-| `test_l1_packages.py` | Package export surface tests for the L1 sub-packages |
+| `test_l1_packages.py` | Package export surface tests for L1 sub-packages, including the default context-admission ledger |
 | `test_make_campaign_skill_contracts.py` | Contract tests: structural invariants for the make-campaign SKILL.md |
 | `test_make_plan_echo_rule.py` | Contract test: make-plan SKILL.md must contain requirement echo validation rule and Requirements Map template section |
 | `test_make_plan_remediation_inventory.py` | Focused contract: make-plan binds remediation output to explicit authority, exact dispositions, and immutable association |
@@ -81,7 +81,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_projection_cache_key.py` | Cache-key completeness — every input keyed or excluded with a written rationale |
 | `test_projection_freshness.py` | The projection matches the running package at every entrypoint, never a cache snapshot |
 | `test_protocol_definitions.py` | Tests for Protocol definitions in core/_type_protocols_*.py shards (REQ-PROTO-007) |
-| `test_protocol_satisfaction.py` | Tests for Protocol Contract Layer (GroupB) |
+| `test_protocol_satisfaction.py` | Runtime protocol conformance, including DefaultContextAdmissionLedger ↔ ContextAdmissionLedger |
 | `test_protocol_satisfaction_five.py` | Protocol satisfaction tests — Group Five (issue #1523) |
 | `test_review_design_contracts.py` | Contract tests for review-design SKILL.md — orchestration dispatch, output tokens, on_context_limit, and retained Critical Constraints |
 | `test_review_local_mode_contracts.py` | Contract tests for skill_contracts.yaml and SKILL.md validation for local review mode (mode=local) |

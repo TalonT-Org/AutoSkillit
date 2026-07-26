@@ -77,3 +77,4 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_closure_authority_spec.py` | Tests for ClosureAuthoritySpec and factory validation |
 | `test_closure_report.py` | Tests for ClosureRow and ClosureReport schema validation |
 | `types/test_context_admission_contract.py` | Frozen context-admission enums, records, unions, validation, serialization, and gateway contract |
+| `types/test_context_admission_persistence_contract.py` | Durable envelope, stream-key, shadow projection, storage result, and reducer-version contracts |

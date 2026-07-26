@@ -20,6 +20,7 @@ from tests._test_filter import (
     MODULE_CASCADE_CONFIG,
     MODULE_CASCADE_CORE,
     MODULE_CASCADE_EXECUTION,
+    MODULE_CASCADE_PIPELINE,
     MODULE_CASCADE_RECIPE,
     _file_to_package,
 )
@@ -211,6 +212,11 @@ def _build_execution_module_reverse_graph() -> dict[str, set[str]]:
     return _build_pkg_module_reverse_graph("execution", _build_reexport_map("execution"))
 
 
+def _build_pipeline_module_reverse_graph() -> dict[str, set[str]]:
+    """REQ-GUARD-001 (module level, pipeline). Returns {stem: set[consuming_pkg]}."""
+    return _build_pkg_module_reverse_graph("pipeline", _build_reexport_map("pipeline"))
+
+
 def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
     """REQ-GUARD-001 (module level, recipe). Returns {stem: set[consuming_pkg]}."""
     graph = _build_pkg_module_reverse_graph("recipe", _build_reexport_map("recipe"))
@@ -322,6 +328,45 @@ class TestModuleCascadeExecutionGuard:
             "the source file may have been renamed or deleted:\n"
             f"  {sorted(phantoms)}\n"
             "Remove the stale entry or rename it to match the current module."
+        )
+
+
+class TestModuleCascadePipelineGuard:
+    """REQ-PIPELINE-001: Validate pipeline cascades against actual AST imports."""
+
+    def test_module_cascade_pipeline_is_superset_of_ast_consumers(self) -> None:
+        graph = _build_pipeline_module_reverse_graph()
+        violations: dict[str, dict[str, list[str]]] = {}
+        for stem, declared in MODULE_CASCADE_PIPELINE.items():
+            actual = graph.get(stem, set())
+            declared_dirs = {entry for entry in declared if "/" not in entry}
+            file_prefixes = {entry.split("/", 1)[0] for entry in declared if "/" in entry}
+            missing = actual - (declared_dirs | file_prefixes)
+            if missing:
+                violations[stem] = {
+                    "declared": sorted(declared),
+                    "actual": sorted(actual),
+                    "missing": sorted(missing),
+                }
+        assert not violations, (
+            "MODULE_CASCADE_PIPELINE entries are too narrow — update tests/_test_filter.py:\n"
+            + "\n".join(
+                f"  {stem}: add {value['missing']} "
+                f"(declared={value['declared']}, actual={value['actual']})"
+                for stem, value in sorted(violations.items())
+            )
+        )
+
+    def test_module_cascade_pipeline_has_no_phantom_stems(self) -> None:
+        graph = _build_pipeline_module_reverse_graph()
+        phantoms = [
+            stem
+            for stem in MODULE_CASCADE_PIPELINE
+            if not graph.get(stem) and not (_SRC_ROOT / "pipeline" / f"{stem}.py").exists()
+        ]
+        assert not phantoms, (
+            "MODULE_CASCADE_PIPELINE contains stems with no consumers or source file:\n"
+            f"  {sorted(phantoms)}"
         )
 
 

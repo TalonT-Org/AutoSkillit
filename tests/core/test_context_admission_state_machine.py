@@ -25,12 +25,10 @@ from autoskillit.core import (
     AdmissionReservation,
     AdmissionReservationId,
     AdmissionReservationKey,
-    AdmissionSequence,
     AdmissionState,
     AdmissionWitness,
     AdmissionWitnessId,
     AgentInstanceId,
-    AggregateRevision,
     AuthoritySourceId,
     AuthorityUnavailableEffect,
     AuthorityUnavailableEvent,
@@ -97,6 +95,15 @@ from autoskillit.core import (
     reduce_context_admission,
     replay_context_admission,
 )
+from tests.fixtures.context_admission import (
+    idempotency_namespace as fixture_idempotency_namespace,
+)
+from tests.fixtures.context_admission import (
+    snapshot as fixture_snapshot,
+)
+from tests.fixtures.context_admission import (
+    uninitialized_state,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -108,32 +115,23 @@ _RESERVE_CLASS = st.sampled_from(
 
 
 def _namespace(operation_kind: str) -> IdempotencyNamespace:
-    return IdempotencyNamespace(caller_scope="state-machine", operation_kind=operation_kind)
+    return fixture_idempotency_namespace(operation_kind, caller_scope="state-machine")
 
 
 def _uninitialized() -> UninitializedContextAdmissionState:
-    return UninitializedContextAdmissionState(
-        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
-        aggregate_revision=AggregateRevision(0),
-        admission_sequence=AdmissionSequence(0),
-        processed_events=(),
-        idempotency_records=(),
-        expired_idempotency_tombstones=(),
-        closed_epochs=(),
-    )
+    return uninitialized_state()
 
 
 def _snapshot() -> ContextWindowSnapshot:
-    return ContextWindowSnapshot(
-        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
-        window_epoch_id=WindowEpochId("epoch-state-machine"),
-        window_epoch_number=1,
-        model_identity=ModelIdentity.anthropic("claude-state-machine"),
-        tokenizer_identity=TokenizerIdentity("tokenizer-state-machine"),
-        snapshot_sequence=1,
+    return fixture_snapshot(
+        epoch=1,
+        sequence=1,
         active_count=50,
         hard_limit=100,
         remaining_count=50,
+        model="claude-state-machine",
+        tokenizer="tokenizer-state-machine",
+        epoch_id="epoch-state-machine",
     )
 
 

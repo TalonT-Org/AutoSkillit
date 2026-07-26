@@ -97,6 +97,17 @@ def test_make_context_service_fields_are_typed_instances(tmp_path):
     assert isinstance(ctx.context_admission_ledger, DefaultContextAdmissionLedger)
 
 
+def test_make_context_creates_isolated_context_admission_ledgers(tmp_path) -> None:
+    first = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
+    second = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
+
+    assert first.context_admission_ledger is not second.context_admission_ledger
+    assert (
+        first.context_admission_ledger.database_path
+        == second.context_admission_ledger.database_path
+    )
+
+
 def test_make_context_github_client_is_default_fetcher(tmp_path):
     ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".", project_dir=tmp_path)
     assert isinstance(ctx.github_client, DefaultGitHubFetcher)

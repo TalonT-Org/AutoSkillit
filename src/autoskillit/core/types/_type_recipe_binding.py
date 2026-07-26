@@ -203,6 +203,20 @@ class BoundStepInvocation:
     skill_inputs: tuple[BoundValue, ...]
     failures: tuple[BindingFailure, ...] = ()
 
+    def __post_init__(self) -> None:
+        mcp_kwargs = tuple(self.mcp_kwargs)
+        skill_inputs = tuple(self.skill_inputs)
+        failures = tuple(self.failures)
+        if any(not isinstance(value, BoundValue) for value in mcp_kwargs):
+            raise TypeError("mcp_kwargs must contain only BoundValue entries")
+        if any(not isinstance(value, BoundValue) for value in skill_inputs):
+            raise TypeError("skill_inputs must contain only BoundValue entries")
+        if any(not isinstance(failure, BindingFailure) for failure in failures):
+            raise TypeError("failures must contain only BindingFailure entries")
+        object.__setattr__(self, "mcp_kwargs", mcp_kwargs)
+        object.__setattr__(self, "skill_inputs", skill_inputs)
+        object.__setattr__(self, "failures", failures)
+
     @property
     def is_valid(self) -> bool:
         return not self.failures

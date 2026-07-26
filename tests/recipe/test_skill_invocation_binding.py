@@ -14,6 +14,7 @@ from autoskillit.core import (
     ABSENT_BOUND_VALUE,
     BindingFailureCode,
     BindingMode,
+    BoundStepInvocation,
     BoundValue,
     BoundValueOrigin,
     BoundValueState,
@@ -106,6 +107,47 @@ def test_bound_value_rejects_contradictory_absence(
             effective_value=effective,
             state=state,
             origin=origin,
+        )
+
+
+def test_bound_step_invocation_freezes_collection_inputs() -> None:
+    value = BoundValue(
+        name="value",
+        declared_value="declared",
+        effective_value="effective",
+        state=BoundValueState.PRESENT,
+        origin=BoundValueOrigin.LITERAL,
+    )
+    mcp_kwargs = [value]
+    skill_inputs = [value]
+    failures = []
+
+    invocation = BoundStepInvocation(
+        step_name="verify",
+        tool_name="run_skill",
+        mode=BindingMode.RECIPE,
+        skill_name="dry-walkthrough",
+        mcp_kwargs=mcp_kwargs,  # type: ignore[arg-type]
+        skill_inputs=skill_inputs,  # type: ignore[arg-type]
+        failures=failures,  # type: ignore[arg-type]
+    )
+    mcp_kwargs.clear()
+    skill_inputs.clear()
+
+    assert invocation.mcp_kwargs == (value,)
+    assert invocation.skill_inputs == (value,)
+    assert invocation.failures == ()
+
+
+def test_bound_step_invocation_rejects_invalid_collection_elements() -> None:
+    with pytest.raises(TypeError, match="mcp_kwargs"):
+        BoundStepInvocation(
+            step_name="verify",
+            tool_name="run_skill",
+            mode=BindingMode.RECIPE,
+            skill_name="dry-walkthrough",
+            mcp_kwargs=("not-bound",),  # type: ignore[arg-type]
+            skill_inputs=(),
         )
 
 

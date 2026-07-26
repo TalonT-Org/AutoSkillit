@@ -713,28 +713,67 @@ def test_partial_bookkeeping_failure_resets_resident_state_and_allows_retry(
     evidence_cache, monkeypatch
 ) -> None:
     content = _document("bookkeeping", 'git commit -m "bookkeeping"')
-    original = capabilities._SkillCapabilityEvidenceCache._evict_if_needed_locked
+    scanner_entered = Event()
+    scanner_release = Event()
+    original_eviction = capabilities._SkillCapabilityEvidenceCache._evict_if_needed_locked
+    original_scanner = capabilities._scan_skill_capability_evidence_uncached
     failure = RuntimeError("bookkeeping failed")
 
     def fail_after_insertion(self):
         raise failure
+
+    def blocked_scanner(body: str, name: str):
+        scanner_entered.set()
+        assert scanner_release.wait(2)
+        return original_scanner(body, name)
 
     monkeypatch.setattr(
         capabilities._SkillCapabilityEvidenceCache,
         "_evict_if_needed_locked",
         fail_after_insertion,
     )
-    with pytest.raises(RuntimeError) as raised:
-        capabilities.classify_skill_capability_evidence(content)
-    assert raised.value is failure
+    monkeypatch.setattr(
+        capabilities,
+        "_scan_skill_capability_evidence_uncached",
+        blocked_scanner,
+    )
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        builder = executor.submit(
+            capabilities.classify_skill_capability_evidence,
+            content,
+        )
+        try:
+            assert scanner_entered.wait(2)
+            waiter = executor.submit(
+                capabilities.classify_skill_capability_evidence,
+                content,
+            )
+            _wait_for_cache_info(evidence_cache, lambda info: info.inflight_waiters == 1)
+            scanner_release.set()
+            with pytest.raises(RuntimeError) as builder_raised:
+                builder.result(timeout=2)
+            with pytest.raises(RuntimeError) as waiter_raised:
+                waiter.result(timeout=2)
+        finally:
+            scanner_release.set()
+
+    assert builder_raised.value is failure
+    assert waiter_raised.value is not failure
+    assert waiter_raised.value.__cause__ is failure
     assert evidence_cache.info().entry_count == 0
     assert evidence_cache.info().weight_bytes == 0
     assert evidence_cache.info().inflight_builds == 0
+    assert evidence_cache.info().inflight_waiters == 0
 
     monkeypatch.setattr(
         capabilities._SkillCapabilityEvidenceCache,
         "_evict_if_needed_locked",
-        original,
+        original_eviction,
+    )
+    monkeypatch.setattr(
+        capabilities,
+        "_scan_skill_capability_evidence_uncached",
+        original_scanner,
     )
     retry = capabilities.classify_skill_capability_evidence(content)
     assert retry[0].capability == "git_metadata_write"

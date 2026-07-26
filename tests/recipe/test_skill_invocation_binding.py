@@ -398,6 +398,51 @@ def test_required_and_wire_typed_tool_parameters_reject_invalid_shapes(
     )
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        {1: "non-string-key"},
+        {"nested": {"bad": object()}},
+        {"nested": [1.5]},
+    ],
+)
+def test_structured_tool_parameters_reject_noncanonical_json(args: object) -> None:
+    invocation = bind_step_invocation(
+        "step",
+        RecipeStep(
+            name="step",
+            tool="run_python",
+            with_args={"callable": "module:function", "args": args},
+        ),
+        manifest=_manifest(),
+    )
+
+    assert any(
+        failure.code is BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE and failure.name == "args"
+        for failure in invocation.failures
+    )
+
+
+def test_structured_tool_parameters_snapshot_nested_values() -> None:
+    nested = ["original"]
+    args = {"nested": nested}
+    invocation = bind_step_invocation(
+        "step",
+        RecipeStep(
+            name="step",
+            tool="run_python",
+            with_args={"callable": "module:function", "args": args},
+        ),
+        manifest=_manifest(),
+    )
+    bound_args = next(value for value in invocation.mcp_kwargs if value.name == "args")
+
+    nested.append("mutated")
+
+    assert bound_args.declared_value == {"nested": ("original",)}
+    assert bound_args.effective_value == {"nested": ("original",)}
+
+
 def test_missing_and_inline_plus_structured_inputs_reject() -> None:
     missing = _required_inputs()
     del missing["plan_path"]

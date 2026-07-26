@@ -144,6 +144,20 @@ def _bound_structured_value(name: str, declared: object, effective: object) -> B
     )
 
 
+def _snapshot_json_value(value: object) -> object:
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float):
+        raise ValueError("floating-point values are outside the canonical JSON profile")
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise ValueError("object keys must be strings")
+        return {key: _snapshot_json_value(nested) for key, nested in value.items()}
+    if isinstance(value, (list, tuple)):
+        return tuple(_snapshot_json_value(nested) for nested in value)
+    raise ValueError(f"unsupported nested value {type(value).__name__}")
+
+
 def _failure(
     code: BindingFailureCode,
     step_name: str,
@@ -566,7 +580,26 @@ def bind_step_invocation(
                     )
                 )
                 continue
-            mcp_kwargs.append(_bound_structured_value(param.name, declared, effective))
+            try:
+                declared_snapshot = _snapshot_json_value(declared)
+                effective_snapshot = _snapshot_json_value(effective)
+            except ValueError as exc:
+                failures.append(
+                    _failure(
+                        BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+                        step_name,
+                        param.name,
+                        f"tool parameter {param.name!r} is not canonical JSON: {exc}",
+                    )
+                )
+                continue
+            mcp_kwargs.append(
+                _bound_structured_value(
+                    param.name,
+                    declared_snapshot,
+                    effective_snapshot,
+                )
+            )
             continue
         if not _is_scalar(declared) or not _is_scalar(effective):
             failures.append(

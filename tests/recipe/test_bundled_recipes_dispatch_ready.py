@@ -72,6 +72,26 @@ def test_structured_skill_inputs_do_not_embed_cli_option_prefixes(recipe_name: s
 
 
 @pytest.mark.parametrize(
+    "recipe_name,step_name,selection_marker",
+    [
+        ("implementation-groups", "plan", "CURRENT group file path"),
+        ("research-implement", "plan_phase", "FIRST REMAINING phase file path"),
+    ],
+)
+def test_group_planning_binds_the_selected_file_in_structured_input(
+    recipe_name: str,
+    step_name: str,
+    selection_marker: str,
+) -> None:
+    recipe = load_recipe(_RECIPES_DIR / f"{recipe_name}.yaml")
+    task = recipe.steps[step_name].with_args["skill_inputs"]["task"]
+
+    assert task != "${{ context.group_files }}"
+    assert selection_marker in task
+    assert "${{ context.group_files }}" in task
+
+
+@pytest.mark.parametrize(
     "recipe_name,step_name",
     _SALVAGE_ROUTE_SITES,
     ids=[f"{r}:{s}" for r, s in _SALVAGE_ROUTE_SITES],

@@ -184,7 +184,7 @@
       "with": {
         "skill_command": "/autoskillit:make-plan",
         "skill_inputs": {
-          "task": "${{ context.group_files }}",
+          "task": "FIRST REMAINING phase file path from ${{ context.group_files }}",
           "audit_cycle_path": "${{ context.audit_cycle_path }}"
         },
         "cwd": "${{ inputs.worktree_path }}",
@@ -208,7 +208,7 @@
       ],
       "on_failure": "escalate_stop",
       "on_context_limit": "salvage_plan_phase",
-      "note": "Plans the current setup phase. Replace ${{ context.group_files }} in the skill_command with the FIRST REMAINING phase file path from the list — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob plan_dir for *_part_*.md or single plan file. ITERATION: After each implement_phase cycle, advance to the next entry in context.group_files for the following plan_phase iteration. REMEDIATION MODE: consume the exact audit_cycle_path from the NO GO producer and emit its plan_disposition_path. verdict=plan is the only success.\n",
+      "note": "Plans the current setup phase. Set skill_inputs.task to the FIRST REMAINING phase file path selected from context.group_files — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob plan_dir for *_part_*.md or single plan file. ITERATION: After each implement_phase cycle, advance to the next entry in context.group_files for the following plan_phase iteration. REMEDIATION MODE: consume the exact audit_cycle_path from the NO GO producer and emit its plan_disposition_path. verdict=plan is the only success.\n",
       "optional_context_refs": [
         "audit_cycle_path"
       ]

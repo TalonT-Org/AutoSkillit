@@ -1175,6 +1175,7 @@ def test_check_source_version_drift_ok_outside_source_repo(
     """GIT_VCS install with empty cache reports OK (no drift observable)."""
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1187,7 +1188,8 @@ def test_check_source_version_drift_ok_outside_source_repo(
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     # Simulate empty cache and no source repo: resolve returns None
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_reference_sha",
+        update_checks_module,
+        "resolve_reference_sha",
         lambda info, home, **kw: None,
     )
 
@@ -1223,6 +1225,7 @@ def test_check_source_version_drift_ok_for_pinned_sha(
     """When requested_revision == commit_id, resolve_reference_sha short-circuits → no drift."""
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
     sha = "abcdef1234567890abcdef1234567890"
@@ -1236,7 +1239,9 @@ def test_check_source_version_drift_ok_for_pinned_sha(
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     # When requested_revision == commit_id, resolve_reference_sha returns commit_id
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_reference_sha", lambda info, home, **kw: sha
+        update_checks_module,
+        "resolve_reference_sha",
+        lambda info, home, **kw: sha,
     )
 
     result = _check_source_version_drift(home=tmp_path)
@@ -1249,6 +1254,7 @@ def test_check_source_version_drift_ok_when_cache_empty(
     """When SHA cannot be resolved (network/cache miss), doctor reports OK."""
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
     info = InstallInfo(
@@ -1260,7 +1266,8 @@ def test_check_source_version_drift_ok_when_cache_empty(
     )
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_reference_sha",
+        update_checks_module,
+        "resolve_reference_sha",
         lambda info, home, **kw: None,
     )
 
@@ -1278,6 +1285,7 @@ def test_check_source_version_drift_warning_on_drift(
     """When cache has a different reference SHA than installed, reports WARNING with short SHAs."""
     from autoskillit.cli._install_info import InstallInfo, InstallType
     from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.update import _update_checks as update_checks_module
     from autoskillit.core import Severity
 
     installed_sha = "installed123abc"
@@ -1292,7 +1300,8 @@ def test_check_source_version_drift_warning_on_drift(
     )
     monkeypatch.setattr("autoskillit.cli._install_info.detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_reference_sha",
+        update_checks_module,
+        "resolve_reference_sha",
         lambda info, home, **kw: ref_sha,
     )
 

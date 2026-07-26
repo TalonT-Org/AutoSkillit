@@ -609,8 +609,8 @@ async def run_skill(
     recipe step must already be selected before this call.
 
     When a user names or asks to use an available local skill for the current interactive
-    conversation, load and follow its SKILL.md in the current interactive session. Do not call
-    run_skill merely because the skill was named.
+    conversation, load and follow its SKILL.md in the current interactive session.
+    Do not call run_skill merely because the skill was named.
 
     Returns JSON with success, result, session_id, subtype, is_error, exit_code, needs_retry,
     and retry_reason. When needs_retry is true, follow the recipe's declared retry route.

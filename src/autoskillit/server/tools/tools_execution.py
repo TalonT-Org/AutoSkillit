@@ -604,9 +604,9 @@ async def run_skill(
 ) -> str:
     """Delegate one already-selected recipe step to a separate L1 headless coding-agent worker.
 
-    Use this tool only when a headless L2 recipe orchestrator or an interactive AutoSkillit
-    cook/order session intends separate-worker delegation. The recipe step must already be
-    selected before this call.
+    Use this tool only when a headless recipe orchestrator operating at L2 or an
+    interactive AutoSkillit cook/order session intends separate-worker delegation. The
+    recipe step must already be selected before this call.
 
     When a user names or asks to use an available local skill for the current interactive
     conversation, load and follow its SKILL.md in the current interactive session. Do not call

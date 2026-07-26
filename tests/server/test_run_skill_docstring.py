@@ -39,7 +39,7 @@ class TestRunSkillDocstring:
     def test_docstring_has_positive_and_negative_selection_boundaries(self) -> None:
         docstring = _run_skill_docstring().casefold()
         assert "already-selected recipe step" in docstring
-        assert "headless l2 recipe orchestrator" in docstring
+        assert "headless recipe orchestrator operating at l2" in docstring
         assert "interactive autoskillit cook/order session" in docstring
         assert "separate l1 headless coding-agent worker" in docstring
         assert "available local skill" in docstring

@@ -730,7 +730,7 @@ class TestToolSchemas:
         description_lower = description.casefold()
 
         assert "already-selected recipe step" in description_lower
-        assert "headless l2 recipe orchestrator" in description_lower
+        assert "headless recipe orchestrator operating at l2" in description_lower
         assert "interactive autoskillit cook/order session" in description_lower
         assert "separate l1 headless coding-agent worker" in description_lower
         assert "available local skill" in description_lower

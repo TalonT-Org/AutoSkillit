@@ -69,6 +69,7 @@ from autoskillit.server._recipe_execution import (
     publish_verified_audit_cycle,
 )
 from autoskillit.server.tools.tools_execution import run_skill
+from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -1265,6 +1266,54 @@ async def test_runtime_attestation_rejects_before_executor(
     assert result["stage"] == "preflight:recipe_execution"
     assert "invocation_template_digest_mismatch" in result["error"]
     assert len(tool_ctx_kitchen_open.runner.call_args_list) == calls_before
+
+
+@pytest.mark.anyio
+async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
+    tool_ctx_kitchen_open,
+    tmp_path: Path,
+) -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_preflight_projection(),
+        execution_id="execution-1",
+    )
+    install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+    tool_ctx_kitchen_open.runner.push(
+        _make_result(
+            0,
+            '{"type":"result","subtype":"success","is_error":false,'
+            '"result":"done","session_id":"session-1"}',
+            "",
+        )
+    )
+    calls_before = len(tool_ctx_kitchen_open.runner.call_args_list)
+    plan_path = str(tmp_path / "plan.md")
+
+    result = json.loads(
+        await run_skill(
+            "/dry-walkthrough",
+            str(tmp_path),
+            step_name="dry",
+            recipe_execution_id="execution-1",
+            invocation_template_digest=snapshot.templates["dry"].template_digest,
+            skill_inputs={"plan_path": plan_path, "issue_url": ""},
+        )
+    )
+
+    assert result["success"] is True
+    assert len(tool_ctx_kitchen_open.runner.call_args_list) > calls_before
+    cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
+    prompt_index = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
+    prompt = cmd[prompt_index]
+    assert "AUTOSKILLIT_BOUND_INVOCATION_V1" in prompt
+    assert f'"value":"{plan_path}"' in prompt
+    installed = get_recipe_execution(tool_ctx_kitchen_open)
+    assert installed is not None
+    assert installed.runtime_binding_digests["dry"].startswith("sha256:")
 
 
 @pytest.mark.anyio

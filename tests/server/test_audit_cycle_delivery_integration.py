@@ -957,15 +957,26 @@ class AuditCycleLifecycleStateMachine(RuleBasedStateMachine):
                 part_id=self.part_id,
             )
         )
-        head = self.store.publish(
+        successor = f"{self.part_id}-successor" if verdict is AuditVerdict.GO else None
+        expected_head = AuditCycleHead(
+            execution_generation=authority.execution_generation,
+            cycle_id=authority.cycle_id,
+            plan_set_id=authority.plan_set_id,
+            scope_id=authority.scope_id,
+            part_id=authority.part_id,
+            current_authority_digest=authority.authority_digest,
+            audit_round=authority.audit_round,
+            verdict=authority.verdict,
+            authorized_successor_part_id=successor,
+        )
+        published_head = self.store.publish(
             authority,
             expected_parent_digest=(None if current is None else current.current_authority_digest),
             expected_round=0 if current is None else current.audit_round,
-            authorized_successor_part_id=(
-                f"{self.part_id}-successor" if verdict is AuditVerdict.GO else None
-            ),
+            authorized_successor_part_id=successor,
         )
-        self.model_heads[self._model_key()] = head
+        assert published_head == expected_head
+        self.model_heads[self._model_key()] = expected_head
         self.authorities[authority.authority_digest] = authority
         self.reports.pop(self._model_key(), None)
         self.history.append(authority)

@@ -58,10 +58,9 @@ def test_load_recipe_custom_temp_dir_substituted(tmp_path: Path) -> None:
     recipe = load_recipe(path, temp_dir_relpath="custom/x")
     cmd = recipe.steps["setup"].with_args["cmd"]
     assert cmd == 'mkdir -p "custom/x/worktrees"'
-    assert (
-        recipe.steps["setup"].declared_with_args["cmd"]
-        == 'mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees"'
-    )
+    declared_with_args = recipe.steps["setup"].declared_with_args
+    assert declared_with_args is not None
+    assert declared_with_args["cmd"] == 'mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees"'
 
 
 def test_load_recipe_rejects_yaml_unsafe_temp_dir_relpath(tmp_path: Path) -> None:

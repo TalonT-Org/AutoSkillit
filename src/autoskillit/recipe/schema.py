@@ -118,7 +118,7 @@ class RecipeStep:
     # Tool-specific binding validates ordinary values. Runtime validation below
     # reserves the one generic nested channel for structured child-skill inputs.
     with_args: dict[str, Any] = field(default_factory=dict)
-    declared_with_args: dict[str, Any] = field(default_factory=dict, repr=False)
+    declared_with_args: dict[str, Any] | None = field(default=None, repr=False)
     on_success: str | None = None
     on_failure: str | None = None
     on_context_limit: str | None = None
@@ -168,10 +168,11 @@ class RecipeStep:
                     raise TypeError(
                         "run_skill.with.skill_inputs must map names to strict scalar values"
                     )
-        if self.declared_with_args:
-            if self.declared_with_args.keys() != self.with_args.keys():
+        if self.declared_with_args is not None:
+            if not self.declared_with_args.keys() <= self.with_args.keys():
                 raise ValueError(
-                    "RecipeStep declared/effective with mappings must have identical keys"
+                    "RecipeStep declared with mapping cannot contain keys absent "
+                    "from the effective mapping"
                 )
         else:
             self.declared_with_args = dict(self.with_args)

@@ -289,8 +289,16 @@ def test_recipe_step_rejects_float_skill_inputs() -> None:
 
 
 def test_explicit_empty_declaration_rejects_effective_only_inputs() -> None:
-    step = _step(_required_inputs())
-    step.declared_with_args = {}
+    step = RecipeStep(
+        name="verify",
+        tool="run_skill",
+        with_args={
+            "skill_command": "/autoskillit:dry-walkthrough",
+            "cwd": "/repo",
+            "skill_inputs": _required_inputs(),
+        },
+        declared_with_args={},
+    )
 
     invocation = bind_step_invocation("verify", step, manifest=_manifest())
 
@@ -458,6 +466,7 @@ def test_missing_and_inline_plus_structured_inputs_reject() -> None:
     )
     ambiguous_step = _step(_required_inputs())
     ambiguous_step.with_args["skill_command"] = "/autoskillit:dry-walkthrough /tmp/inline-plan.md"
+    assert ambiguous_step.declared_with_args is not None
     ambiguous_step.declared_with_args["skill_command"] = (
         "/autoskillit:dry-walkthrough /tmp/inline-plan.md"
     )

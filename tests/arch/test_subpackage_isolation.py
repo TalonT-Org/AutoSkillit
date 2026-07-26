@@ -1018,7 +1018,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1100,
         "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
         "selection, receipt reservation, and compiled-execution publication form one "
-        "transactional authority boundary; the snapshot carrier keeps installation after "
+        "transactional authority boundary; the snapshot carrier keeps installation before "
         "durable delivery commit without introducing a second finalization path",
     ),
     "tools_kitchen.py": (

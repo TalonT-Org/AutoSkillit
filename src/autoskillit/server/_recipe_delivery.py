@@ -985,52 +985,41 @@ def complete_finalized_recipe_response(
     *,
     now_unix: int | None = None,
 ) -> Any:
-    """Commit only an exact enforced response; otherwise abort its pending receipt."""
+    """Install and commit an exact enforced response; otherwise abort its receipt."""
     handle = finalized.receipt_handle
     ledger = finalized.receipt_ledger
     if enforced == finalized.rendered:
-        if handle is None:
-            completed = enforced
-        elif ledger is not None and ledger.commit(
-            handle,
-            now_unix=int(time.time()) if now_unix is None else now_unix,
-        ):
-            completed = enforced
-        else:
-            completed = json.dumps(
+        if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
+            try:
+                from autoskillit.server._recipe_execution import (  # circular-break
+                    install_recipe_execution,
+                )
+
+                install_recipe_execution(
+                    finalized.tool_ctx,
+                    snapshot=finalized.execution_snapshot,
+                )
+            except Exception:
+                get_logger(__name__).error(
+                    "recipe execution snapshot installation failed",
+                    exc_info=True,
+                )
+                enforced = json.dumps(
+                    {"success": False, "error": "recipe_execution_install_failed"},
+                    separators=(",", ":"),
+                )
+        if enforced == finalized.rendered:
+            if handle is None:
+                return enforced
+            if ledger is not None and ledger.commit(
+                handle,
+                now_unix=int(time.time()) if now_unix is None else now_unix,
+            ):
+                return enforced
+            enforced = json.dumps(
                 {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
                 separators=(",", ":"),
             )
-        if completed == finalized.rendered:
-            if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
-                try:
-                    from autoskillit.server._recipe_execution import (  # circular-break
-                        install_recipe_execution,
-                    )
-
-                    install_recipe_execution(
-                        finalized.tool_ctx,
-                        snapshot=finalized.execution_snapshot,
-                    )
-                except Exception:
-                    get_logger(__name__).error(
-                        "recipe execution snapshot installation failed",
-                        exc_info=True,
-                    )
-                    from autoskillit.server._recipe_execution import (  # circular-break
-                        clear_recipe_execution,
-                    )
-
-                    clear_recipe_execution(finalized.tool_ctx)
-                    return json.dumps(
-                        {
-                            "success": False,
-                            "error": "recipe_execution_install_failed",
-                        },
-                        separators=(",", ":"),
-                    )
-            return completed
-        enforced = completed
     if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
         from autoskillit.server._recipe_execution import (  # circular-break
             clear_recipe_execution,

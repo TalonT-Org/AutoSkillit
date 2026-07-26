@@ -296,6 +296,48 @@ def test_delivery_persists_and_installs_matching_execution(
     )
 
 
+def test_failed_execution_install_aborts_receipt_before_commit(
+    minimal_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    finalized = finalize_recipe_delivery(
+        {
+            "content": "name: demo\n",
+            "content_hash": _HASH_A,
+            "composite_hash": _HASH_B,
+            "valid": True,
+        },
+        surface="load_recipe",
+        recipe_name="demo",
+        tool_ctx=minimal_ctx,
+        compiled_bindings=_projection(),
+    )
+    handle = MagicMock()
+    ledger = MagicMock()
+    ledger.commit.return_value = True
+    ledger.abort.return_value = True
+    finalized = replace(
+        finalized,
+        receipt_handle=handle,
+        receipt_ledger=ledger,
+    )
+    monkeypatch.setattr(
+        recipe_execution_module,
+        "install_recipe_execution",
+        MagicMock(side_effect=RuntimeError("install failed")),
+    )
+
+    result = json.loads(complete_finalized_recipe_response(finalized, finalized.rendered))
+
+    assert result == {
+        "success": False,
+        "error": "recipe_execution_install_failed",
+    }
+    ledger.commit.assert_not_called()
+    ledger.abort.assert_called_once_with(handle)
+    assert get_recipe_execution(minimal_ctx) is None
+
+
 def test_transformed_delivery_never_installs_execution(minimal_ctx) -> None:
     finalized = finalize_recipe_delivery(
         {

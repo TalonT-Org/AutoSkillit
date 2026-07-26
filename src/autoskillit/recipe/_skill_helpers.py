@@ -13,6 +13,13 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
+    from autoskillit.recipe._analysis import ValidationContext
+
+
+def bound_skill_name(ctx: ValidationContext, step_name: str) -> str | None:
+    """Return the compiler-resolved skill identity for a recipe step."""
+    invocation = ctx.binding_projection.for_step(step_name)
+    return invocation.skill_name if invocation is not None else None
 
 
 def get_allowed_values_for_skill(skill_name: str) -> dict[str, list[str]]:

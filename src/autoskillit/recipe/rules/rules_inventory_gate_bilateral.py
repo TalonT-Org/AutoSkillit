@@ -5,17 +5,9 @@ from __future__ import annotations
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import all_paths_cross, bfs_reachable
-from autoskillit.recipe.contracts import resolve_skill_name
+from autoskillit.recipe._skill_helpers import bound_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
-
-
-def _skill_name(ctx: ValidationContext, step_name: str) -> str | None:
-    invocation = ctx.binding_projection.for_step(step_name)
-    if invocation is not None and invocation.skill_name is not None:
-        return invocation.skill_name
-    step = ctx.recipe.steps[step_name]
-    return resolve_skill_name(str(step.with_args.get("skill_command", "")))
 
 
 def _has_bound_input(ctx: ValidationContext, step_name: str, name: str) -> bool:
@@ -56,7 +48,9 @@ def _no_go_routes(step: RecipeStep) -> tuple[str, ...]:
     severity=Severity.ERROR,
 )
 def _check_inventory_gate_bilateral(ctx: ValidationContext) -> list[RuleFinding]:
-    audit_steps = [name for name in ctx.recipe.steps if _skill_name(ctx, name) == "audit-impl"]
+    audit_steps = [
+        name for name in ctx.recipe.steps if bound_skill_name(ctx, name) == "audit-impl"
+    ]
     if not audit_steps:
         return []
 
@@ -74,12 +68,14 @@ def _check_inventory_gate_bilateral(ctx: ValidationContext) -> list[RuleFinding]
                 )
             )
 
-    make_plan_steps = {name for name in ctx.recipe.steps if _skill_name(ctx, name) == "make-plan"}
+    make_plan_steps = {
+        name for name in ctx.recipe.steps if bound_skill_name(ctx, name) == "make-plan"
+    }
     disposition_produced = any(
         "plan_disposition_path" in ctx.recipe.steps[name].capture for name in make_plan_steps
     )
     for step_name in ctx.recipe.steps:
-        if _skill_name(ctx, step_name) != "dry-walkthrough":
+        if bound_skill_name(ctx, step_name) != "dry-walkthrough":
             continue
         missing = [
             name
@@ -146,7 +142,7 @@ def _check_inventory_gate_bilateral(ctx: ValidationContext) -> list[RuleFinding]
             for dry_name in sorted(
                 name
                 for name in reachable
-                if name in ctx.recipe.steps and _skill_name(ctx, name) == "dry-walkthrough"
+                if name in ctx.recipe.steps and bound_skill_name(ctx, name) == "dry-walkthrough"
             ):
                 if any(
                     all_paths_cross(

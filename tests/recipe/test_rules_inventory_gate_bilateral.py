@@ -79,6 +79,22 @@ def _findings(steps: dict[str, RecipeStep]) -> list:
     ]
 
 
+def test_inventory_gate_uses_only_compiler_resolved_skill_identity() -> None:
+    steps = {
+        "not_a_skill": RecipeStep(
+            tool="run_cmd",
+            with_args={
+                "cmd": "true",
+                "cwd": "/repo",
+                "skill_command": "/autoskillit:audit-impl",
+            },
+        ),
+        "done": RecipeStep(action="stop"),
+    }
+
+    assert _findings(steps) == []
+
+
 def test_inventory_gate_bilateral_fires_for_missing_dry_tuple() -> None:
     findings = _findings(_audit_cycle_steps())
     assert len(findings) == 1

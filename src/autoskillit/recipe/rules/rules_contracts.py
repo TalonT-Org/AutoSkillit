@@ -6,6 +6,7 @@ import regex as re
 
 from autoskillit.core import SKILL_TOOLS, Severity, get_logger, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._skill_helpers import bound_skill_name
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
@@ -30,11 +31,6 @@ logger = get_logger(__name__)
 _HR_SPLIT_RE = re.compile(r"---\n+(/?\w[\w:.-]*---)")
 _DELIM_BOLD_RE = re.compile(r"\*{1,2}(---/?\w[\w:.-]*---)\*{1,2}")
 _DELIM_BACKTICK_RE = re.compile(r"`(---/?\w[\w:.-]*---)`")
-
-
-def _bound_skill_name(ctx: ValidationContext, step_name: str) -> str | None:
-    invocation = ctx.binding_projection.for_step(step_name)
-    return invocation.skill_name if invocation is not None else None
 
 
 def _normalize_for_pattern_match(text: str) -> str:
@@ -64,7 +60,7 @@ def _check_missing_output_patterns(ctx: ValidationContext) -> list[RuleFinding]:
         if step.tool != "run_skill":
             continue
 
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name:
             continue
 
@@ -104,7 +100,7 @@ def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name:
             continue
         contract = get_skill_contract(name, manifest)
@@ -155,7 +151,7 @@ def _check_missing_pattern_examples(ctx: ValidationContext) -> list[RuleFinding]
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name:
             continue
         contract = get_skill_contract(name, manifest)
@@ -193,7 +189,7 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
         if step.tool != "run_skill":
             continue
 
-        skill_name = _bound_skill_name(ctx, step_name)
+        skill_name = bound_skill_name(ctx, step_name)
         if not skill_name:
             continue
 
@@ -298,7 +294,7 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
         if step.tool != "run_skill":
             continue
 
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name:
             continue
 
@@ -383,7 +379,7 @@ def _check_result_field_drift(ctx: ValidationContext) -> list[RuleFinding]:
         if step.tool != "run_skill":
             continue
 
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name or name not in skill_schemas:
             continue
 
@@ -448,7 +444,7 @@ def _check_example_covers_all_allowed_values(ctx: ValidationContext) -> list[Rul
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name:
             continue
         contract = get_skill_contract(name, manifest)
@@ -508,7 +504,7 @@ def _check_all_examples_match_all_patterns(ctx: ValidationContext) -> list[RuleF
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name:
             continue
         contract = get_skill_contract(name, manifest)
@@ -565,7 +561,7 @@ def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFin
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name:
             continue
         contract = get_skill_contract(name, manifest)
@@ -627,7 +623,7 @@ def _check_write_skill_requires_source_output_dir(ctx: ValidationContext) -> lis
     for step_name, step in ctx.recipe.steps.items():
         if step.tool not in SKILL_TOOLS:
             continue
-        name = _bound_skill_name(ctx, step_name)
+        name = bound_skill_name(ctx, step_name)
         if not name:
             continue
         contract = get_skill_contract(name, manifest)

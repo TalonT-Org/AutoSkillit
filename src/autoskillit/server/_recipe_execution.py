@@ -67,10 +67,6 @@ __all__ = [
     "record_runtime_binding_digest",
 ]
 
-_RUN_SKILL_TOOL_DEF = get_tool_def("run_skill")
-if _RUN_SKILL_TOOL_DEF is None:
-    raise RuntimeError("canonical run_skill tool contract is unavailable")
-_TOOL_CONTRACT_IDENTITY = compute_tool_contract_identity(_RUN_SKILL_TOOL_DEF)
 _SKILL_CONTRACT_IDENTITY_DOMAIN = b"autoskillit:skill-contract:v1\0"
 
 
@@ -316,6 +312,13 @@ def _skill_contract_identity(
     return "sha256:" + hashlib.sha256(_SKILL_CONTRACT_IDENTITY_DOMAIN + payload).hexdigest()
 
 
+def _run_skill_tool_contract_identity() -> str:
+    tool_def = get_tool_def("run_skill")
+    if tool_def is None:
+        raise RuntimeError("canonical run_skill tool contract is unavailable")
+    return compute_tool_contract_identity(tool_def)
+
+
 def build_recipe_execution_snapshot(
     *,
     recipe_name: str,
@@ -326,6 +329,7 @@ def build_recipe_execution_snapshot(
 ) -> RecipeExecutionSnapshot:
     """Create a fresh attested snapshot from the exact post-prune projection."""
     active_execution_id = execution_id or uuid4().hex
+    tool_identity = _run_skill_tool_contract_identity()
     templates: dict[str, InvocationTemplate] = {}
     for step_name, invocation in projection.invocations.items():
         if invocation.tool_name != "run_skill" or not invocation.attested:
@@ -339,12 +343,12 @@ def build_recipe_execution_snapshot(
             content_hash=content_hash,
             composite_hash=composite_hash,
             invocation=invocation,
-            tool_contract_identity=_TOOL_CONTRACT_IDENTITY,
+            tool_contract_identity=tool_identity,
             skill_contract_identity=skill_identity,
         )
         templates[step_name] = InvocationTemplate(
             invocation=invocation,
-            tool_contract_identity=_TOOL_CONTRACT_IDENTITY,
+            tool_contract_identity=tool_identity,
             skill_contract_identity=skill_identity,
             template_digest=digest,
         )

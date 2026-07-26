@@ -1356,7 +1356,14 @@ async def test_runtime_attestation_rejects_before_executor(
 async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
     tool_ctx_kitchen_open,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    marker = "%%ORDER_UP::12345678%%"
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.uuid4",
+        lambda: SimpleNamespace(hex="12345678000000000000000000000000"),
+    )
+    tool_ctx_kitchen_open.write_expected_resolver = None
     snapshot = build_recipe_execution_snapshot(
         recipe_name="demo",
         content_hash=_HASH_A,
@@ -1369,8 +1376,15 @@ async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
     tool_ctx_kitchen_open.runner.push(
         _make_result(
             0,
-            '{"type":"result","subtype":"success","is_error":false,'
-            '"result":"done","session_id":"session-1"}',
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": f"done\n{marker}",
+                    "session_id": "session-1",
+                }
+            ),
             "",
         )
     )

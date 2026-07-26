@@ -276,6 +276,30 @@ def test_exact_aggregate_byte_boundary_and_one_byte_overflow(monkeypatch, scan_c
     assert len(scan_calls) == 3
 
 
+def test_non_ascii_input_over_byte_limit_bypasses_cache(monkeypatch, scan_calls) -> None:
+    effective_name = "unicode"
+    content = _document(
+        effective_name,
+        'éééééééééééééééé\ngit commit -m "unicode"',
+    )
+    character_weight = len(content) + len(effective_name)
+    encoded_weight = len(content.encode("utf-8")) + len(effective_name.encode("utf-8"))
+    assert encoded_weight > character_weight
+    cache = capabilities._SkillCapabilityEvidenceCache(
+        max_entries=2,
+        max_bytes=1024 * 1024,
+        max_input_bytes=character_weight,
+    )
+    monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+
+    capabilities.classify_skill_capability_evidence(content, effective_name)
+    capabilities.classify_skill_capability_evidence(content, effective_name)
+
+    assert scan_calls == [(content, effective_name), (content, effective_name)]
+    assert cache.info().entry_count == 0
+    assert cache.info().weight_bytes == 0
+
+
 def test_record_charge_and_multi_entry_byte_eviction(monkeypatch, scan_calls) -> None:
     charged_content = _document(
         "charged",

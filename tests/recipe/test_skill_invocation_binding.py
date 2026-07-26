@@ -283,6 +283,11 @@ def test_falsey_values_remain_present() -> None:
     assert invocation.skill_input("round").effective_value == 0  # type: ignore[union-attr]
 
 
+def test_recipe_step_rejects_float_skill_inputs() -> None:
+    with pytest.raises(TypeError, match="strict scalar"):
+        _step({"round": 1.5})  # type: ignore[dict-item]
+
+
 def test_explicit_empty_declaration_rejects_effective_only_inputs() -> None:
     step = _step(_required_inputs())
     step.declared_with_args = {}

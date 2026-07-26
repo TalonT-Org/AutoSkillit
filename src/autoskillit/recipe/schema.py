@@ -161,7 +161,7 @@ class RecipeStep:
                     )
                 if not all(
                     isinstance(input_name, str)
-                    and isinstance(input_value, (str, int, float, bool))
+                    and isinstance(input_value, (str, int, bool))
                     and input_value is not None
                     for input_name, input_value in value.items()
                 ):

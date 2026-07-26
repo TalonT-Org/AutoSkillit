@@ -572,6 +572,8 @@ class AuditCycleVerifier:
         try:
             requirement_ids_raw = inventory_raw["requirement_ids"]
             requirements_raw = inventory_raw["requirements"]
+            if not isinstance(requirement_ids_raw, list) or not isinstance(requirements_raw, list):
+                raise TypeError("requirement_ids and requirements must be arrays")
             requirement_ids = tuple(requirement_ids_raw)
             row_ids = tuple(item["id"] for item in requirements_raw)
         except (KeyError, TypeError) as exc:

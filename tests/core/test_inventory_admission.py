@@ -14,6 +14,7 @@ from autoskillit.core import (
     AuditAssessmentRow,
     AuditCycleAuthority,
     AuditCycleHead,
+    AuditCycleVerificationError,
     AuditCycleVerifier,
     AuditVerdict,
     InventoryAdmissionDecision,
@@ -21,7 +22,7 @@ from autoskillit.core import (
     PlanDispositionReport,
     PlanDispositionRow,
 )
-from autoskillit.core.closure_hashing import compute_bytes_hash
+from autoskillit.core.closure_hashing import canonical_json_bytes, compute_bytes_hash
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -340,6 +341,41 @@ def test_inventory_order_duplicates_missing_and_extra_reject(
         AdmissionReason.INVENTORY_INVALID,
         AdmissionReason.REQUIREMENT_ORDER_MISMATCH,
     }
+
+
+def test_inventory_requirement_ids_must_be_array(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    authority = _authority(tmp_path)
+    report = _report(tmp_path, authority)
+    inventory_bytes = canonical_json_bytes(
+        {
+            "schema_version": 1,
+            "requirement_ids": "AB",
+            "requirements": [{"id": "A"}, {"id": "B"}],
+        }
+    )
+    verifier = AuditCycleVerifier(tmp_path)
+    monkeypatch.setattr(verifier, "load_report", lambda _path: report)
+
+    def verify_artifact(ref: ArtifactRef) -> bytes:
+        if ref == authority.inventory_ref:
+            return inventory_bytes
+        if ref == report.current_plan_ref:
+            return _plan_text(report.dispositions).encode()
+        return b"verified"
+
+    monkeypatch.setattr(verifier, "verify_artifact_ref", verify_artifact)
+
+    with pytest.raises(AuditCycleVerificationError) as exc_info:
+        verifier._verify_active_tuple(
+            authority=authority,
+            report_path=tmp_path / "report.json",
+            trusted_head=_head(authority),
+            current_plan_path=report.current_plan_ref.locator,
+        )
+
+    assert exc_info.value.reason is AdmissionReason.INVENTORY_INVALID
 
 
 def test_report_row_reorder_rejects(tmp_path: Path) -> None:

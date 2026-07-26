@@ -10,6 +10,7 @@ Audit log, gate state, token tracking, and PR-gate tests.
 | `test_audit.py` | Tests for autoskillit.pipeline.audit — pipeline failure tracking |
 | `test_background_supervisor.py` | Unit tests for DefaultBackgroundSupervisor |
 | `test_context.py` | Tests for ToolContext dependency injection container |
+| `test_context_admission_ledger.py` | Secure initialization, atomic publication, replay, recovery, contention, and privacy tests for the context-admission ledger |
 | `test_gate.py` | Unit tests for _gate.py constants and functions |
 | `test_github_api_log.py` | GitHub API log tests |
 | `test_mcp_response.py` | Tests for autoskillit.pipeline.mcp_response — MCP tool response size tracking |

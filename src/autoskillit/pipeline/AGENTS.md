@@ -10,6 +10,7 @@ IL-1 pipeline state — per-tool-call state containers, gate logic, audit log, t
 | `audit.py` | `FailureRecord`, `DefaultAuditLog` |
 | `background.py` | `DefaultBackgroundSupervisor` |
 | `context.py` | `ToolContext` DI container |
+| `context_admission_ledger.py` | Crash-safe SQLite journal, recovery, and shadow projections for context admission |
 | `gate.py` | `DefaultGateState`, `gate_error_result` |
 | `github_api_log.py` | `DefaultGitHubApiLog` — session-scoped GitHub API request accumulator |
 | `mcp_response.py` | Per-tool response size tracking |

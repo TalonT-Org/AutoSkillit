@@ -312,6 +312,10 @@ class AuditCycleAuthority:
             self.audited_plan_refs
         ):
             raise ValueError("AuditCycleAuthority.audited_plan_refs contain duplicate content")
+        if not isinstance(self.inventory_ref, ArtifactRef):
+            raise ValueError("AuditCycleAuthority.inventory_ref must be an ArtifactRef")
+        if self.remediation_ref is not None and not isinstance(self.remediation_ref, ArtifactRef):
+            raise ValueError("AuditCycleAuthority.remediation_ref must be an ArtifactRef")
         ids = tuple(row.requirement_id for row in self.assessments)
         if len(set(ids)) != len(ids):
             raise ValueError("AuditCycleAuthority.assessments contain duplicate requirement IDs")

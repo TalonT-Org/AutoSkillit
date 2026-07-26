@@ -179,6 +179,12 @@ def test_authority_rejects_invalid_collection_elements(
         replace(_authority(tmp_path), **{field: value})
 
 
+@pytest.mark.parametrize("field", ["inventory_ref", "remediation_ref"])
+def test_authority_rejects_non_artifact_references(tmp_path: Path, field: str) -> None:
+    with pytest.raises(ValueError, match=rf"{field} must be an ArtifactRef"):
+        replace(_authority(tmp_path), **{field: object()})
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

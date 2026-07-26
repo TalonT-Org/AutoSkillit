@@ -283,6 +283,21 @@ def test_falsey_values_remain_present() -> None:
     assert invocation.skill_input("round").effective_value == 0  # type: ignore[union-attr]
 
 
+def test_explicit_empty_declaration_rejects_effective_only_inputs() -> None:
+    step = _step(_required_inputs())
+    step.declared_with_args = {}
+
+    invocation = bind_step_invocation("verify", step, manifest=_manifest())
+
+    assert not invocation.attested
+    undeclared = {
+        failure.name
+        for failure in invocation.failures
+        if "absent from the declaration" in failure.message
+    }
+    assert undeclared == {"cwd", "skill_command", "skill_inputs"}
+
+
 def test_spaces_and_shell_metacharacters_round_trip_as_data() -> None:
     values = _required_inputs()
     values["optional_note"] = "a path; $(touch never) && 'quoted value'"

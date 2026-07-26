@@ -482,9 +482,8 @@ def bind_step_invocation(
 
     tool_name = step.tool or ""
     effective_with: Mapping[str, object] = step.with_args or {}
-    declared_with: Mapping[str, object] = (
-        getattr(step, "declared_with_args", None) or effective_with
-    )
+    declared_candidate: Mapping[str, object] | None = getattr(step, "declared_with_args", None)
+    declared_with = effective_with if declared_candidate is None else declared_candidate
     tool_def = get_tool_def(tool_name)
     if tool_def is None:
         failure = _failure(
@@ -497,6 +496,16 @@ def bind_step_invocation(
 
     failures: list[BindingFailure] = []
     active_manifest = manifest if manifest is not None else load_bundled_manifest()
+    undeclared_effective_params = frozenset(effective_with) - frozenset(declared_with)
+    for name in sorted(undeclared_effective_params):
+        failures.append(
+            _failure(
+                BindingFailureCode.UNKNOWN_TOOL_PARAMETER,
+                step_name,
+                name,
+                f"effective tool parameter {name!r} is absent from the declaration",
+            )
+        )
     authorable_params = tool_def.param_set
     if tool_name == "run_python":
         callable_name = effective_with.get("callable")

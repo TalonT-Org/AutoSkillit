@@ -743,6 +743,24 @@ class InventoryAdmissionDecision:
     details: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "dispositions",
+            _immutable_typed_tuple(
+                "InventoryAdmissionDecision.dispositions",
+                self.dispositions,
+                PlanDispositionRow,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "details",
+            _immutable_typed_tuple(
+                "InventoryAdmissionDecision.details",
+                self.details,
+                str,
+            ),
+        )
         if not isinstance(self.status, AdmissionStatus):
             raise ValueError("InventoryAdmissionDecision.status must be an AdmissionStatus")
         if not isinstance(self.reason, AdmissionReason):

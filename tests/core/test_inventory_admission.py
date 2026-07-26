@@ -256,6 +256,39 @@ def test_admission_decision_rejects_contradictory_status_matrix(decision) -> Non
         decision()
 
 
+def test_admission_decision_snapshots_typed_payload_collections() -> None:
+    mutable_dispositions = list(_dispositions())
+    admitted = InventoryAdmissionDecision(
+        status=AdmissionStatus.PASS,
+        reason=AdmissionReason.ADMITTED,
+        dispositions=mutable_dispositions,  # type: ignore[arg-type]
+    )
+    mutable_dispositions.clear()
+    assert admitted.dispositions == _dispositions()
+
+    mutable_details = ["rejected"]
+    rejected = InventoryAdmissionDecision(
+        status=AdmissionStatus.REJECT,
+        reason=AdmissionReason.INTERNAL_ERROR,
+        details=mutable_details,  # type: ignore[arg-type]
+    )
+    mutable_details.clear()
+    assert rejected.details == ("rejected",)
+
+    with pytest.raises(ValueError, match="PlanDispositionRow"):
+        InventoryAdmissionDecision(
+            status=AdmissionStatus.PASS,
+            reason=AdmissionReason.ADMITTED,
+            dispositions=[object()],  # type: ignore[list-item, arg-type]
+        )
+    with pytest.raises(ValueError, match="str"):
+        InventoryAdmissionDecision(
+            status=AdmissionStatus.REJECT,
+            reason=AdmissionReason.INTERNAL_ERROR,
+            details=[object()],  # type: ignore[list-item, arg-type]
+        )
+
+
 def test_complete_two_disposition_truth_table_passes(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     report = _report(tmp_path, authority)

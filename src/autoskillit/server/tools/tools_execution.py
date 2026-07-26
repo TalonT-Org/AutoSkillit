@@ -1216,7 +1216,7 @@ async def run_skill(
                 if invocation.root.source_ref is None:
                     raise SkillContractError("Effective skill source identity is missing")
                 resolved_command = render_target_skill_command(
-                    skill_command,
+                    child_skill_command,
                     invocation.root.source_ref,
                     (
                         _effective_backend_obj.conventions

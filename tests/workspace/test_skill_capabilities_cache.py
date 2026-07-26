@@ -204,7 +204,7 @@ def test_cold_and_warm_mixed_corpus_preserves_complete_evidence(
         (
             "github_api_write",
             "external",
-            "descriptive",
+            "inbound",
             "artifact",
             (8, 8),
             'gh issue edit 42 --body-file "artifact.md"',

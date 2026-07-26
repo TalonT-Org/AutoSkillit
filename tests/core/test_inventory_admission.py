@@ -116,8 +116,11 @@ def _report(
     rows: tuple[PlanDispositionRow, ...] | None = None,
     cycle_id: str | None = None,
     generation: str | None = None,
+    plan_set_id: str | None = None,
     scope_id: str | None = None,
     part_id: str | None = None,
+    audit_round: int | None = None,
+    parent_authority_digest: str | None = None,
     inventory_digest: str | None = None,
     findings_digest: str | None = None,
 ) -> PlanDispositionReport:
@@ -128,11 +131,11 @@ def _report(
     return PlanDispositionReport.create(
         execution_generation=generation or authority.execution_generation,
         cycle_id=cycle_id or authority.cycle_id,
-        plan_set_id=authority.plan_set_id,
+        plan_set_id=plan_set_id or authority.plan_set_id,
         scope_id=scope_id or authority.scope_id,
         part_id=part_id or authority.part_id,
-        audit_round=authority.audit_round,
-        parent_authority_digest=authority.authority_digest,
+        audit_round=audit_round if audit_round is not None else authority.audit_round,
+        parent_authority_digest=parent_authority_digest or authority.authority_digest,
         inventory_digest=inventory_digest or authority.inventory_ref.content_digest,
         findings_digest=findings_digest or authority.findings_digest,
         current_plan_ref=_ref(
@@ -302,8 +305,14 @@ def test_authoritative_empty_findings_satisfies_every_row(tmp_path: Path) -> Non
     [
         ({"cycle_id": "cycle-other"}, AdmissionReason.CYCLE_MISMATCH),
         ({"generation": "generation-other"}, AdmissionReason.GENERATION_MISMATCH),
+        ({"plan_set_id": "plans-other"}, AdmissionReason.PLAN_SET_MISMATCH),
         ({"scope_id": "scope-other"}, AdmissionReason.SCOPE_MISMATCH),
         ({"part_id": "part-b"}, AdmissionReason.PART_MISMATCH),
+        ({"audit_round": 3}, AdmissionReason.ROUND_MISMATCH),
+        (
+            {"parent_authority_digest": "sha256:" + "d" * 64},
+            AdmissionReason.PARENT_MISMATCH,
+        ),
         ({"inventory_digest": _HASH_A}, AdmissionReason.INVENTORY_MISMATCH),
         (
             {"findings_digest": "sha256:" + "c" * 64},

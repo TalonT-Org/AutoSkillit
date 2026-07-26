@@ -723,6 +723,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_recipe_backend_composition_matrix.py",
             "recipe/test_recipe_composition_vacuous_gate.py",
             "recipe/test_rules_backend_compat.py",
+            "recipe/test_rules_cmd.py",
             "recipe/test_rules_skill_content.py",
             "recipe/test_rules_stamp_ownership.py",
             # recipe transitive entries (exercise workspace via deferred imports in

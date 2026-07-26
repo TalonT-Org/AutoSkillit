@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.recipe._contracts_types import SkillInput, SkillOutput
+from autoskillit.recipe._contracts_types import SkillContract, SkillInput, SkillOutput
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -20,6 +20,17 @@ def test_skill_input_rejects_noncanonical_float(input_type: str) -> None:
 
     assert skill_input.accepts(1)
     assert not skill_input.accepts(1.5)
+
+
+def test_skill_contract_rejects_unknown_input_preflight() -> None:
+    with pytest.raises(ValueError, match="unsupported input preflight"):
+        SkillContract(inputs=(), outputs=[], input_preflight="unknown")
+
+
+def test_skill_contract_accepts_supported_input_preflight() -> None:
+    contract = SkillContract(inputs=(), outputs=[], input_preflight="audit_cycle_inventory")
+
+    assert contract.input_preflight == "audit_cycle_inventory"
 
 
 def test_skill_output_accepts_allowed_values_kwarg() -> None:

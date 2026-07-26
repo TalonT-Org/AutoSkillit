@@ -6,6 +6,8 @@ import dataclasses
 
 import regex as re
 
+from autoskillit.core import PreflightKind
+
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
@@ -80,6 +82,14 @@ class SkillContract:
     outcome_invariants: list[OutcomeInvariantEntry] = dataclasses.field(default_factory=list)
     success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
     input_preflight: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.input_preflight is None:
+            return
+        try:
+            self.input_preflight = PreflightKind(self.input_preflight).value
+        except ValueError as exc:
+            raise ValueError(f"unsupported input preflight: {self.input_preflight!r}") from exc
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

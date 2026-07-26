@@ -46,7 +46,10 @@ from autoskillit.recipe._api_listing import (  # noqa: F401
     validate_from_path,
 )
 from autoskillit.recipe._binding import bind_recipe
-from autoskillit.recipe._io_loading import load_recipe_dict_with_declarations
+from autoskillit.recipe._io_loading import (
+    assert_no_raw_placeholders,
+    load_recipe_dict_with_declarations,
+)
 from autoskillit.recipe._recipe_composition import (
     _assert_content_integrity,
     _build_active_recipe,
@@ -86,7 +89,6 @@ from autoskillit.recipe.diagrams import (
 )
 from autoskillit.recipe.io import (
     RecipeInfo,
-    _assert_no_raw_placeholders,
     _parse_recipe,
     builtin_recipes_dir,
     builtin_sub_recipes_dir,
@@ -633,7 +635,7 @@ def load_and_validate(
         if active_recipe is not None
         else None
     )
-    _assert_no_raw_placeholders(raw, context=name, hidden_ingredient_names=_hidden_names)
+    assert_no_raw_placeholders(raw, context=name, hidden_ingredient_names=_hidden_names)
     result: LoadRecipeResult = {
         "content": raw,
         "errors": errors,

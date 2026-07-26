@@ -23,7 +23,6 @@ from autoskillit.recipe._io_loading import (
     _SCRIPTS_PLACEHOLDER as _SCRIPTS_PLACEHOLDER,
 )
 from autoskillit.recipe._io_loading import (
-    assert_no_raw_placeholders,
     load_recipe_dict_with_declarations,
 )
 from autoskillit.recipe._io_loading import (
@@ -47,7 +46,6 @@ from autoskillit.recipe.schema import (
 )
 
 logger = get_logger(__name__)
-_assert_no_raw_placeholders = assert_no_raw_placeholders
 
 
 def step_byte_ranges_from_yaml(content: str) -> dict[str, tuple[int, int]]:

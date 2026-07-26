@@ -26,6 +26,7 @@ Workspace cleanup, clone lifecycle, session skills, and worktree tests.
 | `test_session_skills_provider.py` | Tests for unified projection and exact-catalog materialization |
 | `test_session_skills_stale_path.py` | Tests for validate_session_exists() and cleanup_stale() structured logging |
 | `test_skill_content_substitution.py` | Tests for SkillsDirectoryProvider.get_skill_content placeholder substitution |
+| `test_skill_capabilities_cache.py` | Bounded semantic-evidence cache identity, eviction, admission, and concurrency contracts |
 | `test_skill_format.py` | Unit tests for skill frontmatter validation functions |
 | `test_skills.py` | Tests for skill resolution hierarchy |
 | `test_worktree.py` | Worktree tests |

@@ -260,6 +260,87 @@ def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
     assert second.execution_role.value == "orchestrator"
 
 
+def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeypatch) -> None:
+    """Changed canonical bytes must bypass a resident semantic classification."""
+    import hashlib
+
+    import autoskillit.workspace.skill_capabilities as capability_module
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    cache = capability_module._SkillCapabilityEvidenceCache(
+        max_entries=capability_module._SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_ENTRIES,
+        max_bytes=capability_module._SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_BYTES,
+        max_input_bytes=(capability_module._SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_INPUT_BYTES),
+    )
+    monkeypatch.setattr(
+        capability_module,
+        "_SKILL_CAPABILITY_EVIDENCE_CACHE",
+        cache,
+    )
+    scan_keys: list[tuple[str, str]] = []
+    original_scanner = capability_module._scan_skill_capability_evidence_uncached
+
+    def recording_scanner(content: str, effective_name: str):
+        scan_keys.append((content, effective_name))
+        return original_scanner(content, effective_name)
+
+    monkeypatch.setattr(
+        capability_module,
+        "_scan_skill_capability_evidence_uncached",
+        recording_scanner,
+    )
+    project = tmp_path / "project"
+    skill_root = project / ".claude" / "skills"
+    skill_path = _write_effective_skill(
+        skill_root,
+        "cache-rewrite-target",
+        capabilities=("git_metadata_write",),
+        execution_role="session",
+        body='git commit -m "first sentinel"',
+    )
+    resolver = DefaultSkillResolver()
+
+    first = resolver.resolve_effective("cache-rewrite-target", project)
+
+    assert first is not None
+    assert first.invalid_reason is None
+    first_evidence = capability_module.classify_skill_capability_evidence(
+        first.canonical_content,
+        first.name,
+    )
+    assert first_evidence[0].source == 'git commit -m "first sentinel"'
+    assert first.canonical_digest == hashlib.sha256(skill_path.read_bytes()).hexdigest()
+
+    _write_effective_skill(
+        skill_root,
+        "cache-rewrite-target",
+        capabilities=("agent_model",),
+        execution_role="session",
+        body='git commit -m "second sentinel"',
+    )
+    second = resolver.resolve_effective("cache-rewrite-target", project)
+
+    assert second is not None
+    assert second is not first
+    assert second.canonical_content != first.canonical_content
+    assert second.canonical_digest != first.canonical_digest
+    assert second.canonical_digest == hashlib.sha256(skill_path.read_bytes()).hexdigest()
+    second_evidence = capability_module.classify_skill_capability_evidence(
+        second.canonical_content,
+        second.name,
+    )
+    assert second_evidence[0].source == 'git commit -m "second sentinel"'
+    assert second_evidence[0].source_span == (7, 7)
+    assert second.invalid_reason is not None
+    assert "missing declaration for 'git_metadata_write'" in second.invalid_reason
+    assert "second sentinel" in second.invalid_reason
+    assert "first sentinel" not in second.invalid_reason
+    assert scan_keys == [
+        (first.canonical_content, "cache-rewrite-target"),
+        (second.canonical_content, "cache-rewrite-target"),
+    ]
+
+
 def test_resolve_effective_observes_removed_override_and_falls_back(tmp_path, monkeypatch):
     """Removing a winning override exposes the lower-priority source on the next lookup."""
     from autoskillit.workspace.skills import DefaultSkillResolver

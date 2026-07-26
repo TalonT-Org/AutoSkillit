@@ -12,7 +12,7 @@ IL-1 workspace management — clone lifecycle, worktrees, skill resolution.
 | `_clone_detect.py` | `detect_*` helpers + `RUNS_DIR` + `classify_remote_url` |
 | `_clone_remote.py` | `CloneSourceResolution` + probe/isolate remotes |
 | `session_skills.py` | Per-session ephemeral skill dirs; subset filtering |
-| `skill_capabilities.py` | Semantic classification and validation of skill capability evidence |
+| `skill_capabilities.py` | Semantic classification, bounded process-local evidence memoization, and capability validation |
 | `skill_format.py` | SKILL.md frontmatter validation per agentskills.io spec |
 | `skill_projection.py` | Agent-safe projections of typed skill machine contracts |
 | `_projection_cache.py` | Projection asset inventory, cache-key record, and orphan sweep |
@@ -44,3 +44,7 @@ Clone paths live under `RUNS_DIR` (resolved by `_clone_detect.py`). `clone_regis
 coordinates deferred cleanup across concurrent pipeline sessions using file-based locking.
 `session_skills.py` builds per-session ephemeral copies of the bundled skill set so that
 headless sessions can use a filtered subset without polluting the installed package.
+
+`skill_capabilities.py` owns a process-local, weighted LRU keyed by exact canonical
+content and normalized logical skill name. The cache bounds resident entries and
+accounted payload bytes while coordinating concurrent scans outside its lock.

@@ -1360,7 +1360,7 @@ async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
 ) -> None:
     marker = "%%ORDER_UP::12345678%%"
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.uuid4",
+        "uuid.uuid4",
         lambda: SimpleNamespace(hex="12345678000000000000000000000000"),
     )
     tool_ctx_kitchen_open.write_expected_resolver = None

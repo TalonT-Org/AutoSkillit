@@ -81,6 +81,13 @@ def test_resident_semantic_input_scans_once_and_reuses_tuple(evidence_cache, sca
     assert evidence_cache.info().entry_count == 1
 
 
+def test_cache_info_is_an_immutable_policy_snapshot(evidence_cache) -> None:
+    info = evidence_cache.info()
+
+    with pytest.raises(FrozenInstanceError):
+        info.entry_count = 0  # type: ignore[misc]
+
+
 def test_empty_evidence_tuple_is_a_cache_hit(evidence_cache, scan_calls) -> None:
     content = _document("empty", "Pure prose without a capability operation.")
 
@@ -546,6 +553,88 @@ def test_waiter_receives_builder_tuple_after_resident_eviction(
 
     assert waiter_result is builder_result
     assert cache.info().entry_count == 1
+
+
+def test_resuming_waiter_refreshes_same_resident_generation_to_mru(
+    monkeypatch, scan_calls
+) -> None:
+    cache = capabilities._SkillCapabilityEvidenceCache(
+        max_entries=2,
+        max_bytes=1024 * 1024,
+        max_input_bytes=64 * 1024,
+    )
+    monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
+    first_content = _document("first", 'git commit -m "first"')
+    second_content = _document("second", 'git commit -m "second"')
+    third_content = _document("third", 'git commit -m "third"')
+    scanner_entered = Event()
+    scanner_release = Event()
+    waiter_awakened = Event()
+    waiter_release = Event()
+    original_scanner = capabilities._scan_skill_capability_evidence_uncached
+
+    class PausingEvent:
+        def __init__(self) -> None:
+            self._event = Event()
+
+        def set(self) -> None:
+            self._event.set()
+
+        def wait(self, timeout: float | None = None) -> bool:
+            assert self._event.wait(timeout)
+            waiter_awakened.set()
+            assert waiter_release.wait(2)
+            return True
+
+    def new_build_state(_self):
+        return capabilities._SkillCapabilityEvidenceBuildState(
+            event=PausingEvent(),  # type: ignore[arg-type]
+        )
+
+    def blocked_scanner(body: str, name: str):
+        if name == "first":
+            scanner_entered.set()
+            assert scanner_release.wait(2)
+        return original_scanner(body, name)
+
+    monkeypatch.setattr(
+        capabilities._SkillCapabilityEvidenceCache,
+        "_new_build_state",
+        new_build_state,
+    )
+    monkeypatch.setattr(
+        capabilities,
+        "_scan_skill_capability_evidence_uncached",
+        blocked_scanner,
+    )
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            builder = executor.submit(
+                capabilities.classify_skill_capability_evidence,
+                first_content,
+            )
+            assert scanner_entered.wait(2)
+            waiter = executor.submit(
+                capabilities.classify_skill_capability_evidence,
+                first_content,
+            )
+            _wait_for_cache_info(cache, lambda info: info.inflight_waiters == 1)
+            scanner_release.set()
+            first_result = builder.result(timeout=2)
+            assert waiter_awakened.wait(2)
+            capabilities.classify_skill_capability_evidence(second_content)
+            waiter_release.set()
+            assert waiter.result(timeout=2) is first_result
+    finally:
+        scanner_release.set()
+        waiter_release.set()
+
+    capabilities.classify_skill_capability_evidence(third_content)
+    assert capabilities.classify_skill_capability_evidence(first_content) is first_result
+    capabilities.classify_skill_capability_evidence(second_content)
+    assert Counter(name for _, name in scan_calls) == Counter(
+        {"second": 2, "first": 1, "third": 1}
+    )
 
 
 def test_scanner_failure_releases_waiters_and_allows_retry(evidence_cache, monkeypatch) -> None:

@@ -25,6 +25,9 @@ CapabilityDirection = Literal["outbound", "inbound", "descriptive"]
 CapabilitySourceClassification = Literal["executable", "artifact"]
 _SkillCapabilityEvidenceKey = tuple[str, str]
 
+# Accounted resident payload includes exact key strings, evidence source strings,
+# and a stable policy charge per immutable evidence record. Entry count bounds
+# the remaining fixed per-entry overhead.
 _SKILL_CAPABILITY_EVIDENCE_RECORD_WEIGHT_BYTES = 192
 _SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_ENTRIES = 256
 _SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_BYTES = 16 * 1024 * 1024

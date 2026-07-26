@@ -45,6 +45,9 @@ __all__ = [
     "SynthesisStrategy",
     "AdmissionState",
     "AdmissionDecisionKind",
+    "ContextAdmissionAccountingStatus",
+    "ContextAdmissionStorageHealthStatus",
+    "ContextAdmissionStorageFailureReason",
     "ChargeDomain",
     "GenerationState",
     "MeasurementKind",
@@ -682,6 +685,44 @@ class AdmissionDecisionKind(StrEnum):
     CONFLICT = "conflict"
     IDEMPOTENCY_EXPIRED = "idempotency_expired"
     QUARANTINED = "quarantined"
+
+
+@unique
+class ContextAdmissionAccountingStatus(StrEnum):
+    """Closed outcome vocabulary for durable context accounting."""
+
+    RECORDED = "recorded"
+    EXACT_REPLAY = "exact_replay"
+    SEMANTIC_REJECTION = "semantic_rejection"
+    RECONCILIATION_REQUIRED = "reconciliation_required"
+    PROTOCOL_QUARANTINED = "protocol_quarantined"
+    CONTENDED = "contended"
+    STORAGE_FAIL_CLOSED = "storage_fail_closed"
+
+
+@unique
+class ContextAdmissionStorageHealthStatus(StrEnum):
+    """Storage health, intentionally separate from protocol lifecycle."""
+
+    UNINITIALIZED = "uninitialized"
+    HEALTHY = "healthy"
+    FAIL_CLOSED = "fail_closed"
+
+
+@unique
+class ContextAdmissionStorageFailureReason(StrEnum):
+    """Bounded reasons for sticky storage-health failure."""
+
+    CONFIGURATION = "configuration"
+    IO = "io"
+    SECURITY_IDENTITY = "security_identity"
+    INTEGRITY = "integrity"
+    UNSUPPORTED_SCHEMA = "unsupported_schema"
+    UNSUPPORTED_ENCODING = "unsupported_encoding"
+    UNSUPPORTED_PROTOCOL = "unsupported_protocol"
+    REPLAY_MISMATCH = "replay_mismatch"
+    IDENTITY_MISMATCH = "identity_mismatch"
+    AMBIGUOUS_RECOVERY = "ambiguous_recovery"
 
 
 @unique

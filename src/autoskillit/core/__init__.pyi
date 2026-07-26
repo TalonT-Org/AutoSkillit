@@ -66,10 +66,19 @@ from .closure_hashing import parse_canonical_json_bytes as parse_canonical_json_
 from .closure_verifier import VerificationResult as VerificationResult
 from .closure_verifier import verify_closure_report as verify_closure_report
 from .context_admission import (
+    CONTEXT_ADMISSION_REDUCER_REGISTRY as CONTEXT_ADMISSION_REDUCER_REGISTRY,
+)
+from .context_admission import (
+    ContextAdmissionReducerDef as ContextAdmissionReducerDef,
+)
+from .context_admission import (
     ContextAdmissionValidationError as ContextAdmissionValidationError,
 )
 from .context_admission import (
     UnsupportedContextAdmissionProtocolError as UnsupportedContextAdmissionProtocolError,
+)
+from .context_admission import (
+    context_admission_reducer_for_protocol as context_admission_reducer_for_protocol,
 )
 from .context_admission import (
     reduce_context_admission as reduce_context_admission,
@@ -225,7 +234,16 @@ from .types import CODEX_VALID_MODEL_IDS as CODEX_VALID_MODEL_IDS
 from .types import CONFIG_AUTHORITY_KEYS as CONFIG_AUTHORITY_KEYS
 from .types import CONTEXT_ADMISSION_COVERAGE as CONTEXT_ADMISSION_COVERAGE
 from .types import (
+    CONTEXT_ADMISSION_ENCODING_VERSION as CONTEXT_ADMISSION_ENCODING_VERSION,
+)
+from .types import (
+    CONTEXT_ADMISSION_ENVELOPE_UPCASTERS as CONTEXT_ADMISSION_ENVELOPE_UPCASTERS,
+)
+from .types import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION as CONTEXT_ADMISSION_PROTOCOL_VERSION,
+)
+from .types import (
+    CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS as CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS,
 )
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
@@ -432,8 +450,19 @@ from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ConflictRejectedEffect as ConflictRejectedEffect
 from .types import ContaminationOutcome as ContaminationOutcome
+from .types import ContextAdmissionAccountingResult as ContextAdmissionAccountingResult
+from .types import ContextAdmissionAccountingStatus as ContextAdmissionAccountingStatus
 from .types import ContextAdmissionEvent as ContextAdmissionEvent
+from .types import ContextAdmissionInspectionResult as ContextAdmissionInspectionResult
+from .types import ContextAdmissionLedger as ContextAdmissionLedger
+from .types import ContextAdmissionRecoveryResult as ContextAdmissionRecoveryResult
 from .types import ContextAdmissionState as ContextAdmissionState
+from .types import ContextAdmissionStorageFailureReason as ContextAdmissionStorageFailureReason
+from .types import ContextAdmissionStorageHealthStatus as ContextAdmissionStorageHealthStatus
+from .types import ContextAdmissionStoreAuthority as ContextAdmissionStoreAuthority
+from .types import ContextAdmissionStoreHealth as ContextAdmissionStoreHealth
+from .types import ContextAdmissionStreamHealth as ContextAdmissionStreamHealth
+from .types import ContextAdmissionStreamKey as ContextAdmissionStreamKey
 from .types import ContextLineage as ContextLineage
 from .types import ContextSessionId as ContextSessionId
 from .types import ContextThreadId as ContextThreadId
@@ -446,6 +475,7 @@ from .types import CrossDomainAssessment as CrossDomainAssessment
 from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
+from .types import DurableContextAdmissionPayload as DurableContextAdmissionPayload
 from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
@@ -634,10 +664,15 @@ from .types import SkillSource as SkillSource
 from .types import SkillSourceIdentity as SkillSourceIdentity
 from .types import SkillSourceRef as SkillSourceRef
 from .types import SkillVisibilitySpec as SkillVisibilitySpec
+from .types import ShadowContextAdmissionRecord as ShadowContextAdmissionRecord
+from .types import (
+    ShadowContextAdmissionTargetRecord as ShadowContextAdmissionTargetRecord,
+)
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
 from .types import StartGenerationEvent as StartGenerationEvent
+from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope
 from .types import StoredSkillSessionContract as StoredSkillSessionContract
 from .types import StreamParser as StreamParser
 from .types import SubprocessResult as SubprocessResult
@@ -682,14 +717,23 @@ from .types import (
 )
 from .types import compute_remaining as compute_remaining
 from .types import compute_runtime_binding_digest as compute_runtime_binding_digest
+from .types import (
+    decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
+)
 from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches
+from .types import (
+    encode_stored_context_admission_envelope as encode_stored_context_admission_envelope,
+)
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
 from .types import is_path_like_token as is_path_like_token
 from .types import is_valid_codex_model_id as is_valid_codex_model_id
+from .types import (
+    make_stored_context_admission_envelope as make_stored_context_admission_envelope,
+)
 from .types import model_class as model_class
 from .types import parse_plan_paths as parse_plan_paths
 from .types import recipe_section_digest as recipe_section_digest
@@ -706,6 +750,9 @@ from .types import session_type_for_skill_execution_role as session_type_for_ski
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
 from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
+from .types import (
+    validate_context_admission_persistence_value as validate_context_admission_persistence_value,
+)
 from .types import validate_label_transition as validate_label_transition
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
 from .types import validate_skill_capability_roles as validate_skill_capability_roles

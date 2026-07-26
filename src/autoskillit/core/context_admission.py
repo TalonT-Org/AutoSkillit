@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+from types import MappingProxyType
 from typing import assert_never
 
 from .types._type_context_admission import (
@@ -88,10 +90,28 @@ from .types._type_helpers import _reconciled_snapshot_counts
 __all__ = [
     "ContextAdmissionValidationError",
     "UnsupportedContextAdmissionProtocolError",
+    "ContextAdmissionReducerDef",
+    "CONTEXT_ADMISSION_REDUCER_REGISTRY",
+    "context_admission_reducer_for_protocol",
     "reduce_context_admission",
     "replay_context_admission",
     "resolve_context_admission_coverage",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class ContextAdmissionReducerDef:
+    """Static reducer/replay definition for one released protocol version."""
+
+    protocol_version: int
+    reduce_transition: Callable[
+        [ContextAdmissionState, ContextAdmissionEvent],
+        AdmissionTransition,
+    ]
+    replay_stream: Callable[
+        [ContextAdmissionState, tuple[ContextAdmissionEvent, ...]],
+        AdmissionReplay,
+    ]
 
 
 def _effect_coordinates(
@@ -2917,6 +2937,29 @@ def replay_context_admission(
         transitions.append(transition)
         state = transition.next_state
     return AdmissionReplay(final_state=state, transitions=tuple(transitions))
+
+
+CONTEXT_ADMISSION_REDUCER_REGISTRY: Mapping[int, ContextAdmissionReducerDef] = MappingProxyType(
+    {
+        1: ContextAdmissionReducerDef(
+            protocol_version=1,
+            reduce_transition=reduce_context_admission,
+            replay_stream=replay_context_admission,
+        )
+    }
+)
+
+
+def context_admission_reducer_for_protocol(
+    protocol_version: int,
+) -> ContextAdmissionReducerDef:
+    """Select exactly one released reducer definition."""
+    if isinstance(protocol_version, bool):
+        raise UnsupportedContextAdmissionProtocolError("unsupported_protocol_version")
+    reducer = CONTEXT_ADMISSION_REDUCER_REGISTRY.get(protocol_version)
+    if reducer is None:
+        raise UnsupportedContextAdmissionProtocolError("unsupported_protocol_version")
+    return reducer
 
 
 def resolve_context_admission_coverage(

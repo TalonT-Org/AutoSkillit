@@ -1,8 +1,6 @@
-"""Contract tests: every instruction surface must carry the pipeline tool restriction.
+"""Contracts for authoritative pipeline instruction surfaces.
 
-These tests verify that all surfaces where the orchestrator receives instructions
-about native tool usage contain the full forbidden tool list with prohibition framing.
-If any test fails, a drift has occurred and the corresponding surface needs updating.
+Guards the surfaces that own native-tool restrictions and prohibition framing.
 """
 
 from __future__ import annotations
@@ -64,7 +62,7 @@ class TestWriteRecipeSkillContract:
 
 
 class TestServerToolSurfaceContract:
-    """Server tool docstrings and prompts must name all forbidden tools."""
+    """Authoritative server prompts and recipe-loading docs name forbidden tools."""
 
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, minimal_ctx, monkeypatch):
@@ -92,15 +90,6 @@ class TestServerToolSurfaceContract:
 
         has_framing = any(term in text for term in ("NEVER", "Do NOT", "MUST NOT"))
         assert has_framing, "open_kitchen prompt lacks prohibition framing (NEVER/Do NOT/MUST NOT)"
-
-    def test_run_skill_docstring_names_all_forbidden_tools(self):
-        """run_skill docstring must name every forbidden tool."""
-        from autoskillit.server.tools.tools_execution import run_skill
-
-        doc = run_skill.__doc__
-        assert doc, "run_skill has no docstring"
-        missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in doc]
-        assert not missing, f"run_skill docstring missing tools: {missing}"
 
     def test_load_recipe_docstring_names_all_forbidden_tools(self):
         """load_recipe docstring must name every forbidden tool."""

@@ -649,10 +649,6 @@ class TestToolSchemas:
 
         return list(PIPELINE_FORBIDDEN_TOOLS)
 
-    PIPELINE_TOOLS_WITH_GUIDANCE: dict[str, list[str]] = {
-        "run_skill": ["MCP tool", "delegate"],
-    }
-
     async def _get_all_tools(self, kitchen_enabled) -> dict:
         """Return dict of tool_name -> tool for all tools, including kitchen-gated ones."""
         from fastmcp.client import Client
@@ -726,18 +722,34 @@ class TestToolSchemas:
         )
 
     @pytest.mark.anyio
-    async def test_pipeline_tools_have_orchestrator_guidance(self, kitchen_enabled):
-        """run_skill must reinforce MCP-only delegation."""
+    async def test_run_skill_description_has_compact_selection_contract(self, kitchen_enabled):
+        """run_skill must publish the complete provider-neutral selection boundary."""
         tools = await self._get_all_tools(kitchen_enabled)
-        failures = []
-        for tool_name, required_terms in self.PIPELINE_TOOLS_WITH_GUIDANCE.items():
-            desc = tools[tool_name].description or ""
-            for term in required_terms:
-                if term.lower() not in desc.lower():
-                    failures.append(f"Tool '{tool_name}' missing orchestrator term '{term}'")
-        assert not failures, "Pipeline tools missing orchestrator guidance:\n" + "\n".join(
-            f"  - {f}" for f in failures
-        )
+        tool = tools["run_skill"]
+        description = tool.description or ""
+        description_lower = description.casefold()
+
+        assert "already-selected recipe step" in description_lower
+        assert "headless l2 recipe orchestrator" in description_lower
+        assert "interactive autoskillit cook/order session" in description_lower
+        assert "separate l1 headless coding-agent worker" in description_lower
+        assert "available local skill" in description_lower
+        assert "load and follow its skill.md" in description_lower
+        assert "current interactive session" in description_lower
+        assert "do not call run_skill merely because the skill was named" in description_lower
+
+        assert "Use this for all skill sessions" not in description
+        assert len(description) <= 2_000
+
+        properties = tool.inputSchema.get("properties", {})
+        property_descriptions = [
+            schema["description"]
+            for schema in properties.values()
+            if isinstance(schema, dict) and isinstance(schema.get("description"), str)
+        ]
+        model_facing_text = "\n".join((description, *property_descriptions)).casefold()
+        for provider_term in ("claude", "sonnet", "opus"):
+            assert provider_term not in model_facing_text
 
     def test_pipeline_forbidden_tools_constant_is_complete(self):
         """PIPELINE_FORBIDDEN_TOOLS must contain all 10 native Claude Code tools.
@@ -761,19 +773,6 @@ class TestToolSchemas:
         actual = set(PIPELINE_FORBIDDEN_TOOLS)
         missing = expected - actual
         assert not missing, f"PIPELINE_FORBIDDEN_TOOLS missing tools: {missing}"
-
-    @pytest.mark.anyio
-    async def test_run_skill_names_all_forbidden_tools(self, kitchen_enabled):
-        """run_skill docstring must name all forbidden tools."""
-        from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
-
-        tools = await self._get_all_tools(kitchen_enabled)
-        for tool_name in ("run_skill",):
-            desc = tools[tool_name].description or ""
-            missing = [t for t in PIPELINE_FORBIDDEN_TOOLS if t not in desc]
-            assert not missing, (
-                f"{tool_name} docstring must name all forbidden tools. Missing: {missing}"
-            )
 
     def test_bundled_recipe_kitchen_rules_name_all_forbidden_tools(self):
         """All bundled recipe kitchen_rules blocks must name every forbidden tool."""

@@ -665,13 +665,19 @@ def test_scanner_failure_releases_waiters_and_allows_retry(evidence_cache, monke
             assert entered.wait(2)
             _wait_for_cache_info(evidence_cache, lambda info: info.inflight_waiters == 2)
             release.set()
+            raised_errors: list[RuntimeError] = []
             for future in futures:
                 with pytest.raises(RuntimeError) as raised:
                     future.result(timeout=2)
-                assert raised.value is failure
+                raised_errors.append(raised.value)
     finally:
         release.set()
 
+    assert sum(error is failure for error in raised_errors) == 1
+    waiter_errors = [error for error in raised_errors if error is not failure]
+    assert len(waiter_errors) == 2
+    assert waiter_errors[0] is not waiter_errors[1]
+    assert all(error.__cause__ is failure for error in waiter_errors)
     assert evidence_cache.info().inflight_builds == 0
     assert evidence_cache.info().inflight_waiters == 0
     should_fail = False

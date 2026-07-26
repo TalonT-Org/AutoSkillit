@@ -192,7 +192,9 @@ class _SkillCapabilityEvidenceCache:
         with self._lock:
             self._inflight_waiters -= 1
             if state.error is not None:
-                raise state.error
+                raise RuntimeError(
+                    "Capability evidence build failed in another thread"
+                ) from state.error
             result = state.result
             if result is None:
                 raise RuntimeError("Capability evidence build completed without a result")

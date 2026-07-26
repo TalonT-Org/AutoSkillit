@@ -241,9 +241,11 @@ def test_review_skill_command_passes_diff_annotation_paths(
     assert review_steps, f"No {skill_name} step in {recipe_name}.yaml"
     for step_name, step in review_steps:
         skill_inputs = step.with_args["skill_inputs"]
-        assert "hunk_ranges_path" in skill_inputs, (
-            f"{recipe_name}.yaml step '{step_name}' calls {skill_name} without hunk_ranges_path"
+        assert skill_inputs.get("hunk_ranges_path") == "${{ context.hunk_ranges_path }}", (
+            f"{recipe_name}.yaml step '{step_name}' must bind hunk_ranges_path "
+            "to context.hunk_ranges_path"
         )
-        assert "valid_lines_path" in skill_inputs, (
-            f"{recipe_name}.yaml step '{step_name}' calls {skill_name} without valid_lines_path"
+        assert skill_inputs.get("valid_lines_path") == "${{ context.valid_lines_path }}", (
+            f"{recipe_name}.yaml step '{step_name}' must bind valid_lines_path "
+            "to context.valid_lines_path"
         )

@@ -1,5 +1,5 @@
 """Composition Root: make_context() is the only location that legally instantiates
-the server service contracts simultaneously.
+all 25 service contracts simultaneously.
 
 server/ is IL-3 — the only layer permitted to import from both IL-1 (pipeline/)
 and IL-2 (recipe/, migration/) at the same time. This module is the canonical
@@ -17,6 +17,7 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    ContextAdmissionStoreAuthority,
     DirectInstall,
     FleetLock,
     InstalledRecipeExecution,
@@ -54,6 +55,7 @@ from autoskillit.migration import DefaultMigrationService, default_migration_eng
 from autoskillit.pipeline import (
     DefaultAuditLog,
     DefaultBackgroundSupervisor,
+    DefaultContextAdmissionLedger,
     DefaultGateState,
     DefaultGitHubApiLog,
     DefaultTimingLog,
@@ -166,7 +168,7 @@ def make_context(
     fleet_lock: FleetLock | None = None,
     project_dir: Path | None = None,
 ) -> ToolContext:
-    """Create a fully-wired ToolContext with all 24 service fields populated.
+    """Create a fully-wired ToolContext with all 25 service fields populated.
 
     This is the Composition Root — the only location that should instantiate
     all concrete service implementations simultaneously. Uses a three-step
@@ -331,6 +333,12 @@ def make_context(
 
     audit = DefaultAuditLog()
     github_api_log = DefaultGitHubApiLog()
+    context_admission_ledger = DefaultContextAdmissionLedger(
+        ContextAdmissionStoreAuthority(
+            database_path=(temp_dir / "context-admission" / "ledger.sqlite3").resolve(),
+            expected_owner_id=os.getuid(),
+        )
+    )
     ctx = ToolContext(
         config=config,
         audit=audit,
@@ -355,6 +363,7 @@ def make_context(
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
         skill_session_contract_store=DefaultSkillSessionContractStore(),
+        context_admission_ledger=context_admission_ledger,
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         session_serve_overrides=None,

@@ -17,6 +17,9 @@ from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.execution.testing import DefaultTestRunner
 from autoskillit.migration.engine import DefaultMigrationService
 from autoskillit.pipeline.context import ToolContext
+from autoskillit.pipeline.context_admission_ledger import (
+    DefaultContextAdmissionLedger,
+)
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
@@ -50,6 +53,12 @@ def test_make_context_returns_toolcontext(tmp_path):
     assert isinstance(ctx, ToolContext)
     assert ctx.gate is not None
     assert ctx.runner is not None
+    assert isinstance(ctx.context_admission_ledger, DefaultContextAdmissionLedger)
+    assert (
+        ctx.context_admission_ledger.database_path
+        == (tmp_path / ".autoskillit" / "temp" / "context-admission" / "ledger.sqlite3").resolve()
+    )
+    assert not ctx.context_admission_ledger.database_path.exists()
 
 
 def test_make_context_gate_starts_closed(monkeypatch, tmp_path):
@@ -85,6 +94,7 @@ def test_make_context_service_fields_are_typed_instances(tmp_path):
     assert isinstance(ctx.migrations, DefaultMigrationService)
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)
     assert isinstance(ctx.workspace_mgr, DefaultWorkspaceManager)
+    assert isinstance(ctx.context_admission_ledger, DefaultContextAdmissionLedger)
 
 
 def test_make_context_github_client_is_default_fetcher(tmp_path):

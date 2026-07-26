@@ -1377,6 +1377,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_protocols_backend.py",
         "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",
+        "core/types/_type_context_admission_persistence.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
         if not types_path.exists():

@@ -21,7 +21,11 @@ import asyncio
 from datetime import UTC
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import get_logger
+from autoskillit.core import (
+    CONTEXT_ADMISSION_PROTOCOL_VERSION,
+    ContextAdmissionStorageHealthStatus,
+    get_logger,
+)
 from autoskillit.execution import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
@@ -104,6 +108,32 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
     Sets ready_event when complete — tools needing audit data await this event.
     """
     try:
+        accounting_recovery = ctx.context_admission_ledger.recover_all()
+        failed_streams = tuple(
+            health
+            for health in accounting_recovery.stream_healths
+            if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+        )
+        if (
+            accounting_recovery.status is not ContextAdmissionStorageHealthStatus.HEALTHY
+            or failed_streams
+        ):
+            failure_reason = accounting_recovery.store_health.failure_reason
+            if failure_reason is None and failed_streams:
+                failure_reason = failed_streams[0].failure_reason
+            logger.warning(
+                "context_admission_recovery_failed",
+                extra={
+                    "status": accounting_recovery.status.value,
+                    "reason": (
+                        failure_reason.value
+                        if failure_reason is not None
+                        else "recovery_contended"
+                    ),
+                    "protocol_version": CONTEXT_ADMISSION_PROTOCOL_VERSION,
+                },
+            )
+
         try:
             cfg = ctx.config.linux_tracing
             n = recover_crashed_sessions(

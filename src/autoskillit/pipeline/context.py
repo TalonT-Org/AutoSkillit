@@ -22,6 +22,7 @@ from autoskillit.core import (
     CloneManager,
     CodingAgentBackend,
     CompletionRequiredResolver,
+    ContextAdmissionLedger,
     DatabaseReader,
     FleetLock,
     GateState,
@@ -124,6 +125,8 @@ class ToolContext:
     skill_resolver:       SkillResolver — resolves skill names to source tier
     skill_session_contract_store: SkillSessionContractStore — binds projected skill
                           contracts and snapshots to resumable backend session IDs.
+    context_admission_ledger: ContextAdmissionLedger — durable, shadow-only cumulative
+                          context accounting and recovery service.
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
                           to the current kitchen session lifetime.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
@@ -184,6 +187,7 @@ class ToolContext:
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
     skill_session_contract_store: SkillSessionContractStore = field(default=_MISSING)
+    context_admission_ledger: ContextAdmissionLedger = field(default=_MISSING)
     recipe_name: str = field(default="")
     recipe_content_hash: str = field(default="")
     recipe_composite_hash: str = field(default="")
@@ -222,6 +226,11 @@ class ToolContext:
             raise TypeError(
                 "skill_session_contract_store must be supplied explicitly. "
                 "Use make_context() or pass an isolated store directly."
+            )
+        if self.context_admission_ledger is _MISSING:
+            raise TypeError(
+                "context_admission_ledger must be supplied explicitly. "
+                "Use make_context() or pass an isolated ledger directly."
             )
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)

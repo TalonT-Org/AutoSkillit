@@ -88,6 +88,8 @@ def _head(authority: AuditCycleAuthority, *, successor: str | None = None) -> Au
         part_id=authority.part_id,
         current_authority_digest=authority.authority_digest,
         audit_round=authority.audit_round,
+        audited_plan_refs=authority.audited_plan_refs,
+        inventory_ref=authority.inventory_ref,
         verdict=authority.verdict,
         authorized_successor_part_id=successor,
     )
@@ -475,6 +477,8 @@ def test_stale_no_go_authority_rejects(tmp_path: Path) -> None:
         part_id=authority.part_id,
         current_authority_digest="sha256:" + "d" * 64,
         audit_round=authority.audit_round,
+        audited_plan_refs=authority.audited_plan_refs,
+        inventory_ref=authority.inventory_ref,
         verdict=authority.verdict,
     )
     decision = _evaluate(authority, report, head=stale_head)

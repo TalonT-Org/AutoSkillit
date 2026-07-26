@@ -470,6 +470,8 @@ class AuditCycleHead:
     part_id: str
     current_authority_digest: str
     audit_round: int
+    audited_plan_refs: tuple[ArtifactRef, ...]
+    inventory_ref: ArtifactRef
     verdict: AuditVerdict
     authorized_successor_part_id: str | None = None
 
@@ -478,6 +480,14 @@ class AuditCycleHead:
             _require_nonempty(f"AuditCycleHead.{name}", getattr(self, name))
         _require_digest("AuditCycleHead.current_authority_digest", self.current_authority_digest)
         _require_positive_int("AuditCycleHead.audit_round", self.audit_round)
+        audited_plan_refs = tuple(self.audited_plan_refs)
+        if not audited_plan_refs or any(
+            not isinstance(ref, ArtifactRef) for ref in audited_plan_refs
+        ):
+            raise ValueError("AuditCycleHead.audited_plan_refs must contain ArtifactRef entries")
+        if not isinstance(self.inventory_ref, ArtifactRef):
+            raise ValueError("AuditCycleHead.inventory_ref must be an ArtifactRef")
+        object.__setattr__(self, "audited_plan_refs", audited_plan_refs)
         if not isinstance(self.verdict, AuditVerdict):
             raise ValueError("AuditCycleHead.verdict must be an AuditVerdict")
         if self.authorized_successor_part_id is not None:

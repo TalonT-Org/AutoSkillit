@@ -41,9 +41,16 @@ def _ref(path: Path, content: bytes, *, schema_version: int = 1) -> ArtifactRef:
     )
 
 
-def _authority(root: Path, *, parent: str | None = None, round_: int = 1) -> AuditCycleAuthority:
-    plan = _ref(root / "plan.md", b"plan")
-    inventory = _ref(root / "inventory.json", b"inventory")
+def _authority(
+    root: Path,
+    *,
+    parent: str | None = None,
+    round_: int = 1,
+    plan_content: bytes = b"plan",
+    inventory_content: bytes = b"inventory",
+) -> AuditCycleAuthority:
+    plan = _ref(root / "plan.md", plan_content)
+    inventory = _ref(root / "inventory.json", inventory_content)
     remediation = _ref(root / "remediation.md", b"remediation")
     row = AuditAssessmentRow.create(
         requirement_id="REQ-001",
@@ -154,6 +161,8 @@ def test_successor_must_descend_from_trusted_current_head(tmp_path: Path) -> Non
         part_id=first.part_id,
         current_authority_digest=first.authority_digest,
         audit_round=first.audit_round,
+        audited_plan_refs=first.audited_plan_refs,
+        inventory_ref=first.inventory_ref,
         verdict=first.verdict,
     )
     successor = _authority(tmp_path, parent=first.authority_digest, round_=2)
@@ -162,6 +171,44 @@ def test_successor_must_descend_from_trusted_current_head(tmp_path: Path) -> Non
     with pytest.raises(AuditCycleVerificationError) as caught:
         AuditCycleVerifier.verify_successor(forged_parent, head)
     assert caught.value.reason is AdmissionReason.PARENT_MISMATCH
+
+
+@pytest.mark.parametrize(
+    "replacement,reason",
+    [
+        ({"inventory_content": b"replacement-inventory"}, AdmissionReason.INVENTORY_MISMATCH),
+        ({"plan_content": b"replacement-plan"}, AdmissionReason.PLAN_MISMATCH),
+    ],
+)
+def test_successor_preserves_trusted_artifact_lineage(
+    tmp_path: Path,
+    replacement: dict[str, bytes],
+    reason: AdmissionReason,
+) -> None:
+    first = _authority(tmp_path)
+    head = AuditCycleHead(
+        execution_generation=first.execution_generation,
+        cycle_id=first.cycle_id,
+        plan_set_id=first.plan_set_id,
+        scope_id=first.scope_id,
+        part_id=first.part_id,
+        current_authority_digest=first.authority_digest,
+        audit_round=first.audit_round,
+        audited_plan_refs=first.audited_plan_refs,
+        inventory_ref=first.inventory_ref,
+        verdict=first.verdict,
+    )
+    successor = _authority(
+        tmp_path,
+        parent=first.authority_digest,
+        round_=2,
+        **replacement,
+    )
+
+    with pytest.raises(AuditCycleVerificationError) as caught:
+        AuditCycleVerifier.verify_successor(successor, head)
+
+    assert caught.value.reason is reason
 
 
 def test_stale_authority_replay_is_rejected_before_inventory_read(tmp_path: Path) -> None:
@@ -189,6 +236,8 @@ def test_stale_authority_replay_is_rejected_before_inventory_read(tmp_path: Path
         part_id=current.part_id,
         current_authority_digest=current.authority_digest,
         audit_round=current.audit_round,
+        audited_plan_refs=current.audited_plan_refs,
+        inventory_ref=current.inventory_ref,
         verdict=current.verdict,
     )
     decision = verifier.evaluate_paths(

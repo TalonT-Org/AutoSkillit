@@ -331,7 +331,7 @@ def test_plan_disposition_report_is_bound_to_full_identity(tmp_path: Path) -> No
         replace(normalized, dispositions=[object()])
 
 
-def test_head_allows_successor_only_for_go() -> None:
+def test_head_allows_successor_only_for_go(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="only a GO"):
         AuditCycleHead(
             execution_generation="generation-1",
@@ -341,6 +341,8 @@ def test_head_allows_successor_only_for_go() -> None:
             part_id="part-a",
             current_authority_digest=_HASH_A,
             audit_round=1,
+            audited_plan_refs=(_ref(tmp_path / "plan.md"),),
+            inventory_ref=_ref(tmp_path / "inventory.json", _HASH_B),
             verdict=AuditVerdict.NO_GO,
             authorized_successor_part_id="part-b",
         )

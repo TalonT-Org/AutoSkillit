@@ -490,6 +490,16 @@ class AuditCycleVerifier:
                 AdmissionReason.PARENT_MISMATCH,
                 "successor parent is not the trusted current head",
             )
+        if candidate.inventory_ref != trusted_head.inventory_ref:
+            raise AuditCycleVerificationError(
+                AdmissionReason.INVENTORY_MISMATCH,
+                "successor inventory identity differs from the trusted head",
+            )
+        if candidate.audited_plan_refs != trusted_head.audited_plan_refs:
+            raise AuditCycleVerificationError(
+                AdmissionReason.PLAN_MISMATCH,
+                "successor audited-plan identities differ from the trusted head",
+            )
 
     def verify_active_tuple(
         self,

@@ -336,6 +336,13 @@ def test_plan_disposition_report_is_bound_to_full_identity(tmp_path: Path) -> No
     with pytest.raises(ValueError, match="PlanDispositionRow"):
         replace(normalized, dispositions=[object()])
 
+    class MutableArtifactRef:
+        def to_dict(self) -> dict[str, object]:
+            return report.current_plan_ref.to_dict()
+
+    with pytest.raises(ValueError, match="current_plan_ref must be an ArtifactRef"):
+        replace(report, current_plan_ref=MutableArtifactRef())  # type: ignore[arg-type]
+
 
 def test_head_allows_successor_only_for_go(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="only a GO"):

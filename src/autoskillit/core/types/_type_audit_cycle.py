@@ -618,6 +618,8 @@ class PlanDispositionReport:
         _require_positive_int("PlanDispositionReport.audit_round", self.audit_round)
         for name in ("parent_authority_digest", "inventory_digest", "findings_digest"):
             _require_digest(f"PlanDispositionReport.{name}", getattr(self, name))
+        if not isinstance(self.current_plan_ref, ArtifactRef):
+            raise ValueError("PlanDispositionReport.current_plan_ref must be an ArtifactRef")
         ids = tuple(row.requirement_id for row in self.dispositions)
         if len(set(ids)) != len(ids):
             raise ValueError("PlanDispositionReport.dispositions contain duplicate IDs")

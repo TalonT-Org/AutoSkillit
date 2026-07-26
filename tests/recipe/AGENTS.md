@@ -144,7 +144,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_ci_enqueue_gate.py` | Tests for `enqueue-missing-ci-gate` semantic rule |
 | `test_rules_ci_loops.py` | Tests for ci-timed-out-self-loop-unguarded and ci-conflict-path-missing-auto-trigger rules |
 | `test_rules_clone.py` | Tests for clone semantic validation rule |
-| `test_rules_cmd.py` | Tests for cmd semantic validation and representative capability-classifier operation counts |
+| `test_rules_cmd.py` | Tests for cmd semantic validation rule |
 | `test_rules_commit_guard_regression_route.py` | Tests for `commit-guard-regression-route-missing` semantic validation rule |
 | `test_rules_conditional_push.py` | Tests for conditional_push semantic validation rule |
 | `test_rules_contract_recovery.py` | Tests for contract-recovery-requires-salvage-route semantic validation rule |
@@ -222,6 +222,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_schema.py` | Tests for Recipe, RecipeStep, and DataFlowWarning schema |
 | `test_skip_inviting_notes.py` | Tests that bundled recipe optional steps have no skip-inviting note phrases |
 | `test_skill_contract_completeness.py` | Tests for SKILL.md to skill_contracts.yaml output completeness |
+| `test_skill_capability_cache_integration.py` | Tests recipe-validation integration with the workspace capability evidence cache |
 | `test_skill_emit_consistency.py` | Tests for skill emit consistency in recipe steps |
 | `test_skill_worktree_patterns.py` | Tests that SKILL.md files do not use fragile relative worktree path patterns |
 | `test_silent_type_convention.py` | Tests for silent-type-convention.md documentation |

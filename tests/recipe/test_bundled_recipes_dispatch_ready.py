@@ -36,6 +36,13 @@ _RECIPES_WITH_OTHER_ERROR_RULES: frozenset[str] = frozenset(
 )
 
 _DISPATCH_GATE_STEMS = [s for s in _RECIPE_STEMS if s not in _RECIPES_WITH_OTHER_ERROR_RULES]
+_STRUCTURED_INPUT_RECIPES = (
+    "implementation",
+    "implementation-groups",
+    "merge-prs",
+    "remediation",
+    "research",
+)
 
 
 def _part_a_dispatch_gate_params() -> list:
@@ -44,6 +51,24 @@ def _part_a_dispatch_gate_params() -> list:
 
 def _part_a_recipe_params() -> list:
     return [pytest.param(n) for n in _RECIPE_STEMS]
+
+
+@pytest.mark.parametrize("recipe_name", _STRUCTURED_INPUT_RECIPES)
+def test_structured_skill_inputs_do_not_embed_cli_option_prefixes(recipe_name: str) -> None:
+    recipe = load_recipe(_RECIPES_DIR / f"{recipe_name}.yaml")
+
+    for step_name, step in recipe.steps.items():
+        skill_inputs = step.with_args.get("skill_inputs", {})
+        if not isinstance(skill_inputs, dict):
+            continue
+        for name, value in skill_inputs.items():
+            if not isinstance(value, str):
+                continue
+            cli_prefix = f"--{name.replace('_', '-')}="
+            assert not value.startswith(cli_prefix), (
+                f"{recipe_name}:{step_name} structured input {name!r} "
+                f"must not embed CLI prefix {cli_prefix!r}"
+            )
 
 
 @pytest.mark.parametrize(

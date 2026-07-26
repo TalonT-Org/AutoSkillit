@@ -319,10 +319,10 @@
       "with": {
         "skill_command": "/autoskillit:synthesize-vis-plan",
         "skill_inputs": {
-          "methodology_tradition": "--methodology-tradition=${{ context.methodology_tradition }}",
-          "disambiguation_rule_applied": "--disambiguation-rule-applied=${{ context.disambiguation_rule_applied }}",
+          "methodology_tradition": "${{ context.methodology_tradition }}",
+          "disambiguation_rule_applied": "${{ context.disambiguation_rule_applied }}",
           "experiment_plan_path": "${{ context.experiment_plan }}",
-          "tier_c_lens": "--tier-c-lens=${{ context.tier_c_lens }}",
+          "tier_c_lens": "${{ context.tier_c_lens }}",
           "source_dir": "${{ inputs.source_dir }}",
           "capture_dir": "{{AUTOSKILLIT_TEMP}}/run-vis-lenses"
         },

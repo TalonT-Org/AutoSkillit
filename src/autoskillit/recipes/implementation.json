@@ -1814,8 +1814,8 @@
         "skill_command": "/autoskillit:analyze-pipeline-health",
         "skill_inputs": {
           "kitchen_id": "${{ inputs.kitchen_id }}",
-          "dispatch_id": "--dispatch-id=${{ inputs.dispatch_id }}",
-          "diagnostics_log_dir": "--diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}"
+          "dispatch_id": "${{ inputs.dispatch_id }}",
+          "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "analyze_pipeline_health"
@@ -2841,8 +2841,8 @@
         "skill_command": "/autoskillit:analyze-pipeline-health",
         "skill_inputs": {
           "kitchen_id": "${{ inputs.kitchen_id }}",
-          "dispatch_id": "--dispatch-id=${{ inputs.dispatch_id }}",
-          "diagnostics_log_dir": "--diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}"
+          "dispatch_id": "${{ inputs.dispatch_id }}",
+          "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "analyze_pipeline_health"
@@ -2902,8 +2902,8 @@
         "skill_command": "/autoskillit:analyze-pipeline-health",
         "skill_inputs": {
           "kitchen_id": "${{ inputs.kitchen_id }}",
-          "dispatch_id": "--dispatch-id=${{ inputs.dispatch_id }}",
-          "diagnostics_log_dir": "--diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}"
+          "dispatch_id": "${{ inputs.dispatch_id }}",
+          "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "analyze_pipeline_health"
@@ -2925,8 +2925,8 @@
         "skill_command": "/autoskillit:analyze-pipeline-health",
         "skill_inputs": {
           "kitchen_id": "${{ inputs.kitchen_id }}",
-          "dispatch_id": "--dispatch-id=${{ inputs.dispatch_id }}",
-          "diagnostics_log_dir": "--diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}"
+          "dispatch_id": "${{ inputs.dispatch_id }}",
+          "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "analyze_pipeline_health"
@@ -2959,8 +2959,8 @@
         "skill_command": "/autoskillit:analyze-pipeline-health",
         "skill_inputs": {
           "kitchen_id": "${{ inputs.kitchen_id }}",
-          "dispatch_id": "--dispatch-id=${{ inputs.dispatch_id }}",
-          "diagnostics_log_dir": "--diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}"
+          "dispatch_id": "${{ inputs.dispatch_id }}",
+          "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "analyze_pipeline_health"
@@ -2993,8 +2993,8 @@
         "skill_command": "/autoskillit:analyze-pipeline-health",
         "skill_inputs": {
           "kitchen_id": "${{ inputs.kitchen_id }}",
-          "dispatch_id": "--dispatch-id=${{ inputs.dispatch_id }}",
-          "diagnostics_log_dir": "--diagnostics-log-dir=${{ inputs.diagnostics_log_dir }}"
+          "dispatch_id": "${{ inputs.dispatch_id }}",
+          "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "analyze_pipeline_health"

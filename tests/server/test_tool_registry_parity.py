@@ -11,6 +11,7 @@ import pytest
 from autoskillit.core import (
     TOOL_REGISTRY,
     ToolParamDef,
+    ToolWireType,
     compute_tool_contract_identity,
 )
 
@@ -74,6 +75,39 @@ def test_registry_matches_handler_order_and_requiredness() -> None:
             if param.handler_parameter
         )
         assert registry_params == handler_params, name
+
+
+def test_registry_preserves_typed_handler_wire_contracts() -> None:
+    expected = {
+        "configure_fleet": {
+            "max_concurrent_dispatches": ToolWireType.INTEGER,
+            "max_total_issues": ToolWireType.INTEGER,
+            "default_timeout_sec": ToolWireType.INTEGER,
+            "max_extension_seconds": ToolWireType.INTEGER,
+            "idle_output_timeout": ToolWireType.INTEGER,
+            "acquire_timeout_sec": ToolWireType.INTEGER,
+            "max_issues_per_food_truck": ToolWireType.INTEGER,
+            "enable_deadline_extension": ToolWireType.BOOLEAN,
+        },
+        "configure_order": {
+            "timeout": ToolWireType.INTEGER,
+            "stale_threshold": ToolWireType.INTEGER,
+            "idle_output_timeout": ToolWireType.INTEGER,
+            "max_suppression_seconds": ToolWireType.INTEGER,
+        },
+        "record_gate_dispatch": {"approved": ToolWireType.BOOLEAN},
+        "reset_dispatch": {
+            "force": ToolWireType.BOOLEAN,
+            "destroy_artifacts": ToolWireType.BOOLEAN,
+        },
+        "open_kitchen": {"ingredients_only": ToolWireType.BOOLEAN},
+    }
+
+    for tool_name, wire_types in expected.items():
+        for param_name, wire_type in wire_types.items():
+            param = TOOL_REGISTRY[tool_name].param_def(param_name)
+            assert param is not None
+            assert param.wire_type is wire_type
 
 
 def test_run_skill_has_one_compiler_owned_structured_input_channel() -> None:

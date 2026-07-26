@@ -204,6 +204,16 @@ _TOOL_DEFS = (
             "inspector_model",
             "default_model",
         ),
+        wire_types={
+            "max_concurrent_dispatches": ToolWireType.INTEGER,
+            "max_total_issues": ToolWireType.INTEGER,
+            "default_timeout_sec": ToolWireType.INTEGER,
+            "max_extension_seconds": ToolWireType.INTEGER,
+            "idle_output_timeout": ToolWireType.INTEGER,
+            "acquire_timeout_sec": ToolWireType.INTEGER,
+            "max_issues_per_food_truck": ToolWireType.INTEGER,
+            "enable_deadline_extension": ToolWireType.BOOLEAN,
+        },
     ),
     _tool(
         "configure_order",
@@ -214,6 +224,12 @@ _TOOL_DEFS = (
             "max_suppression_seconds",
             "default_model",
         ),
+        wire_types={
+            "timeout": ToolWireType.INTEGER,
+            "stale_threshold": ToolWireType.INTEGER,
+            "idle_output_timeout": ToolWireType.INTEGER,
+            "max_suppression_seconds": ToolWireType.INTEGER,
+        },
     ),
     _tool("run_cmd", ("cmd", "cwd", "timeout", "step_name"), required=("cmd", "cwd")),
     _tool(
@@ -252,11 +268,16 @@ _TOOL_DEFS = (
         "record_gate_dispatch",
         ("dispatch_name", "approved"),
         required=("dispatch_name", "approved"),
+        wire_types={"approved": ToolWireType.BOOLEAN},
     ),
     _tool(
         "reset_dispatch",
         ("dispatch_id", "reset_to", "force", "destroy_artifacts"),
         required=("dispatch_id",),
+        wire_types={
+            "force": ToolWireType.BOOLEAN,
+            "destroy_artifacts": ToolWireType.BOOLEAN,
+        },
     ),
     _tool(
         "merge_worktree",
@@ -316,6 +337,7 @@ _TOOL_DEFS = (
         ("name", "overrides", "ingredients_only", "delivery_request"),
         wire_types={
             "overrides": ToolWireType.OBJECT,
+            "ingredients_only": ToolWireType.BOOLEAN,
             "delivery_request": ToolWireType.OBJECT,
         },
     ),

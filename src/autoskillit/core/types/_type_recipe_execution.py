@@ -280,18 +280,25 @@ def compute_runtime_binding_digest(
     step_name: str,
     template_digest: str,
     bound_inputs: tuple[tuple[str, BoundScalar], ...],
-    preflight: InventoryAdmissionDecision | None,
+    actual_mcp_kwargs: Mapping[str, BoundScalar],
+    preflight: VerifiedInputPreflightResult | None,
 ) -> str:
     """Hash actual ordered values independently from the template/payload."""
     payload = {
         "bound_inputs": [{"name": name, "value": value} for name, value in bound_inputs],
         "execution_id": execution_id,
+        "mcp_kwargs": [
+            {"name": name, "value": actual_mcp_kwargs[name]} for name in sorted(actual_mcp_kwargs)
+        ],
         "preflight": (
             None
             if preflight is None
             else {
-                "reason": preflight.reason.value,
-                "status": preflight.status.value,
+                "evidence": [
+                    {"name": item.name, "value": item.value} for item in preflight.evidence
+                ],
+                "reason": preflight.decision.reason.value,
+                "status": preflight.decision.status.value,
             }
         ),
         "step_name": step_name,

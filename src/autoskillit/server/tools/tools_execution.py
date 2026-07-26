@@ -962,7 +962,8 @@ async def run_skill(
                 step_name=step_name,
                 template_digest=invocation_template_digest,
                 bound_inputs=_bound_recipe_inputs,
-                preflight=(_preflight_result.decision if _preflight_result is not None else None),
+                actual_mcp_kwargs=_actual_mcp_kwargs,
+                preflight=_preflight_result,
             )
             try:
                 record_runtime_binding_digest(

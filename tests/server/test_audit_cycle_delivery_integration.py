@@ -40,12 +40,14 @@ from autoskillit.core import (
     InvocationTemplate,
     PlanDispositionReport,
     PlanDispositionRow,
+    PreflightEvidence,
     RecipeBindingProjection,
     RecipeExecutionSnapshot,
     RetryReason,
     SkillResult,
     VerifiedInputPreflightRequest,
     VerifiedInputPreflightResult,
+    compute_runtime_binding_digest,
 )
 from autoskillit.server._recipe_delivery import (
     complete_finalized_recipe_response,
@@ -401,6 +403,43 @@ def test_snapshot_rejects_digest_that_does_not_attest_invocation() -> None:
             templates={"dry": tampered},
             snapshot_digest=snapshot.snapshot_digest,
         )
+
+
+def test_runtime_binding_digest_attests_mcp_values_and_preflight_evidence() -> None:
+    preflight = VerifiedInputPreflightResult(
+        decision=InventoryAdmissionDecision.omit(AdmissionReason.NO_AUTHORITY),
+        evidence=(PreflightEvidence("inventory_dispositions", "[]"),),
+    )
+    digest = compute_runtime_binding_digest(
+        execution_id="execution-1",
+        step_name="dry",
+        template_digest=_HASH_A,
+        bound_inputs=(("plan_path", "/plans/current.md"),),
+        actual_mcp_kwargs={"cwd": "/repo", "output_dir": "/output/a"},
+        preflight=preflight,
+    )
+    changed_mcp_digest = compute_runtime_binding_digest(
+        execution_id="execution-1",
+        step_name="dry",
+        template_digest=_HASH_A,
+        bound_inputs=(("plan_path", "/plans/current.md"),),
+        actual_mcp_kwargs={"cwd": "/repo", "output_dir": "/output/b"},
+        preflight=preflight,
+    )
+    changed_evidence_digest = compute_runtime_binding_digest(
+        execution_id="execution-1",
+        step_name="dry",
+        template_digest=_HASH_A,
+        bound_inputs=(("plan_path", "/plans/current.md"),),
+        actual_mcp_kwargs={"cwd": "/repo", "output_dir": "/output/a"},
+        preflight=replace(
+            preflight,
+            evidence=(PreflightEvidence("inventory_dispositions", "[changed]"),),
+        ),
+    )
+
+    assert digest != changed_mcp_digest
+    assert digest != changed_evidence_digest
 
 
 @pytest.mark.parametrize("field", ["content_hash", "composite_hash"])

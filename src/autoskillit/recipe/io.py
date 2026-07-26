@@ -22,12 +22,9 @@ from autoskillit.core import (
 from autoskillit.recipe._io_loading import (
     _SCRIPTS_PLACEHOLDER as _SCRIPTS_PLACEHOLDER,
 )
-from autoskillit.recipe._io_loading import assert_no_raw_placeholders
 from autoskillit.recipe._io_loading import (
-    load_recipe_dict as _load_recipe_dict,
-)
-from autoskillit.recipe._io_loading import (
-    load_recipe_dict_with_declarations as _load_recipe_dict_with_declarations,
+    assert_no_raw_placeholders,
+    load_recipe_dict_with_declarations,
 )
 from autoskillit.recipe._io_loading import (
     substitute_scripts_placeholder as substitute_scripts_placeholder,
@@ -89,7 +86,7 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     ``_analysis.py`` imports ``iter_steps_with_context`` from this module, so a
     top-level import here would create a cycle.
     """
-    data, declared_data = _load_recipe_dict_with_declarations(
+    data, declared_data = load_recipe_dict_with_declarations(
         path,
         temp_dir_relpath=temp_dir_relpath,
     )
@@ -674,8 +671,8 @@ def _collect_recipes(
         if f.suffix in (".yaml", ".yml") and f.is_file():
             try:
                 raw = f.read_text(encoding="utf-8")
-                data = _load_recipe_dict(f, raw_text=raw)
-                recipe = _parse_recipe(data)
+                data, declared_data = load_recipe_dict_with_declarations(f, raw_text=raw)
+                recipe = _parse_recipe(data, declared_data=declared_data)
                 if recipe.name and recipe.name not in seen:
                     seen.add(recipe.name)
                     from autoskillit.recipe.staleness_cache import (  # noqa: PLC0415

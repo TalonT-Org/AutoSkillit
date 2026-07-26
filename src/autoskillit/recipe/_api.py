@@ -46,6 +46,7 @@ from autoskillit.recipe._api_listing import (  # noqa: F401
     validate_from_path,
 )
 from autoskillit.recipe._binding import bind_recipe
+from autoskillit.recipe._io_loading import load_recipe_dict_with_declarations
 from autoskillit.recipe._recipe_composition import (
     _assert_content_integrity,
     _build_active_recipe,
@@ -86,7 +87,6 @@ from autoskillit.recipe.diagrams import (
 from autoskillit.recipe.io import (
     RecipeInfo,
     _assert_no_raw_placeholders,
-    _load_recipe_dict_with_declarations,
     _parse_recipe,
     builtin_recipes_dir,
     builtin_sub_recipes_dir,
@@ -344,7 +344,7 @@ def load_and_validate(
 
     try:
         # Stage: yaml parse
-        data, declared_data = _load_recipe_dict_with_declarations(
+        data, declared_data = load_recipe_dict_with_declarations(
             match.path,
             raw_text=raw_declared,
             temp_dir_relpath=_temp_relpath,

@@ -602,51 +602,23 @@ async def run_skill(
     closure_target_sha: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Run a Claude Code headless session with a skill command.
+    """Delegate one already-selected recipe step to a separate L1 headless coding-agent worker.
 
-    Returns JSON with: success, result, session_id, subtype, is_error, exit_code,
-    needs_retry, retry_reason. When needs_retry is true, retry_reason is:
-    - "resume": context/turn limit hit — partial progress on disk, route to on_context_limit.
-    - "drain_race": channel confirmed completion but stdout not fully flushed — route to
-      on_context_limit (same as resume).
-    - "completed_no_flush": session exited with empty stdout but write evidence confirms work was
-      performed — route to on_context_limit (same as drain_race/resume).
-    - "empty_output": session exited cleanly with no output AND no write evidence — no partial
-      progress, route to on_failure.
-    - "path_contamination": session wrote files outside its working directory — route to
-      on_failure.
-    - "early_stop": model stopped before completion marker — route to on_failure.
-    - "zero_writes": skill made no writes despite write expectation — route to on_failure.
-    - "thinking_stall": model produced thinking blocks only, no text/tool output — route to
-      on_context_limit if lifespan_started, else on_failure.
-    - "contract_recovery": model completed and wrote artifacts but structured output failed
-      pattern validation and nudge could not recover — route to on_context_limit if
-      has_progress_evidence, else on_failure.
-    - "rate_limited": transient HTTP 429 or rate-limit text signal — route to on_rate_limit
-      (falls back to on_context_limit if on_rate_limit is absent).
-    - "stale": session went stale (no output progress) — decrement retries counter and
-      re-execute the same step if retries remain, else on_failure.
-    - "idle_stall": stdout idle watchdog killed the session — route to on_context_limit if
-      lifespan_started, else on_failure.
-    - "clone_contamination": session wrote to a contaminated clone directory — route to
-      on_failure.
-    - "budget_exhausted": session exceeded its budget allocation — route to on_failure.
+    Use this tool only when a headless recipe orchestrator operating at L2 or an
+    interactive AutoSkillit cook/order session intends separate-worker delegation. The
+    recipe step must already be selected before this call.
 
-    This is the correct MCP tool to delegate work to a headless session during
-    pipeline execution. NEVER use native tools (Read, Grep, Glob, Edit, Write,
-    Bash, Agent, WebFetch, WebSearch, NotebookEdit) from the orchestrator.
-    All code changes, investigation, and research happen through the headless
-    session launched by this tool.
+    When a user names or asks to use an available local skill for the current interactive
+    conversation, load and follow its SKILL.md in the current interactive session.
+    Do not call run_skill merely because the skill was named.
 
-    Use this for all skill sessions, including long-running ones that may hit the
-    context limit. The 2-hour timeout is the default. When needs_retry is true,
-    route to the appropriate resume step (e.g., retry-worktree) rather than
-    re-running this step from scratch.
+    Returns JSON with success, result, session_id, subtype, is_error, exit_code, needs_retry,
+    and retry_reason. When needs_retry is true, follow the recipe's declared retry route.
 
     Args:
-        skill_command: The full prompt including skill invocation (e.g. "/investigate ...").
-        cwd: Working directory for the claude session.
-        model: Model to use (e.g. "sonnet", "opus"). Empty string = use config default.
+        skill_command: Full recipe-declared skill invocation or resume continuation.
+        cwd: Absolute working directory for the separate coding-agent worker.
+        model: Optional model identifier. Empty string uses the configured default.
         step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
             accumulated in the server-side token log, grouped by this name.
         order_id: Optional per-issue/order identifier for token telemetry scoping. When set,
@@ -659,9 +631,8 @@ async def run_skill(
             0 = disabled for this step. None = use global config
             (RunSkillConfig.idle_output_timeout, default 1000s).
         resume_session_id: Session ID from a previous run_skill call that was interrupted.
-            When set, the session is resumed via --resume instead of starting fresh.
-            The skill_command becomes a continuation instruction (non-slash text is allowed).
-            Pass the session_id from the previous run_skill result JSON.
+            When set, resume that coding-agent session instead of starting fresh. The
+            skill_command becomes a continuation instruction; pass the prior result's session_id.
 
     Never raises.
     """

@@ -153,6 +153,7 @@ from .runtime.session_registry import registry_path as registry_path
 from .runtime.session_registry import write_registry_entry as write_registry_entry
 from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
 from .tool_registry import all_tool_names as all_tool_names
+from .tool_registry import compute_tool_contract_identity as compute_tool_contract_identity
 from .tool_registry import get_tool_def as get_tool_def
 from .tool_registry import unsupported_tool_params as unsupported_tool_params
 from .tool_sequence_analysis import DFG as DFG

@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from autoskillit.core import TOOL_REGISTRY
+from autoskillit.core import (
+    TOOL_REGISTRY,
+    ToolParamDef,
+    compute_tool_contract_identity,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -77,3 +82,13 @@ def test_run_skill_has_one_compiler_owned_structured_input_channel() -> None:
     )
     assert tuple(param.name for param in structured) == ("skill_inputs",)
     assert structured[0].handler_parameter
+
+
+def test_tool_contract_identity_tracks_registry_parameter_shape() -> None:
+    run_skill = TOOL_REGISTRY["run_skill"]
+    changed = replace(
+        run_skill,
+        params=(*run_skill.params, ToolParamDef("future_parameter")),
+    )
+
+    assert compute_tool_contract_identity(changed) != compute_tool_contract_identity(run_skill)

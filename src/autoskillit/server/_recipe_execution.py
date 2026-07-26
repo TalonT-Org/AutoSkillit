@@ -32,7 +32,9 @@ from autoskillit.core import (
     VerifiedInputPreflightResult,
     compute_invocation_template_digest,
     compute_recipe_execution_snapshot_digest,
+    compute_tool_contract_identity,
     get_logger,
+    get_tool_def,
     resolve_skill_name,
 )
 from autoskillit.recipe import (
@@ -64,7 +66,10 @@ __all__ = [
     "record_runtime_binding_digest",
 ]
 
-_TOOL_CONTRACT_IDENTITY = "autoskillit:tool-registry:v1:run_skill"
+_RUN_SKILL_TOOL_DEF = get_tool_def("run_skill")
+if _RUN_SKILL_TOOL_DEF is None:
+    raise RuntimeError("canonical run_skill tool contract is unavailable")
+_TOOL_CONTRACT_IDENTITY = compute_tool_contract_identity(_RUN_SKILL_TOOL_DEF)
 _SKILL_CONTRACT_IDENTITY_DOMAIN = b"autoskillit:skill-contract:v1\0"
 
 

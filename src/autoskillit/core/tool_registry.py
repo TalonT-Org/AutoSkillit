@@ -10,15 +10,19 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType
 
+from .closure_hashing import compute_canonical_hash
 from .types._type_constants_registries import HEADLESS_TOOLS
 from .types._type_recipe_binding import ToolDef, ToolParamDef, ToolWireType
 
 __all__ = [
     "TOOL_REGISTRY",
     "all_tool_names",
+    "compute_tool_contract_identity",
     "get_tool_def",
     "unsupported_tool_params",
 ]
+
+_TOOL_CONTRACT_IDENTITY_DOMAIN = "autoskillit:tool-contract:v1:sha256"
 
 
 def _tool(
@@ -405,6 +409,26 @@ if not HEADLESS_TOOLS <= TOOL_REGISTRY.keys():
 
 def get_tool_def(tool_name: str) -> ToolDef | None:
     return TOOL_REGISTRY.get(tool_name)
+
+
+def compute_tool_contract_identity(tool_def: ToolDef) -> str:
+    """Hash every canonical parameter property that defines a tool contract."""
+    return compute_canonical_hash(
+        {
+            "name": tool_def.name,
+            "params": [
+                {
+                    "handler_parameter": param.handler_parameter,
+                    "name": param.name,
+                    "required": param.required,
+                    "structured_skill_inputs": param.structured_skill_inputs,
+                    "wire_type": param.wire_type.value,
+                }
+                for param in tool_def.params
+            ],
+        },
+        domain=_TOOL_CONTRACT_IDENTITY_DOMAIN,
+    )
 
 
 def all_tool_names() -> frozenset[str]:

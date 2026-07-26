@@ -36,6 +36,7 @@ from autoskillit.core import (
     BoundValue,
     BoundValueOrigin,
     BoundValueState,
+    InputPreflightResolver,
     InventoryAdmissionDecision,
     InventoryAdmissionEvaluator,
     InvocationTemplate,
@@ -1546,7 +1547,26 @@ async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
         projection=_preflight_projection(),
         execution_id="execution-1",
     )
-    install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+
+    class RecordingResolver:
+        def __init__(self, wrapped: InputPreflightResolver) -> None:
+            self._wrapped = wrapped
+            self.result: VerifiedInputPreflightResult | None = None
+
+        def resolve(
+            self,
+            request: VerifiedInputPreflightRequest,
+        ) -> VerifiedInputPreflightResult:
+            self.result = self._wrapped.resolve(request)
+            return self.result
+
+    recording_resolver = RecordingResolver(installed.input_preflight_resolver)
+    installed = replace(
+        installed,
+        input_preflight_resolver=recording_resolver,
+    )
+    tool_ctx_kitchen_open.active_recipe_execution = installed
     tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
     tool_ctx_kitchen_open.runner.push(
         _make_result(
@@ -1584,9 +1604,35 @@ async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
     prompt = cmd[prompt_index]
     assert "AUTOSKILLIT_BOUND_INVOCATION_V1" in prompt
     assert f'"value":"{plan_path}"' in prompt
-    installed = get_recipe_execution(tool_ctx_kitchen_open)
-    assert installed is not None
-    assert installed.runtime_binding_digests["dry"].startswith("sha256:")
+    recorded = get_recipe_execution(tool_ctx_kitchen_open)
+    assert recorded is not None
+    assert recording_resolver.result is not None
+    expected_digest = compute_runtime_binding_digest(
+        execution_id="execution-1",
+        step_name="dry",
+        template_digest=snapshot.templates["dry"].template_digest,
+        bound_inputs=(("plan_path", plan_path), ("issue_url", "")),
+        actual_mcp_kwargs={
+            "skill_command": "/dry-walkthrough",
+            "cwd": str(tmp_path),
+            "model": "",
+            "step_name": "dry",
+            "recipe_execution_id": "execution-1",
+            "invocation_template_digest": snapshot.templates["dry"].template_digest,
+            "step_provider": "",
+            "order_id": "",
+            "output_dir": "",
+            "resume_session_id": "",
+            "closure_authority_path": "",
+            "closure_authority_hash": "",
+            "closure_plan_paths": "",
+            "closure_base_sha": "",
+            "closure_diff_sha": "",
+            "closure_target_sha": "",
+        },
+        preflight=recording_resolver.result,
+    )
+    assert recorded.runtime_binding_digests["dry"] == expected_digest
 
 
 @pytest.mark.anyio

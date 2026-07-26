@@ -403,6 +403,20 @@ def test_snapshot_rejects_digest_that_does_not_attest_invocation() -> None:
         )
 
 
+@pytest.mark.parametrize("field", ["content_hash", "composite_hash"])
+def test_snapshot_rejects_invalid_recipe_hash_identity(field: str) -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+
+    with pytest.raises(ValueError, match="canonical sha256"):
+        replace(snapshot, **{field: "not-a-recipe-hash"})
+
+
 def test_published_audit_head_binds_preflight_template_identity(
     tool_ctx_kitchen_open,
 ) -> None:

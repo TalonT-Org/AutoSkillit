@@ -14,7 +14,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
 
-from ..closure_hashing import compute_canonical_hash
+from ..closure_hashing import HASH_RE, compute_canonical_hash
 from ._type_audit_cycle import AuditCycleAuthority, AuditCycleHead, InventoryAdmissionDecision
 from ._type_recipe_binding import (
     AbsentBoundValue,
@@ -146,6 +146,8 @@ class RecipeExecutionSnapshot:
     def __post_init__(self) -> None:
         if not self.execution_id or not self.recipe_name:
             raise ValueError("recipe execution identity must be non-empty")
+        if not HASH_RE.fullmatch(self.content_hash) or not HASH_RE.fullmatch(self.composite_hash):
+            raise ValueError("recipe execution hashes must be canonical sha256 identities")
         copied = dict(self.templates)
         if any(name != template.invocation.step_name for name, template in copied.items()):
             raise ValueError("recipe execution template keys must match step names")

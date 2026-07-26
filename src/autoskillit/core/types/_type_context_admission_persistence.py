@@ -112,11 +112,11 @@ class ShadowContextAdmissionTargetRecord(_ContractValue):
 
     target_id: AdmissionBatchId | GenerationReservationId
     occurrence_ids: tuple[AdmissionOccurrenceId, ...]
-    turn_id: TurnId | None
-    tool_call_id: ToolCallId | None
-    producer_instance_id: ProducerInstanceId | None
+    turn_ids: tuple[TurnId, ...]
+    tool_call_ids: tuple[ToolCallId | None, ...]
+    producer_instance_ids: tuple[ProducerInstanceId, ...]
     producer_surfaces: tuple[ProducerSurface, ...]
-    delivery_occurrence_id: DeliveryOccurrenceId | None
+    delivery_occurrence_ids: tuple[DeliveryOccurrenceId | None, ...]
     reservation_id: AdmissionReservationId | None
     batch_id: AdmissionBatchId | None
     generation_reservation_id: GenerationReservationId | None
@@ -140,19 +140,26 @@ class ShadowContextAdmissionTargetRecord(_ContractValue):
                 _validate_non_negative(value, "invalid_shadow_count")
         if tuple(sorted(self.occurrence_ids, key=lambda item: item.value)) != self.occurrence_ids:
             _raise_invalid("noncanonical_shadow_occurrences")
-        if (
-            tuple(sorted(self.producer_surfaces, key=lambda item: item.value))
-            != self.producer_surfaces
+        occurrence_count = len(self.occurrence_ids)
+        if any(
+            len(values) != occurrence_count
+            for values in (
+                self.turn_ids,
+                self.tool_call_ids,
+                self.producer_instance_ids,
+                self.producer_surfaces,
+                self.delivery_occurrence_ids,
+            )
         ):
-            _raise_invalid("noncanonical_shadow_producers")
-        if len(set(self.producer_surfaces)) != len(self.producer_surfaces):
-            _raise_invalid("duplicate_shadow_producer")
+            _raise_invalid("shadow_lineage_coordinate_mismatch")
         is_input = isinstance(self.target_id, AdmissionBatchId)
-        if is_input != (self.batch_id is not None):
+        if is_input and self.batch_id != self.target_id:
             _raise_invalid("invalid_shadow_input_target")
         if is_input and self.generation_reservation_id is not None:
             _raise_invalid("mixed_shadow_target_domain")
-        if not is_input and self.generation_reservation_id != self.target_id:
+        if not is_input and (
+            self.batch_id is None or self.generation_reservation_id != self.target_id
+        ):
             _raise_invalid("invalid_shadow_generation_target")
 
 

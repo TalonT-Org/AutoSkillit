@@ -6,6 +6,7 @@ from typing import Any
 
 from autoskillit.core import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
+    AcceptInputEvent,
     AdmissionAttemptId,
     AdmissionBatch,
     AdmissionBatchId,
@@ -17,9 +18,11 @@ from autoskillit.core import (
     AdmissionReservationId,
     AdmissionReservationKey,
     AdmissionSequence,
+    AdmissionWitness,
     AdmissionWitnessId,
     AgentInstanceId,
     AggregateRevision,
+    AuthoritySourceId,
     CanonicalRepresentationManifest,
     CanonicalSpanId,
     CanonicalSpanOwner,
@@ -29,22 +32,33 @@ from autoskillit.core import (
     ContextSessionId,
     ContextThreadId,
     ContextWindowSnapshot,
+    DispatchRequestEvent,
+    GenerationReservationId,
+    GenerationReservationRecord,
+    GenerationState,
     IdempotencyNamespace,
+    MeasurementKind,
     ModelIdentity,
     ModelItemId,
     OpenEpochEvent,
+    PrepareBatchEvent,
     ProducerInstanceId,
     ProducerSurface,
     ProposeOccurrenceEvent,
+    ReconcileGenerationEvent,
     RepresentationBindingId,
+    RepresentationBindingWitness,
     RepresentationRevision,
     ReserveClass,
     ReserveRequestEvent,
+    StageHistoryEvent,
+    StartGenerationEvent,
     TokenizerIdentity,
     ToolCallId,
     TurnId,
     UninitializedContextAdmissionState,
     WindowEpochId,
+    WitnessKind,
 )
 
 
@@ -232,26 +246,184 @@ def reserve_event(
     *,
     event_id: str = "event-reserve",
     count: int = 10,
+    generation_allowance: int | None = None,
 ) -> ReserveRequestEvent:
     return ReserveRequestEvent(
         **event_fields(state, event_id, "reserve-request"),
         batch=batch_value,
         snapshot_sequence=1,
         input_reservations=(reservation(batch_value, occurrence_value, count=count),),
-        generation_reservation=None,
+        generation_reservation=(
+            generation_reservation(
+                batch_value,
+                maximum=generation_allowance,
+            )
+            if generation_allowance is not None
+            else None
+        ),
+    )
+
+
+def generation_reservation(
+    batch_value: AdmissionBatch,
+    *,
+    maximum: int,
+) -> GenerationReservationRecord:
+    return GenerationReservationRecord(
+        generation_reservation_id=GenerationReservationId("generation-one"),
+        request_id=batch_value.request_id,
+        batch_id=batch_value.batch_id,
+        representation_revision=batch_value.manifest.representation_revision,
+        occurrence_ids=batch_value.occurrence_ids,
+        response_id=ModelItemId("response-one"),
+        window_epoch_id=WindowEpochId("epoch-one"),
+        window_epoch_number=1,
+        snapshot_sequence=1,
+        reserve_class=batch_value.reserve_class,
+        protected_pool_owner_id=batch_value.protected_pool_owner_id,
+        maximum_allowance=maximum,
+        state=GenerationState.RESERVED,
+        exact_terminal_usage=None,
+        witness_ids=(),
+        authority_source_id=None,
+    )
+
+
+def witness(
+    batch_value: AdmissionBatch,
+    kind: WitnessKind,
+) -> AdmissionWitness:
+    return AdmissionWitness(
+        witness_id=AdmissionWitnessId(f"{kind.value}-witness"),
+        kind=kind,
+        window_epoch_id=WindowEpochId("epoch-one"),
+        window_epoch_number=1,
+        snapshot_sequence=1,
+        request_id=batch_value.request_id,
+        batch_id=batch_value.batch_id,
+        representation_revision=batch_value.manifest.representation_revision,
+        representation_binding_id=batch_value.manifest.representation_binding_id,
+        occurrence_ids=batch_value.occurrence_ids,
+        authority_source_id=AuthoritySourceId("authority-test"),
+    )
+
+
+def representation_binding(
+    batch_value: AdmissionBatch,
+) -> RepresentationBindingWitness:
+    return RepresentationBindingWitness(
+        counted_representation_revision=batch_value.manifest.representation_revision,
+        dispatched_representation_revision=batch_value.manifest.representation_revision,
+        final_manifest_revision=batch_value.manifest.representation_revision,
+        representation_binding_id=batch_value.manifest.representation_binding_id,
+        request_id=batch_value.request_id,
+        batch_id=batch_value.batch_id,
+        authority_source_id=AuthoritySourceId("authority-test"),
+    )
+
+
+def prepare_event(
+    state: ContextAdmissionState,
+    batch_value: AdmissionBatch,
+    *,
+    proposed_charge: int = 10,
+) -> PrepareBatchEvent:
+    return PrepareBatchEvent(
+        **event_fields(state, "event-prepare", "prepare-batch"),
+        batch_id=batch_value.batch_id,
+        representation_revision=batch_value.manifest.representation_revision,
+        representation_binding_id=batch_value.manifest.representation_binding_id,
+        proposed_charge=proposed_charge,
+        measurement_kind=MeasurementKind.TOKENIZER_EXACT,
+        authority_source=AuthoritySourceId("authority-test"),
+    )
+
+
+def stage_event(
+    state: ContextAdmissionState,
+    batch_value: AdmissionBatch,
+) -> StageHistoryEvent:
+    return StageHistoryEvent(
+        **event_fields(state, "event-stage", "stage-history"),
+        batch_id=batch_value.batch_id,
+        witness=witness(batch_value, WitnessKind.HISTORY_STAGED),
+    )
+
+
+def dispatch_event(
+    state: ContextAdmissionState,
+    batch_value: AdmissionBatch,
+) -> DispatchRequestEvent:
+    return DispatchRequestEvent(
+        **event_fields(state, "event-dispatch", "dispatch-request"),
+        batch_id=batch_value.batch_id,
+        witness=witness(batch_value, WitnessKind.REQUEST_INCLUDED),
+    )
+
+
+def start_generation_event(
+    state: ContextAdmissionState,
+    batch_value: AdmissionBatch,
+) -> StartGenerationEvent:
+    return StartGenerationEvent(
+        **event_fields(state, "event-start-generation", "start-generation"),
+        generation_reservation_id=GenerationReservationId("generation-one"),
+        witness=witness(batch_value, WitnessKind.REQUEST_INCLUDED),
+    )
+
+
+def accept_event(
+    state: ContextAdmissionState,
+    batch_value: AdmissionBatch,
+    *,
+    exact_input_charge: int,
+) -> AcceptInputEvent:
+    return AcceptInputEvent(
+        **event_fields(state, "event-accept", "accept-input"),
+        batch_id=batch_value.batch_id,
+        witness=witness(batch_value, WitnessKind.PROVIDER_ACCEPTED),
+        final_manifest_revision=batch_value.manifest.representation_revision,
+        final_manifest=batch_value.manifest,
+        exact_input_charge=exact_input_charge,
+        measurement_kind=MeasurementKind.PROVIDER_EXACT,
+        authority_source=AuthoritySourceId("authority-test"),
+        representation_binding_witness=representation_binding(batch_value),
+    )
+
+
+def reconcile_generation_event(
+    state: ContextAdmissionState,
+    batch_value: AdmissionBatch,
+    *,
+    exact_output_usage: int,
+) -> ReconcileGenerationEvent:
+    return ReconcileGenerationEvent(
+        **event_fields(state, "event-reconcile-generation", "reconcile-generation"),
+        generation_reservation_id=GenerationReservationId("generation-one"),
+        output_usage_witness=witness(batch_value, WitnessKind.OUTPUT_USAGE),
+        exact_output_usage=exact_output_usage,
     )
 
 
 __all__ = [
+    "accept_event",
     "batch",
+    "dispatch_event",
     "event_fields",
+    "generation_reservation",
     "lineage",
     "occurrence",
     "open_event",
+    "prepare_event",
     "propose_event",
     "reservation",
+    "reconcile_generation_event",
+    "representation_binding",
     "reserve_event",
     "snapshot",
+    "stage_event",
+    "start_generation_event",
     "stream_key",
     "uninitialized_state",
+    "witness",
 ]

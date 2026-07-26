@@ -475,12 +475,12 @@ from .types import CrossDomainAssessment as CrossDomainAssessment
 from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
-from .types import DurableContextAdmissionPayload as DurableContextAdmissionPayload
 from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
 from .types import DispatchRequestEvent as DispatchRequestEvent
+from .types import DurableContextAdmissionPayload as DurableContextAdmissionPayload
 from .types import EffectiveSkillCatalogAuthority as EffectiveSkillCatalogAuthority
 from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocationAuthority
 from .types import EnvPolicy as EnvPolicy
@@ -646,6 +646,10 @@ from .types import SessionSummary as SessionSummary
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
+from .types import ShadowContextAdmissionRecord as ShadowContextAdmissionRecord
+from .types import (
+    ShadowContextAdmissionTargetRecord as ShadowContextAdmissionTargetRecord,
+)
 from .types import SkillAuthority as SkillAuthority
 from .types import SkillCapabilityDef as SkillCapabilityDef
 from .types import SkillContractError as SkillContractError
@@ -664,10 +668,6 @@ from .types import SkillSource as SkillSource
 from .types import SkillSourceIdentity as SkillSourceIdentity
 from .types import SkillSourceRef as SkillSourceRef
 from .types import SkillVisibilitySpec as SkillVisibilitySpec
-from .types import ShadowContextAdmissionRecord as ShadowContextAdmissionRecord
-from .types import (
-    ShadowContextAdmissionTargetRecord as ShadowContextAdmissionTargetRecord,
-)
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent

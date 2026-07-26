@@ -242,7 +242,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_backend": frozenset({"core", "execution", "cli", "recipe", "server", "workspace"}),
     "_type_recipe_delivery": frozenset({"core", "execution", "server"}),
     "_type_recipe_sections": frozenset({"core", "execution", "server"}),
-    "_type_context_admission": frozenset({"core"}),
+    "_type_context_admission": frozenset({"core", "pipeline"}),
+    "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli"}),
@@ -283,12 +284,29 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_recipe_binding": frozenset({"core", "recipe", "server"}),
     "_type_recipe_execution": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_closure_report": frozenset({"core"}),
-    "context_admission": frozenset({"core"}),
+    "context_admission": frozenset({"core", "pipeline"}),
     "audit_cycle_verifier": frozenset({"core", "recipe", "server"}),
     "tool_registry": frozenset({"core", "recipe", "server"}),
     "closure_hashing": frozenset({"core", "recipe"}),
     "path_containment": frozenset({"core", "recipe"}),
     "closure_verifier": frozenset({"core", "execution"}),
+}
+
+# Narrow per-module cascade for pipeline/. Modules not listed here fall
+# through to LAYER_CASCADE_CONSERVATIVE["pipeline"] (fail-open).
+MODULE_CASCADE_PIPELINE: dict[str, frozenset[str]] = {
+    "context_admission_ledger": frozenset({"pipeline", "server"}),
+    "context": frozenset(
+        {
+            "pipeline",
+            "execution",
+            "server",
+            "infra",
+            "cli",
+            "fleet",
+            "smoke_utils",
+        }
+    ),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through
@@ -1725,6 +1743,12 @@ def build_test_scope(
                         test_dirs.update(
                             cascade_map["execution"]
                         )  # fail-open: unknown execution modules
+            elif pkg == "pipeline" and mode == FilterMode.CONSERVATIVE:
+                stem = Path(f).stem
+                if stem in MODULE_CASCADE_PIPELINE:
+                    test_dirs.update(MODULE_CASCADE_PIPELINE[stem])
+                else:
+                    test_dirs.update(cascade_map["pipeline"])  # fail-open
             elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
                 stem = Path(f).stem
                 if stem in MODULE_CASCADE_RECIPE:
@@ -1831,6 +1855,25 @@ def build_test_scope(
                                 test_dirs.update(MODULE_CASCADE_EXECUTION[stem])
                             else:
                                 test_dirs.update(cascade_map["execution"])  # fail-open
+                    elif pkg == "pipeline" and mode == FilterMode.CONSERVATIVE:
+                        stem = Path(f).stem
+                        if stem == "__init__":
+                            pipeline_cause_stems = {
+                                Path(c).stem
+                                for c in changed_src_py
+                                if _file_to_package(c) == "pipeline" and Path(c).stem != "__init__"
+                            }
+                            if pipeline_cause_stems and all(
+                                s in MODULE_CASCADE_PIPELINE for s in pipeline_cause_stems
+                            ):
+                                for s in pipeline_cause_stems:
+                                    test_dirs.update(MODULE_CASCADE_PIPELINE[s])
+                            else:
+                                test_dirs.update(cascade_map["pipeline"])
+                        elif stem in MODULE_CASCADE_PIPELINE:
+                            test_dirs.update(MODULE_CASCADE_PIPELINE[stem])
+                        else:
+                            test_dirs.update(cascade_map["pipeline"])  # fail-open
                     elif pkg == "recipe" and mode == FilterMode.CONSERVATIVE:
                         stem = Path(f).stem
                         if stem == "__init__":

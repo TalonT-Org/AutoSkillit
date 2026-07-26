@@ -22,12 +22,18 @@ from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
 )
 from tests.fixtures.context_admission import (
+    accept_event,
     batch,
+    dispatch_event,
     occurrence,
     open_event,
+    prepare_event,
     propose_event,
+    reconcile_generation_event,
     reserve_event,
     snapshot,
+    stage_event,
+    start_generation_event,
     stream_key,
 )
 
@@ -190,12 +196,26 @@ def test_reducer_transition_is_published_atomically_with_independent_journal_ord
             proposed.transition.next_state,
             batch(occurrence_value),
             occurrence_value,
+            generation_allowance=15,
         ),
     )
     assert reserved.status is ContextAdmissionAccountingStatus.RECORDED
     assert reserved.journal_sequence == 3
     assert reserved.transition is not None
     assert reserved.transition.next_state.admission_sequence.value == 1
+    inspection = ledger.inspect_stream(key)
+    assert inspection.events[-1].event_id.value == "event-reserve"
+    assert inspection.effects[-1] == reserved.transition.effects
+    assert inspection.state == reserved.transition.next_state
+    input_target, generation_target = inspection.shadows[-1].targets
+    assert input_target.proposed_input_count == 10
+    assert input_target.generation_allowance is None
+    assert input_target.producer_surfaces == (occurrence_value.lineage.producer_surface,)
+    assert input_target.turn_ids == (occurrence_value.lineage.turn_id,)
+    assert generation_target.proposed_input_count is None
+    assert generation_target.generation_allowance == 15
+    assert generation_target.exact_input_charge is None
+    assert generation_target.exact_output_charge is None
 
     connection = sqlite3.connect(authority.database_path)
     try:
@@ -214,6 +234,81 @@ def test_reducer_transition_is_published_atomically_with_independent_journal_ord
         )
     finally:
         connection.close()
+
+
+def test_shadow_projection_preserves_exact_input_and_output_measurements(
+    tmp_path: Path,
+) -> None:
+    ledger = DefaultContextAdmissionLedger(_authority(tmp_path))
+    key = stream_key()
+    occurrence_value = occurrence()
+    batch_value = batch(occurrence_value)
+
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    reserved = ledger.reserve(
+        key,
+        reserve_event(
+            proposed.transition.next_state,
+            batch_value,
+            occurrence_value,
+            generation_allowance=15,
+        ),
+    )
+    assert reserved.transition is not None
+    prepared = ledger.apply(
+        key,
+        prepare_event(reserved.transition.next_state, batch_value),
+    )
+    assert prepared.transition is not None
+    staged = ledger.apply(
+        key,
+        stage_event(prepared.transition.next_state, batch_value),
+    )
+    assert staged.transition is not None
+    dispatched = ledger.apply(
+        key,
+        dispatch_event(staged.transition.next_state, batch_value),
+    )
+    assert dispatched.transition is not None
+    generation_started = ledger.apply(
+        key,
+        start_generation_event(dispatched.transition.next_state, batch_value),
+    )
+    assert generation_started.transition is not None
+    accepted = ledger.commit(
+        key,
+        accept_event(
+            generation_started.transition.next_state,
+            batch_value,
+            exact_input_charge=9,
+        ),
+    )
+    assert accepted.transition is not None
+    reconciled = ledger.commit(
+        key,
+        reconcile_generation_event(
+            accepted.transition.next_state,
+            batch_value,
+            exact_output_usage=7,
+        ),
+    )
+    assert reconciled.transition is not None
+
+    inspection = ledger.replay(key)
+    assert inspection.latest_journal_sequence == 9
+    assert tuple(record.journal_sequence for record in inspection.shadows) == tuple(range(1, 10))
+    accepted_target = inspection.shadows[7].targets[0]
+    assert accepted_target.exact_input_charge == 9
+    assert accepted_target.measurement_kind is not None
+    reconciled_target = inspection.shadows[8].targets[0]
+    assert reconciled_target.exact_output_charge == 7
+    assert reconciled_target.generation_allowance == 15
 
 
 def test_exact_event_retry_returns_current_state_noop_without_append(

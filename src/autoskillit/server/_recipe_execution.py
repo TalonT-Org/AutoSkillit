@@ -20,7 +20,6 @@ from autoskillit.core import (
     AuditVerdict,
     BindingMode,
     BoundScalar,
-    BoundValueOrigin,
     BoundValueState,
     InstalledRecipeExecution,
     InventoryAdmissionDecision,
@@ -431,9 +430,7 @@ def record_runtime_binding_digest(
 
 
 def _is_dynamic(value: Any) -> bool:
-    return bool(value.context_dependencies or value.input_dependencies) or (
-        value.origin is not BoundValueOrigin.LITERAL
-    )
+    return bool(value.context_dependencies or value.input_dependencies)
 
 
 def bind_attested_runtime_invocation(

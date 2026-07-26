@@ -602,6 +602,65 @@ def test_runtime_binding_rejects_undeclared_effective_tool_options(
     assert option_name in str(exc_info.value)
 
 
+def test_runtime_binding_rejects_template_only_tool_override() -> None:
+    invocation = _projection().invocations["dry"]
+    template_only_cwd = BoundValue(
+        name="cwd",
+        declared_value="{{AUTOSKILLIT_TEMP}}/worktree",
+        effective_value="/resolved/worktree",
+        state=BoundValueState.PRESENT,
+        origin=BoundValueOrigin.TEMPLATE,
+        template_dependencies=("AUTOSKILLIT_TEMP",),
+    )
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=RecipeBindingProjection(
+            {
+                "dry": replace(
+                    invocation,
+                    mcp_kwargs=(invocation.mcp_kwargs[0], template_only_cwd),
+                )
+            }
+        ),
+        execution_id="execution-1",
+    )
+    store = DefaultAuditCycleHeadStore()
+    from autoskillit.core import InstalledRecipeExecution
+
+    installed = InstalledRecipeExecution(
+        snapshot=snapshot,
+        runtime_binding_digests={},
+        audit_cycle_heads=store,
+        input_preflight_resolver=DefaultInputPreflightResolver(
+            allowed_root=Path("/tmp"),
+            head_store=store,
+        ),
+    )
+
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        bind_attested_runtime_invocation(
+            installed,
+            execution_id="execution-1",
+            step_name="dry",
+            template_digest=snapshot.templates["dry"].template_digest,
+            skill_command="/dry-walkthrough",
+            skill_inputs={
+                "plan_path": "/tmp/plan.md",
+                "issue_url": "",
+                "audit_cycle_path": "/tmp/audit-cycle.json",
+                "plan_disposition_path": "/tmp/plan-disposition.json",
+            },
+            actual_mcp_kwargs={
+                "skill_command": "/dry-walkthrough",
+                "cwd": "/caller/override",
+            },
+        )
+
+    assert exc_info.value.code == "recipe_execution_static_tool_mismatch"
+
+
 @pytest.mark.parametrize(
     ("invalid_name", "invalid_value"),
     (("count", "3"), ("enabled", "false")),

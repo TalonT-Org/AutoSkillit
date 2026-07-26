@@ -139,6 +139,21 @@ class BoundValue:
     input_dependencies: tuple[str, ...] = ()
     template_dependencies: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        declared_absent = isinstance(self.declared_value, AbsentBoundValue)
+        effective_absent = isinstance(self.effective_value, AbsentBoundValue)
+        if self.state is BoundValueState.ABSENT:
+            if (
+                not declared_absent
+                or not effective_absent
+                or self.origin is not BoundValueOrigin.ABSENT
+            ):
+                raise ValueError(
+                    "absent bound values require absent declared/effective values and origin"
+                )
+        elif declared_absent or effective_absent or self.origin is BoundValueOrigin.ABSENT:
+            raise ValueError("present bound values cannot use an absent value or origin")
+
     @classmethod
     def absent(cls, name: str) -> BoundValue:
         return cls(

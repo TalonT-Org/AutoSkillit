@@ -11,8 +11,10 @@ import pytest
 
 import autoskillit.recipe._binding as binding_module
 from autoskillit.core import (
+    ABSENT_BOUND_VALUE,
     BindingFailureCode,
     BindingMode,
+    BoundValue,
     BoundValueOrigin,
     BoundValueState,
 )
@@ -70,6 +72,41 @@ def _required_inputs() -> dict[str, str]:
         "audit_cycle_path": "/tmp/audit/cycle.json",
         "plan_disposition_path": "/tmp/audit/plan disposition.json",
     }
+
+
+@pytest.mark.parametrize(
+    "declared,effective,state,origin",
+    [
+        ("declared", "effective", BoundValueState.ABSENT, BoundValueOrigin.ABSENT),
+        (
+            ABSENT_BOUND_VALUE,
+            ABSENT_BOUND_VALUE,
+            BoundValueState.PRESENT,
+            BoundValueOrigin.LITERAL,
+        ),
+        (
+            ABSENT_BOUND_VALUE,
+            ABSENT_BOUND_VALUE,
+            BoundValueState.ABSENT,
+            BoundValueOrigin.LITERAL,
+        ),
+        ("declared", "effective", BoundValueState.PRESENT, BoundValueOrigin.ABSENT),
+    ],
+)
+def test_bound_value_rejects_contradictory_absence(
+    declared: object,
+    effective: object,
+    state: BoundValueState,
+    origin: BoundValueOrigin,
+) -> None:
+    with pytest.raises(ValueError, match="absent"):
+        BoundValue(
+            name="value",
+            declared_value=declared,
+            effective_value=effective,
+            state=state,
+            origin=origin,
+        )
 
 
 def test_contract_input_order_is_explicit_and_immutable() -> None:

@@ -896,7 +896,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 26,  # +_context_admission pure reducer
-        "core/types": 36,  # +_type_recipe_sections +_type_skill_contract +context admission
+        "core/types": 37,  # +_type_intake_policy evidence-bound Codex intake rule registry
         "cli": 21,
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 14,  # +_install_state (single install-state consistency authority,

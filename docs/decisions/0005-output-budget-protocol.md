@@ -203,11 +203,13 @@ insertion control, not a measurement of remaining context.
   vs 258,400 in cli 0.144.1, but the effective window is server/catalog-controlled
   and oscillated during July 2026 (openai/codex#31860, #32806) — re-verify, do not
   assume an upgrade restores headroom.
-- openai/codex#25458 / #27830: `fork_turns "none"` task-envelope delivery bug gates
-  the intake digest's sub-agent spawn rule — until the upstream bug is fixed,
-  `codex --json` sessions cannot reliably deliver task-envelope context to
-  sub-agents, so the intake discipline's "do not spawn sub-agents" guard remains
-  the operative constraint.
+- openai/codex#25458 / #27830: `fork_turns "none"` task-envelope delivery bug — until
+  the upstream bug is fixed, `codex --json` sessions cannot reliably deliver
+  task-envelope context to sub-agents, so the intake discipline requires sub-agents to
+  be spawned with `fork_turns "none"` passed explicitly and given an explicit narrow
+  brief; sub-agents return a summary of their own task work, not raw file contents,
+  and must not be delegated the reading or interpretation of the caller's instruction
+  files.
 - openai/codex#33881: agent-TOML `model`/`model_reasoning_effort` reportedly ignored
   on 0.144.5 — affects the pins `_generate_agent_tomls` writes.
 - Upstream auto-compact semantics are scope-dependent
@@ -222,3 +224,10 @@ insertion control, not a measurement of remaining context.
 - Recipe and ordinary result decisions are explicit and independent from history retention.
 - Artifact/invariant failures become explicit bounded errors instead of context floods.
 - The accepted gaps above remain visible work rather than implicit guarantees.
+- The Codex context-intake policy (#4351) is advisory prose with no runtime gate, so it
+  is governed by the evidence-bound `CODEX_INTAKE_RULES` registry rather than by
+  `INVARIANT_REGISTRY`, which maps prohibitions to runtime enforcement targets.
+- The intake digest is deliberately excluded from `PROBE_POLICY_IDENTITY`. Wiring it in
+  would make every intake-prose edit probe-gated under this ADR's Forward Obligations,
+  a real recurring operational cost; excluding it keeps that a conscious future decision
+  rather than a side effect of this change.

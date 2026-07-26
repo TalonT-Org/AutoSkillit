@@ -37,6 +37,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_helpers.py` | Text processing, skill-name extraction, and shared content-free validation utilities |
 | `_type_inspector.py` | Health Inspector types: `InspectorEvidence`, `InspectorVerdict`, `InspectorCallback` (issue #3533) |
 | `_type_invariant_registry.py` | Invariant registry: `InvariantDef` dataclass and `INVARIANT_REGISTRY` mapping prose prohibitions to runtime gates |
+| `_type_intake_policy.py` | Codex context-intake rule registry: `IntakeRuleDef`, `CODEX_INTAKE_RULES`, rendered digest, byte budgets |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |
 | `_type_plugin_source.py` | `DirectInstall` (projection input) and `ProjectedPluginRoot` (the sole `PluginSource`) |
@@ -45,7 +46,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 
 ## Architecture Notes
 
-Internal dependency DAG: enums -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter; enums + phoropter -> tradition_manifest. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
+Internal dependency DAG: enums -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter; enums + phoropter -> tradition_manifest. `_type_intake_policy` is a DAG leaf — stdlib-only, zero sibling imports. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
 
 ## Extension Bundle Pattern
 

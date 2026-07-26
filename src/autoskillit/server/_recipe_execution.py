@@ -655,6 +655,12 @@ def _publish_loaded_audit_cycle(
 ) -> AuditCycleHead:
     if authority.execution_generation != installed.snapshot.execution_id:
         raise AuditCycleHeadConflict("authority crosses recipe execution generations")
+    verifier = AuditCycleVerifier(tool_ctx.temp_dir)
+    for audited_plan_ref in authority.audited_plan_refs:
+        verifier.verify_artifact_ref(audited_plan_ref)
+    verifier.verify_artifact_ref(authority.inventory_ref)
+    if authority.remediation_ref is not None:
+        verifier.verify_artifact_ref(authority.remediation_ref)
     head = installed.audit_cycle_heads.publish(
         authority,
         expected_parent_digest=expected_parent_digest,

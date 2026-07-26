@@ -29,6 +29,7 @@ from autoskillit.core import (
     AuditAssessmentRow,
     AuditCycleAuthority,
     AuditCycleHead,
+    AuditCycleVerificationError,
     AuditVerdict,
     BindingMode,
     BoundStepInvocation,
@@ -49,6 +50,7 @@ from autoskillit.core import (
     VerifiedInputPreflightResult,
     compute_runtime_binding_digest,
 )
+from autoskillit.core.closure_hashing import compute_bytes_hash
 from autoskillit.recipe import RecipeStep, bind_step_invocation
 from autoskillit.server._recipe_delivery import (
     complete_finalized_recipe_response,
@@ -141,12 +143,12 @@ def _preflight_projection() -> RecipeBindingProjection:
     )
 
 
-def _artifact(path: Path, digest: str) -> ArtifactRef:
+def _artifact(path: Path, digest: str, *, byte_size: int = 1) -> ArtifactRef:
     return ArtifactRef(
         locator=str(path),
         media_type="application/json",
         schema_version=1,
-        byte_size=1,
+        byte_size=byte_size,
         content_digest=digest,
     )
 
@@ -159,7 +161,35 @@ def _authority(
     parent: str | None,
     verdict: AuditVerdict,
     part_id: str = "part-a",
+    materialize: bool = False,
 ) -> AuditCycleAuthority:
+    plan_ref = _artifact(tmp_path / "plan.md", _HASH_A)
+    inventory_ref = _artifact(tmp_path / "inventory.json", _HASH_B)
+    remediation_ref = _artifact(tmp_path / "remediation.md", _HASH_A)
+    if materialize:
+        artifact_payloads = {
+            tmp_path / "plan.md": b"audited plan",
+            tmp_path / "inventory.json": b'{"schema_version":1}',
+            tmp_path / "remediation.md": b"remediation",
+        }
+        for path, payload in artifact_payloads.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+        plan_ref = _artifact(
+            tmp_path / "plan.md",
+            compute_bytes_hash(artifact_payloads[tmp_path / "plan.md"]),
+            byte_size=len(artifact_payloads[tmp_path / "plan.md"]),
+        )
+        inventory_ref = _artifact(
+            tmp_path / "inventory.json",
+            compute_bytes_hash(artifact_payloads[tmp_path / "inventory.json"]),
+            byte_size=len(artifact_payloads[tmp_path / "inventory.json"]),
+        )
+        remediation_ref = _artifact(
+            tmp_path / "remediation.md",
+            compute_bytes_hash(artifact_payloads[tmp_path / "remediation.md"]),
+            byte_size=len(artifact_payloads[tmp_path / "remediation.md"]),
+        )
     assessment = AuditAssessmentRow.create(
         requirement_id="REQ-001",
         requirement_text="requirement",
@@ -174,15 +204,11 @@ def _authority(
         part_id=part_id,
         audit_round=round_,
         parent_authority_digest=parent,
-        audited_plan_refs=(_artifact(tmp_path / "plan.md", _HASH_A),),
-        inventory_ref=_artifact(tmp_path / "inventory.json", _HASH_B),
+        audited_plan_refs=(plan_ref,),
+        inventory_ref=inventory_ref,
         assessments=(assessment,),
         verdict=verdict,
-        remediation_ref=(
-            _artifact(tmp_path / "remediation.md", _HASH_A)
-            if verdict is AuditVerdict.NO_GO
-            else None
-        ),
+        remediation_ref=(remediation_ref if verdict is AuditVerdict.NO_GO else None),
         generated_at="2026-07-23T00:00:00Z",
     )
 
@@ -475,6 +501,7 @@ def test_published_audit_head_binds_preflight_template_identity(
         round_=1,
         parent=None,
         verdict=AuditVerdict.NO_GO,
+        materialize=True,
     )
     authority_path = Path(tool_ctx_kitchen_open.temp_dir) / "authority.json"
     authority_path.parent.mkdir(parents=True, exist_ok=True)
@@ -496,6 +523,49 @@ def test_published_audit_head_binds_preflight_template_identity(
     )
 
 
+def test_audit_publication_rejects_tampered_referenced_artifact(
+    tool_ctx_kitchen_open,
+) -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    root = Path(tool_ctx_kitchen_open.temp_dir)
+    authority = _authority(
+        root,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.GO,
+        materialize=True,
+    )
+    authority_path = root / "tampered-authority.json"
+    authority_path.write_bytes(authority.canonical_bytes)
+    Path(authority.inventory_ref.locator).write_bytes(b"tampered")
+
+    with pytest.raises(AuditCycleVerificationError):
+        publish_verified_audit_cycle(
+            tool_ctx_kitchen_open,
+            authority_path=str(authority_path),
+            expected_parent_digest=None,
+            expected_round=0,
+        )
+
+    assert (
+        installed.audit_cycle_heads.get(
+            execution_generation=authority.execution_generation,
+            plan_set_id=authority.plan_set_id,
+            scope_id=authority.scope_id,
+            part_id=authority.part_id,
+        )
+        is None
+    )
+
+
 def test_successful_audit_result_publishes_protected_successor_identity(
     tool_ctx_kitchen_open,
 ) -> None:
@@ -513,6 +583,7 @@ def test_successful_audit_result_publishes_protected_successor_identity(
         round_=1,
         parent=None,
         verdict=AuditVerdict.NO_GO,
+        materialize=True,
     )
     authority_path = Path(tool_ctx_kitchen_open.temp_dir) / "reported-authority.json"
     authority_path.parent.mkdir(parents=True, exist_ok=True)

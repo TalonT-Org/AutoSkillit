@@ -40,7 +40,7 @@ _INPUT_REF_RE: Final = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
 _AUTOSKILLIT_TEMPLATE_RE: Final = re.compile(r"\{\{(AUTOSKILLIT_[A-Z0-9_]+)\}\}")
 _EXACT_CONTEXT_REF_RE: Final = re.compile(r"^\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}$")
 _EXACT_INPUT_REF_RE: Final = re.compile(r"^\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}$")
-_SCALAR_TYPES = (str, int, float, bool)
+_SCALAR_TYPES = (str, int, bool)
 
 
 def _is_scalar(value: object) -> TypeGuard[BoundScalar]:
@@ -160,7 +160,7 @@ def _wire_value_is_valid(value: object, param: ToolParamDef) -> bool:
         case ToolWireType.INTEGER:
             return isinstance(value, int) and not isinstance(value, bool)
         case ToolWireType.NUMBER:
-            return isinstance(value, (int, float)) and not isinstance(value, bool)
+            return isinstance(value, int) and not isinstance(value, bool)
         case ToolWireType.BOOLEAN:
             return isinstance(value, bool)
         case ToolWireType.SCALAR:

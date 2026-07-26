@@ -30,7 +30,7 @@ __all__ = [
 ]
 
 
-BoundScalar: TypeAlias = str | int | float | bool
+BoundScalar: TypeAlias = str | int | bool
 
 
 class ToolWireType(StrEnum):
@@ -246,7 +246,7 @@ class BoundStepInvocation:
             effective = value.effective_value
             if isinstance(effective, AbsentBoundValue):
                 continue
-            if not isinstance(effective, (str, int, float, bool)):
+            if not isinstance(effective, (str, int, bool)):
                 raise TypeError(f"child-skill input {value.name!r} is not a strict scalar")
             result.append((value.name, effective))
         return tuple(result)

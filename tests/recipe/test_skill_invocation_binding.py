@@ -51,7 +51,7 @@ def _manifest() -> dict[str, object]:
 
 
 def _step(
-    skill_inputs: dict[str, str | int | float | bool],
+    skill_inputs: dict[str, str | int | bool],
     **extra: str,
 ) -> RecipeStep:
     return RecipeStep(
@@ -269,7 +269,7 @@ def test_optional_absence_does_not_shift_later_values() -> None:
 
 
 def test_falsey_values_remain_present() -> None:
-    values: dict[str, str | int | float | bool] = _required_inputs()
+    values: dict[str, str | int | bool] = _required_inputs()
     values.update(optional_note="", enabled=False, round=0)
     invocation = bind_step_invocation(
         "verify",
@@ -371,6 +371,12 @@ def test_unknown_tool_and_skill_namespaces_are_distinct() -> None:
             {"issue_numbers": "42", "comment": "done", "cwd": "/repo"},
             BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
             "issue_numbers",
+        ),
+        (
+            "run_cmd",
+            {"cmd": "pwd", "cwd": "/repo", "timeout": 1.5},
+            BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+            "timeout",
         ),
     ],
 )

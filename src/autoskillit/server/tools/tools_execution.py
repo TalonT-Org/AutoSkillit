@@ -621,7 +621,7 @@ async def run_skill(
     closure_base_sha: str = "",
     closure_diff_sha: str = "",
     closure_target_sha: str = "",
-    skill_inputs: dict[str, str | int | float | bool] | None = None,
+    skill_inputs: dict[str, str | int | bool] | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Delegate one already-selected recipe step to a separate L1 headless coding-agent worker.

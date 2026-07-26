@@ -553,11 +553,10 @@ def bind_attested_runtime_invocation(
             value.name: value.effective_value
             for value in runtime_inline.skill_inputs
             if value.state is BoundValueState.PRESENT
-            and isinstance(value.effective_value, (str, int, float, bool))
+            and isinstance(value.effective_value, (str, int, bool))
         }
     if any(
-        not isinstance(value, (str, int, float, bool)) or value is None
-        for value in supplied.values()
+        not isinstance(value, (str, int, bool)) or value is None for value in supplied.values()
     ):
         raise RecipeExecutionAdmissionError(
             "recipe_execution_input_type",

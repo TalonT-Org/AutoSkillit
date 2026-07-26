@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import stat
@@ -16,6 +17,7 @@ from autoskillit.core import (
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     ContextAdmissionStoreAuthority,
+    ContextAdmissionStreamKey,
     ContextThreadId,
 )
 from autoskillit.pipeline.context_admission_ledger import (
@@ -31,6 +33,7 @@ from tests.fixtures.context_admission import (
     propose_event,
     reconcile_generation_event,
     reserve_event,
+    rollover_event,
     snapshot,
     stage_event,
     start_generation_event,
@@ -172,6 +175,181 @@ def test_recovery_is_idempotent_for_an_empty_healthy_store(tmp_path: Path) -> No
     assert first == second
 
 
+def test_recovery_replays_nonempty_stream_and_surfaces_unresolved_work(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    occurrence_value = occurrence()
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    reserved = ledger.reserve(
+        key,
+        reserve_event(
+            proposed.transition.next_state,
+            batch(occurrence_value),
+            occurrence_value,
+            generation_allowance=15,
+        ),
+    )
+    assert reserved.transition is not None
+
+    reopened = DefaultContextAdmissionLedger(authority)
+    recovered = reopened.recover_all()
+
+    assert recovered.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    assert recovered.recovered_streams == (key,)
+    assert recovered.unresolved_streams == (key,)
+    inspection = reopened.inspect_stream(key)
+    assert inspection.state == reserved.transition.next_state
+    assert inspection.latest_journal_sequence == 3
+    replayed = reopened.apply(
+        key,
+        reserve_event(
+            proposed.transition.next_state,
+            batch(occurrence_value),
+            occurrence_value,
+            generation_allowance=15,
+        ),
+    )
+    assert replayed.status is ContextAdmissionAccountingStatus.EXACT_REPLAY
+    assert replayed.journal_sequence == 3
+
+
+def test_recovery_failure_is_sticky_per_stream_and_isolates_other_streams(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    failed_key = stream_key()
+    healthy_key = replace(
+        failed_key,
+        current_thread_id=ContextThreadId("thread-other"),
+    )
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert (
+        ledger.apply(failed_key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    )
+    assert (
+        ledger.apply(healthy_key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    )
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        rows = connection.execute("SELECT stream_id FROM streams ORDER BY stream_id").fetchall()
+        failed_id = next(
+            bytes(row[0])
+            for row in rows
+            if ContextAdmissionStreamKey.from_dict(json.loads(bytes(row[0]).decode("utf-8")))
+            == failed_key
+        )
+        connection.execute(
+            """
+            DELETE FROM shadow_decisions
+            WHERE stream_id = ? AND journal_sequence = 1
+            """,
+            (failed_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    recovered = DefaultContextAdmissionLedger(authority)
+    result = recovered.recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    assert recovered.stream_health(failed_key).status is (
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    )
+    assert recovered.stream_health(healthy_key).status is (
+        ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    assert (
+        recovered.apply(failed_key, open_event()).status
+        is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED
+    )
+    assert (
+        recovered.apply(healthy_key, open_event()).status
+        is ContextAdmissionAccountingStatus.EXACT_REPLAY
+    )
+    restarted = DefaultContextAdmissionLedger(authority)
+    restarted.recover_all()
+    assert restarted.stream_health(failed_key).status is (
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    )
+
+
+def test_recovery_rejects_valid_but_nonzero_genesis(tmp_path: Path) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute("UPDATE streams SET genesis_envelope = state_envelope")
+        connection.commit()
+    finally:
+        connection.close()
+
+    recovered = DefaultContextAdmissionLedger(authority)
+    result = recovered.recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    health = recovered.stream_health(key)
+    assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert health.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert health.reason_code == "invalid-stream-genesis-type"
+
+
+def test_recovery_preflight_rejects_unsupported_encoding_without_rewrite(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert (
+        ledger.apply(stream_key(), open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        original = bytes(
+            connection.execute("SELECT event_envelope FROM journal_events").fetchone()[0]
+        )
+        unsupported = original.replace(
+            b'"encoding_version":1',
+            b'"encoding_version":2',
+            1,
+        )
+        connection.execute(
+            "UPDATE journal_events SET event_envelope = ?",
+            (unsupported,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    recovered = DefaultContextAdmissionLedger(authority)
+    result = recovered.recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert (
+        result.store_health.failure_reason
+        is ContextAdmissionStorageFailureReason.UNSUPPORTED_ENCODING
+    )
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        assert (
+            bytes(connection.execute("SELECT event_envelope FROM journal_events").fetchone()[0])
+            == unsupported
+        )
+    finally:
+        connection.close()
+
+
 def test_reducer_transition_is_published_atomically_with_independent_journal_order(
     tmp_path: Path,
 ) -> None:
@@ -311,6 +489,49 @@ def test_shadow_projection_preserves_exact_input_and_output_measurements(
     assert reconciled_target.generation_allowance == 15
 
 
+def test_rollover_projection_retains_every_invalidated_target_and_replays(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(authority)
+    key = stream_key()
+    occurrence_value = occurrence()
+    batch_value = batch(occurrence_value)
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    reserved = ledger.reserve(
+        key,
+        reserve_event(
+            proposed.transition.next_state,
+            batch_value,
+            occurrence_value,
+            generation_allowance=15,
+        ),
+    )
+    assert reserved.transition is not None
+    rolled_over = ledger.apply(
+        key,
+        rollover_event(reserved.transition.next_state, batch_value),
+    )
+    assert rolled_over.transition is not None
+
+    targets = ledger.inspect_stream(key).shadows[-1].targets
+    assert tuple(target.target_id.value for target in targets) == (
+        "batch-one",
+        "generation-one",
+    )
+    assert targets[0].proposed_input_count == 10
+    assert targets[1].generation_allowance == 15
+    recovered = DefaultContextAdmissionLedger(authority).recover_all()
+    assert recovered.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    assert recovered.unresolved_streams == ()
+
+
 def test_exact_event_retry_returns_current_state_noop_without_append(
     tmp_path: Path,
 ) -> None:
@@ -432,6 +653,43 @@ def test_postcommit_fault_has_unknown_outcome_but_exact_retry_finds_publication(
     replayed = ledger.apply(stream_key(), event)
     assert replayed.status is ContextAdmissionAccountingStatus.EXACT_REPLAY
     assert replayed.journal_sequence == 1
+
+
+@pytest.mark.parametrize(
+    ("fault_name", "expected_status"),
+    [
+        ("before_commit", ContextAdmissionAccountingStatus.RECORDED),
+        ("after_commit", ContextAdmissionAccountingStatus.EXACT_REPLAY),
+    ],
+)
+def test_sqlite_result_class_recovery_reopens_and_resolves_publication(
+    tmp_path: Path,
+    fault_name: str,
+    expected_status: ContextAdmissionAccountingStatus,
+) -> None:
+    authority = _authority(tmp_path)
+    fired = False
+
+    def inject(point: object) -> None:
+        nonlocal fired
+        if not fired and getattr(point, "value") == fault_name:
+            fired = True
+            error = sqlite3.OperationalError(fault_name)
+            error.sqlite_errorcode = sqlite3.SQLITE_IOERR
+            raise error
+
+    result = DefaultContextAdmissionLedger(
+        authority,
+        fault_callback=inject,
+    ).apply(stream_key(), open_event())
+
+    assert result.status is expected_status
+    assert result.journal_sequence == 1
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        assert connection.execute("SELECT COUNT(*) FROM journal_events").fetchone() == (1,)
+    finally:
+        connection.close()
 
 
 def test_lineage_mismatch_sets_sticky_stream_health(tmp_path: Path) -> None:

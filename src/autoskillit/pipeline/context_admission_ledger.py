@@ -23,6 +23,7 @@ from typing import Final, assert_never, cast, get_args
 from autoskillit.core import (
     CONTEXT_ADMISSION_ENCODING_VERSION,
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
+    CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS,
     AcceptInputEvent,
     ActiveContextAdmissionState,
     AdmissionBatch,
@@ -57,6 +58,7 @@ from autoskillit.core import (
     ExpireIdempotencyKeyEvent,
     GenerationReservationId,
     GenerationReservationRecord,
+    GenerationState,
     MarkGenerationIndeterminateEvent,
     MarkIndeterminateEvent,
     MeasurementKind,
@@ -88,6 +90,17 @@ _DATABASE_MODE: Final = 0o600
 _DIRECTORY_MODE: Final = 0o700
 _SQLITE_PRIMARY_MASK: Final = 0xFF
 _SQLITE_BUSY_CODES: Final = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
+_SQLITE_RECOVERY_CODES: Final = frozenset(
+    {
+        sqlite3.SQLITE_FULL,
+        sqlite3.SQLITE_IOERR,
+        sqlite3.SQLITE_INTERRUPT,
+        sqlite3.SQLITE_NOMEM,
+    }
+)
+_ENVELOPE_KEYS: Final = frozenset(
+    {"encoding_version", "protocol_version", "type_discriminator", "payload"}
+)
 _EVENT_TYPES: Final = get_args(ContextAdmissionEvent)
 _EFFECT_TYPES: Final = get_args(AdmissionEffect)
 _STATE_TYPES: Final = get_args(ContextAdmissionState)
@@ -149,6 +162,7 @@ class DefaultContextAdmissionLedger:
             ContextAdmissionStreamKey,
             ContextAdmissionStreamHealth,
         ] = {}
+        self._unresolved_streams: set[ContextAdmissionStreamKey] = set()
 
     @property
     def database_path(self) -> Path:
@@ -469,18 +483,26 @@ class DefaultContextAdmissionLedger:
                     reason_code="protocol-validation-failed",
                 )
             except sqlite3.Error as exc:
-                if connection is not None:
-                    _rollback(connection)
-                if _sqlite_primary_code(exc) in _SQLITE_BUSY_CODES:
+                primary_code = _sqlite_primary_code(exc)
+                if primary_code in _SQLITE_BUSY_CODES:
+                    if connection is not None:
+                        _rollback(connection)
                     return ContextAdmissionAccountingResult(
                         status=ContextAdmissionAccountingStatus.CONTENDED,
                         stream_key=stream_key,
                         reason_code="busy",
                     )
+                if connection is not None and primary_code in _SQLITE_RECOVERY_CODES:
+                    return self._recover_sqlite_result(
+                        connection,
+                        stream_key,
+                        event,
+                    )
+                if connection is not None:
+                    _rollback(connection)
                 reason = (
                     ContextAdmissionStorageFailureReason.INTEGRITY
-                    if _sqlite_primary_code(exc)
-                    in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
+                    if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
                     else ContextAdmissionStorageFailureReason.IO
                 )
                 self._set_store_failure(reason, "sqlite-publication-failed")
@@ -492,6 +514,44 @@ class DefaultContextAdmissionLedger:
             finally:
                 if connection is not None:
                     connection.close()
+
+    def _recover_sqlite_result(
+        self,
+        connection: sqlite3.Connection,
+        stream_key: ContextAdmissionStreamKey,
+        event: ContextAdmissionEvent,
+    ) -> ContextAdmissionAccountingResult:
+        transaction_was_active = connection.in_transaction
+        _rollback(connection)
+        rollback_confirmed = not connection.in_transaction
+        connection.close()
+        self._recovered = False
+        self._store_health = ContextAdmissionStoreHealth(
+            ContextAdmissionStorageHealthStatus.UNINITIALIZED
+        )
+        self._stream_health.clear()
+        self._unresolved_streams.clear()
+        recovery = self.recover_all()
+        if recovery.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+            return self._storage_failure_result(stream_key)
+        health = self.stream_health(stream_key)
+        if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+            return ContextAdmissionAccountingResult(
+                status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+                stream_key=stream_key,
+                failure_reason=health.failure_reason,
+                reason_code=health.reason_code,
+            )
+        inspection = self.inspect_stream(stream_key)
+        if any(stored_event.event_id == event.event_id for stored_event in inspection.events):
+            return self.apply(stream_key, event)
+        if transaction_was_active and rollback_confirmed:
+            return self.apply(stream_key, event)
+        self._set_store_failure(
+            ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY,
+            "sqlite-result-ambiguous",
+        )
+        return self._storage_failure_result(stream_key)
 
     def reserve(
         self,
@@ -554,7 +614,7 @@ class DefaultContextAdmissionLedger:
         stream_key: ContextAdmissionStreamKey,
         reason: ContextAdmissionStorageFailureReason,
         reason_code: str,
-    ) -> None:
+    ) -> bool:
         try:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
@@ -571,14 +631,22 @@ class DefaultContextAdmissionLedger:
                 ),
             )
             connection.execute("COMMIT")
-        except sqlite3.Error:
+        except sqlite3.Error as exc:
             _rollback(connection)
+            if _sqlite_primary_code(exc) in _SQLITE_BUSY_CODES:
+                return False
+            self._set_store_failure(
+                ContextAdmissionStorageFailureReason.IO,
+                "stream-health-persistence-failed",
+            )
+            return False
         self._stream_health[stream_key] = ContextAdmissionStreamHealth(
             stream_key,
             ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
             failure_reason=reason,
             reason_code=reason_code,
         )
+        return True
 
     def _storage_failure_result(
         self,
@@ -617,12 +685,14 @@ class DefaultContextAdmissionLedger:
                     if health.status is ContextAdmissionStorageHealthStatus.HEALTHY
                     else ()
                 ),
-                unresolved_streams=(),
+                unresolved_streams=(
+                    (stream_key,) if stream_key in self._unresolved_streams else ()
+                ),
             )
 
     def recover_all(self) -> ContextAdmissionRecoveryResult:
         with self._fence:
-            if self._store_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+            if self._recovered:
                 return self._recovery_result()
             connection: sqlite3.Connection | None = None
             try:
@@ -631,17 +701,83 @@ class DefaultContextAdmissionLedger:
                 self._validate_integrity(connection)
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 self._validate_metadata(metadata)
-                stream_count = int(
-                    connection.execute("SELECT COUNT(*) FROM streams").fetchone()[0]
-                )
-                if stream_count:
-                    raise _LedgerOpenError(
-                        ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY,
-                        "stream-replay-pending",
+                _preflight_storage_routes(connection)
+                self._stream_health.clear()
+                self._unresolved_streams.clear()
+                stream_rows = connection.execute(
+                    """
+                    SELECT stream_id, stream_key, genesis_envelope, state_envelope,
+                           aggregate_revision, admission_sequence,
+                           latest_journal_sequence, health_status,
+                           failure_reason, reason_code
+                    FROM streams
+                    ORDER BY stream_id
+                    """
+                ).fetchall()
+                for row in stream_rows:
+                    stream_id = bytes(row[0])
+                    stream_key = _decode_stream_key(bytes(row[1]))
+                    if stream_id != bytes(row[1]) or stream_id != _stream_key_bytes(stream_key):
+                        raise _LedgerOpenError(
+                            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+                            "stream-key-mismatch",
+                        )
+                    try:
+                        health = _stored_stream_health(stream_key, row[7], row[8], row[9])
+                    except (ContextAdmissionValidationError, ValueError) as exc:
+                        raise _LedgerOpenError(
+                            ContextAdmissionStorageFailureReason.INTEGRITY,
+                            "invalid-stream-health",
+                        ) from exc
+                    if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+                        self._stream_health[stream_key] = health
+                        continue
+                    try:
+                        recovered_state = _recover_stream_projection(
+                            connection,
+                            stream_id,
+                            stream_key,
+                            genesis_envelope=bytes(row[2]),
+                            materialized_state_envelope=bytes(row[3]),
+                            aggregate_revision=int(row[4]),
+                            admission_sequence=int(row[5]),
+                            latest_journal_sequence=int(row[6]),
+                        )
+                    except ContextAdmissionValidationError:
+                        persisted = self._persist_stream_failure(
+                            connection,
+                            stream_id,
+                            stream_key,
+                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                            "stream-replay-decode-failed",
+                        )
+                        if not persisted:
+                            break
+                        continue
+                    except _LedgerOpenError as exc:
+                        persisted = self._persist_stream_failure(
+                            connection,
+                            stream_id,
+                            stream_key,
+                            exc.reason,
+                            exc.reason_code,
+                        )
+                        if not persisted:
+                            break
+                        continue
+                    self._stream_health[stream_key] = ContextAdmissionStreamHealth(
+                        stream_key,
+                        ContextAdmissionStorageHealthStatus.HEALTHY,
                     )
-                self._store_health = ContextAdmissionStoreHealth(
-                    ContextAdmissionStorageHealthStatus.HEALTHY
-                )
+                    if _state_has_unresolved_work(recovered_state):
+                        self._unresolved_streams.add(stream_key)
+                if (
+                    self._store_health.status
+                    is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+                ):
+                    self._store_health = ContextAdmissionStoreHealth(
+                        ContextAdmissionStorageHealthStatus.HEALTHY
+                    )
                 self._recovered = True
             except _LedgerContended:
                 return ContextAdmissionRecoveryResult(
@@ -837,7 +973,7 @@ class DefaultContextAdmissionLedger:
                 for health in healths
                 if health.status is ContextAdmissionStorageHealthStatus.HEALTHY
             ),
-            unresolved_streams=(),
+            unresolved_streams=tuple(sorted(self._unresolved_streams, key=_stream_key_bytes)),
         )
 
     def _ensure_store(self) -> None:
@@ -1108,6 +1244,326 @@ def _decode_state(value: bytes) -> ContextAdmissionState:
     if not isinstance(payload, _STATE_TYPES):
         raise ContextAdmissionValidationError("stored_state_type_mismatch")
     return cast(ContextAdmissionState, payload)
+
+
+def _decode_stream_key(value: bytes) -> ContextAdmissionStreamKey:
+    try:
+        raw = json.loads(value.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+            "invalid-stream-key",
+        ) from None
+    if not isinstance(raw, dict):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+            "invalid-stream-key",
+        )
+    try:
+        stream_key = ContextAdmissionStreamKey.from_dict(raw)
+    except ContextAdmissionValidationError as exc:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+            "invalid-stream-key",
+        ) from exc
+    if _stream_key_bytes(stream_key) != value:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+            "noncanonical-stream-key",
+        )
+    return stream_key
+
+
+def _stored_stream_health(
+    stream_key: ContextAdmissionStreamKey,
+    status: object,
+    failure_reason: object,
+    reason_code: object,
+) -> ContextAdmissionStreamHealth:
+    return ContextAdmissionStreamHealth(
+        stream_key,
+        ContextAdmissionStorageHealthStatus(str(status)),
+        failure_reason=(
+            ContextAdmissionStorageFailureReason(str(failure_reason))
+            if failure_reason is not None
+            else None
+        ),
+        reason_code=str(reason_code) if reason_code is not None else None,
+    )
+
+
+def _preflight_storage_routes(connection: sqlite3.Connection) -> None:
+    queries = (
+        "SELECT genesis_envelope FROM streams",
+        "SELECT state_envelope FROM streams",
+        "SELECT event_envelope FROM journal_events",
+        "SELECT decision_envelope FROM journal_events",
+        "SELECT effect_envelope FROM effect_outbox",
+        "SELECT shadow_envelope FROM shadow_decisions",
+    )
+    for query in queries:
+        for (encoded,) in connection.execute(query):
+            encoding_version, protocol_version, discriminator = _envelope_header(bytes(encoded))
+            if encoding_version != CONTEXT_ADMISSION_ENCODING_VERSION:
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.UNSUPPORTED_ENCODING,
+                    "unsupported-envelope-encoding",
+                )
+            if discriminator not in CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS:
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.UNSUPPORTED_ENCODING,
+                    "unsupported-envelope-discriminator",
+                )
+            try:
+                context_admission_reducer_for_protocol(protocol_version)
+            except ContextAdmissionValidationError as exc:
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
+                    "unsupported-envelope-protocol",
+                ) from exc
+
+
+def _envelope_header(value: bytes) -> tuple[int, int, str]:
+    try:
+        raw = json.loads(value.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.INTEGRITY,
+            "invalid-envelope-header",
+        ) from None
+    if not isinstance(raw, dict) or frozenset(raw) != _ENVELOPE_KEYS:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.INTEGRITY,
+            "invalid-envelope-header",
+        )
+    encoding_version = raw["encoding_version"]
+    protocol_version = raw["protocol_version"]
+    discriminator = raw["type_discriminator"]
+    if (
+        isinstance(encoding_version, bool)
+        or not isinstance(encoding_version, int)
+        or isinstance(protocol_version, bool)
+        or not isinstance(protocol_version, int)
+        or not isinstance(discriminator, str)
+    ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.INTEGRITY,
+            "invalid-envelope-header",
+        )
+    return encoding_version, protocol_version, discriminator
+
+
+def _recover_stream_projection(
+    connection: sqlite3.Connection,
+    stream_id: bytes,
+    stream_key: ContextAdmissionStreamKey,
+    *,
+    genesis_envelope: bytes,
+    materialized_state_envelope: bytes,
+    aggregate_revision: int,
+    admission_sequence: int,
+    latest_journal_sequence: int,
+) -> ContextAdmissionState:
+    genesis_wrapper = decode_stored_context_admission_envelope(genesis_envelope)
+    if not isinstance(genesis_wrapper.payload, UninitializedContextAdmissionState):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "invalid-stream-genesis-type",
+        )
+    genesis = genesis_wrapper.payload
+    if genesis_wrapper.protocol_version != genesis.protocol_version or genesis != _zero_state(
+        genesis.protocol_version
+    ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "invalid-stream-genesis",
+        )
+    if latest_journal_sequence <= 0:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY,
+            "empty-bound-stream",
+        )
+    journal_rows = connection.execute(
+        """
+        SELECT journal_sequence, event_envelope, decision_envelope,
+               expected_revision, prior_aggregate_revision,
+               prior_admission_sequence, resulting_aggregate_revision,
+               resulting_admission_sequence
+        FROM journal_events
+        WHERE stream_id = ?
+        ORDER BY journal_sequence
+        """,
+        (stream_id,),
+    ).fetchall()
+    sequences = tuple(int(row[0]) for row in journal_rows)
+    if sequences != tuple(range(1, latest_journal_sequence + 1)):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "journal-sequence-gap",
+        )
+    effects_by_sequence: dict[int, list[bytes]] = {sequence: [] for sequence in sequences}
+    for sequence, ordinal, envelope in connection.execute(
+        """
+        SELECT journal_sequence, effect_ordinal, effect_envelope
+        FROM effect_outbox
+        WHERE stream_id = ?
+        ORDER BY journal_sequence, effect_ordinal
+        """,
+        (stream_id,),
+    ):
+        effects = effects_by_sequence.get(int(sequence))
+        if effects is None or int(ordinal) != len(effects):
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "effect-sequence-gap",
+            )
+        effects.append(bytes(envelope))
+    shadow_rows = connection.execute(
+        """
+        SELECT journal_sequence, shadow_envelope
+        FROM shadow_decisions
+        WHERE stream_id = ?
+        ORDER BY journal_sequence
+        """,
+        (stream_id,),
+    ).fetchall()
+    if tuple(int(row[0]) for row in shadow_rows) != sequences:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "shadow-sequence-gap",
+        )
+    shadow_by_sequence = {int(sequence): bytes(envelope) for sequence, envelope in shadow_rows}
+    state: ContextAdmissionState = genesis
+    for row in journal_rows:
+        journal_sequence = int(row[0])
+        event_wrapper = decode_stored_context_admission_envelope(bytes(row[1]))
+        decision_wrapper = decode_stored_context_admission_envelope(bytes(row[2]))
+        if not isinstance(event_wrapper.payload, _EVENT_TYPES) or not isinstance(
+            decision_wrapper.payload,
+            AdmissionDecision,
+        ):
+            raise ContextAdmissionValidationError("stored_publication_type_mismatch")
+        event = cast(ContextAdmissionEvent, event_wrapper.payload)
+        stored_decision = decision_wrapper.payload
+        if journal_sequence == 1 and not isinstance(
+            event,
+            OpenEpochEvent | AuthorityUnavailableEvent,
+        ):
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "invalid-initial-event",
+            )
+        protocol_version = event.protocol_version
+        if (
+            event_wrapper.protocol_version != protocol_version
+            or decision_wrapper.protocol_version != protocol_version
+            or state.protocol_version != protocol_version
+        ):
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "publication-protocol-mismatch",
+            )
+        _validate_event_stream_identity(stream_key, event)
+        if (
+            int(row[3]) != event.expected_aggregate_revision.value
+            or int(row[4]) != state.aggregate_revision.value
+            or int(row[5]) != state.admission_sequence.value
+        ):
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "journal-prior-coordinate-mismatch",
+            )
+        reducer = context_admission_reducer_for_protocol(protocol_version)
+        transition = reducer.reduce_transition(state, event)
+        if stored_decision != transition.decision:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "journal-decision-mismatch",
+            )
+        stored_effects: list[AdmissionEffect] = []
+        for encoded_effect in effects_by_sequence[journal_sequence]:
+            effect_wrapper = decode_stored_context_admission_envelope(encoded_effect)
+            if effect_wrapper.protocol_version != protocol_version or not isinstance(
+                effect_wrapper.payload, _EFFECT_TYPES
+            ):
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                    "effect-protocol-mismatch",
+                )
+            stored_effects.append(cast(AdmissionEffect, effect_wrapper.payload))
+        if tuple(stored_effects) != transition.effects:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "journal-effects-mismatch",
+            )
+        if (
+            int(row[6]) != transition.next_state.aggregate_revision.value
+            or int(row[7]) != transition.next_state.admission_sequence.value
+        ):
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "journal-result-coordinate-mismatch",
+            )
+        shadow_wrapper = decode_stored_context_admission_envelope(
+            shadow_by_sequence[journal_sequence]
+        )
+        regenerated_shadow = _shadow_record(
+            stream_key,
+            state,
+            event,
+            transition,
+            journal_sequence,
+        )
+        if (
+            shadow_wrapper.protocol_version != protocol_version
+            or not isinstance(
+                shadow_wrapper.payload,
+                ShadowContextAdmissionRecord,
+            )
+            or shadow_wrapper.payload != regenerated_shadow
+        ):
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "journal-shadow-mismatch",
+            )
+        state = transition.next_state
+    materialized_wrapper = decode_stored_context_admission_envelope(materialized_state_envelope)
+    if (
+        materialized_wrapper.protocol_version != state.protocol_version
+        or not isinstance(materialized_wrapper.payload, _STATE_TYPES)
+        or materialized_wrapper.payload != state
+        or aggregate_revision != state.aggregate_revision.value
+        or admission_sequence != state.admission_sequence.value
+    ):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "materialized-state-mismatch",
+        )
+    return state
+
+
+def _state_has_unresolved_work(state: ContextAdmissionState) -> bool:
+    if not isinstance(state, ActiveContextAdmissionState):
+        return False
+    unresolved_admission_states = {
+        AdmissionState.RESERVED,
+        AdmissionState.PREPARED,
+        AdmissionState.HISTORY_STAGED,
+        AdmissionState.REQUEST_DISPATCHED,
+        AdmissionState.INDETERMINATE,
+        AdmissionState.QUARANTINED,
+    }
+    unresolved_generation_states = {
+        GenerationState.RESERVED,
+        GenerationState.STREAMING,
+        GenerationState.INDETERMINATE,
+        GenerationState.QUARANTINED,
+    }
+    return any(
+        record.state in unresolved_admission_states for record in state.batch_records
+    ) or any(
+        record.state in unresolved_generation_states for record in state.generation_reservations
+    )
 
 
 def _empty_inspection(

@@ -51,6 +51,7 @@ from autoskillit.core import (
     RepresentationRevision,
     ReserveClass,
     ReserveRequestEvent,
+    RolloverEpochEvent,
     StageHistoryEvent,
     StartGenerationEvent,
     TokenizerIdentity,
@@ -405,6 +406,29 @@ def reconcile_generation_event(
     )
 
 
+def rollover_event(
+    state: ContextAdmissionState,
+    batch_value: AdmissionBatch,
+) -> RolloverEpochEvent:
+    return RolloverEpochEvent(
+        **event_fields(state, "event-rollover", "rollover-epoch"),
+        witness=witness(batch_value, WitnessKind.EPOCH_ROLLOVER),
+        fence_proof=None,
+        new_snapshot=ContextWindowSnapshot(
+            protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+            window_epoch_id=WindowEpochId("epoch-two"),
+            window_epoch_number=2,
+            model_identity=ModelIdentity.anthropic("claude-test"),
+            tokenizer_identity=TokenizerIdentity("tokenizer-test"),
+            snapshot_sequence=1,
+            active_count=0,
+            hard_limit=100,
+            remaining_count=100,
+        ),
+        protected_pools=(),
+    )
+
+
 __all__ = [
     "accept_event",
     "batch",
@@ -420,6 +444,7 @@ __all__ = [
     "reconcile_generation_event",
     "representation_binding",
     "reserve_event",
+    "rollover_event",
     "snapshot",
     "stage_event",
     "start_generation_event",

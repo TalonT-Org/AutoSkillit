@@ -662,6 +662,62 @@ def test_runtime_binding_rejects_template_only_tool_override() -> None:
     assert exc_info.value.code == "recipe_execution_static_tool_mismatch"
 
 
+@pytest.mark.parametrize(
+    "tamper_target,expected_code",
+    [
+        ("skill_input", "recipe_execution_static_input_mismatch"),
+        ("mcp_parameter", "recipe_execution_static_tool_mismatch"),
+    ],
+)
+def test_runtime_binding_rejects_declared_static_value_tampering(
+    tamper_target: str,
+    expected_code: str,
+) -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+    store = DefaultAuditCycleHeadStore()
+    from autoskillit.core import InstalledRecipeExecution
+
+    installed = InstalledRecipeExecution(
+        snapshot=snapshot,
+        runtime_binding_digests={},
+        audit_cycle_heads=store,
+        input_preflight_resolver=DefaultInputPreflightResolver(
+            allowed_root=Path("/tmp"),
+            head_store=store,
+        ),
+    )
+    runtime_command = (
+        "/dry-walkthrough unexpected-inline-value"
+        if tamper_target == "mcp_parameter"
+        else "/dry-walkthrough"
+    )
+    runtime_inputs = {
+        "plan_path": "/tmp/plan.md",
+        "issue_url": "tampered" if tamper_target == "skill_input" else "",
+        "audit_cycle_path": "/tmp/audit-cycle.json",
+        "plan_disposition_path": "/tmp/plan-disposition.json",
+    }
+
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        bind_attested_runtime_invocation(
+            installed,
+            execution_id="execution-1",
+            step_name="dry",
+            template_digest=snapshot.templates["dry"].template_digest,
+            skill_command=runtime_command,
+            skill_inputs=runtime_inputs,
+            actual_mcp_kwargs={"skill_command": runtime_command, "cwd": "/tmp"},
+        )
+
+    assert exc_info.value.code == expected_code
+
+
 def test_runtime_binding_accepts_compiled_inline_skill_arguments() -> None:
     declared_command = (
         "/dry-walkthrough "

@@ -740,8 +740,7 @@ def test_codex_selects_local_skill_and_explicit_recipe_delegation(
     )
     local_tool_names = _completed_mcp_tool_names(local_skill)
     assert "LOCAL_INVESTIGATE_SKILL_FOLLOWED" in local_skill.final_text
-    assert "open_kitchen" not in local_tool_names
-    assert "run_skill" not in local_tool_names
+    assert local_tool_names == []
 
     nonexistent_cwd = tmp_path / "missing-run-skill-cwd"
     delegated = _run_codex_selection_case(
@@ -757,8 +756,7 @@ def test_codex_selects_local_skill_and_explicit_recipe_delegation(
         model=model,
     )
     delegated_tool_names = _completed_mcp_tool_names(delegated)
-    assert delegated_tool_names.count("run_skill") == 1
-    assert "open_kitchen" not in delegated_tool_names
+    assert delegated_tool_names == ["run_skill"]
     run_skill_item = delegated.completed_mcp_items[delegated_tool_names.index("run_skill")]
     assert "preflight:cwd" in json.dumps(run_skill_item.get("result"), sort_keys=True)
 

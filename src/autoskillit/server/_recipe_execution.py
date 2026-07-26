@@ -284,9 +284,13 @@ class DefaultInputPreflightResolver:
         return self._result(decision)
 
 
-def _skill_contract_identity(skill_name: str) -> str:
-    manifest = load_bundled_manifest()
-    contract = get_skill_contract(skill_name, manifest)
+def _skill_contract_identity(
+    skill_name: str,
+    *,
+    manifest: dict[str, Any] | None = None,
+) -> str:
+    active_manifest = manifest if manifest is not None else load_bundled_manifest()
+    contract = get_skill_contract(skill_name, active_manifest)
     if contract is None:
         raise ValueError(f"skill contract is unavailable for {skill_name!r}")
     payload = json.dumps(
@@ -505,6 +509,15 @@ def bind_attested_runtime_invocation(
         raise RecipeExecutionAdmissionError(
             "recipe_execution_contract_unavailable",
             "the compiled skill contract is unavailable at runtime",
+        )
+    runtime_skill_identity = _skill_contract_identity(
+        invocation.skill_name or "",
+        manifest=manifest,
+    )
+    if runtime_skill_identity != template.skill_contract_identity:
+        raise RecipeExecutionAdmissionError(
+            "recipe_execution_contract_mismatch",
+            "runtime skill contract differs from the compiled template",
         )
     contract_inputs = {input_def.name: input_def for input_def in contract.inputs}
     supplied = dict(skill_inputs or {})

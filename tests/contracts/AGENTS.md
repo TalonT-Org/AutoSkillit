@@ -53,7 +53,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_implement_experiment_contracts.py` | Contract tests for implement-experiment SKILL.md — test infrastructure requirements |
 | `test_input_type_semantic_correctness.py` | Cross-validate skill_contracts.yaml path input types against SKILL.md content |
 | `test_install_state_consistency.py` | `verify_install_state()` invariants, the doctor checks that consume it, and the retired-artifact-shape registry double bind |
-| `test_instruction_surface.py` | Contract tests: every instruction surface must carry the pipeline tool restriction |
+| `test_instruction_surface.py` | Contracts for the authoritative instruction surfaces that own pipeline native-tool restrictions and prohibition framing |
 | `test_issue_body_discipline.py` | Cross-skill contract: no SKILL.md may append validation summaries to issue bodies |
 | `test_issue_content_fidelity.py` | Cross-skill contract: content fidelity for issue body assembly |
 | `test_issue_splitter_contracts.py` | Contract tests: issue-splitter skill correctness and triage-issues integration |

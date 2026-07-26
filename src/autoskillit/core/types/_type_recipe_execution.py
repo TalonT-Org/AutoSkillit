@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
 
@@ -30,6 +31,7 @@ __all__ = [
     "InvocationTemplate",
     "PreflightEvidence",
     "PreflightKind",
+    "RecipeExecutionFactory",
     "RecipeExecutionLock",
     "RecipeExecutionSnapshot",
     "VerifiedInputPreflightRequest",
@@ -272,6 +274,18 @@ class InstalledRecipeExecution:
             "preflight_identities",
             MappingProxyType(identities),
         )
+
+
+@runtime_checkable
+class RecipeExecutionFactory(Protocol):
+    """Composition-root factory for a fully wired execution generation."""
+
+    def __call__(
+        self,
+        *,
+        snapshot: RecipeExecutionSnapshot,
+        allowed_root: Path,
+    ) -> InstalledRecipeExecution: ...
 
 
 def compute_runtime_binding_digest(

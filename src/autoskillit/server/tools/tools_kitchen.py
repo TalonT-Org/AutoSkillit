@@ -676,7 +676,6 @@ def get_recipe(name: str) -> str:
     ctx = _get_ctx_or_none()
     if ctx is None or ctx.recipes is None:
         return json.dumps({"error": "Kitchen not open."})
-    clear_recipe_execution(ctx)
     match = ctx.recipes.find(name, ctx.project_dir)
     if match is None:
         return json.dumps({"error": f"No recipe named '{name}'."})

@@ -560,6 +560,7 @@ from .types import RecipeDeliveryMode as RecipeDeliveryMode
 from .types import RecipeDeliveryRequest as RecipeDeliveryRequest
 from .types import RecipeDeliverySurfaceDef as RecipeDeliverySurfaceDef
 from .types import RecipeExecutionLock as RecipeExecutionLock
+from .types import RecipeExecutionFactory as RecipeExecutionFactory
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError

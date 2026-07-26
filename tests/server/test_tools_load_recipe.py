@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -80,12 +80,23 @@ class TestLoadRecipeTools:
 
     # SS3
     @pytest.mark.anyio
-    async def test_load_unknown_returns_error(self, tmp_path, monkeypatch):
+    async def test_load_unknown_preserves_active_execution(
+        self,
+        tmp_path,
+        monkeypatch,
+        tool_ctx_kitchen_open,
+    ):
         """load_recipe returns error JSON for unknown recipe name."""
         monkeypatch.chdir(tmp_path)
+        previous = MagicMock()
+        previous.snapshot.execution_id = "previous-execution"
+        tool_ctx_kitchen_open.active_recipe_execution = previous
+
         result = json.loads(await load_recipe(name="nonexistent"))
+
         assert "error" in result
         assert "nonexistent" in result["error"]
+        assert tool_ctx_kitchen_open.active_recipe_execution is previous
 
     # SS7
     @pytest.mark.anyio

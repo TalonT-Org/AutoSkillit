@@ -14,7 +14,6 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
-    AuditCycleHeadStore,
     AuditLog,
     BackgroundSupervisor,
     CampaignProtector,
@@ -30,7 +29,6 @@ from autoskillit.core import (
     GitHubFetcher,
     HeadlessExecutor,
     InputContractResolver,
-    InputPreflightResolver,
     InstalledRecipeExecution,
     McpResponseLog,
     MergeQueueWatcher,
@@ -39,6 +37,7 @@ from autoskillit.core import (
     PluginSource,
     QuotaRefreshTask,
     ReadOnlyResolver,
+    RecipeExecutionFactory,
     RecipeExecutionLock,
     RecipeRepository,
     ServeOverridesSnapshot,
@@ -180,8 +179,7 @@ class ToolContext:
     input_contract_resolver: InputContractResolver | None = field(default=None)
     completion_required_resolver: CompletionRequiredResolver | None = field(default=None)
     skill_contract_resolver: SkillContractResolver | None = field(default=None)
-    audit_cycle_head_store: AuditCycleHeadStore | None = field(default=None)
-    input_preflight_resolver: InputPreflightResolver | None = field(default=None)
+    recipe_execution_factory: RecipeExecutionFactory | None = field(default=None)
     backend: CodingAgentBackend | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)

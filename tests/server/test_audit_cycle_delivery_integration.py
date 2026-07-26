@@ -143,6 +143,24 @@ def _preflight_projection() -> RecipeBindingProjection:
     )
 
 
+def _wire_recipe_execution_factory(tool_ctx) -> None:
+    def _factory(*, snapshot: RecipeExecutionSnapshot, allowed_root: Path):
+        from autoskillit.core import InstalledRecipeExecution
+
+        store = DefaultAuditCycleHeadStore()
+        return InstalledRecipeExecution(
+            snapshot=snapshot,
+            runtime_binding_digests={},
+            audit_cycle_heads=store,
+            input_preflight_resolver=DefaultInputPreflightResolver(
+                allowed_root=allowed_root,
+                head_store=store,
+            ),
+        )
+
+    tool_ctx.recipe_execution_factory = _factory
+
+
 def _artifact(path: Path, digest: str, *, byte_size: int = 1) -> ArtifactRef:
     return ArtifactRef(
         locator=str(path),
@@ -254,6 +272,7 @@ REQ-001 remains satisfied.
 def test_delivery_persists_and_installs_matching_execution(
     minimal_ctx,
 ) -> None:
+    _wire_recipe_execution_factory(minimal_ctx)
     finalized = finalize_recipe_delivery(
         {
             "content": "name: demo\n",
@@ -296,10 +315,11 @@ def test_delivery_persists_and_installs_matching_execution(
     )
 
 
-def test_failed_execution_install_aborts_receipt_before_commit(
+def test_failed_execution_preparation_aborts_receipt_before_commit(
     minimal_ctx,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _wire_recipe_execution_factory(minimal_ctx)
     finalized = finalize_recipe_delivery(
         {
             "content": "name: demo\n",
@@ -323,7 +343,7 @@ def test_failed_execution_install_aborts_receipt_before_commit(
     )
     monkeypatch.setattr(
         recipe_execution_module,
-        "install_recipe_execution",
+        "prepare_recipe_execution",
         MagicMock(side_effect=RuntimeError("install failed")),
     )
 
@@ -338,7 +358,66 @@ def test_failed_execution_install_aborts_receipt_before_commit(
     assert get_recipe_execution(minimal_ctx) is None
 
 
-def test_transformed_delivery_never_installs_execution(minimal_ctx) -> None:
+def test_receipt_commit_failure_preserves_previous_execution(
+    tool_ctx_kitchen_open,
+) -> None:
+    previous_snapshot = build_recipe_execution_snapshot(
+        recipe_name="previous",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="previous-execution",
+    )
+    previous = install_recipe_execution(
+        tool_ctx_kitchen_open,
+        snapshot=previous_snapshot,
+    )
+    finalized = finalize_recipe_delivery(
+        {
+            "content": "name: replacement\n",
+            "content_hash": _HASH_A,
+            "composite_hash": _HASH_B,
+            "valid": True,
+        },
+        surface="load_recipe",
+        recipe_name="replacement",
+        tool_ctx=tool_ctx_kitchen_open,
+        compiled_bindings=_projection(),
+    )
+    handle = MagicMock()
+    ledger = MagicMock()
+    ledger.commit.return_value = False
+    ledger.abort.return_value = True
+    finalized = replace(
+        finalized,
+        receipt_handle=handle,
+        receipt_ledger=ledger,
+    )
+
+    result = json.loads(complete_finalized_recipe_response(finalized, finalized.rendered))
+
+    assert result == {
+        "success": False,
+        "error": "recipe_delivery_receipt_commit_failed",
+    }
+    ledger.abort.assert_called_once_with(handle)
+    assert get_recipe_execution(tool_ctx_kitchen_open) is previous
+
+
+def test_transformed_delivery_preserves_previous_execution(
+    tool_ctx_kitchen_open,
+) -> None:
+    previous_snapshot = build_recipe_execution_snapshot(
+        recipe_name="previous",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="previous-execution",
+    )
+    previous = install_recipe_execution(
+        tool_ctx_kitchen_open,
+        snapshot=previous_snapshot,
+    )
     finalized = finalize_recipe_delivery(
         {
             "content": "name: demo\n",
@@ -348,19 +427,21 @@ def test_transformed_delivery_never_installs_execution(minimal_ctx) -> None:
         },
         surface="load_recipe",
         recipe_name="demo",
-        tool_ctx=minimal_ctx,
+        tool_ctx=tool_ctx_kitchen_open,
         compiled_bindings=_projection(),
     )
     assert complete_finalized_recipe_response(finalized, "bounded replacement") == (
         "bounded replacement"
     )
-    assert get_recipe_execution(minimal_ctx) is None
+    assert get_recipe_execution(tool_ctx_kitchen_open) is previous
 
 
 def test_recipe_execution_compilation_failure_logs_exception_context(
     minimal_ctx,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    previous = MagicMock()
+    minimal_ctx.active_recipe_execution = previous
     mock_logger = MagicMock()
     monkeypatch.setattr(recipe_delivery_module, "get_logger", lambda _name: mock_logger)
     monkeypatch.setattr(
@@ -393,6 +474,7 @@ def test_recipe_execution_compilation_failure_logs_exception_context(
         error_type="ValueError",
         exc_info=True,
     )
+    assert get_recipe_execution(minimal_ctx) is previous
 
 
 def test_bound_prompt_preserves_falsey_and_metacharacter_values() -> None:

@@ -48,7 +48,7 @@ from autoskillit.server._recipe_delivery import (
     recipe_pull_producers,
     recipe_recreation_producers,
 )
-from autoskillit.server._recipe_execution import clear_recipe_execution, get_recipe_execution
+from autoskillit.server._recipe_execution import get_recipe_execution
 from autoskillit.server._recipe_section_pagination import (
     RecipeSectionBoundError,
     RecipeSectionNonConvergenceError,
@@ -338,8 +338,6 @@ async def load_recipe(
             tool_ctx = _get_ctx_or_none()
             if tool_ctx is None or tool_ctx.recipes is None:
                 return json.dumps({"error": "Server not initialized"})
-            if not ingredients_only:
-                clear_recipe_execution(tool_ctx)
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
             _recipe_info_pre = tool_ctx.recipes.find(name, tool_ctx.project_dir)

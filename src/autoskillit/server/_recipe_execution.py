@@ -60,6 +60,7 @@ __all__ = [
     "clear_recipe_execution",
     "get_recipe_execution",
     "install_recipe_execution",
+    "prepare_recipe_execution",
     "publish_audit_cycle_result",
     "publish_reported_audit_cycle",
     "publish_verified_audit_cycle",
@@ -369,38 +370,46 @@ def get_recipe_execution(tool_ctx: ToolContext) -> InstalledRecipeExecution | No
         return tool_ctx.active_recipe_execution
 
 
-def install_recipe_execution(
+def prepare_recipe_execution(
     tool_ctx: ToolContext,
     *,
     snapshot: RecipeExecutionSnapshot,
 ) -> InstalledRecipeExecution:
-    """Atomically install a snapshot, empty runtime map, and empty head ledger."""
-    from autoskillit.server._factory import (  # circular-break
-        make_audit_cycle_head_store,
-        make_input_preflight_resolver,
-    )
+    """Build a replacement generation without changing the active execution."""
+    factory = tool_ctx.recipe_execution_factory
+    if factory is None:
+        raise RecipeExecutionAdmissionError(
+            "recipe_execution_factory_unavailable",
+            "recipe execution factory is not configured",
+        )
+    return factory(snapshot=snapshot, allowed_root=tool_ctx.temp_dir)
 
-    head_store = make_audit_cycle_head_store()
-    resolver = make_input_preflight_resolver(
-        allowed_root=tool_ctx.temp_dir,
-        head_store=head_store,
-    )
-    installed = InstalledRecipeExecution(
-        snapshot=snapshot,
-        runtime_binding_digests={},
-        audit_cycle_heads=head_store,
-        input_preflight_resolver=resolver,
-    )
+
+def install_recipe_execution(
+    tool_ctx: ToolContext,
+    *,
+    snapshot: RecipeExecutionSnapshot | None = None,
+    prepared_execution: InstalledRecipeExecution | None = None,
+) -> InstalledRecipeExecution:
+    """Atomically install a snapshot, empty runtime map, and empty head ledger."""
+    if (snapshot is None) == (prepared_execution is None):
+        raise TypeError("provide exactly one of snapshot or prepared_execution")
+    if prepared_execution is not None:
+        installed = prepared_execution
+    else:
+        assert snapshot is not None
+        installed = prepare_recipe_execution(tool_ctx, snapshot=snapshot)
     with tool_ctx.recipe_execution_lock:
         previous = tool_ctx.active_recipe_execution
-        previous_store = tool_ctx.audit_cycle_head_store
         tool_ctx.active_recipe_execution = installed
-        tool_ctx.audit_cycle_head_store = head_store
-        tool_ctx.input_preflight_resolver = resolver
-        if previous is not None:
+    if previous is not None and previous is not installed:
+        try:
             previous.audit_cycle_heads.clear_generation(previous.snapshot.execution_id)
-        elif previous_store is not None:
-            previous_store.clear_all()
+        except Exception:
+            get_logger(__name__).warning(
+                "prior recipe execution cleanup failed",
+                exc_info=True,
+            )
     return installed
 
 
@@ -408,14 +417,9 @@ def clear_recipe_execution(tool_ctx: ToolContext) -> None:
     """Clear the complete active attestation generation in one locked transition."""
     with tool_ctx.recipe_execution_lock:
         previous = tool_ctx.active_recipe_execution
-        previous_store = tool_ctx.audit_cycle_head_store
         tool_ctx.active_recipe_execution = None
-        tool_ctx.audit_cycle_head_store = None
-        tool_ctx.input_preflight_resolver = None
-        if previous is not None:
-            previous.audit_cycle_heads.clear_generation(previous.snapshot.execution_id)
-        elif previous_store is not None:
-            previous_store.clear_all()
+    if previous is not None:
+        previous.audit_cycle_heads.clear_generation(previous.snapshot.execution_id)
 
 
 def record_runtime_binding_digest(

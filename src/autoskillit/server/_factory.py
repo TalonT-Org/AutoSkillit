@@ -17,11 +17,11 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
-    AuditCycleHeadStore,
     DirectInstall,
     FleetLock,
-    InputPreflightResolver,
+    InstalledRecipeExecution,
     PluginSource,
+    RecipeExecutionSnapshot,
     SkillExecutionRole,
     SubprocessRunner,
     WriteBehaviorSpec,
@@ -68,6 +68,10 @@ from autoskillit.recipe import (
     resolve_input_specs,
     resolve_skill_name,
 )
+from autoskillit.server._recipe_execution import (
+    DefaultAuditCycleHeadStore,
+    DefaultInputPreflightResolver,
+)
 from autoskillit.workspace import (
     DefaultCloneManager,
     DefaultSessionSkillManager,
@@ -83,28 +87,21 @@ from autoskillit.workspace import (
 logger = get_logger(__name__)
 
 
-def make_audit_cycle_head_store() -> AuditCycleHeadStore:
-    """Construct the server-owned trusted-head ledger implementation."""
-    from autoskillit.server._recipe_execution import (  # circular-break
-        DefaultAuditCycleHeadStore,
-    )
-
-    return DefaultAuditCycleHeadStore()
-
-
-def make_input_preflight_resolver(
+def make_recipe_execution(
     *,
+    snapshot: RecipeExecutionSnapshot,
     allowed_root: Path,
-    head_store: AuditCycleHeadStore,
-) -> InputPreflightResolver:
-    """Construct the bounded verifier backed by the supplied trusted ledger."""
-    from autoskillit.server._recipe_execution import (  # circular-break
-        DefaultInputPreflightResolver,
-    )
-
-    return DefaultInputPreflightResolver(
-        allowed_root=allowed_root,
-        head_store=head_store,
+) -> InstalledRecipeExecution:
+    """Build one execution generation from server-owned protocol implementations."""
+    head_store = DefaultAuditCycleHeadStore()
+    return InstalledRecipeExecution(
+        snapshot=snapshot,
+        runtime_binding_digests={},
+        audit_cycle_heads=head_store,
+        input_preflight_resolver=DefaultInputPreflightResolver(
+            allowed_root=allowed_root,
+            head_store=head_store,
+        ),
     )
 
 
@@ -418,11 +415,7 @@ def make_context(
     ctx.completion_required_resolver = _resolve_completion_required
     ctx.skill_contract_resolver = _resolve_skill_contract
     ctx.input_contract_resolver = resolve_input_specs
-    ctx.audit_cycle_head_store = make_audit_cycle_head_store()
-    ctx.input_preflight_resolver = make_input_preflight_resolver(
-        allowed_root=ctx.temp_dir,
-        head_store=ctx.audit_cycle_head_store,
-    )
+    ctx.recipe_execution_factory = make_recipe_execution
     ctx.token_factory = token_factory
     ctx.build_protected_campaign_ids = build_protected_campaign_ids
     ctx.executor = DefaultHeadlessExecutor(ctx)

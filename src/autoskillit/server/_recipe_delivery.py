@@ -768,10 +768,8 @@ def finalize_recipe_delivery(
     if compiled_bindings is not None:
         from autoskillit.server._recipe_execution import (  # circular-break
             build_recipe_execution_snapshot,
-            clear_recipe_execution,
         )
 
-        clear_recipe_execution(tool_ctx)
         try:
             execution_snapshot = build_recipe_execution_snapshot(
                 recipe_name=recipe_name,
@@ -985,17 +983,18 @@ def complete_finalized_recipe_response(
     *,
     now_unix: int | None = None,
 ) -> Any:
-    """Install and commit an exact enforced response; otherwise abort its receipt."""
+    """Commit and install an exact enforced response; otherwise preserve prior state."""
     handle = finalized.receipt_handle
     ledger = finalized.receipt_ledger
+    prepared_execution = None
     if enforced == finalized.rendered:
         if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
             try:
                 from autoskillit.server._recipe_execution import (  # circular-break
-                    install_recipe_execution,
+                    prepare_recipe_execution,
                 )
 
-                install_recipe_execution(
+                prepared_execution = prepare_recipe_execution(
                     finalized.tool_ctx,
                     snapshot=finalized.execution_snapshot,
                 )
@@ -1009,23 +1008,28 @@ def complete_finalized_recipe_response(
                     separators=(",", ":"),
                 )
         if enforced == finalized.rendered:
-            if handle is None:
-                return enforced
-            if ledger is not None and ledger.commit(
-                handle,
-                now_unix=int(time.time()) if now_unix is None else now_unix,
+            if handle is not None and (
+                ledger is None
+                or not ledger.commit(
+                    handle,
+                    now_unix=int(time.time()) if now_unix is None else now_unix,
+                )
             ):
-                return enforced
-            enforced = json.dumps(
-                {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
-                separators=(",", ":"),
-            )
-    if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
-        from autoskillit.server._recipe_execution import (  # circular-break
-            clear_recipe_execution,
-        )
+                enforced = json.dumps(
+                    {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
+                    separators=(",", ":"),
+                )
+        if enforced == finalized.rendered:
+            if prepared_execution is not None and finalized.tool_ctx is not None:
+                from autoskillit.server._recipe_execution import (  # circular-break
+                    install_recipe_execution,
+                )
 
-        clear_recipe_execution(finalized.tool_ctx)
+                install_recipe_execution(
+                    finalized.tool_ctx,
+                    prepared_execution=prepared_execution,
+                )
+            return enforced
     if handle is not None and (ledger is None or not ledger.abort(handle)):
         return json.dumps(
             {"success": False, "error": "recipe_delivery_receipt_abort_failed"},

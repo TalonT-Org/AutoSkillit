@@ -360,6 +360,8 @@ def validate_context_admission_persistence_value(value: object) -> None:
 
 
 def _validate_persisted_text(value: str) -> None:
+    if value == "":
+        return
     _validate_bounded_text(
         value,
         "invalid_persisted_text",

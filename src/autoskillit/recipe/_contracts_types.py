@@ -34,7 +34,7 @@ class SkillInput:
         if normalized == "integer":
             return isinstance(value, int) and not isinstance(value, bool)
         if normalized in {"number", "float"}:
-            return isinstance(value, (int, float)) and not isinstance(value, bool)
+            return isinstance(value, int) and not isinstance(value, bool)
         if normalized in {"boolean", "bool"}:
             return isinstance(value, bool)
         return False

@@ -140,6 +140,10 @@ class BoundValue:
     template_dependencies: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.state, BoundValueState):
+            raise ValueError("BoundValue.state must be a BoundValueState")
+        if not isinstance(self.origin, BoundValueOrigin):
+            raise ValueError("BoundValue.origin must be a BoundValueOrigin")
         declared_absent = isinstance(self.declared_value, AbsentBoundValue)
         effective_absent = isinstance(self.effective_value, AbsentBoundValue)
         if self.state is BoundValueState.ABSENT:

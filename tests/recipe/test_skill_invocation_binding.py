@@ -110,6 +110,31 @@ def test_bound_value_rejects_contradictory_absence(
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "expected_type"),
+    [
+        ("state", "present", "BoundValueState"),
+        ("origin", "literal", "BoundValueOrigin"),
+    ],
+)
+def test_bound_value_rejects_raw_enum_values(
+    field: str,
+    value: str,
+    expected_type: str,
+) -> None:
+    kwargs: dict[str, object] = {
+        "name": "value",
+        "declared_value": "declared",
+        "effective_value": "effective",
+        "state": BoundValueState.PRESENT,
+        "origin": BoundValueOrigin.LITERAL,
+    }
+    kwargs[field] = value
+
+    with pytest.raises(ValueError, match=expected_type):
+        BoundValue(**kwargs)  # type: ignore[arg-type]
+
+
 def test_bound_step_invocation_freezes_collection_inputs() -> None:
     value = BoundValue(
         name="value",

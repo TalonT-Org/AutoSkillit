@@ -492,7 +492,8 @@ def bind_attested_runtime_invocation(
                 f"{undeclared_effective_names!r}"
             ),
         )
-    contract = get_skill_contract(invocation.skill_name or "", load_bundled_manifest())
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract(invocation.skill_name or "", manifest)
     if contract is None:
         raise RecipeExecutionAdmissionError(
             "recipe_execution_contract_unavailable",
@@ -500,6 +501,32 @@ def bind_attested_runtime_invocation(
         )
     contract_inputs = {input_def.name: input_def for input_def in contract.inputs}
     supplied = dict(skill_inputs or {})
+    if skill_inputs is None:
+        runtime_with_args: dict[str, object] = {"skill_command": skill_command}
+        runtime_cwd = actual_mcp_kwargs.get("cwd")
+        if isinstance(runtime_cwd, str):
+            runtime_with_args["cwd"] = runtime_cwd
+        runtime_inline = bind_step_invocation(
+            step_name,
+            RecipeStep(
+                name=step_name,
+                tool="run_skill",
+                with_args=runtime_with_args,
+                declared_with_args=dict(runtime_with_args),
+            ),
+            manifest=manifest,
+        )
+        if runtime_inline.failures:
+            raise RecipeExecutionAdmissionError(
+                "recipe_execution_input_shape",
+                runtime_inline.failures[0].message,
+            )
+        supplied = {
+            value.name: value.effective_value
+            for value in runtime_inline.skill_inputs
+            if value.state is BoundValueState.PRESENT
+            and isinstance(value.effective_value, (str, int, float, bool))
+        }
     if any(
         not isinstance(value, (str, int, float, bool)) or value is None
         for value in supplied.values()

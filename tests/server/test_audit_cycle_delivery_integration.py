@@ -49,6 +49,7 @@ from autoskillit.core import (
     VerifiedInputPreflightResult,
     compute_runtime_binding_digest,
 )
+from autoskillit.recipe import RecipeStep, bind_step_invocation
 from autoskillit.server._recipe_delivery import (
     complete_finalized_recipe_response,
     finalize_recipe_delivery,
@@ -659,6 +660,69 @@ def test_runtime_binding_rejects_template_only_tool_override() -> None:
         )
 
     assert exc_info.value.code == "recipe_execution_static_tool_mismatch"
+
+
+def test_runtime_binding_accepts_compiled_inline_skill_arguments() -> None:
+    declared_command = (
+        "/dry-walkthrough "
+        "plan_path=${{ context.plan_path }} "
+        "issue_url=${{ context.issue_url }} "
+        "audit_cycle_path=${{ context.audit_cycle_path }} "
+        "plan_disposition_path=${{ context.plan_disposition_path }}"
+    )
+    invocation = bind_step_invocation(
+        "dry",
+        RecipeStep(
+            name="dry",
+            tool="run_skill",
+            with_args={"skill_command": declared_command, "cwd": "/tmp"},
+            declared_with_args={"skill_command": declared_command, "cwd": "/tmp"},
+        ),
+    )
+    assert invocation.is_valid
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=RecipeBindingProjection({"dry": invocation}),
+        execution_id="execution-1",
+    )
+    store = DefaultAuditCycleHeadStore()
+    from autoskillit.core import InstalledRecipeExecution
+
+    installed = InstalledRecipeExecution(
+        snapshot=snapshot,
+        runtime_binding_digests={},
+        audit_cycle_heads=store,
+        input_preflight_resolver=DefaultInputPreflightResolver(
+            allowed_root=Path("/tmp"),
+            head_store=store,
+        ),
+    )
+    runtime_command = (
+        "/dry-walkthrough "
+        "plan_path=/tmp/plan.md "
+        "issue_url=https://example.test/42 "
+        "audit_cycle_path=/tmp/audit.json "
+        "plan_disposition_path=/tmp/disposition.json"
+    )
+
+    bound, _template = bind_attested_runtime_invocation(
+        installed,
+        execution_id="execution-1",
+        step_name="dry",
+        template_digest=snapshot.templates["dry"].template_digest,
+        skill_command=runtime_command,
+        skill_inputs=None,
+        actual_mcp_kwargs={"skill_command": runtime_command, "cwd": "/tmp"},
+    )
+
+    assert bound == (
+        ("plan_path", "/tmp/plan.md"),
+        ("issue_url", "https://example.test/42"),
+        ("audit_cycle_path", "/tmp/audit.json"),
+        ("plan_disposition_path", "/tmp/disposition.json"),
+    )
 
 
 @pytest.mark.parametrize(

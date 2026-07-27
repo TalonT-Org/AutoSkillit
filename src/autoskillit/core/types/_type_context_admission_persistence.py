@@ -518,6 +518,13 @@ def _validate_health(
     failure_reason: ContextAdmissionStorageFailureReason | None,
     reason_code: str | None,
 ) -> None:
+    if not isinstance(status, ContextAdmissionStorageHealthStatus):
+        raise ValueError("invalid_context_admission_storage_health")
+    if failure_reason is not None and not isinstance(
+        failure_reason,
+        ContextAdmissionStorageFailureReason,
+    ):
+        raise ValueError("invalid_context_admission_storage_health")
     failed = status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
     if failed != (failure_reason is not None):
         raise ValueError("invalid_context_admission_storage_health")
@@ -537,6 +544,13 @@ class ContextAdmissionAccountingResult:
     reason_code: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.status, ContextAdmissionAccountingStatus):
+            raise ValueError("invalid_context_admission_accounting_status")
+        if self.failure_reason is not None and not isinstance(
+            self.failure_reason,
+            ContextAdmissionStorageFailureReason,
+        ):
+            raise ValueError("invalid_context_admission_storage_failure_reason")
         if self.journal_sequence is not None:
             _validate_non_negative(self.journal_sequence, "invalid_journal_sequence")
             if self.journal_sequence == 0:

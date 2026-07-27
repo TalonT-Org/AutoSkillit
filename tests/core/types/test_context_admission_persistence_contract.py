@@ -36,6 +36,7 @@ from autoskillit.core import (
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     ContextAdmissionStoreAuthority,
+    ContextAdmissionStoreHealth,
     ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
@@ -589,6 +590,27 @@ def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:
         reason_code="integrity",
     )
     assert failed.transition is None
+
+
+def test_health_and_accounting_results_reject_raw_enum_values() -> None:
+    with pytest.raises(ValueError, match="invalid_context_admission_storage_health"):
+        ContextAdmissionStoreHealth(
+            status="healthy",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="invalid_context_admission_accounting_status"):
+        ContextAdmissionAccountingResult(
+            status="recorded",  # type: ignore[arg-type]
+            stream_key=_stream_key(),
+        )
+    with pytest.raises(
+        ValueError,
+        match="invalid_context_admission_storage_failure_reason",
+    ):
+        ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+            stream_key=_stream_key(),
+            failure_reason="integrity",  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.parametrize(

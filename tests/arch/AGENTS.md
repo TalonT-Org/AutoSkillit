@@ -121,6 +121,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_subagent_filter_guard.py` | AST guard: all assistant-record NDJSON processing sites must use _is_parent_assistant_record or _is_parent_assistant predicate |
 | `test_swap_labels_guard.py` | AST guard: direct swap_labels calls in fleet/ must go through cleanup_orphaned_labels |
 | `test_invariant_registry_coverage.py` | Meta-test: every InvariantDef has resolvable gate_target, non-empty fields, and source_doc containing prohibition prose |
+| `test_intake_rule_registry.py` | Structural guards for the Codex intake-rule registry (#4351): evidence-bound basis resolution, mandatory exceptions for absolute imperatives, and no rule naming a harness-denied path class |
 | `test_issue_url_extraction_guard.py` | AST guard: raw `.get('issue_url')` / `.get('issue_urls')` banned in fleet/; dual-key asserted in fleet_claim_guard.py |
 | `test_enqueue_ready_type_enforcement.py` | AST guard: mutation methods (_enqueue_direct, _enable_auto_merge_direct) must accept EnqueueReady, not str |
 | `test_origin_isolation_contract.py` | AST + shell lint guard: no hardcoded "origin" in git remote operations outside allowlist; shell scripts must try upstream before origin |

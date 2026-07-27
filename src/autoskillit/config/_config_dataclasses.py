@@ -154,6 +154,15 @@ class CoreRunConfig:
     def __post_init__(self) -> None:
         if not self.default_model:
             raise ValueError("CoreRunConfig.default_model must not be empty")
+        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
+        # all children commented out (or otherwise empty) parse to None; treating
+        # them as empty matches user intent and avoids spurious validation errors
+        # during collection when a user-level ~/.autoskillit/config.yaml contains
+        # such a section.
+        self.recipe_overrides = {
+            recipe: (overrides if overrides is not None else {})
+            for recipe, overrides in self.recipe_overrides.items()
+        }
         for step, model_val in self.step_overrides.items():
             if not isinstance(model_val, str):
                 raise ValueError(

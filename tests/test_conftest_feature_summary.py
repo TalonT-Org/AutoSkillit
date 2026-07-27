@@ -48,7 +48,7 @@ def pytest_collection_modifyitems(items, config):
 
     # Feature gate pass — emulate the real conftest: stash the full feature
     # scope dict for all registered features (not just those encountered on items).
-    scope = {"fleet": False, "planner": False, "providers": False}
+    scope = {"fleet": False, "planner": False, "providers": True}
     config.stash[_feature_scope_key] = scope
     test_features_env = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
     for item in items:

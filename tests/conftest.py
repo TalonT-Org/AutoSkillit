@@ -658,8 +658,8 @@ def _resolve_test_config() -> "AutomationConfig":
     """
     from pathlib import Path
 
+    from autoskillit.config import load_config
     from autoskillit.config.settings import AutomationConfig as _AutomationConfig
-    from autoskillit.config.settings import load_config
 
     # Anchor to repo root via this file's known location (tests/conftest.py)
     # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.

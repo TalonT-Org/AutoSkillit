@@ -358,10 +358,11 @@ def test_resolve_test_config_raises_on_load_failure(monkeypatch):
     """
     from tests.conftest import _resolve_test_config
 
-    def _broken_load_config():
+    def _broken_load_config(*args, **kwargs):
+        del args, kwargs
         raise RuntimeError("broken")
 
-    monkeypatch.setattr("autoskillit.config.settings.load_config", _broken_load_config)
+    monkeypatch.setattr("autoskillit.config.load_config", _broken_load_config)
     _resolve_test_config.cache_clear()
     try:
         with pytest.raises(RuntimeError, match="broken"):

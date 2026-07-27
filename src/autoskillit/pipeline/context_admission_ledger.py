@@ -1092,12 +1092,28 @@ class DefaultContextAdmissionLedger:
                 return inspection
             except _LedgerContended:
                 return _contended_inspection(stream_key)
-            except (ContextAdmissionValidationError, _LedgerOpenError, sqlite3.Error) as exc:
-                if (
-                    isinstance(exc, sqlite3.Error)
-                    and _sqlite_primary_code(exc) in _SQLITE_BUSY_CODES
-                ):
+            except sqlite3.Error as exc:
+                primary_code = _sqlite_primary_code(exc)
+                if connection is not None:
+                    _rollback(connection)
+                if primary_code in _SQLITE_BUSY_CODES or primary_code in _SQLITE_RECOVERY_CODES:
                     return _contended_inspection(stream_key)
+                reason = (
+                    ContextAdmissionStorageFailureReason.INTEGRITY
+                    if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
+                    else ContextAdmissionStorageFailureReason.IO
+                )
+                self._set_store_failure(reason, "sqlite-inspection-failed")
+                return _empty_inspection(
+                    stream_key,
+                    ContextAdmissionStreamHealth(
+                        stream_key,
+                        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+                        failure_reason=self._store_health.failure_reason,
+                        reason_code=self._store_health.reason_code,
+                    ),
+                )
+            except (ContextAdmissionValidationError, _LedgerOpenError) as exc:
                 reason = (
                     exc.reason
                     if isinstance(exc, _LedgerOpenError)

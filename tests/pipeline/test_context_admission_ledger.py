@@ -1683,6 +1683,43 @@ def test_inspection_stops_when_startup_recovery_is_contended(
 
 
 @pytest.mark.parametrize(
+    "primary_code",
+    [
+        sqlite3.SQLITE_FULL,
+        sqlite3.SQLITE_IOERR,
+        sqlite3.SQLITE_IOERR_READ,
+        sqlite3.SQLITE_INTERRUPT,
+        sqlite3.SQLITE_NOMEM,
+    ],
+)
+def test_inspection_keeps_transient_sqlite_failures_retryable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    primary_code: int,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    original_connect = ledger._connect
+    error = sqlite3.OperationalError("transient-inspection-failure")
+    error.sqlite_errorcode = primary_code
+
+    def raise_transient_error() -> sqlite3.Connection:
+        raise error
+
+    monkeypatch.setattr(ledger, "_connect", raise_transient_error)
+
+    inspection = ledger.inspect_stream(key)
+
+    assert inspection.health.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+    monkeypatch.setattr(ledger, "_connect", original_connect)
+    assert ledger.inspect_stream(key).health.status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+
+@pytest.mark.parametrize(
     "fault_name",
     [
         "before_reduction",

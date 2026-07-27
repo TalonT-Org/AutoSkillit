@@ -604,6 +604,36 @@ def _legacy_envelope_bytes() -> bytes:
 
 
 @pytest.mark.parametrize(
+    "error",
+    [
+        KeyError("payload"),
+        ValueError("invalid legacy payload"),
+        json.JSONDecodeError("invalid legacy JSON", "x", 0),
+    ],
+)
+def test_envelope_decoder_normalizes_expected_upcaster_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+) -> None:
+    def raise_malformed_input(_value: bytes) -> bytes:
+        raise error
+
+    monkeypatch.setattr(
+        persistence_types,
+        "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
+        MappingProxyType({(0, 1): raise_malformed_input}),
+    )
+
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="invalid_context_admission_upcast",
+    ) as raised:
+        decode_stored_context_admission_envelope(_legacy_envelope_bytes())
+
+    assert raised.value.__cause__ is error
+
+
+@pytest.mark.parametrize(
     "routes",
     [
         {},

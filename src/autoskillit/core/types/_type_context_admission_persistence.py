@@ -372,7 +372,12 @@ def _upcast_envelope_bytes(encoded: bytes) -> bytes:
         target_version, upcaster = candidates[0]
         if target_version <= source_version or target_version > CONTEXT_ADMISSION_ENCODING_VERSION:
             _raise_invalid("ambiguous_context_admission_upcast")
-        current_encoded = upcaster(current_encoded)
+        try:
+            current_encoded = upcaster(current_encoded)
+        except ContextAdmissionValidationError:
+            raise
+        except (KeyError, TypeError, ValueError, UnicodeError) as exc:
+            raise ContextAdmissionValidationError("invalid_context_admission_upcast") from exc
         if not isinstance(current_encoded, bytes):
             _raise_invalid("invalid_context_admission_upcast")
         upcast_value = _decode_envelope_json(current_encoded)

@@ -1046,7 +1046,10 @@ class ProjectedPluginArtifactAuthority:
         backend: CodingAgentBackend,
         load_mode: PluginLoadMode,
     ) -> PluginLaunchBinding:
-        if not load_mode.consumes_artifact:
+        if load_mode not in {
+            PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            PluginLoadMode.PROJECTED_HOME,
+        }:
             raise ValueError(
                 f"projected plugin authority cannot bind load mode {load_mode.value!r}"
             )

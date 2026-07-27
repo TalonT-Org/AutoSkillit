@@ -220,9 +220,13 @@ def test_writer_to_reader_handoff_revalidates_exact_incarnation(
 
 @pytest.mark.parametrize(
     "load_mode",
-    [PluginLoadMode.GENERATED_HOME, PluginLoadMode.NONE],
+    [
+        PluginLoadMode.GENERATED_HOME,
+        PluginLoadMode.IMPLICIT_INSTALLED,
+        PluginLoadMode.NONE,
+    ],
 )
-def test_authority_rejects_non_artifact_modes(
+def test_projected_authority_rejects_incompatible_load_modes(
     tmp_path: Path,
     monkeypatch,
     load_mode: PluginLoadMode,

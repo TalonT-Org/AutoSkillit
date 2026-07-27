@@ -24,6 +24,7 @@ from typing import Any, Final, assert_never, cast, get_args
 from autoskillit.core import (
     CONTEXT_ADMISSION_ENCODING_VERSION,
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
+    CONTEXT_ADMISSION_REDUCER_REGISTRY,
     AcceptInputEvent,
     ActiveContextAdmissionState,
     AdmissionBatch,
@@ -109,6 +110,7 @@ from ._context_admission_storage import (
 )
 
 _SCHEMA_VERSION: Final = 1
+_CONTEXT_ADMISSION_SHADOW_PROTOCOL_V1: Final = 1
 _DATABASE_MODE: Final = 0o600
 _DIRECTORY_MODE: Final = 0o700
 _SQLITE_PRIMARY_MASK: Final = 0xFF
@@ -1957,8 +1959,18 @@ def _shadow_record_protocol_v1(
 
 
 _CONTEXT_ADMISSION_SHADOW_PROJECTORS: Final = MappingProxyType(
-    {CONTEXT_ADMISSION_PROTOCOL_VERSION: _shadow_record_protocol_v1}
+    {_CONTEXT_ADMISSION_SHADOW_PROTOCOL_V1: _shadow_record_protocol_v1}
 )
+
+
+def _validate_context_admission_protocol_registries() -> None:
+    if frozenset(_CONTEXT_ADMISSION_SHADOW_PROJECTORS) != frozenset(
+        CONTEXT_ADMISSION_REDUCER_REGISTRY
+    ):
+        raise RuntimeError("incomplete_context_admission_protocol_registry")
+
+
+_validate_context_admission_protocol_registries()
 
 
 def _shadow_targets(

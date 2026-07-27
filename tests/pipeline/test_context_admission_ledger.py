@@ -847,8 +847,16 @@ def test_recovery_uses_versioned_shadow_projector(
 
     assert recovered.recovered_streams == (key,)
     projector.assert_called_once()
+    assert tuple(registry) == (1,)
     with pytest.raises(TypeError):
         registry[2] = projector  # type: ignore[index]
+    monkeypatch.setattr(
+        ledger_module,
+        "_CONTEXT_ADMISSION_SHADOW_PROJECTORS",
+        MappingProxyType({}),
+    )
+    with pytest.raises(RuntimeError, match="incomplete_context_admission_protocol_registry"):
+        ledger_module._validate_context_admission_protocol_registries()
 
 
 def test_recover_filters_healthy_failed_unresolved_unknown_and_store_failure(

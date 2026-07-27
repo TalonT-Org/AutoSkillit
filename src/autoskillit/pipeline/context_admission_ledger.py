@@ -1297,12 +1297,19 @@ def _preflight_storage_routes(connection: sqlite3.Connection) -> None:
     )
     for query in queries:
         for (encoded,) in connection.execute(query):
-            encoding_version, protocol_version, discriminator = _envelope_header(bytes(encoded))
+            encoded_bytes = bytes(encoded)
+            encoding_version, protocol_version, discriminator = _envelope_header(encoded_bytes)
             if encoding_version != CONTEXT_ADMISSION_ENCODING_VERSION:
-                raise _LedgerOpenError(
-                    ContextAdmissionStorageFailureReason.UNSUPPORTED_ENCODING,
-                    "unsupported-envelope-encoding",
-                )
+                try:
+                    envelope = decode_stored_context_admission_envelope(encoded_bytes)
+                except ContextAdmissionValidationError as exc:
+                    raise _LedgerOpenError(
+                        ContextAdmissionStorageFailureReason.UNSUPPORTED_ENCODING,
+                        "unsupported-envelope-encoding",
+                    ) from exc
+                encoding_version = envelope.encoding_version
+                protocol_version = envelope.protocol_version
+                discriminator = envelope.type_discriminator
             if discriminator not in CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS:
                 raise _LedgerOpenError(
                     ContextAdmissionStorageFailureReason.UNSUPPORTED_ENCODING,

@@ -6,10 +6,12 @@ import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import cast, get_args
 
 import pytest
 
+import autoskillit.core.types._type_context_admission_persistence as persistence_types
 from autoskillit.core import (
     CONTEXT_ADMISSION_ENCODING_VERSION,
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
@@ -291,6 +293,34 @@ def test_envelope_decoders_reject_unbounded_json_before_parsing(
 
     with pytest.raises(ContextAdmissionValidationError):
         cast(Callable[[bytes], object], decoder)(b" " * (16 * 1024 * 1024 + 1))
+
+
+def test_envelope_decoder_consumes_deterministic_upcaster_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    encoded = encode_stored_context_admission_envelope(
+        make_stored_context_admission_envelope(_authority_event())
+    )
+    legacy = encoded.replace(b'"encoding_version":1', b'"encoding_version":0', 1)
+
+    monkeypatch.setattr(
+        persistence_types,
+        "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
+        MappingProxyType(
+            {
+                (0, 1): lambda value: value.replace(
+                    b'"encoding_version":0',
+                    b'"encoding_version":1',
+                    1,
+                )
+            }
+        ),
+    )
+
+    decoded = decode_stored_context_admission_envelope(legacy)
+
+    assert decoded.encoding_version == CONTEXT_ADMISSION_ENCODING_VERSION
+    assert decoded.payload == _authority_event()
 
 
 @pytest.mark.parametrize(

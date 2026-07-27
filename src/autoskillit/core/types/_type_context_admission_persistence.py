@@ -294,7 +294,8 @@ def decode_stored_context_admission_envelope(
     encoded: bytes,
 ) -> StoredContextAdmissionEnvelope:
     """Decode and canonicality-check one durable envelope."""
-    value = _decode_envelope_json(encoded)
+    current_encoded = _upcast_envelope_bytes(encoded)
+    value = _decode_envelope_json(current_encoded)
     encoding_version, protocol_version, discriminator = _envelope_header(value)
     raw_payload = value["payload"]
     if (
@@ -311,7 +312,7 @@ def decode_stored_context_admission_envelope(
         type_discriminator=discriminator,
         payload=cast(DurableContextAdmissionPayload, payload),
     )
-    if encode_stored_context_admission_envelope(envelope) != encoded:
+    if encode_stored_context_admission_envelope(envelope) != current_encoded:
         _raise_invalid("noncanonical_context_admission_envelope")
     return envelope
 
@@ -321,6 +322,42 @@ def decode_stored_context_admission_envelope_header(
 ) -> tuple[int, int, str]:
     """Read a bounded durable-envelope header without decoding its payload."""
     return _envelope_header(_decode_envelope_json(encoded))
+
+
+def _upcast_envelope_bytes(encoded: bytes) -> bytes:
+    current_encoded = encoded
+    visited_versions: set[int] = set()
+    while True:
+        value = _decode_envelope_json(current_encoded)
+        source_version, protocol_version, discriminator = _envelope_header(value)
+        if source_version == CONTEXT_ADMISSION_ENCODING_VERSION:
+            return current_encoded
+        if source_version in visited_versions:
+            _raise_invalid("ambiguous_context_admission_upcast")
+        visited_versions.add(source_version)
+        candidates = tuple(
+            (target_version, upcaster)
+            for (candidate_source, target_version), upcaster in (
+                CONTEXT_ADMISSION_ENVELOPE_UPCASTERS.items()
+            )
+            if candidate_source == source_version
+        )
+        if len(candidates) != 1:
+            _raise_invalid("unsupported_context_admission_encoding")
+        target_version, upcaster = candidates[0]
+        if target_version <= source_version or target_version > CONTEXT_ADMISSION_ENCODING_VERSION:
+            _raise_invalid("ambiguous_context_admission_upcast")
+        current_encoded = upcaster(current_encoded)
+        if not isinstance(current_encoded, bytes):
+            _raise_invalid("invalid_context_admission_upcast")
+        upcast_value = _decode_envelope_json(current_encoded)
+        upcast_version, upcast_protocol, upcast_discriminator = _envelope_header(upcast_value)
+        if (
+            upcast_version != target_version
+            or upcast_protocol != protocol_version
+            or upcast_discriminator != discriminator
+        ):
+            _raise_invalid("invalid_context_admission_upcast")
 
 
 def _decode_envelope_json(encoded: bytes) -> dict[str, object]:

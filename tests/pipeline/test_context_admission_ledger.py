@@ -8,9 +8,11 @@ import sqlite3
 import stat
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
+import autoskillit.core.types._type_context_admission_persistence as persistence_types
 from autoskillit.core import (
     ActiveContextAdmissionState,
     AdmissionDecisionKind,
@@ -426,6 +428,67 @@ def test_recovery_preflight_rejects_unsupported_encoding_without_rewrite(
             bytes(connection.execute("SELECT event_envelope FROM journal_events").fetchone()[0])
             == unsupported
         )
+    finally:
+        connection.close()
+
+
+def test_recovery_decodes_supported_legacy_encoding_without_rewrite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert (
+        ledger.apply(stream_key(), open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    envelope_columns = (
+        ("streams", "genesis_envelope"),
+        ("streams", "state_envelope"),
+        ("journal_events", "event_envelope"),
+        ("journal_events", "decision_envelope"),
+        ("effect_outbox", "effect_envelope"),
+        ("shadow_decisions", "shadow_envelope"),
+    )
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        for table, column in envelope_columns:
+            for row_id, value in connection.execute(f"SELECT rowid, {column} FROM {table}"):
+                legacy = bytes(value).replace(
+                    b'"encoding_version":1',
+                    b'"encoding_version":0',
+                    1,
+                )
+                connection.execute(
+                    f"UPDATE {table} SET {column} = ? WHERE rowid = ?",
+                    (legacy, row_id),
+                )
+        connection.commit()
+    finally:
+        connection.close()
+    monkeypatch.setattr(
+        persistence_types,
+        "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
+        MappingProxyType(
+            {
+                (0, 1): lambda value: value.replace(
+                    b'"encoding_version":0',
+                    b'"encoding_version":1',
+                    1,
+                )
+            }
+        ),
+    )
+
+    result = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        stored = bytes(
+            connection.execute("SELECT event_envelope FROM journal_events").fetchone()[0]
+        )
+        assert b'"encoding_version":0' in stored
     finally:
         connection.close()
 

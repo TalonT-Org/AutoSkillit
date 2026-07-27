@@ -548,6 +548,15 @@ class ContextAdmissionAccountingResult:
         elif self.status is ContextAdmissionAccountingStatus.EXACT_REPLAY:
             if self.transition is None or self.transition.effects or self.journal_sequence is None:
                 raise ValueError("exact_replay_result_is_not_idempotent")
+        elif self.status is ContextAdmissionAccountingStatus.SEMANTIC_REJECTION:
+            if self.transition is None:
+                raise ValueError("semantic_rejection_requires_transition")
+        elif self.status in {
+            ContextAdmissionAccountingStatus.RECONCILIATION_REQUIRED,
+            ContextAdmissionAccountingStatus.PROTOCOL_QUARANTINED,
+        }:
+            if self.transition is None or self.journal_sequence is None:
+                raise ValueError("published_result_requires_transition")
         elif self.status in {
             ContextAdmissionAccountingStatus.CONTENDED,
             ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,

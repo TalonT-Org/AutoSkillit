@@ -105,6 +105,22 @@ def _authority_event() -> AuthorityUnavailableEvent:
     )
 
 
+def _transition() -> AdmissionTransition:
+    return AdmissionTransition(
+        next_state=_uninitialized(),
+        decision=AdmissionDecision(
+            kind=AdmissionDecisionKind.WOULD_ADMIT,
+            reason_code="would-admit",
+            window_epoch_id=None,
+            snapshot_sequence=None,
+            requested_count=0,
+            available_ordinary_count=0,
+            available_protected_count=0,
+        ),
+        effects=(),
+    )
+
+
 @pytest.mark.parametrize("owner_id", [True, -1, 1000.0, "1000"])
 def test_store_authority_rejects_invalid_owner_ids(
     tmp_path: Path,
@@ -402,19 +418,7 @@ def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:
         ContextAdmissionAccountingResult(
             status=ContextAdmissionAccountingStatus.CONTENDED,
             stream_key=_stream_key(),
-            transition=AdmissionTransition(
-                next_state=_uninitialized(),
-                decision=AdmissionDecision(
-                    kind=AdmissionDecisionKind.WOULD_ADMIT,
-                    reason_code="would-admit",
-                    window_epoch_id=None,
-                    snapshot_sequence=None,
-                    requested_count=0,
-                    available_ordinary_count=0,
-                    available_protected_count=0,
-                ),
-                effects=(),
-            ),
+            transition=_transition(),
         )
     failed = ContextAdmissionAccountingResult(
         status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
@@ -423,6 +427,57 @@ def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:
         reason_code="integrity",
     )
     assert failed.transition is None
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        ContextAdmissionAccountingStatus.RECORDED,
+        ContextAdmissionAccountingStatus.EXACT_REPLAY,
+        ContextAdmissionAccountingStatus.RECONCILIATION_REQUIRED,
+        ContextAdmissionAccountingStatus.PROTOCOL_QUARANTINED,
+    ],
+)
+def test_published_accounting_results_require_transition_and_sequence(
+    status: ContextAdmissionAccountingStatus,
+) -> None:
+    with pytest.raises(ValueError):
+        ContextAdmissionAccountingResult(
+            status=status,
+            stream_key=_stream_key(),
+        )
+    with pytest.raises(ValueError):
+        ContextAdmissionAccountingResult(
+            status=status,
+            stream_key=_stream_key(),
+            transition=_transition(),
+        )
+
+
+def test_semantic_rejection_requires_transition() -> None:
+    with pytest.raises(ValueError, match="semantic_rejection_requires_transition"):
+        ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.SEMANTIC_REJECTION,
+            stream_key=_stream_key(),
+        )
+
+
+def test_storage_failure_rejects_publication_and_nonstorage_failure_reason() -> None:
+    with pytest.raises(ValueError, match="nonadmitting_storage_result_has_transition"):
+        ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+            stream_key=_stream_key(),
+            transition=_transition(),
+            journal_sequence=1,
+            failure_reason=ContextAdmissionStorageFailureReason.INTEGRITY,
+        )
+    with pytest.raises(ValueError, match="nonstorage_result_has_storage_reason"):
+        ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.SEMANTIC_REJECTION,
+            stream_key=_stream_key(),
+            transition=_transition(),
+            failure_reason=ContextAdmissionStorageFailureReason.INTEGRITY,
+        )
 
 
 def test_reducer_registry_is_exact_and_rejects_unsupported_versions() -> None:

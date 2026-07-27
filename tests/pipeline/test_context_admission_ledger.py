@@ -405,6 +405,34 @@ def test_recovery_remains_incomplete_when_failure_marker_is_contended(
     assert not recovered._recovered
 
 
+def test_apply_persists_sticky_failure_for_corrupt_materialized_state(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            "UPDATE streams SET state_envelope = ?",
+            (b"invalid",),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    failed = ledger.apply(key, open_event())
+
+    assert failed.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED
+    assert failed.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert failed.reason_code == "stored-state-decode-failed"
+    assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    restarted = DefaultContextAdmissionLedger(authority)
+    restarted.recover_all()
+    assert restarted.stream_health(key).status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+
+
 def test_recovery_rejects_valid_but_nonzero_genesis(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     key = stream_key()

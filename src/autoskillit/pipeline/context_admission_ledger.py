@@ -261,7 +261,13 @@ class DefaultContextAdmissionLedger:
                             failure_reason=ContextAdmissionStorageFailureReason(row[6]),
                             reason_code=str(row[7]),
                         )
-                    current_state = _decode_state(bytes(row[1]))
+                    try:
+                        current_state = _decode_state(bytes(row[1]))
+                    except ContextAdmissionValidationError as exc:
+                        raise _LedgerOpenError(
+                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                            "stored-state-decode-failed",
+                        ) from exc
                     prior_revision = int(row[2])
                     prior_sequence = int(row[3])
                     prior_journal_sequence = int(row[4])
@@ -288,8 +294,14 @@ class DefaultContextAdmissionLedger:
                         "stream-protocol-mismatch",
                     )
                 if existing is not None:
-                    original_event = _decode_event(bytes(existing[1]))
-                    original_decision = _decode_decision(bytes(existing[2]))
+                    try:
+                        original_event = _decode_event(bytes(existing[1]))
+                        original_decision = _decode_decision(bytes(existing[2]))
+                    except ContextAdmissionValidationError as exc:
+                        raise _LedgerOpenError(
+                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                            "stored-publication-decode-failed",
+                        ) from exc
                     if original_event != event:
                         conflict = replace(
                             original_decision,

@@ -720,6 +720,9 @@ from .types import compute_runtime_binding_digest as compute_runtime_binding_dig
 from .types import (
     decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
 )
+from .types import (
+    decode_stored_context_admission_envelope_header as decode_stored_context_admission_envelope_header,
+)
 from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches
 from .types import (

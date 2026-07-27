@@ -81,6 +81,7 @@ from autoskillit.core import (
     UninitializedContextAdmissionState,
     context_admission_reducer_for_protocol,
     decode_stored_context_admission_envelope,
+    decode_stored_context_admission_envelope_header,
     encode_stored_context_admission_envelope,
     make_stored_context_admission_envelope,
 )
@@ -97,9 +98,6 @@ _SQLITE_RECOVERY_CODES: Final = frozenset(
         sqlite3.SQLITE_INTERRUPT,
         sqlite3.SQLITE_NOMEM,
     }
-)
-_ENVELOPE_KEYS: Final = frozenset(
-    {"encoding_version", "protocol_version", "type_discriminator", "payload"}
 )
 _EVENT_TYPES: Final = get_args(ContextAdmissionEvent)
 _EFFECT_TYPES: Final = get_args(AdmissionEffect)
@@ -1321,32 +1319,12 @@ def _preflight_storage_routes(connection: sqlite3.Connection) -> None:
 
 def _envelope_header(value: bytes) -> tuple[int, int, str]:
     try:
-        raw = json.loads(value.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        return decode_stored_context_admission_envelope_header(value)
+    except ContextAdmissionValidationError:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.INTEGRITY,
             "invalid-envelope-header",
         ) from None
-    if not isinstance(raw, dict) or frozenset(raw) != _ENVELOPE_KEYS:
-        raise _LedgerOpenError(
-            ContextAdmissionStorageFailureReason.INTEGRITY,
-            "invalid-envelope-header",
-        )
-    encoding_version = raw["encoding_version"]
-    protocol_version = raw["protocol_version"]
-    discriminator = raw["type_discriminator"]
-    if (
-        isinstance(encoding_version, bool)
-        or not isinstance(encoding_version, int)
-        or isinstance(protocol_version, bool)
-        or not isinstance(protocol_version, int)
-        or not isinstance(discriminator, str)
-    ):
-        raise _LedgerOpenError(
-            ContextAdmissionStorageFailureReason.INTEGRITY,
-            "invalid-envelope-header",
-        )
-    return encoding_version, protocol_version, discriminator
 
 
 def _recover_stream_projection(

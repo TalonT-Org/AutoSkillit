@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import cast, get_args
@@ -45,6 +46,7 @@ from autoskillit.core import (
     UnsupportedContextAdmissionProtocolError,
     context_admission_reducer_for_protocol,
     decode_stored_context_admission_envelope,
+    decode_stored_context_admission_envelope_header,
     encode_stored_context_admission_envelope,
     make_stored_context_admission_envelope,
     reduce_context_admission,
@@ -265,6 +267,30 @@ def test_envelope_rejects_unknown_or_noncanonical_routes() -> None:
         decode_stored_context_admission_envelope(b'{"payload":{},"encoding_version":1}')
     with pytest.raises(ContextAdmissionValidationError):
         decode_stored_context_admission_envelope(b" " + encoded)
+
+
+@pytest.mark.parametrize(
+    "decoder",
+    [
+        decode_stored_context_admission_envelope,
+        decode_stored_context_admission_envelope_header,
+    ],
+)
+def test_envelope_decoders_reject_unbounded_json_before_parsing(
+    decoder: object,
+) -> None:
+    deeply_nested = (
+        b'{"encoding_version":1,"payload":'
+        + (b"[" * 129)
+        + b"null"
+        + (b"]" * 129)
+        + b',"protocol_version":1,"type_discriminator":"AuthorityUnavailableEvent"}'
+    )
+    with pytest.raises(ContextAdmissionValidationError):
+        cast(Callable[[bytes], object], decoder)(deeply_nested)
+
+    with pytest.raises(ContextAdmissionValidationError):
+        cast(Callable[[bytes], object], decoder)(b" " * (16 * 1024 * 1024 + 1))
 
 
 @pytest.mark.parametrize(

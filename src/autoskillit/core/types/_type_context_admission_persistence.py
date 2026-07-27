@@ -70,6 +70,8 @@ from ._type_helpers import (
 
 CONTEXT_ADMISSION_ENCODING_VERSION = 1
 _MAX_PERSISTED_TEXT = 256
+_MAX_ENVELOPE_BYTES = 16 * 1024 * 1024
+_MAX_JSON_NESTING = 128
 _CANONICAL_ENVELOPE_KEYS = frozenset(
     {"encoding_version", "protocol_version", "type_discriminator", "payload"}
 )
@@ -292,24 +294,11 @@ def decode_stored_context_admission_envelope(
     encoded: bytes,
 ) -> StoredContextAdmissionEnvelope:
     """Decode and canonicality-check one durable envelope."""
-    if not isinstance(encoded, bytes) or not encoded:
-        _raise_invalid("invalid_context_admission_envelope")
-    try:
-        value = json.loads(encoded.decode("utf-8"), object_pairs_hook=_unique_object)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        raise ContextAdmissionValidationError("invalid_context_admission_envelope") from None
-    if not isinstance(value, dict) or frozenset(value) != _CANONICAL_ENVELOPE_KEYS:
-        _raise_invalid("invalid_context_admission_envelope")
-    encoding_version = value["encoding_version"]
-    protocol_version = value["protocol_version"]
-    discriminator = value["type_discriminator"]
+    value = _decode_envelope_json(encoded)
+    encoding_version, protocol_version, discriminator = _envelope_header(value)
     raw_payload = value["payload"]
     if (
-        isinstance(encoding_version, bool)
-        or not isinstance(encoding_version, int)
-        or isinstance(protocol_version, bool)
-        or not isinstance(protocol_version, int)
-        or not isinstance(discriminator, str)
+        encoding_version != CONTEXT_ADMISSION_ENCODING_VERSION
         or not isinstance(raw_payload, dict)
         or discriminator not in _TOP_LEVEL_TYPE_REGISTRY
     ):
@@ -325,6 +314,66 @@ def decode_stored_context_admission_envelope(
     if encode_stored_context_admission_envelope(envelope) != encoded:
         _raise_invalid("noncanonical_context_admission_envelope")
     return envelope
+
+
+def decode_stored_context_admission_envelope_header(
+    encoded: bytes,
+) -> tuple[int, int, str]:
+    """Read a bounded durable-envelope header without decoding its payload."""
+    return _envelope_header(_decode_envelope_json(encoded))
+
+
+def _decode_envelope_json(encoded: bytes) -> dict[str, object]:
+    if not isinstance(encoded, bytes) or not encoded or len(encoded) > _MAX_ENVELOPE_BYTES:
+        _raise_invalid("invalid_context_admission_envelope")
+    _validate_json_nesting(encoded)
+    try:
+        value = json.loads(encoded.decode("utf-8"), object_pairs_hook=_unique_object)
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        raise ContextAdmissionValidationError("invalid_context_admission_envelope") from None
+    if not isinstance(value, dict) or frozenset(value) != _CANONICAL_ENVELOPE_KEYS:
+        _raise_invalid("invalid_context_admission_envelope")
+    return value
+
+
+def _validate_json_nesting(encoded: bytes) -> None:
+    depth = 0
+    in_string = False
+    escaped = False
+    for value in encoded:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif value == ord("\\"):
+                escaped = True
+            elif value == ord('"'):
+                in_string = False
+            continue
+        if value == ord('"'):
+            in_string = True
+        elif value in {ord("{"), ord("[")}:
+            depth += 1
+            if depth > _MAX_JSON_NESTING:
+                _raise_invalid("invalid_context_admission_envelope")
+        elif value in {ord("}"), ord("]")}:
+            depth -= 1
+            if depth < 0:
+                _raise_invalid("invalid_context_admission_envelope")
+
+
+def _envelope_header(value: Mapping[str, object]) -> tuple[int, int, str]:
+    encoding_version = value["encoding_version"]
+    protocol_version = value["protocol_version"]
+    discriminator = value["type_discriminator"]
+    if (
+        isinstance(encoding_version, bool)
+        or not isinstance(encoding_version, int)
+        or isinstance(protocol_version, bool)
+        or not isinstance(protocol_version, int)
+        or not isinstance(discriminator, str)
+    ):
+        _raise_invalid("invalid_context_admission_envelope")
+    return encoding_version, protocol_version, discriminator
 
 
 def _unique_object(items: list[tuple[str, object]]) -> dict[str, object]:
@@ -591,5 +640,6 @@ __all__ = [
     "make_stored_context_admission_envelope",
     "encode_stored_context_admission_envelope",
     "decode_stored_context_admission_envelope",
+    "decode_stored_context_admission_envelope_header",
     "validate_context_admission_persistence_value",
 ]

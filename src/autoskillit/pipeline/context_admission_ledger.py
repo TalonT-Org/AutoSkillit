@@ -1226,7 +1226,6 @@ class DefaultContextAdmissionLedger:
             trusted_stat = trusted_parent.lstat()
             if (
                 not stat.S_ISDIR(trusted_stat.st_mode)
-                or stat.S_ISLNK(trusted_stat.st_mode)
                 or trusted_stat.st_uid != self._authority.expected_owner_id
             ):
                 raise _LedgerOpenError(
@@ -1248,7 +1247,6 @@ class DefaultContextAdmissionLedger:
             ) from exc
         if (
             not stat.S_ISDIR(parent_stat.st_mode)
-            or stat.S_ISLNK(parent_stat.st_mode)
             or parent_stat.st_uid != self._authority.expected_owner_id
             or stat.S_IMODE(parent_stat.st_mode) != _DIRECTORY_MODE
         ):

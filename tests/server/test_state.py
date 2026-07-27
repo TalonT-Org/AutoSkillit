@@ -332,3 +332,55 @@ async def test_deferred_initialize_logs_only_bounded_accounting_failure(
             "protocol_version": 1,
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_deferred_initialize_selects_failed_stream_reason_from_healthy_store(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import (
+        ContextAdmissionRecoveryResult,
+        ContextAdmissionStorageFailureReason,
+        ContextAdmissionStorageHealthStatus,
+        ContextAdmissionStoreHealth,
+        ContextAdmissionStreamHealth,
+    )
+    from autoskillit.server._state import deferred_initialize
+    from tests.fixtures.context_admission import stream_key
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.session_skill_manager = None
+    mock_ctx.audit.load_from_log_dir.return_value = 0
+    store_health = ContextAdmissionStoreHealth(
+        ContextAdmissionStorageHealthStatus.HEALTHY,
+    )
+    failed_stream = ContextAdmissionStreamHealth(
+        stream_key(),
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+        failure_reason=ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+        reason_code="private-detail-must-not-be-logged",
+    )
+    mock_ctx.context_admission_ledger.recover_all.return_value = ContextAdmissionRecoveryResult(
+        status=ContextAdmissionStorageHealthStatus.HEALTHY,
+        store_health=store_health,
+        stream_healths=(failed_stream,),
+        recovered_streams=(),
+        unresolved_streams=(),
+    )
+    event = asyncio.Event()
+
+    with (
+        patch("autoskillit.execution.recover_crashed_sessions", return_value=0),
+        patch("autoskillit.server._state.logger") as logger,
+    ):
+        await deferred_initialize(mock_ctx, ready_event=event)
+
+    assert event.is_set()
+    logger.warning.assert_any_call(
+        "context_admission_recovery_failed",
+        extra={
+            "status": "healthy",
+            "reason": "replay_mismatch",
+            "protocol_version": 1,
+        },
+    )

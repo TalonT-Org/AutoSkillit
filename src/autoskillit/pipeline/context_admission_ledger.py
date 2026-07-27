@@ -520,6 +520,8 @@ class DefaultContextAdmissionLedger:
                                 stream_key=stream_key,
                                 reason_code="busy",
                             )
+                else:
+                    self._set_store_failure(exc.reason, exc.reason_code)
                 return ContextAdmissionAccountingResult(
                     status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
                     stream_key=stream_key,
@@ -1055,6 +1057,8 @@ class DefaultContextAdmissionLedger:
                     if isinstance(exc, _LedgerOpenError)
                     else "inspection-decode-failed"
                 )
+                if connection is None and isinstance(exc, _LedgerOpenError):
+                    self._set_store_failure(reason, reason_code)
                 if connection is not None:
                     _rollback(connection)
                 persisted = connection is not None and self._persist_stream_failure(

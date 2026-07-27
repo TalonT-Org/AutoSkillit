@@ -2009,6 +2009,38 @@ def test_inspection_keeps_transient_sqlite_failures_retryable(
     assert ledger.inspect_stream(key).health.status is ContextAdmissionStorageHealthStatus.HEALTHY
 
 
+@pytest.mark.parametrize("operation", ["apply", "inspect"])
+def test_post_recovery_open_failure_sets_sticky_store_health(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+
+    def raise_permanent_open_failure() -> sqlite3.Connection:
+        raise ledger_module._LedgerOpenError(
+            ContextAdmissionStorageFailureReason.CONFIGURATION,
+            "post-recovery-open-failed",
+        )
+
+    monkeypatch.setattr(ledger, "_connect", raise_permanent_open_failure)
+
+    if operation == "apply":
+        result = ledger.apply(key, open_event())
+        assert result.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED
+    else:
+        inspection = ledger.inspect_stream(key)
+        assert inspection.health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+
+    health = ledger.store_health()
+    assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert health.failure_reason is ContextAdmissionStorageFailureReason.CONFIGURATION
+    assert health.reason_code == "post-recovery-open-failed"
+
+
 @pytest.mark.parametrize(
     "fault_name",
     [

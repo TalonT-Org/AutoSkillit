@@ -22,6 +22,7 @@ from autoskillit.core import (
     AdmissionDecisionKind,
     AdmissionEffect,
     AdmissionEventId,
+    AdmissionOccurrenceId,
     AdmissionSequence,
     AdmissionState,
     AdmissionTransition,
@@ -45,6 +46,7 @@ from autoskillit.core import (
     ContextThreadId,
     CoverageState,
     ForkOccurrenceId,
+    GenerationReservationId,
     IdempotencyNamespace,
     MeasurementKind,
     ModelIdentity,
@@ -137,6 +139,32 @@ def _transition() -> AdmissionTransition:
     )
 
 
+def _valid_shadow_target() -> ShadowContextAdmissionTargetRecord:
+    occurrence_value = occurrence()
+    batch_value = batch(occurrence_value)
+    reservation_value = reservation(batch_value, occurrence_value)
+    return ShadowContextAdmissionTargetRecord(
+        target_id=batch_value.batch_id,
+        occurrence_ids=batch_value.occurrence_ids,
+        turn_ids=(occurrence_value.lineage.turn_id,),
+        tool_call_ids=(occurrence_value.lineage.tool_call_id,),
+        producer_instance_ids=(occurrence_value.lineage.producer_instance_id,),
+        producer_surfaces=(occurrence_value.lineage.producer_surface,),
+        delivery_occurrence_ids=(occurrence_value.lineage.delivery_occurrence_id,),
+        reservation_id=reservation_value.reservation_id,
+        batch_id=batch_value.batch_id,
+        generation_reservation_id=None,
+        window_epoch_id=occurrence_value.lineage.window_epoch_id,
+        reserve_class=batch_value.reserve_class,
+        lifecycle_state=AdmissionState.RESERVED,
+        proposed_input_count=occurrence_value.predicted_authoritative_maximum,
+        generation_allowance=None,
+        exact_input_charge=None,
+        exact_output_charge=None,
+        measurement_kind=MeasurementKind.TOKENIZER_EXACT,
+    )
+
+
 @pytest.mark.parametrize("owner_id", [True, -1, 1000.0, "1000"])
 def test_store_authority_rejects_invalid_owner_ids(
     tmp_path: Path,
@@ -214,29 +242,9 @@ def test_active_state_effect_and_populated_shadow_have_exact_encoding_vectors() 
     proposed_event = propose_event(active, occurrence_value)
     proposed = reduce_context_admission(active, proposed_event)
     batch_value = batch(occurrence_value)
-    reservation_value = reservation(batch_value, occurrence_value)
     reserved_event = reserve_event(proposed.next_state, batch_value, occurrence_value)
     reserved = reduce_context_admission(proposed.next_state, reserved_event)
-    target = ShadowContextAdmissionTargetRecord(
-        target_id=batch_value.batch_id,
-        occurrence_ids=batch_value.occurrence_ids,
-        turn_ids=(occurrence_value.lineage.turn_id,),
-        tool_call_ids=(occurrence_value.lineage.tool_call_id,),
-        producer_instance_ids=(occurrence_value.lineage.producer_instance_id,),
-        producer_surfaces=(occurrence_value.lineage.producer_surface,),
-        delivery_occurrence_ids=(occurrence_value.lineage.delivery_occurrence_id,),
-        reservation_id=reservation_value.reservation_id,
-        batch_id=batch_value.batch_id,
-        generation_reservation_id=None,
-        window_epoch_id=occurrence_value.lineage.window_epoch_id,
-        reserve_class=batch_value.reserve_class,
-        lifecycle_state=AdmissionState.RESERVED,
-        proposed_input_count=occurrence_value.predicted_authoritative_maximum,
-        generation_allowance=None,
-        exact_input_charge=None,
-        exact_output_charge=None,
-        measurement_kind=MeasurementKind.TOKENIZER_EXACT,
-    )
+    target = _valid_shadow_target()
     shadow = ShadowContextAdmissionRecord(
         stream_key=stream_key(),
         event_id=reserved_event.event_id,
@@ -264,6 +272,50 @@ def test_active_state_effect_and_populated_shadow_have_exact_encoding_vectors() 
             make_stored_context_admission_envelope(payload)
         )
         assert sha256(encoded).hexdigest() == expected_digests[name]
+
+
+def test_shadow_target_rejects_negative_counts() -> None:
+    with pytest.raises(ContextAdmissionValidationError, match="invalid_shadow_count"):
+        replace(_valid_shadow_target(), proposed_input_count=-1)
+
+
+def test_shadow_target_rejects_noncanonical_occurrence_order() -> None:
+    target = _valid_shadow_target()
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="noncanonical_shadow_occurrences",
+    ):
+        replace(
+            target,
+            occurrence_ids=(
+                AdmissionOccurrenceId("occurrence-two"),
+                AdmissionOccurrenceId("occurrence-one"),
+            ),
+            turn_ids=target.turn_ids * 2,
+            tool_call_ids=target.tool_call_ids * 2,
+            producer_instance_ids=target.producer_instance_ids * 2,
+            producer_surfaces=target.producer_surfaces * 2,
+            delivery_occurrence_ids=target.delivery_occurrence_ids * 2,
+        )
+
+
+def test_shadow_target_rejects_lineage_coordinate_mismatch() -> None:
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="shadow_lineage_coordinate_mismatch",
+    ):
+        replace(_valid_shadow_target(), turn_ids=())
+
+
+def test_shadow_target_rejects_mixed_input_and_generation_identity() -> None:
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="mixed_shadow_target_domain",
+    ):
+        replace(
+            _valid_shadow_target(),
+            generation_reservation_id=GenerationReservationId("generation-one"),
+        )
 
 
 def test_shadow_publication_is_a_released_top_level_envelope() -> None:

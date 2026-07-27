@@ -384,3 +384,7 @@ async def test_deferred_initialize_selects_failed_stream_reason_from_healthy_sto
             "protocol_version": 1,
         },
     )
+    assert all(
+        "private-detail-must-not-be-logged" not in repr(call)
+        for call in logger.warning.call_args_list
+    )

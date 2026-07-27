@@ -1289,7 +1289,7 @@ def test_recovery_rejects_projection_corruption_with_exact_reason(
             connection.execute(
                 """
                 UPDATE effect_outbox
-                SET effect_ordinal = 1
+                SET effect_ordinal = 100
                 WHERE journal_sequence = 3 AND effect_ordinal = 0
                 """
             )

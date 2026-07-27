@@ -1,0 +1,10 @@
+# Frozen fixture: a project .autoskillit/config.yaml as written by a version
+# prior to 0.10.885, before diagnostics.post_run_analysis was renamed to
+# diagnostics.pipeline_health. Do not edit after creation — this is a
+# point-in-time snapshot of a real prior-version config shape.
+diagnostics:
+  post_run_analysis: true
+github:
+  default_repo: "owner/repo"
+logging:
+  level: "DEBUG"

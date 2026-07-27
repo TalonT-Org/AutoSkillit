@@ -3,13 +3,48 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import Severity, get_logger
 
 from ._doctor_types import DoctorResult
 
+if TYPE_CHECKING:
+    from autoskillit.config import AutomationConfig
+
 logger = get_logger(__name__)
+
+
+def _load_config_guarded(
+    project_dir: Path | None = None,
+) -> tuple[AutomationConfig, list[DoctorResult]]:
+    """Load project config, surviving a broken config instead of raising.
+
+    On success, returns the loaded config and an empty result list. On a
+    ``ConfigSchemaError`` or ``YAMLError`` (schema-invalid or syntactically
+    malformed ``config.yaml``), returns dataclass defaults plus a
+    ``config_loadable`` ERROR result — the caller's remaining checks then run
+    against built-in defaults rather than dying before any of them execute.
+    """
+    from autoskillit.config import AutomationConfig, ConfigSchemaError, load_config
+    from autoskillit.core import YAMLError
+
+    results: list[DoctorResult] = []
+    try:
+        cfg = load_config(project_dir or Path.cwd())
+    except (ConfigSchemaError, YAMLError) as exc:
+        cfg = AutomationConfig()
+        results.append(
+            DoctorResult(
+                Severity.ERROR,
+                "config_loadable",
+                f"Configuration could not be loaded: {exc} "
+                f"Backend and all config-derived checks below ran against built-in "
+                f"defaults (agent_backend.backend={cfg.agent_backend.backend!r}), "
+                f"not your configuration.",
+            )
+        )
+    return cfg, results
 
 
 def _check_project_config(project_dir: Path | None = None) -> DoctorResult:
@@ -30,7 +65,7 @@ def _check_config_layers_for_secrets(project_dir: Path | None = None) -> DoctorR
     Scans the user-level and project-level config.yaml files for any keys
     that belong only in .secrets.yaml. Reports ERROR with exact fix guidance.
     """
-    from autoskillit.config import ConfigSchemaError, validate_layer_keys
+    from autoskillit.config import ConfigSchemaError, remap_retired_keys, validate_layer_keys
     from autoskillit.core import YAMLError, load_yaml
 
     root = project_dir or Path.cwd()
@@ -51,6 +86,7 @@ def _check_config_layers_for_secrets(project_dir: Path | None = None) -> DoctorR
             )
         if not isinstance(data, dict):
             continue
+        data, _ = remap_retired_keys(data, is_secrets_layer=False)
         try:
             validate_layer_keys(data, config_path, is_secrets_layer=False)
         except ConfigSchemaError as exc:

@@ -1,0 +1,7 @@
+# Frozen fixture: a project .autoskillit/config.yaml as written by a version
+# prior to 0.8.39, before quota_guard.threshold was split into
+# short_window_threshold and long_window_threshold. Do not edit after
+# creation — this is a point-in-time snapshot of a real prior-version config shape.
+quota_guard:
+  threshold: 90.0
+  enabled: true

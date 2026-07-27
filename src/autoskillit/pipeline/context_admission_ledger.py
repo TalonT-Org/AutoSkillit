@@ -2137,11 +2137,6 @@ def _accounting_status(
 ) -> ContextAdmissionAccountingStatus:
     if transition.decision.kind is AdmissionDecisionKind.QUARANTINED:
         return ContextAdmissionAccountingStatus.PROTOCOL_QUARANTINED
-    if isinstance(
-        event,
-        MarkIndeterminateEvent | MarkGenerationIndeterminateEvent | RequestReconciliationEvent,
-    ):
-        return ContextAdmissionAccountingStatus.RECONCILIATION_REQUIRED
     if transition.decision.kind in {
         AdmissionDecisionKind.WOULD_REJECT,
         AdmissionDecisionKind.WATERMARK_UNAVAILABLE,
@@ -2150,6 +2145,11 @@ def _accounting_status(
         AdmissionDecisionKind.IDEMPOTENCY_EXPIRED,
     }:
         return ContextAdmissionAccountingStatus.SEMANTIC_REJECTION
+    if isinstance(
+        event,
+        MarkIndeterminateEvent | MarkGenerationIndeterminateEvent | RequestReconciliationEvent,
+    ):
+        return ContextAdmissionAccountingStatus.RECONCILIATION_REQUIRED
     return ContextAdmissionAccountingStatus.RECORDED
 
 

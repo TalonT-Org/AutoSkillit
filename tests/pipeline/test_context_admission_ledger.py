@@ -1270,6 +1270,25 @@ def test_dispatched_indeterminate_work_remains_charged_across_recovery(
     assert sum(reservation.reserved_count for reservation in state.reservations) == 10
 
 
+def test_rejected_indeterminate_event_is_reported_as_semantic_rejection(
+    tmp_path: Path,
+) -> None:
+    ledger = DefaultContextAdmissionLedger(_authority(tmp_path))
+    key = stream_key()
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    batch_value = batch(occurrence())
+
+    rejected = ledger.apply(
+        key,
+        mark_indeterminate_event(opened.transition.next_state, batch_value),
+    )
+
+    assert rejected.status is ContextAdmissionAccountingStatus.SEMANTIC_REJECTION
+    assert rejected.transition is not None
+    assert rejected.transition.decision.kind is AdmissionDecisionKind.WOULD_REJECT
+
+
 def test_busy_begin_is_transient_and_retry_succeeds_without_poisoning_health(
     tmp_path: Path,
 ) -> None:

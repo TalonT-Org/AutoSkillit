@@ -556,6 +556,39 @@ def test_apply_persists_sticky_failure_for_corrupt_materialized_state(
     )
 
 
+def test_apply_retries_when_corruption_failure_marker_is_contended(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            "UPDATE streams SET state_envelope = ?",
+            (b"invalid",),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    persist_stream_failure = ledger._persist_stream_failure
+    monkeypatch.setattr(ledger, "_persist_stream_failure", lambda *_args: False)
+
+    contended = ledger.apply(key, open_event())
+
+    assert contended.status is ContextAdmissionAccountingStatus.CONTENDED
+    assert contended.reason_code == "busy"
+    assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+    monkeypatch.setattr(ledger, "_persist_stream_failure", persist_stream_failure)
+    failed = ledger.apply(key, open_event())
+
+    assert failed.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED
+    assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+
+
 def test_recovery_rejects_valid_but_nonzero_genesis(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     key = stream_key()

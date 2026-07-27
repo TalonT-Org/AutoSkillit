@@ -495,13 +495,21 @@ class DefaultContextAdmissionLedger:
                         ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
                         ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
                     }:
-                        self._persist_stream_failure(
+                        persisted = self._persist_stream_failure(
                             connection,
                             stream_id,
                             stream_key,
                             exc.reason,
                             exc.reason_code,
                         )
+                        if not persisted and self._store_health.status is not (
+                            ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+                        ):
+                            return ContextAdmissionAccountingResult(
+                                status=ContextAdmissionAccountingStatus.CONTENDED,
+                                stream_key=stream_key,
+                                reason_code="busy",
+                            )
                 return ContextAdmissionAccountingResult(
                     status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
                     stream_key=stream_key,

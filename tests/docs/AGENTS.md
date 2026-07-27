@@ -26,3 +26,4 @@ Documentation integrity, link validity, and naming convention tests.
 | `test_recipe_redelivery_decision.py` | ADR-0004 recipe pull pagination identity and reconstruction contracts |
 | `test_check_sub_claude_md_script.py` | Unit and integration tests for the check_sub_claude_md.py pre-commit hook script |
 | `test_context_admission_decision.py` | Ratchet ADR-0007 context-admission authority, evidence, traceability, and downstream ownership |
+| `test_codex_limit_findings_are_recorded.py` | Ratchet: every upstream-neutralized Codex limit finding must be disclosed in ADR-0004 and ADR-0005 |

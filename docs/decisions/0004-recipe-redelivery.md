@@ -77,5 +77,19 @@ page carrying `next_part`. They must not guess or repair a malformed continuatio
 - Future work relaxing `CODEX_AUTO_COMPACT_LIMIT` must add integration tests verifying
   `load_recipe` / `open_kitchen` / `get_recipe_section` re-delivery restores full
   pipeline execution capability, including envelope re-delivery plus per-step pulls.
-- `test_copied_config_has_auto_compact_limit` validates the primary defense path:
+- `test_snapshotted_config_has_auto_compact_limit` validates the primary defense path:
   `setup_session_dir` preserves the override in the copied `config.toml`.
+
+## Re-verification at codex-cli 0.145.0 (2026-07-26)
+
+Issue #4369 re-verified the primary defense against upstream `rust-v0.145.0`
+(commit `25af12f7e61572b0bc18ddb1008be543b91519b0`). `ModelInfo::auto_compact_token_limit()`
+clamps the configured `model_auto_compact_token_limit` to 90% of the resolved context
+window; for gpt-5.6-sol (`resolved_context_window = 272_000`) the clamped, effective
+threshold is **244,800** — not the configured `999_999_999`. **`CODEX_AUTO_COMPACT_LIMIT`
+is measurably neutralized upstream at this CLI version**: 34 compaction events were
+observed under 0.145.0. The forward obligation recorded above — testing the
+`load_recipe` / `open_kitchen` / `get_recipe_section` end-to-end recovery path — is
+therefore live, not hypothetical, and is owned by #4271. The finding is recorded
+machine-readably in `CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_AUTO_COMPACT_LIMIT"]`
+(`execution/backends/_codex_config.py`).

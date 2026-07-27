@@ -32,7 +32,9 @@ output-boundary bounding on measured bytes:
    output through its owned fd. The bounded inline slice includes a provenance
    marker whose path is present only after marker-time identity verification. The
    ordinary outer-result limit remains the backstop for hook-failure paths. The
-   separately configured `CODEX_HISTORY_RETENTION_TOKEN_LIMIT` governs later history.
+   separately configured `CODEX_HISTORY_RETENTION_TOKEN_LIMIT` replaces the model's
+   `truncation_policy` outright, so it governs both the current-turn exec output sent
+   to the model and retained history — not later history alone.
 
 ### Sequencing Rule
 

@@ -13,7 +13,7 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 | `claude.py` | `ClaudeCodeBackend` (incl. `validate_session_layout`), `ClaudeEnvPolicy`, `ClaudeSessionLocator`, `ClaudeStreamParser`, `ClaudeResultParser` (prompt utilities moved to `_claude_prompt.py`) |
 | `_claude_prompt.py` | Prompt injection utilities, session constants (`_ensure_skill_prefix`, `_inject_completion_directive`, `_compose_resume_prompt`, etc.), shared by claude + codex + commands |
 | `codex.py` | `CodexFlags`, `CodexBackend` (incl. `validate_session_layout`, `setup_session_dir` agent TOML generation and session-config registration), `CodexEnvPolicy`, `CodexSessionLocator`, `CodexStateReadinessProbe` (parse/config moved to `_codex_parse.py` / `_codex_config.py`) |
-| `_codex_config.py` | TOML serialization with `[[key]]` array-of-tables support, MCP registration (`ensure_codex_mcp_registered`, `_serialize_toml`) |
+| `_codex_config.py` | TOML serialization with `[[key]]` array-of-tables support, MCP registration (`ensure_codex_mcp_registered`, `_serialize_toml`), `CODEX_LIMIT_VERIFICATION_REGISTRY` (`CodexLimitVerificationDef`, `validate_codex_limit_verification`) |
 | `_codex_config_lock.py` | Canonical source-config advisory lock with timeout, ownership diagnostics, and non-reentrant lifecycle |
 | `_codex_hooks.py` | Codex config.toml hook generation, sync, and upsert (`generate_codex_hooks_config`, `sync_hooks_to_codex_config`) |
 | `_codex_parse.py` | `CodexStreamParser`, `CodexResultParser`, NDJSON scanning, and bounded persisted-rollout parsing |

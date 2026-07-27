@@ -23,7 +23,11 @@ from autoskillit.core import (
     get_logger,
     is_valid_codex_model_id,
 )
-from autoskillit.execution import CODEX_LIMITS_LAST_VERIFIED_VERSION, QUOTA_CACHE_SCHEMA_VERSION
+from autoskillit.execution import (
+    CODEX_LIMITS_LAST_VERIFIED_VERSION,
+    QUOTA_CACHE_SCHEMA_VERSION,
+    CodexBackend,
+)
 
 from ._doctor_types import DoctorResult
 
@@ -94,23 +98,29 @@ def _check_codex_version(*, backend: CodingAgentBackend | None = None) -> Doctor
 
 def _check_codex_limits_verified(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
     check_name = "codex_limits_verified"
+    # F3 guard: a Codex CLI limits pin is only ever meaningful for a Codex backend.
+    # Comparing it against whatever CLI a differently-configured backend names
+    # (e.g. `claude --version`) produces a factually false warning.
+    if not isinstance(backend, CodexBackend):
+        return DoctorResult(
+            Severity.OK, check_name, "Skipped (backend declares no CLI limits pin)"
+        )
     ver = _parse_codex_version(backend=backend)
     if ver.skip_reason is not None:
         return DoctorResult(Severity.OK, check_name, f"Skipped ({ver.skip_reason})")
     assert ver.parsed is not None
+    cur_str = ".".join(str(v) for v in ver.parsed)
     if ver.parsed > CODEX_LIMITS_LAST_VERIFIED_VERSION:
         pin_str = ".".join(str(v) for v in CODEX_LIMITS_LAST_VERIFIED_VERSION)
-        cur_str = ".".join(str(v) for v in ver.parsed)
         return DoctorResult(
             Severity.WARNING,
             check_name,
-            f"Codex CLI {cur_str} is newer than verified pin {pin_str}; "
-            "re-verify the recipe outer-result parser/protected evidence contract, "
-            "CODEX_HISTORY_RETENTION_TOKEN_LIMIT (later history only), and "
-            "CODEX_AUTO_COMPACT_LIMIT against upstream behavior, then bump "
-            "CODEX_LIMITS_LAST_VERIFIED_VERSION",
+            f"Codex CLI {cur_str} is newer than verified pin {pin_str}; re-verify "
+            "CODEX_HISTORY_RETENTION_TOKEN_LIMIT, CODEX_AUTO_COMPACT_LIMIT, and "
+            "CODEX_RECIPE_DELIVERY_BUDGET against upstream behavior and update "
+            "CODEX_LIMIT_VERIFICATION_REGISTRY, from which "
+            "CODEX_LIMITS_LAST_VERIFIED_VERSION is derived",
         )
-    cur_str = ".".join(str(v) for v in ver.parsed)
     return DoctorResult(Severity.OK, check_name, f"Codex CLI {cur_str} at or below verified pin")
 
 

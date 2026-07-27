@@ -198,7 +198,13 @@ insertion control, not a measurement of remaining context.
   (`CODEX_HISTORY_RETENTION_TOKEN_LIMIT`), and auto-compact sentinel
   (`CODEX_AUTO_COMPACT_LIMIT`) against the upstream registry AND observed session
   windows, then bump `CODEX_LIMITS_LAST_VERIFIED_VERSION`. Doctor Check 39
-  (`codex_limits_verified`) mechanizes the reminder. Issue #4280's investigation
+  (`codex_limits_verified`) mechanizes the reminder. `CODEX_LIMIT_VERIFICATION_REGISTRY`
+  is the durable, machine-readable record of what was checked and found;
+  `CODEX_LIMITS_LAST_VERIFIED_VERSION` is derived from it as the minimum
+  `checked_at_cli_version` across its entries. At codex-cli 0.145.0,
+  `CODEX_AUTO_COMPACT_LIMIT` was found neutralized upstream:
+  `ModelInfo::auto_compact_token_limit()` clamps it to 90% of the resolved context
+  window, an effective threshold of 244,800 for gpt-5.6-sol. Issue #4280's investigation
   found upstream models.json (post-0.144.1) listing gpt-5.6-sol at 372,000 tokens
   vs 258,400 in cli 0.144.1, but the effective window is server/catalog-controlled
   and oscillated during July 2026 (openai/codex#31860, #32806) — re-verify, do not
@@ -212,10 +218,12 @@ insertion control, not a measurement of remaining context.
   files.
 - openai/codex#33881: agent-TOML `model`/`model_reasoning_effort` reportedly ignored
   on 0.144.5 — affects the pins `_generate_agent_tomls` writes.
-- Upstream auto-compact semantics are scope-dependent
-  (`model_auto_compact_token_limit` is consulted only under `BodyAfterPrefix` scope;
-  a separate full-context-window trigger ignores it) — re-verify
-  `CODEX_AUTO_COMPACT_LIMIT`'s disabling effect per upgrade.
+- Upstream auto-compact semantics: `model_auto_compact_token_limit` is consulted
+  directly only under the non-default `BodyAfterPrefix` scope; the default scope is
+  `Total`, under which the trigger uses `ModelInfo::auto_compact_token_limit()`, which
+  clamps the configured value to 90% of the resolved context window. The practical
+  mechanism is the clamp, not a separate trigger — re-verify `CODEX_AUTO_COMPACT_LIMIT`'s
+  disabling effect per upgrade.
 
 ## Consequences
 

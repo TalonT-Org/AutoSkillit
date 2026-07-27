@@ -207,6 +207,8 @@ class ShadowContextAdmissionRecord(_ContractValue):
         ):
             _raise_invalid("unsupported_context_admission_encoding")
         _validate_reason_code(self.reason_code)
+        if self.reason_code != self.decision.reason_code:
+            _raise_invalid("shadow_reason_code_mismatch")
         target_keys = tuple(_shadow_target_key(target) for target in self.targets)
         if tuple(sorted(target_keys)) != target_keys or len(set(target_keys)) != len(target_keys):
             _raise_invalid("noncanonical_shadow_targets")
@@ -572,6 +574,11 @@ class ContextAdmissionAccountingResult:
                 raise ValueError("invalid_journal_sequence")
         if self.reason_code is not None:
             _validate_reason_code(self.reason_code)
+        if (
+            self.transition is not None
+            and self.reason_code != self.transition.decision.reason_code
+        ):
+            raise ValueError("accounting_reason_code_mismatch")
         if self.status is ContextAdmissionAccountingStatus.RECORDED:
             if self.transition is None or self.journal_sequence is None:
                 raise ValueError("recorded_result_requires_publication")

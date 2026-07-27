@@ -402,6 +402,23 @@ def test_shadow_publication_is_a_released_top_level_envelope() -> None:
     assert "ShadowContextAdmissionRecord" in CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS
 
 
+def test_shadow_reason_code_must_match_decision() -> None:
+    transition = reduce_context_admission(_uninitialized(), _authority_event())
+    with pytest.raises(ContextAdmissionValidationError, match="shadow_reason_code_mismatch"):
+        ShadowContextAdmissionRecord(
+            stream_key=_stream_key(),
+            event_id=_authority_event().event_id,
+            journal_sequence=1,
+            aggregate_revision=transition.next_state.aggregate_revision,
+            admission_sequence=transition.next_state.admission_sequence,
+            decision=transition.decision,
+            protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+            encoding_version=CONTEXT_ADMISSION_ENCODING_VERSION,
+            reason_code="conflicting-reason",
+            targets=(),
+        )
+
+
 @pytest.mark.parametrize("encoding_version", [True, 1.0, "1"])
 def test_shadow_constructor_rejects_non_integer_encoding_versions(
     encoding_version: object,
@@ -817,6 +834,16 @@ def test_semantic_rejection_requires_transition() -> None:
         ContextAdmissionAccountingResult(
             status=ContextAdmissionAccountingStatus.SEMANTIC_REJECTION,
             stream_key=_stream_key(),
+        )
+
+
+def test_accounting_reason_code_must_match_transition_decision() -> None:
+    with pytest.raises(ValueError, match="accounting_reason_code_mismatch"):
+        ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.SEMANTIC_REJECTION,
+            stream_key=_stream_key(),
+            transition=_transition(),
+            reason_code="conflicting-reason",
         )
 
 

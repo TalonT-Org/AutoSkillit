@@ -780,6 +780,15 @@ def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:
     assert failed.transition is None
 
 
+def test_storage_failure_accounting_result_requires_reason_code() -> None:
+    with pytest.raises(ValueError, match="storage_failure_requires_reason"):
+        ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+            stream_key=_stream_key(),
+            failure_reason=ContextAdmissionStorageFailureReason.INTEGRITY,
+        )
+
+
 def test_health_and_accounting_results_reject_raw_enum_values() -> None:
     with pytest.raises(ValueError, match="invalid_context_admission_storage_health"):
         ContextAdmissionStoreHealth(

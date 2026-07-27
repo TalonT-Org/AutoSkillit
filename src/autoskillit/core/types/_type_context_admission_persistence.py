@@ -603,7 +603,7 @@ class ContextAdmissionAccountingResult:
             if self.transition is not None or self.journal_sequence is not None:
                 raise ValueError("nonadmitting_storage_result_has_transition")
         if self.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED:
-            if self.failure_reason is None:
+            if self.failure_reason is None or self.reason_code is None:
                 raise ValueError("storage_failure_requires_reason")
         elif self.failure_reason is not None:
             raise ValueError("nonstorage_result_has_storage_reason")

@@ -174,6 +174,39 @@ class TestTaskfile:
         assert "CODEX_SMOKE_TEST" in preconditions
         assert "CLAUDE_CODE_SMOKE_TEST" in preconditions
 
+    def test_test_check_sets_experimental_enabled(self):
+        """T16 — test-check must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED to "true".
+
+        Guards against accidental removal of the env var. Without it, the test
+        suite falls back to is_dev_install() (config/settings.py:513) and silently
+        skips all EXPERIMENTAL-lifecycle tests on non-editable installs — a
+        fail-open hidden in feature-gate resolution (issue #4385).
+        """
+        data = self._load()
+        env = data["tasks"]["test-check"].get("env", {})
+        assert "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED" in env, (
+            "test-check.env must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED "
+            "so the test scope matches CI regardless of install type"
+        )
+        assert env["AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED"] == "true", (
+            "test-check.env AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED must be 'true'"
+        )
+
+    def test_test_all_sets_experimental_enabled(self):
+        """T17 — test-all must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED to "true".
+
+        Mirrors the test-check guard. Both test entry points must request the
+        same feature scope, otherwise local runs diverge from each other.
+        """
+        data = self._load()
+        env = data["tasks"]["test-all"].get("env", {})
+        assert "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED" in env, (
+            "test-all.env must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED"
+        )
+        assert env["AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED"] == "true", (
+            "test-all.env AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED must be 'true'"
+        )
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

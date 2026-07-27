@@ -1,0 +1,42 @@
+{
+  "encoding_version": 1,
+  "final_state_envelope": "{\"encoding_version\":1,\"payload\":{\"admission_sequence\":{\"__type__\":\"AdmissionSequence\",\"value\":0},\"aggregate_revision\":{\"__type__\":\"AggregateRevision\",\"value\":1},\"closed_epochs\":{\"__tuple__\":[]},\"expired_idempotency_tombstones\":{\"__tuple__\":[]},\"idempotency_records\":{\"__tuple__\":[]},\"processed_events\":{\"__tuple__\":[{\"__type__\":\"ProcessedEventRecord\",\"admission_sequence\":{\"__type__\":\"AdmissionSequence\",\"value\":0},\"aggregate_revision\":{\"__type__\":\"AggregateRevision\",\"value\":1},\"event\":{\"__type__\":\"AuthorityUnavailableEvent\",\"authority_state\":{\"__enum__\":\"CoverageState\",\"value\":\"partial\"},\"event_id\":{\"__type__\":\"AdmissionEventId\",\"value\":\"event-authority-unavailable\"},\"expected_aggregate_revision\":{\"__type__\":\"AggregateRevision\",\"value\":0},\"idempotency_namespace\":{\"__type__\":\"IdempotencyNamespace\",\"caller_scope\":\"ledger-fixture\",\"operation_kind\":\"authority-unavailable\"},\"protocol_version\":1,\"reason_code\":\"authoritative-watermark-unavailable\"},\"event_id\":{\"__type__\":\"AdmissionEventId\",\"value\":\"event-authority-unavailable\"},\"original_decision\":{\"__type__\":\"AdmissionDecision\",\"available_ordinary_count\":0,\"available_protected_count\":0,\"kind\":{\"__enum__\":\"AdmissionDecisionKind\",\"value\":\"watermark_unavailable\"},\"reason_code\":\"authoritative-watermark-unavailable\",\"requested_count\":0,\"snapshot_sequence\":null,\"window_epoch_id\":null}}]},\"protocol_version\":1},\"protocol_version\":1,\"type_discriminator\":\"UninitializedContextAdmissionState\"}",
+  "protocol_version": 1,
+  "publications": [
+    {
+      "decision_envelope": "{\"encoding_version\":1,\"payload\":{\"available_ordinary_count\":0,\"available_protected_count\":0,\"kind\":{\"__enum__\":\"AdmissionDecisionKind\",\"value\":\"watermark_unavailable\"},\"reason_code\":\"authoritative-watermark-unavailable\",\"requested_count\":0,\"snapshot_sequence\":null,\"window_epoch_id\":null},\"protocol_version\":1,\"type_discriminator\":\"AdmissionDecision\"}",
+      "effect_envelopes": [],
+      "event_envelope": "{\"encoding_version\":1,\"payload\":{\"authority_state\":{\"__enum__\":\"CoverageState\",\"value\":\"partial\"},\"event_id\":{\"__type__\":\"AdmissionEventId\",\"value\":\"event-authority-unavailable\"},\"expected_aggregate_revision\":{\"__type__\":\"AggregateRevision\",\"value\":0},\"idempotency_namespace\":{\"__type__\":\"IdempotencyNamespace\",\"caller_scope\":\"ledger-fixture\",\"operation_kind\":\"authority-unavailable\"},\"protocol_version\":1,\"reason_code\":\"authoritative-watermark-unavailable\"},\"protocol_version\":1,\"type_discriminator\":\"AuthorityUnavailableEvent\"}",
+      "journal_sequence": 1,
+      "shadow_envelope": "{\"encoding_version\":1,\"payload\":{\"admission_sequence\":{\"__type__\":\"AdmissionSequence\",\"value\":0},\"aggregate_revision\":{\"__type__\":\"AggregateRevision\",\"value\":1},\"decision\":{\"__type__\":\"AdmissionDecision\",\"available_ordinary_count\":0,\"available_protected_count\":0,\"kind\":{\"__enum__\":\"AdmissionDecisionKind\",\"value\":\"watermark_unavailable\"},\"reason_code\":\"authoritative-watermark-unavailable\",\"requested_count\":0,\"snapshot_sequence\":null,\"window_epoch_id\":null},\"encoding_version\":1,\"event_id\":{\"__type__\":\"AdmissionEventId\",\"value\":\"event-authority-unavailable\"},\"journal_sequence\":1,\"protocol_version\":1,\"reason_code\":\"authoritative-watermark-unavailable\",\"stream_key\":{\"__type__\":\"ContextAdmissionStreamKey\",\"current_agent_id\":{\"__type__\":\"AgentInstanceId\",\"value\":\"agent-root\"},\"current_session_id\":{\"__type__\":\"ContextSessionId\",\"value\":\"session-root\"},\"current_thread_id\":{\"__type__\":\"ContextThreadId\",\"value\":\"thread-root\"},\"fork_occurrence_id\":null,\"root_agent_id\":{\"__type__\":\"AgentInstanceId\",\"value\":\"agent-root\"},\"root_session_id\":{\"__type__\":\"ContextSessionId\",\"value\":\"session-root\"},\"root_thread_id\":{\"__type__\":\"ContextThreadId\",\"value\":\"thread-root\"}},\"targets\":{\"__tuple__\":[]}},\"protocol_version\":1,\"type_discriminator\":\"ShadowContextAdmissionRecord\"}"
+    }
+  ],
+  "schema_version": 1,
+  "stream_key": {
+    "current_agent_id": {
+      "__type__": "AgentInstanceId",
+      "value": "agent-root"
+    },
+    "current_session_id": {
+      "__type__": "ContextSessionId",
+      "value": "session-root"
+    },
+    "current_thread_id": {
+      "__type__": "ContextThreadId",
+      "value": "thread-root"
+    },
+    "fork_occurrence_id": null,
+    "root_agent_id": {
+      "__type__": "AgentInstanceId",
+      "value": "agent-root"
+    },
+    "root_session_id": {
+      "__type__": "ContextSessionId",
+      "value": "session-root"
+    },
+    "root_thread_id": {
+      "__type__": "ContextThreadId",
+      "value": "thread-root"
+    }
+  }
+}

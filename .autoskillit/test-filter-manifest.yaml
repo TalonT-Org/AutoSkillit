@@ -163,6 +163,10 @@ tests/fixtures/codex_recipe_diagnostic/*:
 tests/fixtures/codex_recipe_protected/*:
   - execution/
 
+tests/fixtures/context_admission_journals/*.json:
+  - core/
+  - pipeline/
+
 tests/execution/backends/fixtures/codex_ndjson/*.json:
   - execution/
 

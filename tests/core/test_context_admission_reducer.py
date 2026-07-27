@@ -11,7 +11,6 @@ from autoskillit.core import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
     AcceptInputEvent,
     ActiveContextAdmissionState,
-    AdmissionAttemptId,
     AdmissionBatch,
     AdmissionBatchId,
     AdmissionDecisionKind,
@@ -22,28 +21,20 @@ from autoskillit.core import (
     AdmissionReservation,
     AdmissionReservationId,
     AdmissionReservationKey,
-    AdmissionSequence,
     AdmissionState,
     AdmissionWitness,
     AdmissionWitnessId,
-    AgentInstanceId,
-    AggregateRevision,
     AuthoritySourceId,
     AuthorityUnavailableEvent,
     CanonicalRepresentationManifest,
     CanonicalSpanId,
-    CanonicalSpanOwner,
     ContextAdmissionValidationError,
     ContextLineage,
-    ContextSessionId,
-    ContextThreadId,
     ContextWindowSnapshot,
     CoverageState,
-    DeliveryOccurrenceId,
     DispatchRequestEvent,
     EpochFenceProof,
     ExpireIdempotencyKeyEvent,
-    ForkOccurrenceId,
     GenerationReservationId,
     GenerationReservationRecord,
     GenerationState,
@@ -51,11 +42,9 @@ from autoskillit.core import (
     MarkGenerationIndeterminateEvent,
     MarkIndeterminateEvent,
     MeasurementKind,
-    ModelIdentity,
     ModelItemId,
     OpenEpochEvent,
     PrepareBatchEvent,
-    ProducerInstanceId,
     ProducerSurface,
     ProposeOccurrenceEvent,
     ProtectedPoolOwnerId,
@@ -76,21 +65,45 @@ from autoskillit.core import (
     RolloverEpochEvent,
     StageHistoryEvent,
     StartGenerationEvent,
-    TokenizerIdentity,
-    ToolCallId,
-    TurnId,
     UninitializedContextAdmissionState,
     WindowEpochId,
     WitnessKind,
     reduce_context_admission,
     replay_context_admission,
 )
+from tests.fixtures.context_admission import (
+    canonical_manifest as fixture_manifest,
+)
+from tests.fixtures.context_admission import (
+    event_fields as fixture_event_fields,
+)
+from tests.fixtures.context_admission import (
+    idempotency_namespace as fixture_idempotency_namespace,
+)
+from tests.fixtures.context_admission import (
+    lineage as fixture_lineage,
+)
+from tests.fixtures.context_admission import (
+    occurrence as fixture_occurrence,
+)
+from tests.fixtures.context_admission import (
+    representation_binding as fixture_representation_binding,
+)
+from tests.fixtures.context_admission import (
+    snapshot as fixture_snapshot,
+)
+from tests.fixtures.context_admission import (
+    uninitialized_state,
+)
+from tests.fixtures.context_admission import (
+    witness as fixture_witness,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def _namespace(operation_kind: str) -> IdempotencyNamespace:
-    return IdempotencyNamespace(caller_scope="test-caller", operation_kind=operation_kind)
+    return fixture_idempotency_namespace(operation_kind, caller_scope="test-caller")
 
 
 def _event_fields(
@@ -100,14 +113,13 @@ def _event_fields(
     *,
     expected_revision: int | None = None,
 ) -> dict[str, object]:
-    return {
-        "event_id": AdmissionEventId(event_id),
-        "protocol_version": CONTEXT_ADMISSION_PROTOCOL_VERSION,
-        "idempotency_namespace": _namespace(operation_kind),
-        "expected_aggregate_revision": AggregateRevision(
-            state.aggregate_revision.value if expected_revision is None else expected_revision
-        ),
-    }
+    return fixture_event_fields(
+        state,
+        event_id,
+        operation_kind,
+        expected_revision=expected_revision,
+        caller_scope="test-caller",
+    )
 
 
 def _snapshot(
@@ -120,29 +132,20 @@ def _snapshot(
     model: str = "claude-test",
     tokenizer: str = "tokenizer-test",
 ) -> ContextWindowSnapshot:
-    return ContextWindowSnapshot(
-        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
-        window_epoch_id=WindowEpochId(f"epoch-{epoch}"),
-        window_epoch_number=epoch,
-        model_identity=ModelIdentity.anthropic(model),
-        tokenizer_identity=TokenizerIdentity(tokenizer),
-        snapshot_sequence=sequence,
+    return fixture_snapshot(
+        epoch=epoch,
+        sequence=sequence,
         active_count=active_count,
         hard_limit=hard_limit,
         remaining_count=remaining_count,
+        model=model,
+        tokenizer=tokenizer,
+        epoch_id=f"epoch-{epoch}",
     )
 
 
 def _uninitialized() -> UninitializedContextAdmissionState:
-    return UninitializedContextAdmissionState(
-        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
-        aggregate_revision=AggregateRevision(0),
-        admission_sequence=AdmissionSequence(0),
-        processed_events=(),
-        idempotency_records=(),
-        expired_idempotency_tombstones=(),
-        closed_epochs=(),
-    )
+    return uninitialized_state()
 
 
 def _open_epoch(
@@ -179,32 +182,14 @@ def _lineage(
     fork: str | None = None,
     delivery: str | None = None,
 ) -> ContextLineage:
-    return ContextLineage(
-        root_session_id=ContextSessionId("session-root"),
-        current_session_id=ContextSessionId(
-            "session-child" if parent_agent is not None else "session-root"
-        ),
-        root_agent_id=AgentInstanceId("agent-root"),
-        current_agent_id=AgentInstanceId(
-            f"agent-{occurrence}" if parent_agent is not None else "agent-root"
-        ),
-        parent_agent_id=AgentInstanceId(parent_agent) if parent_agent is not None else None,
-        root_thread_id=ContextThreadId("thread-root"),
-        current_thread_id=ContextThreadId(
-            f"thread-{occurrence}" if fork is not None else "thread-root"
-        ),
-        parent_thread_id=ContextThreadId("thread-root") if fork is not None else None,
-        fork_occurrence_id=ForkOccurrenceId(fork) if fork is not None else None,
-        turn_id=TurnId(f"turn-{occurrence}"),
-        producer_surface=surface,
-        producer_instance_id=ProducerInstanceId(f"producer-{occurrence}"),
-        tool_call_id=ToolCallId(f"tool-{occurrence}"),
-        model_item_id=ModelItemId(f"item-{occurrence}"),
-        dispatch_identity=None,
-        attempt_id=AdmissionAttemptId(f"attempt-{occurrence}"),
-        delivery_occurrence_id=(DeliveryOccurrenceId(delivery) if delivery is not None else None),
-        window_epoch_id=WindowEpochId(f"epoch-{epoch}"),
-        window_epoch_number=epoch,
+    return fixture_lineage(
+        occurrence,
+        epoch=epoch,
+        surface=surface,
+        parent_agent=parent_agent,
+        fork=fork,
+        delivery=delivery,
+        epoch_id=f"epoch-{epoch}",
     )
 
 
@@ -218,14 +203,15 @@ def _occurrence(
     surface: ProducerSurface = ProducerSurface.TOOL_RESULT_ENVELOPE,
     lineage: ContextLineage | None = None,
 ) -> AdmissionOccurrence:
-    return AdmissionOccurrence(
-        occurrence_id=AdmissionOccurrenceId(name),
-        lineage=lineage or _lineage(name, epoch=epoch, surface=surface),
+    return fixture_occurrence(
+        name,
+        maximum=maximum,
+        revision=revision,
+        epoch=epoch,
         reserve_class=reserve_class,
-        producer_surface=surface,
-        predicted_authoritative_maximum=maximum,
-        representation_revision=RepresentationRevision(revision or f"revision-{name}"),
-        owned_span_ids=(CanonicalSpanId(f"span-{name}"),),
+        surface=surface,
+        lineage_value=lineage,
+        epoch_id=f"epoch-{epoch}",
     )
 
 
@@ -235,17 +221,13 @@ def _manifest(
     *,
     revision: str = "revision-final",
 ) -> CanonicalRepresentationManifest:
-    return CanonicalRepresentationManifest(
-        request_id=AdmissionRequestId(request),
-        representation_revision=RepresentationRevision(revision),
-        representation_binding_id=RepresentationBindingId(f"binding-{request}"),
-        span_owners=tuple(
-            CanonicalSpanOwner(span_id=span_id, occurrence_id=occurrence.occurrence_id)
-            for occurrence in occurrences
-            for span_id in occurrence.owned_span_ids
-        ),
-        assembler_identity=ProducerInstanceId(f"assembler-{request}"),
-        assembler_witness_id=AdmissionWitnessId(f"assembler-witness-{request}"),
+    return fixture_manifest(
+        occurrences,
+        request=request,
+        revision=revision,
+        binding=f"binding-{request}",
+        assembler=f"assembler-{request}",
+        assembler_witness=f"assembler-witness-{request}",
     )
 
 
@@ -339,38 +321,20 @@ def _witness(
     revision: str | None = None,
     epoch: int = 1,
 ) -> AdmissionWitness:
-    return AdmissionWitness(
-        witness_id=AdmissionWitnessId(witness or f"{kind.value}-witness-{batch.batch_id.value}"),
-        kind=kind,
-        window_epoch_id=WindowEpochId(f"epoch-{epoch}"),
-        window_epoch_number=epoch,
-        snapshot_sequence=1,
-        request_id=batch.request_id,
-        batch_id=batch.batch_id,
-        representation_revision=RepresentationRevision(
-            revision or batch.manifest.representation_revision.value
-        ),
-        representation_binding_id=batch.manifest.representation_binding_id,
-        occurrence_ids=batch.occurrence_ids,
-        authority_source_id=AuthoritySourceId("authority-test"),
+    return fixture_witness(
+        batch,
+        kind,
+        witness_id=witness or f"{kind.value}-witness-{batch.batch_id.value}",
+        epoch=epoch,
+        epoch_id=f"epoch-{epoch}",
+        revision=revision,
     )
 
 
 def _binding(
     batch: AdmissionBatch, *, revision: str | None = None
 ) -> RepresentationBindingWitness:
-    bound_revision = RepresentationRevision(
-        revision or batch.manifest.representation_revision.value
-    )
-    return RepresentationBindingWitness(
-        counted_representation_revision=bound_revision,
-        dispatched_representation_revision=bound_revision,
-        final_manifest_revision=bound_revision,
-        representation_binding_id=batch.manifest.representation_binding_id,
-        request_id=batch.request_id,
-        batch_id=batch.batch_id,
-        authority_source_id=AuthoritySourceId("authority-test"),
-    )
+    return fixture_representation_binding(batch, revision=revision)
 
 
 def _propose(

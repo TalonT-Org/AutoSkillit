@@ -3,22 +3,37 @@
 from __future__ import annotations
 
 import dataclasses
+import os
 from pathlib import Path
 from typing import get_args, get_type_hints
 
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import GitHubFetcher
+from autoskillit.core import ContextAdmissionStoreAuthority, GitHubFetcher
 from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.context import ToolContext
+from autoskillit.pipeline.context_admission_ledger import (
+    DefaultContextAdmissionLedger,
+)
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.pipeline.timings import DefaultTimingLog
 from autoskillit.pipeline.tokens import DefaultTokenLog
 from tests.fakes import FakeSkillSessionContractStore
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
+
+
+def _ledger(project_dir: Path) -> DefaultContextAdmissionLedger:
+    return DefaultContextAdmissionLedger(
+        ContextAdmissionStoreAuthority(
+            database_path=(
+                project_dir / ".autoskillit" / "temp" / "context-admission" / "ledger.sqlite3"
+            ).resolve(),
+            expected_owner_id=os.getuid(),
+        )
+    )
 
 
 def test_tool_context_fields_accessible(tmp_path):
@@ -34,6 +49,7 @@ def test_tool_context_fields_accessible(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=_ledger(tmp_path),
     )
     assert ctx.gate.enabled is True
     assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
@@ -53,6 +69,7 @@ def test_tool_context_audit_isolation(tmp_path):
         temp_dir=tmp_path / "a" / ".autoskillit" / "temp",
         project_dir=tmp_path / "a",
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=_ledger(tmp_path / "a"),
     )
     ctx_b = ToolContext(
         config=AutomationConfig(),
@@ -65,6 +82,7 @@ def test_tool_context_audit_isolation(tmp_path):
         temp_dir=tmp_path / "b" / ".autoskillit" / "temp",
         project_dir=tmp_path / "b",
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=_ledger(tmp_path / "b"),
     )
     ctx_a.audit.record_failure(
         FailureRecord(
@@ -94,6 +112,7 @@ def test_gate_state_replacement(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=_ledger(tmp_path),
     )
     assert ctx.gate.enabled is False
     ctx.gate = DefaultGateState(enabled=True)
@@ -113,6 +132,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=_ledger(tmp_path),
     )
     assert ctx.executor is None
     assert ctx.tester is None
@@ -231,6 +251,7 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=_ledger(tmp_path),
     )
 
 
@@ -285,6 +306,7 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=_ledger(tmp_path),
     )
     assert isinstance(ctx.background, DefaultBackgroundSupervisor)
 
@@ -366,6 +388,7 @@ def test_toolcontext_raises_typeerror_when_temp_dir_unset(tmp_path):
             runner=None,
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
+            context_admission_ledger=_ledger(tmp_path),
         )
 
 
@@ -380,6 +403,23 @@ def test_toolcontext_raises_typeerror_when_project_dir_unset(tmp_path):
             plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
+            skill_session_contract_store=FakeSkillSessionContractStore(),
+            context_admission_ledger=_ledger(tmp_path),
+        )
+
+
+def test_toolcontext_raises_typeerror_when_context_ledger_unset(tmp_path):
+    with pytest.raises(TypeError, match="context_admission_ledger"):
+        ToolContext(
+            config=AutomationConfig(),
+            audit=DefaultAuditLog(),
+            token_log=DefaultTokenLog(),
+            timing_log=DefaultTimingLog(),
+            gate=DefaultGateState(),
+            plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+            runner=None,
+            temp_dir=tmp_path / ".autoskillit" / "temp",
+            project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
         )
 
@@ -396,6 +436,7 @@ def test_toolcontext_accepts_explicit_path_fields(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=_ledger(tmp_path),
     )
     assert ctx.temp_dir == tmp_path / ".autoskillit" / "temp"
     assert ctx.project_dir == tmp_path

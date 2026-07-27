@@ -20,7 +20,9 @@ from tests._test_filter import (
     MODULE_CASCADE_CONFIG,
     MODULE_CASCADE_CORE,
     MODULE_CASCADE_EXECUTION,
+    MODULE_CASCADE_PIPELINE,
     MODULE_CASCADE_RECIPE,
+    MODULE_CASCADE_SERVER_CROSS_LAYER,
     _file_to_package,
 )
 
@@ -211,6 +213,24 @@ def _build_execution_module_reverse_graph() -> dict[str, set[str]]:
     return _build_pkg_module_reverse_graph("execution", _build_reexport_map("execution"))
 
 
+def _build_pipeline_module_reverse_graph() -> dict[str, set[str]]:
+    """REQ-GUARD-001 (module level, pipeline). Returns {stem: set[consuming_pkg]}."""
+    return _build_pkg_module_reverse_graph("pipeline", _build_reexport_map("pipeline"))
+
+
+def _build_server_cross_layer_requirements() -> dict[str, set[str]]:
+    """Find server modules whose ledger access requires pipeline verification."""
+    requirements: dict[str, set[str]] = {}
+    for path in sorted((_SRC_ROOT / "server").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(
+            isinstance(node, ast.Attribute) and node.attr == "context_admission_ledger"
+            for node in ast.walk(tree)
+        ):
+            requirements[path.stem] = {"pipeline"}
+    return requirements
+
+
 def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
     """REQ-GUARD-001 (module level, recipe). Returns {stem: set[consuming_pkg]}."""
     graph = _build_pkg_module_reverse_graph("recipe", _build_reexport_map("recipe"))
@@ -322,6 +342,71 @@ class TestModuleCascadeExecutionGuard:
             "the source file may have been renamed or deleted:\n"
             f"  {sorted(phantoms)}\n"
             "Remove the stale entry or rename it to match the current module."
+        )
+
+
+class TestModuleCascadePipelineGuard:
+    """REQ-PIPELINE-001: Validate pipeline cascades against actual AST imports."""
+
+    def test_module_cascade_pipeline_is_superset_of_ast_consumers(self) -> None:
+        graph = _build_pipeline_module_reverse_graph()
+        violations: dict[str, dict[str, list[str]]] = {}
+        for stem, declared in MODULE_CASCADE_PIPELINE.items():
+            actual = graph.get(stem, set())
+            declared_dirs = {entry for entry in declared if "/" not in entry}
+            file_prefixes = {entry.split("/", 1)[0] for entry in declared if "/" in entry}
+            missing = actual - (declared_dirs | file_prefixes)
+            if missing:
+                violations[stem] = {
+                    "declared": sorted(declared),
+                    "actual": sorted(actual),
+                    "missing": sorted(missing),
+                }
+        assert not violations, (
+            "MODULE_CASCADE_PIPELINE entries are too narrow — update tests/_test_filter.py:\n"
+            + "\n".join(
+                f"  {stem}: add {value['missing']} "
+                f"(declared={value['declared']}, actual={value['actual']})"
+                for stem, value in sorted(violations.items())
+            )
+        )
+
+    def test_module_cascade_pipeline_has_no_phantom_stems(self) -> None:
+        graph = _build_pipeline_module_reverse_graph()
+        phantoms = [
+            stem
+            for stem in MODULE_CASCADE_PIPELINE
+            if not graph.get(stem) and not (_SRC_ROOT / "pipeline" / f"{stem}.py").exists()
+        ]
+        assert not phantoms, (
+            "MODULE_CASCADE_PIPELINE contains stems with no consumers or source file:\n"
+            f"  {sorted(phantoms)}"
+        )
+
+
+class TestModuleCascadeServerCrossLayerGuard:
+    """Validate additive server cross-layer cascades against ledger consumers."""
+
+    def test_server_cross_layer_cascade_covers_ledger_consumers(self) -> None:
+        requirements = _build_server_cross_layer_requirements()
+        violations = {
+            stem: sorted(required - MODULE_CASCADE_SERVER_CROSS_LAYER.get(stem, frozenset()))
+            for stem, required in requirements.items()
+            if required - MODULE_CASCADE_SERVER_CROSS_LAYER.get(stem, frozenset())
+        }
+        assert not violations, (
+            f"MODULE_CASCADE_SERVER_CROSS_LAYER is missing ledger consumer routes:\n  {violations}"
+        )
+
+    def test_server_cross_layer_cascade_has_no_phantom_stems(self) -> None:
+        phantoms = [
+            stem
+            for stem in MODULE_CASCADE_SERVER_CROSS_LAYER
+            if not (_SRC_ROOT / "server" / f"{stem}.py").exists()
+        ]
+        assert not phantoms, (
+            "MODULE_CASCADE_SERVER_CROSS_LAYER contains missing server modules:\n"
+            f"  {sorted(phantoms)}"
         )
 
 

@@ -18,6 +18,11 @@ _api_sim_mcp = pytest.importorskip("api_simulator.mcp")
 
 def _make_mock_ctx(tmp_path: Path) -> MagicMock:
     """Return a minimal mock ToolContext for _initialize tests."""
+    from autoskillit.core import (
+        ContextAdmissionRecoveryResult,
+        ContextAdmissionStorageHealthStatus,
+        ContextAdmissionStoreHealth,
+    )
     from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 
     ctx = MagicMock()
@@ -27,6 +32,14 @@ def _make_mock_ctx(tmp_path: Path) -> MagicMock:
     tracing_cfg.tmpfs_path = str(tmp_path / "tmpfs")
     tracing_cfg.log_dir = str(tmp_path / "logs")
     ctx.config.linux_tracing = tracing_cfg
+    store_health = ContextAdmissionStoreHealth(ContextAdmissionStorageHealthStatus.HEALTHY)
+    ctx.context_admission_ledger.recover_all.return_value = ContextAdmissionRecoveryResult(
+        status=ContextAdmissionStorageHealthStatus.HEALTHY,
+        store_health=store_health,
+        stream_healths=(),
+        recovered_streams=(),
+        unresolved_streams=(),
+    )
     return ctx
 
 
@@ -272,3 +285,109 @@ async def test_deferred_initialize_runs_recovery_operations(tmp_path):
         await deferred_initialize(mock_ctx, ready_event=event)
 
     assert event.is_set(), "deferred_initialize did not signal readiness"
+    mock_ctx.context_admission_ledger.recover_all.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_deferred_initialize_logs_only_bounded_accounting_failure(
+    tmp_path,
+) -> None:
+    from autoskillit.core import (
+        ContextAdmissionRecoveryResult,
+        ContextAdmissionStorageFailureReason,
+        ContextAdmissionStorageHealthStatus,
+        ContextAdmissionStoreHealth,
+    )
+    from autoskillit.server._state import deferred_initialize
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.session_skill_manager = None
+    mock_ctx.audit.load_from_log_dir.return_value = 0
+    failed_health = ContextAdmissionStoreHealth(
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+        failure_reason=ContextAdmissionStorageFailureReason.INTEGRITY,
+        reason_code="sqlite-integrity-failed",
+    )
+    mock_ctx.context_admission_ledger.recover_all.return_value = ContextAdmissionRecoveryResult(
+        status=ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+        store_health=failed_health,
+        stream_healths=(),
+        recovered_streams=(),
+        unresolved_streams=(),
+    )
+    event = asyncio.Event()
+
+    with (
+        patch("autoskillit.execution.recover_crashed_sessions", return_value=0),
+        patch("autoskillit.server._state.logger") as logger,
+    ):
+        await deferred_initialize(mock_ctx, ready_event=event)
+
+    assert event.is_set()
+    logger.warning.assert_any_call(
+        "context_admission_recovery_failed",
+        extra={
+            "status": "fail_closed",
+            "reason": "integrity",
+            "protocol_version": 1,
+        },
+    )
+    assert all(
+        "sqlite-integrity-failed" not in repr(call) for call in logger.warning.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_deferred_initialize_selects_failed_stream_reason_from_healthy_store(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import (
+        ContextAdmissionRecoveryResult,
+        ContextAdmissionStorageFailureReason,
+        ContextAdmissionStorageHealthStatus,
+        ContextAdmissionStoreHealth,
+        ContextAdmissionStreamHealth,
+    )
+    from autoskillit.server._state import deferred_initialize
+    from tests.fixtures.context_admission import stream_key
+
+    mock_ctx = _make_mock_ctx(tmp_path)
+    mock_ctx.session_skill_manager = None
+    mock_ctx.audit.load_from_log_dir.return_value = 0
+    store_health = ContextAdmissionStoreHealth(
+        ContextAdmissionStorageHealthStatus.HEALTHY,
+    )
+    failed_stream = ContextAdmissionStreamHealth(
+        stream_key(),
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+        failure_reason=ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+        reason_code="private-detail-must-not-be-logged",
+    )
+    mock_ctx.context_admission_ledger.recover_all.return_value = ContextAdmissionRecoveryResult(
+        status=ContextAdmissionStorageHealthStatus.HEALTHY,
+        store_health=store_health,
+        stream_healths=(failed_stream,),
+        recovered_streams=(),
+        unresolved_streams=(),
+    )
+    event = asyncio.Event()
+
+    with (
+        patch("autoskillit.execution.recover_crashed_sessions", return_value=0),
+        patch("autoskillit.server._state.logger") as logger,
+    ):
+        await deferred_initialize(mock_ctx, ready_event=event)
+
+    assert event.is_set()
+    logger.warning.assert_any_call(
+        "context_admission_recovery_failed",
+        extra={
+            "status": "healthy",
+            "reason": "replay_mismatch",
+            "protocol_version": 1,
+        },
+    )
+    assert all(
+        "private-detail-must-not-be-logged" not in repr(call)
+        for call in logger.warning.call_args_list
+    )

@@ -116,6 +116,7 @@ class TestModuleCascadeCore:
             "_type_recipe_delivery",
             "_type_recipe_sections",
             "_type_context_admission",
+            "_type_context_admission_persistence",
             "_type_dispatch_identity",
             "_type_figure_spec",
             "_type_session_env",
@@ -209,6 +210,11 @@ class TestModuleCascadeCore:
     def test_type_recipe_delivery_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_recipe_delivery"] == frozenset(
             {"core", "execution", "server"}
+        )
+
+    def test_context_admission_persistence_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_context_admission_persistence"] == frozenset(
+            {"core", "pipeline", "server"}
         )
 
     def test_type_dispatch_identity_cascade(self) -> None:
@@ -346,6 +352,21 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         for pkg in ["core", "config", "execution", "server", "cli"]:
             assert pkg in dir_names
+
+    def test_context_admission_persistence_selects_ledger_and_composition(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_context_admission_persistence.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert isinstance(result, set)
+        dir_names = {path.name for path in result if path.is_dir()}
+        assert {"core", "pipeline", "server"} <= dir_names
+        assert "execution" not in dir_names
 
     def test_kitchen_state_narrow_cascade(self, tmp_path: Path) -> None:
         """kitchen_state.py → narrow cascade of {"core"} only."""

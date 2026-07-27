@@ -91,6 +91,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
+        # Released reducer definitions are immutable registry values keyed by their own
+        # protocol version so the selector cannot drift from the registered definition.
+        "context_admission",
         # Canonical output-discipline block/digest and their SHA-256 cache identity are
         # deliberately derived once at import time from the single source of truth.
         "_type_constants",
@@ -140,6 +143,13 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
         "cmd_keyword_pattern",  # recipe/_rule_helpers.py: regex factory returning compiled Pattern
         "object",
         "MappingProxyType",  # types.MappingProxyType — read-only view, no state
+    }
+)
+_SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("context_admission_ledger", "_EVENT_TYPES"),
+        ("context_admission_ledger", "_EFFECT_TYPES"),
+        ("context_admission_ledger", "_STATE_TYPES"),
     }
 )
 
@@ -261,11 +271,25 @@ def test_singleton_definition_locality(source_file: Path) -> None:
     violations: list[str] = []
     for node in tree.body:  # module-level only
         rhs: ast.expr | None = None
+        target_name: str | None = None
         if isinstance(node, ast.Assign) and node.value:
             rhs = node.value
+            if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                target_name = node.targets[0].id
         elif isinstance(node, ast.AnnAssign) and node.value:
             rhs = node.value
+            if isinstance(node.target, ast.Name):
+                target_name = node.target.id
         if rhs is None or not isinstance(rhs, ast.Call):
+            continue
+        if (
+            target_name is not None
+            and (
+                mod_stem,
+                target_name,
+            )
+            in _SINGLETON_SAFE_ASSIGNMENTS
+        ):
             continue
         func_name = _get_call_func_name(rhs)
         if func_name in _SINGLETON_SAFE_CALL_NAMES:
@@ -280,6 +304,15 @@ def test_singleton_definition_locality(source_file: Path) -> None:
     assert not violations, f"Singleton locality violations in {_rel(source_file)}:\n" + "\n".join(
         violations
     )
+
+
+def test_context_admission_ledger_singletons_are_assignment_scoped() -> None:
+    assert "context_admission_ledger" not in SINGLETON_ALLOWED_MODULES
+    assert {
+        target
+        for module, target in _SINGLETON_SAFE_ASSIGNMENTS
+        if module == "context_admission_ledger"
+    } == {"_EVENT_TYPES", "_EFFECT_TYPES", "_STATE_TYPES"}
 
 
 # ── Rule 4: test_no_module_level_io ───────────────────────────────────────────
@@ -902,14 +935,14 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 28,  # +context admission +audit-cycle verifier/tool registry
-        "core/types": 40,  # context, recipe-section, audit, binding, execution, intake types
+        "core/types": 41,  # +context persistence, audit, binding, execution, intake types
         "cli": 21,
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 14,  # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_artifacts.py  # noqa: E501
-        "pipeline": 12,
+        "pipeline": 13,  # +context_admission_ledger crash-safe shadow accounting
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 55,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery  # noqa: E501
         "server/tools": 32,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
@@ -1185,12 +1218,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "truth for the bound-vs-deprioritized budget allocation order.",
     ),
     "core/context_admission.py": (
-        2950,
+        3000,
         "REQ-CNST-010-E13: #4333 freezes one exhaustive protocol-v1 reducer and replay "
         "surface. Keeping all closed event transitions together makes atomic batch, "
         "idempotency, protected-pool, reconciliation, rollover, and declarative effect "
-        "semantics reviewable as one state machine; splitting dispatch branches would "
-        "fragment exhaustiveness.",
+        "semantics plus released-version dispatch reviewable as one state machine; "
+        "splitting dispatch branches would fragment exhaustiveness.",
     ),
     "core/types/_type_context_admission.py": (
         2300,
@@ -1198,6 +1231,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "one IL-0 shard. Co-locating identities, records, closed event/effect unions, "
         "states, canonical serialization, and the static coverage registry prevents "
         "downstream layers from defining incompatible wire contracts.",
+    ),
+    "pipeline/context_admission_ledger.py": (
+        2300,
+        "REQ-CNST-010-E15: #4334 keeps the crash-safe SQLite transaction boundary, "
+        "journal replay verification, sticky health fencing, and exhaustive shadow "
+        "projection in one IL-1 authority; consistent recovery snapshots and shared "
+        "row/byte budgets remain beside replay validation so storage and reducer "
+        "publication invariants cannot drift across independently mutable modules.",
     ),
 }
 
@@ -1368,6 +1409,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_protocols_backend.py",
         "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",
+        "core/types/_type_context_admission_persistence.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
         if not types_path.exists():

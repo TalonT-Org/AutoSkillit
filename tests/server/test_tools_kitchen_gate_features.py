@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -262,9 +263,13 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
 
     # Build context with project_dir = different_dir, recipes = RealRecipeRepository
     from autoskillit.config.settings import AutomationConfig
+    from autoskillit.core import ContextAdmissionStoreAuthority
     from autoskillit.core.types import ProjectedPluginRoot
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.context_admission_ledger import (
+        DefaultContextAdmissionLedger,
+    )
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
@@ -285,6 +290,14 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         project_dir=different_dir,
         recipes=real_repo,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=DefaultContextAdmissionLedger(
+            ContextAdmissionStoreAuthority(
+                database_path=(
+                    tmp_path / ".autoskillit" / "temp" / "context-admission" / "ledger.sqlite3"
+                ).resolve(),
+                expected_owner_id=os.getuid(),
+            )
+        ),
     )
 
     mock_ctx = _make_mock_ctx()

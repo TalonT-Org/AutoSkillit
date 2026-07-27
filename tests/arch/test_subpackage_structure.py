@@ -24,6 +24,7 @@ class TestCoreSubpackages:
             "_type_constants_features",
             "_type_constants_registries",
             "_type_context_admission",
+            "_type_context_admission_persistence",
             "_type_dispatch_identity",
             "_type_enums",
             "_type_exceptions",

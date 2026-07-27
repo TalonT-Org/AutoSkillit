@@ -366,9 +366,13 @@ def minimal_ctx(tmp_path):
     use tool_ctx instead.
     """
     from autoskillit.config import AutomationConfig
+    from autoskillit.core import ContextAdmissionStoreAuthority
     from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.context_admission_ledger import (
+        DefaultContextAdmissionLedger,
+    )
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
@@ -385,6 +389,14 @@ def minimal_ctx(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        context_admission_ledger=DefaultContextAdmissionLedger(
+            ContextAdmissionStoreAuthority(
+                database_path=(
+                    tmp_path / ".autoskillit" / "temp" / "context-admission" / "ledger.sqlite3"
+                ).resolve(),
+                expected_owner_id=os.getuid(),
+            )
+        ),
     )
     return ctx
 

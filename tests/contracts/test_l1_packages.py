@@ -20,6 +20,7 @@ def test_pipeline_package_exports() -> None:
         GATED_TOOLS,
         UNGATED_TOOLS,
         DefaultAuditLog,
+        DefaultContextAdmissionLedger,
         DefaultGateState,
         DefaultTokenLog,
         FailureRecord,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -201,9 +202,13 @@ def _patch_kitchen_reaper(monkeypatch):
 def build_ctx(tmp_path):
     """Factory: build_ctx(**overrides) → minimal ToolContext with overrides applied."""
     from autoskillit.config.settings import AutomationConfig
+    from autoskillit.core import ContextAdmissionStoreAuthority
     from autoskillit.core.types import ProjectedPluginRoot
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
+    from autoskillit.pipeline.context_admission_ledger import (
+        DefaultContextAdmissionLedger,
+    )
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
@@ -221,6 +226,14 @@ def build_ctx(tmp_path):
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
+            context_admission_ledger=DefaultContextAdmissionLedger(
+                ContextAdmissionStoreAuthority(
+                    database_path=(
+                        tmp_path / ".autoskillit" / "temp" / "context-admission" / "ledger.sqlite3"
+                    ).resolve(),
+                    expected_owner_id=os.getuid(),
+                )
+            ),
         )
         for field_name, value in overrides.items():
             setattr(ctx, field_name, value)

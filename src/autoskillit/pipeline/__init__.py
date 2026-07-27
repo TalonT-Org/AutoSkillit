@@ -1,8 +1,7 @@
-"""pipeline/ IL-1 package: audit log, token tracking, gate policy, and ToolContext.
+"""pipeline/ IL-1 package: audit log, durable accounting, gate policy, and ToolContext.
 
-Re-exports the full public surface of the four pipeline sub-modules.
-Only pipeline/context.py imports from config/; the other three modules
-depend only on autoskillit.core.*.
+Re-exports the public pipeline service surface. Only pipeline/context.py
+imports from config/; the remaining modules depend only on autoskillit.core.*.
 """
 
 from autoskillit.core import (
@@ -23,6 +22,9 @@ from autoskillit.pipeline.background import (
     write_status,
 )
 from autoskillit.pipeline.context import ToolContext
+from autoskillit.pipeline.context_admission_ledger import (
+    DefaultContextAdmissionLedger,
+)
 from autoskillit.pipeline.gate import (
     DefaultGateState,
     gate_error_result,
@@ -72,6 +74,7 @@ __all__ = [
     "write_status",
     # context
     "ToolContext",
+    "DefaultContextAdmissionLedger",
     # github_api_log
     "DefaultGitHubApiLog",
     # pr_gates

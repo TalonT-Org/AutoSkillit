@@ -354,7 +354,7 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.config import AutomationConfig
 
         mock_cfg = AutomationConfig(features={"fleet": False})
-        monkeypatch.setattr("autoskillit.cli.doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -384,7 +384,7 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.config import AutomationConfig
 
         mock_cfg = AutomationConfig(features={"fleet": True})
-        monkeypatch.setattr("autoskillit.cli.doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -416,7 +416,7 @@ class TestGroupNFeatureGateDoctorChecks:
         from autoskillit.config import AutomationConfig
 
         mock_cfg = AutomationConfig(features={"fleet": False})
-        monkeypatch.setattr("autoskillit.cli.doctor.load_config", lambda _: mock_cfg)
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)

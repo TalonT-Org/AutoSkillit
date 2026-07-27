@@ -412,6 +412,28 @@ def test_insecure_existing_parent_fails_closed_without_repair(
     assert not authority.database_path.exists()
 
 
+@pytest.mark.parametrize("writable_mode", [stat.S_IWGRP, stat.S_IWOTH])
+def test_writable_trusted_parent_fails_closed(
+    tmp_path: Path,
+    writable_mode: int,
+) -> None:
+    authority = _authority(tmp_path)
+    original_mode = stat.S_IMODE(tmp_path.stat().st_mode)
+    tmp_path.chmod(original_mode | writable_mode)
+    try:
+        result = DefaultContextAdmissionLedger(authority).recover_all()
+    finally:
+        tmp_path.chmod(original_mode)
+
+    assert result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert (
+        result.store_health.failure_reason
+        is ContextAdmissionStorageFailureReason.SECURITY_IDENTITY
+    )
+    assert result.store_health.reason_code == "untrusted-store-parent"
+    assert not authority.database_path.exists()
+
+
 def test_preexisting_database_symlink_fails_closed_without_following_it(
     tmp_path: Path,
 ) -> None:

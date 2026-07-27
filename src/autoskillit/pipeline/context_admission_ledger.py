@@ -1277,6 +1277,7 @@ class DefaultContextAdmissionLedger:
             if (
                 not stat.S_ISDIR(trusted_stat.st_mode)
                 or trusted_stat.st_uid != self._authority.expected_owner_id
+                or trusted_stat.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
             ):
                 raise _LedgerOpenError(
                     ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,

@@ -253,6 +253,68 @@ def private_file_identity(
     return path_stat.st_dev, path_stat.st_ino
 
 
+def require_private_file_identity(
+    path: Path,
+    *,
+    owner_id: int,
+    file_mode: int,
+    reason_code: str,
+) -> tuple[int, int]:
+    try:
+        identity = private_file_identity(
+            path,
+            owner_id=owner_id,
+            file_mode=file_mode,
+        )
+    except OSError as exc:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
+            reason_code,
+        ) from exc
+    if identity is None:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
+            reason_code,
+        )
+    return identity
+
+
+def validate_sidecars(
+    database_path: Path,
+    *,
+    owner_id: int,
+    file_mode: int,
+    allow_regular: bool,
+) -> None:
+    for suffix in ("-journal", "-wal", "-shm"):
+        sidecar = Path(f"{database_path}{suffix}")
+        try:
+            sidecar.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.IO,
+                "store-sidecar-unavailable",
+            ) from exc
+        if not allow_regular:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
+                "orphan-store-sidecar",
+            )
+        try:
+            require_private_file_identity(
+                sidecar,
+                owner_id=owner_id,
+                file_mode=file_mode,
+                reason_code="insecure-store-sidecar",
+            )
+        except _LedgerOpenError as exc:
+            if isinstance(exc.__cause__, FileNotFoundError):
+                continue
+            raise
+
+
 def fsync_file(path: Path) -> None:
     """Synchronize one no-follow regular file descriptor."""
     descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)

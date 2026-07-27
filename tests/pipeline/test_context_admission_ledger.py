@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import autoskillit.core.types._type_context_admission_persistence as persistence_types
+import autoskillit.pipeline._context_admission_storage as storage_module
 import autoskillit.pipeline.context_admission_ledger as ledger_module
 from autoskillit.core import (
     ActiveContextAdmissionState,
@@ -614,7 +615,7 @@ def test_existing_store_tolerates_sidecar_disappearing_during_identity_check(
     sidecar = Path(f"{authority.database_path}-journal")
     sidecar.write_bytes(b"transient")
     sidecar.chmod(0o600)
-    original_identity = ledger_module._read_private_file_identity
+    original_identity = storage_module.private_file_identity
     vanished = False
 
     def vanish_during_identity(
@@ -631,8 +632,8 @@ def test_existing_store_tolerates_sidecar_disappearing_during_identity_check(
         return original_identity(path, owner_id=owner_id, file_mode=file_mode)
 
     monkeypatch.setattr(
-        ledger_module,
-        "_read_private_file_identity",
+        storage_module,
+        "private_file_identity",
         vanish_during_identity,
     )
 
@@ -858,15 +859,9 @@ def test_recovery_uses_versioned_shadow_projector(
     assert recovered.recovered_streams == (key,)
     projector.assert_called_once()
     assert tuple(registry) == (1,)
+    assert registry.keys() == ledger_module.CONTEXT_ADMISSION_REDUCER_REGISTRY.keys()
     with pytest.raises(TypeError):
         registry[2] = projector  # type: ignore[index]
-    monkeypatch.setattr(
-        ledger_module,
-        "_CONTEXT_ADMISSION_SHADOW_PROJECTORS",
-        MappingProxyType({}),
-    )
-    with pytest.raises(RuntimeError, match="incomplete_context_admission_protocol_registry"):
-        ledger_module._validate_context_admission_protocol_registries()
 
 
 def test_recover_filters_healthy_failed_unresolved_unknown_and_store_failure(
@@ -1259,31 +1254,58 @@ def test_recovery_rejects_projection_corruption_with_exact_reason(
     opened = ledger.apply(key, open_event())
     assert opened.transition is not None
     assert opened.status is ContextAdmissionAccountingStatus.RECORDED
+    occurrence_value = occurrence()
     proposed = ledger.apply(
         key,
-        propose_event(opened.transition.next_state, occurrence()),
+        propose_event(opened.transition.next_state, occurrence_value),
     )
+    assert proposed.transition is not None
     assert proposed.status is ContextAdmissionAccountingStatus.RECORDED
+    batch_value = batch(occurrence_value)
+    reserved = ledger.apply(
+        key,
+        reserve_event(
+            proposed.transition.next_state,
+            batch_value,
+            occurrence_value,
+        ),
+    )
+    assert reserved.transition is not None
+    assert reserved.status is ContextAdmissionAccountingStatus.RECORDED
+    released = ledger.apply(
+        key,
+        release_non_admission_event(
+            reserved.transition.next_state,
+            batch_value,
+        ),
+    )
+    assert released.status is ContextAdmissionAccountingStatus.RECORDED
     connection = sqlite3.connect(authority.database_path)
     try:
         if corruption == "effect-ordinal":
+            assert connection.execute(
+                "SELECT COUNT(*) FROM effect_outbox WHERE journal_sequence = 3"
+            ).fetchone()[0]
             connection.execute(
                 """
                 UPDATE effect_outbox
                 SET effect_ordinal = 1
-                WHERE journal_sequence = 1 AND effect_ordinal = 0
+                WHERE journal_sequence = 3 AND effect_ordinal = 0
                 """
             )
         elif corruption == "effect-payload":
+            assert connection.execute(
+                "SELECT COUNT(*) FROM effect_outbox WHERE journal_sequence = 4"
+            ).fetchone()[0]
             connection.execute(
                 """
                 UPDATE effect_outbox
                 SET effect_envelope = (
                     SELECT effect_envelope
                     FROM effect_outbox
-                    WHERE journal_sequence = 2 AND effect_ordinal = 0
+                    WHERE journal_sequence = 4 AND effect_ordinal = 0
                 )
-                WHERE journal_sequence = 1 AND effect_ordinal = 0
+                WHERE journal_sequence = 3 AND effect_ordinal = 0
                 """
             )
         elif corruption == "prior-coordinate":

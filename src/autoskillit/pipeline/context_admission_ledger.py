@@ -103,11 +103,12 @@ from ._context_admission_storage import (
     fsync_file as _fsync_file,
 )
 from ._context_admission_storage import (
-    private_file_identity as _read_private_file_identity,
+    require_private_file_identity as _private_file_identity,
 )
 from ._context_admission_storage import (
     unlink_initialization_artifact as _unlink_initialization_artifact,
 )
+from ._context_admission_storage import validate_sidecars as _validate_sidecars
 
 _SCHEMA_VERSION: Final = 1
 _CONTEXT_ADMISSION_SHADOW_PROTOCOL_V1: Final = 1
@@ -1151,9 +1152,19 @@ class DefaultContextAdmissionLedger:
         if self._path.exists():
             self._recover_initialization_link()
             self._validate_database_file()
-            self._validate_sidecars(allow_regular=True)
+            _validate_sidecars(
+                self._path,
+                owner_id=self._authority.expected_owner_id,
+                file_mode=_DATABASE_MODE,
+                allow_regular=True,
+            )
             return
-        self._validate_sidecars(allow_regular=False)
+        _validate_sidecars(
+            self._path,
+            owner_id=self._authority.expected_owner_id,
+            file_mode=_DATABASE_MODE,
+            allow_regular=False,
+        )
         temporary_path = self._path.parent / (f".{self._path.name}.{secrets.token_hex(12)}.tmp")
         try:
             descriptor = os.open(
@@ -1281,40 +1292,18 @@ class DefaultContextAdmissionLedger:
         return _private_file_identity(
             self._path,
             owner_id=self._authority.expected_owner_id,
+            file_mode=_DATABASE_MODE,
             reason_code="insecure-store-file",
         )
 
-    def _validate_sidecars(self, *, allow_regular: bool) -> None:
-        for suffix in ("-journal", "-wal", "-shm"):
-            sidecar = Path(f"{self._path}{suffix}")
-            try:
-                sidecar.lstat()
-            except FileNotFoundError:
-                continue
-            except OSError as exc:
-                raise _LedgerOpenError(
-                    ContextAdmissionStorageFailureReason.IO,
-                    "store-sidecar-unavailable",
-                ) from exc
-            if not allow_regular:
-                raise _LedgerOpenError(
-                    ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                    "orphan-store-sidecar",
-                )
-            try:
-                _private_file_identity(
-                    sidecar,
-                    owner_id=self._authority.expected_owner_id,
-                    reason_code="insecure-store-sidecar",
-                )
-            except _LedgerOpenError as exc:
-                if isinstance(exc.__cause__, FileNotFoundError):
-                    continue
-                raise
-
     def _connect(self) -> sqlite3.Connection:
         before = self._validate_database_file()
-        self._validate_sidecars(allow_regular=True)
+        _validate_sidecars(
+            self._path,
+            owner_id=self._authority.expected_owner_id,
+            file_mode=_DATABASE_MODE,
+            allow_regular=True,
+        )
         connection = self._configure_connection(self._path)
         try:
             after = self._validate_database_file()
@@ -1961,16 +1950,8 @@ def _shadow_record_protocol_v1(
 _CONTEXT_ADMISSION_SHADOW_PROJECTORS: Final = MappingProxyType(
     {_CONTEXT_ADMISSION_SHADOW_PROTOCOL_V1: _shadow_record_protocol_v1}
 )
-
-
-def _validate_context_admission_protocol_registries() -> None:
-    if frozenset(_CONTEXT_ADMISSION_SHADOW_PROJECTORS) != frozenset(
-        CONTEXT_ADMISSION_REDUCER_REGISTRY
-    ):
-        raise RuntimeError("incomplete_context_admission_protocol_registry")
-
-
-_validate_context_admission_protocol_registries()
+if _CONTEXT_ADMISSION_SHADOW_PROJECTORS.keys() != CONTEXT_ADMISSION_REDUCER_REGISTRY.keys():
+    raise RuntimeError("incomplete_context_admission_protocol_registry")
 
 
 def _shadow_targets(
@@ -2297,31 +2278,6 @@ def _stream_key_bytes(stream_key: ContextAdmissionStreamKey) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-
-
-def _private_file_identity(
-    path: Path,
-    *,
-    owner_id: int,
-    reason_code: str,
-) -> tuple[int, int]:
-    try:
-        identity = _read_private_file_identity(
-            path,
-            owner_id=owner_id,
-            file_mode=_DATABASE_MODE,
-        )
-    except OSError as exc:
-        raise _LedgerOpenError(
-            ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
-            reason_code,
-        ) from exc
-    if identity is None:
-        raise _LedgerOpenError(
-            ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
-            reason_code,
-        )
-    return identity
 
 
 def _rollback(connection: sqlite3.Connection) -> None:

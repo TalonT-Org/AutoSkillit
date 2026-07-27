@@ -667,3 +667,19 @@ def test_envelope_constructor_rejects_discriminator_payload_mismatch() -> None:
             type_discriminator="AdmissionDecision",
             payload=_authority_event(),
         )
+
+
+@pytest.mark.parametrize("encoding_version", [True, 1.0, "1"])
+def test_envelope_constructor_rejects_non_integer_encoding_versions(
+    encoding_version: object,
+) -> None:
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="unsupported_context_admission_encoding",
+    ):
+        StoredContextAdmissionEnvelope(
+            encoding_version=encoding_version,  # type: ignore[arg-type]
+            protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+            type_discriminator="AuthorityUnavailableEvent",
+            payload=_authority_event(),
+        )

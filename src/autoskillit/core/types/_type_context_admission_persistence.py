@@ -240,6 +240,7 @@ class StoredContextAdmissionEnvelope:
     def __post_init__(self) -> None:
         if (
             isinstance(self.encoding_version, bool)
+            or not isinstance(self.encoding_version, int)
             or self.encoding_version != CONTEXT_ADMISSION_ENCODING_VERSION
         ):
             raise ContextAdmissionValidationError("unsupported_context_admission_encoding")

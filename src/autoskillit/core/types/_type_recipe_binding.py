@@ -64,10 +64,16 @@ class ToolDef:
     params: tuple[ToolParamDef, ...]
 
     def __post_init__(self) -> None:
-        names = tuple(param.name for param in self.params)
+        params = tuple(self.params)
+        for index, param in enumerate(params):
+            if not isinstance(param, ToolParamDef):
+                raise TypeError(f"ToolDef {self.name!r} parameter {index} must be a ToolParamDef")
+        object.__setattr__(self, "params", params)
+
+        names = tuple(param.name for param in params)
         if len(names) != len(set(names)):
             raise ValueError(f"ToolDef {self.name!r} contains duplicate parameters")
-        structured = tuple(param.name for param in self.params if param.structured_skill_inputs)
+        structured = tuple(param.name for param in params if param.structured_skill_inputs)
         if structured not in {(), ("skill_inputs",)}:
             raise ValueError(
                 f"ToolDef {self.name!r} has invalid structured parameters: {structured!r}"

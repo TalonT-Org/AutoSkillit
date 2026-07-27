@@ -119,6 +119,20 @@ def test_run_skill_has_one_compiler_owned_structured_input_channel() -> None:
     assert structured[0].handler_parameter
 
 
+def test_tool_def_freezes_caller_owned_parameter_sequences() -> None:
+    params = [ToolParamDef("first")]
+
+    tool = replace(TOOL_REGISTRY["close_kitchen"], params=params)
+    params.append(ToolParamDef("later"))
+
+    assert tool.params == (ToolParamDef("first"),)
+
+
+def test_tool_def_rejects_non_parameter_definitions() -> None:
+    with pytest.raises(TypeError, match="parameter 0 must be a ToolParamDef"):
+        replace(TOOL_REGISTRY["close_kitchen"], params=(object(),))
+
+
 def test_tool_contract_identity_tracks_registry_parameter_shape() -> None:
     run_skill = TOOL_REGISTRY["run_skill"]
     changed = replace(

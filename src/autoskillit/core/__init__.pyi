@@ -27,6 +27,7 @@ from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
 from ._plugin_cache import due_retiring_records as due_retiring_records
 from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
 from ._plugin_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
+from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry
 from ._plugin_cache import read_retiring_cache as read_retiring_cache
 from ._plugin_cache import register_active_kitchen as register_active_kitchen

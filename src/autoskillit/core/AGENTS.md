@@ -21,7 +21,7 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 | `claude_conventions.py` | Skill discovery directory layout constants |
 | `git_remote.py` | `resolve_clone_remote_name_sync`, `REMOTE_PRECEDENCE` — IL-0 canonical remote precedence |
 | `github_url.py` | `parse_github_repo` |
-| `_plugin_cache.py` | Plugin cache lifecycle: retiring cache, install locking, kitchen registry |
+| `_plugin_cache.py` | Plugin cache lifecycle: shared retirement engine, retiring cache, install locking, kitchen registry |
 | `_plugin_ids.py` | `DIRECT_PREFIX`, `MARKETPLACE_PREFIX`, `detect_autoskillit_mcp_prefix` (stdlib-only) |
 | `_install_detect.py` | `is_dev_install()` — editable-install detection for config resolution |
 | `_execution_marker.py` | `execution_marker` async context manager — unified write/heartbeat/cleanup for stale-detector suppression markers |

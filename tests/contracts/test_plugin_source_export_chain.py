@@ -40,6 +40,7 @@ ADDED = (
     "PluginArtifactKind",
     "PluginArtifactIdentity",
     "PluginArtifactPublicationError",
+    "PluginArtifactRetirementEngine",
     "PluginArtifactRetirementOwner",
     "PluginArtifactValidationError",
     "PluginLaunchBinding",

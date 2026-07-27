@@ -6,19 +6,25 @@ import fcntl
 import hashlib
 import json
 import os
-from collections.abc import Iterable, Mapping
+import shutil
+import uuid
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
 
 import psutil
 
 from .io import read_versioned_json, write_versioned_json
-from .logging import get_logger
+from .logging import get_logger, log_plugin_artifact_lifecycle
 from .paths import destination_location
+from .runtime.artifact_lease import ArtifactLease, ArtifactLeaseContention
 from .types import (
     LegacyRetiringEvidence,
+    PluginArtifactIdentity,
     PluginArtifactKind,
+    PluginArtifactValidationError,
+    RetirementOutcome,
     RetiringAppendResult,
     RetiringArtifactRecord,
     RetiringCacheReadResult,
@@ -399,6 +405,207 @@ class _InstallLock:
         if self._lock_file is not None:
             self._lock_file.close()
             self._lock_file = None
+
+
+class PluginArtifactRetirementEngine:
+    """Shared exact-identity retirement algorithm parameterized by artifact hooks."""
+
+    def __init__(
+        self,
+        *,
+        managed_root: Path,
+        artifact_kind: PluginArtifactKind,
+        manifest_path: Callable[[Path], Path],
+        lease_path: Callable[[Path], Path],
+        current_identity: Callable[[RetiringArtifactRecord], PluginArtifactIdentity],
+        logger: Any,
+    ) -> None:
+        self.managed_root = Path(managed_root).expanduser().resolve(strict=False)
+        self.artifact_kind = artifact_kind
+        self._manifest_path = manifest_path
+        self._lease_path = lease_path
+        self._current_identity = current_identity
+        self._logger = logger
+
+    def contains(self, path: Path) -> bool:
+        """Return whether *path* is a child artifact owned by this engine."""
+        try:
+            location = destination_location(Path(path))
+        except (OSError, ValueError):
+            return False
+        return location != self.managed_root and location.is_relative_to(self.managed_root)
+
+    def enqueue_retirement(
+        self,
+        identity: PluginArtifactIdentity,
+        not_before: datetime,
+    ) -> RetiringAppendResult:
+        """Queue one exact incarnation after validating owner-specific paths."""
+        if not self.contains(identity.managed_path):
+            raise PluginArtifactValidationError(
+                f"{self.artifact_kind.value} artifact is outside managed root: "
+                f"{identity.managed_path}"
+            )
+        if identity.manifest_path != self._manifest_path(identity.managed_path):
+            raise PluginArtifactValidationError(
+                f"{self.artifact_kind.value} artifact manifest path is not canonical: "
+                f"{identity.manifest_path}"
+            )
+        result = append_retiring_record(
+            RetiringArtifactRecord(
+                record_id=uuid.uuid4().hex,
+                artifact_kind=self.artifact_kind,
+                semantic_key=identity.semantic_key,
+                managed_path=identity.managed_path,
+                manifest_path=identity.manifest_path,
+                incarnation_id=identity.incarnation_id,
+                manifest_schema_version=identity.manifest_schema_version,
+                artifact_digest=identity.artifact_digest,
+                retired_at=datetime.now(UTC),
+                not_before=not_before,
+            )
+        )
+        log_plugin_artifact_lifecycle(
+            self._logger,
+            action="retire",
+            outcome="succeeded",
+            artifact_kind=self.artifact_kind.value,
+            semantic_key=identity.semantic_key,
+            incarnation=identity.incarnation_id,
+            not_before=not_before,
+        )
+        return result
+
+    def cancel_obsolete_retirements(
+        self,
+        identity: PluginArtifactIdentity,
+    ) -> tuple[str, ...]:
+        """Remove exact and migrated retirement entries superseded by *identity*."""
+        state = read_retiring_cache()
+        if state.state is not RetiringCacheState.EXACT_V2:
+            return ()
+        record_ids = tuple(
+            record.record_id
+            for record in state.records
+            if record.artifact_kind is self.artifact_kind
+            and record.managed_path == identity.managed_path
+        ) + tuple(
+            evidence.record_id
+            for evidence in state.legacy_evidence
+            if evidence.recognized_kind is self.artifact_kind
+            and Path(evidence.path) == identity.managed_path
+        )
+        if not record_ids:
+            return ()
+        remove_retiring_records(record_ids)
+        log_plugin_artifact_lifecycle(
+            self._logger,
+            action="cancel_retirement",
+            outcome="succeeded",
+            artifact_kind=self.artifact_kind.value,
+            semantic_key=identity.semantic_key,
+            incarnation=identity.incarnation_id,
+        )
+        return record_ids
+
+    def try_reclaim(
+        self,
+        record: RetiringArtifactRecord,
+        now: datetime,
+    ) -> RetirementOutcome:
+        """Reclaim one queued record only while its lease and identity remain exact."""
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("artifact retirement sweep time must be timezone-aware")
+        now = now.astimezone(UTC)
+        if record.artifact_kind is not self.artifact_kind:
+            return self._log_reclaim(record, RetirementOutcome.REJECTED_IDENTITY)
+        if now < record.not_before:
+            return RetirementOutcome.DEFERRED_NOT_DUE
+        if not self.contains(record.managed_path):
+            return self._log_reclaim(record, RetirementOutcome.REJECTED_IDENTITY)
+        try:
+            writer = ArtifactLease.acquire_exclusive(
+                self._lease_path(record.managed_path),
+                blocking=False,
+            )
+        except ArtifactLeaseContention as exc:
+            return self._log_reclaim(
+                record,
+                RetirementOutcome.DEFERRED_CONTENDED,
+                detail=str(exc),
+            )
+        try:
+            with _InstallLock():
+                state = read_retiring_cache()
+                queued = next(
+                    (
+                        current
+                        for current in state.records
+                        if current.record_id == record.record_id
+                    ),
+                    None,
+                )
+                if queued is None:
+                    return RetirementOutcome.RECORD_REMOVED
+                if queued != record:
+                    return self._log_reclaim(
+                        record,
+                        RetirementOutcome.REJECTED_IDENTITY,
+                    )
+                if now < queued.not_before:
+                    return RetirementOutcome.DEFERRED_NOT_DUE
+                if not record.managed_path.exists() and not record.manifest_path.exists():
+                    remove_retiring_records((record.record_id,))
+                    return RetirementOutcome.RECORD_REMOVED
+                try:
+                    current = self._current_identity(record)
+                except PluginArtifactValidationError:
+                    remove_retiring_records((record.record_id,))
+                    return self._log_reclaim(
+                        record,
+                        RetirementOutcome.REJECTED_IDENTITY,
+                        failed_validation=True,
+                    )
+                if current != record.identity:
+                    remove_retiring_records((record.record_id,))
+                    return self._log_reclaim(
+                        record,
+                        RetirementOutcome.REJECTED_IDENTITY,
+                    )
+                shutil.rmtree(record.managed_path)
+                if record.manifest_path.is_file() or record.manifest_path.is_symlink():
+                    record.manifest_path.unlink()
+                remove_retiring_records((record.record_id,))
+                return self._log_reclaim(record, RetirementOutcome.RECLAIMED)
+        finally:
+            writer.close()
+
+    def _log_reclaim(
+        self,
+        record: RetiringArtifactRecord,
+        outcome: RetirementOutcome,
+        *,
+        detail: str | None = None,
+        failed_validation: bool = False,
+    ) -> RetirementOutcome:
+        event_outcome = {
+            RetirementOutcome.RECLAIMED: "succeeded",
+            RetirementOutcome.DEFERRED_CONTENDED: "deferred_contended",
+            RetirementOutcome.REJECTED_IDENTITY: "rejected_identity",
+        }[outcome]
+        if failed_validation:
+            event_outcome = "failed_validation"
+        log_plugin_artifact_lifecycle(
+            self._logger,
+            action="reclaim",
+            outcome=event_outcome,
+            artifact_kind=self.artifact_kind.value,
+            semantic_key=record.semantic_key,
+            incarnation=record.incarnation_id,
+            not_before=record.not_before,
+            contention_detail=detail,
+        )
+        return outcome
 
 
 def kitchen_entry_alive(entry: dict) -> bool:

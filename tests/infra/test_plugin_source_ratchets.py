@@ -83,13 +83,15 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Legacy package layout migration runs inside the installed-plugin transaction.",
     ),
-    ("cli/_plugin_artifact.py", "try_reclaim", "record.manifest_path.unlink"): (
+    ("core/_plugin_cache.py", "try_reclaim", "record.manifest_path.unlink"): (
         1,
-        "The installed retirement owner revalidates the exact queued incarnation first.",
+        "The shared retirement engine revalidates the owner-specific exact queued "
+        "incarnation before deleting its canonical manifest.",
     ),
-    ("cli/_plugin_artifact.py", "try_reclaim", "shutil.rmtree"): (
+    ("core/_plugin_cache.py", "try_reclaim", "shutil.rmtree"): (
         1,
-        "The installed retirement owner holds exclusive ownership and exact identity.",
+        "The shared retirement engine holds the owner-specific exclusive lease and "
+        "revalidates exact identity before removing an artifact tree.",
     ),
     ("workspace/_install_state.py", "reconcile_install_artifacts", "artifact.unlink"): (
         1,
@@ -100,14 +102,6 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "The retired-shape registry identifies the exact obsolete install artifact "
         "before reconciliation removes a directory tree.",
-    ),
-    ("workspace/_projection_cache.py", "try_reclaim", "record.manifest_path.unlink"): (
-        1,
-        "The projection retirement owner revalidates the exact queued incarnation first.",
-    ),
-    ("workspace/_projection_cache.py", "try_reclaim", "shutil.rmtree"): (
-        1,
-        "The projection retirement owner holds exclusive ownership and exact identity.",
     ),
     ("workspace/skill_projection.py", "_publish_projected_plugin_manifest", "os.replace"): (
         1,

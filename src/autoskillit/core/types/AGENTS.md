@@ -43,7 +43,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_intake_policy.py` | Codex context-intake rule registry: `IntakeRuleDef`, `CODEX_INTAKE_RULES`, rendered digest, byte budgets |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |
-| `_type_plugin_source.py` | `DirectInstall` (projection input) and `ProjectedPluginRoot` (the sole `PluginSource`) |
+| `_type_plugin_source.py` | Plugin projection input plus exact artifact identity, load mode, and launch binding contracts |
 | `_type_tradition_manifest.py` | `TraditionManifest`, `LensEntry`, `DialingConfig` frozen dataclasses with `from_dict`/`from_yaml_path` loaders |
 | `_type_context_admission.py` | Frozen content-free identities, events, records, effects, states, and coverage definitions for context admission |
 | `_type_context_admission_persistence.py` | Versioned durable envelopes, shadow projections, storage health/results, and ledger protocol for context admission |

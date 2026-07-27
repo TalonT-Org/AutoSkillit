@@ -140,6 +140,8 @@ from .paths import resolve_project_dir as resolve_project_dir
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
+from .runtime.artifact_lease import ArtifactLease as ArtifactLease
+from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
 from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir
@@ -570,6 +572,13 @@ from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PlanDispositionReport as PlanDispositionReport
 from .types import PlanDispositionRow as PlanDispositionRow
+from .types import PluginArtifactAuthority as PluginArtifactAuthority
+from .types import PluginArtifactContentionError as PluginArtifactContentionError
+from .types import PluginArtifactIdentity as PluginArtifactIdentity
+from .types import PluginArtifactPublicationError as PluginArtifactPublicationError
+from .types import PluginArtifactValidationError as PluginArtifactValidationError
+from .types import PluginLaunchBinding as PluginLaunchBinding
+from .types import PluginLoadMode as PluginLoadMode
 from .types import PluginSource as PluginSource
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind

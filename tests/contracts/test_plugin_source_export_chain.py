@@ -22,6 +22,15 @@ REMOVED = ("MarketplaceInstall", "_get_autoskillit_install_path")
 
 #: Symbols this change added. Each must be importable from the gateway.
 ADDED = (
+    "ArtifactLease",
+    "ArtifactLeaseContention",
+    "PluginArtifactAuthority",
+    "PluginArtifactContentionError",
+    "PluginArtifactIdentity",
+    "PluginArtifactPublicationError",
+    "PluginArtifactValidationError",
+    "PluginLaunchBinding",
+    "PluginLoadMode",
     "ProjectedPluginRoot",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
     "RetiredArtifactShape",

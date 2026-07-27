@@ -60,6 +60,15 @@ def test_core_pyi_stub_exists():
     assert pyi.exists(), f"Missing stub: {pyi}"
 
 
+def test_runtime_package_exports_artifact_lease_types():
+    import autoskillit.core.runtime as runtime
+
+    expected = {"ArtifactLease", "ArtifactLeaseContention"}
+    assert expected <= set(runtime.__all__)
+    for name in expected:
+        assert hasattr(runtime, name), f"Missing runtime export: {name}"
+
+
 def test_core_pyi_stub_consistent_with_all():
     import ast
 

@@ -81,6 +81,7 @@ class TestCoreSubpackages:
 
     def test_core_runtime_has_expected_modules(self):
         expected = {
+            "artifact_lease",
             "kitchen_state",
             "readiness",
             "session_provenance",

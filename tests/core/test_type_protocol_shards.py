@@ -43,6 +43,7 @@ def test_workspace_shard_all():
 
     assert set(__all__) == {
         "WorkspaceManager",
+        "PluginArtifactAuthority",
         "CloneManager",
         "EffectiveSkillCatalogAuthority",
         "EffectiveSkillInvocationAuthority",
@@ -177,6 +178,34 @@ def test_workspace_skill_authority_boundary_has_structural_types():
     assert effective_hints["return"] == ResolvedSkillAuthority | None
     assert list_hints["return"] is EffectiveSkillCatalogAuthority
     assert invocation_hints["return"] is EffectiveSkillInvocationAuthority
+
+
+def test_plugin_artifact_authority_signature_and_runtime_protocol():
+    import inspect
+    from typing import get_type_hints
+
+    from autoskillit.core import (
+        CodingAgentBackend,
+        PluginArtifactAuthority,
+        PluginLaunchBinding,
+        PluginLoadMode,
+    )
+
+    signature = inspect.signature(PluginArtifactAuthority.acquire_launch_binding)
+    assert tuple(signature.parameters) == ("self", "backend", "load_mode")
+    assert signature.parameters["backend"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["load_mode"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert get_type_hints(PluginArtifactAuthority.acquire_launch_binding) == {
+        "backend": CodingAgentBackend,
+        "load_mode": PluginLoadMode,
+        "return": PluginLaunchBinding,
+    }
+
+    class ConformingAuthority:
+        def acquire_launch_binding(self, *, backend, load_mode):
+            raise NotImplementedError
+
+    assert isinstance(ConformingAuthority(), PluginArtifactAuthority)
 
 
 def test_pyi_stub_exports_skill_constants():

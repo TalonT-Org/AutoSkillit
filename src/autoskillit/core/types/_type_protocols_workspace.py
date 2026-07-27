@@ -9,12 +9,14 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import BackendConventions
 from ._type_enums import SkillExecutionRole, SkillSource
+from ._type_plugin_source import PluginLaunchBinding, PluginLoadMode
 from ._type_protocols_backend import CodingAgentBackend
 from ._type_results import CleanupResult, CloneResult, ManagedSessionHome, ValidatedAddDir
 from ._type_skill_contract import SkillSourceIdentity, SkillSourceRef, SkillVisibilitySpec
 
 __all__ = [
     "WorkspaceManager",
+    "PluginArtifactAuthority",
     "CloneManager",
     "EffectiveSkillCatalogAuthority",
     "EffectiveSkillInvocationAuthority",
@@ -26,6 +28,18 @@ __all__ = [
     "SkillProjectionContextAuthority",
     "SkillResolver",
 ]
+
+
+@runtime_checkable
+class PluginArtifactAuthority(Protocol):
+    """Lazy authority that binds an exact plugin incarnation to one launch."""
+
+    def acquire_launch_binding(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        load_mode: PluginLoadMode,
+    ) -> PluginLaunchBinding: ...
 
 
 @runtime_checkable

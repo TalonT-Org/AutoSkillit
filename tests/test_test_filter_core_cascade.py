@@ -73,6 +73,9 @@ class TestModuleCascadeCore:
             {"core", "cli", "config", "execution", "recipe", "server", "workspace"}
         )
 
+    def test_artifact_lease_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["artifact_lease"] == frozenset({"core", "workspace"})
+
     def test_branch_guard_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["branch_guard"] == frozenset(
             {"core", "pipeline", "server", "workspace"}
@@ -86,6 +89,7 @@ class TestModuleCascadeCore:
     def test_all_entries_present(self) -> None:
         expected_stems = {
             "_json",
+            "artifact_lease",
             "feature_flags",
             "branch_guard",
             "_plugin_ids",

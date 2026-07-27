@@ -1664,6 +1664,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # recipe tests — recipe layer is IL-2 and may use workspace (IL-1 sibling) or config (IL-1)
     "tests/recipe/test_rules_inputs.py": frozenset({"autoskillit.config"}),
     "tests/recipe/test_contracts.py": frozenset({"autoskillit.workspace"}),
+    "tests/recipe/test_skill_capability_cache_integration.py": frozenset(
+        {"autoskillit.workspace"}
+    ),
     "tests/recipe/test_rules_skill_content.py": frozenset({"autoskillit.workspace"}),
     "tests/recipe/test_rules_backend_compat.py": frozenset(
         {"autoskillit.server", "autoskillit.workspace"}

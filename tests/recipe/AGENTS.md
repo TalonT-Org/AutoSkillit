@@ -222,6 +222,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_schema.py` | Tests for Recipe, RecipeStep, and DataFlowWarning schema |
 | `test_skip_inviting_notes.py` | Tests that bundled recipe optional steps have no skip-inviting note phrases |
 | `test_skill_contract_completeness.py` | Tests for SKILL.md to skill_contracts.yaml output completeness |
+| `test_skill_capability_cache_integration.py` | Tests recipe-validation integration with the workspace capability evidence cache |
 | `test_skill_emit_consistency.py` | Tests for skill emit consistency in recipe steps |
 | `test_skill_worktree_patterns.py` | Tests that SKILL.md files do not use fragile relative worktree path patterns |
 | `test_silent_type_convention.py` | Tests for silent-type-convention.md documentation |

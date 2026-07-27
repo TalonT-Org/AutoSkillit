@@ -106,6 +106,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_step_context",  # core/_step_context.py: current_step_name, current_order_id ContextVars
         "_api_cache",  # recipe/_api_cache.py: _LOAD_CACHE = LoadCache()
         "_contracts_manifest",  # recipe/_contracts_manifest.py: _MANIFEST_CACHE = YamlFileCache()
+        "skill_capabilities",  # workspace/skill_capabilities.py: bounded evidence cache
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE

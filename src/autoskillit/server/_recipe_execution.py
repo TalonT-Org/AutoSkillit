@@ -537,31 +537,31 @@ def _publish_loaded_audit_cycle(
     verifier.verify_artifact_ref(authority.inventory_ref)
     if authority.remediation_ref is not None:
         verifier.verify_artifact_ref(authority.remediation_ref)
-    head = installed.audit_cycle_heads.publish(
-        authority,
-        expected_parent_digest=expected_parent_digest,
-        expected_round=expected_round,
-        authorized_successor_part_id=authorized_successor_part_id,
-    )
-    expected_identity = (
-        head.plan_set_id,
-        head.scope_id,
-        head.authorized_successor_part_id or head.part_id,
-    )
     manifest = load_bundled_manifest()
-    preflight_identities = dict(installed.preflight_identities)
-    for step_name, template in installed.snapshot.templates.items():
-        contract = get_skill_contract(template.invocation.skill_name or "", manifest)
-        if (
-            contract is not None
-            and contract.input_preflight == PreflightKind.AUDIT_CYCLE_INVENTORY.value
-        ):
-            preflight_identities[step_name] = expected_identity
     with tool_ctx.recipe_execution_lock:
         if tool_ctx.active_recipe_execution is not installed:
             raise AuditCycleHeadConflict(
                 "active recipe execution changed while publishing audit authority"
             )
+        head = installed.audit_cycle_heads.publish(
+            authority,
+            expected_parent_digest=expected_parent_digest,
+            expected_round=expected_round,
+            authorized_successor_part_id=authorized_successor_part_id,
+        )
+        expected_identity = (
+            head.plan_set_id,
+            head.scope_id,
+            head.authorized_successor_part_id or head.part_id,
+        )
+        preflight_identities = dict(installed.preflight_identities)
+        for step_name, template in installed.snapshot.templates.items():
+            contract = get_skill_contract(template.invocation.skill_name or "", manifest)
+            if (
+                contract is not None
+                and contract.input_preflight == PreflightKind.AUDIT_CYCLE_INVENTORY.value
+            ):
+                preflight_identities[step_name] = expected_identity
         tool_ctx.active_recipe_execution = replace(
             installed,
             preflight_identities=preflight_identities,

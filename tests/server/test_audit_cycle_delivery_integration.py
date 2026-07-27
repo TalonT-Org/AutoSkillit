@@ -719,6 +719,73 @@ def test_published_audit_head_binds_preflight_template_identity(
     )
 
 
+def test_audit_publication_does_not_mutate_replaced_execution(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    replacement = replace(
+        installed,
+        runtime_binding_digests={"replacement": _HASH_B},
+    )
+    root = Path(tool_ctx_kitchen_open.temp_dir)
+    authority = _authority(
+        root,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.NO_GO,
+        materialize=True,
+    )
+    authority_path = root / "authority-replaced.json"
+    authority_path.write_bytes(authority.canonical_bytes)
+    original_verify = AuditCycleVerifier.verify_artifact_ref
+    replaced = False
+
+    def replace_during_verification(
+        verifier: AuditCycleVerifier,
+        artifact_ref: ArtifactRef,
+    ) -> bytes:
+        nonlocal replaced
+        if not replaced:
+            tool_ctx_kitchen_open.active_recipe_execution = replacement
+            replaced = True
+        return original_verify(verifier, artifact_ref)
+
+    monkeypatch.setattr(
+        AuditCycleVerifier,
+        "verify_artifact_ref",
+        replace_during_verification,
+    )
+
+    with pytest.raises(AuditCycleHeadConflict, match="active recipe execution changed"):
+        publish_verified_audit_cycle(
+            tool_ctx_kitchen_open,
+            authority_path=str(authority_path),
+            expected_parent_digest=None,
+            expected_round=0,
+        )
+
+    assert tool_ctx_kitchen_open.active_recipe_execution is replacement
+    assert dict(replacement.runtime_binding_digests) == {"replacement": _HASH_B}
+    assert (
+        replacement.audit_cycle_heads.get(
+            execution_generation=authority.execution_generation,
+            plan_set_id=authority.plan_set_id,
+            scope_id=authority.scope_id,
+            part_id=authority.part_id,
+        )
+        is None
+    )
+
+
 def test_audit_publication_rejects_tampered_referenced_artifact(
     tool_ctx_kitchen_open,
 ) -> None:

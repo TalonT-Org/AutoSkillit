@@ -501,12 +501,7 @@ def _validate_persisted_text(value: str) -> None:
         "ghp_",
         "sk-",
     )
-    looks_like_path = (
-        value.startswith(("/", "~/", "\\"))
-        or (len(value) > 2 and value[1] == ":" and value[2] in {"/", "\\"})
-        or "\n" in value
-        or "\r" in value
-    )
+    looks_like_path = "/" in value or "\\" in value or "\n" in value or "\r" in value
     looks_like_digest = len(value) in {40, 64, 128} and all(
         character in "0123456789abcdefABCDEF" for character in value
     )

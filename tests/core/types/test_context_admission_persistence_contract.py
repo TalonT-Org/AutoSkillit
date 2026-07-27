@@ -719,6 +719,8 @@ def test_envelope_decoder_rejects_upcaster_header_changes(
     [
         "/private/store.sqlite3",
         "~/ledger",
+        "private/store.sqlite3",
+        ".ssh\\id_rsa",
         "password=visible",
         "a" * 64,
         {"nested": "ghp_visible"},

@@ -145,6 +145,46 @@ def test_build_headless_error_response_extra_fields_cannot_override_canonical() 
     assert resp["success"] is False
 
 
+def test_build_headless_error_response_degraded_success_fields() -> None:
+    """success=True, status='degraded' → warning key set, no error key."""
+    result = _make_skill_result(success=True, session_id="abc", subtype="success", exit_code=0)
+    resp = _build_headless_error_response(
+        result, warning="no result block found", status="degraded", success=True
+    )
+    assert resp["success"] is True
+    assert resp["status"] == "degraded"
+    assert resp["warning"] == "no result block found"
+    assert "error" not in resp
+    assert resp["session_id"] == "abc"
+    assert resp["subtype"] == "success"
+    assert resp["exit_code"] == 0
+
+
+def test_build_headless_error_response_degraded_extra_fields_cannot_override_canonical() -> None:
+    """In degraded-success mode, extra_fields still cannot overwrite canonical keys."""
+    result = _make_skill_result(
+        success=True, session_id="real-session", subtype="success", exit_code=0
+    )
+    resp = _build_headless_error_response(
+        result,
+        warning="real warning",
+        status="degraded",
+        success=True,
+        extra_fields={
+            "warning": "injected",
+            "session_id": "spoofed",
+            "status": "spoofed",
+            "success": False,
+            "partial_issue_url": "https://github.com/owner/repo/issues/42",
+        },
+    )
+    assert resp["warning"] == "real warning"
+    assert resp["session_id"] == "real-session"
+    assert resp["status"] == "degraded"
+    assert resp["success"] is True
+    assert resp["partial_issue_url"] == "https://github.com/owner/repo/issues/42"
+
+
 def test_retry_reason_to_error_uses_enum_value() -> None:
     """Non-NONE RetryReason → returns its .value string."""
     result = _make_skill_result(success=False, retry_reason=RetryReason.STALE)

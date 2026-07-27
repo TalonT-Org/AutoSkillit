@@ -104,6 +104,25 @@ def test_construction_is_side_effect_free_and_recovery_publishes_private_schema(
     assert not list(authority.database_path.parent.glob("*.tmp*"))
 
 
+def test_recovery_removes_same_inode_crash_window_initialization_link(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    orphan = authority.database_path.parent / (f".{authority.database_path.name}.{'a' * 24}.tmp")
+    os.link(authority.database_path, orphan)
+    assert authority.database_path.stat().st_nlink == 2
+
+    result = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    assert authority.database_path.stat().st_nlink == 1
+    assert not orphan.exists()
+
+
 def test_each_ledger_connection_sets_and_reads_back_required_pragmas(
     tmp_path: Path,
 ) -> None:

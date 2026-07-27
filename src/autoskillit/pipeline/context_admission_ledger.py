@@ -1018,6 +1018,7 @@ class DefaultContextAdmissionLedger:
     def _ensure_store(self) -> None:
         self._ensure_private_parent()
         if self._path.exists():
+            self._recover_initialization_link()
             self._validate_database_file()
             self._validate_sidecars(allow_regular=True)
             return
@@ -1075,6 +1076,65 @@ class DefaultContextAdmissionLedger:
             ) from exc
         finally:
             _unlink_initialization_artifact(temporary_path)
+
+    def _recover_initialization_link(self) -> None:
+        directory_fd: int | None = None
+        removed = False
+        try:
+            directory_fd = os.open(
+                self._path.parent,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            )
+            database_stat = os.stat(
+                self._path.name,
+                dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+            if (
+                not stat.S_ISREG(database_stat.st_mode)
+                or stat.S_ISLNK(database_stat.st_mode)
+                or database_stat.st_uid != self._authority.expected_owner_id
+                or stat.S_IMODE(database_stat.st_mode) != _DATABASE_MODE
+                or database_stat.st_nlink <= 1
+            ):
+                return
+            prefix = f".{self._path.name}."
+            suffix = ".tmp"
+            for name in os.listdir(directory_fd):
+                if not name.startswith(prefix) or not name.endswith(suffix):
+                    continue
+                token = name[len(prefix) : -len(suffix)]
+                if len(token) != 24 or any(
+                    character not in "0123456789abcdef" for character in token
+                ):
+                    continue
+                candidate_stat = os.stat(
+                    name,
+                    dir_fd=directory_fd,
+                    follow_symlinks=False,
+                )
+                if (
+                    stat.S_ISREG(candidate_stat.st_mode)
+                    and not stat.S_ISLNK(candidate_stat.st_mode)
+                    and candidate_stat.st_dev == database_stat.st_dev
+                    and candidate_stat.st_ino == database_stat.st_ino
+                    and candidate_stat.st_uid == self._authority.expected_owner_id
+                    and stat.S_IMODE(candidate_stat.st_mode) == _DATABASE_MODE
+                ):
+                    os.unlink(name, dir_fd=directory_fd)
+                    removed = True
+        except (FileNotFoundError, NotADirectoryError):
+            return
+        except OSError as exc:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.IO,
+                "store-initialization-link-recovery-failed",
+            ) from exc
+        finally:
+            if directory_fd is not None:
+                os.close(directory_fd)
+        if removed:
+            _fsync_directory(self._path.parent)
 
     def _ensure_private_parent(self) -> None:
         parent = self._path.parent

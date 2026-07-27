@@ -619,6 +619,13 @@ class DefaultContextAdmissionLedger:
                 reason_code=health.reason_code,
             )
         inspection = self.inspect_stream(stream_key)
+        if inspection.health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+            return ContextAdmissionAccountingResult(
+                status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
+                stream_key=stream_key,
+                failure_reason=inspection.health.failure_reason,
+                reason_code=inspection.health.reason_code,
+            )
         if inspection.health.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED:
             return ContextAdmissionAccountingResult(
                 status=ContextAdmissionAccountingStatus.CONTENDED,

@@ -29,6 +29,7 @@ from autoskillit.core import (
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     ContextAdmissionStoreAuthority,
+    ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextThreadId,
     CoverageState,
@@ -1220,6 +1221,36 @@ def test_apply_retries_when_corruption_failure_marker_is_contended(
 
     assert failed.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED
     assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+
+
+def test_sqlite_recovery_preserves_failure_discovered_during_inspection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    event = open_event()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, event).status is ContextAdmissionAccountingStatus.RECORDED
+    failure = ContextAdmissionStreamHealth(
+        key,
+        ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+        failure_reason=ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+        reason_code="inspection-publication-mismatch",
+    )
+    monkeypatch.setattr(
+        ledger,
+        "inspect_stream",
+        lambda _key: ledger_module._empty_inspection(key, failure),
+    )
+    connection = ledger._connect()
+
+    recovered = ledger._recover_sqlite_result(connection, key, event)
+
+    assert recovered.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED
+    assert recovered.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert recovered.reason_code == "inspection-publication-mismatch"
+    assert ledger.store_health().status is ContextAdmissionStorageHealthStatus.HEALTHY
 
 
 def test_recovery_rejects_valid_but_nonzero_genesis(tmp_path: Path) -> None:

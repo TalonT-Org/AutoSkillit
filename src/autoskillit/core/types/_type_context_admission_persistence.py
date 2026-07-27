@@ -158,13 +158,24 @@ class ShadowContextAdmissionTargetRecord(_ContractValue):
             )
         ):
             _raise_invalid("shadow_lineage_coordinate_mismatch")
-        is_input = isinstance(self.target_id, AdmissionBatchId)
-        if is_input and self.batch_id != self.target_id:
+        is_input = type(self.target_id) is AdmissionBatchId
+        is_generation = type(self.target_id) is GenerationReservationId
+        if not is_input and not is_generation:
+            _raise_invalid("invalid_shadow_target_id")
+        if is_input and (
+            self.batch_id != self.target_id
+            or self.generation_reservation_id is not None
+            or not isinstance(self.lifecycle_state, AdmissionState)
+            or self.generation_allowance is not None
+            or self.exact_output_charge is not None
+        ):
             _raise_invalid("invalid_shadow_input_target")
-        if is_input and self.generation_reservation_id is not None:
-            _raise_invalid("mixed_shadow_target_domain")
-        if not is_input and (
-            self.batch_id is None or self.generation_reservation_id != self.target_id
+        if is_generation and (
+            self.batch_id is None
+            or self.generation_reservation_id != self.target_id
+            or not isinstance(self.lifecycle_state, GenerationState)
+            or self.proposed_input_count is not None
+            or self.exact_input_charge is not None
         ):
             _raise_invalid("invalid_shadow_generation_target")
 

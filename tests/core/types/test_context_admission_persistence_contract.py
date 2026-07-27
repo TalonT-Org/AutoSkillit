@@ -47,6 +47,7 @@ from autoskillit.core import (
     CoverageState,
     ForkOccurrenceId,
     GenerationReservationId,
+    GenerationState,
     IdempotencyNamespace,
     MeasurementKind,
     ModelIdentity,
@@ -162,6 +163,20 @@ def _valid_shadow_target() -> ShadowContextAdmissionTargetRecord:
         exact_input_charge=None,
         exact_output_charge=None,
         measurement_kind=MeasurementKind.TOKENIZER_EXACT,
+    )
+
+
+def _valid_generation_shadow_target() -> ShadowContextAdmissionTargetRecord:
+    target = _valid_shadow_target()
+    generation_id = GenerationReservationId("generation-one")
+    return replace(
+        target,
+        target_id=generation_id,
+        generation_reservation_id=generation_id,
+        lifecycle_state=GenerationState.RESERVED,
+        proposed_input_count=None,
+        generation_allowance=100,
+        measurement_kind=None,
     )
 
 
@@ -310,12 +325,57 @@ def test_shadow_target_rejects_lineage_coordinate_mismatch() -> None:
 def test_shadow_target_rejects_mixed_input_and_generation_identity() -> None:
     with pytest.raises(
         ContextAdmissionValidationError,
-        match="mixed_shadow_target_domain",
+        match="invalid_shadow_input_target",
     ):
         replace(
             _valid_shadow_target(),
             generation_reservation_id=GenerationReservationId("generation-one"),
         )
+
+
+def test_shadow_target_requires_exact_target_id_variant() -> None:
+    target = _valid_generation_shadow_target()
+    invalid_id = ContextSessionId("not-a-shadow-target")
+    with pytest.raises(ContextAdmissionValidationError, match="invalid_shadow_target_id"):
+        replace(
+            target,
+            target_id=invalid_id,  # type: ignore[arg-type]
+            generation_reservation_id=invalid_id,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    ("target", "replacement", "reason"),
+    [
+        (
+            _valid_shadow_target(),
+            {"lifecycle_state": GenerationState.RESERVED},
+            "invalid_shadow_input_target",
+        ),
+        (
+            _valid_shadow_target(),
+            {"generation_allowance": 100},
+            "invalid_shadow_input_target",
+        ),
+        (
+            _valid_generation_shadow_target(),
+            {"lifecycle_state": AdmissionState.RESERVED},
+            "invalid_shadow_generation_target",
+        ),
+        (
+            _valid_generation_shadow_target(),
+            {"proposed_input_count": 100},
+            "invalid_shadow_generation_target",
+        ),
+    ],
+)
+def test_shadow_target_rejects_cross_domain_fields(
+    target: ShadowContextAdmissionTargetRecord,
+    replacement: dict[str, object],
+    reason: str,
+) -> None:
+    with pytest.raises(ContextAdmissionValidationError, match=reason):
+        replace(target, **replacement)
 
 
 def test_shadow_publication_is_a_released_top_level_envelope() -> None:

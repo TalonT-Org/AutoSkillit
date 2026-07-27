@@ -21,6 +21,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_ci_dev_config.py` | Structural enforcement: CI workflow and pre-commit configuration must contain required quality gates |
 | `test_ci_shard_config.py` | Tests for CI shard directory configuration consistency |
 | `test_ci_workflow.py` | CI workflow structural tests |
+| `test_codex_read_repetition_measure.py` | Tests for scripts/measure_codex_read_repetition.py (#4351) — bounded-read classifier, repeat-read counting, cohort split, malformed-record handling |
 | `test_claude_md_critical_rules.py` | Tests that effective `CLAUDE.md` (resolved via the `@AGENTS.md` include) contains required critical rules from friction analysis; direct ownership of shared rules lives in `AGENTS.md` and is covered by `test_docs_critical_rules.py` and `tests/docs/test_agents_md_content.py` |
 | `test_command_guard_completeness.py` | Structural meta-test: command-inspecting guards must cover all command-executing tools |
 | `test_command_guard_verb_position.py` | Structural ratchet: command-inspecting guards must not perform raw substring membership against shell command text — guards must tokenize evaluated payloads and compare verb/argument positions |

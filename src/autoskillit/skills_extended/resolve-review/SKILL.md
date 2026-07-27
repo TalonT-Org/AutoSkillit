@@ -512,6 +512,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Issue URL extraction guard | `test_issue_url_extraction_guard.py` | Raw `.get("issue_url")` / `.get("issue_urls")` in `fleet/` outside `_issue_url_helpers.py` and `state_types.py` — must use `extract_issue_urls()`; `fleet_claim_guard.py` must retain both key variants |
 | Pipeline ordering | `test_pipeline_ordering.py` | Moving `run_semantic_rules` before `_prune_skipped_steps` in `load_and_validate` — semantic rules must run on post-prune recipe |
 | Hook env-var authority | `test_hook_env_var_authority.py` | Hook scripts that read `AUTOSKILLIT_PROVIDER_PROFILE` without also reading `AUTOSKILLIT_AGENT_BACKEND` — provider profile is a credentials label, not a backend-identity signal |
+| Evidence-bound intake rules | `test_intake_rule_registry.py` | `CODEX_INTAKE_RULES` entries stating an absolute imperative without a declared `exception`; `basis`/`evidence`/`evidence_anchor` that does not resolve to a live backend capability, ADR, or issue; a `path_classes` entry naming a file class `recipe_read_guard` denies |
 
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing

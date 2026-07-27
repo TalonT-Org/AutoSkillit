@@ -94,6 +94,10 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # Canonical output-discipline block/digest and their SHA-256 cache identity are
         # deliberately derived once at import time from the single source of truth.
         "_type_constants",
+        # CODEX_INTAKE_DISCIPLINE_DIGEST is rendered once from CODEX_INTAKE_RULES at
+        # import time, and its byte length is checked against the budget in the same
+        # module-load self-check block (#4351).
+        "_type_intake_policy",
         "_type_constants_registries",  # measured response-exemption registry digest
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
@@ -897,7 +901,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 26,  # +_context_admission pure reducer
-        "core/types": 36,  # +_type_recipe_sections +_type_skill_contract +context admission
+        "core/types": 37,  # +_type_intake_policy evidence-bound Codex intake rule registry
         "cli": 21,
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 14,  # +_install_state (single install-state consistency authority,

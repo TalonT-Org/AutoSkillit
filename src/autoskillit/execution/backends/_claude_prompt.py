@@ -187,6 +187,61 @@ def _inject_narration_suppression(skill_command: str, *, has_skill_prefix: bool 
     return skill_command + directive
 
 
+class CoInjectedPolicyDef(NamedTuple):
+    """One policy text co-injected into a Codex session by codex_discipline_suffix().
+
+    ``subjects`` must be disjoint across every entry: two texts making claims about the
+    same subject is the shape that produced #4351, where one digest said "directly read
+    only known-small files" and the next said "Never read a file end-to-end".
+    ``scope_marker`` must appear in the text, so a text cannot silently widen past the
+    subject it declares.
+
+    Not to be confused with ``InjectorDef`` below, which names a *stage of the
+    prompt-injection chain* ("intake-discipline"). This names a *constant whose text
+    is injected* ("CODEX_INTAKE_DISCIPLINE_DIGEST"). The field is ``constant_name``, not
+    ``name``, precisely so the two cannot be mistaken at a call site.
+    """
+
+    constant_name: str
+    subjects: frozenset[str]
+    scope_marker: str
+
+
+CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
+    CoInjectedPolicyDef(
+        constant_name="OUTPUT_DISCIPLINE_DIGEST",
+        subjects=frozenset({"producer-byte-bounding", "saved-artifact-inspection"}),
+        scope_marker="saved output",
+    ),
+    CoInjectedPolicyDef(
+        constant_name="CODEX_INTAKE_DISCIPLINE_DIGEST",
+        subjects=frozenset(
+            {
+                "instruction-file-intake",
+                "data-file-intake",
+                "tool-result-budget",
+                "package-table-orientation",
+                "subagent-spawning",
+            }
+        ),
+        scope_marker="Instruction files",
+    ),
+    CoInjectedPolicyDef(
+        constant_name="CODEX_RECIPE_DELIVERY_CALLING_CONTRACT",
+        subjects=frozenset({"recipe-delivery-attestation"}),
+        scope_marker="delivery_request",
+    ),
+)
+
+# Explicit lookup, not globals()/getattr: a constant renamed out from under the matrix
+# becomes an import error at module load, not a silently missing key at test time.
+_CO_INJECTED_POLICY_TEXTS: dict[str, str] = {
+    "OUTPUT_DISCIPLINE_DIGEST": OUTPUT_DISCIPLINE_DIGEST,
+    "CODEX_INTAKE_DISCIPLINE_DIGEST": CODEX_INTAKE_DISCIPLINE_DIGEST,
+    "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT": CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
+}
+
+
 def codex_discipline_suffix() -> str:
     """Canonical combined discipline suffix: output-discipline + intake-discipline."""
     return (

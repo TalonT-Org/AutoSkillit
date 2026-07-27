@@ -166,6 +166,18 @@ def test_decision_defines_the_recipe_section_byte_budget(decision_text: str) -> 
     assert "token×4" in decision_text or "token x 4" in decision_text
 
 
+def test_adr_describes_the_subagent_rule_it_actually_gates(decision_text: str) -> None:
+    """The Forward Obligations bullet must describe the shipped rule, not a retired one.
+
+    R6 of the v1 intake digest said sub-agents "return a summary, not raw file
+    contents" while this ADR described the gate as a "do not spawn sub-agents" guard —
+    the two texts never matched (#4351).
+    """
+    assert "do not spawn sub-agents" not in decision_text
+    assert 'fork_turns "none"' in decision_text
+    assert "not raw file contents" in decision_text
+
+
 def test_decision_requires_exact_bounded_recipe_section_rendering(decision_text: str) -> None:
     for required in (
         "complete outer response",

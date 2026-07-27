@@ -84,10 +84,10 @@ def test_digest_is_safe_for_agent_toml_multiline_literal_guard() -> None:
 
 def test_intake_digest_pins_numeric_rules() -> None:
     anchors = [
-        "at most 2 files per exec command",
+        "must be read completely",
+        "continue until EOF",
         "at most 250 lines",
         "max_output_tokens above 10000",
-        "at most 2 of the listed files",
         "an index, not required reading",
         "fresh context",
         'fork_turns "none"',

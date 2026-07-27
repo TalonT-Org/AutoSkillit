@@ -6,19 +6,22 @@ PRIMARY delivery channel is populated via the correct builder.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core import (
+    CODEX_INTAKE_DISCIPLINE_DIGEST,
     SESSION_TYPE_ENV_VAR,
     SESSION_TYPE_FLEET,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     ProjectedPluginRoot,
 )
+from autoskillit.core.paths import pkg_root
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+from autoskillit.execution.backends.codex import CodexBackend, _generate_agent_tomls
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -29,6 +32,28 @@ def _assert_interactive_primary_channel(backend, spec) -> None:
         assert "--append-system-prompt" in spec.cmd
     else:
         assert any("developer_instructions=" in arg for arg in spec.cmd)
+
+
+def _assert_interactive_intake_digest(backend, spec) -> None:
+    """Assert the intake digest is present for Codex, absent for Claude.
+
+    The interactive channel delivers the digest inside a `-c developer_instructions=...`
+    TOML config-override, which escapes newlines to literal `\\n` sequences — the digest's
+    single-line header survives that escaping unchanged, so it is the anchor here.
+    """
+    header = CODEX_INTAKE_DISCIPLINE_DIGEST.splitlines()[0]
+    if isinstance(backend, ClaudeCodeBackend):
+        assert not any(header in arg for arg in spec.cmd)
+    else:
+        assert any("developer_instructions=" in arg and header in arg for arg in spec.cmd)
+
+
+def _assert_headless_intake_digest(backend, spec) -> None:
+    """Assert the intake digest is present in the final prompt arg for Codex, absent for Claude."""
+    if isinstance(backend, ClaudeCodeBackend):
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST not in spec.cmd[-1]
+    else:
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
 
 
 class TestFleetInteractive:
@@ -56,6 +81,18 @@ class TestFleetInteractive:
         )
         assert spec.env.get(SESSION_TYPE_ENV_VAR) == SESSION_TYPE_FLEET
 
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_intake_digest_delivery(self, backend) -> None:
+        spec = backend.build_interactive_cmd(
+            system_prompt="Fleet discipline prompt",
+            env_extras={SESSION_TYPE_ENV_VAR: SESSION_TYPE_FLEET},
+        )
+        _assert_interactive_intake_digest(backend, spec)
+
 
 class TestOrchestratorInteractive:
     @pytest.mark.parametrize(
@@ -79,6 +116,17 @@ class TestOrchestratorInteractive:
             system_prompt="Orchestrator discipline prompt",
         )
         assert not spec.env.get(SESSION_TYPE_ENV_VAR, "")
+
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_intake_digest_delivery(self, backend) -> None:
+        spec = backend.build_interactive_cmd(
+            system_prompt="Orchestrator discipline prompt",
+        )
+        _assert_interactive_intake_digest(backend, spec)
 
 
 class TestOrchestratorHeadless:
@@ -111,6 +159,20 @@ class TestOrchestratorHeadless:
         )
         assert spec.env.get(SESSION_TYPE_ENV_VAR) == SESSION_TYPE_ORCHESTRATOR
 
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_intake_digest_delivery(self, backend) -> None:
+        spec = backend.build_food_truck_cmd(
+            orchestrator_prompt="Run the pipeline",
+            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        )
+        _assert_headless_intake_digest(backend, spec)
+
 
 class TestSkillSession:
     @pytest.mark.parametrize(
@@ -130,6 +192,63 @@ class TestSkillSession:
     def test_session_type_skill_in_env(self, backend) -> None:
         spec = backend.build_skill_session_cmd("/investigate foo", "/tmp")
         assert spec.env.get(SESSION_TYPE_ENV_VAR) == SESSION_TYPE_SKILL
+
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_intake_digest_delivery(self, backend) -> None:
+        spec = backend.build_skill_session_cmd("/investigate foo", "/tmp")
+        _assert_headless_intake_digest(backend, spec)
+
+
+class TestResumeDelivery:
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_intake_digest_delivery(self, backend) -> None:
+        spec = backend.build_resume_cmd(
+            resume_session_id="abc123",
+            prompt="CALLER PROMPT MARKER",
+        )
+        _assert_headless_intake_digest(backend, spec)
+
+    def test_intake_digest_is_prepended_before_the_caller_prompt_for_codex(self) -> None:
+        backend = CodexBackend()
+        spec = backend.build_resume_cmd(
+            resume_session_id="abc123",
+            prompt="CALLER PROMPT MARKER",
+        )
+        assert spec.cmd[-1].index(CODEX_INTAKE_DISCIPLINE_DIGEST) < spec.cmd[-1].index(
+            "CALLER PROMPT MARKER"
+        )
+
+
+class TestAgentTomlDelivery:
+    @pytest.mark.medium
+    def test_every_bundled_agent_toml_carries_the_composed_suffix(self, tmp_path) -> None:
+        from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
+
+        agents_src = pkg_root() / "agents"
+        expected_count = sum(
+            1
+            for md_path in agents_src.glob("*.md")
+            if md_path.name not in ("AGENTS.md", "CLAUDE.md")
+        )
+
+        count = _generate_agent_tomls(tmp_path)
+
+        assert count == expected_count
+        toml_files = sorted((tmp_path / "agents").glob("*.toml"))
+        assert len(toml_files) == expected_count
+        suffix = codex_discipline_suffix()
+        for toml_path in toml_files:
+            parsed = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+            # TOML keeps the trailing newline before the closing ''' delimiter.
+            assert parsed["developer_instructions"].endswith(f"{suffix}\n")
 
 
 class TestSousChefDelivery:

@@ -19,8 +19,6 @@ __all__ = [
     "OUTPUT_DISCIPLINE_COMBINED_SHA256",
     "OUTPUT_DISCIPLINE_DIGEST",
     "OUTPUT_DISCIPLINE_REQUIRED_SKILLS",
-    "CODEX_INTAKE_DISCIPLINE_VERSION",
-    "CODEX_INTAKE_DISCIPLINE_DIGEST",
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
@@ -163,37 +161,6 @@ OUTPUT_DISCIPLINE_COMBINED_SHA256 = sha256(
 
 OUTPUT_DISCIPLINE_REQUIRED_SKILLS: frozenset[str] = frozenset(
     {"investigate", "rectify", "audit-bugs", "audit-friction"}
-)
-
-CODEX_INTAKE_DISCIPLINE_VERSION: int = 1
-
-CODEX_INTAKE_DISCIPLINE_DIGEST = "\n".join(
-    (
-        "Context Intake Discipline v1:",
-        (
-            "- Read at most 2 files per exec command; never chain whole-file dumps "
-            "(`cat`/`sed`/`nl`) across a list of files."
-        ),
-        (
-            "- Never read a file end-to-end. Use `rg -n` with context flags, or "
-            "`sed -n` ranges of at most 250 lines."
-        ),
-        "- Never pass max_output_tokens above 10000.",
-        (
-            "- After listing a directory, open at most 2 of the listed files before "
-            "deciding what to read next."
-        ),
-        (
-            "- Package tables in AGENTS.md files are an index, not required reading; "
-            "consult a per-package AGENTS.md only for packages you are modifying."
-        ),
-        (
-            '- Spawn sub-agents with fresh context: pass fork_turns "none" explicitly '
-            '(omitting fork_turns silently defaults to "all", forking the full parent '
-            "conversation). Give each sub-agent an explicit narrow brief; sub-agents "
-            "return a summary, not raw file contents."
-        ),
-    )
 )
 
 RETIRED_SKILL_NAMES: frozenset[str] = frozenset(

@@ -227,6 +227,23 @@ _PLAN_ASSOCIATION_KEYS = frozenset(
 _MAX_ASSOCIATION_FILES = 256
 
 
+def _log_plan_disposition_rejection(
+    reason: str,
+    *,
+    authority_path: Path,
+    current_plan_path: Path,
+    error: BaseException | None = None,
+) -> None:
+    logger.warning(
+        "plan_disposition_validation_rejected",
+        reason=reason,
+        audit_cycle_path=str(authority_path),
+        current_plan_path=str(current_plan_path),
+        error=None if error is None else f"{type(error).__name__}: {error}",
+        exc_info=error is not None,
+    )
+
+
 def _resolve_plan_disposition(*, audit_cycle_path: str, current_plan_path: Path) -> str | None:
     authority_path = Path(audit_cycle_path)
     if not authority_path.is_absolute() or not current_plan_path.is_absolute():
@@ -234,7 +251,13 @@ def _resolve_plan_disposition(*, audit_cycle_path: str, current_plan_path: Path)
     cycle_dir = authority_path.parent
     try:
         authority = AuditCycleVerifier(cycle_dir).load_authority(authority_path)
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        _log_plan_disposition_rejection(
+            "authority loading or validation failed",
+            authority_path=authority_path,
+            current_plan_path=current_plan_path,
+            error=exc,
+        )
         return None
     if authority.verdict is not AuditVerdict.NO_GO:
         return None
@@ -244,8 +267,14 @@ def _resolve_plan_disposition(*, audit_cycle_path: str, current_plan_path: Path)
         associations_dir = cycle_dir / "associations"
         candidates = tuple(sorted(associations_dir.glob("*.json")))
         if len(candidates) > _MAX_ASSOCIATION_FILES:
+            _log_plan_disposition_rejection(
+                f"association file count exceeds {_MAX_ASSOCIATION_FILES}: {len(candidates)}",
+                authority_path=authority_path,
+                current_plan_path=current_plan_path,
+            )
             return None
         records: list[tuple[Path, dict[str, object]]] = []
+        invalid_candidate_count = 0
         for candidate in candidates:
             _, association_bytes = read_stable_contained_bytes(
                 candidate,
@@ -258,25 +287,48 @@ def _resolve_plan_disposition(*, audit_cycle_path: str, current_plan_path: Path)
                 require_canonical=True,
             )
             if raw is None or frozenset(raw) != _PLAN_ASSOCIATION_KEYS:
+                invalid_candidate_count += 1
                 continue
             try:
                 plan_ref = ArtifactRef.from_dict(raw["plan_ref"])
             except (TypeError, ValueError):
+                invalid_candidate_count += 1
                 continue
             if Path(plan_ref.locator) == current_plan_path:
                 plan_ref_candidates.append(plan_ref)
                 records.append((candidate, raw))
         if len(plan_ref_candidates) != 1 or len(records) != 1:
+            _log_plan_disposition_rejection(
+                "expected exactly one matching plan association; "
+                f"matches={len(plan_ref_candidates)}, records={len(records)}, "
+                f"invalid_candidates={invalid_candidate_count}, candidates={len(candidates)}",
+                authority_path=authority_path,
+                current_plan_path=current_plan_path,
+            )
             return None
 
         plan_ref = plan_ref_candidates[0]
         association_path, association = records[0]
         if association_path.name != f"{plan_ref.content_digest}.json":
+            _log_plan_disposition_rejection(
+                "association filename does not match the plan content digest",
+                authority_path=authority_path,
+                current_plan_path=current_plan_path,
+            )
             return None
-        if (
-            association["schema_version"] != AUDIT_CYCLE_SCHEMA_VERSION
-            or association["parent_authority_digest"] != authority.authority_digest
-        ):
+        if association["schema_version"] != AUDIT_CYCLE_SCHEMA_VERSION:
+            _log_plan_disposition_rejection(
+                "association schema version does not match the audit-cycle schema",
+                authority_path=authority_path,
+                current_plan_path=current_plan_path,
+            )
+            return None
+        if association["parent_authority_digest"] != authority.authority_digest:
+            _log_plan_disposition_rejection(
+                "association parent digest does not match the active authority",
+                authority_path=authority_path,
+                current_plan_path=current_plan_path,
+            )
             return None
         association_payload = {
             key: value for key, value in association.items() if key != "association_digest"
@@ -285,33 +337,59 @@ def _resolve_plan_disposition(*, audit_cycle_path: str, current_plan_path: Path)
             association_payload,
             domain=_PLAN_ASSOCIATION_DOMAIN,
         ):
+            _log_plan_disposition_rejection(
+                "association digest does not attest its payload",
+                authority_path=authority_path,
+                current_plan_path=current_plan_path,
+            )
             return None
 
         AuditCycleVerifier(current_plan_path.parent).verify_artifact_ref(plan_ref)
         disposition_data = association["disposition_ref"]
         if not isinstance(disposition_data, dict):
+            _log_plan_disposition_rejection(
+                "association disposition_ref is not an object",
+                authority_path=authority_path,
+                current_plan_path=current_plan_path,
+            )
             return None
         disposition_ref = ArtifactRef.from_dict(disposition_data)
         cycle_verifier = AuditCycleVerifier(cycle_dir)
         cycle_verifier.verify_artifact_ref(disposition_ref)
         report = cycle_verifier.load_report(disposition_ref.locator)
-    except (KeyError, OSError, TypeError, ValueError):
+    except (KeyError, OSError, TypeError, ValueError) as exc:
+        _log_plan_disposition_rejection(
+            "association or disposition validation failed",
+            authority_path=authority_path,
+            current_plan_path=current_plan_path,
+            error=exc,
+        )
         return None
 
-    identity_matches = (
-        report.execution_generation == authority.execution_generation
-        and report.cycle_id == authority.cycle_id
-        and report.plan_set_id == authority.plan_set_id
-        and report.scope_id == authority.scope_id
-        and report.part_id == authority.part_id
-        and report.audit_round == authority.audit_round
-        and report.parent_authority_digest == authority.authority_digest
-        and report.inventory_digest == authority.inventory_ref.content_digest
-        and report.findings_digest == authority.findings_digest
-        and report.current_plan_ref == plan_ref
-        and Path(report.current_plan_ref.locator) == current_plan_path
+    identity_checks = {
+        "execution_generation": report.execution_generation == authority.execution_generation,
+        "cycle_id": report.cycle_id == authority.cycle_id,
+        "plan_set_id": report.plan_set_id == authority.plan_set_id,
+        "scope_id": report.scope_id == authority.scope_id,
+        "part_id": report.part_id == authority.part_id,
+        "audit_round": report.audit_round == authority.audit_round,
+        "parent_authority_digest": (report.parent_authority_digest == authority.authority_digest),
+        "inventory_digest": report.inventory_digest == authority.inventory_ref.content_digest,
+        "findings_digest": report.findings_digest == authority.findings_digest,
+        "current_plan_ref": report.current_plan_ref == plan_ref,
+        "current_plan_path": Path(report.current_plan_ref.locator) == current_plan_path,
+    }
+    mismatched_fields = tuple(
+        field_name for field_name, matches in identity_checks.items() if not matches
     )
-    return disposition_ref.locator if identity_matches else None
+    if mismatched_fields:
+        _log_plan_disposition_rejection(
+            f"disposition identity mismatch: {', '.join(mismatched_fields)}",
+            authority_path=authority_path,
+            current_plan_path=current_plan_path,
+        )
+        return None
+    return disposition_ref.locator
 
 
 def verify_plan_artifacts(

@@ -3,8 +3,11 @@ for context-limit-stumbled plan-producing steps (issue #4305)."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
+import autoskillit.recipe._cmd_rpc_guards as cmd_rpc_guards
 from autoskillit.core.closure_hashing import (
     canonical_json_bytes,
     compute_bytes_hash,
@@ -214,3 +217,55 @@ def test_active_no_go_salvage_rejects_missing_association(tmp_path):
         plan_parts=str(plan),
         audit_cycle_path=str(authority),
     ) == {"verdict": "unsalvageable"}
+
+
+def test_active_no_go_salvage_logs_authority_validation_failure(tmp_path, monkeypatch):
+    plan = tmp_path / "plan.md"
+    plan.write_text("plan")
+    cycle = tmp_path / "cycle"
+    cycle.mkdir()
+    authority = cycle / "authority.json"
+    authority.write_text("not-json")
+    warnings = []
+    monkeypatch.setattr(
+        cmd_rpc_guards,
+        "logger",
+        SimpleNamespace(warning=lambda event, **context: warnings.append((event, context))),
+    )
+
+    assert verify_plan_artifacts(
+        plan_parts=str(plan),
+        audit_cycle_path=str(authority),
+    ) == {"verdict": "unsalvageable"}
+    assert warnings[0][0] == "plan_disposition_validation_rejected"
+    assert warnings[0][1]["reason"] == "authority loading or validation failed"
+    assert warnings[0][1]["audit_cycle_path"] == str(authority)
+    assert warnings[0][1]["current_plan_path"] == str(plan)
+    assert warnings[0][1]["error"].startswith("AuditCycleVerificationError:")
+    assert warnings[0][1]["exc_info"] is True
+
+
+def test_active_no_go_salvage_logs_malformed_association_context(tmp_path, monkeypatch):
+    plan, authority, _ = _write_audit_tuple(tmp_path)
+    association = next((authority.parent / "associations").iterdir())
+    association.write_text("{}")
+    warnings = []
+    monkeypatch.setattr(
+        cmd_rpc_guards,
+        "logger",
+        SimpleNamespace(warning=lambda event, **context: warnings.append((event, context))),
+    )
+
+    assert verify_plan_artifacts(
+        plan_parts=str(plan),
+        audit_cycle_path=str(authority),
+    ) == {"verdict": "unsalvageable"}
+    assert warnings[0][0] == "plan_disposition_validation_rejected"
+    assert warnings[0][1]["reason"] == (
+        "expected exactly one matching plan association; "
+        "matches=0, records=0, invalid_candidates=1, candidates=1"
+    )
+    assert warnings[0][1]["audit_cycle_path"] == str(authority)
+    assert warnings[0][1]["current_plan_path"] == str(plan)
+    assert warnings[0][1]["error"] is None
+    assert warnings[0][1]["exc_info"] is False

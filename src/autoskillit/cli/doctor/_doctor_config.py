@@ -30,7 +30,7 @@ def _check_config_layers_for_secrets(project_dir: Path | None = None) -> DoctorR
     Scans the user-level and project-level config.yaml files for any keys
     that belong only in .secrets.yaml. Reports ERROR with exact fix guidance.
     """
-    from autoskillit.config import ConfigSchemaError, validate_layer_keys
+    from autoskillit.config import ConfigSchemaError, remap_retired_keys, validate_layer_keys
     from autoskillit.core import YAMLError, load_yaml
 
     root = project_dir or Path.cwd()
@@ -51,6 +51,7 @@ def _check_config_layers_for_secrets(project_dir: Path | None = None) -> DoctorR
             )
         if not isinstance(data, dict):
             continue
+        data, _ = remap_retired_keys(data, is_secrets_layer=False)
         try:
             validate_layer_keys(data, config_path, is_secrets_layer=False)
         except ConfigSchemaError as exc:

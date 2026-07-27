@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path
-from autoskillit.config import load_config
-from autoskillit.core import Severity, get_logger, is_feature_enabled
+from autoskillit.config import AutomationConfig, ConfigSchemaError, load_config
+from autoskillit.core import Severity, YAMLError, get_logger, is_feature_enabled
 from autoskillit.execution import get_backend
 
 from ._doctor_config import (
@@ -84,8 +84,21 @@ __all__ = ["DoctorResult", "Severity", "run_doctor"]
 
 def run_doctor(*, output_json: bool = False) -> None:
     """Check project setup for common issues."""
-    cfg = load_config(Path.cwd())
     results: list[DoctorResult] = []
+    try:
+        cfg = load_config(Path.cwd())
+    except (ConfigSchemaError, YAMLError) as exc:
+        cfg = AutomationConfig()
+        results.append(
+            DoctorResult(
+                Severity.ERROR,
+                "config_loadable",
+                f"Configuration could not be loaded: {exc} "
+                f"Backend and all config-derived checks below ran against built-in "
+                f"defaults (agent_backend.backend={cfg.agent_backend.backend!r}), "
+                f"not your configuration.",
+            )
+        )
 
     if cfg.agent_backend.backend:
         try:

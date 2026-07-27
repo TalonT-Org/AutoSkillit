@@ -127,7 +127,7 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
     from dynaconf import Dynaconf  # noqa: PLC0415
 
     from autoskillit.config._config_dataclasses import ConfigSchemaError
-    from autoskillit.config.settings import validate_layer_keys
+    from autoskillit.config.settings import remap_retired_keys, validate_layer_keys
 
     defaults_path = pkg_root() / "config" / "defaults.yaml"
     root = project_dir or Path.cwd()
@@ -146,6 +146,17 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
             data = load_yaml(path)
             if isinstance(data, dict):
                 if should_validate:
+                    data, remapped = remap_retired_keys(data, is_secrets_layer=is_secrets)
+                    for rec in remapped:
+                        logger.warning(
+                            "retired_config_key",
+                            layer=str(path),
+                            old_key=f"{rec.section}.{rec.old_key}",
+                            new_key=f"{rec.section}.{rec.new_key}",
+                            value_carried=rec.value_moved,
+                            retired_in=rec.definition.retired_in,
+                            guidance=rec.definition.note,
+                        )
                     validate_layer_keys(data, path, is_secrets_layer=is_secrets)
                 _apply_layer(merged, data)
             elif data is not None:

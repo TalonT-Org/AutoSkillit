@@ -295,8 +295,9 @@ def test_remediation_has_investigate_ingredient(recipe) -> None:
 
 # T9: bridge_investigation step exists and routes to rectify
 def test_remediation_has_bridge_investigation_step(recipe) -> None:
-    """remediation recipe must have a bridge_investigation step that routes to rectify."""
+    """remediation recipe must have a bridge_investigation step that uses run_python."""
     step = recipe.steps["bridge_investigation"]
+    assert step.tool == "run_python"
     assert step.on_success == "rectify"
 
 
@@ -310,10 +311,17 @@ def test_remediation_bridge_investigation_capture_is_path_typed(recipe) -> None:
     assert entry.value_type == "path"
 
 
-def test_remediation_bridge_investigation_cmd_has_nonempty_guard(recipe) -> None:
-    """bridge_investigation cmd must contain a non-empty file guard (test -s or [ -s)."""
-    cmd = recipe.steps["bridge_investigation"].with_args["cmd"]
-    assert "test -s" in cmd or "[ -s" in cmd
+def test_remediation_bridge_investigation_uses_extract_investigation_callable(recipe) -> None:
+    """bridge_investigation must invoke autoskillit.smoke_utils.extract_investigation."""
+    step = recipe.steps["bridge_investigation"]
+    callable_name = step.with_args["callable"]
+    assert callable_name == "autoskillit.smoke_utils.extract_investigation"
+
+
+def test_remediation_bridge_investigation_on_failure_halts(recipe) -> None:
+    """bridge_investigation must halt the pipeline on failure rather than passing garbage."""
+    step = recipe.steps["bridge_investigation"]
+    assert step.on_failure == "release_issue_failure"
 
 
 def test_remediation_investigate_routes_to_bridge(recipe) -> None:

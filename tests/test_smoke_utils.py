@@ -22,6 +22,7 @@ from autoskillit.smoke_utils import (
     compile_eval_scorecard,
     consolidate_health_reports,
     enrich_diff_context,
+    extract_investigation,
     gate_backend_write,
     init_counter,
     parse_agent_eval_manifests,
@@ -2745,6 +2746,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "detect_zero_changes",
         "diagnose_merge_gate",
         "enrich_diff_context",
+        "extract_investigation",
         "fetch_merge_queue_data",
         "gate_backend_write",
         "init_counter",
@@ -2780,6 +2782,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "detect_zero_changes",
         "diagnose_merge_gate",
         "enrich_diff_context",
+        "extract_investigation",
         "fetch_merge_queue_data",
         "gate_backend_write",
         "init_counter",
@@ -3674,3 +3677,177 @@ def test_check_review_posted_in_smoke_utils_all():
 
     assert "check_review_posted" in sm.__all__
     assert callable(sm.check_review_posted)
+
+
+# ---------------------------------------------------------------------------
+# T_EI1–T_EI8: extract_investigation
+# ---------------------------------------------------------------------------
+
+
+_ISSUE_BODY_WITH_INVESTIGATION = (
+    "Some preamble not in the investigation section.\n"
+    "\n"
+    "## Investigation\n"
+    "<!-- investigation_complete: true -->\n"
+    "> Prior investigation completed interactively. See below for root cause analysis.\n"
+    "\n"
+    "# Investigation: Topic\n"
+    "## Summary\n"
+    "Summary content here.\n"
+    "## Root Cause\n"
+    "Root cause content here.\n"
+    "## Evidence\n"
+    "Evidence content here.\n"
+    "## Recommendations\n"
+    "Recommendation content here.\n"
+)
+
+
+@patch("autoskillit.smoke_utils._investigation.run_gh")
+def test_extract_investigation_full_content(mock_run_gh, tmp_path: Path) -> None:
+    """Extraction must retain all ## subsections inside ## Investigation."""
+
+    mock_run_gh.return_value = subprocess.CompletedProcess(
+        [], 0, _ISSUE_BODY_WITH_INVESTIGATION, ""
+    )
+    out_dir = tmp_path / "investigate"
+    result = extract_investigation(
+        investigation_path="",
+        issue_number="42",
+        output_dir=str(out_dir),
+    )
+    assert result["investigation_report"] == str(out_dir / "investigation_from_issue.md")
+    written = Path(result["investigation_report"]).read_text()
+    assert "## Summary" in written
+    assert "## Root Cause" in written
+    assert "## Evidence" in written
+    assert "## Recommendations" in written
+    assert "Summary content here." in written
+    assert "Root cause content here." in written
+    assert "Evidence content here." in written
+    assert "Recommendation content here." in written
+
+
+def test_extract_investigation_passthrough(tmp_path: Path) -> None:
+    """When investigation_path is set, file exists, and content is complete, return it."""
+
+    report = tmp_path / "investigation_full.md"
+    report.write_text(
+        "# Investigation: Topic\n"
+        "## Summary\n"
+        "Summary content.\n"
+        "## Recommendations\n"
+        "Recommendations content.\n"
+    )
+    result = extract_investigation(
+        investigation_path=str(report),
+        issue_number="42",
+        output_dir=str(tmp_path / "unused"),
+    )
+    assert result["investigation_report"] == str(report)
+
+
+def test_extract_investigation_passthrough_truncated_raises(tmp_path: Path) -> None:
+    """When investigation_path points to a truncated file (no ## subsections), callable raises."""
+
+    truncated = tmp_path / "investigation_truncated.md"
+    truncated.write_text(
+        "<!-- investigation_complete: true -->\n"
+        "> Prior investigation completed interactively. See below for root cause analysis.\n"
+    )
+    with pytest.raises(ValueError, match="Recommendations"):
+        extract_investigation(
+            investigation_path=str(truncated),
+            issue_number="42",
+            output_dir=str(tmp_path / "unused"),
+        )
+
+
+@patch("autoskillit.smoke_utils._investigation.run_gh")
+def test_extract_investigation_no_section_raises(mock_run_gh, tmp_path: Path) -> None:
+    """When issue body has no ## Investigation section, callable raises."""
+
+    mock_run_gh.return_value = subprocess.CompletedProcess(
+        [], 0, "Body without the investigation section.\n## Other\n", ""
+    )
+    with pytest.raises(ValueError, match="## Investigation"):
+        extract_investigation(
+            investigation_path="",
+            issue_number="42",
+            output_dir=str(tmp_path),
+        )
+
+
+@patch("autoskillit.smoke_utils._investigation.run_gh")
+def test_extract_investigation_empty_body_raises(mock_run_gh, tmp_path: Path) -> None:
+    """When ## Investigation section is empty, callable raises."""
+
+    mock_run_gh.return_value = subprocess.CompletedProcess(
+        [], 0, "## Investigation\n\n## Next Section\n", ""
+    )
+    with pytest.raises(ValueError, match="Recommendations"):
+        extract_investigation(
+            investigation_path="",
+            issue_number="42",
+            output_dir=str(tmp_path),
+        )
+
+
+@patch("autoskillit.smoke_utils._investigation.run_gh")
+def test_extract_investigation_gh_failure_raises(mock_run_gh, tmp_path: Path) -> None:
+    """When gh issue view fails, callable raises ValueError."""
+
+    mock_run_gh.return_value = subprocess.CompletedProcess([], 1, "", "gh: not authenticated")
+    with pytest.raises(ValueError, match="gh issue view failed"):
+        extract_investigation(
+            investigation_path="",
+            issue_number="42",
+            output_dir=str(tmp_path),
+        )
+
+
+@patch("autoskillit.smoke_utils._investigation.run_gh")
+def test_extract_investigation_ignores_h3_investigation_decoy(mock_run_gh, tmp_path: Path) -> None:
+    """A decoy '### Investigation' subsection must not be mistaken for the real heading."""
+
+    body = (
+        "Preamble.\n"
+        "### Investigation\n"
+        "Decoy sub-subsection text, not the real heading.\n"
+        "\n"
+        "## Investigation\n"
+        "## Summary\n"
+        "Summary content.\n"
+        "## Recommendations\n"
+        "Recommendation content.\n"
+    )
+    mock_run_gh.return_value = subprocess.CompletedProcess([], 0, body, "")
+    out_dir = tmp_path / "investigate"
+    result = extract_investigation(
+        investigation_path="",
+        issue_number="42",
+        output_dir=str(out_dir),
+    )
+    written = Path(result["investigation_report"]).read_text()
+    assert "Decoy sub-subsection text" not in written
+    assert "## Summary" in written
+    assert "Summary content." in written
+
+
+def test_extract_investigation_passthrough_rejects_h3_recommendations_decoy(
+    tmp_path: Path,
+) -> None:
+    """A decoy '### Recommendations' heading must not satisfy the completeness check."""
+
+    truncated = tmp_path / "investigation_truncated.md"
+    truncated.write_text(
+        "<!-- investigation_complete: true -->\n"
+        "> Prior investigation completed interactively.\n"
+        "### Recommendations for future work (not a real section)\n"
+    )
+    with pytest.raises(ValueError, match="Recommendations"):
+        extract_investigation(
+            investigation_path=str(truncated),
+            issue_number="42",
+            output_dir=str(tmp_path / "unused"),
+        )

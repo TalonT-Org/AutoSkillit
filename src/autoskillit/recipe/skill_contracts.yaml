@@ -3470,6 +3470,20 @@ callable_contracts:
     - name: variant_manifest
       type: str
       required: true
+  autoskillit.smoke_utils.extract_investigation:
+    inputs:
+    - name: investigation_path
+      type: str
+      required: false
+    - name: issue_number
+      type: str
+      required: false
+    - name: output_dir
+      type: str
+      required: false
+    outputs:
+    - name: investigation_report
+      type: str
 
 tool_output_contracts:
   wait_for_ci:

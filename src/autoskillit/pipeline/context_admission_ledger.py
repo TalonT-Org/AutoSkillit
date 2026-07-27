@@ -1113,7 +1113,7 @@ class DefaultContextAdmissionLedger:
     def _configure_connection(self, path: Path) -> sqlite3.Connection:
         try:
             connection = self._connection_factory(
-                f"file:{path}?mode=rw",
+                f"{path.as_uri()}?mode=rw",
                 uri=True,
                 timeout=self._busy_timeout_ms / 1_000,
                 isolation_level=None,

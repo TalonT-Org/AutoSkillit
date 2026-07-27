@@ -120,6 +120,18 @@ def test_each_ledger_connection_sets_and_reads_back_required_pragmas(
         connection.close()
 
 
+def test_store_path_uri_metacharacters_are_percent_encoded(tmp_path: Path) -> None:
+    authority = ContextAdmissionStoreAuthority(
+        database_path=(tmp_path / "context?admission#literal" / "ledger%literal.sqlite3"),
+        expected_owner_id=os.getuid(),
+    )
+
+    result = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    assert authority.database_path.is_file()
+
+
 def test_insecure_existing_parent_fails_closed_without_repair(
     tmp_path: Path,
 ) -> None:

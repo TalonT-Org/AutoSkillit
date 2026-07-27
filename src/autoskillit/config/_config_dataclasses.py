@@ -547,6 +547,15 @@ class ProvidersConfig:
                         f"profiles[{name!r}][{k!r}] must be a string or null, "
                         f"got {type(v).__name__!r}"
                     )
+        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
+        # all children commented out (or otherwise empty) parse to None; treating
+        # them as empty matches user intent and avoids spurious validation errors
+        # during collection when a user-level ~/.autoskillit/config.yaml contains
+        # such a section.
+        self.recipe_overrides = {
+            recipe: (overrides if overrides is not None else {})
+            for recipe, overrides in self.recipe_overrides.items()
+        }
         for recipe, overrides in self.recipe_overrides.items():
             if not isinstance(overrides, dict):
                 raise ValueError(
@@ -649,6 +658,16 @@ class AgentBackendConfig:
                     backend=override_backend,
                     valid_names=sorted(KNOWN_BACKEND_NAMES),
                 )
+
+        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
+        # all children commented out (or otherwise empty) parse to None; treating
+        # them as empty matches user intent and avoids spurious validation errors
+        # during collection when a user-level ~/.autoskillit/config.yaml contains
+        # such a section.
+        self.recipe_overrides = {
+            recipe: (overrides if overrides is not None else {})
+            for recipe, overrides in self.recipe_overrides.items()
+        }
 
         # Validate recipe_overrides shape: outer values are dicts, inner values are strings.
         for recipe_name, recipe_map in self.recipe_overrides.items():

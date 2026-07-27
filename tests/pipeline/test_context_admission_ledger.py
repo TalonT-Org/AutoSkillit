@@ -592,6 +592,46 @@ def test_existing_store_normalizes_sidecar_metadata_failure(
     assert result.store_health.reason_code == "store-sidecar-unavailable"
 
 
+def test_existing_store_tolerates_sidecar_disappearing_during_identity_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    sidecar = Path(f"{authority.database_path}-journal")
+    sidecar.write_bytes(b"transient")
+    sidecar.chmod(0o600)
+    original_identity = ledger_module._read_private_file_identity
+    vanished = False
+
+    def vanish_during_identity(
+        path: Path,
+        *,
+        owner_id: int,
+        file_mode: int,
+    ) -> tuple[int, int] | None:
+        nonlocal vanished
+        if path == sidecar and not vanished:
+            vanished = True
+            path.unlink()
+            raise FileNotFoundError(path)
+        return original_identity(path, owner_id=owner_id, file_mode=file_mode)
+
+    monkeypatch.setattr(
+        ledger_module,
+        "_read_private_file_identity",
+        vanish_during_identity,
+    )
+
+    result = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert vanished
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+
 def test_existing_database_hard_link_fails_closed_without_unlinking(
     tmp_path: Path,
 ) -> None:

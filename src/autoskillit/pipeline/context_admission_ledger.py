@@ -1299,11 +1299,16 @@ class DefaultContextAdmissionLedger:
                     ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
                     "orphan-store-sidecar",
                 )
-            _private_file_identity(
-                sidecar,
-                owner_id=self._authority.expected_owner_id,
-                reason_code="insecure-store-sidecar",
-            )
+            try:
+                _private_file_identity(
+                    sidecar,
+                    owner_id=self._authority.expected_owner_id,
+                    reason_code="insecure-store-sidecar",
+                )
+            except _LedgerOpenError as exc:
+                if isinstance(exc.__cause__, FileNotFoundError):
+                    continue
+                raise
 
     def _connect(self) -> sqlite3.Connection:
         before = self._validate_database_file()

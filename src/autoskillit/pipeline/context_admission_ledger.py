@@ -267,18 +267,13 @@ class DefaultContextAdmissionLedger:
                             ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
                             "stream-key-mismatch",
                         )
-                    try:
-                        persisted_health = _stored_stream_health(
-                            stream_key,
-                            row[5],
-                            row[6],
-                            row[7],
-                        )
-                    except (ContextAdmissionValidationError, ValueError) as exc:
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                            "invalid-stream-health",
-                        ) from exc
+                    persisted_health = _stored_stream_health(
+                        stream_key,
+                        row[5],
+                        row[6],
+                        row[7],
+                        invalid_reason=ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                    )
                     if persisted_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                         _rollback(connection)
                         return ContextAdmissionAccountingResult(
@@ -1545,6 +1540,10 @@ def _stored_stream_health(
     status: object,
     failure_reason: object,
     reason_code: object,
+    *,
+    invalid_reason: ContextAdmissionStorageFailureReason = (
+        ContextAdmissionStorageFailureReason.INTEGRITY
+    ),
 ) -> ContextAdmissionStreamHealth:
     try:
         return ContextAdmissionStreamHealth(
@@ -1559,7 +1558,7 @@ def _stored_stream_health(
         )
     except (ContextAdmissionValidationError, ValueError) as exc:
         raise _LedgerOpenError(
-            ContextAdmissionStorageFailureReason.INTEGRITY,
+            invalid_reason,
             "invalid-stream-health",
         ) from exc
 

@@ -152,11 +152,11 @@ class TestDispatchFoodTruckExecution:
         assert result["token_usage"] == normalize_dispatch_token_usage({"input_tokens": 100})
         assert result["l3_parse_source"] == "stdout"
         dispatch_call = tool_ctx.executor.dispatch_calls[0]
-        assert dispatch_call.capability_contract is not None
-        assert dispatch_call.capability_contract.resolved_command == (
+        assert dispatch_call.capability_preparation is not None
+        assert dispatch_call.capability_preparation.resolved_command == (
             dispatch_call.orchestrator_prompt
         )
-        assert dispatch_call.capability_contract.cwd == str(tool_ctx.project_dir.resolve())
+        assert dispatch_call.capability_preparation.cwd == tool_ctx.project_dir.resolve()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_on_spawn_writes_pid(self, tool_ctx, monkeypatch):

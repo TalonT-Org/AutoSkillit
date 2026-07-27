@@ -653,6 +653,14 @@ def test_runtime_binding_digest_attests_mcp_values_and_preflight_evidence() -> N
         actual_mcp_kwargs={"cwd": "/repo", "output_dir": "/output/b"},
         preflight=preflight,
     )
+    changed_bound_inputs_digest = compute_runtime_binding_digest(
+        execution_id="execution-1",
+        step_name="dry",
+        template_digest=_HASH_A,
+        bound_inputs=(("plan_path", "/plans/changed.md"),),
+        actual_mcp_kwargs={"cwd": "/repo", "output_dir": "/output/a"},
+        preflight=preflight,
+    )
     changed_evidence_digest = compute_runtime_binding_digest(
         execution_id="execution-1",
         step_name="dry",
@@ -666,6 +674,7 @@ def test_runtime_binding_digest_attests_mcp_values_and_preflight_evidence() -> N
     )
 
     assert digest != changed_mcp_digest
+    assert digest != changed_bound_inputs_digest
     assert digest != changed_evidence_digest
 
 

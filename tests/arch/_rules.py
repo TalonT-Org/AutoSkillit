@@ -140,6 +140,9 @@ _STRENUM_COMPARE_EXEMPT_FILES: frozenset[str] = frozenset(
         "test_sidecar_synthesis_terminal_guard.py",  # L3ParseResult.outcome: Literal[...]
         "test_verdict_dispatch_chain.py",  # L3ParseResult.outcome: Literal[...]
         "test_helpers_exports.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
+        # CodexLimitVerificationDef.status: Literal[...], not StrEnum
+        "test_codex_limit_verification.py",
+        "test_codex_limit_findings_are_recorded.py",
     }
 )
 
@@ -155,6 +158,9 @@ _STRENUM_SRC_COMPARE_EXEMPT_PATHS: frozenset[str] = frozenset(
         "fleet/_checkpoint_bridge.py",  # IssueSidecarEntry.status: Literal[...], not StrEnum
         "fleet/_outcome.py",  # classify_dispatch_outcome: Literal comparisons
         "fleet/_sidecar_synthesis.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
+        # CodexLimitVerificationDef.status: CodexLimitVerificationStatus = Literal[...],
+        # not StrEnum
+        "execution/backends/_codex_config.py",
     }
 )
 

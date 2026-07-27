@@ -119,6 +119,17 @@ damage bound, not the current call's outer result selector, and does not make
 `develop`, not the repository's default branch, `main`. Closure must therefore be
 recorded explicitly in the issue body.
 
+Issue #4369 re-verified both governed limits against upstream `rust-v0.145.0` (see
+Forward Obligations, below). Two claims in the "Numeric Limits and Rationale" table
+above are superseded by that re-verification: `CODEX_HISTORY_RETENTION_TOKEN_LIMIT`'s
+"does not select the current outer result" framing incorrectly implied `tool_output_token_limit`
+only governs later-stored history — it also governs the current turn's tool output,
+per `CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_HISTORY_RETENTION_TOKEN_LIMIT"]`
+(`execution/backends/_codex_config.py`); and `CODEX_AUTO_COMPACT_LIMIT`'s "unreachable
+sentinel" framing no longer holds, since `ModelInfo::auto_compact_token_limit()` clamps
+it to 90% of the resolved context window (244,800 for gpt-5.6-sol), per
+`CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_AUTO_COMPACT_LIMIT"]`.
+
 ## Accepted Gaps
 
 1. Non-JSONL single-file searches and arbitrary shell verbs (`python -c` file dumps,
@@ -198,7 +209,13 @@ insertion control, not a measurement of remaining context.
   (`CODEX_HISTORY_RETENTION_TOKEN_LIMIT`), and auto-compact sentinel
   (`CODEX_AUTO_COMPACT_LIMIT`) against the upstream registry AND observed session
   windows, then bump `CODEX_LIMITS_LAST_VERIFIED_VERSION`. Doctor Check 39
-  (`codex_limits_verified`) mechanizes the reminder. Issue #4280's investigation
+  (`codex_limits_verified`) mechanizes the reminder. `CODEX_LIMIT_VERIFICATION_REGISTRY`
+  is the durable, machine-readable record of what was checked and found;
+  `CODEX_LIMITS_LAST_VERIFIED_VERSION` is derived from it as the minimum
+  `checked_at_cli_version` across its entries. At codex-cli 0.145.0,
+  `CODEX_AUTO_COMPACT_LIMIT` was found neutralized upstream:
+  `ModelInfo::auto_compact_token_limit()` clamps it to 90% of the resolved context
+  window, an effective threshold of 244,800 for gpt-5.6-sol. Issue #4280's investigation
   found upstream models.json (post-0.144.1) listing gpt-5.6-sol at 372,000 tokens
   vs 258,400 in cli 0.144.1, but the effective window is server/catalog-controlled
   and oscillated during July 2026 (openai/codex#31860, #32806) — re-verify, do not
@@ -212,10 +229,12 @@ insertion control, not a measurement of remaining context.
   files.
 - openai/codex#33881: agent-TOML `model`/`model_reasoning_effort` reportedly ignored
   on 0.144.5 — affects the pins `_generate_agent_tomls` writes.
-- Upstream auto-compact semantics are scope-dependent
-  (`model_auto_compact_token_limit` is consulted only under `BodyAfterPrefix` scope;
-  a separate full-context-window trigger ignores it) — re-verify
-  `CODEX_AUTO_COMPACT_LIMIT`'s disabling effect per upgrade.
+- Upstream auto-compact semantics: `model_auto_compact_token_limit` is consulted
+  directly only under the non-default `BodyAfterPrefix` scope; the default scope is
+  `Total`, under which the trigger uses `ModelInfo::auto_compact_token_limit()`, which
+  clamps the configured value to 90% of the resolved context window. The practical
+  mechanism is the clamp, not a separate trigger — re-verify `CODEX_AUTO_COMPACT_LIMIT`'s
+  disabling effect per upgrade.
 
 ## Consequences
 

@@ -273,10 +273,11 @@ class TestCIWorkflow:
         matrix_steps = [s for s in steps if s.get("id") == "set-matrix"]
         assert len(matrix_steps) == 1
         run = str(matrix_steps[0].get("run", ""))
-        assert "ubuntu-latest" in run
-        assert "macos-15" in run
-        assert "github.base_ref" not in run and "github.ref" not in run, (
-            "macOS coverage must not be conditional on a stable-branch context"
+        assert run.strip() == (
+            'echo \'matrix=["ubuntu-latest","macos-15"]\' >> "$GITHUB_OUTPUT"'
+        ), (
+            "preflight must emit exactly the supported Linux/macOS matrix, "
+            "without conditional branches or additional platforms"
         )
 
     def test_ci_push_trigger_includes_stable(self) -> None:

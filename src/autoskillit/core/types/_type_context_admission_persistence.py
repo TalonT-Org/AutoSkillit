@@ -664,7 +664,7 @@ class ContextAdmissionInspectionResult:
             len(self.effects),
             len(self.shadows),
         }
-        if len(lengths) != 1:
+        if len(lengths) != 1 or lengths != {self.latest_journal_sequence}:
             raise ValueError("inspection_publication_length_mismatch")
 
 

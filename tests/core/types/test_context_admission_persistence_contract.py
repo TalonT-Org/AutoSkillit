@@ -764,6 +764,24 @@ def test_inspection_result_rejects_mismatched_stream_health_identity() -> None:
         )
 
 
+def test_inspection_result_ties_publications_to_latest_sequence() -> None:
+    key = _stream_key()
+    with pytest.raises(ValueError, match="inspection_publication_length_mismatch"):
+        ContextAdmissionInspectionResult(
+            stream_key=key,
+            health=ContextAdmissionStreamHealth(
+                key,
+                ContextAdmissionStorageHealthStatus.HEALTHY,
+            ),
+            state=_uninitialized(),
+            events=(),
+            decisions=(),
+            effects=(),
+            shadows=(),
+            latest_journal_sequence=1,
+        )
+
+
 def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:
     with pytest.raises(ValueError, match="nonadmitting"):
         ContextAdmissionAccountingResult(

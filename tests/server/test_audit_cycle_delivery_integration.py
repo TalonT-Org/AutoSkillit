@@ -833,6 +833,7 @@ def test_audit_publication_rejects_tampered_referenced_artifact(
 
 def test_successful_audit_result_publishes_protected_successor_identity(
     tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     snapshot = build_recipe_execution_snapshot(
         recipe_name="demo",
@@ -855,7 +856,7 @@ def test_successful_audit_result_publishes_protected_successor_identity(
     authority_path.write_bytes(authority.canonical_bytes)
     result = SkillResult(
         success=True,
-        result=f"audit_cycle_path = {authority_path}",
+        result=f"authority_file = {authority_path}",
         session_id="audit-session",
         subtype="success",
         is_error=False,
@@ -863,12 +864,34 @@ def test_successful_audit_result_publishes_protected_successor_identity(
         needs_retry=False,
         retry_reason=RetryReason.NONE,
         stderr="",
-        outcome_fields={"audit_cycle_path": str(authority_path)},
+        outcome_fields={"authority_file": str(authority_path)},
+    )
+    monkeypatch.setattr(
+        recipe_execution_module,
+        "load_bundled_manifest",
+        lambda: {
+            "skills": {
+                "renamed-auditor": {
+                    "audit_authority_publication": {
+                        "output_field": "authority_file",
+                        "prior_input_field": "previous_authority",
+                    },
+                    "inputs": [
+                        {
+                            "name": "previous_authority",
+                            "type": "file_path",
+                            "required": False,
+                        }
+                    ],
+                    "outputs": [{"name": "authority_file", "type": "file_path"}],
+                }
+            }
+        },
     )
 
     publish_audit_cycle_result(
         tool_ctx_kitchen_open,
-        "audit-impl",
+        "renamed-auditor",
         result,
         installed,
         (),

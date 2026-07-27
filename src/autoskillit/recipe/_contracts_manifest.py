@@ -20,6 +20,7 @@ from autoskillit.recipe._contracts_types import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,
+    AuditAuthorityPublicationSpec,
     OutcomeInvariantEntry,
     ResultFieldSpec,
     SkillContract,
@@ -118,6 +119,27 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             )
         success_qualifiers.append(SuccessQualifierEntry(when=w, qualifier=q))
 
+    authority_data = skill_data.get("audit_authority_publication")
+    authority_publication = None
+    if authority_data is not None:
+        output_field = authority_data.get("output_field", "")
+        prior_input_field = authority_data.get("prior_input_field", "")
+        input_names = {item.name for item in inputs}
+        if output_field not in output_names:
+            raise ValueError(
+                f"audit_authority_publication references undeclared output "
+                f"'{output_field}' in skill '{skill_name}'"
+            )
+        if prior_input_field not in input_names:
+            raise ValueError(
+                f"audit_authority_publication references undeclared input "
+                f"'{prior_input_field}' in skill '{skill_name}'"
+            )
+        authority_publication = AuditAuthorityPublicationSpec(
+            output_field=output_field,
+            prior_input_field=prior_input_field,
+        )
+
     return SkillContract(
         inputs=inputs,
         outputs=outputs,
@@ -131,6 +153,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         outcome_invariants=outcome_invariants,
         success_qualifiers=success_qualifiers,
         input_preflight=skill_data.get("input_preflight"),
+        audit_authority_publication=authority_publication,
     )
 
 

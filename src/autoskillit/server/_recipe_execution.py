@@ -656,15 +656,20 @@ def publish_audit_cycle_result(
     bound_inputs: tuple[tuple[str, BoundScalar], ...],
 ) -> None:
     """Publish a successful attested audit child's declared authority."""
-    if not skill_result.success or target_name != "audit-impl" or installed is None:
+    if not skill_result.success or target_name is None or installed is None:
         return
-    authority_path = (skill_result.outcome_fields or {}).get("audit_cycle_path")
+    contract = get_skill_contract(target_name, load_bundled_manifest())
+    publication = contract.audit_authority_publication if contract is not None else None
+    if publication is None:
+        return
+    authority_path = (skill_result.outcome_fields or {}).get(publication.output_field)
     if not isinstance(authority_path, str) or not authority_path:
         raise RecipeExecutionAdmissionError(
             "recipe_execution_audit_output_missing",
-            "successful audit-impl result did not declare a valid audit_cycle_path",
+            "successful authority-producing skill result did not declare "
+            f"a valid {publication.output_field}",
         )
-    prior_authority_path = dict(bound_inputs).get("prior_audit_cycle_path")
+    prior_authority_path = dict(bound_inputs).get(publication.prior_input_field)
     publish_reported_audit_cycle(
         tool_ctx,
         authority_path=authority_path,

@@ -839,6 +839,14 @@ def compute_skill_contract_identity(
         raise ValueError(f"skill contract is unavailable for {skill_name!r}")
     payload = json.dumps(
         {
+            "audit_authority_publication": (
+                {
+                    "output_field": contract.audit_authority_publication.output_field,
+                    "prior_input_field": (contract.audit_authority_publication.prior_input_field),
+                }
+                if contract.audit_authority_publication is not None
+                else None
+            ),
             "completion_required": contract.completion_required,
             "input_preflight": contract.input_preflight,
             "inputs": [

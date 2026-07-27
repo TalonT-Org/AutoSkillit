@@ -422,6 +422,9 @@ skills:
     inputs: []
     outputs: []
   audit-impl:
+    audit_authority_publication:
+      output_field: audit_cycle_path
+      prior_input_field: prior_audit_cycle_path
     inputs:
     - name: all_plan_paths
       type: file_path_list

@@ -606,6 +606,10 @@ def test_sc1_audit_impl_has_real_inputs_and_outputs() -> None:
     assert verdict_out["type"] == "string"
     remediation_out = next(o for o in audit_impl["outputs"] if o["name"] == "remediation_path")
     assert remediation_out["type"] == "file_path"
+    assert audit_impl["audit_authority_publication"] == {
+        "output_field": "audit_cycle_path",
+        "prior_input_field": "prior_audit_cycle_path",
+    }
 
 
 def test_sc2_resolve_failures_declares_verdict_output() -> None:

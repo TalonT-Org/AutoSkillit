@@ -68,6 +68,12 @@ class SuccessQualifierEntry:
     qualifier: str
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class AuditAuthorityPublicationSpec:
+    output_field: str
+    prior_input_field: str
+
+
 @dataclasses.dataclass
 class SkillContract:
     inputs: tuple[SkillInput, ...]
@@ -82,6 +88,7 @@ class SkillContract:
     outcome_invariants: list[OutcomeInvariantEntry] = dataclasses.field(default_factory=list)
     success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
     input_preflight: str | None = None
+    audit_authority_publication: AuditAuthorityPublicationSpec | None = None
 
     def __post_init__(self) -> None:
         if self.input_preflight is None:

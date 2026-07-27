@@ -9,6 +9,7 @@ IL-1 pipeline state — per-tool-call state containers, gate logic, audit log, t
 | `__init__.py` | Re-exports public protocol implementations |
 | `audit.py` | `FailureRecord`, `DefaultAuditLog` |
 | `background.py` | `DefaultBackgroundSupervisor` |
+| `_context_admission_recovery.py` | Bounded SQLite recovery reads and envelope preflight validation |
 | `_context_admission_storage.py` | Low-level private-file identity, fsync, and initialization-link recovery |
 | `context.py` | `ToolContext` DI container |
 | `context_admission_ledger.py` | Crash-safe SQLite journal, recovery, and shadow projections for context admission |

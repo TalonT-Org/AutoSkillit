@@ -224,6 +224,8 @@ def validate_codex_limit_verification(entry: CodexLimitVerificationDef, *, key: 
                 f"{key}: status locally_unreachable requires upstream_effective_value, "
                 "configured_value, and codex_config_key to all be None"
             )
+    else:
+        raise ValueError(f"{key}: unrecognized status {entry.status!r}")
 
 
 CODEX_LIMIT_VERIFICATION_REGISTRY: Mapping[str, CodexLimitVerificationDef] = MappingProxyType(

@@ -1633,7 +1633,11 @@ async def run_skill(
 
                 if skill_result.success:
                     _publish_audit_result(
-                        tool_ctx, target_name, skill_result, _installed_execution
+                        tool_ctx,
+                        target_name,
+                        skill_result,
+                        _installed_execution,
+                        _bound_recipe_inputs,
                     )
                     tool_ctx.audit.record_success(skill_command)
                     clear_run_skill_state(tool_ctx.project_dir)

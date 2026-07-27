@@ -596,18 +596,49 @@ def publish_reported_audit_cycle(
     tool_ctx: ToolContext,
     *,
     authority_path: str,
+    prior_authority_path: str | None,
 ) -> AuditCycleHead:
     """Verify and publish the authority path reported by a successful audit child."""
     installed = get_recipe_execution(tool_ctx)
     if installed is None:
         raise AuditCycleHeadConflict("no active recipe execution")
-    authority = AuditCycleVerifier(tool_ctx.temp_dir).load_authority(authority_path)
-    current = installed.audit_cycle_heads.get(
-        execution_generation=authority.execution_generation,
-        plan_set_id=authority.plan_set_id,
-        scope_id=authority.scope_id,
-        part_id=authority.part_id,
-    )
+    verifier = AuditCycleVerifier(tool_ctx.temp_dir)
+    authority = verifier.load_authority(authority_path)
+    if prior_authority_path:
+        prior = verifier.load_authority(prior_authority_path)
+        if (
+            authority.execution_generation,
+            authority.cycle_id,
+            authority.plan_set_id,
+            authority.scope_id,
+            authority.part_id,
+        ) != (
+            prior.execution_generation,
+            prior.cycle_id,
+            prior.plan_set_id,
+            prior.scope_id,
+            prior.part_id,
+        ):
+            raise AuditCycleHeadConflict(
+                "reported authority identity differs from its attested prior authority"
+            )
+        current = installed.audit_cycle_heads.get(
+            execution_generation=prior.execution_generation,
+            plan_set_id=prior.plan_set_id,
+            scope_id=prior.scope_id,
+            part_id=prior.part_id,
+        )
+        if current is None or current.current_authority_digest != prior.authority_digest:
+            raise AuditCycleHeadConflict(
+                "attested prior authority is not the trusted current head"
+            )
+    else:
+        current = installed.audit_cycle_heads.get(
+            execution_generation=authority.execution_generation,
+            plan_set_id=authority.plan_set_id,
+            scope_id=authority.scope_id,
+            part_id=authority.part_id,
+        )
     return _publish_loaded_audit_cycle(
         tool_ctx,
         installed=installed,
@@ -622,6 +653,7 @@ def publish_audit_cycle_result(
     target_name: str | None,
     skill_result: SkillResult,
     installed: InstalledRecipeExecution | None,
+    bound_inputs: tuple[tuple[str, BoundScalar], ...],
 ) -> None:
     """Publish a successful attested audit child's declared authority."""
     if not skill_result.success or target_name != "audit-impl" or installed is None:
@@ -632,4 +664,13 @@ def publish_audit_cycle_result(
             "recipe_execution_audit_output_missing",
             "successful audit-impl result did not declare a valid audit_cycle_path",
         )
-    publish_reported_audit_cycle(tool_ctx, authority_path=authority_path)
+    prior_authority_path = dict(bound_inputs).get("prior_audit_cycle_path")
+    publish_reported_audit_cycle(
+        tool_ctx,
+        authority_path=authority_path,
+        prior_authority_path=(
+            prior_authority_path
+            if isinstance(prior_authority_path, str) and prior_authority_path
+            else None
+        ),
+    )

@@ -71,6 +71,7 @@ from autoskillit.server._recipe_execution import (
     get_recipe_execution,
     install_recipe_execution,
     publish_audit_cycle_result,
+    publish_reported_audit_cycle,
     publish_verified_audit_cycle,
     record_runtime_binding_digest,
 )
@@ -182,6 +183,7 @@ def _authority(
     round_: int,
     parent: str | None,
     verdict: AuditVerdict,
+    plan_set_id: str = "plans-1",
     part_id: str = "part-a",
     materialize: bool = False,
 ) -> AuditCycleAuthority:
@@ -221,7 +223,7 @@ def _authority(
     return AuditCycleAuthority.create(
         execution_generation=generation,
         cycle_id="cycle-1",
-        plan_set_id="plans-1",
+        plan_set_id=plan_set_id,
         scope_id="scope-1",
         part_id=part_id,
         audit_round=round_,
@@ -869,6 +871,7 @@ def test_successful_audit_result_publishes_protected_successor_identity(
         "audit-impl",
         result,
         installed,
+        (),
     )
 
     installed = get_recipe_execution(tool_ctx_kitchen_open)
@@ -877,6 +880,72 @@ def test_successful_audit_result_publishes_protected_successor_identity(
         authority.plan_set_id,
         authority.scope_id,
         authority.part_id,
+    )
+
+
+def test_reported_audit_cycle_cannot_replace_attested_prior_lineage(
+    tool_ctx_kitchen_open,
+) -> None:
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    root = Path(tool_ctx_kitchen_open.temp_dir)
+    prior = _authority(
+        root,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.NO_GO,
+        materialize=True,
+    )
+    prior_path = root / "prior-authority.json"
+    prior_path.write_bytes(prior.canonical_bytes)
+    publish_verified_audit_cycle(
+        tool_ctx_kitchen_open,
+        authority_path=str(prior_path),
+        expected_parent_digest=None,
+        expected_round=0,
+    )
+    unrelated = _authority(
+        root,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.NO_GO,
+        plan_set_id="plans-unrelated",
+        materialize=True,
+    )
+    unrelated_path = root / "unrelated-authority.json"
+    unrelated_path.write_bytes(unrelated.canonical_bytes)
+
+    with pytest.raises(AuditCycleHeadConflict, match="attested prior authority"):
+        publish_reported_audit_cycle(
+            tool_ctx_kitchen_open,
+            authority_path=str(unrelated_path),
+            prior_authority_path=str(prior_path),
+        )
+
+    current = installed.audit_cycle_heads.get(
+        execution_generation=prior.execution_generation,
+        plan_set_id=prior.plan_set_id,
+        scope_id=prior.scope_id,
+        part_id=prior.part_id,
+    )
+    assert current is not None
+    assert current.current_authority_digest == prior.authority_digest
+    assert (
+        installed.audit_cycle_heads.get(
+            execution_generation=unrelated.execution_generation,
+            plan_set_id=unrelated.plan_set_id,
+            scope_id=unrelated.scope_id,
+            part_id=unrelated.part_id,
+        )
+        is None
     )
 
 

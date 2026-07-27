@@ -219,6 +219,34 @@ def test_recovery_fails_closed_on_orphaned_foreign_key_rows(tmp_path: Path) -> N
     assert recovered.store_health.reason_code == "sqlite-foreign-key-check-failed"
 
 
+def test_stream_key_decoder_enforces_byte_and_nesting_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    encoded = ledger_module._stream_key_bytes(stream_key())
+    monkeypatch.setattr(ledger_module, "_MAX_STREAM_KEY_BYTES", len(encoded) - 1)
+    with pytest.raises(RuntimeError, match="invalid-stream-key"):
+        ledger_module._decode_stream_key(encoded)
+
+    monkeypatch.setattr(ledger_module, "_MAX_STREAM_KEY_BYTES", 16 * 1024)
+    deeply_nested = b'{"nested":' + (b"[" * 17) + b"null" + (b"]" * 17) + b"}"
+    with pytest.raises(RuntimeError, match="invalid-stream-key"):
+        ledger_module._decode_stream_key(deeply_nested)
+
+
+def test_stream_key_decoder_normalizes_recursive_json_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    encoded = ledger_module._stream_key_bytes(stream_key())
+
+    def raise_recursion(_value: str) -> object:
+        raise RecursionError
+
+    monkeypatch.setattr(ledger_module.json, "loads", raise_recursion)
+
+    with pytest.raises(RuntimeError, match="invalid-stream-key"):
+        ledger_module._decode_stream_key(encoded)
+
+
 def test_store_path_uri_metacharacters_are_percent_encoded(tmp_path: Path) -> None:
     authority = ContextAdmissionStoreAuthority(
         database_path=(tmp_path / "context?admission#literal" / "ledger%literal.sqlite3"),

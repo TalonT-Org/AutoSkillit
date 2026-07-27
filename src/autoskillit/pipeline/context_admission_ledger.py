@@ -118,6 +118,8 @@ _SQLITE_RECOVERY_CODES: Final = frozenset(
         sqlite3.SQLITE_NOMEM,
     }
 )
+_MAX_STREAM_KEY_BYTES: Final = 16 * 1024
+_MAX_STREAM_KEY_JSON_NESTING: Final = 16
 _EVENT_TYPES: Final = get_args(ContextAdmissionEvent)
 _EFFECT_TYPES: Final = get_args(AdmissionEffect)
 _STATE_TYPES: Final = get_args(ContextAdmissionState)
@@ -1365,9 +1367,10 @@ def _decode_state(value: bytes) -> ContextAdmissionState:
 
 
 def _decode_stream_key(value: bytes) -> ContextAdmissionStreamKey:
+    _validate_stream_key_json_bounds(value)
     try:
         raw = json.loads(value.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
             "invalid-stream-key",
@@ -1390,6 +1393,42 @@ def _decode_stream_key(value: bytes) -> ContextAdmissionStreamKey:
             "noncanonical-stream-key",
         )
     return stream_key
+
+
+def _validate_stream_key_json_bounds(value: bytes) -> None:
+    if not value or len(value) > _MAX_STREAM_KEY_BYTES:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+            "invalid-stream-key",
+        )
+    depth = 0
+    in_string = False
+    escaped = False
+    for character in value:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == ord("\\"):
+                escaped = True
+            elif character == ord('"'):
+                in_string = False
+            continue
+        if character == ord('"'):
+            in_string = True
+        elif character in {ord("{"), ord("[")}:
+            depth += 1
+            if depth > _MAX_STREAM_KEY_JSON_NESTING:
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+                    "invalid-stream-key",
+                )
+        elif character in {ord("}"), ord("]")}:
+            depth -= 1
+            if depth < 0:
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+                    "invalid-stream-key",
+                )
 
 
 def _stored_stream_health(

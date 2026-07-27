@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import regex as re
+
 from autoskillit.core import atomic_write, run_gh
 
 _INVESTIGATION_HEADING = "## Investigation"
 _RECOMMENDATIONS_HEADING = "## Recommendations"
+_INVESTIGATION_HEADING_RE = re.compile(r"^" + re.escape(_INVESTIGATION_HEADING), re.MULTILINE)
+_RECOMMENDATIONS_HEADING_RE = re.compile(r"^" + re.escape(_RECOMMENDATIONS_HEADING), re.MULTILINE)
 
 
 def extract_investigation(
@@ -25,7 +29,7 @@ def extract_investigation(
     """
     if investigation_path and Path(investigation_path).is_file():
         content = Path(investigation_path).read_text()
-        if _RECOMMENDATIONS_HEADING not in content:
+        if _RECOMMENDATIONS_HEADING_RE.search(content) is None:
             raise ValueError(
                 f"investigation_path file lacks '{_RECOMMENDATIONS_HEADING}' heading: "
                 f"{investigation_path}"
@@ -49,15 +53,15 @@ def extract_investigation(
         )
 
     body = gh_result.stdout
-    idx = body.find(_INVESTIGATION_HEADING)
-    if idx < 0:
+    heading_match = _INVESTIGATION_HEADING_RE.search(body)
+    if heading_match is None:
         raise ValueError(
             f"no '{_INVESTIGATION_HEADING}' section found in issue {issue_number} body"
         )
 
-    extracted = body[idx + len(_INVESTIGATION_HEADING) :]
+    extracted = body[heading_match.end() :]
 
-    if _RECOMMENDATIONS_HEADING not in extracted:
+    if _RECOMMENDATIONS_HEADING_RE.search(extracted) is None:
         raise ValueError(
             f"extracted '{_INVESTIGATION_HEADING}' section lacks "
             f"'{_RECOMMENDATIONS_HEADING}' heading — investigation report is truncated"

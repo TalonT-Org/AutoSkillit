@@ -3680,7 +3680,7 @@ def test_check_review_posted_in_smoke_utils_all():
 
 
 # ---------------------------------------------------------------------------
-# T_EI1–T_EI6: extract_investigation
+# T_EI1–T_EI8: extract_investigation
 # ---------------------------------------------------------------------------
 
 
@@ -3803,4 +3803,51 @@ def test_extract_investigation_gh_failure_raises(mock_run_gh, tmp_path: Path) ->
             investigation_path="",
             issue_number="42",
             output_dir=str(tmp_path),
+        )
+
+
+@patch("autoskillit.smoke_utils._investigation.run_gh")
+def test_extract_investigation_ignores_h3_investigation_decoy(mock_run_gh, tmp_path: Path) -> None:
+    """A decoy '### Investigation' subsection must not be mistaken for the real heading."""
+
+    body = (
+        "Preamble.\n"
+        "### Investigation\n"
+        "Decoy sub-subsection text, not the real heading.\n"
+        "\n"
+        "## Investigation\n"
+        "## Summary\n"
+        "Summary content.\n"
+        "## Recommendations\n"
+        "Recommendation content.\n"
+    )
+    mock_run_gh.return_value = subprocess.CompletedProcess([], 0, body, "")
+    out_dir = tmp_path / "investigate"
+    result = extract_investigation(
+        investigation_path="",
+        issue_number="42",
+        output_dir=str(out_dir),
+    )
+    written = Path(result["investigation_report"]).read_text()
+    assert "Decoy sub-subsection text" not in written
+    assert "## Summary" in written
+    assert "Summary content." in written
+
+
+def test_extract_investigation_passthrough_rejects_h3_recommendations_decoy(
+    tmp_path: Path,
+) -> None:
+    """A decoy '### Recommendations' heading must not satisfy the completeness check."""
+
+    truncated = tmp_path / "investigation_truncated.md"
+    truncated.write_text(
+        "<!-- investigation_complete: true -->\n"
+        "> Prior investigation completed interactively.\n"
+        "### Recommendations for future work (not a real section)\n"
+    )
+    with pytest.raises(ValueError, match="Recommendations"):
+        extract_investigation(
+            investigation_path=str(truncated),
+            issue_number="42",
+            output_dir=str(tmp_path / "unused"),
         )

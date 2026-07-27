@@ -86,6 +86,25 @@ from autoskillit.core import (
     make_stored_context_admission_envelope,
 )
 
+from ._context_admission_storage import (
+    SCHEMA_SQL as _SCHEMA_SQL,
+)
+from ._context_admission_storage import (
+    fsync_directory as _fsync_directory,
+)
+from ._context_admission_storage import (
+    fsync_file as _fsync_file,
+)
+from ._context_admission_storage import (
+    private_file_identity as _read_private_file_identity,
+)
+from ._context_admission_storage import (
+    reconcile_initialization_links,
+)
+from ._context_admission_storage import (
+    unlink_initialization_artifact as _unlink_initialization_artifact,
+)
+
 _SCHEMA_VERSION: Final = 1
 _DATABASE_MODE: Final = 0o600
 _DIRECTORY_MODE: Final = 0o700
@@ -1056,11 +1075,16 @@ class DefaultContextAdmissionLedger:
             os.chmod(temporary_path, _DATABASE_MODE)
             _fsync_file(temporary_path)
             os.link(temporary_path, self._path, follow_symlinks=False)
-            os.unlink(temporary_path)
+            _unlink_initialization_artifact(temporary_path)
             _fsync_directory(self._path.parent)
             self._validate_database_file()
         except FileExistsError as exc:
             if self._path.exists():
+                deadline = time.monotonic() + (self._busy_timeout_ms / 1_000)
+                while self._has_initialization_link():
+                    if time.monotonic() >= deadline:
+                        raise _LedgerContended from exc
+                    time.sleep(min(0.005, max(0.0, deadline - time.monotonic())))
                 self._validate_database_file()
                 return
             raise _LedgerOpenError(
@@ -1078,51 +1102,20 @@ class DefaultContextAdmissionLedger:
             _unlink_initialization_artifact(temporary_path)
 
     def _recover_initialization_link(self) -> None:
-        directory_fd: int | None = None
-        removed = False
+        deadline = time.monotonic() + (self._busy_timeout_ms / 1_000)
         try:
-            directory_fd = os.open(
-                self._path.parent,
-                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-            )
-            database_stat = os.stat(
-                self._path.name,
-                dir_fd=directory_fd,
-                follow_symlinks=False,
-            )
-            if (
-                not stat.S_ISREG(database_stat.st_mode)
-                or stat.S_ISLNK(database_stat.st_mode)
-                or database_stat.st_uid != self._authority.expected_owner_id
-                or stat.S_IMODE(database_stat.st_mode) != _DATABASE_MODE
-                or database_stat.st_nlink <= 1
-            ):
+            while self._has_initialization_link():
+                if time.monotonic() < deadline:
+                    time.sleep(min(0.005, max(0.0, deadline - time.monotonic())))
+                    continue
+                if reconcile_initialization_links(
+                    self._path,
+                    owner_id=self._authority.expected_owner_id,
+                    file_mode=_DATABASE_MODE,
+                    remove=True,
+                ):
+                    _fsync_directory(self._path.parent)
                 return
-            prefix = f".{self._path.name}."
-            suffix = ".tmp"
-            for name in os.listdir(directory_fd):
-                if not name.startswith(prefix) or not name.endswith(suffix):
-                    continue
-                token = name[len(prefix) : -len(suffix)]
-                if len(token) != 24 or any(
-                    character not in "0123456789abcdef" for character in token
-                ):
-                    continue
-                candidate_stat = os.stat(
-                    name,
-                    dir_fd=directory_fd,
-                    follow_symlinks=False,
-                )
-                if (
-                    stat.S_ISREG(candidate_stat.st_mode)
-                    and not stat.S_ISLNK(candidate_stat.st_mode)
-                    and candidate_stat.st_dev == database_stat.st_dev
-                    and candidate_stat.st_ino == database_stat.st_ino
-                    and candidate_stat.st_uid == self._authority.expected_owner_id
-                    and stat.S_IMODE(candidate_stat.st_mode) == _DATABASE_MODE
-                ):
-                    os.unlink(name, dir_fd=directory_fd)
-                    removed = True
         except (FileNotFoundError, NotADirectoryError):
             return
         except OSError as exc:
@@ -1130,11 +1123,14 @@ class DefaultContextAdmissionLedger:
                 ContextAdmissionStorageFailureReason.IO,
                 "store-initialization-link-recovery-failed",
             ) from exc
-        finally:
-            if directory_fd is not None:
-                os.close(directory_fd)
-        if removed:
-            _fsync_directory(self._path.parent)
+
+    def _has_initialization_link(self) -> bool:
+        return reconcile_initialization_links(
+            self._path,
+            owner_id=self._authority.expected_owner_id,
+            file_mode=_DATABASE_MODE,
+            remove=False,
+        )
 
     def _ensure_private_parent(self) -> None:
         parent = self._path.parent
@@ -2110,57 +2106,22 @@ def _private_file_identity(
     reason_code: str,
 ) -> tuple[int, int]:
     try:
-        path_stat = path.lstat()
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-        try:
-            descriptor_stat = os.fstat(descriptor)
-        finally:
-            os.close(descriptor)
+        identity = _read_private_file_identity(
+            path,
+            owner_id=owner_id,
+            file_mode=_DATABASE_MODE,
+        )
     except OSError as exc:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
             reason_code,
         ) from exc
-    if (
-        not stat.S_ISREG(path_stat.st_mode)
-        or stat.S_ISLNK(path_stat.st_mode)
-        or path_stat.st_uid != owner_id
-        or stat.S_IMODE(path_stat.st_mode) != _DATABASE_MODE
-        or path_stat.st_nlink != 1
-        or (path_stat.st_dev, path_stat.st_ino) != (descriptor_stat.st_dev, descriptor_stat.st_ino)
-    ):
+    if identity is None:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
             reason_code,
         )
-    return path_stat.st_dev, path_stat.st_ino
-
-
-def _fsync_file(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _fsync_directory(path: Path) -> None:
-    descriptor = os.open(
-        path,
-        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-    )
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _unlink_initialization_artifact(path: Path) -> None:
-    for candidate in (path, Path(f"{path}-journal")):
-        try:
-            candidate.unlink(missing_ok=True)
-        except OSError:
-            pass
+    return identity
 
 
 def _rollback(connection: sqlite3.Connection) -> None:
@@ -2176,56 +2137,5 @@ def _sqlite_primary_code(error: sqlite3.Error) -> int | None:
     code = getattr(error, "sqlite_errorcode", None)
     return code & _SQLITE_PRIMARY_MASK if isinstance(code, int) else None
 
-
-_SCHEMA_SQL = """
-CREATE TABLE metadata (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-) STRICT;
-CREATE TABLE streams (
-    stream_id BLOB PRIMARY KEY,
-    stream_key BLOB NOT NULL UNIQUE,
-    genesis_envelope BLOB NOT NULL,
-    state_envelope BLOB NOT NULL,
-    aggregate_revision INTEGER NOT NULL,
-    admission_sequence INTEGER NOT NULL,
-    latest_journal_sequence INTEGER NOT NULL,
-    health_status TEXT NOT NULL,
-    failure_reason TEXT,
-    reason_code TEXT
-) STRICT;
-CREATE TABLE journal_events (
-    stream_id BLOB NOT NULL,
-    journal_sequence INTEGER NOT NULL,
-    event_id TEXT NOT NULL,
-    event_envelope BLOB NOT NULL,
-    decision_envelope BLOB NOT NULL,
-    expected_revision INTEGER NOT NULL,
-    prior_aggregate_revision INTEGER NOT NULL,
-    prior_admission_sequence INTEGER NOT NULL,
-    resulting_aggregate_revision INTEGER NOT NULL,
-    resulting_admission_sequence INTEGER NOT NULL,
-    PRIMARY KEY (stream_id, journal_sequence),
-    UNIQUE (stream_id, event_id),
-    FOREIGN KEY (stream_id) REFERENCES streams(stream_id)
-) STRICT;
-CREATE TABLE effect_outbox (
-    stream_id BLOB NOT NULL,
-    journal_sequence INTEGER NOT NULL,
-    effect_ordinal INTEGER NOT NULL,
-    effect_envelope BLOB NOT NULL,
-    PRIMARY KEY (stream_id, journal_sequence, effect_ordinal),
-    FOREIGN KEY (stream_id, journal_sequence)
-        REFERENCES journal_events(stream_id, journal_sequence)
-) STRICT;
-CREATE TABLE shadow_decisions (
-    stream_id BLOB NOT NULL,
-    journal_sequence INTEGER NOT NULL,
-    shadow_envelope BLOB NOT NULL,
-    PRIMARY KEY (stream_id, journal_sequence),
-    FOREIGN KEY (stream_id, journal_sequence)
-        REFERENCES journal_events(stream_id, journal_sequence)
-) STRICT;
-"""
 
 __all__ = ["DefaultContextAdmissionLedger"]

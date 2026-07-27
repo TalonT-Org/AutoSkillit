@@ -7,6 +7,7 @@ import os
 import sqlite3
 import stat
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -138,6 +139,7 @@ def test_independent_ledgers_race_first_publication_at_shared_path(
     publication_barrier = threading.Barrier(2)
     collision_count = 0
     collision_lock = threading.Lock()
+    collision_seen = threading.Event()
     original_link = ledger_module.os.link
 
     def racing_link(
@@ -157,7 +159,10 @@ def test_independent_ledgers_race_first_publication_at_shared_path(
         except FileExistsError:
             with collision_lock:
                 collision_count += 1
+            collision_seen.set()
             raise
+        assert collision_seen.wait(timeout=5)
+        time.sleep(0.1)
 
     monkeypatch.setattr(ledger_module.os, "link", racing_link)
 

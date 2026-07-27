@@ -410,6 +410,12 @@ def test_reducer_registry_is_exact_and_rejects_unsupported_versions() -> None:
         CONTEXT_ADMISSION_REDUCER_REGISTRY[2] = reducer_def  # type: ignore[index]
 
 
+@pytest.mark.parametrize("protocol_version", [True, 1.0, "1"])
+def test_reducer_selector_rejects_non_integer_versions(protocol_version: object) -> None:
+    with pytest.raises(UnsupportedContextAdmissionProtocolError):
+        context_admission_reducer_for_protocol(protocol_version)  # type: ignore[arg-type]
+
+
 def test_envelope_constructor_rejects_discriminator_payload_mismatch() -> None:
     with pytest.raises(ContextAdmissionValidationError):
         StoredContextAdmissionEnvelope(

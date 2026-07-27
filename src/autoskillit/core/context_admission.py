@@ -2953,7 +2953,7 @@ def context_admission_reducer_for_protocol(
     protocol_version: int,
 ) -> ContextAdmissionReducerDef:
     """Select exactly one released reducer definition."""
-    if isinstance(protocol_version, bool):
+    if not isinstance(protocol_version, int) or isinstance(protocol_version, bool):
         raise UnsupportedContextAdmissionProtocolError("unsupported_protocol_version")
     reducer = CONTEXT_ADMISSION_REDUCER_REGISTRY.get(protocol_version)
     if reducer is None:

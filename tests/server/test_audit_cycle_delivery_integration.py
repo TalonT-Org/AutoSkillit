@@ -71,6 +71,7 @@ from autoskillit.server._recipe_execution import (
     install_recipe_execution,
     publish_audit_cycle_result,
     publish_verified_audit_cycle,
+    record_runtime_binding_digest,
 )
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
@@ -1577,6 +1578,39 @@ def test_real_preflight_rejects_terminal_go_with_disposition_report(tmp_path: Pa
 
     assert result.decision.status is AdmissionStatus.REJECT
     assert result.decision.reason is AdmissionReason.DISPOSITION_MISMATCH
+
+
+def test_runtime_binding_digest_rejects_replaced_execution(
+    tool_ctx_kitchen_open,
+) -> None:
+    first = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-1",
+    )
+    install_recipe_execution(tool_ctx_kitchen_open, snapshot=first)
+    replacement = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=_projection(),
+        execution_id="execution-2",
+    )
+    active = install_recipe_execution(tool_ctx_kitchen_open, snapshot=replacement)
+
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        record_runtime_binding_digest(
+            tool_ctx_kitchen_open,
+            execution_id="execution-1",
+            step_name="dry",
+            digest=_HASH_A,
+        )
+
+    assert exc_info.value.code == "recipe_execution_replaced"
+    assert get_recipe_execution(tool_ctx_kitchen_open) is active
+    assert dict(active.runtime_binding_digests) == {}
 
 
 @pytest.mark.anyio

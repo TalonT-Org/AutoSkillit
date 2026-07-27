@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
@@ -89,6 +90,16 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ("cli/_plugin_artifact.py", "try_reclaim", "shutil.rmtree"): (
         1,
         "The installed retirement owner holds exclusive ownership and exact identity.",
+    ),
+    ("workspace/_install_state.py", "reconcile_install_artifacts", "artifact.unlink"): (
+        1,
+        "The retired-shape registry identifies the exact obsolete install artifact "
+        "before reconciliation removes a file or symlink.",
+    ),
+    ("workspace/_install_state.py", "reconcile_install_artifacts", "shutil.rmtree"): (
+        1,
+        "The retired-shape registry identifies the exact obsolete install artifact "
+        "before reconciliation removes a directory tree.",
     ),
     ("workspace/_projection_cache.py", "try_reclaim", "record.manifest_path.unlink"): (
         1,
@@ -247,8 +258,26 @@ STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ),
 }
 
-_PLUGIN_MUTATION_FILES = frozenset(key[0] for key in PLUGIN_MUTATION_ALLOWLIST)
-_STRICT_WRITE_SCOPES = {(rel, scope) for rel, scope, _call in STRICT_PLUGIN_WRITE_ALLOWLIST}
+_PLUGIN_LIFECYCLE_SYMBOLS = frozenset(
+    {
+        "InstalledPluginArtifactRetirementOwner",
+        "PluginArtifactIdentity",
+        "PluginArtifactKind",
+        "PluginArtifactRetirementOwner",
+        "PluginArtifactValidationError",
+        "ProjectedPluginRetirementOwner",
+        "RETIRED_INSTALL_ARTIFACT_SHAPES",
+        "RetiringArtifactRecord",
+        "read_retiring_cache",
+    }
+)
+_STRICT_PLUGIN_WRITE_SYMBOLS = frozenset(
+    {
+        "LegacyRetiringEvidence",
+        "PluginArtifactIdentity",
+        "RetiringArtifactRecord",
+    }
+)
 
 
 def _iter_src_files() -> list[Path]:
@@ -305,6 +334,31 @@ def _call_name(call: ast.Call) -> str:
     return ast.unparse(call.func)
 
 
+def _referenced_symbols(tree: ast.AST) -> frozenset[str]:
+    return frozenset(
+        node.id
+        if isinstance(node, ast.Name)
+        else node.attr
+        if isinstance(node, ast.Attribute)
+        else node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Name, ast.Attribute, ast.alias))
+    )
+
+
+def _is_plugin_lifecycle_tree(tree: ast.AST) -> bool:
+    return not _referenced_symbols(tree).isdisjoint(_PLUGIN_LIFECYCLE_SYMBOLS)
+
+
+def _strict_plugin_write_scopes(tree: ast.AST) -> frozenset[str]:
+    return frozenset(
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not _referenced_symbols(node).isdisjoint(_STRICT_PLUGIN_WRITE_SYMBOLS)
+    )
+
+
 def _scan_plugin_mutations_in_tree(
     rel: str,
     tree: ast.AST,
@@ -333,12 +387,21 @@ def _scan_plugin_mutations_in_tree(
     return hits
 
 
-def _scan_plugin_mutations() -> Counter[tuple[str, str, str]]:
+def _scan_plugin_mutation_trees(
+    sources: Iterable[tuple[str, ast.AST]],
+) -> Counter[tuple[str, str, str]]:
     hits: Counter[tuple[str, str, str]] = Counter()
-    for rel in sorted(_PLUGIN_MUTATION_FILES):
-        tree = ast.parse((SRC_ROOT / rel).read_text())
+    for rel, tree in sources:
+        if not _is_plugin_lifecycle_tree(tree):
+            continue
         hits.update(_scan_plugin_mutations_in_tree(rel, tree))
     return hits
+
+
+def _scan_plugin_mutations() -> Counter[tuple[str, str, str]]:
+    return _scan_plugin_mutation_trees(
+        (_rel(path), ast.parse(path.read_text())) for path in _iter_src_files()
+    )
 
 
 def _scan_pass_fds_in_tree(
@@ -364,11 +427,11 @@ def _scan_pass_fds() -> Counter[tuple[str, str, str]]:
 def _scan_strict_plugin_writes_in_tree(
     rel: str,
     tree: ast.AST,
-    scopes: set[tuple[str, str]],
+    scopes: frozenset[str],
 ) -> Counter[tuple[str, str, str]]:
     hits: Counter[tuple[str, str, str]] = Counter()
     for scope, call in _scoped_calls(tree):
-        if (rel, scope) not in scopes:
+        if scope not in scopes:
             continue
         call_name = _call_name(call)
         if call_name not in {"atomic_write", "write_versioned_json"}:
@@ -385,17 +448,28 @@ def _scan_strict_plugin_writes_in_tree(
     return hits
 
 
-def _scan_strict_plugin_writes() -> Counter[tuple[str, str, str]]:
+def _scan_strict_plugin_write_trees(
+    sources: Iterable[tuple[str, ast.AST]],
+) -> Counter[tuple[str, str, str]]:
     hits: Counter[tuple[str, str, str]] = Counter()
-    for rel in sorted({rel for rel, _scope in _STRICT_WRITE_SCOPES}):
+    for rel, tree in sources:
+        scopes = _strict_plugin_write_scopes(tree)
+        if not scopes:
+            continue
         hits.update(
             _scan_strict_plugin_writes_in_tree(
                 rel,
-                ast.parse((SRC_ROOT / rel).read_text()),
-                _STRICT_WRITE_SCOPES,
+                tree,
+                scopes,
             )
         )
     return hits
+
+
+def _scan_strict_plugin_writes() -> Counter[tuple[str, str, str]]:
+    return _scan_strict_plugin_write_trees(
+        (_rel(path), ast.parse(path.read_text())) for path in _iter_src_files()
+    )
 
 
 def _scan_caller_grace(tree: ast.AST) -> list[int]:
@@ -660,14 +734,28 @@ class TestPluginMutationInventory:
         assert any("lease" in key[2] for key in hits)
 
     def test_strict_write_ratchet_detects_missing_durability(self) -> None:
-        injected = ast.parse("def publish():\n    write_versioned_json(path, payload)\n")
-        hits = _scan_strict_plugin_writes_in_tree(
-            "injected.py",
-            injected,
-            {("injected.py", "publish")},
+        injected = ast.parse(
+            "def publish(identity: PluginArtifactIdentity):\n"
+            "    write_versioned_json(identity.manifest_path, payload)\n"
         )
+        hits = _scan_strict_plugin_write_trees([("new_plugin_owner.py", injected)])
         assert hits == Counter(
-            {("injected.py", "publish", "write_versioned_json:strict=<missing>"): 1}
+            {
+                (
+                    "new_plugin_owner.py",
+                    "publish",
+                    "write_versioned_json:strict=<missing>",
+                ): 1
+            }
+        )
+
+    def test_mutation_ratchet_discovers_new_lifecycle_module(self) -> None:
+        injected = ast.parse(
+            "def reclaim(record: RetiringArtifactRecord):\n    record.manifest_path.unlink()\n"
+        )
+        hits = _scan_plugin_mutation_trees([("new_plugin_owner.py", injected)])
+        assert hits == Counter(
+            {("new_plugin_owner.py", "reclaim", "record.manifest_path.unlink"): 1}
         )
 
 

@@ -752,6 +752,11 @@ class DefaultContextAdmissionLedger:
                             "stream-replay-decode-failed",
                         )
                         if not persisted:
+                            if (
+                                self._store_health.status
+                                is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+                            ):
+                                raise _LedgerContended
                             break
                         continue
                     except _LedgerOpenError as exc:
@@ -763,6 +768,11 @@ class DefaultContextAdmissionLedger:
                             exc.reason_code,
                         )
                         if not persisted:
+                            if (
+                                self._store_health.status
+                                is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+                            ):
+                                raise _LedgerContended
                             break
                         continue
                     self._stream_health[stream_key] = ContextAdmissionStreamHealth(

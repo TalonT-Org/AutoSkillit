@@ -377,6 +377,34 @@ def test_recovery_failure_is_sticky_per_stream_and_isolates_other_streams(
     )
 
 
+def test_recovery_remains_incomplete_when_failure_marker_is_contended(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute("DELETE FROM shadow_decisions")
+        connection.commit()
+    finally:
+        connection.close()
+    recovered = DefaultContextAdmissionLedger(authority)
+    monkeypatch.setattr(
+        recovered,
+        "_persist_stream_failure",
+        lambda *_args: False,
+    )
+
+    result = recovered.recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert recovered.store_health().status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert not recovered._recovered
+
+
 def test_recovery_rejects_valid_but_nonzero_genesis(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     key = stream_key()

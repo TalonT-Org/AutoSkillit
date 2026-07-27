@@ -479,7 +479,7 @@ class TestPrepareIssueTool:
 
     @pytest.mark.anyio
     async def test_prepare_issue_no_result_block_includes_stderr(self, tool_ctx_kitchen_open):
-        """success=True + non-empty result + no delimiters → stderr surfaced."""
+        """success=True + non-empty result + no delimiters → degraded success."""
         mock_executor = AsyncMock()
         mock_executor.run.return_value = SkillResult(
             success=True,
@@ -494,9 +494,10 @@ class TestPrepareIssueTool:
         )
         tool_ctx_kitchen_open.executor = mock_executor
         response = json.loads(await prepare_issue("Test Issue", ""))
-        assert response["success"] is False
-        assert response["error"] == "no result block found"
-        assert "stderr" in response, "stderr must be in block-parse-failure response"
+        assert response["success"] is True
+        assert response["status"] == "degraded"
+        assert response["warning"] == "no result block found"
+        assert "stderr" in response, "stderr must be in degraded-success response"
         assert response["stderr"] == "ImportError: cannot import x from autoskillit"
         assert response["session_id"] == "abc-123"
 
@@ -648,11 +649,43 @@ class TestEnrichIssuesTool:
         )
         tool_ctx_kitchen_open.executor = mock_executor
         response = json.loads(await enrich_issues())
-        assert response["success"] is False
-        assert response["error"] == "no result block found"
-        assert "stderr" in response, "stderr must be in block-parse-failure response"
+        assert response["success"] is True
+        assert response["status"] == "degraded"
+        assert response["warning"] == "no result block found"
+        assert "stderr" in response, "stderr must be in degraded-success response"
         assert response["stderr"] == "Warning: contract stale"
         assert response["session_id"] == "enrich-123"
+
+    @pytest.mark.anyio
+    async def test_enrich_issues_invalid_result_block_returns_degraded_success(
+        self, tool_ctx_kitchen_open
+    ):
+        """success=True + malformed block preserves success and partial diagnostics."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=True,
+            result=(
+                "Enriched issue #42.\n"
+                "---enrich-issues-result---\n"
+                "{bad json\n"
+                "---/enrich-issues-result---"
+            ),
+            session_id="enrich-invalid",
+            stderr="Warning: malformed result",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+        )
+        tool_ctx_kitchen_open.executor = mock_executor
+        response = json.loads(await enrich_issues())
+        assert response["success"] is True
+        assert response["status"] == "degraded"
+        assert "invalid JSON" in response["warning"]
+        assert response["partial_issues_enriched"] == [42]
+        assert response["session_id"] == "enrich-invalid"
+        assert response["stderr"] == "Warning: malformed result"
 
     @pytest.mark.anyio
     async def test_enrich_issues_contract_recovery_includes_partial_enriched(
@@ -718,21 +751,6 @@ _HEADLESS_FAILURE_SCENARIOS = [
         id="prepare_issue-drain_race",
     ),
     pytest.param(
-        "prepare_issue",
-        dict(
-            success=True,
-            result="prose without delimiters",
-            session_id="s3",
-            stderr="e3",
-            subtype="success",
-            exit_code=0,
-            needs_retry=False,
-            is_error=False,
-            retry_reason=RetryReason.NONE,
-        ),
-        id="prepare_issue-block_parse_error",
-    ),
-    pytest.param(
         "enrich_issues",
         dict(
             success=False,
@@ -761,21 +779,6 @@ _HEADLESS_FAILURE_SCENARIOS = [
             retry_reason=RetryReason.NONE,
         ),
         id="enrich_issues-drain_race",
-    ),
-    pytest.param(
-        "enrich_issues",
-        dict(
-            success=True,
-            result="prose without delimiters",
-            session_id="s6",
-            stderr="e6",
-            subtype="success",
-            exit_code=0,
-            needs_retry=False,
-            is_error=False,
-            retry_reason=RetryReason.NONE,
-        ),
-        id="enrich_issues-block_parse_error",
     ),
 ]
 
@@ -860,10 +863,12 @@ async def test_prepare_issue_block_parse_error_propagates_partial_url(
     tool_ctx_kitchen_open.executor = mock_executor
 
     response = json.loads(await prepare_issue("Title", "Body"))
-    # Canonical contract preserved.
-    missing = _REQUIRED_FAILURE_KEYS - set(response.keys())
-    assert not missing, f"missing failure response keys: {missing}"
-    assert response["success"] is False
+    # Degraded-success contract preserves adjudication authority and diagnostics.
+    assert response["success"] is True
+    assert response["status"] == "degraded"
+    assert "invalid JSON" in response["warning"]
+    assert response["session_id"] == "s-parse"
+    assert response["stderr"] == "e-parse"
     # Partial-result propagation.
     assert response["partial_issue_url"] == "https://github.com/owner/repo/issues/42"
     assert response["partial_issue_number"] == 42

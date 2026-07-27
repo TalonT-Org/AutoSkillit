@@ -938,6 +938,78 @@ def make_build_skill_result_kwargs():
 
 
 class TestContractRecoveryGate:
+    def _unparseable_with_write_evidence(self, returncode: int = 0) -> SubprocessResult:
+        stdout = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "Write",
+                            "id": "t1",
+                            "input": {"file_path": "/tmp/plan.md"},
+                        }
+                    ]
+                },
+            }
+        )
+        return SubprocessResult(
+            returncode=returncode,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            channel_confirmation=ChannelConfirmation.CHANNEL_A,
+        )
+
+    def test_unparseable_with_clean_exit_and_write_evidence_becomes_retriable(self):
+        sr = _build_skill_result(
+            self._unparseable_with_write_evidence(),
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"plan_path\s*=\s*/. +".replace(" ", "")],
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is False
+        assert sr.needs_retry is True
+        assert sr.retry_reason == RetryReason.CONTRACT_RECOVERY
+        assert sr.subtype == "unparseable"
+
+    def test_unparseable_with_crashed_process_is_not_contract_recovery(self):
+        sr = _build_skill_result(
+            self._unparseable_with_write_evidence(returncode=1),
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"plan_path\s*=\s*/. +".replace(" ", "")],
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.retry_reason != RetryReason.CONTRACT_RECOVERY
+
+    def test_unparseable_contract_recovery_respects_budget_guard(self):
+        audit = DefaultAuditLog()
+        skill_command = "/autoskillit:make-plan"
+        for _ in range(4):
+            audit.record_failure(
+                FailureRecord(
+                    timestamp="2026-01-01T00:00:00+00:00",
+                    skill_command=skill_command,
+                    exit_code=0,
+                    subtype="unparseable",
+                    needs_retry=True,
+                    retry_reason=RetryReason.CONTRACT_RECOVERY.value,
+                    stderr="",
+                )
+            )
+        sr = _build_skill_result(
+            self._unparseable_with_write_evidence(),
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"plan_path\s*=\s*/. +".replace(" ", "")],
+            skill_command=skill_command,
+            audit=audit,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.needs_retry is False
+        assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
+
     def test_adjudicated_failure_with_write_evidence_becomes_retriable(
         self, make_build_skill_result_kwargs
     ):

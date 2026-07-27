@@ -77,6 +77,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_EVIDENCE_RECOVERABLE_SUBTYPES: frozenset[str] = frozenset({"adjudicated_failure", "unparseable"})
+
 __all__ = [
     "_build_skill_result",
     "_make_terminated_result",
@@ -700,16 +702,18 @@ def _build_skill_result(
             f"TIMED_OUT session produced subtype={normalized_subtype!r}, expected {expected!r}"
         )
 
-    # For adjudicated_failure + write evidence: record as retriable so the consecutive
-    # chain is intact for the CONTRACT_RECOVERY budget guard (genuinely retriable).
+    # For evidence-recoverable subtypes (adjudicated_failure, unparseable) + write evidence:
+    # record as retriable so the consecutive chain is intact for the CONTRACT_RECOVERY
+    # budget guard (genuinely retriable).
     _audit_needs_retry = needs_retry
     _audit_retry_reason = retry_reason
     if (
         not success
         and not needs_retry
-        and normalized_subtype == "adjudicated_failure"
+        and normalized_subtype in _EVIDENCE_RECOVERABLE_SUBTYPES
         and _has_write_evidence
         and not readonly_skill
+        and (normalized_subtype == "adjudicated_failure" or returncode == 0)
     ):
         _audit_needs_retry = True
         _audit_retry_reason = RetryReason.CONTRACT_RECOVERY
@@ -848,17 +852,19 @@ def _build_skill_result(
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
-    # CONTRACT_RECOVERY gate: when the session was classified as adjudicated_failure but
-    # write evidence exists, the model wrote the artifact but omitted the structured output
-    # token — promote to RETRIABLE(CONTRACT_RECOVERY). Re-apply budget_guard after
-    # promoting so budget exhaustion can still cap CONTRACT_RECOVERY retries.
+    # CONTRACT_RECOVERY gate: when the session was classified as a terminal failure
+    # (adjudicated_failure or unparseable) but write evidence exists and the process
+    # exited cleanly, the model wrote the artifact but the structured output token was
+    # missing or the stdout stream was truncated — promote to RETRIABLE(CONTRACT_RECOVERY).
+    # Re-apply budget_guard after promoting so budget exhaustion can still cap retries.
     # The first _apply_budget_guard skips this case because needs_retry is False then.
     if (
         not sr.success
         and not sr.needs_retry
-        and sr.subtype == "adjudicated_failure"
+        and sr.subtype in _EVIDENCE_RECOVERABLE_SUBTYPES
         and _has_write_evidence
         and not readonly_skill
+        and (sr.subtype == "adjudicated_failure" or returncode == 0)
     ):
         sr = dataclasses.replace(
             sr,

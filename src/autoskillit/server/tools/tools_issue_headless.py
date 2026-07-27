@@ -360,9 +360,16 @@ async def prepare_issue(
             if parsed.get("error") in _BLOCK_PARSE_ERRORS:
                 extra = _extract_partial_issue_data(result.result)
                 return json.dumps(
-                    _build_headless_error_response(
-                        result, error=parsed["error"], extra_fields=extra
-                    )
+                    {
+                        "success": True,
+                        "status": "degraded",
+                        "warning": parsed["error"],
+                        "session_id": result.session_id,
+                        "stderr": result.stderr or "",
+                        "subtype": result.subtype or "",
+                        "exit_code": result.exit_code if result.exit_code is not None else -1,
+                        **extra,
+                    }
                 )
 
             # Block parsed successfully. result.success=True is the authoritative signal —
@@ -488,9 +495,16 @@ async def enrich_issues(
             if parsed.get("error") in _BLOCK_PARSE_ERRORS:
                 extra = _extract_partial_enrich_data(result.result)
                 return json.dumps(
-                    _build_headless_error_response(
-                        result, error=parsed["error"], extra_fields=extra
-                    )
+                    {
+                        "success": True,
+                        "status": "degraded",
+                        "warning": parsed["error"],
+                        "session_id": result.session_id,
+                        "stderr": result.stderr or "",
+                        "subtype": result.subtype or "",
+                        "exit_code": result.exit_code if result.exit_code is not None else -1,
+                        **extra,
+                    }
                 )
 
             return json.dumps(

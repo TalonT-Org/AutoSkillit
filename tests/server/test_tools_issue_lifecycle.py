@@ -287,14 +287,15 @@ async def test_prepare_issue_empty_output(tool_ctx_kitchen_open) -> None:
 
 @pytest.mark.anyio
 async def test_prepare_issue_block_parse_error(tool_ctx_kitchen_open) -> None:
-    """success=True, output present, but no delimiters → 'no result block found' error."""
+    """success=True with no delimiters → degraded-success warning."""
     skill_result = _make_skill_result(success=True, result="some output without delimiters")
     tool_ctx_kitchen_open.executor = AsyncMock()
     tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
 
     result = json.loads(await prepare_issue("Title", "Body"))
-    assert result["success"] is False
-    assert result["error"] == "no result block found"
+    assert result["success"] is True
+    assert result["status"] == "degraded"
+    assert result["warning"] == "no result block found"
 
 
 @pytest.mark.anyio

@@ -3755,7 +3755,7 @@ def test_extract_investigation_passthrough_truncated_raises(tmp_path: Path) -> N
         "<!-- investigation_complete: true -->\n"
         "> Prior investigation completed interactively. See below for root cause analysis.\n"
     )
-    with pytest.raises(ValueError, match="Recommendations"):
+    with pytest.raises(ValueError, match="no '## ' subsections"):
         extract_investigation(
             investigation_path=str(truncated),
             issue_number="42",
@@ -3780,17 +3780,53 @@ def test_extract_investigation_no_section_raises(mock_run_gh, tmp_path: Path) ->
 
 @patch("autoskillit.smoke_utils._investigation.run_gh")
 def test_extract_investigation_empty_body_raises(mock_run_gh, tmp_path: Path) -> None:
-    """When ## Investigation section is empty, callable raises."""
+    """When neither the section nor the body carries any ## subsection, callable raises."""
 
     mock_run_gh.return_value = subprocess.CompletedProcess(
-        [], 0, "## Investigation\n\n## Next Section\n", ""
+        [], 0, "Preamble with no structure.\n## Investigation\n\n", ""
     )
-    with pytest.raises(ValueError, match="Recommendations"):
+    with pytest.raises(ValueError, match="no investigation to hand to rectify"):
         extract_investigation(
             investigation_path="",
             issue_number="42",
             output_dir=str(tmp_path),
         )
+
+
+@patch("autoskillit.smoke_utils._investigation.run_gh")
+def test_extract_investigation_attestation_section_falls_back_to_body(
+    mock_run_gh, tmp_path: Path
+) -> None:
+    """An attestation-style section hands rectify the whole body, not a three-line note.
+
+    Regression test for #4392. A sizeable minority of issues use ``## Investigation`` to
+    record *that* an investigation happened, with the analysis written above the heading.
+    Requiring a ``## Recommendations`` heading rejected 16 of 34 such issues and — because
+    bridge_investigation now halts on failure — stopped the pipeline outright.
+    """
+
+    body = (
+        "## Problem\n"
+        "The real analysis lives up here, above the attestation.\n"
+        "## Root cause\n"
+        "Detailed root cause content.\n"
+        "\n"
+        "## Investigation\n"
+        "<!-- investigation_complete: true -->\n"
+        "> Prior investigation completed interactively; analysis included above.\n"
+    )
+    mock_run_gh.return_value = subprocess.CompletedProcess([], 0, body, "")
+    out_dir = tmp_path / "investigate"
+    result = extract_investigation(
+        investigation_path="",
+        issue_number="42",
+        output_dir=str(out_dir),
+    )
+    written = Path(result["investigation_report"]).read_text()
+    # The whole body is handed over, so the analysis above the heading survives.
+    assert "The real analysis lives up here" in written
+    assert "Detailed root cause content." in written
+    assert "## Problem" in written
 
 
 @patch("autoskillit.smoke_utils._investigation.run_gh")
@@ -3834,10 +3870,10 @@ def test_extract_investigation_ignores_h3_investigation_decoy(mock_run_gh, tmp_p
     assert "Summary content." in written
 
 
-def test_extract_investigation_passthrough_rejects_h3_recommendations_decoy(
+def test_extract_investigation_passthrough_rejects_h3_subsection_decoy(
     tmp_path: Path,
 ) -> None:
-    """A decoy '### Recommendations' heading must not satisfy the completeness check."""
+    """A '### ' heading is not a '## ' subsection and must not satisfy the check."""
 
     truncated = tmp_path / "investigation_truncated.md"
     truncated.write_text(
@@ -3845,9 +3881,36 @@ def test_extract_investigation_passthrough_rejects_h3_recommendations_decoy(
         "> Prior investigation completed interactively.\n"
         "### Recommendations for future work (not a real section)\n"
     )
-    with pytest.raises(ValueError, match="Recommendations"):
+    with pytest.raises(ValueError, match="no '## ' subsections"):
         extract_investigation(
             investigation_path=str(truncated),
             issue_number="42",
             output_dir=str(tmp_path / "unused"),
         )
+
+
+def test_extract_investigation_accepts_report_without_recommendations(
+    tmp_path: Path,
+) -> None:
+    """Completeness must not be proxied on one heading name (#4392).
+
+    A structured report using a different terminal section is complete. The prior
+    revision rejected this shape, which is what halted 16 of 34 real investigations.
+    """
+
+    report = tmp_path / "investigation_no_recs.md"
+    report.write_text(
+        "# Investigation: Topic\n"
+        "## Summary\n"
+        "Summary content.\n"
+        "## Root Cause\n"
+        "Root cause content.\n"
+        "## Scope Boundary\n"
+        "Scope content — no Recommendations heading anywhere.\n"
+    )
+    result = extract_investigation(
+        investigation_path=str(report),
+        issue_number="42",
+        output_dir=str(tmp_path / "unused"),
+    )
+    assert result["investigation_report"] == str(report)

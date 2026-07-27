@@ -721,7 +721,7 @@ from .types import (
     decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
 )
 from .types import (
-    decode_stored_context_admission_envelope_header as decode_stored_context_admission_envelope_header,
+    context_admission_envelope_header as context_admission_envelope_header,
 )
 from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches

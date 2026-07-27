@@ -317,7 +317,7 @@ def decode_stored_context_admission_envelope(
     return envelope
 
 
-def decode_stored_context_admission_envelope_header(
+def context_admission_envelope_header(
     encoded: bytes,
 ) -> tuple[int, int, str]:
     """Read a bounded durable-envelope header without decoding its payload."""
@@ -677,6 +677,6 @@ __all__ = [
     "make_stored_context_admission_envelope",
     "encode_stored_context_admission_envelope",
     "decode_stored_context_admission_envelope",
-    "decode_stored_context_admission_envelope_header",
+    "context_admission_envelope_header",
     "validate_context_admission_persistence_value",
 ]

@@ -79,9 +79,9 @@ from autoskillit.core import (
     StageHistoryEvent,
     StartGenerationEvent,
     UninitializedContextAdmissionState,
+    context_admission_envelope_header,
     context_admission_reducer_for_protocol,
     decode_stored_context_admission_envelope,
-    decode_stored_context_admission_envelope_header,
     encode_stored_context_admission_envelope,
     make_stored_context_admission_envelope,
 )
@@ -1431,7 +1431,7 @@ def _preflight_storage_routes(connection: sqlite3.Connection) -> None:
 
 def _envelope_header(value: bytes) -> tuple[int, int, str]:
     try:
-        return decode_stored_context_admission_envelope_header(value)
+        return context_admission_envelope_header(value)
     except ContextAdmissionValidationError:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.INTEGRITY,

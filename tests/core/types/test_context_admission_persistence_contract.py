@@ -46,9 +46,9 @@ from autoskillit.core import (
     StoredContextAdmissionEnvelope,
     UninitializedContextAdmissionState,
     UnsupportedContextAdmissionProtocolError,
+    context_admission_envelope_header,
     context_admission_reducer_for_protocol,
     decode_stored_context_admission_envelope,
-    decode_stored_context_admission_envelope_header,
     encode_stored_context_admission_envelope,
     make_stored_context_admission_envelope,
     reduce_context_admission,
@@ -275,7 +275,7 @@ def test_envelope_rejects_unknown_or_noncanonical_routes() -> None:
     "decoder",
     [
         decode_stored_context_admission_envelope,
-        decode_stored_context_admission_envelope_header,
+        context_admission_envelope_header,
     ],
 )
 def test_envelope_decoders_reject_unbounded_json_before_parsing(

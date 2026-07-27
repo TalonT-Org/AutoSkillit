@@ -16,6 +16,7 @@ from autoskillit.core import (
     AdmissionReason,
     AuditCycleAuthority,
     AuditCycleHead,
+    AuditCycleVerificationError,
     AuditCycleVerifier,
     AuditVerdict,
     BindingMode,
@@ -147,7 +148,7 @@ class DefaultAuditCycleHeadStore:
                     raise AuditCycleHeadConflict("audit-cycle head compare-and-swap failed")
                 try:
                     AuditCycleVerifier.verify_successor(authority, current)
-                except Exception as exc:
+                except AuditCycleVerificationError as exc:
                     raise AuditCycleHeadConflict(str(exc)) from exc
             if (
                 authorized_successor_part_id is not None

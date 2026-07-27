@@ -30,6 +30,7 @@ from autoskillit.core import (
     AuditCycleAuthority,
     AuditCycleHead,
     AuditCycleVerificationError,
+    AuditCycleVerifier,
     AuditVerdict,
     BindingMode,
     BoundStepInvocation,
@@ -1151,6 +1152,40 @@ def test_head_publication_is_monotonic_compare_and_swap(tmp_path: Path) -> None:
     )
     assert terminal.current_authority_digest == successor.authority_digest
     assert terminal.authorized_successor_part_id == "part-b"
+
+
+def test_head_publication_does_not_mask_unexpected_verifier_faults(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = DefaultAuditCycleHeadStore()
+    first = _authority(
+        tmp_path,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.NO_GO,
+    )
+    store.publish(first, expected_parent_digest=None, expected_round=0)
+    successor = _authority(
+        tmp_path,
+        generation="execution-1",
+        round_=2,
+        parent=first.authority_digest,
+        verdict=AuditVerdict.GO,
+    )
+
+    def fail_unexpectedly(*_args: object) -> None:
+        raise RuntimeError("verifier implementation fault")
+
+    monkeypatch.setattr(AuditCycleVerifier, "verify_successor", fail_unexpectedly)
+
+    with pytest.raises(RuntimeError, match="implementation fault"):
+        store.publish(
+            successor,
+            expected_parent_digest=first.authority_digest,
+            expected_round=1,
+        )
 
 
 class AuditCycleLifecycleStateMachine(RuleBasedStateMachine):

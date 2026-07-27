@@ -91,6 +91,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_sessions",  # cli/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
+        # Released reducer definitions are immutable registry values keyed by their own
+        # protocol version so the selector cannot drift from the registered definition.
+        "context_admission",
         # Closed event/effect/state union registries are derived once for durable decoding.
         "context_admission_ledger",
         # Canonical output-discipline block/digest and their SHA-256 cache identity are

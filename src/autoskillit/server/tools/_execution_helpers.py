@@ -65,7 +65,9 @@ if TYPE_CHECKING:
     from autoskillit.core import SkillResult
     from autoskillit.pipeline import ToolContext
 
-_PATH_LIKE_ARGS: frozenset[str] = frozenset({"output_dir", "workspace", "diagnostics_log_dir"})
+_PATH_LIKE_ARGS: frozenset[str] = frozenset(
+    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path"}
+)
 
 
 @dataclasses.dataclass(slots=True)

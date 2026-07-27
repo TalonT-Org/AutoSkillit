@@ -8,6 +8,7 @@ Utility callables for smoke-test pipeline `run_python` steps (decomposed from mo
 |------|---------|
 | `__init__.py` | Re-export facade — 28 public names via `__all__` |
 | `_helpers.py` | Shared JSON loading helpers (`_load_json`, `try_load_json`) |
+| `_investigation.py` | Investigation report extraction and completeness validation for remediation |
 | `_merge_gate_diagnosis.py` | Merge gate test failure diagnosis file writer |
 | `_review.py` | PR diff annotation, review loop guards, diff context enrichment, dimension selection, verdict aggregation |
 | `_eval.py` | Eval manifest parsing, context building, scorecard compilation |

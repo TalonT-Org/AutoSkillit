@@ -119,6 +119,17 @@ damage bound, not the current call's outer result selector, and does not make
 `develop`, not the repository's default branch, `main`. Closure must therefore be
 recorded explicitly in the issue body.
 
+Issue #4369 re-verified both governed limits against upstream `rust-v0.145.0` (see
+Forward Obligations, below). Two claims in the "Numeric Limits and Rationale" table
+above are superseded by that re-verification: `CODEX_HISTORY_RETENTION_TOKEN_LIMIT`'s
+"does not select the current outer result" framing incorrectly implied `tool_output_token_limit`
+only governs later-stored history — it also governs the current turn's tool output,
+per `CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_HISTORY_RETENTION_TOKEN_LIMIT"]`
+(`execution/backends/_codex_config.py`); and `CODEX_AUTO_COMPACT_LIMIT`'s "unreachable
+sentinel" framing no longer holds, since `ModelInfo::auto_compact_token_limit()` clamps
+it to 90% of the resolved context window (244,800 for gpt-5.6-sol), per
+`CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_AUTO_COMPACT_LIMIT"]`.
+
 ## Accepted Gaps
 
 1. Non-JSONL single-file searches and arbitrary shell verbs (`python -c` file dumps,

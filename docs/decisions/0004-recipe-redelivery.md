@@ -15,7 +15,8 @@ Two defenses exist:
 1. **Primary — disable compaction**: `ensure_codex_mcp_registered` writes
    `model_auto_compact_token_limit = 999_999_999` (an unreachable threshold) to
    `~/.codex/config.toml`. `setup_session_dir` copies this config into each session
-   directory, ensuring every headless session inherits the setting.
+   directory, ensuring every headless session inherits the setting. *Re-verified at
+   codex-cli 0.145.0 and found neutralized upstream — see "Re-verification" below.*
 
 2. **Guard — block raw recipe reads**: The `recipe_read_guard.py` PreToolUse hook
    blocks `run_cmd`/`Bash` from reading recipe YAML, SKILL.md, or agent definition

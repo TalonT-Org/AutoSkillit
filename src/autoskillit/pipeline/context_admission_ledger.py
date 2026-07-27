@@ -840,6 +840,16 @@ class DefaultContextAdmissionLedger:
                     if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                         self._stream_health[stream_key] = health
                         continue
+                    if health.status is not ContextAdmissionStorageHealthStatus.HEALTHY:
+                        pending_stream_failures.append(
+                            (
+                                stream_id,
+                                stream_key,
+                                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                                "invalid-stream-health",
+                            )
+                        )
+                        continue
                     try:
                         recovered_state = _recover_stream_projection(
                             connection,

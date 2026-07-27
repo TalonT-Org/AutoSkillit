@@ -1119,6 +1119,33 @@ def test_inspection_rejects_health_corrupted_after_recovery(tmp_path: Path) -> N
     assert inspection.health.reason_code == "invalid-stream-health"
 
 
+def test_recovery_rejects_uninitialized_health_for_bound_stream(tmp_path: Path) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    assert (
+        DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            "UPDATE streams SET health_status = ?, failure_reason = NULL, reason_code = NULL",
+            (ContextAdmissionStorageHealthStatus.UNINITIALIZED.value,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    recovered = DefaultContextAdmissionLedger(authority)
+    result = recovered.recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    health = recovered.stream_health(key)
+    assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert health.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert health.reason_code == "invalid-stream-health"
+
+
 def test_inspection_replays_validly_encoded_publications_after_recovery(
     tmp_path: Path,
 ) -> None:

@@ -191,6 +191,34 @@ def test_each_ledger_connection_sets_and_reads_back_required_pragmas(
         connection.close()
 
 
+def test_recovery_fails_closed_on_orphaned_foreign_key_rows(tmp_path: Path) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute(
+            """
+            INSERT INTO effect_outbox(
+                stream_id, journal_sequence, effect_ordinal, effect_envelope
+            ) VALUES (?, 1, 0, ?)
+            """,
+            (b"orphan-stream", b"invalid"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    recovered = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert recovered.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert recovered.store_health.failure_reason is ContextAdmissionStorageFailureReason.INTEGRITY
+    assert recovered.store_health.reason_code == "sqlite-foreign-key-check-failed"
+
+
 def test_store_path_uri_metacharacters_are_percent_encoded(tmp_path: Path) -> None:
     authority = ContextAdmissionStoreAuthority(
         database_path=(tmp_path / "context?admission#literal" / "ledger%literal.sqlite3"),

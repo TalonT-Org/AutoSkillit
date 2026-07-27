@@ -1267,6 +1267,11 @@ class DefaultContextAdmissionLedger:
                 ContextAdmissionStorageFailureReason.INTEGRITY,
                 "sqlite-integrity-failed",
             )
+        if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.INTEGRITY,
+                "sqlite-foreign-key-check-failed",
+            )
 
     @staticmethod
     def _validate_metadata(metadata: dict[str, str]) -> None:

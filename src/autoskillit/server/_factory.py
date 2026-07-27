@@ -22,6 +22,7 @@ from autoskillit.core import (
     FleetLock,
     InstalledRecipeExecution,
     PluginArtifactAuthority,
+    PluginRetirementCoordinator,
     RecipeExecutionSnapshot,
     SkillExecutionRole,
     SubprocessRunner,
@@ -165,6 +166,7 @@ def make_context(
     runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = _UNSET,
     plugin_authority: PluginArtifactAuthority = _UNSET,
+    plugin_retirement_coordinator: PluginRetirementCoordinator | None = None,
     fleet_lock: FleetLock | None = None,
     project_dir: Path | None = None,
 ) -> ToolContext:
@@ -346,6 +348,7 @@ def make_context(
         backend=backend,
         temp_dir=temp_dir,
         project_dir=project_dir,
+        plugin_retirement_coordinator=plugin_retirement_coordinator,
         tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,
         recipes=DefaultRecipeRepository(),
         db_reader=DefaultDatabaseReader(),

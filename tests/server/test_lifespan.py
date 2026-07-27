@@ -106,6 +106,27 @@ async def test_lifespan_sets_startup_ready_event(monkeypatch):
             )
 
 
+@pytest.mark.asyncio
+async def test_retirement_startup_uses_injected_coordinator_deadlines() -> None:
+    from autoskillit.server._lifespan import _run_retiring_sweep_async
+
+    coordinator = MagicMock()
+    coordinator.sweep_due.return_value = ()
+    mock_ctx = MagicMock()
+    mock_ctx.plugin_retirement_coordinator = coordinator
+
+    with patch(
+        "autoskillit.server._lifespan._get_ctx_or_none",
+        return_value=mock_ctx,
+    ):
+        await _run_retiring_sweep_async()
+
+    coordinator.sweep_due.assert_called_once()
+    sweep_time = coordinator.sweep_due.call_args.args[0]
+    assert sweep_time.tzinfo is not None
+    assert sweep_time.utcoffset() is not None
+
+
 # T-WT-4: MCP lifespan startup detects broken hooks
 def test_startup_broken_hook_detection(tmp_path: Path, monkeypatch) -> None:
     """run_startup_hook_health_check must detect broken hook scripts across all scopes."""

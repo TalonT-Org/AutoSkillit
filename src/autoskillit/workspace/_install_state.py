@@ -2,7 +2,7 @@
 
 Before this module the same question was asked in nine unrelated ad-hoc repairs
 (``upgrade()``, ``_ensure_workspace_ready()``, ``evict_direct_mcp_entry()``,
-``_evict_stale_autoskillit_hooks()``, ``_retire_old_versions()``, …), each with
+``_evict_stale_autoskillit_hooks()``, cache retirement, …), each with
 its own trigger and idempotency story — and two doctor checks answered ``OK`` on
 a machine that could not start. Nine one-offs is not a pattern; it is the
 absence of one.
@@ -37,10 +37,15 @@ from pathlib import Path
 from autoskillit.core import (  # IL-005: core only — never cli.InstalledPluginsFile
     DIRECT_INSTALL_CACHE_SUBDIR,
     RETIRED_INSTALL_ARTIFACT_SHAPES,
+    PluginArtifactKind,
+    RetiringArtifactRecord,
+    RetiringCacheState,
     Severity,
+    directory_tree_digest,
     get_logger,
+    read_retiring_cache,
+    read_versioned_json,
     registered_install_paths,
-    retiring_cache_entries,
 )
 
 __all__ = [
@@ -128,25 +133,65 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
                 )
             )
 
-    # 3. The sweeper must never be poised to delete a live registry entry.
-    registered = {str(p) for p in registered_install_paths()}
-    for entry in retiring_cache_entries():
-        path = entry.get("path", "")
-        if path and path in registered:
+    # 3. Legacy evidence is visible but never deletion authority. Exact v2
+    #    records are errors only when the registered path still validates as
+    #    the same incarnation.
+    registered = frozenset(registered_install_paths())
+    retirement = read_retiring_cache()
+    if retirement.state is RetiringCacheState.EXACT_V2:
+        for evidence in retirement.legacy_evidence:
             findings.append(
                 InstallStateFinding(
-                    Severity.ERROR,
-                    "retiring_entry_still_registered",
-                    f"{path} is queued for deletion in retiring_cache.json but is still "
-                    "referenced by installed_plugins.json. The registry is stale — run "
-                    "`autoskillit install` to reconcile it.",
+                    Severity.WARNING,
+                    "retiring_cache_legacy_evidence",
+                    f"{evidence.path} is path-only retirement evidence from schema v1. "
+                    "It is retained for diagnosis and cannot authorize deletion.",
                 )
             )
+        for record in retirement.records:
+            if (
+                record.artifact_kind is PluginArtifactKind.INSTALLED_PLUGIN
+                and record.managed_path in registered
+                and _record_matches_current_installed_artifact(record)
+            ):
+                findings.append(
+                    InstallStateFinding(
+                        Severity.ERROR,
+                        "retiring_exact_identity_still_registered",
+                        f"{record.managed_path} is queued as exact incarnation "
+                        f"{record.incarnation_id} while installed_plugins.json still "
+                        "references it. Run `autoskillit install` to reconcile the registry.",
+                    )
+                )
 
     # 4. Version agreement, one finding per derived file (see module docstring).
     findings.extend(_derived_version_findings(__version__))
 
     return tuple(findings)
+
+
+def _record_matches_current_installed_artifact(
+    record: RetiringArtifactRecord,
+) -> bool:
+    try:
+        raw = read_versioned_json(
+            record.manifest_path,
+            record.manifest_schema_version,
+        )
+        if raw is None:
+            return False
+        if (
+            raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value
+            or raw.get("semantic_key") != record.semantic_key
+            or raw.get("incarnation_id") != record.incarnation_id
+            or raw.get("artifact_digest") != record.artifact_digest
+            or raw.get("managed_path") != str(record.managed_path)
+            or raw.get("manifest_path") != str(record.manifest_path)
+        ):
+            return False
+        return directory_tree_digest(record.managed_path) == record.artifact_digest
+    except (OSError, ValueError):
+        return False
 
 
 def _has_retired_shape(artifact: Path, shape: str) -> bool:

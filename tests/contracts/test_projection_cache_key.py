@@ -222,24 +222,50 @@ class TestAssetChangesForceReprojection:
 
 
 class TestOrphanedProjectionRetirementIsLeaseGated:
-    def test_pruning_does_not_mutate_root_or_manifest(self, tmp_path: Path) -> None:
-        from autoskillit.workspace import prune_stale_projections
-
-        projections = tmp_path / ".autoskillit" / "plugin-projections"
-        projections.mkdir(parents=True)
-        orphan = projections / "deadbeefdeadbeefdeadbeef"
-        orphan.mkdir()
-        manifest = projections / f".{orphan.name}.autoskillit-projection.json"
-        manifest.write_text("{}")
-
-        assert (
-            prune_stale_projections(
-                projections,
-                active_key="activeactiveactiveactive",
-                grace_hours=0,
-            )
-            == 0
+    def test_pruning_queues_only_after_reader_release(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.core import PluginLoadMode, read_retiring_cache
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import (
+            project_default_plugin_authority,
+            prune_stale_projections,
         )
-        assert orphan.is_dir()
-        assert manifest.is_file()
-        assert not (tmp_path / ".autoskillit" / "retiring_cache.json").exists()
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        backend = ClaudeCodeBackend()
+        orphan = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="old",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        active = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="new",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        try:
+            assert read_retiring_cache().records == ()
+            orphan.close()
+            assert (
+                prune_stale_projections(
+                    tmp_path / ".autoskillit" / "plugin-projections",
+                    active_key=active.identity.semantic_key,
+                )
+                == 1
+            )
+            assert read_retiring_cache().records[0].identity == orphan.identity
+            assert orphan.identity.managed_path.is_dir()
+            assert orphan.identity.manifest_path.is_file()
+        finally:
+            orphan.close()
+            active.close()

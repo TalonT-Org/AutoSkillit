@@ -673,6 +673,7 @@ class TestResumeBoundary:
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
                     _on_poll=count_polls,
+                    caller_session_id="session-abc",
                 )
             )
 
@@ -772,6 +773,7 @@ class TestResumeBoundary:
             spawn_time=spawn_time,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
+            caller_session_id="session-ghi",
         )
 
         assert result.status == ChannelBStatus.STALE

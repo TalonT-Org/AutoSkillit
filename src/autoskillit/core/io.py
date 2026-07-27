@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import stat
 import tempfile
 import threading
 import uuid
@@ -182,7 +183,12 @@ def resolve_skill_temp_dir(cwd: str, skill_command: str) -> Path | None:
     return Path(cwd) / ".autoskillit" / "temp" / name
 
 
-def atomic_write(path: Path, content: str) -> None:
+def atomic_write(
+    path: Path,
+    content: str,
+    *,
+    strict_durability: bool = False,
+) -> None:
     """Crash-safe write: write to a temp file then os.replace.
 
     Includes data fsync and directory fsync for durability on ext4/xfs.
@@ -205,8 +211,8 @@ def atomic_write(path: Path, content: str) -> None:
             pass
         raise
     # Durable rename: fsync the parent directory on POSIX.
-    # Best-effort: os.replace() already committed the rename; a dir_fsync
-    # failure here does not undo the write.
+    # Default callers retain best-effort parent durability. Identity-bearing
+    # stores opt into strict mode so a failed directory fsync is observable.
     if _sys.platform != "win32":
         try:
             dir_fd = os.open(path.parent, os.O_RDONLY)
@@ -215,7 +221,41 @@ def atomic_write(path: Path, content: str) -> None:
             finally:
                 os.close(dir_fd)
         except OSError:
-            pass  # Non-fatal — data is durable at path after os.replace()
+            if strict_durability:
+                raise
+
+
+def directory_tree_digest(root: Path) -> str:
+    """Hash every relative entry, kind, mode, and regular-file byte."""
+    root = Path(root)
+    if not root.is_dir() or root.is_symlink():
+        raise ValueError(f"artifact root is not a regular directory: {root}")
+    digest = hashlib.sha256()
+    for current_root, directory_names, file_names in os.walk(root, followlinks=False):
+        current = Path(current_root)
+        directory_names.sort()
+        file_names.sort()
+        for name in (*directory_names, *file_names):
+            path = current / name
+            relative = path.relative_to(root).as_posix()
+            entry_stat = path.stat(follow_symlinks=False)
+            if stat.S_ISLNK(entry_stat.st_mode):
+                raise ValueError(f"artifact contains a symlink: {path}")
+            if stat.S_ISDIR(entry_stat.st_mode):
+                kind = b"d"
+            elif stat.S_ISREG(entry_stat.st_mode):
+                kind = b"f"
+            else:
+                raise ValueError(f"artifact contains a special file: {path}")
+            digest.update(kind)
+            digest.update(relative.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(stat.S_IMODE(entry_stat.st_mode).to_bytes(2, "big"))
+            if kind == b"f":
+                with path.open("rb") as handle:
+                    digest.update(hashlib.file_digest(handle, "sha256").digest())
+            digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def spill_output(
@@ -311,7 +351,13 @@ def safe_upsert_section(
     atomic_write(path, "".join(new_lines))
 
 
-def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: int) -> None:
+def write_versioned_json(
+    path: Path,
+    payload: dict[str, Any],
+    schema_version: int,
+    *,
+    strict_durability: bool = False,
+) -> None:
     """Write a dict JSON artifact enriched with ``schema_version``.
 
     Covers **write atomicity only** (single-writer semantics via
@@ -325,7 +371,11 @@ def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: in
     if not isinstance(payload, dict):
         raise TypeError("write_versioned_json requires a dict payload")
     enriched = {**payload, "schema_version": schema_version}
-    atomic_write(path, _fast_dumps(enriched, indent=True))
+    atomic_write(
+        path,
+        _fast_dumps(enriched, indent=True),
+        strict_durability=strict_durability,
+    )
 
 
 def write_canonical_versioned_json(
@@ -420,6 +470,7 @@ _AUTOSKILLIT_GITIGNORE_ENTRIES = [
     "sync_manifest.json",
     "test-filter-manifest.yaml",
     "validation-errors/",
+    "retiring_cache.lock",
 ]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(

@@ -56,12 +56,17 @@ async def _execute_fleet_run(
 ) -> DispatchResult:
     import functools
 
+    from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
     from autoskillit.core import SkillExecutionRole, detect_autoskillit_mcp_prefix
     from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
     from autoskillit.server import make_context
     from autoskillit.workspace import SkillProjectionContext, project_agent_skill_document
 
-    ctx = make_context(cfg, project_dir=Path.cwd())
+    ctx = make_context(
+        cfg,
+        project_dir=Path.cwd(),
+        plugin_retirement_coordinator=default_plugin_retirement_coordinator(),
+    )
 
     from autoskillit.server import (  # noqa: PLC0415
         _compute_effective_backend_map,

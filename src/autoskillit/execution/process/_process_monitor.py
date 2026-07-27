@@ -290,6 +290,17 @@ async def _session_log_monitor(
     # scans content written AFTER monitoring began.
     try:
         _initial_content = session_file.read_text(errors="replace")
+        if caller_session_id is None and _jsonl_contains_marker(
+            _initial_content,
+            completion_marker,
+            record_types,
+        ):
+            logger.debug(
+                "session_log_phase1_marker_found",
+                file=str(session_file),
+                selection_method="current_session_initial_content",
+            )
+            return SessionMonitorResult(ChannelBStatus.COMPLETION, _session_id)
         scan_pos = len(_initial_content)
         last_size = len(_initial_content.encode("utf-8"))
     except OSError:

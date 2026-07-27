@@ -35,6 +35,7 @@ from autoskillit.core import (
     MigrationService,
     OutputPatternResolver,
     PluginArtifactAuthority,
+    PluginRetirementCoordinator,
     QuotaRefreshTask,
     ReadOnlyResolver,
     RecipeExecutionFactory,
@@ -164,6 +165,7 @@ class ToolContext:
     runner: SubprocessRunner | None
     temp_dir: Path = field(default=_MISSING)
     project_dir: Path = field(default=_MISSING)
+    plugin_retirement_coordinator: PluginRetirementCoordinator | None = None
     response_log: McpResponseLog = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)

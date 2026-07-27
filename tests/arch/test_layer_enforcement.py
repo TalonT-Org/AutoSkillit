@@ -1508,6 +1508,9 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
         Path("cli/_marketplace.py"): {"DefaultSkillResolver"},  # CLI marketplace skill resolution
         Path("cli/_prompts.py"): {"DefaultSkillResolver"},  # interactive CLI skill selection
+        Path("cli/_plugin_artifact.py"): {
+            "DefaultPluginRetirementCoordinator"
+        },  # CLI-owned cross-kind composition injected into ToolContext
         Path("cli/doctor/_doctor_config.py"): {
             "DefaultSkillResolver"
         },  # standing backend pin feasibility check

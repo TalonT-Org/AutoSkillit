@@ -11,14 +11,36 @@ one module is what stops those three from drifting apart again.
 from __future__ import annotations
 
 import hashlib
+import shutil
+import uuid
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import MappingProxyType
+
+from autoskillit.core import (
+    ArtifactLease,
+    ArtifactLeaseContention,
+    PluginArtifactIdentity,
+    PluginArtifactKind,
+    PluginArtifactValidationError,
+    RetirementOutcome,
+    RetiringAppendResult,
+    RetiringArtifactRecord,
+    RetiringCacheState,
+    _InstallLock,
+    append_retiring_record,
+    destination_location,
+    read_retiring_cache,
+    read_versioned_json,
+    remove_retiring_records,
+)
 
 __all__ = [
     "PROJECTION_CACHE_KEY_EXCLUSIONS",
     "ProjectionCacheKey",
+    "ProjectedPluginRetirementOwner",
     "is_projected_asset",
     "iter_public_plugin_asset_files",
     "prune_stale_projections",
@@ -164,19 +186,257 @@ PROJECTION_CACHE_KEY_EXCLUSIONS: Mapping[str, str] = MappingProxyType(
 )
 
 
+class ProjectedPluginRetirementOwner:
+    """Exact-identity retirement owner for projected plugin generations."""
+
+    def __init__(self, managed_root: Path) -> None:
+        self.managed_root = Path(managed_root).expanduser().resolve(strict=False)
+
+    def _contains(self, path: Path) -> bool:
+        try:
+            location = destination_location(Path(path))
+        except (OSError, ValueError):
+            return False
+        return location != self.managed_root and location.is_relative_to(self.managed_root)
+
+    @staticmethod
+    def manifest_path(managed_path: Path) -> Path:
+        return managed_path.parent / f".{managed_path.name}.autoskillit-projection.json"
+
+    @staticmethod
+    def lease_path(managed_path: Path) -> Path:
+        return managed_path.parent / ".artifact-leases" / f"{managed_path.name}.lock"
+
+    def enqueue_retirement(
+        self,
+        identity: PluginArtifactIdentity,
+        not_before: datetime,
+    ) -> RetiringAppendResult:
+        if not self._contains(identity.managed_path):
+            raise PluginArtifactValidationError(
+                f"projection is outside managed root: {identity.managed_path}"
+            )
+        if identity.manifest_path != self.manifest_path(identity.managed_path):
+            raise PluginArtifactValidationError(
+                f"projection manifest path is not canonical: {identity.manifest_path}"
+            )
+        retired_at = datetime.now(UTC)
+        return append_retiring_record(
+            RetiringArtifactRecord(
+                record_id=uuid.uuid4().hex,
+                artifact_kind=PluginArtifactKind.PROJECTION,
+                semantic_key=identity.semantic_key,
+                managed_path=identity.managed_path,
+                manifest_path=identity.manifest_path,
+                incarnation_id=identity.incarnation_id,
+                manifest_schema_version=identity.manifest_schema_version,
+                artifact_digest=identity.artifact_digest,
+                retired_at=retired_at,
+                not_before=not_before,
+            )
+        )
+
+    def cancel_obsolete_retirements(
+        self,
+        identity: PluginArtifactIdentity,
+    ) -> tuple[str, ...]:
+        state = read_retiring_cache()
+        if state.state is not RetiringCacheState.EXACT_V2:
+            return ()
+        record_ids = tuple(
+            record.record_id
+            for record in state.records
+            if record.artifact_kind is PluginArtifactKind.PROJECTION
+            and record.managed_path == identity.managed_path
+        ) + tuple(
+            evidence.record_id
+            for evidence in state.legacy_evidence
+            if evidence.recognized_kind is PluginArtifactKind.PROJECTION
+            and Path(evidence.path) == identity.managed_path
+        )
+        if not record_ids:
+            return ()
+        remove_retiring_records(record_ids)
+        return record_ids
+
+    def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
+        """Validate and return the exact current identity at a managed path."""
+        from autoskillit.workspace.skill_projection import (
+            _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            _projected_plugin_artifact_digest,
+        )
+
+        managed_path = Path(managed_path)
+        if not self._contains(managed_path):
+            raise PluginArtifactValidationError(
+                f"projection is outside managed root: {managed_path}"
+            )
+        manifest_path = self.manifest_path(managed_path)
+        manifest = read_versioned_json(
+            manifest_path,
+            _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        )
+        if manifest is None:
+            raise PluginArtifactValidationError(
+                f"projected retirement manifest is unreadable: {manifest_path}"
+            )
+        semantic_key = manifest.get("semantic_key")
+        incarnation_id = manifest.get("incarnation_id")
+        artifact_digest = manifest.get("artifact_digest")
+        if semantic_key != managed_path.name:
+            raise PluginArtifactValidationError(
+                f"projected retirement semantic key mismatch: {manifest_path}"
+            )
+        if not isinstance(incarnation_id, str):
+            raise PluginArtifactValidationError(
+                f"projected retirement incarnation is missing: {manifest_path}"
+            )
+        try:
+            parsed_incarnation = uuid.UUID(incarnation_id)
+        except ValueError as exc:
+            raise PluginArtifactValidationError(
+                f"projected retirement incarnation is invalid: {manifest_path}"
+            ) from exc
+        if str(parsed_incarnation) != incarnation_id:
+            raise PluginArtifactValidationError(
+                f"projected retirement incarnation is not canonical: {manifest_path}"
+            )
+        if not isinstance(artifact_digest, str) or len(artifact_digest) != 64:
+            raise PluginArtifactValidationError(
+                f"projected retirement digest is invalid: {manifest_path}"
+            )
+        identity = PluginArtifactIdentity(
+            semantic_key=semantic_key,
+            incarnation_id=incarnation_id,
+            manifest_schema_version=_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            artifact_digest=artifact_digest,
+            managed_path=managed_path,
+            manifest_path=manifest_path,
+        )
+        if _projected_plugin_artifact_digest(managed_path) != identity.artifact_digest:
+            raise PluginArtifactValidationError("projected retirement digest mismatch")
+        return identity
+
+    def _current_identity(
+        self,
+        record: RetiringArtifactRecord,
+    ) -> PluginArtifactIdentity:
+        from autoskillit.workspace.skill_projection import (
+            _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        )
+
+        if record.manifest_path != self.manifest_path(record.managed_path):
+            raise PluginArtifactValidationError(
+                "projected retirement manifest path is not canonical"
+            )
+        if record.manifest_schema_version != _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION:
+            raise PluginArtifactValidationError(
+                "projected retirement manifest schema is unsupported"
+            )
+        return self.identity_for_path(record.managed_path)
+
+    def try_reclaim(
+        self,
+        record: RetiringArtifactRecord,
+        now: datetime,
+    ) -> RetirementOutcome:
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("projection retirement sweep time must be timezone-aware")
+        now = now.astimezone(UTC)
+        if record.artifact_kind is not PluginArtifactKind.PROJECTION:
+            return RetirementOutcome.REJECTED_IDENTITY
+        if now < record.not_before:
+            return RetirementOutcome.DEFERRED_NOT_DUE
+        if not self._contains(record.managed_path):
+            return RetirementOutcome.REJECTED_IDENTITY
+        try:
+            writer = ArtifactLease.acquire_exclusive(
+                self.lease_path(record.managed_path),
+                blocking=False,
+            )
+        except ArtifactLeaseContention:
+            return RetirementOutcome.DEFERRED_CONTENDED
+        try:
+            with _InstallLock():
+                state = read_retiring_cache()
+                queued = next(
+                    (
+                        current
+                        for current in state.records
+                        if current.record_id == record.record_id
+                    ),
+                    None,
+                )
+                if queued is None:
+                    return RetirementOutcome.RECORD_REMOVED
+                if queued != record:
+                    return RetirementOutcome.REJECTED_IDENTITY
+                if now < queued.not_before:
+                    return RetirementOutcome.DEFERRED_NOT_DUE
+                if not record.managed_path.exists() and not record.manifest_path.exists():
+                    remove_retiring_records((record.record_id,))
+                    return RetirementOutcome.RECORD_REMOVED
+                try:
+                    current = self._current_identity(record)
+                except PluginArtifactValidationError:
+                    remove_retiring_records((record.record_id,))
+                    return RetirementOutcome.REJECTED_IDENTITY
+                if current != record.identity:
+                    remove_retiring_records((record.record_id,))
+                    return RetirementOutcome.REJECTED_IDENTITY
+                shutil.rmtree(record.managed_path)
+                if record.manifest_path.is_file() or record.manifest_path.is_symlink():
+                    record.manifest_path.unlink()
+                remove_retiring_records((record.record_id,))
+                return RetirementOutcome.RECLAIMED
+        finally:
+            writer.close()
+
+
 def prune_stale_projections(
     projections_root: Path,
     *,
     active_key: str,
-    grace_hours: int = _PROJECTION_GRACE_HOURS,
 ) -> int:
-    """Defer retirement until it can participate in artifact leases.
+    """Queue exact stale incarnations without mutating reader-held artifacts."""
+    from autoskillit.core import (
+        ArtifactLease,
+        ArtifactLeaseContention,
+        PluginArtifactValidationError,
+        _InstallLock,
+    )
 
-    A projection manifest is part of the exact incarnation identity. Removing
-    it independently of the public root makes a reader-held artifact
-    unverifiable. Retirement therefore remains a no-op until its writer path
-    acquires each projection's stable sidecar lease and removes root and
-    manifest as one operation.
-    """
-    del projections_root, active_key, grace_hours
-    return 0
+    root = Path(projections_root).expanduser().resolve(strict=False)
+    owner = ProjectedPluginRetirementOwner(root)
+    with _InstallLock():
+        if not root.is_dir():
+            return 0
+        candidates = tuple(
+            path
+            for path in sorted(root.iterdir(), key=lambda item: item.name)
+            if path.name != active_key
+            and not path.name.startswith(".")
+            and path.is_dir()
+            and not path.is_symlink()
+        )
+
+    created = 0
+    not_before = datetime.now(UTC) + timedelta(hours=_PROJECTION_GRACE_HOURS)
+    for candidate in candidates:
+        try:
+            writer = ArtifactLease.acquire_exclusive(
+                owner.lease_path(candidate),
+                blocking=False,
+            )
+        except ArtifactLeaseContention:
+            continue
+        try:
+            with _InstallLock():
+                try:
+                    identity = owner.identity_for_path(candidate)
+                except PluginArtifactValidationError:
+                    continue
+                created += int(owner.enqueue_retirement(identity, not_before).created)
+        finally:
+            writer.close()
+    return created

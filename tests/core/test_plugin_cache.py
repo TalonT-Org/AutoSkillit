@@ -4,16 +4,23 @@ validation."""
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from autoskillit.core import (
+    PluginArtifactKind,
+    RetiringArtifactRecord,
+    RetiringCacheState,
+)
 from autoskillit.core._plugin_cache import (
     any_kitchen_open,
-    append_retiring_entry,
+    append_retiring_record,
     clear_kitchens_for_pid,
+    migrate_retiring_cache_v1,
+    read_retiring_cache,
     register_active_kitchen,
-    sweep_retiring_cache,
     unregister_active_kitchen,
 )
 
@@ -37,6 +44,22 @@ def _make_retiring_file(path: Path, schema_version: int, retiring: list[dict]) -
     path.write_text(json.dumps({"schema_version": schema_version, "retiring": retiring}))
 
 
+def _retiring_record(tmp_path: Path) -> RetiringArtifactRecord:
+    retired_at = datetime.now(UTC)
+    return RetiringArtifactRecord(
+        record_id="record-1",
+        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+        semantic_key="plugin:1",
+        managed_path=(tmp_path / "managed" / "1").absolute(),
+        manifest_path=(tmp_path / "managed" / ".1.manifest.json").absolute(),
+        incarnation_id="incarnation-1",
+        manifest_schema_version=1,
+        artifact_digest="a" * 64,
+        retired_at=retired_at,
+        not_before=retired_at + timedelta(hours=6),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Schema version validation — stale retiring cache
 # ---------------------------------------------------------------------------
@@ -48,72 +71,56 @@ class TestRetiringCacheSchemaValidation:
 
         _reset_schema_drift_logged_for_tests()
 
-    def test_append_retiring_entry_reads_ignore_stale_version(self, monkeypatch, tmp_path):
-        """Stale retiring_cache.json (schema_version=99) must be treated as empty.
-
-        append_retiring_entry reads the existing cache before writing.
-        When the file has a stale schema version, it must be discarded and only
-        the new entry must be written.
-        """
+    def test_future_schema_is_preserved_and_mutation_fails_closed(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         cache = tmp_path / ".autoskillit" / "retiring_cache.json"
         _make_retiring_file(
             cache, schema_version=99, retiring=[{"version": "old", "path": "/old/path"}]
         )
+        before = cache.read_bytes()
 
-        # Intercept filesystem writes so we can inspect what gets persisted
-        written: list[str] = []
+        result = read_retiring_cache()
 
-        def spy_write(path, data, schema_version):
-            from autoskillit.core.io import write_versioned_json as real
+        assert result.state is RetiringCacheState.UNSUPPORTED_FUTURE
+        with pytest.raises(RuntimeError, match="unsupported_future"):
+            append_retiring_record(_retiring_record(tmp_path))
+        assert cache.read_bytes() == before
 
-            real(path, data, schema_version)
-            written.append(json.loads(Path(path).read_text()))
-
-        monkeypatch.setattr("autoskillit.core._plugin_cache.write_versioned_json", spy_write)
-
-        append_retiring_entry("1.0", "/new/path")
-
-        # The stale entries must not appear in any write
-        for w in written:
-            versioned_entries = w.get("retiring", [])
-            stale = [e for e in versioned_entries if e["version"] == "old"]
-            assert len(stale) == 0, "Stale entries must not be carried forward"
-        # Only the new entry should be present
-        last = written[-1]
-        assert last["retiring"] == [
-            {
-                "version": "1.0",
-                "path": "/new/path",
-                "retired_at": last["retiring"][0]["retired_at"],
-            }
-        ]
-
-    def test_sweep_retiring_cache_ignores_stale_version(self, monkeypatch, tmp_path):
-        """sweep_retiring_cache must treat a stale retiring_cache.json as empty.
-
-        When the file has schema_version != _SCHEMA_VERSION, the function must
-        return 0 (nothing to sweep) rather than crashing or sweeping stale data.
-        """
+    def test_explicit_v1_migration_preserves_active_registry(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         cache = tmp_path / ".autoskillit" / "retiring_cache.json"
         _make_retiring_file(
             cache,
-            schema_version=99,
+            schema_version=1,
             retiring=[
                 {
                     "version": "0.9",
-                    "path": str(tmp_path / "old"),
+                    "path": str(tmp_path / "managed" / "0.9"),
                     "retired_at": "2020-01-01T00:00:00+00:00",
                 }
             ],
         )
-        # Create the directory so shutil.rmtree doesn't crash
-        (tmp_path / "old").mkdir()
+        kitchens = tmp_path / ".autoskillit" / "active_kitchens.json"
+        _make_kitchen_file(kitchens, schema_version=1, kitchens=[])
+        kitchens_before = kitchens.read_bytes()
 
-        result = sweep_retiring_cache(grace_hours=0)
+        result = migrate_retiring_cache_v1(
+            {PluginArtifactKind.INSTALLED_PLUGIN: tmp_path / "managed"}
+        )
 
-        assert result == 0, "Must return 0 when file has stale schema version"
+        assert result.state is RetiringCacheState.EXACT_V2
+        assert len(result.legacy_evidence) == 1
+        assert result.legacy_evidence[0].recognized_kind is PluginArtifactKind.INSTALLED_PLUGIN
+        assert result.records == ()
+        assert kitchens.read_bytes() == kitchens_before
 
     def test_register_active_kitchen_ignores_stale_version(self, monkeypatch, tmp_path):
         """Stale active_kitchens.json must be overwritten with fresh data.

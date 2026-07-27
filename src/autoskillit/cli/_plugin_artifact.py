@@ -2,22 +2,37 @@
 
 from __future__ import annotations
 
-import hashlib
-import os
+import shutil
 import stat
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     DIRECT_INSTALL_CACHE_SUBDIR,
     ArtifactLease,
+    ArtifactLeaseContention,
     PluginArtifactIdentity,
+    PluginArtifactKind,
     PluginArtifactPublicationError,
+    PluginArtifactRetirementOwner,
     PluginArtifactValidationError,
     PluginLaunchBinding,
     PluginLoadMode,
+    RetirementOutcome,
+    RetiringAppendResult,
+    RetiringArtifactRecord,
+    RetiringCacheState,
+    _InstallLock,
+    append_retiring_record,
+    destination_location,
+    directory_tree_digest,
+    due_retiring_records,
+    migrate_retiring_cache_v1,
+    read_retiring_cache,
     read_versioned_json,
+    remove_retiring_records,
     write_versioned_json,
 )
 
@@ -125,6 +140,7 @@ def publish_installed_plugin_artifact(
     root: Path,
     *,
     semantic_key: str,
+    _owned_exclusive_lease: ArtifactLease | None = None,
 ) -> PluginArtifactIdentity:
     """Persist a new exact identity after a successful plugin installation."""
     try:
@@ -134,37 +150,66 @@ def publish_installed_plugin_artifact(
             raise PluginArtifactPublicationError(
                 f"installed plugin manifest path is not absolute: {manifest_path}"
             )
+        if _owned_exclusive_lease is not None:
+            expected_lock = installed_artifact_lock_path(managed_path)
+            if (
+                _owned_exclusive_lease.closed
+                or _owned_exclusive_lease.shared
+                or _owned_exclusive_lease.path != expected_lock
+            ):
+                raise PluginArtifactPublicationError(
+                    f"installed plugin publication lease does not own {expected_lock}"
+                )
+            return _publish_installed_plugin_artifact_locked(
+                managed_path,
+                semantic_key=semantic_key,
+            )
         with ArtifactLease.acquire_exclusive(
             installed_artifact_lock_path(managed_path),
             blocking=True,
         ):
-            identity = PluginArtifactIdentity(
+            return _publish_installed_plugin_artifact_locked(
+                managed_path,
                 semantic_key=semantic_key,
-                incarnation_id=uuid.uuid4().hex,
-                manifest_schema_version=_SCHEMA_VERSION,
-                artifact_digest=_complete_tree_digest(managed_path),
-                managed_path=managed_path,
-                manifest_path=manifest_path,
             )
-            write_versioned_json(
-                manifest_path,
-                {
-                    "artifact_kind": _ARTIFACT_KIND,
-                    "semantic_key": identity.semantic_key,
-                    "incarnation_id": identity.incarnation_id,
-                    "artifact_digest": identity.artifact_digest,
-                    "managed_path": str(identity.managed_path),
-                    "manifest_path": str(identity.manifest_path),
-                },
-                schema_version=_SCHEMA_VERSION,
-            )
-            return identity
     except PluginArtifactPublicationError:
         raise
     except BaseException as exc:
         raise PluginArtifactPublicationError(
             f"failed to publish installed plugin artifact at {root}: {exc}"
         ) from exc
+
+
+def _publish_installed_plugin_artifact_locked(
+    managed_path: Path,
+    *,
+    semantic_key: str,
+) -> PluginArtifactIdentity:
+    """Publish identity while the caller owns the stable exclusive sidecar."""
+    managed_path = _canonical_installed_root(managed_path)
+    manifest_path = installed_artifact_manifest_path(managed_path)
+    identity = PluginArtifactIdentity(
+        semantic_key=semantic_key,
+        incarnation_id=uuid.uuid4().hex,
+        manifest_schema_version=_SCHEMA_VERSION,
+        artifact_digest=_complete_tree_digest(managed_path),
+        managed_path=managed_path,
+        manifest_path=manifest_path,
+    )
+    write_versioned_json(
+        manifest_path,
+        {
+            "artifact_kind": _ARTIFACT_KIND,
+            "semantic_key": identity.semantic_key,
+            "incarnation_id": identity.incarnation_id,
+            "artifact_digest": identity.artifact_digest,
+            "managed_path": str(identity.managed_path),
+            "manifest_path": str(identity.manifest_path),
+        },
+        schema_version=_SCHEMA_VERSION,
+        strict_durability=True,
+    )
+    return identity
 
 
 class InstalledPluginArtifactAuthority:
@@ -203,6 +248,9 @@ class InstalledPluginArtifactAuthority:
                 managed_path,
                 expected_semantic_key=self._semantic_key,
             )
+            InstalledPluginArtifactRetirementOwner(
+                managed_path.parent
+            ).cancel_obsolete_retirements(identity)
             return PluginLaunchBinding(
                 load_mode=load_mode,
                 plugin_dir=None,
@@ -213,6 +261,193 @@ class InstalledPluginArtifactAuthority:
         except BaseException:
             lease.close()
             raise
+
+
+class InstalledPluginArtifactRetirementOwner:
+    """Exact-identity retirement owner for AutoSkillit's installed cache."""
+
+    def __init__(self, managed_root: Path) -> None:
+        self.managed_root = Path(managed_root).expanduser().resolve(strict=False)
+
+    def _contains(self, path: Path) -> bool:
+        try:
+            location = destination_location(Path(path))
+        except (OSError, ValueError):
+            return False
+        return location != self.managed_root and location.is_relative_to(self.managed_root)
+
+    def enqueue_retirement(
+        self,
+        identity: PluginArtifactIdentity,
+        not_before: datetime,
+    ) -> RetiringAppendResult:
+        if not self._contains(identity.managed_path):
+            raise PluginArtifactValidationError(
+                f"installed artifact is outside managed root: {identity.managed_path}"
+            )
+        if identity.manifest_path != installed_artifact_manifest_path(identity.managed_path):
+            raise PluginArtifactValidationError(
+                f"installed artifact manifest path is not canonical: {identity.manifest_path}"
+            )
+        retired_at = datetime.now(UTC)
+        return append_retiring_record(
+            RetiringArtifactRecord(
+                record_id=uuid.uuid4().hex,
+                artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+                semantic_key=identity.semantic_key,
+                managed_path=identity.managed_path,
+                manifest_path=identity.manifest_path,
+                incarnation_id=identity.incarnation_id,
+                manifest_schema_version=identity.manifest_schema_version,
+                artifact_digest=identity.artifact_digest,
+                retired_at=retired_at,
+                not_before=not_before,
+            )
+        )
+
+    def cancel_obsolete_retirements(
+        self,
+        identity: PluginArtifactIdentity,
+    ) -> tuple[str, ...]:
+        state = read_retiring_cache()
+        if state.state is not RetiringCacheState.EXACT_V2:
+            return ()
+        record_ids = tuple(
+            record.record_id
+            for record in state.records
+            if record.artifact_kind is PluginArtifactKind.INSTALLED_PLUGIN
+            and record.managed_path == identity.managed_path
+        ) + tuple(
+            evidence.record_id
+            for evidence in state.legacy_evidence
+            if evidence.recognized_kind is PluginArtifactKind.INSTALLED_PLUGIN
+            and Path(evidence.path) == identity.managed_path
+        )
+        if not record_ids:
+            return ()
+        remove_retiring_records(record_ids)
+        return record_ids
+
+    def try_reclaim(
+        self,
+        record: RetiringArtifactRecord,
+        now: datetime,
+    ) -> RetirementOutcome:
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("installed retirement sweep time must be timezone-aware")
+        now = now.astimezone(UTC)
+        if record.artifact_kind is not PluginArtifactKind.INSTALLED_PLUGIN:
+            return RetirementOutcome.REJECTED_IDENTITY
+        if now < record.not_before:
+            return RetirementOutcome.DEFERRED_NOT_DUE
+        if not self._contains(record.managed_path):
+            return RetirementOutcome.REJECTED_IDENTITY
+        try:
+            writer = ArtifactLease.acquire_exclusive(
+                installed_artifact_lock_path(record.managed_path),
+                blocking=False,
+            )
+        except ArtifactLeaseContention:
+            return RetirementOutcome.DEFERRED_CONTENDED
+        try:
+            with _InstallLock():
+                state = read_retiring_cache()
+                queued = next(
+                    (
+                        current
+                        for current in state.records
+                        if current.record_id == record.record_id
+                    ),
+                    None,
+                )
+                if queued is None:
+                    return RetirementOutcome.RECORD_REMOVED
+                if queued != record:
+                    return RetirementOutcome.REJECTED_IDENTITY
+                if now < queued.not_before:
+                    return RetirementOutcome.DEFERRED_NOT_DUE
+                if not record.managed_path.exists() and not record.manifest_path.exists():
+                    remove_retiring_records((record.record_id,))
+                    return RetirementOutcome.RECORD_REMOVED
+                try:
+                    current = _read_and_validate_identity(
+                        record.managed_path,
+                        expected_semantic_key=record.semantic_key,
+                    )
+                except PluginArtifactValidationError:
+                    remove_retiring_records((record.record_id,))
+                    return RetirementOutcome.REJECTED_IDENTITY
+                if current != record.identity:
+                    remove_retiring_records((record.record_id,))
+                    return RetirementOutcome.REJECTED_IDENTITY
+                shutil.rmtree(record.managed_path)
+                if record.manifest_path.is_file() or record.manifest_path.is_symlink():
+                    record.manifest_path.unlink()
+                remove_retiring_records((record.record_id,))
+                return RetirementOutcome.RECLAIMED
+        finally:
+            writer.close()
+
+
+class DefaultPluginRetirementCoordinator:
+    """Cross-kind retirement dispatcher used by startup and explicit sweeps."""
+
+    def __init__(
+        self,
+        *,
+        projection_owner: PluginArtifactRetirementOwner,
+        installed_owner: InstalledPluginArtifactRetirementOwner,
+        projection_root: Path,
+    ) -> None:
+        self._owners = {
+            PluginArtifactKind.PROJECTION: projection_owner,
+            PluginArtifactKind.INSTALLED_PLUGIN: installed_owner,
+        }
+        self._managed_roots = {
+            PluginArtifactKind.PROJECTION: Path(projection_root),
+            PluginArtifactKind.INSTALLED_PLUGIN: installed_owner.managed_root,
+        }
+
+    def sweep_due(self, now: datetime) -> tuple[RetirementOutcome, ...]:
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("retirement coordinator time must be timezone-aware")
+        now = now.astimezone(UTC)
+        state = read_retiring_cache()
+        if state.state is RetiringCacheState.LEGACY_V1:
+            state = migrate_retiring_cache_v1(self._managed_roots)
+        if state.state is not RetiringCacheState.EXACT_V2:
+            if state.state in {
+                RetiringCacheState.CORRUPT,
+                RetiringCacheState.UNSUPPORTED_FUTURE,
+            }:
+                import warnings
+
+                warnings.warn(
+                    f"retiring cache sweep skipped unsafe state {state.state.value}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            return ()
+        outcomes = [RetirementOutcome.LEGACY_EVIDENCE for _item in state.legacy_evidence]
+        for record in due_retiring_records(now):
+            owner = self._owners[record.artifact_kind]
+            outcomes.append(owner.try_reclaim(record, now))
+        return tuple(outcomes)
+
+
+def default_plugin_retirement_coordinator() -> DefaultPluginRetirementCoordinator:
+    """Compose installed and projected owners without leaking CLI into server lifespan."""
+    from autoskillit.workspace import ProjectedPluginRetirementOwner
+
+    projection_root = Path.home() / ".autoskillit" / "plugin-projections"
+    installed_owner = InstalledPluginArtifactRetirementOwner(
+        current_installed_plugin_root().parent
+    )
+    return DefaultPluginRetirementCoordinator(
+        projection_owner=ProjectedPluginRetirementOwner(projection_root),
+        installed_owner=installed_owner,
+        projection_root=projection_root,
+    )
 
 
 def _read_and_validate_identity(
@@ -302,6 +537,21 @@ def _read_and_validate_identity(
     )
 
 
+def _read_installed_plugin_identity(managed_path: Path) -> PluginArtifactIdentity:
+    """Validate an installed identity whose semantic key is persisted on disk."""
+    managed_path = _canonical_installed_root(managed_path)
+    manifest_path = installed_artifact_manifest_path(managed_path)
+    raw = read_versioned_json(manifest_path, _SCHEMA_VERSION)
+    if raw is None or not isinstance(raw.get("semantic_key"), str):
+        raise PluginArtifactValidationError(
+            f"installed plugin semantic identity is unavailable: {manifest_path}"
+        )
+    return _read_and_validate_identity(
+        managed_path,
+        expected_semantic_key=raw["semantic_key"],
+    )
+
+
 def _canonical_installed_root(root: Path) -> Path:
     supplied = Path(root)
     if not supplied.is_absolute():
@@ -317,42 +567,21 @@ def _canonical_installed_root(root: Path) -> Path:
 
 def _complete_tree_digest(root: Path) -> str:
     """Hash every relative entry, kind, mode, and regular-file byte."""
-    digest = hashlib.sha256()
-    for current_root, directory_names, file_names in os.walk(root, followlinks=False):
-        current = Path(current_root)
-        directory_names.sort()
-        file_names.sort()
-        for name in (*directory_names, *file_names):
-            path = current / name
-            relative = path.relative_to(root).as_posix()
-            entry_stat = path.stat(follow_symlinks=False)
-            if stat.S_ISLNK(entry_stat.st_mode):
-                raise PluginArtifactValidationError(
-                    f"installed plugin artifact contains a symlink: {path}"
-                )
-            if stat.S_ISDIR(entry_stat.st_mode):
-                kind = b"d"
-            elif stat.S_ISREG(entry_stat.st_mode):
-                kind = b"f"
-            else:
-                raise PluginArtifactValidationError(
-                    f"installed plugin artifact contains a special file: {path}"
-                )
-            digest.update(kind)
-            digest.update(relative.encode("utf-8"))
-            digest.update(b"\0")
-            digest.update(stat.S_IMODE(entry_stat.st_mode).to_bytes(2, "big"))
-            if kind == b"f":
-                with path.open("rb") as handle:
-                    digest.update(hashlib.file_digest(handle, "sha256").digest())
-            digest.update(b"\0")
-    return digest.hexdigest()
+    try:
+        return directory_tree_digest(root)
+    except (OSError, ValueError) as exc:
+        raise PluginArtifactValidationError(
+            f"installed plugin artifact cannot be digested: {root}"
+        ) from exc
 
 
 __all__ = [
+    "DefaultPluginRetirementCoordinator",
     "InstalledPluginArtifactAuthority",
+    "InstalledPluginArtifactRetirementOwner",
     "current_installed_plugin_authority",
     "current_installed_plugin_root",
+    "default_plugin_retirement_coordinator",
     "installed_artifact_lock_path",
     "installed_artifact_manifest_path",
     "installed_plugin_semantic_key",

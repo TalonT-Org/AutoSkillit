@@ -20,6 +20,7 @@ import asyncio as _asyncio
 import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -38,7 +39,6 @@ from autoskillit.core import (
     get_logger,
     register_active_kitchen,
     resolve_kitchen_id,
-    sweep_retiring_cache,
     write_readiness_sentinel,
 )
 from autoskillit.core import (
@@ -214,9 +214,15 @@ async def _run_drift_check_async() -> None:
 
 async def _run_retiring_sweep_async() -> None:
     """Offload blocking retiring cache sweep to a thread."""
-
+    ctx = _get_ctx_or_none()
+    if ctx is None or ctx.plugin_retirement_coordinator is None:
+        return
     loop = _asyncio.get_running_loop()
-    await loop.run_in_executor(None, sweep_retiring_cache)
+    await loop.run_in_executor(
+        None,
+        ctx.plugin_retirement_coordinator.sweep_due,
+        datetime.now(UTC),
+    )
 
 
 async def _run_hook_health_check_async() -> None:

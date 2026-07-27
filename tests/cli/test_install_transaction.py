@@ -1,9 +1,8 @@
 """A failed install must leave the machine exactly as it found it.
 
 F3: `install()` retired the live plugin cache *before* securing its replacement
-and never rolled back. Four windows could exit between those two points. Since
-`sweep_retiring_cache` is scheduled on every MCP server startup, a failed install
-became a dangling registry pointer about two hours later — which is how the
+and never rolled back. Four windows could exit between those two points. A later
+startup sweep then created a dangling registry pointer, which is how the
 reporting machine reached the state that crashed `cook`.
 
 Both halves are covered: the preflight ordering (nothing mutates before every
@@ -55,7 +54,10 @@ def _retiring_paths(home: Path) -> set[str]:
     retiring = home / ".autoskillit" / "retiring_cache.json"
     if not retiring.is_file():
         return set()
-    return {e.get("path", "") for e in _read_json(retiring).get("retiring", [])}
+    data = _read_json(retiring)
+    if data.get("schema_version") == 2:
+        return {str(entry.get("managed_path", "")) for entry in data.get("records", [])}
+    return {str(entry.get("path", "")) for entry in data.get("retiring", [])}
 
 
 class TestRollbackOnFailure:
@@ -164,67 +166,56 @@ class TestPreflightOrdering:
         assert not (tmp_path / ".autoskillit" / "marketplace").exists()
 
 
-class TestSweeperDefersRegisteredDirectories:
-    """The sweeper must never be the thing that creates a dangling pointer."""
-
-    def _retire(self, home: Path, path: Path, *, hours_ago: float) -> None:
+class TestRecordOwnedRetirementDeadline:
+    def test_coordinator_dispatches_only_due_exact_records(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
         from datetime import UTC, datetime, timedelta
 
-        from autoskillit.core import write_versioned_json
-
-        retired_at = (datetime.now(UTC) - timedelta(hours=hours_ago)).isoformat()
-        write_versioned_json(
-            home / ".autoskillit" / "retiring_cache.json",
-            {"retiring": [{"version": "x", "path": str(path), "retired_at": retired_at}]},
-            schema_version=1,
+        from autoskillit.cli._plugin_artifact import DefaultPluginRetirementCoordinator
+        from autoskillit.core import (
+            PluginArtifactKind,
+            RetirementOutcome,
+            RetiringArtifactRecord,
+            append_retiring_record,
         )
 
-    def test_registered_and_young_is_deferred(self, tmp_path: Path, monkeypatch) -> None:
-        from autoskillit.core import sweep_retiring_cache
-
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        cache = _seed_installed_state(tmp_path, "0.0.1-old")
-        self._retire(tmp_path, cache, hours_ago=5)
+        now = datetime.now(UTC)
+        future = RetiringArtifactRecord(
+            record_id="future",
+            artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+            semantic_key="plugin:future",
+            managed_path=(tmp_path / "cache" / "future").absolute(),
+            manifest_path=(tmp_path / "cache" / ".future.json").absolute(),
+            incarnation_id="future-incarnation",
+            manifest_schema_version=1,
+            artifact_digest="a" * 64,
+            retired_at=now,
+            not_before=now + timedelta(hours=6),
+        )
+        append_retiring_record(future)
+        dispatched: list[str] = []
 
-        assert sweep_retiring_cache(grace_hours=2) == 0
-        assert cache.is_dir(), "the sweeper deleted a directory the registry still names"
-        assert str(cache) in _retiring_paths(tmp_path)
+        class Owner:
+            managed_root = tmp_path / "cache"
 
-    def test_past_the_ceiling_it_is_deleted_and_reported(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        """Deferral must be bounded or it livelocks.
+            def try_reclaim(self, record, sweep_now):
+                assert sweep_now == now
+                dispatched.append(record.record_id)
+                return RetirementOutcome.RECLAIMED
 
-        `retired_at` is stamped once, so an entry blocked by a stale registry is
-        re-deferred on every later sweep with no state change — unbounded
-        retention. Past the ceiling the directory goes and the *registry* is
-        reported as the thing that is wrong.
-        """
-        from autoskillit.core import sweep_retiring_cache
-        from autoskillit.workspace import verify_install_state
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        cache = _seed_installed_state(tmp_path, "0.0.1-old")
-        self._retire(tmp_path, cache, hours_ago=1000)
-
-        assert sweep_retiring_cache(grace_hours=2, max_defer_hours=72) == 1
-        assert not cache.exists()
-
-        checks = {f.check for f in verify_install_state()}
-        assert "installed_plugins_install_path" in checks, (
-            "deleting past the ceiling must surface the registry inconsistency"
+        owner = Owner()
+        coordinator = DefaultPluginRetirementCoordinator(
+            projection_owner=owner,
+            installed_owner=owner,
+            projection_root=tmp_path / "projections",
         )
 
-    def test_unregistered_and_aged_out_is_deleted(self, tmp_path: Path, monkeypatch) -> None:
-        from autoskillit.core import sweep_retiring_cache
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        orphan = tmp_path / "orphan"
-        orphan.mkdir()
-        self._retire(tmp_path, orphan, hours_ago=5)
-
-        assert sweep_retiring_cache(grace_hours=2) == 1
-        assert not orphan.exists()
+        assert coordinator.sweep_due(now) == ()
+        assert dispatched == []
 
 
 class TestClearPluginCacheKeepsItsPromise:

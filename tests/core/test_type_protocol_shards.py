@@ -85,6 +85,8 @@ def test_workspace_shard_all():
     assert set(__all__) == {
         "WorkspaceManager",
         "PluginArtifactAuthority",
+        "PluginArtifactRetirementOwner",
+        "PluginRetirementCoordinator",
         "CloneManager",
         "EffectiveSkillCatalogAuthority",
         "EffectiveSkillInvocationAuthority",

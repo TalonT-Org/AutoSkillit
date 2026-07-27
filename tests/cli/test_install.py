@@ -743,6 +743,8 @@ def test_clear_plugin_cache_drops_plugins_entry(
     Old version directories still survive under the grace period.
     """
     from autoskillit.cli._marketplace import _clear_plugin_cache
+    from autoskillit.cli._plugin_artifact import publish_installed_plugin_artifact
+    from autoskillit.core import PluginArtifactKind, read_retiring_cache
 
     plugins_dir = tmp_path / ".claude" / "plugins"
     plugins_dir.mkdir(parents=True)
@@ -759,12 +761,17 @@ def test_clear_plugin_cache_drops_plugins_entry(
     cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
     old_version_dir = cache_dir / "0.9.0"
     old_version_dir.mkdir(parents=True)
+    (old_version_dir / "plugin.json").write_text('{"name":"autoskillit"}')
     # Ensure the running __version__ differs from "0.9.0" so retirement applies
     import autoskillit as _pkg
 
     monkeypatch.setattr(_pkg, "__version__", "0.9.99-test")
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    old_identity = publish_installed_plugin_artifact(
+        old_version_dir,
+        semantic_key="autoskillit@autoskillit-local:0.9.0",
+    )
     _clear_plugin_cache()
 
     data = json.loads(installed_json.read_text())
@@ -773,10 +780,10 @@ def test_clear_plugin_cache_drops_plugins_entry(
     # Old version dir survives under grace period
     assert old_version_dir.exists(), "Old version dir must survive under grace period"
     # Retiring registry must record the old version
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    assert retiring_json.exists(), "retiring_cache.json must be created"
-    retiring_data = json.loads(retiring_json.read_text())
-    assert any(e["version"] == "0.9.0" for e in retiring_data["retiring"])
+    retiring = read_retiring_cache()
+    assert len(retiring.records) == 1
+    assert retiring.records[0].artifact_kind is PluginArtifactKind.INSTALLED_PLUGIN
+    assert retiring.records[0].identity == old_identity
 
 
 def test_clear_plugin_cache_noop_when_entry_absent(

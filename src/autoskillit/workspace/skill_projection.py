@@ -56,6 +56,7 @@ from autoskillit.core import (
     SkillSourceIdentity,
     SkillSourceRef,
     SkillVisibilitySpec,
+    _InstallLock,
     atomic_write,
     destination_location,
     dump_yaml_str,
@@ -65,6 +66,7 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.workspace._projection_cache import (
+    ProjectedPluginRetirementOwner,
     ProjectionCacheKey,
     is_projected_asset,
     public_plugin_asset_digest,
@@ -82,6 +84,7 @@ __all__ = [
     "EffectiveSkillDispatchContract",
     "EffectiveSkillDispatchPreparation",
     "ProjectedPluginArtifactAuthority",
+    "ProjectedPluginRetirementOwner",
     "SkillProjectionContext",
     "build_effective_skill_dispatch_contract",
     "finalize_effective_skill_dispatch",
@@ -859,6 +862,7 @@ def _stage_projected_plugin_artifact(
                 "skills": _projection_skills_manifest(skill_infos, documents),
             },
             schema_version=identity.manifest_schema_version,
+            strict_durability=True,
         )
         return _StagedProjectedArtifact(
             root=staging_root,
@@ -1153,33 +1157,34 @@ class ProjectedPluginArtifactAuthority:
                 f"projected plugin mutation is contended: {plan.semantic_key}"
             ) from exc
         try:
-            identity = _try_validate_published_plugin_artifact(plan)
-            if identity is None:
-                plan.destination.parent.mkdir(parents=True, exist_ok=True)
-                staged: _StagedProjectedArtifact | None = None
-                try:
-                    staged = _stage_projected_plugin_artifact(plan)
-                    _publish_projected_plugin_root(staged, plan.destination)
-                    _publish_projected_plugin_manifest(staged, plan.manifest_path)
-                except (
-                    PluginArtifactPublicationError,
-                    PluginArtifactValidationError,
-                ):
-                    raise
-                except BaseException as exc:
-                    raise PluginArtifactPublicationError(
-                        f"projected plugin publication failed: {plan.semantic_key}"
-                    ) from exc
-                finally:
-                    if staged is not None:
-                        shutil.rmtree(staged.root, ignore_errors=True)
-                        if staged.manifest.is_symlink() or staged.manifest.is_file():
-                            staged.manifest.unlink()
-                assert staged is not None
-                identity = _validate_published_plugin_artifact(
-                    plan,
-                    expected_identity=staged.identity,
-                )
+            with _InstallLock():
+                identity = _try_validate_published_plugin_artifact(plan)
+                if identity is None:
+                    plan.destination.parent.mkdir(parents=True, exist_ok=True)
+                    staged: _StagedProjectedArtifact | None = None
+                    try:
+                        staged = _stage_projected_plugin_artifact(plan)
+                        _publish_projected_plugin_root(staged, plan.destination)
+                        _publish_projected_plugin_manifest(staged, plan.manifest_path)
+                    except (
+                        PluginArtifactPublicationError,
+                        PluginArtifactValidationError,
+                    ):
+                        raise
+                    except BaseException as exc:
+                        raise PluginArtifactPublicationError(
+                            f"projected plugin publication failed: {plan.semantic_key}"
+                        ) from exc
+                    finally:
+                        if staged is not None:
+                            shutil.rmtree(staged.root, ignore_errors=True)
+                            if staged.manifest.is_symlink() or staged.manifest.is_file():
+                                staged.manifest.unlink()
+                    assert staged is not None
+                    identity = _validate_published_plugin_artifact(
+                        plan,
+                        expected_identity=staged.identity,
+                    )
         finally:
             writer.close()
 
@@ -1206,6 +1211,14 @@ class ProjectedPluginArtifactAuthority:
         identity: PluginArtifactIdentity,
         reader: ArtifactLease,
     ) -> PluginLaunchBinding:
+        owner = ProjectedPluginRetirementOwner(plan.destination.parent)
+        owner.cancel_obsolete_retirements(identity)
+        from autoskillit.workspace._projection_cache import prune_stale_projections
+
+        prune_stale_projections(
+            plan.destination.parent,
+            active_key=plan.semantic_key,
+        )
         return PluginLaunchBinding(
             load_mode=load_mode,
             plugin_dir=(

@@ -75,14 +75,62 @@ class TestVerifyInstallState:
         assert "retired_install_artifact_shape" in _checks(home)
 
     def test_retiring_entry_the_registry_still_references(self, home: Path) -> None:
-        from autoskillit.core import append_retiring_entry
+        from datetime import UTC, datetime, timedelta
+
+        from autoskillit.cli._plugin_artifact import (
+            InstalledPluginArtifactRetirementOwner,
+            publish_installed_plugin_artifact,
+        )
 
         live = home / "cache" / "1.0.0"
         live.mkdir(parents=True)
+        (live / "plugin.json").write_text('{"name":"autoskillit"}')
         _write_registry(home, live)
-        append_retiring_entry(version="1.0.0", path=str(live))
+        identity = publish_installed_plugin_artifact(
+            live,
+            semantic_key="autoskillit@autoskillit-local:1.0.0",
+        )
+        InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
+            identity,
+            datetime.now(UTC) + timedelta(hours=6),
+        )
 
-        assert "retiring_entry_still_registered" in _checks(home)
+        assert "retiring_exact_identity_still_registered" in _checks(home)
+
+    def test_migrated_legacy_evidence_is_a_warning_not_deletion_authority(
+        self,
+        home: Path,
+    ) -> None:
+        from autoskillit.core import (
+            PluginArtifactKind,
+            Severity,
+            migrate_retiring_cache_v1,
+            write_versioned_json,
+        )
+        from autoskillit.workspace import verify_install_state
+
+        legacy_path = home / "cache" / "legacy"
+        write_versioned_json(
+            home / ".autoskillit" / "retiring_cache.json",
+            {
+                "retiring": [
+                    {
+                        "version": "legacy",
+                        "path": str(legacy_path),
+                        "retired_at": "2025-01-01T00:00:00+00:00",
+                    }
+                ]
+            },
+            schema_version=1,
+        )
+        migrate_retiring_cache_v1({PluginArtifactKind.INSTALLED_PLUGIN: home / "cache"})
+
+        finding = next(
+            item
+            for item in verify_install_state()
+            if item.check == "retiring_cache_legacy_evidence"
+        )
+        assert finding.severity is Severity.WARNING
 
     def test_version_drift_names_each_derived_file(self, home: Path) -> None:
         """Three files carry a version and all three are derived.

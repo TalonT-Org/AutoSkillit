@@ -347,6 +347,8 @@ def validate_context_admission_persistence_value(value: object) -> None:
         for item in value:
             validate_context_admission_persistence_value(item)
         return
+    if isinstance(value, Path | list | dict | set | bytearray):
+        _raise_invalid("invalid_persistence_value")
     if isinstance(value, Mapping):
         for key, item in value.items():
             if not isinstance(key, str):
@@ -354,8 +356,6 @@ def validate_context_admission_persistence_value(value: object) -> None:
             _validate_persisted_text(key)
             validate_context_admission_persistence_value(item)
         return
-    if isinstance(value, Path | list | dict | set | bytearray):
-        _raise_invalid("invalid_persistence_value")
     if is_dataclass(value):
         for field_def in fields(value):
             validate_context_admission_persistence_value(getattr(value, field_def.name))

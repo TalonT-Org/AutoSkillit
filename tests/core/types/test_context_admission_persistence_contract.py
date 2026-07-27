@@ -285,6 +285,11 @@ def test_recursive_persistence_boundary_rejects_sensitive_values(
         validate_context_admission_persistence_value(value)
 
 
+def test_recursive_persistence_boundary_rejects_mutable_mappings() -> None:
+    with pytest.raises(ContextAdmissionValidationError, match="invalid_persistence_value"):
+        validate_context_admission_persistence_value({"benign": 1})
+
+
 def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:
     with pytest.raises(ValueError, match="nonadmitting"):
         ContextAdmissionAccountingResult(

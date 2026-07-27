@@ -90,6 +90,78 @@ class TestRetiringCacheSchemaValidation:
             append_retiring_record(_retiring_record(tmp_path))
         assert cache.read_bytes() == before
 
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("record_id", 123),
+            ("managed_path", ["/managed/1"]),
+            ("manifest_schema_version", True),
+            ("schema_version", float("inf")),
+        ],
+    )
+    def test_v2_record_fields_require_exact_json_types(
+        self,
+        monkeypatch,
+        tmp_path,
+        field,
+        value,
+    ) -> None:
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        append_retiring_record(_retiring_record(tmp_path))
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        payload = json.loads(cache.read_text())
+        payload["records"][0][field] = value
+        cache.write_text(json.dumps(payload))
+
+        result = read_retiring_cache()
+
+        assert result.state is RetiringCacheState.CORRUPT
+        assert result.records == ()
+
+    def test_boolean_root_schema_is_corrupt_not_legacy(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        _make_retiring_file(cache, schema_version=True, retiring=[])
+
+        result = read_retiring_cache()
+
+        assert result.state is RetiringCacheState.CORRUPT
+
+    def test_legacy_evidence_fields_are_not_coerced(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "records": [],
+                    "legacy_evidence": [
+                        {
+                            "record_id": 123,
+                            "version": "0.9",
+                            "path": "/managed/0.9",
+                            "retired_at": "2020-01-01T00:00:00+00:00",
+                            "recognized_kind": None,
+                            "rejection_reason": "legacy path",
+                        }
+                    ],
+                }
+            )
+        )
+
+        result = read_retiring_cache()
+
+        assert result.state is RetiringCacheState.CORRUPT
+
     def test_explicit_v1_migration_preserves_active_registry(
         self,
         monkeypatch,

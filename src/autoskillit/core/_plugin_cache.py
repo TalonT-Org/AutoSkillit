@@ -78,34 +78,56 @@ def _parse_utc(value: object, *, field_name: str) -> datetime:
 def _record_from_json(raw: object) -> RetiringArtifactRecord:
     if not isinstance(raw, dict):
         raise ValueError("retiring record must be an object")
+    string_fields = (
+        "record_id",
+        "artifact_kind",
+        "semantic_key",
+        "managed_path",
+        "manifest_path",
+        "incarnation_id",
+        "artifact_digest",
+    )
+    for field in string_fields:
+        if not isinstance(raw.get(field), str):
+            raise ValueError(f"retiring record {field} must be a string")
+    integer_fields = ("manifest_schema_version", "schema_version")
+    for field in integer_fields:
+        if type(raw.get(field)) is not int:
+            raise ValueError(f"retiring record {field} must be an integer")
     return RetiringArtifactRecord(
-        record_id=str(raw["record_id"]),
-        artifact_kind=PluginArtifactKind(str(raw["artifact_kind"])),
-        semantic_key=str(raw["semantic_key"]),
-        managed_path=Path(str(raw["managed_path"])),
-        manifest_path=Path(str(raw["manifest_path"])),
-        incarnation_id=str(raw["incarnation_id"]),
-        manifest_schema_version=int(raw["manifest_schema_version"]),
-        artifact_digest=str(raw["artifact_digest"]),
+        record_id=raw["record_id"],
+        artifact_kind=PluginArtifactKind(raw["artifact_kind"]),
+        semantic_key=raw["semantic_key"],
+        managed_path=Path(raw["managed_path"]),
+        manifest_path=Path(raw["manifest_path"]),
+        incarnation_id=raw["incarnation_id"],
+        manifest_schema_version=raw["manifest_schema_version"],
+        artifact_digest=raw["artifact_digest"],
         retired_at=_parse_utc(raw["retired_at"], field_name="retired_at"),
         not_before=_parse_utc(raw["not_before"], field_name="not_before"),
-        schema_version=int(raw["schema_version"]),
+        schema_version=raw["schema_version"],
     )
 
 
 def _legacy_from_json(raw: object) -> LegacyRetiringEvidence:
     if not isinstance(raw, dict):
         raise ValueError("legacy retiring evidence must be an object")
+    for field in ("record_id", "version", "path", "retired_at"):
+        if not isinstance(raw.get(field), str):
+            raise ValueError(f"legacy retiring evidence {field} must be a string")
     kind_value = raw.get("recognized_kind")
+    if kind_value is not None and not isinstance(kind_value, str):
+        raise ValueError("legacy retiring evidence recognized_kind must be a string or null")
+    rejection_reason = raw.get("rejection_reason")
+    if rejection_reason is not None and not isinstance(rejection_reason, str):
+        raise ValueError("legacy retiring evidence rejection_reason must be a string or null")
     return LegacyRetiringEvidence(
-        record_id=str(raw["record_id"]),
-        version=str(raw["version"]),
-        path=str(raw["path"]),
-        retired_at=str(raw["retired_at"]),
-        recognized_kind=PluginArtifactKind(str(kind_value)) if kind_value is not None else None,
-        rejection_reason=(
-            str(raw["rejection_reason"]) if raw.get("rejection_reason") is not None else None
-        ),
+        record_id=raw["record_id"],
+        version=raw["version"],
+        path=raw["path"],
+        retired_at=raw["retired_at"],
+        recognized_kind=PluginArtifactKind(kind_value) if kind_value is not None else None,
+        rejection_reason=rejection_reason,
     )
 
 
@@ -118,7 +140,7 @@ def _read_retiring_cache_unlocked() -> RetiringCacheReadResult:
         if not isinstance(raw, dict):
             raise ValueError("retiring cache root must be an object")
         schema_version = raw.get("schema_version")
-        if not isinstance(schema_version, int):
+        if type(schema_version) is not int:
             raise ValueError("retiring cache schema_version must be an integer")
         if schema_version > _RETIRING_CACHE_SCHEMA_VERSION:
             return RetiringCacheReadResult(
@@ -151,7 +173,15 @@ def _read_retiring_cache_unlocked() -> RetiringCacheReadResult:
             legacy_evidence=tuple(_legacy_from_json(item) for item in legacy_raw),
             schema_version=_RETIRING_CACHE_SCHEMA_VERSION,
         )
-    except (OSError, UnicodeError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OverflowError,
+        json.JSONDecodeError,
+    ) as exc:
         return RetiringCacheReadResult(
             state=RetiringCacheState.CORRUPT,
             error=str(exc),

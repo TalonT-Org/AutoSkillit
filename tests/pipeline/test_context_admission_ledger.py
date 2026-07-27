@@ -544,7 +544,11 @@ def test_apply_persists_sticky_failure_for_corrupt_materialized_state(
     assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
     restarted = DefaultContextAdmissionLedger(authority)
     restarted.recover_all()
-    assert restarted.stream_health(key).status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert restarted.store_health().status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert (
+        restarted.apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED
+    )
 
 
 def test_recovery_rejects_valid_but_nonzero_genesis(tmp_path: Path) -> None:
@@ -1180,11 +1184,15 @@ def test_apply_stops_when_startup_recovery_is_contended(
     blocker = sqlite3.connect(authority.database_path, isolation_level=None)
     blocker.execute("BEGIN EXCLUSIVE")
     original_recover_all = ledger.recover_all
+    lock_released = False
 
     def recover_then_release_lock() -> object:
+        nonlocal lock_released
         result = original_recover_all()
-        blocker.execute("ROLLBACK")
-        blocker.close()
+        if not lock_released:
+            blocker.execute("ROLLBACK")
+            blocker.close()
+            lock_released = True
         return result
 
     monkeypatch.setattr(ledger, "recover_all", recover_then_release_lock)

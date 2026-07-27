@@ -332,6 +332,9 @@ async def test_deferred_initialize_logs_only_bounded_accounting_failure(
             "protocol_version": 1,
         },
     )
+    assert all(
+        "sqlite-integrity-failed" not in repr(call) for call in logger.warning.call_args_list
+    )
 
 
 @pytest.mark.asyncio

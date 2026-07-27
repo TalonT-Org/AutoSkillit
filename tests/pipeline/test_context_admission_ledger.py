@@ -200,6 +200,54 @@ def test_preexisting_sidecar_target_fails_closed_before_initialization(
     assert sidecar.read_bytes() == b"untrusted"
 
 
+@pytest.mark.parametrize("target_kind", ["database", "sidecar"])
+def test_existing_store_rejects_insecure_private_file_modes_without_repair(
+    tmp_path: Path,
+    target_kind: str,
+) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    target = authority.database_path
+    if target_kind == "sidecar":
+        target = Path(f"{authority.database_path}-journal")
+        target.write_bytes(b"untrusted")
+    target.chmod(0o644)
+
+    result = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert (
+        result.store_health.failure_reason
+        is ContextAdmissionStorageFailureReason.SECURITY_IDENTITY
+    )
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+
+
+def test_existing_database_hard_link_fails_closed_without_unlinking(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    hard_link = authority.database_path.with_suffix(".hard-link")
+    os.link(authority.database_path, hard_link)
+
+    result = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert (
+        result.store_health.failure_reason
+        is ContextAdmissionStorageFailureReason.SECURITY_IDENTITY
+    )
+    assert authority.database_path.stat().st_nlink == 2
+    assert hard_link.exists()
+
+
 def test_incomplete_existing_database_is_not_reinitialized(
     tmp_path: Path,
 ) -> None:

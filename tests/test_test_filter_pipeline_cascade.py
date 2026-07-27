@@ -124,20 +124,26 @@ def test_content_aware_path_keeps_ledger_route(
     assert "execution" not in dir_names
 
 
-def _pipeline_fail_open_dirs() -> set[str]:
-    return {Path(entry).parts[0] for entry in LAYER_CASCADE_CONSERVATIVE["pipeline"]}
+def _materialize_pipeline_fail_open_route(tests_root: Path) -> set[Path]:
+    expected = {tests_root / entry for entry in LAYER_CASCADE_CONSERVATIVE["pipeline"]}
+    for path in expected:
+        if path.suffix:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+    return expected
 
 
 def test_unknown_pipeline_module_uses_full_fail_open_route(tmp_path: Path) -> None:
+    tests_root = _tests_root(tmp_path)
+    expected = _materialize_pipeline_fail_open_route(tests_root)
     result = build_test_scope(
         changed_files={"src/autoskillit/pipeline/future_module.py"},
         mode=FilterMode.CONSERVATIVE,
-        tests_root=_tests_root(tmp_path),
+        tests_root=tests_root,
     )
 
     assert isinstance(result, set)
-    dir_names = {path.name for path in result if path.is_dir()}
-    assert _pipeline_fail_open_dirs() <= dir_names
+    assert expected <= result
 
 
 def test_content_aware_unknown_pipeline_module_uses_full_fail_open_route(
@@ -145,18 +151,19 @@ def test_content_aware_unknown_pipeline_module_uses_full_fail_open_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(test_filter, "check_bucket_a_content_aware", lambda *_args: False)
+    tests_root = _tests_root(tmp_path)
+    expected = _materialize_pipeline_fail_open_route(tests_root)
 
     result = build_test_scope(
         changed_files={"src/autoskillit/pipeline/future_module.py"},
         mode=FilterMode.CONSERVATIVE,
-        tests_root=_tests_root(tmp_path),
+        tests_root=tests_root,
         cwd=tmp_path,
         base_ref="develop",
     )
 
     assert isinstance(result, set)
-    dir_names = {path.name for path in result if path.is_dir()}
-    assert _pipeline_fail_open_dirs() <= dir_names
+    assert expected <= result
 
 
 @pytest.mark.parametrize(

@@ -121,6 +121,12 @@ class TestProvidersConfig:
         with pytest.raises(ValueError, match=r"recipe_overrides\[.+\] must be a dict"):
             ProvidersConfig(recipe_overrides={"remediation": "not_a_dict"})  # type: ignore[arg-type]
 
+    def test_recipe_overrides_none_entry_coerced_to_empty_dict(self) -> None:
+        from autoskillit.config.settings import ProvidersConfig
+
+        cfg = ProvidersConfig(recipe_overrides={"remediation": None})  # type: ignore[dict-item]
+        assert cfg.recipe_overrides == {"remediation": {}}
+
     def test_providers_config_profiles_none_value_accepted(self) -> None:
         from autoskillit.config.settings import ProvidersConfig
 

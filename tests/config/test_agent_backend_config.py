@@ -167,6 +167,12 @@ class TestAgentBackendConfigOverrides:
         with pytest.raises(ValueError, match="recipe_overrides"):
             AgentBackendConfig(recipe_overrides={"remediation": {"foo": 123}})  # type: ignore[dict-item]
 
+    def test_recipe_overrides_none_entry_coerced_to_empty_dict(self) -> None:
+        from autoskillit.config.settings import AgentBackendConfig
+
+        cfg = AgentBackendConfig(recipe_overrides={"remediation": None})  # type: ignore[dict-item]
+        assert cfg.recipe_overrides == {"remediation": {}}
+
     def test_unknown_backend_in_recipe_overrides_warns(self) -> None:
         import structlog.testing
 

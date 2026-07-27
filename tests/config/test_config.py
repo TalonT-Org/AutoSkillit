@@ -119,6 +119,12 @@ class TestModelStepOverrides:
         cfg = CoreRunConfig(recipe_overrides={"impl": {"plan": "opus"}})
         assert cfg.recipe_overrides == {"impl": {"plan": "opus"}}
 
+    def test_recipe_overrides_none_entry_coerced_to_empty_dict(self):
+        from autoskillit.config import CoreRunConfig
+
+        cfg = CoreRunConfig(recipe_overrides={"impl": None})  # type: ignore[dict-item]
+        assert cfg.recipe_overrides == {"impl": {}}
+
     def test_yaml_loads_step_overrides(self, tmp_path):
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()

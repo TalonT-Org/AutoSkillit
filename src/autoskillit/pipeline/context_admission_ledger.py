@@ -1529,7 +1529,7 @@ def _recover_stream_projection(
         )
     journal_rows = connection.execute(
         """
-        SELECT journal_sequence, event_envelope, decision_envelope,
+        SELECT journal_sequence, event_id, event_envelope, decision_envelope,
                expected_revision, prior_aggregate_revision,
                prior_admission_sequence, resulting_aggregate_revision,
                resulting_admission_sequence
@@ -1580,8 +1580,8 @@ def _recover_stream_projection(
     state: ContextAdmissionState = genesis
     for row in journal_rows:
         journal_sequence = int(row[0])
-        event_wrapper = decode_stored_context_admission_envelope(bytes(row[1]))
-        decision_wrapper = decode_stored_context_admission_envelope(bytes(row[2]))
+        event_wrapper = decode_stored_context_admission_envelope(bytes(row[2]))
+        decision_wrapper = decode_stored_context_admission_envelope(bytes(row[3]))
         if not isinstance(event_wrapper.payload, _EVENT_TYPES) or not isinstance(
             decision_wrapper.payload,
             AdmissionDecision,
@@ -1589,6 +1589,11 @@ def _recover_stream_projection(
             raise ContextAdmissionValidationError("stored_publication_type_mismatch")
         event = cast(ContextAdmissionEvent, event_wrapper.payload)
         stored_decision = decision_wrapper.payload
+        if str(row[1]) != event.event_id.value:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                "journal-event-identity-mismatch",
+            )
         if journal_sequence == 1 and not isinstance(
             event,
             OpenEpochEvent | AuthorityUnavailableEvent,
@@ -1609,9 +1614,9 @@ def _recover_stream_projection(
             )
         _validate_event_stream_identity(stream_key, event)
         if (
-            int(row[3]) != event.expected_aggregate_revision.value
-            or int(row[4]) != state.aggregate_revision.value
-            or int(row[5]) != state.admission_sequence.value
+            int(row[4]) != event.expected_aggregate_revision.value
+            or int(row[5]) != state.aggregate_revision.value
+            or int(row[6]) != state.admission_sequence.value
         ):
             raise _LedgerOpenError(
                 ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
@@ -1641,8 +1646,8 @@ def _recover_stream_projection(
                 "journal-effects-mismatch",
             )
         if (
-            int(row[6]) != transition.next_state.aggregate_revision.value
-            or int(row[7]) != transition.next_state.admission_sequence.value
+            int(row[7]) != transition.next_state.aggregate_revision.value
+            or int(row[8]) != transition.next_state.admission_sequence.value
         ):
             raise _LedgerOpenError(
                 ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,

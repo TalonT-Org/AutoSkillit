@@ -667,6 +667,33 @@ def test_recovery_rejects_valid_but_nonzero_genesis(tmp_path: Path) -> None:
     assert health.reason_code == "invalid-stream-genesis-type"
 
 
+def test_recovery_rejects_journal_event_identity_mismatch(tmp_path: Path) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    assert (
+        DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            "UPDATE journal_events SET event_id = ?",
+            ("damaged-event-id",),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    recovered = DefaultContextAdmissionLedger(authority)
+    result = recovered.recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    health = recovered.stream_health(key)
+    assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert health.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert health.reason_code == "journal-event-identity-mismatch"
+
+
 def test_recovery_preflight_rejects_unsupported_encoding_without_rewrite(
     tmp_path: Path,
 ) -> None:

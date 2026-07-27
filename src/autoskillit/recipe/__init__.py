@@ -18,7 +18,13 @@ from autoskillit.recipe._api import (  # noqa: E402
     load_and_validate,
     validate_from_path,
 )
-from autoskillit.recipe._binding import bind_recipe, bind_step_invocation  # noqa: E402
+from autoskillit.recipe._binding import (  # noqa: E402
+    RuntimeBindingError,
+    bind_recipe,
+    bind_runtime_skill_invocation,
+    bind_step_invocation,
+    compute_skill_contract_identity,
+)
 from autoskillit.recipe._recipe_ingredients import (  # noqa: E402
     ListRecipesResult,
     LoadRecipeResult,
@@ -342,7 +348,10 @@ __all__ = [
     "parse_recipe_metadata",
     "load_and_validate",
     "bind_recipe",
+    "bind_runtime_skill_invocation",
     "bind_step_invocation",
+    "compute_skill_contract_identity",
+    "RuntimeBindingError",
     "validate_from_path",
     "list_all",
     "format_ingredients_table",

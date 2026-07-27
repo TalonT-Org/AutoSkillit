@@ -19,6 +19,7 @@ from hypothesis.stateful import (
     rule,
 )
 
+import autoskillit.recipe._binding as binding_module
 import autoskillit.server._recipe_delivery as recipe_delivery_module
 import autoskillit.server._recipe_execution as recipe_execution_module
 from autoskillit.core import (
@@ -557,8 +558,8 @@ def test_runtime_binding_rejects_skill_contract_identity_drift(
         ),
     )
     monkeypatch.setattr(
-        recipe_execution_module,
-        "_skill_contract_identity",
+        binding_module,
+        "compute_skill_contract_identity",
         lambda *args, **kwargs: "sha256:" + "f" * 64,
     )
 
@@ -592,13 +593,13 @@ def test_skill_contract_identity_fails_closed_for_stale_contract_shape(
         inputs=(),
     )
     monkeypatch.setattr(
-        recipe_execution_module,
+        binding_module,
         "get_skill_contract",
         lambda *_args, **_kwargs: stale_contract,
     )
 
     with pytest.raises(AttributeError, match="input_preflight"):
-        recipe_execution_module._skill_contract_identity("stale", manifest={})  # noqa: SLF001
+        binding_module.compute_skill_contract_identity("stale", manifest={})
 
 
 def test_snapshot_rejects_digest_that_does_not_attest_invocation() -> None:
@@ -1068,7 +1069,7 @@ def test_runtime_binding_rejects_declared_contract_type_mismatch(
         }
     }
     monkeypatch.setattr(
-        recipe_execution_module,
+        binding_module,
         "load_bundled_manifest",
         lambda: manifest,
     )

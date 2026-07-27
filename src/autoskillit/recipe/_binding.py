@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from typing import Any, Final, TypeGuard
 
@@ -16,6 +18,7 @@ from autoskillit.core import (
     BoundValue,
     BoundValueOrigin,
     BoundValueState,
+    InvocationTemplate,
     RecipeBindingProjection,
     ToolParamDef,
     ToolWireType,
@@ -28,11 +31,17 @@ from autoskillit.recipe._contracts_manifest import (
     load_bundled_manifest,
 )
 from autoskillit.recipe._contracts_types import SkillContract, SkillInput
+from autoskillit.recipe.schema import RecipeStep
 
 __all__ = [
+    "RuntimeBindingError",
     "bind_recipe",
+    "bind_runtime_skill_invocation",
     "bind_step_invocation",
+    "compute_skill_contract_identity",
 ]
+
+_SKILL_CONTRACT_IDENTITY_DOMAIN = b"autoskillit:skill-contract:v1\0"
 
 
 _CONTEXT_REF_RE: Final = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
@@ -41,6 +50,14 @@ _AUTOSKILLIT_TEMPLATE_RE: Final = re.compile(r"\{\{(AUTOSKILLIT_[A-Z0-9_]+)\}\}"
 _EXACT_CONTEXT_REF_RE: Final = re.compile(r"^\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}$")
 _EXACT_INPUT_REF_RE: Final = re.compile(r"^\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}$")
 _SCALAR_TYPES = (str, int, bool)
+
+
+class RuntimeBindingError(ValueError):
+    """Stable recipe-domain rejection for one runtime invocation binding."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _is_scalar(value: object) -> TypeGuard[BoundScalar]:
@@ -808,3 +825,176 @@ def bind_recipe(
         if step.tool is not None
     }
     return RecipeBindingProjection(invocations)
+
+
+def compute_skill_contract_identity(
+    skill_name: str,
+    *,
+    manifest: dict[str, Any] | None = None,
+) -> str:
+    """Hash the canonical runtime-relevant shape of one skill contract."""
+    active_manifest = manifest if manifest is not None else load_bundled_manifest()
+    contract = get_skill_contract(skill_name, active_manifest)
+    if contract is None:
+        raise ValueError(f"skill contract is unavailable for {skill_name!r}")
+    payload = json.dumps(
+        {
+            "completion_required": contract.completion_required,
+            "input_preflight": contract.input_preflight,
+            "inputs": [
+                {
+                    "name": item.name,
+                    "nullable": item.nullable,
+                    "required": item.required,
+                    "type": item.type,
+                }
+                for item in contract.inputs
+            ],
+            "skill_name": skill_name,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(_SKILL_CONTRACT_IDENTITY_DOMAIN + payload).hexdigest()
+
+
+def _is_dynamic_binding(value: BoundValue) -> bool:
+    return bool(value.context_dependencies or value.input_dependencies)
+
+
+def bind_runtime_skill_invocation(
+    template: InvocationTemplate,
+    *,
+    execution_id: str,
+    step_name: str,
+    skill_command: str,
+    skill_inputs: Mapping[str, BoundScalar] | None,
+    actual_mcp_kwargs: Mapping[str, BoundScalar],
+) -> tuple[tuple[str, BoundScalar], ...]:
+    """Bind runtime values against one immutable compiled recipe template."""
+    invocation = template.invocation
+    if resolve_skill_name(skill_command) != invocation.skill_name:
+        raise RuntimeBindingError(
+            "recipe_execution_skill_mismatch",
+            "runtime skill identity differs from the compiled template",
+        )
+    compiled_mcp_names = frozenset(value.name for value in invocation.mcp_kwargs)
+    protocol_mcp_values = {
+        "step_name": step_name,
+        "recipe_execution_id": execution_id,
+        "invocation_template_digest": template.template_digest,
+    }
+    for name, expected in protocol_mcp_values.items():
+        if name in actual_mcp_kwargs and actual_mcp_kwargs[name] != expected:
+            raise RuntimeBindingError(
+                "recipe_execution_tool_shape",
+                f"attestation parameter {name!r} differs from the active invocation",
+            )
+    undeclared_effective_names = sorted(
+        name
+        for name, value in actual_mcp_kwargs.items()
+        if name not in compiled_mcp_names and name not in protocol_mcp_values and value != ""
+    )
+    if undeclared_effective_names:
+        raise RuntimeBindingError(
+            "recipe_execution_tool_shape",
+            (
+                "runtime tool parameters are absent from the compiled template: "
+                f"{undeclared_effective_names!r}"
+            ),
+        )
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract(invocation.skill_name or "", manifest)
+    if contract is None:
+        raise RuntimeBindingError(
+            "recipe_execution_contract_unavailable",
+            "the compiled skill contract is unavailable at runtime",
+        )
+    runtime_skill_identity = compute_skill_contract_identity(
+        invocation.skill_name or "",
+        manifest=manifest,
+    )
+    if runtime_skill_identity != template.skill_contract_identity:
+        raise RuntimeBindingError(
+            "recipe_execution_contract_mismatch",
+            "runtime skill contract differs from the compiled template",
+        )
+    contract_inputs = {input_def.name: input_def for input_def in contract.inputs}
+    supplied = dict(skill_inputs or {})
+    if skill_inputs is None:
+        runtime_with_args: dict[str, object] = {"skill_command": skill_command}
+        runtime_cwd = actual_mcp_kwargs.get("cwd")
+        if isinstance(runtime_cwd, str):
+            runtime_with_args["cwd"] = runtime_cwd
+        runtime_inline = bind_step_invocation(
+            step_name,
+            RecipeStep(
+                name=step_name,
+                tool="run_skill",
+                with_args=runtime_with_args,
+                declared_with_args=dict(runtime_with_args),
+            ),
+            manifest=manifest,
+        )
+        if runtime_inline.failures:
+            raise RuntimeBindingError(
+                "recipe_execution_input_shape",
+                runtime_inline.failures[0].message,
+            )
+        supplied = {
+            value.name: value.effective_value
+            for value in runtime_inline.skill_inputs
+            if value.state is BoundValueState.PRESENT
+            and isinstance(value.effective_value, (str, int, bool))
+        }
+    if any(
+        not isinstance(value, (str, int, bool)) or value is None for value in supplied.values()
+    ):
+        raise RuntimeBindingError(
+            "recipe_execution_input_type",
+            "skill_inputs values must be strict JSON scalars",
+        )
+    expected_names = tuple(
+        value.name for value in invocation.skill_inputs if value.state is BoundValueState.PRESENT
+    )
+    if frozenset(supplied) != frozenset(expected_names):
+        raise RuntimeBindingError(
+            "recipe_execution_input_shape",
+            "skill_inputs keys do not exactly match the compiled template",
+        )
+    bound_inputs: list[tuple[str, BoundScalar]] = []
+    for value in invocation.skill_inputs:
+        if value.state is not BoundValueState.PRESENT:
+            continue
+        actual = supplied[value.name]
+        input_def = contract_inputs.get(value.name)
+        if input_def is None:
+            raise RuntimeBindingError(
+                "recipe_execution_contract_mismatch",
+                f"compiled skill input {value.name!r} is absent from the runtime contract",
+            )
+        if not input_def.accepts(actual):
+            raise RuntimeBindingError(
+                "recipe_execution_input_type",
+                f"runtime skill input {value.name!r} expects {input_def.type!r}",
+            )
+        if not _is_dynamic_binding(value) and actual != value.effective_value:
+            raise RuntimeBindingError(
+                "recipe_execution_static_input_mismatch",
+                f"static skill input {value.name!r} differs from the template",
+            )
+        bound_inputs.append((value.name, actual))
+    for value in invocation.mcp_kwargs:
+        if value.name not in actual_mcp_kwargs:
+            raise RuntimeBindingError(
+                "recipe_execution_tool_shape",
+                f"compiled tool parameter {value.name!r} is absent",
+            )
+        actual = actual_mcp_kwargs[value.name]
+        if not _is_dynamic_binding(value) and actual != value.effective_value:
+            raise RuntimeBindingError(
+                "recipe_execution_static_tool_mismatch",
+                f"static tool parameter {value.name!r} differs from the template",
+            )
+    return tuple(bound_inputs)

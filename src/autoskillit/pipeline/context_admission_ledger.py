@@ -1051,7 +1051,9 @@ class DefaultContextAdmissionLedger:
                     read_budget,
                 )
                 sequences = tuple(int(item[0]) for item in journal_rows)
-                if sequences != tuple(range(1, latest + 1)):
+                if latest != len(sequences) or any(
+                    sequence != expected for expected, sequence in enumerate(sequences, start=1)
+                ):
                     raise _LedgerOpenError(
                         ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
                         "journal-sequence-gap",
@@ -1641,7 +1643,9 @@ def _recover_stream_projection(
         read_budget,
     )
     sequences = tuple(int(row[0]) for row in journal_rows)
-    if sequences != tuple(range(1, latest_journal_sequence + 1)):
+    if latest_journal_sequence != len(sequences) or any(
+        sequence != expected for expected, sequence in enumerate(sequences, start=1)
+    ):
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
             "journal-sequence-gap",

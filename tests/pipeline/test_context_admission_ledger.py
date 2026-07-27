@@ -295,6 +295,37 @@ def test_inspection_enforces_aggregate_read_budget(
     assert inspection.health.reason_code == "inspection-read-limit-exceeded"
 
 
+@pytest.mark.parametrize("operation", ["inspect", "recover"])
+def test_persisted_sequence_bounds_do_not_drive_allocations(
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            "UPDATE streams SET latest_journal_sequence = ?",
+            ((2**63) - 1,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    if operation == "inspect":
+        health = ledger.inspect_stream(key).health
+    else:
+        recovered = DefaultContextAdmissionLedger(authority)
+        recovered.recover_all()
+        health = recovered.stream_health(key)
+
+    assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert health.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert health.reason_code == "journal-sequence-gap"
+
+
 def test_recovery_fails_closed_on_orphaned_foreign_key_rows(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     assert (

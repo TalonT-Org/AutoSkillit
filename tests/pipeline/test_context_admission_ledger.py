@@ -12,6 +12,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
+from typing import cast
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -189,6 +191,66 @@ def test_each_ledger_connection_sets_and_reads_back_required_pragmas(
         assert connection.execute("PRAGMA busy_timeout").fetchone() == (37,)
     finally:
         connection.close()
+
+
+def test_connection_factory_pragma_readback_mismatch_fails_closed(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+
+    def mismatched_factory(*args: object, **kwargs: object) -> sqlite3.Connection:
+        connection = sqlite3.connect(*args, **kwargs)  # type: ignore[arg-type]
+        proxy = MagicMock(wraps=connection, spec=sqlite3.Connection)
+
+        def execute(sql: str, *parameters: object) -> sqlite3.Cursor:
+            if sql == "PRAGMA foreign_keys=ON":
+                return connection.execute("SELECT 1 WHERE 0")
+            return connection.execute(sql, *parameters)  # type: ignore[arg-type]
+
+        proxy.execute.side_effect = execute
+        return cast(sqlite3.Connection, proxy)
+
+    result = DefaultContextAdmissionLedger(
+        authority,
+        connection_factory=mismatched_factory,
+    ).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert result.store_health.failure_reason is ContextAdmissionStorageFailureReason.CONFIGURATION
+    assert result.store_health.reason_code == "sqlite-pragma-mismatch"
+
+
+def test_connection_factory_identity_change_fails_closed(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+
+    def replacing_factory(*args: object, **kwargs: object) -> sqlite3.Connection:
+        connection = sqlite3.connect(*args, **kwargs)  # type: ignore[arg-type]
+        replacement_path = authority.database_path.with_suffix(".replacement")
+        replacement = sqlite3.connect(replacement_path)
+        try:
+            connection.backup(replacement)
+        finally:
+            replacement.close()
+        os.replace(replacement_path, authority.database_path)
+        return connection
+
+    result = DefaultContextAdmissionLedger(
+        authority,
+        connection_factory=replacing_factory,
+    ).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert (
+        result.store_health.failure_reason
+        is ContextAdmissionStorageFailureReason.SECURITY_IDENTITY
+    )
+    assert result.store_health.reason_code == "store-identity-changed"
 
 
 def test_recovery_and_inspection_hold_one_snapshot_across_projection_reads(

@@ -32,6 +32,7 @@ from autoskillit.core import (
     ContextAdmissionStreamKey,
     ContextThreadId,
     CoverageState,
+    MeasurementKind,
 )
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
@@ -1404,6 +1405,7 @@ def test_shadow_projection_preserves_exact_input_and_output_measurements(
     reconciled_target = inspection.shadows[8].targets[0]
     assert reconciled_target.exact_output_charge == 7
     assert reconciled_target.generation_allowance == 15
+    assert reconciled_target.measurement_kind is MeasurementKind.PROVIDER_EXACT
 
 
 def test_rollover_projection_retains_every_invalidated_target_and_replays(

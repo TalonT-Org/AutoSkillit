@@ -2093,12 +2093,13 @@ def _generation_shadow_target(
     batch_record, reservation = _find_batch(next_state, record.batch_id)
     if batch_record is None:
         batch_record, reservation = _find_batch(prior_state, record.batch_id)
-    exact_output_charge = (
-        event.exact_output_usage
+    reconciliation = (
+        event
         if isinstance(event, ReconcileGenerationEvent)
         and event.generation_reservation_id == generation_id
         else None
     )
+    exact_output_charge = reconciliation.exact_output_usage if reconciliation is not None else None
     return ShadowContextAdmissionTargetRecord(
         target_id=generation_id,
         occurrence_ids=record.occurrence_ids,
@@ -2117,7 +2118,7 @@ def _generation_shadow_target(
         generation_allowance=record.maximum_allowance,
         exact_input_charge=None,
         exact_output_charge=exact_output_charge,
-        measurement_kind=None,
+        measurement_kind=(MeasurementKind.PROVIDER_EXACT if reconciliation is not None else None),
     )
 
 

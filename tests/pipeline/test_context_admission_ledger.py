@@ -766,6 +766,33 @@ def test_recovery_remains_incomplete_when_failure_marker_is_contended(
     assert not recovered._recovered
 
 
+@pytest.mark.parametrize("primary_code", [sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED])
+def test_recovery_treats_raw_sqlite_contention_as_retryable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    primary_code: int,
+) -> None:
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(authority)
+    error = sqlite3.OperationalError("busy")
+    error.sqlite_errorcode = primary_code
+
+    def raise_contention(_connection: sqlite3.Connection) -> None:
+        raise error
+
+    monkeypatch.setattr(
+        DefaultContextAdmissionLedger,
+        "_validate_integrity",
+        staticmethod(raise_contention),
+    )
+
+    result = ledger.recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert ledger.store_health().status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert not ledger._recovered
+
+
 def test_apply_persists_sticky_failure_for_corrupt_materialized_state(
     tmp_path: Path,
 ) -> None:

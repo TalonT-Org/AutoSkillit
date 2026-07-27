@@ -923,9 +923,20 @@ class DefaultContextAdmissionLedger:
             except _LedgerOpenError as exc:
                 self._set_store_failure(exc.reason, exc.reason_code)
             except sqlite3.Error as exc:
+                primary_code = _sqlite_primary_code(exc)
+                if primary_code in _SQLITE_BUSY_CODES:
+                    if connection is not None:
+                        _rollback(connection)
+                    return ContextAdmissionRecoveryResult(
+                        status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
+                        store_health=self._store_health,
+                        stream_healths=(),
+                        recovered_streams=(),
+                        unresolved_streams=(),
+                    )
                 reason = (
                     ContextAdmissionStorageFailureReason.INTEGRITY
-                    if _sqlite_primary_code(exc) == sqlite3.SQLITE_CORRUPT
+                    if primary_code == sqlite3.SQLITE_CORRUPT
                     else ContextAdmissionStorageFailureReason.IO
                 )
                 self._set_store_failure(reason, "sqlite-recovery-failed")

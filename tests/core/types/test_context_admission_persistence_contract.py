@@ -500,26 +500,22 @@ def test_envelope_decoder_rejects_nonbytes_upcaster_result(
 
 
 @pytest.mark.parametrize(
-    ("old_header", "new_header"),
+    ("header_name", "new_header"),
     [
-        (b'"protocol_version":1', b'"protocol_version":2'),
-        (
-            b'"type_discriminator":"AuthorityUnavailableEvent"',
-            b'"type_discriminator":"AdmissionDecision"',
-        ),
+        ("protocol_version", 2),
+        ("type_discriminator", "AdmissionDecision"),
     ],
 )
 def test_envelope_decoder_rejects_upcaster_header_changes(
     monkeypatch: pytest.MonkeyPatch,
-    old_header: bytes,
-    new_header: bytes,
+    header_name: str,
+    new_header: object,
 ) -> None:
     def alter_header(value: bytes) -> bytes:
-        return value.replace(
-            b'"encoding_version":0',
-            b'"encoding_version":1',
-            1,
-        ).replace(old_header, new_header, 1)
+        envelope = json.loads(value)
+        envelope["encoding_version"] = 1
+        envelope[header_name] = new_header
+        return json.dumps(envelope, separators=(",", ":"), sort_keys=True).encode()
 
     monkeypatch.setattr(
         persistence_types,

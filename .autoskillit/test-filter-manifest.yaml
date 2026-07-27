@@ -165,6 +165,12 @@ tests/fixtures/codex_recipe_protected/*:
 tests/execution/backends/fixtures/codex_ndjson/*.json:
   - execution/
 
+tests/config/golden_configs/*.yaml:
+  - config/
+
+tests/contracts/config_key_ledger.txt:
+  - contracts/
+
 # Local .autoskillit/ config and state files
 .autoskillit/test-source-map.json:
   - infra/

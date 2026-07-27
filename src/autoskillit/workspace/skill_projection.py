@@ -63,10 +63,18 @@ from autoskillit.core import (
     dump_yaml_str,
     get_logger,
     log_plugin_artifact_lifecycle,
+    new_plugin_artifact_incarnation_id,
     pkg_root,
     read_versioned_json,
     temp_dir_display_str,
     write_versioned_json,
+)
+from autoskillit.workspace._projection_artifact import (
+    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    projected_artifact_lease_path,
+    projected_artifact_manifest_path,
+    projected_plugin_artifact_digest,
+    read_projected_plugin_identity,
 )
 from autoskillit.workspace._projection_cache import (
     ProjectedPluginRetirementOwner,
@@ -104,7 +112,6 @@ __all__ = [
     "validate_sanitized_plugin_artifact",
 ]
 _SKILL_NAMESPACE_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
-_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION = 2
 
 
 SkillContractRecord = SkillAuthority
@@ -782,51 +789,6 @@ class _StagedProjectedArtifact:
     identity: PluginArtifactIdentity
 
 
-def _projected_plugin_artifact_digest(public_root: Path) -> str:
-    """Digest the complete published tree, including its inventory."""
-    public_root = Path(public_root)
-    if not public_root.is_dir() or public_root.is_symlink():
-        raise PluginArtifactValidationError(
-            f"projected plugin root is missing or is not a directory: {public_root}"
-        )
-    digest = hashlib.sha256()
-    try:
-        entries = sorted(
-            public_root.rglob("*"),
-            key=lambda path: path.relative_to(public_root).as_posix(),
-        )
-        for entry in entries:
-            relative = entry.relative_to(public_root).as_posix()
-            if entry.is_symlink():
-                raise PluginArtifactValidationError(
-                    f"projected plugin artifact contains a symlink: {entry}"
-                )
-            if entry.is_dir():
-                kind = b"d"
-                payload_digest = b""
-            elif entry.is_file():
-                kind = b"f"
-                with entry.open("rb") as handle:
-                    payload_digest = hashlib.file_digest(handle, "sha256").digest()
-            else:
-                raise PluginArtifactValidationError(
-                    f"projected plugin artifact contains a special file: {entry}"
-                )
-            digest.update(kind)
-            digest.update(b"\0")
-            digest.update(relative.encode())
-            digest.update(b"\0")
-            digest.update(payload_digest)
-            digest.update(b"\0")
-    except PluginArtifactValidationError:
-        raise
-    except OSError as exc:
-        raise PluginArtifactValidationError(
-            f"projected plugin artifact cannot be digested: {public_root}"
-        ) from exc
-    return digest.hexdigest()
-
-
 def _stage_projected_plugin_artifact(
     plan: _ProjectedArtifactPlan,
 ) -> _StagedProjectedArtifact:
@@ -848,11 +810,11 @@ def _stage_projected_plugin_artifact(
             skill_infos,
             plan.context,
         )
-        artifact_digest = _projected_plugin_artifact_digest(staging_root)
+        artifact_digest = projected_plugin_artifact_digest(staging_root)
         identity = PluginArtifactIdentity(
             semantic_key=plan.semantic_key,
-            incarnation_id=str(uuid.uuid4()),
-            manifest_schema_version=_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            incarnation_id=new_plugin_artifact_incarnation_id(),
+            manifest_schema_version=PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
             artifact_digest=artifact_digest,
             managed_path=plan.destination,
             manifest_path=plan.manifest_path,
@@ -903,54 +865,11 @@ def _publish_projected_plugin_manifest(
 
 
 def _manifest_identity(plan: _ProjectedArtifactPlan) -> PluginArtifactIdentity:
-    if plan.manifest_path.is_symlink() or not plan.manifest_path.is_file():
-        raise PluginArtifactValidationError(
-            f"projected plugin identity manifest is not a regular file: {plan.manifest_path}"
-        )
-    manifest = read_versioned_json(
-        plan.manifest_path,
-        _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-    )
-    if manifest is None:
-        raise PluginArtifactValidationError(
-            f"projected plugin identity manifest is unreadable: {plan.manifest_path}"
-        )
-    semantic_key = manifest.get("semantic_key")
-    incarnation_id = manifest.get("incarnation_id")
-    artifact_digest = manifest.get("artifact_digest")
-    if semantic_key != plan.semantic_key:
-        raise PluginArtifactValidationError(
-            f"projected plugin semantic key mismatch: {plan.manifest_path}"
-        )
-    if not isinstance(incarnation_id, str):
-        raise PluginArtifactValidationError(
-            f"projected plugin incarnation is missing: {plan.manifest_path}"
-        )
-    try:
-        parsed_incarnation = uuid.UUID(incarnation_id)
-    except ValueError as exc:
-        raise PluginArtifactValidationError(
-            f"projected plugin incarnation is invalid: {plan.manifest_path}"
-        ) from exc
-    if str(parsed_incarnation) != incarnation_id:
-        raise PluginArtifactValidationError(
-            f"projected plugin incarnation is not canonical: {plan.manifest_path}"
-        )
-    if not isinstance(artifact_digest, str) or len(artifact_digest) != 64:
-        raise PluginArtifactValidationError(
-            f"projected plugin digest is invalid: {plan.manifest_path}"
-        )
-    if manifest.get("projection_version") != plan.context.projection_version:
-        raise PluginArtifactValidationError(
-            f"projected plugin version mismatch: {plan.manifest_path}"
-        )
-    return PluginArtifactIdentity(
-        semantic_key=semantic_key,
-        incarnation_id=incarnation_id,
-        manifest_schema_version=_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        artifact_digest=artifact_digest,
-        managed_path=plan.destination,
+    return read_projected_plugin_identity(
+        plan.destination,
         manifest_path=plan.manifest_path,
+        expected_semantic_key=plan.semantic_key,
+        expected_projection_version=plan.context.projection_version,
     )
 
 
@@ -967,13 +886,13 @@ def _validate_published_plugin_artifact(
         plan.manifest_path,
         plan.validation_catalog,
         require_sources_within_root=plan.require_sources_within_root,
-        manifest_schema_version=_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        manifest_schema_version=PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
     if errors:
         raise PluginArtifactValidationError(
             "projected plugin content validation failed: " + "; ".join(errors)
         )
-    actual_digest = _projected_plugin_artifact_digest(plan.destination)
+    actual_digest = projected_plugin_artifact_digest(plan.destination)
     if actual_digest != identity.artifact_digest:
         raise PluginArtifactValidationError(
             "projected plugin digest mismatch: "
@@ -1112,10 +1031,8 @@ class ProjectedPluginArtifactAuthority:
         return _ProjectedArtifactPlan(
             source_root=source_root,
             destination=destination,
-            manifest_path=(
-                projections_root / f".{semantic_key}.autoskillit-projection.json"
-            ).absolute(),
-            lease_path=(projections_root / ".artifact-leases" / f"{semantic_key}.lock").absolute(),
+            manifest_path=projected_artifact_manifest_path(destination),
+            lease_path=projected_artifact_lease_path(destination),
             semantic_key=semantic_key,
             catalog=catalog,
             validation_catalog=source_infos if source_infos else catalog,

@@ -31,8 +31,11 @@ from autoskillit.core import (
     directory_tree_digest,
     due_retiring_records,
     get_logger,
+    is_canonical_plugin_artifact_digest,
+    is_canonical_plugin_artifact_incarnation_id,
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
+    new_plugin_artifact_incarnation_id,
     read_retiring_cache,
     read_versioned_json,
     remove_retiring_records,
@@ -195,7 +198,7 @@ def _publish_installed_plugin_artifact_locked(
     manifest_path = installed_artifact_manifest_path(managed_path)
     identity = PluginArtifactIdentity(
         semantic_key=semantic_key,
-        incarnation_id=uuid.uuid4().hex,
+        incarnation_id=new_plugin_artifact_incarnation_id(),
         manifest_schema_version=_SCHEMA_VERSION,
         artifact_digest=_complete_tree_digest(managed_path),
         managed_path=managed_path,
@@ -584,26 +587,12 @@ def _read_and_validate_identity(
             f"installed plugin incarnation manifest has invalid identity fields: {manifest_path}"
         )
     incarnation_id = raw["incarnation_id"]
-    try:
-        incarnation_uuid = uuid.UUID(hex=incarnation_id)
-    except ValueError as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation is invalid: {manifest_path}"
-        ) from exc
-    if (
-        len(incarnation_id) != 32
-        or incarnation_uuid.hex != incarnation_id
-        or incarnation_uuid.version != 4
-    ):
+    if not is_canonical_plugin_artifact_incarnation_id(incarnation_id):
         raise PluginArtifactValidationError(
             f"installed plugin incarnation is not canonical uuid4 hex: {manifest_path}"
         )
     artifact_digest = raw["artifact_digest"]
-    if (
-        len(artifact_digest) != 64
-        or artifact_digest.lower() != artifact_digest
-        or any(character not in "0123456789abcdef" for character in artifact_digest)
-    ):
+    if not is_canonical_plugin_artifact_digest(artifact_digest):
         raise PluginArtifactValidationError(
             f"installed plugin artifact digest is invalid: {manifest_path}"
         )

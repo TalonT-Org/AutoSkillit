@@ -586,6 +586,13 @@ from .types import PluginArtifactValidationError as PluginArtifactValidationErro
 from .types import PluginLaunchBinding as PluginLaunchBinding
 from .types import PluginLoadMode as PluginLoadMode
 from .types import PluginRetirementCoordinator as PluginRetirementCoordinator
+from .types import (
+    is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest,
+)
+from .types import (
+    is_canonical_plugin_artifact_incarnation_id as is_canonical_plugin_artifact_incarnation_id,
+)
+from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PrepareBatchEvent as PrepareBatchEvent

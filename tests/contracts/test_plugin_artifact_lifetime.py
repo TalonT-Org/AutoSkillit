@@ -14,6 +14,8 @@ from autoskillit.core import (
     PluginArtifactContentionError,
     PluginArtifactValidationError,
     PluginLoadMode,
+    is_canonical_plugin_artifact_incarnation_id,
+    new_plugin_artifact_incarnation_id,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.workspace import (
@@ -69,6 +71,7 @@ def test_binding_owns_exact_v2_incarnation_and_stable_sidecar(
         assert manifest["semantic_key"] == first.identity.semantic_key
         assert manifest["incarnation_id"] == first.identity.incarnation_id
         assert manifest["artifact_digest"] == first.identity.artifact_digest
+        assert is_canonical_plugin_artifact_incarnation_id(first.identity.incarnation_id)
 
         lease_path = (
             first.identity.managed_path.parent
@@ -149,6 +152,36 @@ def test_corrupt_live_incarnation_is_not_replaced_until_reader_closes(
         assert not probe.exists()
 
 
+def test_mode_only_mutation_invalidates_projection_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    authority = _authority(tmp_path)
+    backend = ClaudeCodeBackend()
+    binding = authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    plugin_metadata = binding.identity.managed_path / ".claude-plugin" / "plugin.json"
+    plugin_metadata.chmod(plugin_metadata.stat().st_mode ^ 0o100)
+
+    try:
+        with pytest.raises(PluginArtifactContentionError):
+            authority.acquire_launch_binding(
+                backend=backend,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            )
+    finally:
+        binding.close()
+
+    with authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as replacement:
+        assert replacement.identity.incarnation_id != binding.identity.incarnation_id
+
+
 def test_writer_to_reader_handoff_revalidates_exact_incarnation(
     tmp_path: Path,
     monkeypatch,
@@ -168,7 +201,7 @@ def test_writer_to_reader_handoff_revalidates_exact_incarnation(
             semantic_key = lock_path.stem
             manifest_path = projections / f".{semantic_key}.autoskillit-projection.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["incarnation_id"] = "00000000-0000-0000-0000-000000000000"
+            manifest["incarnation_id"] = new_plugin_artifact_incarnation_id()
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         return lease
 

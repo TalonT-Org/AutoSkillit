@@ -35,8 +35,14 @@ from autoskillit.core import (
     get_logger,
     log_plugin_artifact_lifecycle,
     read_retiring_cache,
-    read_versioned_json,
     remove_retiring_records,
+)
+from autoskillit.workspace._projection_artifact import (
+    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    projected_artifact_lease_path,
+    projected_artifact_manifest_path,
+    projected_plugin_artifact_digest,
+    read_projected_plugin_identity,
 )
 
 logger = get_logger(__name__)
@@ -206,11 +212,11 @@ class ProjectedPluginRetirementOwner:
 
     @staticmethod
     def manifest_path(managed_path: Path) -> Path:
-        return managed_path.parent / f".{managed_path.name}.autoskillit-projection.json"
+        return projected_artifact_manifest_path(managed_path)
 
     @staticmethod
     def lease_path(managed_path: Path) -> Path:
-        return managed_path.parent / ".artifact-leases" / f"{managed_path.name}.lock"
+        return projected_artifact_lease_path(managed_path)
 
     def enqueue_retirement(
         self,
@@ -284,59 +290,18 @@ class ProjectedPluginRetirementOwner:
 
     def identity_for_path(self, managed_path: Path) -> PluginArtifactIdentity:
         """Validate and return the exact current identity at a managed path."""
-        from autoskillit.workspace.skill_projection import (
-            _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-            _projected_plugin_artifact_digest,
-        )
-
         managed_path = Path(managed_path)
         if not self._contains(managed_path):
             raise PluginArtifactValidationError(
                 f"projection is outside managed root: {managed_path}"
             )
         manifest_path = self.manifest_path(managed_path)
-        manifest = read_versioned_json(
-            manifest_path,
-            _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        )
-        if manifest is None:
-            raise PluginArtifactValidationError(
-                f"projected retirement manifest is unreadable: {manifest_path}"
-            )
-        semantic_key = manifest.get("semantic_key")
-        incarnation_id = manifest.get("incarnation_id")
-        artifact_digest = manifest.get("artifact_digest")
-        if semantic_key != managed_path.name:
-            raise PluginArtifactValidationError(
-                f"projected retirement semantic key mismatch: {manifest_path}"
-            )
-        if not isinstance(incarnation_id, str):
-            raise PluginArtifactValidationError(
-                f"projected retirement incarnation is missing: {manifest_path}"
-            )
-        try:
-            parsed_incarnation = uuid.UUID(incarnation_id)
-        except ValueError as exc:
-            raise PluginArtifactValidationError(
-                f"projected retirement incarnation is invalid: {manifest_path}"
-            ) from exc
-        if str(parsed_incarnation) != incarnation_id:
-            raise PluginArtifactValidationError(
-                f"projected retirement incarnation is not canonical: {manifest_path}"
-            )
-        if not isinstance(artifact_digest, str) or len(artifact_digest) != 64:
-            raise PluginArtifactValidationError(
-                f"projected retirement digest is invalid: {manifest_path}"
-            )
-        identity = PluginArtifactIdentity(
-            semantic_key=semantic_key,
-            incarnation_id=incarnation_id,
-            manifest_schema_version=_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-            artifact_digest=artifact_digest,
-            managed_path=managed_path,
+        identity = read_projected_plugin_identity(
+            managed_path,
             manifest_path=manifest_path,
+            expected_semantic_key=managed_path.name,
         )
-        if _projected_plugin_artifact_digest(managed_path) != identity.artifact_digest:
+        if projected_plugin_artifact_digest(managed_path) != identity.artifact_digest:
             raise PluginArtifactValidationError("projected retirement digest mismatch")
         return identity
 
@@ -344,15 +309,11 @@ class ProjectedPluginRetirementOwner:
         self,
         record: RetiringArtifactRecord,
     ) -> PluginArtifactIdentity:
-        from autoskillit.workspace.skill_projection import (
-            _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        )
-
         if record.manifest_path != self.manifest_path(record.managed_path):
             raise PluginArtifactValidationError(
                 "projected retirement manifest path is not canonical"
             )
-        if record.manifest_schema_version != _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION:
+        if record.manifest_schema_version != PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION:
             raise PluginArtifactValidationError(
                 "projected retirement manifest schema is unsupported"
             )

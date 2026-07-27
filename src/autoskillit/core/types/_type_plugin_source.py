@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TypeGuard
+from uuid import UUID, uuid4
 
 __all__ = [
     "DirectInstall",
@@ -20,6 +21,9 @@ __all__ = [
     "RetiringCacheReadResult",
     "RetiringCacheState",
     "RetirementOutcome",
+    "is_canonical_plugin_artifact_digest",
+    "is_canonical_plugin_artifact_incarnation_id",
+    "new_plugin_artifact_incarnation_id",
 ]
 
 
@@ -74,6 +78,32 @@ class RetirementOutcome(StrEnum):
     REJECTED_IDENTITY = "rejected_identity"
     RECORD_REMOVED = "record_removed"
     LEGACY_EVIDENCE = "legacy_evidence"
+
+
+def new_plugin_artifact_incarnation_id() -> str:
+    """Return the canonical UUID4-hex identity shared by every artifact kind."""
+    return uuid4().hex
+
+
+def is_canonical_plugin_artifact_incarnation_id(value: object) -> TypeGuard[str]:
+    """Return whether *value* is lowercase, 32-character UUID4 hex."""
+    if not isinstance(value, str) or len(value) != 32:
+        return False
+    try:
+        parsed = UUID(hex=value)
+    except ValueError:
+        return False
+    return parsed.hex == value and parsed.version == 4
+
+
+def is_canonical_plugin_artifact_digest(value: object) -> TypeGuard[str]:
+    """Return whether *value* is one lowercase SHA-256 hex digest."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and value.lower() == value
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 @dataclass(frozen=True, slots=True)

@@ -784,6 +784,32 @@ def test_recovery_uses_registered_stream_replay(
     assert replay_calls == 1
 
 
+def test_recovery_uses_versioned_shadow_projector(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    assert (
+        DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    projector = MagicMock(side_effect=ledger_module._shadow_record_protocol_v1)
+    registry = MappingProxyType({1: projector})
+    monkeypatch.setattr(
+        ledger_module,
+        "_CONTEXT_ADMISSION_SHADOW_PROJECTORS",
+        registry,
+    )
+
+    recovered = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert recovered.recovered_streams == (key,)
+    projector.assert_called_once()
+    with pytest.raises(TypeError):
+        registry[2] = projector  # type: ignore[index]
+
+
 def test_recover_filters_healthy_failed_unresolved_unknown_and_store_failure(
     tmp_path: Path,
 ) -> None:

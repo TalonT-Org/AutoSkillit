@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import fields, is_dataclass, replace
 from enum import StrEnum
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Final, assert_never, cast, get_args
 
 from autoskillit.core import (
@@ -1878,6 +1879,22 @@ def _shadow_record(
     transition: AdmissionTransition,
     journal_sequence: int,
 ) -> ShadowContextAdmissionRecord:
+    try:
+        projector = _CONTEXT_ADMISSION_SHADOW_PROJECTORS[event.protocol_version]
+    except KeyError as exc:
+        raise ContextAdmissionValidationError(
+            "unsupported_context_admission_shadow_protocol"
+        ) from exc
+    return projector(stream_key, prior_state, event, transition, journal_sequence)
+
+
+def _shadow_record_protocol_v1(
+    stream_key: ContextAdmissionStreamKey,
+    prior_state: ContextAdmissionState,
+    event: ContextAdmissionEvent,
+    transition: AdmissionTransition,
+    journal_sequence: int,
+) -> ShadowContextAdmissionRecord:
     targets = _shadow_targets(prior_state, event, transition.next_state)
     return ShadowContextAdmissionRecord(
         stream_key=stream_key,
@@ -1899,6 +1916,11 @@ def _shadow_record(
             )
         ),
     )
+
+
+_CONTEXT_ADMISSION_SHADOW_PROJECTORS: Final = MappingProxyType(
+    {CONTEXT_ADMISSION_PROTOCOL_VERSION: _shadow_record_protocol_v1}
+)
 
 
 def _shadow_targets(

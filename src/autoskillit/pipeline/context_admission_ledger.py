@@ -226,7 +226,8 @@ class DefaultContextAdmissionLedger:
                     """
                     SELECT stream_key, state_envelope, aggregate_revision,
                            admission_sequence, latest_journal_sequence,
-                           health_status, failure_reason, reason_code
+                           health_status, failure_reason, reason_code,
+                           genesis_envelope
                     FROM streams WHERE stream_id = ?
                     """,
                     (stream_id,),
@@ -355,6 +356,21 @@ class DefaultContextAdmissionLedger:
                                 "exact-replay-produced-effects",
                             )
                     else:
+                        _recover_stream_projection(
+                            connection,
+                            stream_id,
+                            stream_key,
+                            genesis_envelope=bytes(row[8]),
+                            materialized_state_envelope=bytes(row[1]),
+                            aggregate_revision=int(row[2]),
+                            admission_sequence=int(row[3]),
+                            latest_journal_sequence=int(row[4]),
+                            read_budget=_LedgerReadBudget(
+                                "exact-replay-read-limit-exceeded",
+                                max_rows=_MAX_RECOVERY_ROWS,
+                                max_bytes=_MAX_RECOVERY_BYTES,
+                            ),
+                        )
                         transition = AdmissionTransition(
                             next_state=current_state,
                             decision=original_decision,

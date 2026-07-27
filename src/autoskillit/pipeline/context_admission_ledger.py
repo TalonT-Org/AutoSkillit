@@ -481,15 +481,13 @@ class DefaultContextAdmissionLedger:
                 self._fault_callback(_LedgerFaultPoint.BEFORE_COMMIT)
                 self._commit(connection)
                 self._fault_callback(_LedgerFaultPoint.AFTER_COMMIT)
-                health = ContextAdmissionStreamHealth(
+                self._stream_health[stream_key] = ContextAdmissionStreamHealth(
                     stream_key,
                     ContextAdmissionStorageHealthStatus.HEALTHY,
                 )
-                self._stream_health[stream_key] = health
+                self._unresolved_streams.discard(stream_key)
                 if _state_has_unresolved_work(transition.next_state):
                     self._unresolved_streams.add(stream_key)
-                else:
-                    self._unresolved_streams.discard(stream_key)
                 return ContextAdmissionAccountingResult(
                     status=_accounting_status(event, transition),
                     stream_key=stream_key,
@@ -817,13 +815,7 @@ class DefaultContextAdmissionLedger:
                             ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
                             "stream-key-mismatch",
                         )
-                    try:
-                        health = _stored_stream_health(stream_key, row[7], row[8], row[9])
-                    except (ContextAdmissionValidationError, ValueError) as exc:
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.INTEGRITY,
-                            "invalid-stream-health",
-                        ) from exc
+                    health = _stored_stream_health(stream_key, row[7], row[8], row[9])
                     if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                         self._stream_health[stream_key] = health
                         continue
@@ -991,13 +983,7 @@ class DefaultContextAdmissionLedger:
                         ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
                         "stream-key-mismatch",
                     )
-                try:
-                    health = _stored_stream_health(stream_key, row[3], row[4], row[5])
-                except (ContextAdmissionValidationError, ValueError) as exc:
-                    raise _LedgerOpenError(
-                        ContextAdmissionStorageFailureReason.INTEGRITY,
-                        "invalid-stream-health",
-                    ) from exc
+                health = _stored_stream_health(stream_key, row[3], row[4], row[5])
                 if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                     self._stream_health[stream_key] = health
                     return _empty_inspection(stream_key, health)
@@ -1560,16 +1546,22 @@ def _stored_stream_health(
     failure_reason: object,
     reason_code: object,
 ) -> ContextAdmissionStreamHealth:
-    return ContextAdmissionStreamHealth(
-        stream_key,
-        ContextAdmissionStorageHealthStatus(str(status)),
-        failure_reason=(
-            ContextAdmissionStorageFailureReason(str(failure_reason))
-            if failure_reason is not None
-            else None
-        ),
-        reason_code=str(reason_code) if reason_code is not None else None,
-    )
+    try:
+        return ContextAdmissionStreamHealth(
+            stream_key,
+            ContextAdmissionStorageHealthStatus(str(status)),
+            failure_reason=(
+                ContextAdmissionStorageFailureReason(str(failure_reason))
+                if failure_reason is not None
+                else None
+            ),
+            reason_code=str(reason_code) if reason_code is not None else None,
+        )
+    except (ContextAdmissionValidationError, ValueError) as exc:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.INTEGRITY,
+            "invalid-stream-health",
+        ) from exc
 
 
 def _recover_stream_projection(
@@ -1667,7 +1659,6 @@ def _recover_stream_projection(
     shadow_by_sequence = {int(sequence): bytes(envelope) for sequence, envelope in shadow_rows}
     state: ContextAdmissionState = genesis
     events: list[ContextAdmissionEvent] = []
-    transitions: list[AdmissionTransition] = []
     for row in journal_rows:
         journal_sequence = int(row[0])
         event_wrapper = decode_stored_context_admission_envelope(bytes(row[2]))
@@ -1715,7 +1706,6 @@ def _recover_stream_projection(
         reducer = context_admission_reducer_for_protocol(protocol_version)
         transition = reducer.reduce_transition(state, event)
         events.append(event)
-        transitions.append(transition)
         if stored_decision != transition.decision:
             raise _LedgerOpenError(
                 ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
@@ -1772,7 +1762,7 @@ def _recover_stream_projection(
         genesis,
         tuple(events),
     )
-    if replay.final_state != state or replay.transitions != tuple(transitions):
+    if replay.final_state != state:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
             "registered-replay-mismatch",

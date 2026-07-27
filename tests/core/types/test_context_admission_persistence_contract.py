@@ -32,6 +32,7 @@ from autoskillit.core import (
     ContextAdmissionAccountingStatus,
     ContextAdmissionEvent,
     ContextAdmissionInspectionResult,
+    ContextAdmissionRecoveryResult,
     ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
@@ -610,6 +611,41 @@ def test_health_and_accounting_results_reject_raw_enum_values() -> None:
             status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
             stream_key=_stream_key(),
             failure_reason="integrity",  # type: ignore[arg-type]
+        )
+
+
+def test_recovery_result_enforces_stream_projection_invariants() -> None:
+    key = _stream_key()
+    healthy = ContextAdmissionStreamHealth(
+        key,
+        ContextAdmissionStorageHealthStatus.HEALTHY,
+    )
+    store_health = ContextAdmissionStoreHealth(
+        ContextAdmissionStorageHealthStatus.HEALTHY,
+    )
+    with pytest.raises(ValueError, match="duplicate_recovery_stream_projection"):
+        ContextAdmissionRecoveryResult(
+            status=ContextAdmissionStorageHealthStatus.HEALTHY,
+            store_health=store_health,
+            stream_healths=(healthy, healthy),
+            recovered_streams=(key,),
+            unresolved_streams=(),
+        )
+    with pytest.raises(ValueError, match="recovered_stream_projection_mismatch"):
+        ContextAdmissionRecoveryResult(
+            status=ContextAdmissionStorageHealthStatus.HEALTHY,
+            store_health=store_health,
+            stream_healths=(healthy,),
+            recovered_streams=(),
+            unresolved_streams=(),
+        )
+    with pytest.raises(ValueError, match="unresolved_stream_projection_mismatch"):
+        ContextAdmissionRecoveryResult(
+            status=ContextAdmissionStorageHealthStatus.HEALTHY,
+            store_health=store_health,
+            stream_healths=(),
+            recovered_streams=(),
+            unresolved_streams=(key,),
         )
 
 

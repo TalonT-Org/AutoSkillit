@@ -596,6 +596,24 @@ class ContextAdmissionRecoveryResult:
     def __post_init__(self) -> None:
         if self.status is not self.store_health.status:
             raise ValueError("recovery_status_mismatch")
+        health_keys = tuple(health.stream_key for health in self.stream_healths)
+        recovered_keys = set(self.recovered_streams)
+        unresolved_keys = set(self.unresolved_streams)
+        if (
+            len(set(health_keys)) != len(health_keys)
+            or len(recovered_keys) != len(self.recovered_streams)
+            or len(unresolved_keys) != len(self.unresolved_streams)
+        ):
+            raise ValueError("duplicate_recovery_stream_projection")
+        healthy_keys = {
+            health.stream_key
+            for health in self.stream_healths
+            if health.status is ContextAdmissionStorageHealthStatus.HEALTHY
+        }
+        if recovered_keys != healthy_keys:
+            raise ValueError("recovered_stream_projection_mismatch")
+        if not unresolved_keys <= recovered_keys:
+            raise ValueError("unresolved_stream_projection_mismatch")
 
 
 @dataclass(frozen=True, slots=True)

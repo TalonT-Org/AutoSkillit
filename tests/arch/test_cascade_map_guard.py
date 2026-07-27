@@ -22,6 +22,7 @@ from tests._test_filter import (
     MODULE_CASCADE_EXECUTION,
     MODULE_CASCADE_PIPELINE,
     MODULE_CASCADE_RECIPE,
+    MODULE_CASCADE_SERVER_CROSS_LAYER,
     _file_to_package,
 )
 
@@ -217,6 +218,19 @@ def _build_pipeline_module_reverse_graph() -> dict[str, set[str]]:
     return _build_pkg_module_reverse_graph("pipeline", _build_reexport_map("pipeline"))
 
 
+def _build_server_cross_layer_requirements() -> dict[str, set[str]]:
+    """Find server modules whose ledger access requires pipeline verification."""
+    requirements: dict[str, set[str]] = {}
+    for path in sorted((_SRC_ROOT / "server").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(
+            isinstance(node, ast.Attribute) and node.attr == "context_admission_ledger"
+            for node in ast.walk(tree)
+        ):
+            requirements[path.stem] = {"pipeline"}
+    return requirements
+
+
 def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
     """REQ-GUARD-001 (module level, recipe). Returns {stem: set[consuming_pkg]}."""
     graph = _build_pkg_module_reverse_graph("recipe", _build_reexport_map("recipe"))
@@ -366,6 +380,32 @@ class TestModuleCascadePipelineGuard:
         ]
         assert not phantoms, (
             "MODULE_CASCADE_PIPELINE contains stems with no consumers or source file:\n"
+            f"  {sorted(phantoms)}"
+        )
+
+
+class TestModuleCascadeServerCrossLayerGuard:
+    """Validate additive server cross-layer cascades against ledger consumers."""
+
+    def test_server_cross_layer_cascade_covers_ledger_consumers(self) -> None:
+        requirements = _build_server_cross_layer_requirements()
+        violations = {
+            stem: sorted(required - MODULE_CASCADE_SERVER_CROSS_LAYER.get(stem, frozenset()))
+            for stem, required in requirements.items()
+            if required - MODULE_CASCADE_SERVER_CROSS_LAYER.get(stem, frozenset())
+        }
+        assert not violations, (
+            f"MODULE_CASCADE_SERVER_CROSS_LAYER is missing ledger consumer routes:\n  {violations}"
+        )
+
+    def test_server_cross_layer_cascade_has_no_phantom_stems(self) -> None:
+        phantoms = [
+            stem
+            for stem in MODULE_CASCADE_SERVER_CROSS_LAYER
+            if not (_SRC_ROOT / "server" / f"{stem}.py").exists()
+        ]
+        assert not phantoms, (
+            "MODULE_CASCADE_SERVER_CROSS_LAYER contains missing server modules:\n"
             f"  {sorted(phantoms)}"
         )
 

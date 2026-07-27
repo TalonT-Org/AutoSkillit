@@ -279,35 +279,45 @@ def test_recovery_and_inspection_hold_one_snapshot_across_projection_reads(
 
     assert reader.recover_all().status is ContextAdmissionStorageHealthStatus.HEALTHY
 
-    begin_index = statements.index("BEGIN")
-    stream_index = next(
-        index
-        for index, statement in enumerate(statements)
-        if "FROM streams" in statement and "ORDER BY stream_id" in statement
+    def assert_uninterrupted_projection_reads(
+        trace: list[str],
+        *,
+        stream_query: str,
+        expect_commit: bool,
+    ) -> None:
+        begin_index = trace.index("BEGIN")
+        read_indices = [
+            next(index for index, statement in enumerate(trace) if query in statement)
+            for query in (
+                stream_query,
+                "FROM journal_events",
+                "FROM effect_outbox",
+                "FROM shadow_decisions",
+            )
+        ]
+        last_read_index = max(read_indices)
+        assert begin_index < min(read_indices)
+        assert not any(
+            statement in {"BEGIN", "COMMIT", "ROLLBACK"}
+            for statement in trace[begin_index + 1 : last_read_index + 1]
+        )
+        if expect_commit:
+            assert trace.index("COMMIT", last_read_index + 1) > last_read_index
+
+    assert_uninterrupted_projection_reads(
+        statements,
+        stream_query="FROM streams",
+        expect_commit=True,
     )
-    journal_index = next(
-        index
-        for index, statement in enumerate(statements)
-        if "FROM journal_events" in statement and "ORDER BY journal_sequence" in statement
-    )
-    commit_index = statements.index("COMMIT", journal_index)
-    assert begin_index < stream_index < journal_index < commit_index
 
     inspection_start = len(statements)
     assert reader.inspect_stream(key).health.status is ContextAdmissionStorageHealthStatus.HEALTHY
     inspection_statements = statements[inspection_start:]
-    assert inspection_statements[0] == "BEGIN"
-    inspection_stream_index = next(
-        index
-        for index, statement in enumerate(inspection_statements)
-        if "FROM streams WHERE stream_id" in statement
+    assert_uninterrupted_projection_reads(
+        inspection_statements,
+        stream_query="FROM streams WHERE stream_id",
+        expect_commit=False,
     )
-    inspection_journal_index = next(
-        index
-        for index, statement in enumerate(inspection_statements)
-        if "FROM journal_events" in statement
-    )
-    assert 0 < inspection_stream_index < inspection_journal_index
 
 
 @pytest.mark.parametrize("row_limit", [3, 5])

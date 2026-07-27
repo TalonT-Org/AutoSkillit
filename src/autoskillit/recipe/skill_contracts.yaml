@@ -81,7 +81,7 @@ skills:
       type: file_path
       required: true
     - name: revision_guidance
-      type: directory_path
+      type: file_path
       required: false
     outputs:
     - name: resolution

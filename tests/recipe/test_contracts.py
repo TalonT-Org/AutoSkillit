@@ -58,6 +58,17 @@ def test_load_bundled_manifest_callable_inputs_have_explicit_required() -> None:
             assert "required" in inp, f"{dotted_path}: input {inp['name']} missing 'required'"
 
 
+def test_resolve_design_review_revision_guidance_is_a_file() -> None:
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("resolve-design-review", manifest)
+    assert contract is not None
+    revision_guidance = next(
+        input_def for input_def in contract.inputs if input_def.name == "revision_guidance"
+    )
+
+    assert revision_guidance.type == "file_path"
+
+
 def test_get_skill_contract_defaults_required_false() -> None:
     from autoskillit.recipe.contracts import get_skill_contract
 

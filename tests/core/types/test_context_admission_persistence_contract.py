@@ -161,6 +161,19 @@ def test_released_envelopes_have_byte_stable_canonical_round_trip(
     assert b" " not in encoded
 
 
+def test_envelope_encoder_rejects_output_above_decoder_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    envelope = make_stored_context_admission_envelope(_authority_event())
+    encoded = encode_stored_context_admission_envelope(envelope)
+    monkeypatch.setattr(persistence_types, "_MAX_ENVELOPE_BYTES", len(encoded) - 1)
+
+    with pytest.raises(
+        ContextAdmissionValidationError, match="invalid_context_admission_envelope"
+    ):
+        encode_stored_context_admission_envelope(envelope)
+
+
 def test_shadow_publication_is_a_released_top_level_envelope() -> None:
     transition = reduce_context_admission(_uninitialized(), _authority_event())
     shadow = ShadowContextAdmissionRecord(

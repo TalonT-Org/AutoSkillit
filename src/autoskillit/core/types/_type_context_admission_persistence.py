@@ -286,12 +286,15 @@ def encode_stored_context_admission_envelope(
         "protocol_version": envelope.protocol_version,
         "type_discriminator": envelope.type_discriminator,
     }
-    return json.dumps(
+    encoded = json.dumps(
         value,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+    if len(encoded) > _MAX_ENVELOPE_BYTES:
+        _raise_invalid("invalid_context_admission_envelope")
+    return encoded
 
 
 def decode_stored_context_admission_envelope(

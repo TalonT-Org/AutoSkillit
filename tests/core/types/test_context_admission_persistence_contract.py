@@ -801,6 +801,15 @@ def test_health_and_accounting_results_reject_raw_enum_values() -> None:
         )
 
 
+def test_accounting_result_requires_stream_key() -> None:
+    with pytest.raises(ValueError, match="invalid_context_admission_stream_key"):
+        ContextAdmissionAccountingResult(
+            status=ContextAdmissionAccountingStatus.CONTENDED,
+            stream_key=None,  # type: ignore[arg-type]
+            reason_code="busy",
+        )
+
+
 def test_recovery_result_enforces_stream_projection_invariants() -> None:
     key = _stream_key()
     healthy = ContextAdmissionStreamHealth(

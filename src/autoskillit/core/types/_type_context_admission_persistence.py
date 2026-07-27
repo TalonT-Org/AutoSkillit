@@ -554,7 +554,7 @@ def _validate_health(
 @dataclass(frozen=True, slots=True)
 class ContextAdmissionAccountingResult:
     status: ContextAdmissionAccountingStatus
-    stream_key: ContextAdmissionStreamKey | None
+    stream_key: ContextAdmissionStreamKey
     transition: AdmissionTransition | None = None
     journal_sequence: int | None = None
     failure_reason: ContextAdmissionStorageFailureReason | None = None
@@ -563,6 +563,8 @@ class ContextAdmissionAccountingResult:
     def __post_init__(self) -> None:
         if not isinstance(self.status, ContextAdmissionAccountingStatus):
             raise ValueError("invalid_context_admission_accounting_status")
+        if not isinstance(self.stream_key, ContextAdmissionStreamKey):
+            raise ValueError("invalid_context_admission_stream_key")
         if self.failure_reason is not None and not isinstance(
             self.failure_reason,
             ContextAdmissionStorageFailureReason,

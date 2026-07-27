@@ -486,6 +486,10 @@ class DefaultContextAdmissionLedger:
                     ContextAdmissionStorageHealthStatus.HEALTHY,
                 )
                 self._stream_health[stream_key] = health
+                if _state_has_unresolved_work(transition.next_state):
+                    self._unresolved_streams.add(stream_key)
+                else:
+                    self._unresolved_streams.discard(stream_key)
                 return ContextAdmissionAccountingResult(
                     status=_accounting_status(event, transition),
                     stream_key=stream_key,
@@ -710,6 +714,7 @@ class DefaultContextAdmissionLedger:
             failure_reason=reason,
             reason_code=reason_code,
         )
+        self._unresolved_streams.discard(stream_key)
         return True
 
     def _storage_failure_result(

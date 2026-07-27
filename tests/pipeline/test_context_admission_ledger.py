@@ -699,6 +699,7 @@ def test_recovery_replays_nonempty_stream_and_surfaces_unresolved_work(
         ),
     )
     assert reserved.transition is not None
+    assert ledger.recover_all().unresolved_streams == (key,)
 
     reopened = DefaultContextAdmissionLedger(authority)
     recovered = reopened.recover_all()

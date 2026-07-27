@@ -991,16 +991,13 @@ class DefaultContextAdmissionLedger:
                         ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
                         "stream-key-mismatch",
                     )
-                health = ContextAdmissionStreamHealth(
-                    stream_key,
-                    ContextAdmissionStorageHealthStatus(row[3]),
-                    failure_reason=(
-                        ContextAdmissionStorageFailureReason(row[4])
-                        if row[4] is not None
-                        else None
-                    ),
-                    reason_code=str(row[5]) if row[5] is not None else None,
-                )
+                try:
+                    health = _stored_stream_health(stream_key, row[3], row[4], row[5])
+                except (ContextAdmissionValidationError, ValueError) as exc:
+                    raise _LedgerOpenError(
+                        ContextAdmissionStorageFailureReason.INTEGRITY,
+                        "invalid-stream-health",
+                    ) from exc
                 if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                     self._stream_health[stream_key] = health
                     return _empty_inspection(stream_key, health)

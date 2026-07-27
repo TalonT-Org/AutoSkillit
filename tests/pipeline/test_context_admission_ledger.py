@@ -1013,6 +1013,25 @@ def test_apply_rejects_invalid_persisted_stream_health(
     assert failed.reason_code == "invalid-stream-health"
 
 
+def test_inspection_rejects_health_corrupted_after_recovery(tmp_path: Path) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute("UPDATE streams SET health_status = 'unknown'")
+        connection.commit()
+    finally:
+        connection.close()
+
+    inspection = ledger.inspect_stream(key)
+
+    assert inspection.health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert inspection.health.failure_reason is ContextAdmissionStorageFailureReason.INTEGRITY
+    assert inspection.health.reason_code == "invalid-stream-health"
+
+
 def test_apply_retries_when_corruption_failure_marker_is_contended(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -133,8 +133,13 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
         def build_interactive_cmd(self, **kwargs):
             resume_spec = kwargs["resume_spec"]
+            plugin_binding = kwargs["plugin_binding"]
             events.append(("build", resume_spec))
-            return CmdSpec(cmd=("claude",), env={"ATTEMPT": str(len(events))})
+            return CmdSpec(
+                cmd=("claude",),
+                env={"ATTEMPT": str(len(events))},
+                inherited_fds=plugin_binding.inherited_fds,
+            )
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
             events.append(("validate", spec))

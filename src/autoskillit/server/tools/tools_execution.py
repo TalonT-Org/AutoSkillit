@@ -30,6 +30,7 @@ from autoskillit.core import (
     ClosureAuthoritySpec,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
+    InvocationTemplate,
     PreflightKind,
     SkillContractError,
     SkillExecutionRole,
@@ -839,9 +840,30 @@ async def run_skill(
 
         _preflight_result = None
         _bound_recipe_inputs: tuple[tuple[str, BoundScalar], ...] = ()
+        _invocation_template: InvocationTemplate | None = None
         child_skill_command = skill_command
         _claims_recipe_execution = bool(recipe_execution_id or invocation_template_digest)
-        if _installed_execution is not None:
+        _dynamic_recipe_call = bool(
+            _installed_execution is not None
+            and step_name
+            and step_name in _installed_execution.snapshot.dynamic_skill_step_names
+        )
+        if _dynamic_recipe_call:
+            if _claims_recipe_execution:
+                return _recipe_execution_deny(
+                    "recipe_execution_dynamic_attestation",
+                    "a dynamic recipe skill step cannot claim a concrete invocation template",
+                )
+            if not resume_session_id:
+                try:
+                    child_skill_command = build_standalone_child_prompt(
+                        skill_command,
+                        cwd,
+                        skill_inputs,
+                    )
+                except RecipeExecutionAdmissionError as exc:
+                    return _recipe_execution_deny(exc.code, str(exc))
+        elif _installed_execution is not None:
             if not recipe_execution_id or not invocation_template_digest:
                 return _recipe_execution_deny(
                     "recipe_execution_attestation_missing",
@@ -1636,7 +1658,7 @@ async def run_skill(
                         tool_ctx,
                         target_name,
                         skill_result,
-                        _installed_execution,
+                        (_installed_execution if _invocation_template is not None else None),
                         _bound_recipe_inputs,
                     )
                     tool_ctx.audit.record_success(skill_command)

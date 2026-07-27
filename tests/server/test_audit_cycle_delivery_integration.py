@@ -1809,6 +1809,78 @@ async def test_runtime_attestation_rejects_before_executor(
 
 
 @pytest.mark.anyio
+async def test_dynamic_recipe_skill_step_executes_without_template_attestation(
+    tool_ctx_kitchen_open,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker = "%%ORDER_UP::12345678%%"
+    monkeypatch.setattr(
+        "uuid.uuid4",
+        lambda: SimpleNamespace(hex="12345678000000000000000000000000"),
+    )
+    tool_ctx_kitchen_open.write_expected_resolver = None
+    projection = RecipeBindingProjection(
+        {
+            "fanout": BoundStepInvocation(
+                step_name="fanout",
+                tool_name="run_skill",
+                mode=BindingMode.RECIPE,
+                skill_name=None,
+                mcp_kwargs=(
+                    _present("skill_command", "Choose the applicable audit skills"),
+                    _present("cwd", str(tmp_path)),
+                ),
+                skill_inputs=(),
+                failures=(),
+            )
+        }
+    )
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=projection,
+        execution_id="execution-1",
+    )
+    install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    assert snapshot.templates == {}
+    assert snapshot.dynamic_skill_step_names == frozenset({"fanout"})
+    tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+    tool_ctx_kitchen_open.runner.push(
+        _make_result(
+            0,
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": f"done\n{marker}",
+                    "session_id": "session-1",
+                }
+            ),
+            "",
+        )
+    )
+    calls_before = len(tool_ctx_kitchen_open.runner.call_args_list)
+
+    result = json.loads(
+        await run_skill(
+            "/dry-walkthrough",
+            str(tmp_path),
+            step_name="fanout",
+            skill_inputs={"plan_path": str(tmp_path / "plan.md"), "issue_url": ""},
+        )
+    )
+
+    assert result["success"] is True
+    assert len(tool_ctx_kitchen_open.runner.call_args_list) > calls_before
+    installed = get_recipe_execution(tool_ctx_kitchen_open)
+    assert installed is not None
+    assert dict(installed.runtime_binding_digests) == {}
+
+
+@pytest.mark.anyio
 async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
     tool_ctx_kitchen_open,
     tmp_path: Path,

@@ -116,11 +116,13 @@ def compute_recipe_execution_snapshot_digest(
     content_hash: str,
     composite_hash: str,
     templates: Mapping[str, InvocationTemplate],
+    dynamic_skill_step_names: frozenset[str] = frozenset(),
 ) -> str:
     """Hash the compiled execution snapshot without any delivery hash."""
     payload = {
         "composite_hash": composite_hash,
         "content_hash": content_hash,
+        "dynamic_skill_step_names": sorted(dynamic_skill_step_names),
         "execution_id": execution_id,
         "recipe_name": recipe_name,
         "templates": [
@@ -144,6 +146,7 @@ class RecipeExecutionSnapshot:
     composite_hash: str
     templates: Mapping[str, InvocationTemplate]
     snapshot_digest: str
+    dynamic_skill_step_names: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.execution_id or not self.recipe_name:
@@ -151,8 +154,13 @@ class RecipeExecutionSnapshot:
         if not HASH_RE.fullmatch(self.content_hash) or not HASH_RE.fullmatch(self.composite_hash):
             raise ValueError("recipe execution hashes must be canonical sha256 identities")
         copied = dict(self.templates)
+        dynamic_skill_step_names = frozenset(self.dynamic_skill_step_names)
         if any(name != template.invocation.step_name for name, template in copied.items()):
             raise ValueError("recipe execution template keys must match step names")
+        if any(not name for name in dynamic_skill_step_names):
+            raise ValueError("dynamic recipe skill step names must be non-empty")
+        if dynamic_skill_step_names.intersection(copied):
+            raise ValueError("recipe skill steps cannot be both dynamic and attested")
         for template in copied.values():
             expected_template_digest = compute_invocation_template_digest(
                 execution_id=self.execution_id,
@@ -166,12 +174,14 @@ class RecipeExecutionSnapshot:
             if template.template_digest != expected_template_digest:
                 raise ValueError("recipe execution invocation template digest mismatch")
         object.__setattr__(self, "templates", MappingProxyType(copied))
+        object.__setattr__(self, "dynamic_skill_step_names", dynamic_skill_step_names)
         expected = compute_recipe_execution_snapshot_digest(
             execution_id=self.execution_id,
             recipe_name=self.recipe_name,
             content_hash=self.content_hash,
             composite_hash=self.composite_hash,
             templates=copied,
+            dynamic_skill_step_names=dynamic_skill_step_names,
         )
         if self.snapshot_digest != expected:
             raise ValueError("recipe execution snapshot digest does not match content")

@@ -299,8 +299,18 @@ def build_recipe_execution_snapshot(
     active_execution_id = execution_id or uuid4().hex
     tool_identity = _run_skill_tool_contract_identity()
     templates: dict[str, InvocationTemplate] = {}
+    dynamic_skill_step_names: set[str] = set()
     for step_name, invocation in projection.invocations.items():
-        if invocation.tool_name != "run_skill" or not invocation.attested:
+        if invocation.tool_name != "run_skill":
+            continue
+        if (
+            invocation.mode is BindingMode.RECIPE
+            and invocation.is_valid
+            and invocation.skill_name is None
+        ):
+            dynamic_skill_step_names.add(step_name)
+            continue
+        if not invocation.attested:
             continue
         if invocation.skill_name is None:
             raise AssertionError("attested invocation is missing its skill identity")
@@ -326,6 +336,7 @@ def build_recipe_execution_snapshot(
         content_hash=content_hash,
         composite_hash=composite_hash,
         templates=templates,
+        dynamic_skill_step_names=frozenset(dynamic_skill_step_names),
     )
     return RecipeExecutionSnapshot(
         execution_id=active_execution_id,
@@ -334,6 +345,7 @@ def build_recipe_execution_snapshot(
         composite_hash=composite_hash,
         templates=templates,
         snapshot_digest=snapshot_digest,
+        dynamic_skill_step_names=frozenset(dynamic_skill_step_names),
     )
 
 

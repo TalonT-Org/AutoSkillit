@@ -245,6 +245,56 @@ def test_recovery_and_inspection_hold_one_snapshot_across_projection_reads(
     assert 0 < inspection_stream_index < inspection_journal_index
 
 
+def test_recovery_enforces_aggregate_row_and_byte_budgets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    assert (
+        DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_ROWS", 2)
+
+    row_bounded = DefaultContextAdmissionLedger(authority)
+    recovered = row_bounded.recover_all()
+
+    assert recovered.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    health = row_bounded.stream_health(key)
+    assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert health.failure_reason is ContextAdmissionStorageFailureReason.INTEGRITY
+    assert health.reason_code == "recovery-read-limit-exceeded"
+
+    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_ROWS", 100_000)
+    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_BYTES", 1)
+    byte_bounded = DefaultContextAdmissionLedger(authority)
+
+    byte_result = byte_bounded.recover_all()
+
+    assert byte_result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert (
+        byte_result.store_health.failure_reason is ContextAdmissionStorageFailureReason.INTEGRITY
+    )
+    assert byte_result.store_health.reason_code == "recovery-read-limit-exceeded"
+
+
+def test_inspection_enforces_aggregate_read_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ledger = DefaultContextAdmissionLedger(_authority(tmp_path))
+    key = stream_key()
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_ROWS", 1)
+
+    inspection = ledger.inspect_stream(key)
+
+    assert inspection.health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert inspection.health.failure_reason is ContextAdmissionStorageFailureReason.INTEGRITY
+    assert inspection.health.reason_code == "inspection-read-limit-exceeded"
+
+
 def test_recovery_fails_closed_on_orphaned_foreign_key_rows(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     assert (

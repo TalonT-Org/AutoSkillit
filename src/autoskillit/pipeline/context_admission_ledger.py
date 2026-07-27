@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import fields, is_dataclass, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import Final, assert_never, cast, get_args
+from typing import Any, Final, assert_never, cast, get_args
 
 from autoskillit.core import (
     CONTEXT_ADMISSION_ENCODING_VERSION,
@@ -120,6 +120,8 @@ _SQLITE_RECOVERY_CODES: Final = frozenset(
 )
 _MAX_STREAM_KEY_BYTES: Final = 16 * 1024
 _MAX_STREAM_KEY_JSON_NESTING: Final = 16
+_MAX_RECOVERY_ROWS: Final = 100_000
+_MAX_RECOVERY_BYTES: Final = 256 * 1024 * 1024
 _EVENT_TYPES: Final = get_args(ContextAdmissionEvent)
 _EFFECT_TYPES: Final = get_args(AdmissionEffect)
 _STATE_TYPES: Final = get_args(ContextAdmissionState)
@@ -148,6 +150,39 @@ class _LedgerOpenError(RuntimeError):
 
 class _LedgerContended(RuntimeError):
     pass
+
+
+class _LedgerReadBudget:
+    __slots__ = ("_bytes", "_reason_code", "_rows")
+
+    def __init__(self, reason_code: str) -> None:
+        self._rows = 0
+        self._bytes = 0
+        self._reason_code = reason_code
+
+    def consume(self, row: tuple[Any, ...]) -> tuple[Any, ...]:
+        self._rows += 1
+        self._bytes += sum(
+            len(value)
+            if isinstance(value, bytes | bytearray | memoryview)
+            else len(value.encode("utf-8"))
+            if isinstance(value, str)
+            else 0
+            for value in row
+        )
+        if self._rows > _MAX_RECOVERY_ROWS or self._bytes > _MAX_RECOVERY_BYTES:
+            raise _LedgerOpenError(
+                ContextAdmissionStorageFailureReason.INTEGRITY,
+                self._reason_code,
+            )
+        return row
+
+
+def _read_bounded_rows(
+    cursor: sqlite3.Cursor,
+    budget: _LedgerReadBudget,
+) -> tuple[tuple[Any, ...], ...]:
+    return tuple(budget.consume(cast(tuple[Any, ...], row)) for row in cursor)
 
 
 class DefaultContextAdmissionLedger:
@@ -766,16 +801,20 @@ class DefaultContextAdmissionLedger:
                 _preflight_storage_routes(connection)
                 self._stream_health.clear()
                 self._unresolved_streams.clear()
-                stream_rows = connection.execute(
-                    """
-                    SELECT stream_id, stream_key, genesis_envelope, state_envelope,
-                           aggregate_revision, admission_sequence,
-                           latest_journal_sequence, health_status,
-                           failure_reason, reason_code
-                    FROM streams
-                    ORDER BY stream_id
-                    """
-                ).fetchall()
+                read_budget = _LedgerReadBudget("recovery-read-limit-exceeded")
+                stream_rows = _read_bounded_rows(
+                    connection.execute(
+                        """
+                        SELECT stream_id, stream_key, genesis_envelope, state_envelope,
+                               aggregate_revision, admission_sequence,
+                               latest_journal_sequence, health_status,
+                               failure_reason, reason_code
+                        FROM streams
+                        ORDER BY stream_id
+                        """
+                    ),
+                    read_budget,
+                )
                 for row in stream_rows:
                     stream_id = bytes(row[0])
                     stream_key = _decode_stream_key(bytes(row[1]))
@@ -804,6 +843,7 @@ class DefaultContextAdmissionLedger:
                             aggregate_revision=int(row[4]),
                             admission_sequence=int(row[5]),
                             latest_journal_sequence=int(row[6]),
+                            read_budget=read_budget,
                         )
                     except ContextAdmissionValidationError:
                         pending_stream_failures.append(
@@ -905,6 +945,7 @@ class DefaultContextAdmissionLedger:
             try:
                 connection = self._connect()
                 connection.execute("BEGIN")
+                read_budget = _LedgerReadBudget("inspection-read-limit-exceeded")
                 row = connection.execute(
                     """
                     SELECT stream_key, state_envelope, latest_journal_sequence,
@@ -921,6 +962,7 @@ class DefaultContextAdmissionLedger:
                             ContextAdmissionStorageHealthStatus.UNINITIALIZED,
                         ),
                     )
+                row = read_budget.consume(cast(tuple[Any, ...], row))
                 if bytes(row[0]) != stream_id:
                     raise _LedgerOpenError(
                         ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
@@ -940,33 +982,42 @@ class DefaultContextAdmissionLedger:
                     self._stream_health[stream_key] = health
                     return _empty_inspection(stream_key, health)
                 latest = int(row[2])
-                journal_rows = connection.execute(
-                    """
-                    SELECT journal_sequence, event_envelope, decision_envelope
-                    FROM journal_events
-                    WHERE stream_id = ?
-                    ORDER BY journal_sequence
-                    """,
-                    (stream_id,),
-                ).fetchall()
-                effect_rows = connection.execute(
-                    """
-                    SELECT journal_sequence, effect_ordinal, effect_envelope
-                    FROM effect_outbox
-                    WHERE stream_id = ?
-                    ORDER BY journal_sequence, effect_ordinal
-                    """,
-                    (stream_id,),
-                ).fetchall()
-                shadow_rows = connection.execute(
-                    """
-                    SELECT journal_sequence, shadow_envelope
-                    FROM shadow_decisions
-                    WHERE stream_id = ?
-                    ORDER BY journal_sequence
-                    """,
-                    (stream_id,),
-                ).fetchall()
+                journal_rows = _read_bounded_rows(
+                    connection.execute(
+                        """
+                        SELECT journal_sequence, event_envelope, decision_envelope
+                        FROM journal_events
+                        WHERE stream_id = ?
+                        ORDER BY journal_sequence
+                        """,
+                        (stream_id,),
+                    ),
+                    read_budget,
+                )
+                effect_rows = _read_bounded_rows(
+                    connection.execute(
+                        """
+                        SELECT journal_sequence, effect_ordinal, effect_envelope
+                        FROM effect_outbox
+                        WHERE stream_id = ?
+                        ORDER BY journal_sequence, effect_ordinal
+                        """,
+                        (stream_id,),
+                    ),
+                    read_budget,
+                )
+                shadow_rows = _read_bounded_rows(
+                    connection.execute(
+                        """
+                        SELECT journal_sequence, shadow_envelope
+                        FROM shadow_decisions
+                        WHERE stream_id = ?
+                        ORDER BY journal_sequence
+                        """,
+                        (stream_id,),
+                    ),
+                    read_budget,
+                )
                 sequences = tuple(int(item[0]) for item in journal_rows)
                 if sequences != tuple(range(1, latest + 1)):
                     raise _LedgerOpenError(
@@ -1523,6 +1574,7 @@ def _recover_stream_projection(
     aggregate_revision: int,
     admission_sequence: int,
     latest_journal_sequence: int,
+    read_budget: _LedgerReadBudget,
 ) -> ContextAdmissionState:
     genesis_wrapper = decode_stored_context_admission_envelope(genesis_envelope)
     if not isinstance(genesis_wrapper.payload, UninitializedContextAdmissionState):
@@ -1543,18 +1595,21 @@ def _recover_stream_projection(
             ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY,
             "empty-bound-stream",
         )
-    journal_rows = connection.execute(
-        """
-        SELECT journal_sequence, event_id, event_envelope, decision_envelope,
-               expected_revision, prior_aggregate_revision,
-               prior_admission_sequence, resulting_aggregate_revision,
-               resulting_admission_sequence
-        FROM journal_events
-        WHERE stream_id = ?
-        ORDER BY journal_sequence
-        """,
-        (stream_id,),
-    ).fetchall()
+    journal_rows = _read_bounded_rows(
+        connection.execute(
+            """
+            SELECT journal_sequence, event_id, event_envelope, decision_envelope,
+                   expected_revision, prior_aggregate_revision,
+                   prior_admission_sequence, resulting_aggregate_revision,
+                   resulting_admission_sequence
+            FROM journal_events
+            WHERE stream_id = ?
+            ORDER BY journal_sequence
+            """,
+            (stream_id,),
+        ),
+        read_budget,
+    )
     sequences = tuple(int(row[0]) for row in journal_rows)
     if sequences != tuple(range(1, latest_journal_sequence + 1)):
         raise _LedgerOpenError(
@@ -1562,15 +1617,19 @@ def _recover_stream_projection(
             "journal-sequence-gap",
         )
     effects_by_sequence: dict[int, list[bytes]] = {sequence: [] for sequence in sequences}
-    for sequence, ordinal, envelope in connection.execute(
-        """
-        SELECT journal_sequence, effect_ordinal, effect_envelope
-        FROM effect_outbox
-        WHERE stream_id = ?
-        ORDER BY journal_sequence, effect_ordinal
-        """,
-        (stream_id,),
-    ):
+    effect_rows = _read_bounded_rows(
+        connection.execute(
+            """
+            SELECT journal_sequence, effect_ordinal, effect_envelope
+            FROM effect_outbox
+            WHERE stream_id = ?
+            ORDER BY journal_sequence, effect_ordinal
+            """,
+            (stream_id,),
+        ),
+        read_budget,
+    )
+    for sequence, ordinal, envelope in effect_rows:
         effects = effects_by_sequence.get(int(sequence))
         if effects is None or int(ordinal) != len(effects):
             raise _LedgerOpenError(
@@ -1578,15 +1637,18 @@ def _recover_stream_projection(
                 "effect-sequence-gap",
             )
         effects.append(bytes(envelope))
-    shadow_rows = connection.execute(
-        """
-        SELECT journal_sequence, shadow_envelope
-        FROM shadow_decisions
-        WHERE stream_id = ?
-        ORDER BY journal_sequence
-        """,
-        (stream_id,),
-    ).fetchall()
+    shadow_rows = _read_bounded_rows(
+        connection.execute(
+            """
+            SELECT journal_sequence, shadow_envelope
+            FROM shadow_decisions
+            WHERE stream_id = ?
+            ORDER BY journal_sequence
+            """,
+            (stream_id,),
+        ),
+        read_budget,
+    )
     if tuple(int(row[0]) for row in shadow_rows) != sequences:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,

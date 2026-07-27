@@ -214,9 +214,15 @@ def validate_codex_limit_verification(entry: CodexLimitVerificationDef, *, key: 
                 "upstream_effective_value to both be set and differ"
             )
     elif entry.status == "locally_unreachable":
-        if entry.upstream_effective_value is not None:
+        unreachable = (
+            entry.upstream_effective_value is None
+            and entry.configured_value is None
+            and entry.codex_config_key is None
+        )
+        if not unreachable:
             raise ValueError(
-                f"{key}: status locally_unreachable requires upstream_effective_value is None"
+                f"{key}: status locally_unreachable requires upstream_effective_value, "
+                "configured_value, and codex_config_key to all be None"
             )
 
 

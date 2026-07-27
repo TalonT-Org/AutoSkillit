@@ -635,34 +635,35 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @functools.lru_cache(maxsize=1)
-def _resolve_test_config() -> "AutomationConfig | None":
+def _resolve_test_config() -> "AutomationConfig":
     """Resolve full config for test collection via full config resolution.
 
     Uses the same dynaconf chain as production: defaults.yaml → project config → env vars.
-    Returns None on any failure (fail-open: individual features fall back to
-    FEATURE_REGISTRY[name].default_enabled).
+
+    Fail-closed: any exception raised by ``load_config`` (or a type mismatch in
+    the returned value) propagates to the caller. Since this function runs at
+    pytest collection time inside ``pytest_collection_modifyitems``, an unhandled
+    exception aborts collection with a clear error rather than silently
+    downgrading the test scope to per-feature ``default_enabled`` (which is
+    ``False`` for every currently-registered feature — see
+    ``FEATURE_REGISTRY`` in
+    ``src/autoskillit/core/types/_type_constants_features.py:42-100``).
+
+    ``lru_cache`` only caches successful returns; a transient failure will
+    retry on the next call.
     """
-    try:
-        from pathlib import Path
+    from pathlib import Path
 
-        from autoskillit.config.settings import AutomationConfig as _AutomationConfig
-        from autoskillit.config.settings import load_config
+    from autoskillit.config.settings import AutomationConfig as _AutomationConfig
+    from autoskillit.config.settings import load_config
 
-        # Anchor to repo root via this file's known location (tests/conftest.py)
-        # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.
-        repo_root = Path(__file__).resolve().parent.parent
-        cfg = load_config(repo_root)
-        if not isinstance(cfg, _AutomationConfig):
-            raise TypeError(f"load_config returned {type(cfg)!r}, expected AutomationConfig")
-        return cfg
-    except Exception as exc:
-        import warnings
-
-        warnings.warn(
-            f"Feature flag config resolution failed, falling back to defaults: {exc}",
-            stacklevel=1,
-        )
-        return None
+    # Anchor to repo root via this file's known location (tests/conftest.py)
+    # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.
+    repo_root = Path(__file__).resolve().parent.parent
+    cfg = load_config(repo_root)
+    if not isinstance(cfg, _AutomationConfig):
+        raise TypeError(f"load_config returned {type(cfg)!r}, expected AutomationConfig")
+    return cfg
 
 
 def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
@@ -674,7 +675,6 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
     2. If unset, resolve via full config chain (defaults.yaml → project config
        → env vars) using load_config().  This respects experimental_enabled and
        per-feature config overrides.
-    3. If config resolution fails, fall back to FEATURE_REGISTRY[name].default_enabled.
        Unknown feature names return True (fail-open).
 
     Args:
@@ -700,9 +700,6 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
         return True
 
     cfg = _resolve_test_config()
-    if cfg is None:
-        return defn.default_enabled
-
     return is_feature_enabled(
         feature_name, cfg.features, experimental_enabled=cfg.experimental_enabled
     )

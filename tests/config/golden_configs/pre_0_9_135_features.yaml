@@ -1,0 +1,6 @@
+# Frozen fixture: a project .autoskillit/config.yaml as written by a version
+# prior to 0.9.135, before features.franchise was renamed to features.fleet.
+# Do not edit after creation — this is a point-in-time snapshot of a real
+# prior-version config shape.
+features:
+  franchise: true

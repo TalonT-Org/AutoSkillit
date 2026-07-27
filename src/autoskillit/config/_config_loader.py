@@ -151,8 +151,8 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
                         logger.warning(
                             "retired_config_key",
                             layer=str(path),
-                            old_key=f"{rec.section}.{rec.old_key}",
-                            new_key=f"{rec.section}.{rec.new_key}",
+                            retired=f"{rec.section}.{rec.old_key}",
+                            replacement=f"{rec.section}.{rec.new_key}",
                             value_carried=rec.value_moved,
                             retired_in=rec.definition.retired_in,
                             guidance=rec.definition.note,

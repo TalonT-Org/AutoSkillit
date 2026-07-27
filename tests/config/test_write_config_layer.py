@@ -48,3 +48,14 @@ class TestWriteConfigLayer:
         config_path = tmp_path / "config.yaml"
         write_config_layer(config_path, {"packs": {"enabled": ["research"]}})
         assert config_path.exists()
+
+    def test_write_config_layer_rejects_retired_key(self, tmp_path: Path) -> None:
+        """T8c: write_config_layer is NOT remapped — it calls validate_layer_keys
+        directly with no remap step, so a retired key still raises ConfigSchemaError
+        and writes no file."""
+        from autoskillit.config.settings import ConfigSchemaError, write_config_layer
+
+        config_path = tmp_path / "config.yaml"
+        with pytest.raises(ConfigSchemaError, match="unrecognized key"):
+            write_config_layer(config_path, {"diagnostics": {"post_run_analysis": True}})
+        assert not config_path.exists()

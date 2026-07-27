@@ -32,6 +32,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_cook_workspace.py` | Tests: cook CLI workspace init and clean commands |
 | `test_doctor.py` | Tests for CLI doctor command and related utilities |
 | `test_doctor_backend_guards.py` | Tests for doctor backend guard checks (stale MCP, MCP registered, process state, codex graduation) and run_doctor backend wiring |
+| `test_doctor_broken_config.py` | Tests for run_doctor surviving a broken/unloadable config.yaml (schema-invalid or syntax-invalid) instead of crashing before any check runs |
 | `test_doctor_claude_binary.py` | Tests for the _check_claude_binary doctor check — claude CLI availability for capability-driven rerouting |
 | `test_doctor_codex_mcp.py` | Tests for _check_mcp_server_registered Codex branch — monkeypatch-based, no filesystem I/O |
 | `test_doctor_fleet.py` | Tests for fleet state schema version doctor check |

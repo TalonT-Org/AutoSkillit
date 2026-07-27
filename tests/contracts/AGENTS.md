@@ -28,6 +28,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_claude_code_interface_contracts.py` | Contract tests for Claude Code external interface conventions |
 | `test_collapse_issues_contracts.py` | Contract tests for the collapse-issues skill SKILL.md |
 | `test_config_field_coverage.py` | REQ-CONFIG-001: every sub-config dataclass field must be referenced in from_dynaconf |
+| `test_config_key_ledger.py` | Ledger of every (section, key) _CONFIG_SCHEMA has ever accepted; forces new RETIRED_CONFIG_KEYS registration on schema removal |
 | `test_core_public_api_surface.py` | Validates that every symbol in autoskillit.core.__all__ is importable via the public gateway |
 | `test_delivery_bound_fitness.py` | Contract: bundled-recipe and non-exempted payload fitness against per-backend effective delivery bounds |
 | `test_diagnose_ci_steps.py` | Contract tests for diagnose-ci SKILL.md step numbering and cross-reference integrity |
@@ -83,6 +84,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_protocol_definitions.py` | Tests for Protocol definitions in core/_type_protocols_*.py shards (REQ-PROTO-007) |
 | `test_protocol_satisfaction.py` | Tests for Protocol Contract Layer (GroupB) |
 | `test_protocol_satisfaction_five.py` | Protocol satisfaction tests — Group Five (issue #1523) |
+| `test_retired_config_key_notes.py` | Bidirectional binding: RETIRED_CONFIG_KEYS entries and migrations/*.yaml detect.key notes must agree in both directions |
 | `test_review_design_contracts.py` | Contract tests for review-design SKILL.md — orchestration dispatch, output tokens, on_context_limit, and retained Critical Constraints |
 | `test_review_local_mode_contracts.py` | Contract tests for skill_contracts.yaml and SKILL.md validation for local review mode (mode=local) |
 | `test_review_pr_diff_annotation.py` | C-RPR-1: Contract tests for review-pr diff annotation inputs |

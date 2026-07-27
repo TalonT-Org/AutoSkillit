@@ -51,13 +51,13 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_preflight_explicit_backend.py` | Tests for explicit-backend preflight validation in _check_dispatch_feasibility |
 | `test_run_skill_add_dirs.py` | Contract tests: run_skill passes correct add_dirs to executor (T-OVR-014) |
 | `test_run_skill_backend_compat.py` | Tests for dispatch-time backend compatibility gate in run_skill |
-| `test_run_skill_docstring.py` | Tests for `run_skill` docstring's enumeration of `RetryReason` values |
+| `test_run_skill_docstring.py` | Focused `run_skill` source-docstring contract: compact result/retry routing, backend-neutral argument prose, and local-skill versus recipe-step selection boundaries |
 | `test_run_skill_resume.py` | Tests for resume_session_id threading from run_skill through executor |
 | `test_session_deadline.py` | Tests for AUTOSKILLIT_SESSION_DEADLINE propagation from run_skill to L1 sessions — provider_extras and os.environ injection, fleet-session preservation, malformed-overlay tolerance |
 | `test_run_skill_stale_path.py` | Tests for the stale-path guard in run_skill — init_session returning a nonexistent /dev/shm path must crash-close before the executor |
 | `test_server_init_gate.py` | Tests for server init: gate access, visibility, subset management, wire format compliance |
 | `test_server_init_session_visibility_split.py` | Session visibility split structural guard |
-| `test_server_tool_registration.py` | Tests for MCP tool registration, config-driven behavior, and schema contracts |
+| `test_server_tool_registration.py` | Tests for MCP tool registration, config-driven behavior, and full wire-schema contracts including the compact `run_skill` selection boundary |
 | `test_server_version_telemetry.py` | Tests for server version info, plugin metadata, lazy init, and telemetry |
 | `test_service_wrappers.py` | Behavior tests for DefaultRecipeRepository and DefaultMigrationService (REQ-ARCH-006, 007) |
 | `test_session_type_tags.py` | Tests for _collect_fleet_tool_tags in server._session_type (Finding 1) |

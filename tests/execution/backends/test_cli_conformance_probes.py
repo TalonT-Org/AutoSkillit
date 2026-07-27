@@ -40,6 +40,7 @@ from autoskillit.execution.backends._codex_config import (
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
+from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 from autoskillit.execution.backends._probe_cache import (
     PROBE_POLICY_IDENTITY,
     ProbeResult,
@@ -365,6 +366,20 @@ _skip_unless_codex_generated_child_smoke = pytest.mark.skipif(
     ),
 )
 
+_skip_unless_codex_selection_smoke = pytest.mark.skipif(
+    not os.environ.get("CODEX_SMOKE_TEST")
+    or not shutil.which("codex")
+    or (
+        not os.environ.get("CODEX_API_KEY")
+        and not os.environ.get("OPENAI_API_KEY")
+        and not _CODEX_AUTH_PATH.is_file()
+    ),
+    reason=(
+        "Set CODEX_SMOKE_TEST=1 and provide an environment API key or authenticated "
+        "~/.codex/auth.json to run the Codex skill-selection probe"
+    ),
+)
+
 _skip_unless_claude_output_budget_smoke = pytest.mark.skipif(
     not os.environ.get("CLAUDE_CODE_SMOKE_TEST")
     or not shutil.which("claude")
@@ -390,6 +405,11 @@ class _GeneratedChildProbeOutput(NamedTuple):
     cli_version: str
 
 
+class _CodexSelectionProbeOutput(NamedTuple):
+    final_text: str
+    completed_mcp_items: tuple[dict, ...]
+
+
 def _isolated_cli_env(tmp_path: Path, workspace: Path) -> tuple[dict[str, str], Path, Path]:
     home = tmp_path / "home"
     codex_home = tmp_path / "codex-home"
@@ -410,6 +430,115 @@ def _isolated_cli_env(tmp_path: Path, workspace: Path) -> tuple[dict[str, str], 
         }
     )
     return env, codex_home, claude_config
+
+
+def _prepare_codex_selection_profile(tmp_path: Path, workspace: Path) -> Path:
+    _, profile_codex_home, _ = _isolated_cli_env(tmp_path / "source-profile", workspace)
+    if _CODEX_AUTH_PATH.is_file():
+        (profile_codex_home / "auth.json").symlink_to(_CODEX_AUTH_PATH.resolve())
+
+    profile_config = profile_codex_home / "config.toml"
+    ensure_codex_mcp_registered(config_path=profile_config, headless_auto_gate=False)
+    sync_hooks_to_codex_config(config_path=profile_config)
+
+    skill_dir = profile_codex_home / "skills" / "investigate"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: investigate\n"
+        "description: Follow this skill when the user asks to investigate something.\n"
+        "---\n"
+        "Respond with exactly LOCAL_INVESTIGATE_SKILL_FOLLOWED and do not call tools.\n",
+        encoding="utf-8",
+    )
+    return profile_codex_home
+
+
+def _run_codex_selection_case(
+    *,
+    case_root: Path,
+    source_codex_home: Path,
+    workspace: Path,
+    prompt: str,
+    model: str,
+) -> _CodexSelectionProbeOutput:
+    env, case_codex_home, _ = _isolated_cli_env(case_root, workspace)
+    case_sqlite_home = case_root / "codex-sqlite-home"
+    case_sqlite_home.mkdir()
+
+    env.update(
+        {
+            "CODEX_SQLITE_HOME": str(case_sqlite_home),
+            "AUTOSKILLIT_AGENT_BACKEND": "codex",
+            "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
+            "AUTOSKILLIT_MCP_CLIENT_BACKEND": "codex",
+        }
+    )
+    for inherited_headless_flag in (
+        "AUTOSKILLIT_HEADLESS",
+        "AUTOSKILLIT_HEADLESS_AUTO_GATE",
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_SKILL_NAME",
+    ):
+        env.pop(inherited_headless_flag, None)
+
+    backend = CodexBackend(source_codex_home=source_codex_home)
+    pre_launch_errors = backend.ensure_pre_launch(session_dir=case_codex_home)
+    assert not pre_launch_errors, f"Codex pre-launch failed: {pre_launch_errors}"
+    backend.setup_session_dir(case_codex_home)
+
+    venv_bin = Path(__file__).resolve().parents[3] / ".venv" / "bin"
+    env["PATH"] = f"{venv_bin}{os.pathsep}{env.get('PATH', '')}"
+    timeout = int(os.environ.get("CODEX_SELECTION_SMOKE_TIMEOUT", "900"))
+    result = subprocess.run(  # noqa: S603
+        [
+            "codex",
+            "exec",
+            "--json",
+            "--sandbox",
+            "workspace-write",
+            "--model",
+            model,
+            prompt,
+        ],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if result.returncode != 0:
+        raise OSError(
+            f"Codex selection probe failed with rc={result.returncode}: "
+            f"{result.stdout}\n{result.stderr}"
+        )
+
+    stream_parser = CodexStreamParser()
+    completed_mcp_items: list[dict] = []
+    for line in result.stdout.splitlines():
+        event = stream_parser.parse_line(line)
+        if event is None or event.backend_data is None:
+            continue
+        raw = event.backend_data.raw
+        item = raw.get("item", {})
+        if (
+            raw.get("type") == "item.completed"
+            and isinstance(item, dict)
+            and item.get("type") == "mcp_tool_call"
+        ):
+            completed_mcp_items.append(item)
+
+    parsed = CodexResultParser().parse_stdout(result.stdout, exit_code=result.returncode)
+    return _CodexSelectionProbeOutput(
+        final_text=parsed.output,
+        completed_mcp_items=tuple(completed_mcp_items),
+    )
+
+
+def _completed_mcp_tool_names(output: _CodexSelectionProbeOutput) -> list[str]:
+    return [
+        str(item.get("tool_name") or item.get("tool") or "") for item in output.completed_mcp_items
+    ]
 
 
 def _cli_version(binary: str, env: dict[str, str]) -> str:
@@ -567,6 +696,69 @@ def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
         agent_role=output.agent_role,
         output_discipline_digest=OUTPUT_DISCIPLINE_DIGEST,
     )
+
+
+@_skip_unless_codex_selection_smoke
+def test_codex_selects_local_skill_and_explicit_recipe_delegation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    subprocess.run(
+        ["git", "init", "-q"],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    for selector in (
+        "AUTOSKILLIT_AGENT_BACKEND",
+        "AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
+    ):
+        monkeypatch.setenv(selector, "codex")
+    for headless_flag in (
+        "AUTOSKILLIT_HEADLESS",
+        "AUTOSKILLIT_HEADLESS_AUTO_GATE",
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_SKILL_NAME",
+    ):
+        monkeypatch.delenv(headless_flag, raising=False)
+
+    source_codex_home = _prepare_codex_selection_profile(tmp_path, workspace)
+    model = os.environ.get("GENERATED_CHILD_SMOKE_MODEL", "gpt-5.4")
+
+    local_skill = _run_codex_selection_case(
+        case_root=tmp_path / "local-skill-case",
+        source_codex_home=source_codex_home,
+        workspace=workspace,
+        prompt="Use the investigate skill.",
+        model=model,
+    )
+    local_tool_names = _completed_mcp_tool_names(local_skill)
+    assert "LOCAL_INVESTIGATE_SKILL_FOLLOWED" in local_skill.final_text
+    assert local_tool_names == []
+
+    nonexistent_cwd = tmp_path / "missing-run-skill-cwd"
+    delegated = _run_codex_selection_case(
+        case_root=tmp_path / "delegation-case",
+        source_codex_home=source_codex_home,
+        workspace=workspace,
+        prompt=(
+            "This is an explicit recipe-step delegation request. Call run_skill exactly once "
+            "to delegate /investigate positive-probe to a separate L1 worker, passing "
+            f"cwd={str(nonexistent_cwd)!r}. Do not call open_kitchen. After run_skill "
+            "returns its preflight result, stop without calling any other tool."
+        ),
+        model=model,
+    )
+    delegated_tool_names = _completed_mcp_tool_names(delegated)
+    assert delegated_tool_names == ["run_skill"]
+    run_skill_item = delegated.completed_mcp_items[delegated_tool_names.index("run_skill")]
+    assert "preflight:cwd" in json.dumps(run_skill_item.get("result"), sort_keys=True)
 
 
 @_skip_unless_codex_generated_child_smoke

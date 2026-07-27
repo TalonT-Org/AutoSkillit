@@ -78,7 +78,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_reap_sidecar_check.py` | Tests for _reap_stale_dispatches sidecar-aware status transition (T-RESUMABLE-10) |
 | `test_reload_loop.py` | Tests for the session reload sentinel and loop mechanics |
 | `test_restart.py` | Tests for cli/_restart.py — NoReturn process restart contract |
-| `test_routing_completeness.py` | Enum routing completeness: every orchestrator-visible RetryReason must have a routing rule in the orchestrator prompt; pins run_skill's docstring to the same contract_recovery routing vocabulary as the prompt |
+| `test_routing_completeness.py` | Prompt-owned retry taxonomy: every orchestrator-visible RetryReason must have its declared routing rule in the orchestrator prompt |
 | `test_serve_guard_deferral.py` | Tests for serve_with_signal_guard dispatch-aware deferral — active dispatch deferral, immediate cancel, timeout |
 | `test_serve_sigterm.py` | Regression guard: serve() uses event-loop-routed signal handling (issue #745) |
 | `test_session_launch.py` | Tests for cli/_session_launch.py — _run_interactive_session contract |

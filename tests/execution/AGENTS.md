@@ -168,5 +168,5 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_deterministic_conformance.py` | Sealed-enum vocabulary, hook event format, and config.toml schema template conformance tests with --update-fixtures review gate |
 | `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |
 | `test_coding_agent_backend_conformance.py` | Parametrized conformance tests for all CodingAgentBackend implementations via BackendContractBase |
-| `test_cli_conformance_probes.py` | Live backend CLI conformance probes: schema checks, isolated output-budget deny round trips, and generated Codex child delivery/linkage with ProbeCache and shared error discrimination |
+| `test_cli_conformance_probes.py` | Live backend CLI conformance probes: schema checks, isolated output-budget denial, generated Codex child delivery/linkage, and isolated Codex local-skill versus recipe-delegation selection |
 | `test_probe_cache.py` | Versioned probe-cache tests: CLI/policy identity invalidation, TTL, schema, and write preservation |

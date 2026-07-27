@@ -875,6 +875,8 @@ class DefaultContextAdmissionLedger:
         with self._fence:
             if not self._recovered:
                 self.recover_all()
+            if not self._recovered:
+                return _contended_inspection(stream_key)
             if self._store_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                 health = ContextAdmissionStreamHealth(
                     stream_key,

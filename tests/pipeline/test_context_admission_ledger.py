@@ -1244,6 +1244,39 @@ def test_apply_stops_when_startup_recovery_is_contended(
     )
 
 
+def test_inspection_stops_when_startup_recovery_is_contended(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    assert (
+        DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    ledger = DefaultContextAdmissionLedger(authority, busy_timeout_ms=0)
+    blocker = sqlite3.connect(authority.database_path, isolation_level=None)
+    blocker.execute("BEGIN EXCLUSIVE")
+    original_recover_all = ledger.recover_all
+    lock_released = False
+
+    def recover_then_release_lock() -> object:
+        nonlocal lock_released
+        result = original_recover_all()
+        if not lock_released:
+            blocker.execute("ROLLBACK")
+            blocker.close()
+            lock_released = True
+        return result
+
+    monkeypatch.setattr(ledger, "recover_all", recover_then_release_lock)
+
+    contended = ledger.inspect_stream(key)
+
+    assert contended.health.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert ledger.inspect_stream(key).health.status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+
 @pytest.mark.parametrize(
     "fault_name",
     [

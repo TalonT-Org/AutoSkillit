@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 from types import MappingProxyType
 from typing import cast, get_args
@@ -22,6 +23,7 @@ from autoskillit.core import (
     AdmissionEffect,
     AdmissionEventId,
     AdmissionSequence,
+    AdmissionState,
     AdmissionTransition,
     AgentInstanceId,
     AggregateRevision,
@@ -42,8 +44,10 @@ from autoskillit.core import (
     CoverageState,
     ForkOccurrenceId,
     IdempotencyNamespace,
+    MeasurementKind,
     ModelIdentity,
     ShadowContextAdmissionRecord,
+    ShadowContextAdmissionTargetRecord,
     StoredContextAdmissionEnvelope,
     UninitializedContextAdmissionState,
     UnsupportedContextAdmissionProtocolError,
@@ -55,7 +59,17 @@ from autoskillit.core import (
     reduce_context_admission,
     validate_context_admission_persistence_value,
 )
-from tests.fixtures.context_admission import snapshot
+from tests.fixtures.context_admission import (
+    batch,
+    occurrence,
+    open_event,
+    propose_event,
+    reservation,
+    reserve_event,
+    snapshot,
+    stream_key,
+    uninitialized_state,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
 
@@ -188,6 +202,66 @@ def test_envelope_encoder_rejects_output_above_decoder_limit(
         ContextAdmissionValidationError, match="invalid_context_admission_envelope"
     ):
         encode_stored_context_admission_envelope(envelope)
+
+
+def test_active_state_effect_and_populated_shadow_have_exact_encoding_vectors() -> None:
+    initial = uninitialized_state()
+    opened = reduce_context_admission(initial, open_event(initial))
+    active = opened.next_state
+    occurrence_value = occurrence()
+    proposed_event = propose_event(active, occurrence_value)
+    proposed = reduce_context_admission(active, proposed_event)
+    batch_value = batch(occurrence_value)
+    reservation_value = reservation(batch_value, occurrence_value)
+    reserved_event = reserve_event(proposed.next_state, batch_value, occurrence_value)
+    reserved = reduce_context_admission(proposed.next_state, reserved_event)
+    target = ShadowContextAdmissionTargetRecord(
+        target_id=batch_value.batch_id,
+        occurrence_ids=batch_value.occurrence_ids,
+        turn_ids=(occurrence_value.lineage.turn_id,),
+        tool_call_ids=(occurrence_value.lineage.tool_call_id,),
+        producer_instance_ids=(occurrence_value.lineage.producer_instance_id,),
+        producer_surfaces=(occurrence_value.lineage.producer_surface,),
+        delivery_occurrence_ids=(occurrence_value.lineage.delivery_occurrence_id,),
+        reservation_id=reservation_value.reservation_id,
+        batch_id=batch_value.batch_id,
+        generation_reservation_id=None,
+        window_epoch_id=occurrence_value.lineage.window_epoch_id,
+        reserve_class=batch_value.reserve_class,
+        lifecycle_state=AdmissionState.RESERVED,
+        proposed_input_count=occurrence_value.predicted_authoritative_maximum,
+        generation_allowance=None,
+        exact_input_charge=None,
+        exact_output_charge=None,
+        measurement_kind=MeasurementKind.TOKENIZER_EXACT,
+    )
+    shadow = ShadowContextAdmissionRecord(
+        stream_key=stream_key(),
+        event_id=reserved_event.event_id,
+        journal_sequence=3,
+        aggregate_revision=reserved.next_state.aggregate_revision,
+        admission_sequence=reserved.next_state.admission_sequence,
+        decision=reserved.decision,
+        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+        encoding_version=CONTEXT_ADMISSION_ENCODING_VERSION,
+        reason_code=reserved.decision.reason_code,
+        targets=(target,),
+    )
+    expected_digests = {
+        "active_state": "fda08ea2f4c7103ac14663d6b616c13a380efca2325c7a9afaefc45d80eb6ee0",
+        "effect": "ba5827153bc035734784c9aa9cafa1e45ba27b049dbb3e52da7c2eb71680a60d",
+        "populated_shadow": "0765b580fbf148dc2ea043da90af48f0378593aa7d0d4ae2cfe96008d09d5127",
+    }
+
+    for name, payload in (
+        ("active_state", active),
+        ("effect", reserved.effects[0]),
+        ("populated_shadow", shadow),
+    ):
+        encoded = encode_stored_context_admission_envelope(
+            make_stored_context_admission_envelope(payload)
+        )
+        assert sha256(encoded).hexdigest() == expected_digests[name]
 
 
 def test_shadow_publication_is_a_released_top_level_envelope() -> None:

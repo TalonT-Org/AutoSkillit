@@ -1092,6 +1092,40 @@ def test_inspection_rejects_health_corrupted_after_recovery(tmp_path: Path) -> N
     assert inspection.health.reason_code == "invalid-stream-health"
 
 
+def test_inspection_replays_validly_encoded_publications_after_recovery(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        encoded = bytes(
+            connection.execute("SELECT decision_envelope FROM journal_events").fetchone()[0]
+        )
+        envelope = persistence_types.decode_stored_context_admission_envelope(encoded)
+        assert isinstance(envelope.payload, persistence_types.AdmissionDecision)
+        tampered = replace(envelope.payload, reason_code="validly-encoded-tamper")
+        connection.execute(
+            "UPDATE journal_events SET decision_envelope = ?",
+            (
+                persistence_types.encode_stored_context_admission_envelope(
+                    persistence_types.make_stored_context_admission_envelope(tampered)
+                ),
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    inspection = ledger.inspect_stream(key)
+
+    assert inspection.health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert inspection.health.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert inspection.health.reason_code == "journal-decision-mismatch"
+
+
 def test_apply_retries_when_corruption_failure_marker_is_contended(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

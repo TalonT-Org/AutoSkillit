@@ -930,6 +930,37 @@ def test_busy_begin_is_transient_and_retry_succeeds_without_poisoning_health(
     )
 
 
+def test_apply_stops_when_startup_recovery_is_contended(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    ledger = DefaultContextAdmissionLedger(authority, busy_timeout_ms=0)
+    blocker = sqlite3.connect(authority.database_path, isolation_level=None)
+    blocker.execute("BEGIN EXCLUSIVE")
+    original_recover_all = ledger.recover_all
+
+    def recover_then_release_lock() -> object:
+        result = original_recover_all()
+        blocker.execute("ROLLBACK")
+        blocker.close()
+        return result
+
+    monkeypatch.setattr(ledger, "recover_all", recover_then_release_lock)
+
+    contended = ledger.apply(stream_key(), open_event())
+
+    assert contended.status is ContextAdmissionAccountingStatus.CONTENDED
+    assert (
+        ledger.apply(stream_key(), open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+
+
 @pytest.mark.parametrize(
     "fault_name",
     [

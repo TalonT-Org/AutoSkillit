@@ -193,6 +193,12 @@ class DefaultContextAdmissionLedger:
         with self._fence:
             if not self._recovered:
                 self.recover_all()
+            if not self._recovered:
+                return ContextAdmissionAccountingResult(
+                    status=ContextAdmissionAccountingStatus.CONTENDED,
+                    stream_key=stream_key,
+                    reason_code="busy",
+                )
             if self._store_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                 return self._storage_failure_result(stream_key)
             connection: sqlite3.Connection | None = None

@@ -583,6 +583,23 @@ def test_runtime_binding_rejects_skill_contract_identity_drift(
     assert exc_info.value.code == "recipe_execution_contract_mismatch"
 
 
+def test_skill_contract_identity_fails_closed_for_stale_contract_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stale_contract = SimpleNamespace(
+        completion_required=True,
+        inputs=(),
+    )
+    monkeypatch.setattr(
+        recipe_execution_module,
+        "get_skill_contract",
+        lambda *_args, **_kwargs: stale_contract,
+    )
+
+    with pytest.raises(AttributeError, match="input_preflight"):
+        recipe_execution_module._skill_contract_identity("stale", manifest={})  # noqa: SLF001
+
+
 def test_snapshot_rejects_digest_that_does_not_attest_invocation() -> None:
     snapshot = build_recipe_execution_snapshot(
         recipe_name="demo",

@@ -294,7 +294,7 @@ def _skill_contract_identity(
     payload = json.dumps(
         {
             "completion_required": contract.completion_required,
-            "input_preflight": getattr(contract, "input_preflight", None),
+            "input_preflight": contract.input_preflight,
             "inputs": [
                 {
                     "name": item.name,

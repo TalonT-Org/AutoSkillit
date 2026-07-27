@@ -191,6 +191,60 @@ def test_each_ledger_connection_sets_and_reads_back_required_pragmas(
         connection.close()
 
 
+def test_recovery_and_inspection_hold_one_snapshot_across_projection_reads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    assert (
+        DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    reader = DefaultContextAdmissionLedger(authority)
+    statements: list[str] = []
+    original_connect = reader._connect
+
+    def traced_connect() -> sqlite3.Connection:
+        connection = original_connect()
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(reader, "_connect", traced_connect)
+
+    assert reader.recover_all().status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+    begin_index = statements.index("BEGIN")
+    stream_index = next(
+        index
+        for index, statement in enumerate(statements)
+        if "FROM streams" in statement and "ORDER BY stream_id" in statement
+    )
+    journal_index = next(
+        index
+        for index, statement in enumerate(statements)
+        if "FROM journal_events" in statement and "ORDER BY journal_sequence" in statement
+    )
+    commit_index = statements.index("COMMIT", journal_index)
+    assert begin_index < stream_index < journal_index < commit_index
+
+    inspection_start = len(statements)
+    assert reader.inspect_stream(key).health.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    inspection_statements = statements[inspection_start:]
+    assert inspection_statements[0] == "BEGIN"
+    inspection_stream_index = next(
+        index
+        for index, statement in enumerate(inspection_statements)
+        if "FROM streams WHERE stream_id" in statement
+    )
+    inspection_journal_index = next(
+        index
+        for index, statement in enumerate(inspection_statements)
+        if "FROM journal_events" in statement
+    )
+    assert 0 < inspection_stream_index < inspection_journal_index
+
+
 def test_recovery_fails_closed_on_orphaned_foreign_key_rows(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     assert (

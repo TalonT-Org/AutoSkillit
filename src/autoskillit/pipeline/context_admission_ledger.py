@@ -748,9 +748,18 @@ class DefaultContextAdmissionLedger:
             if self._recovered:
                 return self._recovery_result()
             connection: sqlite3.Connection | None = None
+            pending_stream_failures: list[
+                tuple[
+                    bytes,
+                    ContextAdmissionStreamKey,
+                    ContextAdmissionStorageFailureReason,
+                    str,
+                ]
+            ] = []
             try:
                 self._ensure_store()
                 connection = self._connect()
+                connection.execute("BEGIN")
                 self._validate_integrity(connection)
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 self._validate_metadata(metadata)
@@ -797,36 +806,24 @@ class DefaultContextAdmissionLedger:
                             latest_journal_sequence=int(row[6]),
                         )
                     except ContextAdmissionValidationError:
-                        persisted = self._persist_stream_failure(
-                            connection,
-                            stream_id,
-                            stream_key,
-                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                            "stream-replay-decode-failed",
+                        pending_stream_failures.append(
+                            (
+                                stream_id,
+                                stream_key,
+                                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                                "stream-replay-decode-failed",
+                            )
                         )
-                        if not persisted:
-                            if (
-                                self._store_health.status
-                                is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
-                            ):
-                                raise _LedgerContended
-                            break
                         continue
                     except _LedgerOpenError as exc:
-                        persisted = self._persist_stream_failure(
-                            connection,
-                            stream_id,
-                            stream_key,
-                            exc.reason,
-                            exc.reason_code,
+                        pending_stream_failures.append(
+                            (
+                                stream_id,
+                                stream_key,
+                                exc.reason,
+                                exc.reason_code,
+                            )
                         )
-                        if not persisted:
-                            if (
-                                self._store_health.status
-                                is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
-                            ):
-                                raise _LedgerContended
-                            break
                         continue
                     self._stream_health[stream_key] = ContextAdmissionStreamHealth(
                         stream_key,
@@ -834,6 +831,22 @@ class DefaultContextAdmissionLedger:
                     )
                     if _state_has_unresolved_work(recovered_state):
                         self._unresolved_streams.add(stream_key)
+                connection.execute("COMMIT")
+                for stream_id, stream_key, reason, reason_code in pending_stream_failures:
+                    persisted = self._persist_stream_failure(
+                        connection,
+                        stream_id,
+                        stream_key,
+                        reason,
+                        reason_code,
+                    )
+                    if not persisted:
+                        if (
+                            self._store_health.status
+                            is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+                        ):
+                            raise _LedgerContended
+                        break
                 if (
                     self._store_health.status
                     is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
@@ -891,6 +904,7 @@ class DefaultContextAdmissionLedger:
             stream_id = _stream_key_bytes(stream_key)
             try:
                 connection = self._connect()
+                connection.execute("BEGIN")
                 row = connection.execute(
                     """
                     SELECT stream_key, state_envelope, latest_journal_sequence,
@@ -1009,6 +1023,8 @@ class DefaultContextAdmissionLedger:
                     if isinstance(exc, _LedgerOpenError)
                     else "inspection-decode-failed"
                 )
+                if connection is not None:
+                    _rollback(connection)
                 persisted = connection is not None and self._persist_stream_failure(
                     connection,
                     stream_id,

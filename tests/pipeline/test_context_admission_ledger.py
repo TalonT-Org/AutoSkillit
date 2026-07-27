@@ -2103,7 +2103,7 @@ def test_inspection_stops_when_startup_recovery_is_contended(
         sqlite3.SQLITE_NOMEM,
     ],
 )
-def test_inspection_keeps_transient_sqlite_failures_retryable(
+def test_inspection_fails_closed_on_noncontention_sqlite_failures(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     primary_code: int,
@@ -2121,13 +2121,16 @@ def test_inspection_keeps_transient_sqlite_failures_retryable(
 
     monkeypatch.setattr(ledger, "_connect", raise_transient_error)
 
-    inspection = ledger.inspect_stream(key)
+    failed = ledger.inspect_stream(key)
 
-    assert inspection.health.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
-    assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.HEALTHY
-
+    assert failed.health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert failed.health.failure_reason is ContextAdmissionStorageFailureReason.IO
+    assert failed.health.reason_code == "sqlite-inspection-failed"
+    assert ledger.store_health().status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
     monkeypatch.setattr(ledger, "_connect", original_connect)
-    assert ledger.inspect_stream(key).health.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    assert (
+        ledger.inspect_stream(key).health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    )
 
 
 @pytest.mark.parametrize("operation", ["apply", "inspect"])

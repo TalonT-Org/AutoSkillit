@@ -1049,7 +1049,7 @@ class DefaultContextAdmissionLedger:
                 primary_code = _sqlite_primary_code(exc)
                 if connection is not None:
                     _rollback(connection)
-                if primary_code in _SQLITE_BUSY_CODES or primary_code in _SQLITE_RECOVERY_CODES:
+                if primary_code in _SQLITE_BUSY_CODES:
                     return _contended_inspection(stream_key)
                 if primary_code == sqlite3.SQLITE_TOOBIG:
                     self._set_store_failure(

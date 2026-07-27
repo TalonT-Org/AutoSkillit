@@ -69,18 +69,16 @@ from autoskillit.core import (
     temp_dir_display_str,
     write_versioned_json,
 )
-from autoskillit.workspace._projection_artifact import (
-    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-    projected_artifact_lease_path,
-    projected_artifact_manifest_path,
-    projected_plugin_artifact_digest,
-    read_projected_plugin_identity,
-)
 from autoskillit.workspace._projection_cache import (
+    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ProjectedPluginRetirementOwner,
     ProjectionCacheKey,
     is_projected_asset,
+    projected_artifact_lease_path,
+    projected_artifact_manifest_path,
+    projected_plugin_artifact_digest,
     public_plugin_asset_digest,
+    read_projected_plugin_identity,
 )
 from autoskillit.workspace.skill_format import parse_frontmatter_content
 from autoskillit.workspace.skills import (

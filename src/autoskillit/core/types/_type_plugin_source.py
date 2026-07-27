@@ -226,6 +226,11 @@ class PluginLaunchBinding:
             object.__setattr__(self, "plugin_dir", Path(self.plugin_dir))
             if not self.plugin_dir.is_absolute():
                 raise ValueError(f"plugin launch path must be absolute: {self.plugin_dir}")
+            if self.plugin_dir != self.identity.managed_path:
+                raise ValueError(
+                    "plugin launch path must match the leased artifact identity: "
+                    f"{self.plugin_dir} != {self.identity.managed_path}"
+                )
         if self.load_mode is not PluginLoadMode.IMPLICIT_INSTALLED and self.plugin_dir is None:
             raise ValueError(f"{self.load_mode.value} requires a plugin path")
         normalized_fds = tuple(dict.fromkeys(self.inherited_fds))

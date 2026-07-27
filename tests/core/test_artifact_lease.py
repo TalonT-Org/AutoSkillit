@@ -225,6 +225,21 @@ def test_launch_binding_context_closes_lease_idempotently(tmp_path: Path) -> Non
     binding.close()
 
 
+def test_launch_binding_rejects_path_identity_mismatch(tmp_path: Path) -> None:
+    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    try:
+        with pytest.raises(ValueError, match="must match the leased artifact identity"):
+            PluginLaunchBinding(
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+                plugin_dir=tmp_path / "different-projection",
+                identity=_identity(tmp_path),
+                inherited_fds=lease.inherited_fds,
+                _lease=lease,
+            )
+    finally:
+        lease.close()
+
+
 @pytest.mark.parametrize(
     "load_mode",
     [PluginLoadMode.GENERATED_HOME, PluginLoadMode.NONE],

@@ -94,8 +94,6 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # Released reducer definitions are immutable registry values keyed by their own
         # protocol version so the selector cannot drift from the registered definition.
         "context_admission",
-        # Closed event/effect/state union registries are derived once for durable decoding.
-        "context_admission_ledger",
         # Canonical output-discipline block/digest and their SHA-256 cache identity are
         # deliberately derived once at import time from the single source of truth.
         "_type_constants",
@@ -145,6 +143,13 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
         "cmd_keyword_pattern",  # recipe/_rule_helpers.py: regex factory returning compiled Pattern
         "object",
         "MappingProxyType",  # types.MappingProxyType — read-only view, no state
+    }
+)
+_SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("context_admission_ledger", "_EVENT_TYPES"),
+        ("context_admission_ledger", "_EFFECT_TYPES"),
+        ("context_admission_ledger", "_STATE_TYPES"),
     }
 )
 
@@ -266,11 +271,25 @@ def test_singleton_definition_locality(source_file: Path) -> None:
     violations: list[str] = []
     for node in tree.body:  # module-level only
         rhs: ast.expr | None = None
+        target_name: str | None = None
         if isinstance(node, ast.Assign) and node.value:
             rhs = node.value
+            if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                target_name = node.targets[0].id
         elif isinstance(node, ast.AnnAssign) and node.value:
             rhs = node.value
+            if isinstance(node.target, ast.Name):
+                target_name = node.target.id
         if rhs is None or not isinstance(rhs, ast.Call):
+            continue
+        if (
+            target_name is not None
+            and (
+                mod_stem,
+                target_name,
+            )
+            in _SINGLETON_SAFE_ASSIGNMENTS
+        ):
             continue
         func_name = _get_call_func_name(rhs)
         if func_name in _SINGLETON_SAFE_CALL_NAMES:
@@ -285,6 +304,15 @@ def test_singleton_definition_locality(source_file: Path) -> None:
     assert not violations, f"Singleton locality violations in {_rel(source_file)}:\n" + "\n".join(
         violations
     )
+
+
+def test_context_admission_ledger_singletons_are_assignment_scoped() -> None:
+    assert "context_admission_ledger" not in SINGLETON_ALLOWED_MODULES
+    assert {
+        target
+        for module, target in _SINGLETON_SAFE_ASSIGNMENTS
+        if module == "context_admission_ledger"
+    } == {"_EVENT_TYPES", "_EFFECT_TYPES", "_STATE_TYPES"}
 
 
 # ── Rule 4: test_no_module_level_io ───────────────────────────────────────────

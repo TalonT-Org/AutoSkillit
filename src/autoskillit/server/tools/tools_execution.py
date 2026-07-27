@@ -25,19 +25,16 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
-    AdmissionStatus,
     BoundScalar,
     ClosureAuthoritySpec,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
     InvocationTemplate,
-    PreflightKind,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
     TerminationReason,
     ValidatedAddDir,
-    VerifiedInputPreflightRequest,
     WriteBehaviorSpec,
     closure_authority_spec_from_args,
     compute_runtime_binding_digest,
@@ -85,6 +82,7 @@ from autoskillit.server._recipe_execution import (
     build_standalone_child_prompt,
     get_recipe_execution,
     record_runtime_binding_digest,
+    resolve_attested_input_preflight,
 )
 from autoskillit.server._recipe_execution import (
     publish_audit_cycle_result as _publish_audit_result,
@@ -911,69 +909,18 @@ async def run_skill(
                 )
             except RecipeExecutionAdmissionError as exc:
                 return _recipe_execution_deny(exc.code, str(exc))
-            _contract = (
-                tool_ctx.skill_contract_resolver(skill_command)
-                if tool_ctx.skill_contract_resolver is not None
-                else None
-            )
-            _preflight_name = getattr(_contract, "input_preflight", None)
-            if isinstance(_preflight_name, str) and _preflight_name:
-                if _preflight_name != PreflightKind.AUDIT_CYCLE_INVENTORY.value:
-                    return _recipe_execution_deny(
-                        "recipe_execution_preflight_unknown",
-                        f"unsupported input preflight {_preflight_name!r}",
-                    )
-                _bound_input_map = dict(_bound_recipe_inputs)
-                _plan_path = _bound_input_map.get("plan_path")
-                _audit_cycle_path = _bound_input_map.get("audit_cycle_path")
-                _plan_disposition_path = _bound_input_map.get("plan_disposition_path")
-                if not isinstance(_plan_path, str):
-                    return _recipe_execution_deny(
-                        "recipe_execution_preflight_input",
-                        "audit-cycle preflight requires a bound string plan_path",
-                    )
-                if _audit_cycle_path is not None and not isinstance(_audit_cycle_path, str):
-                    return _recipe_execution_deny(
-                        "recipe_execution_preflight_input",
-                        "audit_cycle_path must be a string when present",
-                    )
-                if _plan_disposition_path is not None and not isinstance(
-                    _plan_disposition_path, str
-                ):
-                    return _recipe_execution_deny(
-                        "recipe_execution_preflight_input",
-                        "plan_disposition_path must be a string when present",
-                    )
-                _preflight_identities = _installed_execution.preflight_identities
-                _expected_preflight_identity = _preflight_identities.get(step_name)
-                if _audit_cycle_path and _expected_preflight_identity is None:
-                    return _recipe_execution_deny(
-                        "recipe_execution_preflight_identity_missing",
-                        "authority-bearing preflight requires a trusted template identity",
-                    )
-                _expected_preflight_identity = _expected_preflight_identity or ("", "", "")
-                _preflight_result = _installed_execution.input_preflight_resolver.resolve(
-                    VerifiedInputPreflightRequest(
-                        execution_generation=recipe_execution_id,
-                        step_name=step_name,
-                        skill_name=_invocation_template.invocation.skill_name or "",
-                        plan_path=_plan_path,
-                        audit_cycle_path=_audit_cycle_path or None,
-                        plan_disposition_path=_plan_disposition_path or None,
-                        expected_plan_set_id=_expected_preflight_identity[0],
-                        expected_scope_id=_expected_preflight_identity[1],
-                        expected_part_id=_expected_preflight_identity[2],
-                    )
+            try:
+                _preflight_result = resolve_attested_input_preflight(
+                    tool_ctx,
+                    _installed_execution,
+                    skill_command=skill_command,
+                    execution_id=recipe_execution_id,
+                    step_name=step_name,
+                    template=_invocation_template,
+                    bound_inputs=_bound_recipe_inputs,
                 )
-                if _preflight_result.decision.status is AdmissionStatus.REJECT:
-                    return _recipe_execution_deny(
-                        f"input_preflight_{_preflight_result.decision.reason.value}",
-                        (
-                            _preflight_result.decision.details[0]
-                            if _preflight_result.decision.details
-                            else "verified input preflight rejected the invocation"
-                        ),
-                    )
+            except RecipeExecutionAdmissionError as exc:
+                return _recipe_execution_deny(exc.code, str(exc))
             child_skill_command = build_bound_child_prompt(
                 skill_command,
                 _bound_recipe_inputs,

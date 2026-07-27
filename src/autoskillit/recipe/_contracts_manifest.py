@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any, Literal, assert_never, cast
 
@@ -34,6 +35,7 @@ from autoskillit.recipe._contracts_types import (
 logger = get_logger(__name__)
 
 _MANIFEST_CACHE = YamlFileCache()
+_SKILL_CONTRACT_IDENTITY_DOMAIN = b"autoskillit:skill-contract:v1\0"
 
 
 def load_bundled_manifest() -> dict[str, Any]:
@@ -155,6 +157,47 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         input_preflight=skill_data.get("input_preflight"),
         audit_authority_publication=authority_publication,
     )
+
+
+def compute_skill_contract_identity(
+    skill_name: str,
+    *,
+    manifest: dict[str, Any] | None = None,
+) -> str:
+    """Hash the canonical runtime-relevant shape of one skill contract."""
+    active_manifest = manifest if manifest is not None else load_bundled_manifest()
+    contract = get_skill_contract(skill_name, active_manifest)
+    if contract is None:
+        raise ValueError(f"skill contract is unavailable for {skill_name!r}")
+    publication = contract.audit_authority_publication
+    payload = json.dumps(
+        {
+            "audit_authority_publication": (
+                {
+                    "output_field": publication.output_field,
+                    "prior_input_field": publication.prior_input_field,
+                }
+                if publication is not None
+                else None
+            ),
+            "completion_required": contract.completion_required,
+            "input_preflight": contract.input_preflight,
+            "inputs": [
+                {
+                    "name": item.name,
+                    "nullable": item.nullable,
+                    "required": item.required,
+                    "type": item.type,
+                }
+                for item in contract.inputs
+            ],
+            "skill_name": skill_name,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(_SKILL_CONTRACT_IDENTITY_DOMAIN + payload).hexdigest()
 
 
 def resolve_input_specs(skill_command: str) -> tuple[InputSpec, ...]:

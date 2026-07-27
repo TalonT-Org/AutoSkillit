@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from typing import Any, Final, TypeGuard
 
@@ -26,6 +24,7 @@ from autoskillit.core import (
     resolve_skill_name,
 )
 from autoskillit.recipe._contracts_manifest import (
+    compute_skill_contract_identity,
     get_callable_contract,
     get_skill_contract,
     load_bundled_manifest,
@@ -40,9 +39,6 @@ __all__ = [
     "bind_step_invocation",
     "compute_skill_contract_identity",
 ]
-
-_SKILL_CONTRACT_IDENTITY_DOMAIN = b"autoskillit:skill-contract:v1\0"
-
 
 _CONTEXT_REF_RE: Final = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 _INPUT_REF_RE: Final = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
@@ -825,46 +821,6 @@ def bind_recipe(
         if step.tool is not None
     }
     return RecipeBindingProjection(invocations)
-
-
-def compute_skill_contract_identity(
-    skill_name: str,
-    *,
-    manifest: dict[str, Any] | None = None,
-) -> str:
-    """Hash the canonical runtime-relevant shape of one skill contract."""
-    active_manifest = manifest if manifest is not None else load_bundled_manifest()
-    contract = get_skill_contract(skill_name, active_manifest)
-    if contract is None:
-        raise ValueError(f"skill contract is unavailable for {skill_name!r}")
-    payload = json.dumps(
-        {
-            "audit_authority_publication": (
-                {
-                    "output_field": contract.audit_authority_publication.output_field,
-                    "prior_input_field": (contract.audit_authority_publication.prior_input_field),
-                }
-                if contract.audit_authority_publication is not None
-                else None
-            ),
-            "completion_required": contract.completion_required,
-            "input_preflight": contract.input_preflight,
-            "inputs": [
-                {
-                    "name": item.name,
-                    "nullable": item.nullable,
-                    "required": item.required,
-                    "type": item.type,
-                }
-                for item in contract.inputs
-            ],
-            "skill_name": skill_name,
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(_SKILL_CONTRACT_IDENTITY_DOMAIN + payload).hexdigest()
 
 
 def _is_dynamic_binding(value: BoundValue) -> bool:

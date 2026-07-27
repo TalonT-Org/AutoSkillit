@@ -532,6 +532,8 @@ class ContextAdmissionStreamHealth:
     reason_code: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.stream_key, ContextAdmissionStreamKey):
+            raise ValueError("invalid_context_admission_stream_key")
         _validate_health(self.status, self.failure_reason, self.reason_code)
 
 

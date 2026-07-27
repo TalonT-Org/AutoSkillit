@@ -896,6 +896,14 @@ def test_accounting_result_requires_stream_key() -> None:
         )
 
 
+def test_stream_health_requires_stream_key() -> None:
+    with pytest.raises(ValueError, match="invalid_context_admission_stream_key"):
+        ContextAdmissionStreamHealth(
+            stream_key=None,  # type: ignore[arg-type]
+            status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
+        )
+
+
 def test_recovery_result_enforces_stream_projection_invariants() -> None:
     key = _stream_key()
     healthy = ContextAdmissionStreamHealth(

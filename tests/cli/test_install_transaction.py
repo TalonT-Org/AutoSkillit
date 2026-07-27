@@ -128,6 +128,7 @@ class TestRollbackOnFailure:
         monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
 
         old_cache = _seed_installed_state(tmp_path, "0.0.1-old")
+        target_root = _marketplace._installed_plugin_root()
         _plugin_artifact.publish_installed_plugin_artifact(
             old_cache,
             semantic_key="autoskillit@autoskillit-local:0.0.1-old",
@@ -165,7 +166,7 @@ class TestRollbackOnFailure:
         def assert_lease_then_rollback(snapshot) -> None:
             with pytest.raises(ArtifactLeaseContention):
                 ArtifactLease.acquire_exclusive(
-                    _plugin_artifact.installed_artifact_lock_path(old_cache),
+                    _plugin_artifact.installed_artifact_lock_path(target_root),
                     blocking=False,
                 )
             original_rollback(snapshot)

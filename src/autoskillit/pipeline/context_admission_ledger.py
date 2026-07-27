@@ -1666,6 +1666,8 @@ def _recover_stream_projection(
         )
     shadow_by_sequence = {int(sequence): bytes(envelope) for sequence, envelope in shadow_rows}
     state: ContextAdmissionState = genesis
+    events: list[ContextAdmissionEvent] = []
+    transitions: list[AdmissionTransition] = []
     for row in journal_rows:
         journal_sequence = int(row[0])
         event_wrapper = decode_stored_context_admission_envelope(bytes(row[2]))
@@ -1712,6 +1714,8 @@ def _recover_stream_projection(
             )
         reducer = context_admission_reducer_for_protocol(protocol_version)
         transition = reducer.reduce_transition(state, event)
+        events.append(event)
+        transitions.append(transition)
         if stored_decision != transition.decision:
             raise _LedgerOpenError(
                 ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
@@ -1764,6 +1768,15 @@ def _recover_stream_projection(
                 "journal-shadow-mismatch",
             )
         state = transition.next_state
+    replay = context_admission_reducer_for_protocol(genesis.protocol_version).replay_stream(
+        genesis,
+        tuple(events),
+    )
+    if replay.final_state != state or replay.transitions != tuple(transitions):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+            "registered-replay-mismatch",
+        )
     materialized_wrapper = decode_stored_context_admission_envelope(materialized_state_envelope)
     if (
         materialized_wrapper.protocol_version != state.protocol_version

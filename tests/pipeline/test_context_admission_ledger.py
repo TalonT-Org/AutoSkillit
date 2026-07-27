@@ -749,6 +749,41 @@ def test_recovery_replays_nonempty_stream_and_surfaces_unresolved_work(
     assert replayed.journal_sequence == 3
 
 
+def test_recovery_uses_registered_stream_replay(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    assert (
+        DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    original_selector = ledger_module.context_admission_reducer_for_protocol
+    replay_calls = 0
+
+    def select_reducer(protocol_version: int) -> object:
+        reducer = original_selector(protocol_version)
+
+        def replay_stream(initial_state: object, events: object) -> object:
+            nonlocal replay_calls
+            replay_calls += 1
+            return reducer.replay_stream(initial_state, events)  # type: ignore[arg-type]
+
+        return replace(reducer, replay_stream=replay_stream)
+
+    monkeypatch.setattr(
+        ledger_module,
+        "context_admission_reducer_for_protocol",
+        select_reducer,
+    )
+
+    recovered = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert recovered.recovered_streams == (key,)
+    assert replay_calls == 1
+
+
 def test_recover_filters_healthy_failed_unresolved_unknown_and_store_failure(
     tmp_path: Path,
 ) -> None:

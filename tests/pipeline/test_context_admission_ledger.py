@@ -567,6 +567,73 @@ def test_recovery_preflight_rejects_unsupported_encoding_without_rewrite(
         connection.close()
 
 
+@pytest.mark.parametrize(
+    ("metadata_key", "invalid_value", "expected_reason", "expected_reason_code"),
+    [
+        (
+            "schema_version",
+            "2",
+            ContextAdmissionStorageFailureReason.UNSUPPORTED_SCHEMA,
+            "invalid-schema-version",
+        ),
+        (
+            "encoding_version",
+            "2",
+            ContextAdmissionStorageFailureReason.UNSUPPORTED_ENCODING,
+            "invalid-encoding-version",
+        ),
+        (
+            "protocol_version",
+            "2",
+            ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
+            "invalid-protocol-version",
+        ),
+        (
+            "store_health",
+            "fail_closed",
+            ContextAdmissionStorageFailureReason.INTEGRITY,
+            "invalid-store-health",
+        ),
+    ],
+)
+def test_recovery_rejects_invalid_metadata_without_rewrite(
+    tmp_path: Path,
+    metadata_key: str,
+    invalid_value: str,
+    expected_reason: ContextAdmissionStorageFailureReason,
+    expected_reason_code: str,
+) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = ?",
+            (invalid_value, metadata_key),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    result = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert result.store_health.failure_reason is expected_reason
+    assert result.store_health.reason_code == expected_reason_code
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        stored = connection.execute(
+            "SELECT value FROM metadata WHERE key = ?",
+            (metadata_key,),
+        ).fetchone()
+        assert stored == (invalid_value,)
+    finally:
+        connection.close()
+
+
 def test_recovery_decodes_supported_legacy_encoding_without_rewrite(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

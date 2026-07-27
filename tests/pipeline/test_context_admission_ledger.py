@@ -1792,6 +1792,84 @@ def test_busy_begin_is_transient_and_retry_succeeds_without_poisoning_health(
     )
 
 
+@pytest.mark.parametrize("primary_code", [sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED])
+@pytest.mark.parametrize(
+    ("commit_failures", "busy_timeout_ms", "expected_status", "expected_rows"),
+    [
+        (1, 50, ContextAdmissionAccountingStatus.RECORDED, 1),
+        (None, 0, ContextAdmissionAccountingStatus.CONTENDED, 0),
+    ],
+)
+def test_commit_contention_retries_or_rolls_back_at_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    primary_code: int,
+    commit_failures: int | None,
+    busy_timeout_ms: int,
+    expected_status: ContextAdmissionAccountingStatus,
+    expected_rows: int,
+) -> None:
+    authority = _authority(tmp_path)
+    ledger = DefaultContextAdmissionLedger(
+        authority,
+        busy_timeout_ms=busy_timeout_ms,
+    )
+    assert ledger.recover_all().status is ContextAdmissionStorageHealthStatus.HEALTHY
+    original_connect = ledger._connect
+    wrappers: list[CommitContentionConnection] = []
+
+    class CommitContentionConnection:
+        def __init__(self, connection: sqlite3.Connection) -> None:
+            self._connection = connection
+            self.commit_attempts = 0
+
+        def execute(
+            self,
+            statement: str,
+            parameters: tuple[object, ...] = (),
+        ) -> sqlite3.Cursor:
+            if statement == "COMMIT":
+                self.commit_attempts += 1
+                should_fail = commit_failures is None or self.commit_attempts <= commit_failures
+                if should_fail:
+                    error = sqlite3.OperationalError("commit contended")
+                    error.sqlite_errorcode = primary_code
+                    raise error
+            return self._connection.execute(statement, parameters)
+
+        @property
+        def in_transaction(self) -> bool:
+            return self._connection.in_transaction
+
+        def close(self) -> None:
+            self._connection.close()
+
+    def connect_with_commit_contention() -> CommitContentionConnection:
+        wrapper = CommitContentionConnection(original_connect())
+        wrappers.append(wrapper)
+        return wrapper
+
+    monkeypatch.setattr(ledger, "_connect", connect_with_commit_contention)
+
+    result = ledger.apply(stream_key(), open_event())
+
+    assert result.status is expected_status
+    assert wrappers[-1].commit_attempts == (2 if commit_failures == 1 else 1)
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        assert connection.execute("SELECT COUNT(*) FROM journal_events").fetchone() == (
+            expected_rows,
+        )
+    finally:
+        connection.close()
+    if expected_status is ContextAdmissionAccountingStatus.CONTENDED:
+        monkeypatch.setattr(ledger, "_connect", original_connect)
+        assert (
+            ledger.apply(stream_key(), open_event()).status
+            is ContextAdmissionAccountingStatus.RECORDED
+        )
+
+
 def test_apply_stops_when_startup_recovery_is_contended(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -581,11 +581,6 @@ class ContextAdmissionAccountingResult:
                 raise ValueError("invalid_journal_sequence")
         if self.reason_code is not None:
             _validate_reason_code(self.reason_code)
-        if (
-            self.transition is not None
-            and self.reason_code != self.transition.decision.reason_code
-        ):
-            raise ValueError("accounting_reason_code_mismatch")
         if self.status is ContextAdmissionAccountingStatus.RECORDED:
             if self.transition is None or self.journal_sequence is None:
                 raise ValueError("recorded_result_requires_publication")
@@ -612,6 +607,11 @@ class ContextAdmissionAccountingResult:
                 raise ValueError("storage_failure_requires_reason")
         elif self.failure_reason is not None:
             raise ValueError("nonstorage_result_has_storage_reason")
+        if (
+            self.transition is not None
+            and self.reason_code != self.transition.decision.reason_code
+        ):
+            raise ValueError("accounting_reason_code_mismatch")
 
 
 @dataclass(frozen=True, slots=True)

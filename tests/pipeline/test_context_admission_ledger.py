@@ -1860,8 +1860,14 @@ def test_fault_checkpoints_follow_distinct_mutation_boundaries(tmp_path: Path) -
         return connection
 
     def record(point: object) -> None:
-        if recording:
-            observed_changes[getattr(point, "value")] = connections[-1].total_changes
+        point_name = getattr(point, "value")
+        if recording and point_name in {
+            "after_journal",
+            "during_effects",
+            "after_state_shadow",
+            "before_commit",
+        }:
+            observed_changes[point_name] = connections[-1].total_changes
 
     ledger = DefaultContextAdmissionLedger(
         authority,

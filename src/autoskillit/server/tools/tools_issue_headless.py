@@ -38,10 +38,10 @@ _BLOCK_PARSE_ERRORS: frozenset[str] = frozenset(
     {"no result block found", "result block contained invalid JSON"}
 )
 
-# Canonical 7 fields of the headless error envelope. extra_fields cannot overwrite
+# Canonical fields of the headless response envelope. extra_fields cannot overwrite
 # any of these — see _build_headless_error_response for the contract.
 _CANONICAL_KEYS: frozenset[str] = frozenset(
-    {"success", "status", "error", "session_id", "stderr", "subtype", "exit_code"}
+    {"success", "status", "error", "warning", "session_id", "stderr", "subtype", "exit_code"}
 )
 
 # Regex for partial-issue-data extraction: a GitHub issue URL anywhere in the
@@ -60,31 +60,37 @@ _ENRICHED_ISSUE_RE: re.Pattern[str] = re.compile(r"Enriched issue #(\d+)")
 def _build_headless_error_response(
     result: SkillResult,
     *,
-    error: str,
+    error: str | None = None,
+    warning: str | None = None,
     status: str = "failed",
+    success: bool = False,
     extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Canonical error response for tools that invoke headless sessions.
+    """Canonical response envelope for tools that invoke headless sessions.
 
-    Every failure path that derives a response from a SkillResult MUST use this
-    builder. Do not hand-roll error dicts — that pattern caused silent omission of
+    Every path that derives a response from a SkillResult MUST use this builder —
+    including degraded-success paths (``success=True``, ``status="degraded"``). Do
+    not hand-roll response dicts — that pattern caused silent omission of
     diagnostic fields (issue #384). Adding a field here propagates to all paths
     automatically.
 
     Callers may pass ``extra_fields`` to attach partial-result evidence (e.g.,
     ``partial_issue_url`` when a headless session created an issue but failed to
     emit a parseable result block). ``extra_fields`` is filtered against
-    ``_CANONICAL_KEYS`` — it cannot overwrite any of the 7 canonical fields.
+    ``_CANONICAL_KEYS`` — it cannot overwrite any canonical field.
     """
     resp: dict[str, Any] = {
-        "success": False,
+        "success": success,
         "status": status,
-        "error": error,
         "session_id": result.session_id,
         "stderr": result.stderr or "",
         "subtype": result.subtype or "",
         "exit_code": result.exit_code if result.exit_code is not None else -1,
     }
+    if error is not None:
+        resp["error"] = error
+    if warning is not None:
+        resp["warning"] = warning
     if extra_fields:
         resp.update({k: v for k, v in extra_fields.items() if k not in _CANONICAL_KEYS})
     return resp
@@ -361,7 +367,11 @@ async def prepare_issue(
                 extra = _extract_partial_issue_data(result.result)
                 return json.dumps(
                     _build_headless_error_response(
-                        result, error=parsed["error"], extra_fields=extra
+                        result,
+                        warning=parsed["error"],
+                        status="degraded",
+                        success=True,
+                        extra_fields=extra,
                     )
                 )
 
@@ -489,7 +499,11 @@ async def enrich_issues(
                 extra = _extract_partial_enrich_data(result.result)
                 return json.dumps(
                     _build_headless_error_response(
-                        result, error=parsed["error"], extra_fields=extra
+                        result,
+                        warning=parsed["error"],
+                        status="degraded",
+                        success=True,
+                        extra_fields=extra,
                     )
                 )
 

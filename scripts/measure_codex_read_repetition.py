@@ -54,6 +54,13 @@ _BOUNDED_PATTERNS = (
 
 _PATH_TOKEN_PAT = re.compile(r"(?:[./~][\w./\-]+|[\w\-]+/[\w./\-]+)")
 
+# A quoted span (single- or double-) is consumed whole, so a literal `|` inside an
+# rg search pattern -- POSIX ERE alternation, this repo's documented idiom for
+# `pattern` arguments -- does not truncate the match. Only an unquoted `|`/`;`
+# (a real shell pipe/separator) ends the span. Unquantified: callers apply their
+# own `*`/`*?` to match the surrounding regex's greediness.
+_QUOTED_OR_UNPIPED = r"(?:'[^']*'|\"[^\"]*\"|[^|;])"
+
 # The rarer custom_tool_call/exec shape embeds the command in a JS-template
 # string: tools.exec_command({cmd:"..."}).
 _CUSTOM_TOOL_CALL_CMD_PAT = re.compile(
@@ -63,7 +70,7 @@ _CUSTOM_TOOL_CALL_CMD_PAT = re.compile(
 _VERSION_V2_MARKER = "Context Intake Discipline v2:"
 _VERSION_V1_MARKER = "Context Intake Discipline v1:"
 
-_ROLLOUT_DATE_PAT = re.compile(r"(\d{4})/(\d{2})/(\d{2})/rollout-")
+_ROLLOUT_DATE_PAT = re.compile(r"(\d{4})/(\d{2})/rollout-")
 
 
 def is_bounded_read(cmd: str) -> bool:
@@ -76,7 +83,9 @@ def extract_target_path(cmd: str) -> str | None:
     m = re.search(r"sed\s+-n\s+'[^']*'\s+([^\s|;]+)", cmd)
     if m:
         return m.group(1)
-    m = re.search(r"\brg\s+[^|;]*?(-n\b|--line-number\b)[^|;]*", cmd)
+    m = re.search(
+        rf"\brg\s+{_QUOTED_OR_UNPIPED}*?(-n\b|--line-number\b){_QUOTED_OR_UNPIPED}*", cmd
+    )
     if m:
         # Strip a trailing `2>&1` (or `2>/dev/null`, `>&2`, ...) redirect token
         # before tokenizing -- an unstripped redirect was mis-attributed as a
@@ -152,8 +161,15 @@ def _extract_function_call_cmd(raw_args: Any) -> str | None:
 
 
 def classify_policy_cohort(rollout_path: Path) -> str:
-    """Return 'v2', 'v1', or 'none' from the intake-discipline header seen on the wire."""
-    text = rollout_path.read_text(encoding="utf-8", errors="ignore")
+    """Return 'v2', 'v1', or 'none' from the intake-discipline header seen on the wire.
+
+    An unreadable rollout is treated as 'none' rather than raised -- one bad file
+    in a batch of thousands must not abort the whole measurement run.
+    """
+    try:
+        text = rollout_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return "none"
     if _VERSION_V2_MARKER in text:
         return "v2"
     if _VERSION_V1_MARKER in text:
@@ -219,7 +235,7 @@ def aggregate_report(rollout_paths: list[Path]) -> dict[str, Any]:
 
 
 def _find_rollouts(log_root: Path, since: str | None, until: str | None) -> list[Path]:
-    paths = sorted(log_root.glob("*/*/*/rollout-*.jsonl"))
+    paths = sorted(log_root.glob("*/*/rollout-*.jsonl"))
     if since is None and until is None:
         return paths
     filtered = []

@@ -133,3 +133,51 @@ def test_unclassified_exec_shapes_are_counted_and_reported(tmp_path: Path) -> No
     commands, unclassified = measurer.classify_rollout_records(path)
     assert commands == []
     assert unclassified == 1
+
+
+def test_find_rollouts_matches_the_real_two_level_yyyy_mm_layout(tmp_path: Path) -> None:
+    # _codex_session_storage.py lays out rollouts as <root>/YYYY/MM/rollout-*.jsonl --
+    # never a third YYYY/MM/DD level.
+    rollout = tmp_path / "2026" / "07" / "rollout-a.jsonl"
+    rollout.parent.mkdir(parents=True)
+    rollout.write_text("{}")
+    found = measurer._find_rollouts(tmp_path, None, None)
+    assert found == [rollout]
+
+
+def test_find_rollouts_date_filter_actually_filters(tmp_path: Path) -> None:
+    paths = {}
+    for year_month in ("2026/06", "2026/07", "2026/08"):
+        directory = tmp_path / year_month
+        directory.mkdir(parents=True)
+        path = directory / "rollout-x.jsonl"
+        path.write_text("{}")
+        paths[year_month] = path
+
+    found = measurer._find_rollouts(tmp_path, "2026-07", "2026-07")
+    assert found == [paths["2026/07"]]
+
+
+def test_extract_target_path_survives_pipe_alternation_in_rg_pattern() -> None:
+    # AGENTS.md documents `|` alternation as this repo's ripgrep idiom -- the
+    # extractor must not truncate at a `|` that is inside the quoted pattern.
+    assert (
+        measurer.extract_target_path("rg -n 'foo|bar' src/autoskillit/file.py")
+        == "src/autoskillit/file.py"
+    )
+    assert (
+        measurer.extract_target_path('rg -n "foo|bar|baz" src/autoskillit/file.py')
+        == "src/autoskillit/file.py"
+    )
+    assert (
+        measurer.extract_target_path("rg -n 'foo|bar' src/autoskillit/file.py | head -c 18000")
+        == "src/autoskillit/file.py"
+    )
+
+
+def test_classify_policy_cohort_survives_an_unreadable_file(tmp_path: Path) -> None:
+    # A directory named like a rollout file can never be read_text'd -- this must
+    # not abort a batch run over many rollouts.
+    unreadable = tmp_path / "rollout-unreadable.jsonl"
+    unreadable.mkdir()
+    assert measurer.classify_policy_cohort(unreadable) == "none"

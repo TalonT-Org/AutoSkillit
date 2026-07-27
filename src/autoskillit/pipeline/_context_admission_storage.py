@@ -78,7 +78,6 @@ def reconcile_initialization_links(
         )
         if (
             not stat.S_ISREG(database_stat.st_mode)
-            or stat.S_ISLNK(database_stat.st_mode)
             or database_stat.st_uid != owner_id
             or stat.S_IMODE(database_stat.st_mode) != file_mode
             or database_stat.st_nlink <= 1
@@ -103,7 +102,6 @@ def reconcile_initialization_links(
                 continue
             if (
                 stat.S_ISREG(candidate_stat.st_mode)
-                and not stat.S_ISLNK(candidate_stat.st_mode)
                 and candidate_stat.st_dev == database_stat.st_dev
                 and candidate_stat.st_ino == database_stat.st_ino
                 and candidate_stat.st_uid == owner_id
@@ -132,7 +130,6 @@ def private_file_identity(
         os.close(descriptor)
     if (
         not stat.S_ISREG(path_stat.st_mode)
-        or stat.S_ISLNK(path_stat.st_mode)
         or path_stat.st_uid != owner_id
         or stat.S_IMODE(path_stat.st_mode) != file_mode
         or path_stat.st_nlink != 1

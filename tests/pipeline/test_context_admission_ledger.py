@@ -1097,6 +1097,70 @@ def test_sqlite_result_class_recovery_reopens_and_resolves_publication(
         connection.close()
 
 
+def test_inspection_contention_is_transient_and_does_not_poison_health(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ledger = DefaultContextAdmissionLedger(_authority(tmp_path))
+    key = stream_key()
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    original_connect = ledger._connect
+    fired = False
+
+    class BusyOnceConnection:
+        def __init__(self, connection: sqlite3.Connection) -> None:
+            self._connection = connection
+
+        def execute(
+            self,
+            statement: str,
+            parameters: tuple[object, ...] = (),
+        ) -> sqlite3.Cursor:
+            nonlocal fired
+            if not fired and "FROM streams WHERE stream_id" in statement:
+                fired = True
+                error = sqlite3.OperationalError("busy")
+                error.sqlite_errorcode = sqlite3.SQLITE_BUSY
+                raise error
+            return self._connection.execute(statement, parameters)
+
+        def close(self) -> None:
+            self._connection.close()
+
+    monkeypatch.setattr(ledger, "_connect", lambda: BusyOnceConnection(original_connect()))
+
+    contended = ledger.inspect_stream(key)
+
+    assert contended.health.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.HEALTHY
+    assert ledger.inspect_stream(key).health.status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+
+def test_inspection_retries_when_failure_marker_is_contended(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            "UPDATE journal_events SET event_envelope = ?",
+            (b"invalid",),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    monkeypatch.setattr(ledger, "_persist_stream_failure", lambda *_args: False)
+
+    inspection = ledger.inspect_stream(key)
+
+    assert inspection.health.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert ledger.stream_health(key).status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+
 def test_lineage_mismatch_sets_sticky_stream_health(tmp_path: Path) -> None:
     ledger = DefaultContextAdmissionLedger(_authority(tmp_path))
     key = stream_key()

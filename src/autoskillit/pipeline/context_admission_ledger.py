@@ -936,11 +936,14 @@ class DefaultContextAdmissionLedger:
                 )
                 self._stream_health[stream_key] = health
                 return inspection
-            except (
-                ContextAdmissionValidationError,
-                _LedgerOpenError,
-                sqlite3.Error,
-            ) as exc:
+            except _LedgerContended:
+                return _contended_inspection(stream_key)
+            except (ContextAdmissionValidationError, _LedgerOpenError, sqlite3.Error) as exc:
+                if (
+                    isinstance(exc, sqlite3.Error)
+                    and _sqlite_primary_code(exc) in _SQLITE_BUSY_CODES
+                ):
+                    return _contended_inspection(stream_key)
                 reason = (
                     exc.reason
                     if isinstance(exc, _LedgerOpenError)
@@ -951,14 +954,28 @@ class DefaultContextAdmissionLedger:
                     if isinstance(exc, _LedgerOpenError)
                     else "inspection-decode-failed"
                 )
-                if connection is not None:
-                    self._persist_stream_failure(
-                        connection,
-                        stream_id,
-                        stream_key,
-                        reason,
-                        reason_code,
-                    )
+                persisted = connection is not None and self._persist_stream_failure(
+                    connection,
+                    stream_id,
+                    stream_key,
+                    reason,
+                    reason_code,
+                )
+                if not persisted:
+                    if (
+                        self._store_health.status
+                        is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+                    ):
+                        return _empty_inspection(
+                            stream_key,
+                            ContextAdmissionStreamHealth(
+                                stream_key,
+                                ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+                                failure_reason=self._store_health.failure_reason,
+                                reason_code=self._store_health.reason_code,
+                            ),
+                        )
+                    return _contended_inspection(stream_key)
                 return _empty_inspection(
                     stream_key,
                     self.stream_health(stream_key),
@@ -1576,6 +1593,18 @@ def _empty_inspection(
         effects=(),
         shadows=(),
         latest_journal_sequence=0,
+    )
+
+
+def _contended_inspection(
+    stream_key: ContextAdmissionStreamKey,
+) -> ContextAdmissionInspectionResult:
+    return _empty_inspection(
+        stream_key,
+        ContextAdmissionStreamHealth(
+            stream_key,
+            ContextAdmissionStorageHealthStatus.UNINITIALIZED,
+        ),
     )
 
 

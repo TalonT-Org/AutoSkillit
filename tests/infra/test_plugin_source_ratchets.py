@@ -15,6 +15,7 @@ modelled on `tests/infra/test_schema_read_convention.py`.
 from __future__ import annotations
 
 import ast
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -39,10 +40,6 @@ REGISTRY_READ_ALLOWLIST: dict[str, str] = {
         "The doctor check that dereferences installPath. Returning OK for a merely "
         "present key is the inversion this ratchet exists to prevent recurring."
     ),
-    "core/_plugin_cache.py": (
-        "sweep_retiring_cache consults the registry so it never deletes a directory "
-        "the registry still names. A consult, not a resolution."
-    ),
 }
 
 #: Modules permitted to call `.resolve()` on a *write destination* before a
@@ -51,6 +48,208 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
     "core/paths.py": "Defines destination_location(), the shared primitive itself.",
 }
 
+PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
+    ("cli/_marketplace.py", "_restore", "path.unlink"): (
+        1,
+        "Transaction rollback restores a snapshotted metadata file, not a leased artifact.",
+    ),
+    ("cli/_marketplace.py", "commit", "shutil.rmtree"): (
+        1,
+        "The transaction-owned backup is removed only after the installed replacement commits.",
+    ),
+    ("cli/_marketplace.py", "rollback", "os.replace"): (
+        1,
+        "Rollback restores the exact transaction backup while installed-artifact "
+        "ownership is held.",
+    ),
+    ("cli/_marketplace.py", "rollback", "self._target_root.unlink"): (
+        1,
+        "Rollback removes only the failed transaction target while artifact ownership is held.",
+    ),
+    ("cli/_marketplace.py", "rollback", "shutil.rmtree"): (
+        1,
+        "Rollback removes only the failed transaction target while artifact ownership is held.",
+    ),
+    ("cli/_marketplace.py", "stage_target_root", "os.replace"): (
+        1,
+        "The current installed root is moved to a transaction backup under its exclusive lease.",
+    ),
+    ("cli/_marketplace.py", "stage_target_root", "self._artifact_manifest_path.unlink"): (
+        1,
+        "The staged installed manifest is removed under the same exclusive transaction lease.",
+    ),
+    ("cli/_marketplace.py", "upgrade", "scripts_dir.rename"): (
+        1,
+        "Legacy package layout migration runs inside the installed-plugin transaction.",
+    ),
+    ("cli/_plugin_artifact.py", "try_reclaim", "record.manifest_path.unlink"): (
+        1,
+        "The installed retirement owner revalidates the exact queued incarnation first.",
+    ),
+    ("cli/_plugin_artifact.py", "try_reclaim", "shutil.rmtree"): (
+        1,
+        "The installed retirement owner holds exclusive ownership and exact identity.",
+    ),
+    ("workspace/_projection_cache.py", "try_reclaim", "record.manifest_path.unlink"): (
+        1,
+        "The projection retirement owner revalidates the exact queued incarnation first.",
+    ),
+    ("workspace/_projection_cache.py", "try_reclaim", "shutil.rmtree"): (
+        1,
+        "The projection retirement owner holds exclusive ownership and exact identity.",
+    ),
+    ("workspace/skill_projection.py", "_publish_projected_plugin_manifest", "os.replace"): (
+        1,
+        "Named publication seam called only while the projection authority owns LOCK_EX.",
+    ),
+    ("workspace/skill_projection.py", "_replace_directory", "destination.unlink"): (
+        1,
+        "Named root-publication seam called only while the projection authority owns LOCK_EX.",
+    ),
+    ("workspace/skill_projection.py", "_replace_directory", "os.replace"): (
+        1,
+        "Named root-publication seam called only while the projection authority owns LOCK_EX.",
+    ),
+    ("workspace/skill_projection.py", "_replace_directory", "shutil.rmtree"): (
+        1,
+        "Named root-publication seam called only while the projection authority owns LOCK_EX.",
+    ),
+    ("workspace/skill_projection.py", "_stage_projected_plugin_artifact", "shutil.rmtree"): (
+        1,
+        "Failure cleanup removes a private unpublished staging directory.",
+    ),
+    (
+        "workspace/skill_projection.py",
+        "_stage_projected_plugin_artifact",
+        "staging_manifest.unlink",
+    ): (
+        1,
+        "Failure cleanup removes a private unpublished staging manifest.",
+    ),
+    ("workspace/skill_projection.py", "acquire_launch_binding", "shutil.rmtree"): (
+        1,
+        "Post-publication cleanup removes the private staging root, never the public root.",
+    ),
+    ("workspace/skill_projection.py", "acquire_launch_binding", "staged.manifest.unlink"): (
+        1,
+        "Post-publication cleanup removes the private staging manifest.",
+    ),
+    ("workspace/skill_projection.py", "materialize_agent_skill_tree", "shutil.rmtree"): (
+        1,
+        "Non-plugin session-tree staging cleanup is outside the managed projection root.",
+    ),
+    (
+        "workspace/skill_projection.py",
+        "materialize_sanitized_plugin_root",
+        "shutil.rmtree",
+    ): (
+        1,
+        "Non-public staging cleanup precedes artifact publication.",
+    ),
+}
+
+PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
+    ("cli/_marketplace.py", "install", "()"): (
+        2,
+        "External Claude install commands intentionally consume no launch binding.",
+    ),
+    ("cli/session/_session_cook.py", "cook", "pass_fds"): (
+        1,
+        "Cook passes the stable merge of command, home, and attempt descriptors.",
+    ),
+    ("cli/session/_session_launch.py", "_run_interactive_session", "spec.inherited_fds"): (
+        1,
+        "Direct interactive launch forwards the command-derived descriptor tuple exactly.",
+    ),
+    ("cli/session/_session_process.py", "run_cook_attempt", "inherited_fds"): (
+        1,
+        "Direct PTY-free cook launch forwards the normalized owned descriptor tuple.",
+    ),
+    ("cli/session/_session_process.py", "run_cook_attempt", "launcher_fds"): (
+        1,
+        "PTY launch adds only the slave descriptor to the owned descriptor tuple.",
+    ),
+    (
+        "execution/backends/_codex_session_storage.py",
+        "__enter__",
+        "tuple((fd for fd in pass_fds if fd >= 0))",
+    ): (
+        1,
+        "Generated Codex home construction forwards its independent storage leases.",
+    ),
+    ("execution/backends/claude.py", "cook_session_context", "()"): (
+        1,
+        "The context probe is not a physical artifact-consuming agent launch.",
+    ),
+    (
+        "execution/headless/_headless_execute.py",
+        "_execute_claude_headless",
+        "spec.inherited_fds",
+    ): (
+        1,
+        "Each provider attempt forwards its freshly built command descriptor tuple.",
+    ),
+    (
+        "execution/headless/_headless_recovery.py",
+        "_attempt_contract_nudge",
+        "spec.inherited_fds",
+    ): (
+        1,
+        "Contract nudge forwards the freshly acquired binding through its rebuilt command.",
+    ),
+    ("execution/process/__init__.py", "__call__", "pass_fds"): (
+        1,
+        "The generic subprocess runner forwards its protocol-owned descriptor tuple.",
+    ),
+    ("execution/process/__init__.py", "run_managed_async", "_inherited_fds"): (
+        1,
+        "The physical anyio spawn receives the normalized generic runner tuple.",
+    ),
+    ("execution/recording.py", "__call__", "pass_fds"): (
+        3,
+        "Recording delegates physical spawns to FD-aware inner runners without "
+        "dropping ownership.",
+    ),
+    ("execution/recording.py", "_record_non_pty_session", "pass_fds"): (
+        1,
+        "The recording helper forwards ownership to its FD-aware physical runner.",
+    ),
+    ("workspace/session_skills.py", "managed_session", "(lease_fd,)"): (
+        1,
+        "The generated-home helper forwards its independent session-storage lease.",
+    ),
+}
+
+STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
+    (
+        "core/_plugin_cache.py",
+        "_write_retiring_cache_unlocked",
+        "write_versioned_json:strict=True",
+    ): (
+        1,
+        "Every retirement-v2 migration and mutation surfaces file and parent fsync failures.",
+    ),
+    (
+        "cli/_plugin_artifact.py",
+        "_publish_installed_plugin_artifact_locked",
+        "write_versioned_json:strict=True",
+    ): (
+        1,
+        "Installed incarnation publication persists exact identity before launch.",
+    ),
+    (
+        "workspace/skill_projection.py",
+        "_stage_projected_plugin_artifact",
+        "write_versioned_json:strict=True",
+    ): (
+        1,
+        "The staged projection manifest is durable before public root publication.",
+    ),
+}
+
+_PLUGIN_MUTATION_FILES = frozenset(key[0] for key in PLUGIN_MUTATION_ALLOWLIST)
+_STRICT_WRITE_SCOPES = {(rel, scope) for rel, scope, _call in STRICT_PLUGIN_WRITE_ALLOWLIST}
+
 
 def _iter_src_files() -> list[Path]:
     return sorted(p for p in SRC_ROOT.rglob("*.py") if "__pycache__" not in p.parts)
@@ -58,6 +257,190 @@ def _iter_src_files() -> list[Path]:
 
 def _rel(path: Path) -> str:
     return str(path.relative_to(SRC_ROOT))
+
+
+class _ScopedCallVisitor(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.scope = "<module>"
+        self.calls: list[tuple[str, ast.Call]] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        previous = self.scope
+        self.scope = node.name
+        self.generic_visit(node)
+        self.scope = previous
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Call(self, node: ast.Call) -> None:
+        self.calls.append((self.scope, node))
+        self.generic_visit(node)
+
+
+def _scoped_calls(tree: ast.AST) -> tuple[tuple[str, ast.Call], ...]:
+    visitor = _ScopedCallVisitor()
+    visitor.visit(tree)
+    return tuple(visitor.calls)
+
+
+def _assert_inventory(
+    *,
+    actual: Counter[tuple[str, str, str]],
+    expected: dict[tuple[str, str, str], tuple[int, str]],
+    label: str,
+) -> None:
+    assert expected, f"{label} inventory must not be empty"
+    expected_counts = Counter({key: count for key, (count, _rationale) in expected.items()})
+    assert actual == expected_counts, (
+        f"{label} inventory drifted.\n"
+        f"Added or count-changed: {actual - expected_counts}\n"
+        f"Stale entries: {expected_counts - actual}"
+    )
+    for key, (_count, rationale) in expected.items():
+        assert (SRC_ROOT / key[0]).is_file(), f"{label} module no longer exists: {key[0]}"
+        assert len(rationale) > 40, f"{label} rationale too thin for {key}"
+
+
+def _call_name(call: ast.Call) -> str:
+    return ast.unparse(call.func)
+
+
+def _scan_plugin_mutations_in_tree(
+    rel: str,
+    tree: ast.AST,
+) -> Counter[tuple[str, str, str]]:
+    hits: Counter[tuple[str, str, str]] = Counter()
+    path_terms = (
+        "path",
+        "root",
+        "dir",
+        "manifest",
+        "staging",
+        "target",
+        "backup",
+        "destination",
+    )
+    for scope, call in _scoped_calls(tree):
+        name = _call_name(call)
+        operation = name.rsplit(".", 1)[-1]
+        destructive = operation in {"unlink", "rename", "rmtree", "move"}
+        destructive = destructive or (
+            operation == "replace"
+            and (name == "os.replace" or any(term in name.lower() for term in path_terms))
+        )
+        if destructive:
+            hits[(rel, scope, name)] += 1
+    return hits
+
+
+def _scan_plugin_mutations() -> Counter[tuple[str, str, str]]:
+    hits: Counter[tuple[str, str, str]] = Counter()
+    for rel in sorted(_PLUGIN_MUTATION_FILES):
+        tree = ast.parse((SRC_ROOT / rel).read_text())
+        hits.update(_scan_plugin_mutations_in_tree(rel, tree))
+    return hits
+
+
+def _scan_pass_fds_in_tree(
+    rel: str,
+    tree: ast.AST,
+) -> Counter[tuple[str, str, str]]:
+    hits: Counter[tuple[str, str, str]] = Counter()
+    for scope, call in _scoped_calls(tree):
+        for keyword in call.keywords:
+            if keyword.arg == "pass_fds":
+                hits[(rel, scope, ast.unparse(keyword.value))] += 1
+    return hits
+
+
+def _scan_pass_fds() -> Counter[tuple[str, str, str]]:
+    hits: Counter[tuple[str, str, str]] = Counter()
+    for path in _iter_src_files():
+        rel = _rel(path)
+        hits.update(_scan_pass_fds_in_tree(rel, ast.parse(path.read_text())))
+    return hits
+
+
+def _scan_strict_plugin_writes_in_tree(
+    rel: str,
+    tree: ast.AST,
+    scopes: set[tuple[str, str]],
+) -> Counter[tuple[str, str, str]]:
+    hits: Counter[tuple[str, str, str]] = Counter()
+    for scope, call in _scoped_calls(tree):
+        if (rel, scope) not in scopes:
+            continue
+        call_name = _call_name(call)
+        if call_name not in {"atomic_write", "write_versioned_json"}:
+            continue
+        strict = next(
+            (
+                ast.unparse(keyword.value)
+                for keyword in call.keywords
+                if keyword.arg == "strict_durability"
+            ),
+            "<missing>",
+        )
+        hits[(rel, scope, f"{call_name}:strict={strict}")] += 1
+    return hits
+
+
+def _scan_strict_plugin_writes() -> Counter[tuple[str, str, str]]:
+    hits: Counter[tuple[str, str, str]] = Counter()
+    for rel in sorted({rel for rel, _scope in _STRICT_WRITE_SCOPES}):
+        hits.update(
+            _scan_strict_plugin_writes_in_tree(
+                rel,
+                ast.parse((SRC_ROOT / rel).read_text()),
+                _STRICT_WRITE_SCOPES,
+            )
+        )
+    return hits
+
+
+def _scan_caller_grace(tree: ast.AST) -> list[int]:
+    hits: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+            if any("grace" in arg.arg or "max_defer" in arg.arg for arg in args):
+                if node.name in {"due_retiring_records", "sweep_due", "try_reclaim"}:
+                    hits.append(node.lineno)
+        elif isinstance(node, ast.Call):
+            call_name = _call_name(node).rsplit(".", 1)[-1]
+            if call_name in {"due_retiring_records", "sweep_due", "try_reclaim"} and any(
+                keyword.arg is not None and ("grace" in keyword.arg or "max_defer" in keyword.arg)
+                for keyword in node.keywords
+            ):
+                hits.append(node.lineno)
+    return hits
+
+
+def _scan_dropped_cmdspec_fds(tree: ast.AST) -> list[int]:
+    hits: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = (
+            node.func.id
+            if isinstance(node.func, ast.Name)
+            else node.func.attr
+            if isinstance(node.func, ast.Attribute)
+            else ""
+        )
+        if name != "CmdSpec":
+            continue
+        rendered_values = " ".join(
+            ast.unparse(value)
+            for value in (
+                *node.args,
+                *(keyword.value for keyword in node.keywords),
+            )
+        )
+        reconstructs = "spec.cmd" in rendered_values or "spec.env" in rendered_values
+        if reconstructs and not any(keyword.arg == "inherited_fds" for keyword in node.keywords):
+            hits.append(node.lineno)
+    return hits
 
 
 def _scan_registry_readers(tree: ast.AST) -> list[int]:
@@ -103,6 +486,21 @@ def _scan_destination_resolve(tree: ast.AST) -> list[int]:
     return hits
 
 
+def _scan_legacy_plugin_source(tree: ast.AST) -> list[tuple[int, str]]:
+    hits: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
+            arg.arg == "plugin_source"
+            for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+        ):
+            hits.append((node.lineno, "parameter"))
+        elif isinstance(node, ast.Attribute) and node.attr == "plugin_source":
+            hits.append((node.lineno, "attribute"))
+        elif isinstance(node, ast.keyword) and node.arg == "plugin_source":
+            hits.append((node.lineno, "keyword"))
+    return hits
+
+
 class TestNoHandRolledRegistryResolution:
     def test_only_allowlisted_modules_read_the_plugin_registry(self) -> None:
         violations: list[str] = []
@@ -124,8 +522,12 @@ class TestNoHandRolledRegistryResolution:
     def test_allowlist_entries_exist_and_carry_rationales(self) -> None:
         """Prevents allowlist rot: a stale entry silently widens the ratchet."""
         for rel, rationale in REGISTRY_READ_ALLOWLIST.items():
-            assert (SRC_ROOT / rel).is_file(), f"allowlisted module no longer exists: {rel}"
+            path = SRC_ROOT / rel
+            assert path.is_file(), f"allowlisted module no longer exists: {rel}"
             assert len(rationale) > 40, f"{rel}: rationale too thin"
+            assert _scan_registry_readers(ast.parse(path.read_text())), (
+                f"stale registry reader allowlist entry: {rel}"
+            )
 
     def test_ratchet_fails_on_an_injected_violation(self, tmp_path: Path) -> None:
         """Meta-test: proves the scanner has teeth."""
@@ -168,21 +570,17 @@ class TestNoLegacyPluginSourceContext:
         violations: list[str] = []
         for path in _iter_src_files():
             rel = _rel(path)
-            for node in ast.walk(ast.parse(path.read_text())):
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
-                    arg.arg == "plugin_source"
-                    for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
-                ):
-                    violations.append(f"{rel}:{node.lineno}:parameter")
-                elif isinstance(node, ast.Attribute) and node.attr == "plugin_source":
-                    violations.append(f"{rel}:{node.lineno}:attribute")
-                elif isinstance(node, ast.keyword) and node.arg == "plugin_source":
-                    violations.append(f"{rel}:{node.lineno}")
+            for line, kind in _scan_legacy_plugin_source(ast.parse(path.read_text())):
+                violations.append(f"{rel}:{line}:{kind}")
         assert not violations, (
             "plugin_source stores a bare path beyond a launch lifetime; carry "
             "plugin_authority on contexts and plugin_binding at builders.\n"
             f"Violations: {violations}"
         )
+
+    def test_ratchet_detects_injected_raw_context_path(self) -> None:
+        injected = ast.parse("def launch(plugin_source):\n    return context.plugin_source\n")
+        assert _scan_legacy_plugin_source(injected)
 
 
 class TestEveryPluginDirEmitterIsBindingDerived:
@@ -217,3 +615,118 @@ class TestEveryPluginDirEmitterIsBindingDerived:
                 checked.append(f"{backend.name}.{name}")
 
         assert checked, "reflection found no --plugin-dir emitting builders — scan is broken"
+
+
+class TestPluginMutationInventory:
+    def test_every_plugin_mutation_is_classified(self) -> None:
+        _assert_inventory(
+            actual=_scan_plugin_mutations(),
+            expected=PLUGIN_MUTATION_ALLOWLIST,
+            label="plugin mutation",
+        )
+
+    def test_sidecar_deletion_is_impossible(self) -> None:
+        sidecar_mutations = [
+            key
+            for key in _scan_plugin_mutations()
+            if "lease" in key[2].lower() or "lock" in key[2].lower()
+        ]
+        assert not sidecar_mutations, (
+            "Artifact lease sidecars are durable synchronization identities and "
+            f"must never be deleted: {sidecar_mutations}"
+        )
+
+    def test_every_lifecycle_persistence_write_is_strict(self) -> None:
+        _assert_inventory(
+            actual=_scan_strict_plugin_writes(),
+            expected=STRICT_PLUGIN_WRITE_ALLOWLIST,
+            label="strict plugin write",
+        )
+
+    def test_ratchet_fails_on_injected_unclassified_mutation(self) -> None:
+        injected = ast.parse("def mutate(destination):\n    destination.replace(other)\n")
+        actual = _scan_plugin_mutations()
+        actual.update(_scan_plugin_mutations_in_tree("injected.py", injected))
+        with pytest.raises(AssertionError, match="inventory drifted"):
+            _assert_inventory(
+                actual=actual,
+                expected=PLUGIN_MUTATION_ALLOWLIST,
+                label="plugin mutation",
+            )
+
+    def test_sidecar_ratchet_detects_injected_unlink(self) -> None:
+        injected = ast.parse("def mutate(lease_path):\n    lease_path.unlink()\n")
+        hits = _scan_plugin_mutations_in_tree("injected.py", injected)
+        assert any("lease" in key[2] for key in hits)
+
+    def test_strict_write_ratchet_detects_missing_durability(self) -> None:
+        injected = ast.parse("def publish():\n    write_versioned_json(path, payload)\n")
+        hits = _scan_strict_plugin_writes_in_tree(
+            "injected.py",
+            injected,
+            {("injected.py", "publish")},
+        )
+        assert hits == Counter(
+            {("injected.py", "publish", "write_versioned_json:strict=<missing>"): 1}
+        )
+
+
+class TestRetirementPolicyOwnership:
+    def test_v2_callers_cannot_supply_grace_or_max_defer(self) -> None:
+        violations: list[str] = []
+        for path in _iter_src_files():
+            for line in _scan_caller_grace(ast.parse(path.read_text())):
+                violations.append(f"{_rel(path)}:{line}")
+        assert not violations, (
+            "Retirement records own their absolute not_before policy; callers may "
+            f"not reinterpret it with grace or max-defer arguments: {violations}"
+        )
+
+    def test_ratchet_detects_injected_caller_grace(self) -> None:
+        injected = ast.parse("coordinator.sweep_due(now, grace_hours=2)\n")
+        assert _scan_caller_grace(injected)
+
+
+class TestInheritedFDInventory:
+    def test_every_pass_fds_site_is_classified(self) -> None:
+        _assert_inventory(
+            actual=_scan_pass_fds(),
+            expected=PASS_FDS_ALLOWLIST,
+            label="pass_fds",
+        )
+
+    def test_pass_fds_never_reconstructs_ownership_from_a_path(self) -> None:
+        forbidden = ("plugin_dir", "plugin_source", "managed_path", "manifest_path")
+        violations = [key for key in _scan_pass_fds() if any(term in key[2] for term in forbidden)]
+        assert not violations, (
+            "Descriptor ownership must come from CmdSpec.inherited_fds or another "
+            f"owned lease, never a reconstructed path: {violations}"
+        )
+
+    def test_cmdspec_reconstruction_preserves_inherited_fds(self) -> None:
+        violations: list[str] = []
+        for path in _iter_src_files():
+            for line in _scan_dropped_cmdspec_fds(ast.parse(path.read_text())):
+                violations.append(f"{_rel(path)}:{line}")
+        assert not violations, (
+            "Every CmdSpec reconstructed from an existing spec must preserve "
+            f"inherited_fds: {violations}"
+        )
+
+    def test_inventory_and_reconstruction_ratchets_detect_injected_violations(self) -> None:
+        injected_pass = ast.parse(
+            "def spawn():\n    subprocess.Popen(cmd, pass_fds=plugin_dir.fds)\n"
+        )
+        actual = _scan_pass_fds()
+        actual.update(_scan_pass_fds_in_tree("injected.py", injected_pass))
+        with pytest.raises(AssertionError, match="inventory drifted"):
+            _assert_inventory(
+                actual=actual,
+                expected=PASS_FDS_ALLOWLIST,
+                label="pass_fds",
+            )
+
+        injected_spec = ast.parse(
+            "def rebuild(spec):\n    return CmdSpec(cmd=spec.cmd, env=spec.env)\n"
+        )
+        assert _scan_dropped_cmdspec_fds(injected_spec)

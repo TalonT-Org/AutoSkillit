@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import structlog
 
 from autoskillit.core import (
     ArtifactLease,
@@ -19,6 +20,7 @@ from autoskillit.workspace import (
     ProjectedPluginArtifactAuthority,
     project_default_plugin_authority,
 )
+from tests._helpers import _flush_structlog_proxy_caches
 from tests.contracts._projection_helpers import session_catalog
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -80,6 +82,35 @@ def test_binding_owns_exact_v2_incarnation_and_stable_sidecar(
     finally:
         first.close()
         second.close()
+
+
+def test_projection_lifecycle_events_cover_publication_and_binding(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            binding = _authority(tmp_path).acquire_launch_binding(
+                backend=ClaudeCodeBackend(),
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            )
+            identity = binding.identity
+            binding.close()
+    finally:
+        _flush_structlog_proxy_caches()
+
+    lifecycle = [entry for entry in logs if entry.get("event") == "plugin_artifact_lifecycle"]
+    assert [entry["action"] for entry in lifecycle] == [
+        "publish",
+        "acquire",
+        "release",
+    ]
+    assert all(entry["outcome"] == "succeeded" for entry in lifecycle)
+    assert all(entry["artifact_kind"] == "projection" for entry in lifecycle)
+    assert all(entry["semantic_key"] == identity.semantic_key for entry in lifecycle)
+    assert all(entry["incarnation"] == identity.incarnation_id for entry in lifecycle)
 
 
 def test_corrupt_live_incarnation_is_not_replaced_until_reader_closes(

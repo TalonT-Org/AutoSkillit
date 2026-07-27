@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+import structlog
 
 from autoskillit.core import (
     ArtifactLease,
@@ -22,6 +23,7 @@ from autoskillit.core import (
     read_retiring_cache,
     remove_retiring_records,
 )
+from tests._helpers import _flush_structlog_proxy_caches
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -125,6 +127,51 @@ def test_installed_reclaim_defers_until_final_reader_closes(
     )
     assert not identity.managed_path.exists()
     assert not identity.manifest_path.exists()
+
+
+def test_installed_lifecycle_events_use_the_shared_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli._plugin_artifact import (
+        InstalledPluginArtifactAuthority,
+        InstalledPluginArtifactRetirementOwner,
+    )
+    from autoskillit.core import PluginLoadMode
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            identity = _installed_identity(tmp_path)
+            binding = InstalledPluginArtifactAuthority(
+                identity.managed_path,
+                semantic_key=identity.semantic_key,
+            ).acquire_launch_binding(
+                backend=object(),  # type: ignore[arg-type]
+                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+            )
+            binding.close()
+            InstalledPluginArtifactRetirementOwner(
+                identity.managed_path.parent
+            ).enqueue_retirement(
+                identity,
+                datetime.now(UTC) + timedelta(hours=6),
+            )
+    finally:
+        _flush_structlog_proxy_caches()
+
+    lifecycle = [entry for entry in logs if entry.get("event") == "plugin_artifact_lifecycle"]
+    assert [entry["action"] for entry in lifecycle] == [
+        "publish",
+        "acquire",
+        "release",
+        "retire",
+    ]
+    assert all(entry["artifact_kind"] == "installed_plugin" for entry in lifecycle)
+    assert all(entry["semantic_key"] == identity.semantic_key for entry in lifecycle)
+    assert all(entry["incarnation"] == identity.incarnation_id for entry in lifecycle)
+    assert all("actor_pid" in entry and "child_pid" in entry for entry in lifecycle)
 
 
 def test_identity_mismatch_removes_record_without_deleting_current_path(

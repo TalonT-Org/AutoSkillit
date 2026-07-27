@@ -40,8 +40,8 @@ simultaneously or reclassify session-role skills between tiers. See
   `generate-report`, `validate-test-audit`, `validate-review-decisions`,
   `stage-data`, `setup-environment`, `bundle-local-report`, `reload-session`
 - **Visible in**: cook and headless sessions
-- **Mechanism**: copied to an ephemeral session directory (cook) or exposed via
-  `--add-dir` (headless sessions launched by `run_skill`)
+- **Mechanism**: projected into a content-keyed plugin artifact. Each physical
+  child receives a fresh exact-incarnation binding and inherited reader lease.
 
 ### Tier 3 — Pipeline-Only (Automation Skills)
 
@@ -97,12 +97,14 @@ and `/autoskillit:close-kitchen`. Skills in `skills_extended/` are never seen.
 
 ### Cook session (`$ autoskillit cook`)
 
-1. AutoSkillit creates an ephemeral session directory at `/dev/shm/autoskillit-sessions/<id>/`
-2. Session-role skills from both configured directories are copied into this ephemeral
-   dir (subset-filtered and override-aware); L2-only skills are excluded
-3. Claude Code is launched with `--plugin-dir <ephemeral-dir>` and `--add-dir <cwd>` so
-   project-local skills in `.claude/skills/` are also discoverable
-4. The ephemeral directory is cleaned up when the session ends
+1. AutoSkillit resolves session-role skills from both configured directories,
+   applies subset and override rules, and excludes L2-only skills.
+2. It validates or publishes a content-keyed projection whose manifest records a
+   random, never-reused incarnation identity.
+3. Claude Code is launched with that binding's `--plugin-dir` and inherited reader
+   descriptor, plus `--add-dir <cwd>` for project-local discovery.
+4. Retirement and repair require nonblocking exclusive ownership, so a projection
+   retained by any live child remains readable until the final descriptor closes.
 
 ### Order session (`$ autoskillit order`)
 
@@ -117,14 +119,29 @@ from the fixed-precedence effective catalog. That resolution includes applicable
 project-local overrides; role, capability, configured-tier, and closure contracts are
 validated before session initialization or filesystem writes.
 
-The selected canonical documents are then projected into a session-bound ephemeral
-skill tree. Machine-only authority (`uses_capabilities`, `execution_role`,
+The selected canonical documents are then projected into an exact, content-keyed
+plugin artifact. Machine-only authority (`uses_capabilities`, `execution_role`,
 `activate_deps`, and retired `backend_requirements`) stays in AutoSkillit's private
-contract and is omitted from every model-facing `SKILL.md`. Claude Code receives that
-sanitized ephemeral tree rather than a raw `skills_extended/` directory. Exact
+contract and is omitted from every model-facing `SKILL.md`. Claude Code receives the
+sanitized projection through the same launch binding whose shared descriptor reaches
+the child, rather than a raw `skills_extended/` directory. Exact
 ORCHESTRATOR-role entries such as `process-issues` remain excluded from the L1 catalog,
 and project-local bytes are exposed only when that source won effective resolution.
 The `AUTOSKILLIT_HEADLESS` environment variable activates session-boundary enforcement.
+
+## Troubleshooting Live Inline Projections
+
+`autoskillit@inline` is a session-only projection, not a marketplace installation.
+Consequently, `/plugin` reinstall is inapplicable when an active inline session reports
+stale or damaged plugin content.
+
+Reprojection or `/reload-plugins` can provide temporary recovery for a new launch, but
+neither command repairs artifact lifetime for a child that is already running. Each
+physical child owns a binding to one exact incarnation; AutoSkillit defers repair,
+retirement, and reclamation while any reader lease for that incarnation remains open.
+If a live session is unhealthy, end that session, start a new launch, and retain the
+lifecycle logs before treating reprojection as evidence of a durable fix. This is the
+operational boundary established for issue #4382.
 
 ## Config-Driven Tier Reclassification
 

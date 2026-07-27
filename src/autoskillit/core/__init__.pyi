@@ -118,8 +118,10 @@ from .io import spill_output as spill_output
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_canonical_versioned_json as write_canonical_versioned_json
 from .io import write_versioned_json as write_versioned_json
+from .logging import PluginArtifactLifecycleLease as PluginArtifactLifecycleLease
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
+from .logging import log_plugin_artifact_lifecycle as log_plugin_artifact_lifecycle
 from .path_containment import ContainmentError as ContainmentError
 from .path_containment import check_metadata_stable as check_metadata_stable
 from .path_containment import read_stable_contained_bytes as read_stable_contained_bytes

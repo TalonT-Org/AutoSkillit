@@ -45,7 +45,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_open_kitchen_guard.py` | Phase 2 tests: open_kitchen_guard PreToolUse hook |
 | `test_output_budget_evidence.py` | Fixture-isolated validation of incremental and complete Output Budget Protocol remediation evidence manifests |
 | `test_planner_gh_discovery_guard.py` | Tests for the planner_gh_discovery_guard PreToolUse hook |
-| `test_plugin_source_ratchets.py` | AST ratchets: no hand-rolled registry resolution, no raw `resolve()` in containment checks, no unprojected `--plugin-dir` |
+| `test_plugin_source_ratchets.py` | AST ratchets: plugin authority/path discipline, exact mutation inventory, durable sidecars, record-owned deadlines, and inherited-FD forwarding |
 | `test_pr_create_guard.py` | Tests for the pr_create_guard PreToolUse hook |
 | `test_pretty_output_formatters.py` | Tests: pretty_output per-tool named formatters |
 | `test_pretty_output_generic_and_wrap.py` | Generic formatter losslessness, artifact-backed reduction, and Claude Code double-wrap tests |

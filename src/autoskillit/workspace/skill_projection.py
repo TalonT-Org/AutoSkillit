@@ -43,6 +43,7 @@ from autoskillit.core import (
     EffectiveSkillInvocationAuthority,
     PluginArtifactContentionError,
     PluginArtifactIdentity,
+    PluginArtifactLifecycleLease,
     PluginArtifactPublicationError,
     PluginArtifactValidationError,
     PluginLaunchBinding,
@@ -60,6 +61,8 @@ from autoskillit.core import (
     atomic_write,
     destination_location,
     dump_yaml_str,
+    get_logger,
+    log_plugin_artifact_lifecycle,
     pkg_root,
     read_versioned_json,
     temp_dir_display_str,
@@ -78,6 +81,9 @@ from autoskillit.workspace.skills import (
     SkillInfo,
     _skill_info_from_frontmatter,
 )
+
+logger = get_logger(__name__)
+_PLUGIN_ARTIFACT_KIND = "projection"
 
 __all__ = [
     "AgentSkillDocument",
@@ -1150,9 +1156,21 @@ class ProjectedPluginArtifactAuthority:
             return self._binding(load_mode, plan, identity, reader)
         reader.close()
 
+        mutation_action = (
+            "repair" if plan.destination.exists() or plan.manifest_path.exists() else "publish"
+        )
         try:
             writer = ArtifactLease.acquire_exclusive(plan.lease_path, blocking=False)
         except ArtifactLeaseContention as exc:
+            log_plugin_artifact_lifecycle(
+                logger,
+                action=mutation_action,
+                outcome="deferred_contended",
+                artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                semantic_key=plan.semantic_key,
+                incarnation="unknown",
+                contention_detail=str(exc),
+            )
             raise PluginArtifactContentionError(
                 f"projected plugin mutation is contended: {plan.semantic_key}"
             ) from exc
@@ -1170,8 +1188,28 @@ class ProjectedPluginArtifactAuthority:
                         PluginArtifactPublicationError,
                         PluginArtifactValidationError,
                     ):
+                        log_plugin_artifact_lifecycle(
+                            logger,
+                            action=mutation_action,
+                            outcome="failed_validation",
+                            artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                            semantic_key=plan.semantic_key,
+                            incarnation=(
+                                staged.identity.incarnation_id if staged is not None else "unknown"
+                            ),
+                        )
                         raise
                     except BaseException as exc:
+                        log_plugin_artifact_lifecycle(
+                            logger,
+                            action=mutation_action,
+                            outcome="failed_validation",
+                            artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                            semantic_key=plan.semantic_key,
+                            incarnation=(
+                                staged.identity.incarnation_id if staged is not None else "unknown"
+                            ),
+                        )
                         raise PluginArtifactPublicationError(
                             f"projected plugin publication failed: {plan.semantic_key}"
                         ) from exc
@@ -1181,9 +1219,28 @@ class ProjectedPluginArtifactAuthority:
                             if staged.manifest.is_symlink() or staged.manifest.is_file():
                                 staged.manifest.unlink()
                     assert staged is not None
-                    identity = _validate_published_plugin_artifact(
-                        plan,
-                        expected_identity=staged.identity,
+                    try:
+                        identity = _validate_published_plugin_artifact(
+                            plan,
+                            expected_identity=staged.identity,
+                        )
+                    except PluginArtifactValidationError:
+                        log_plugin_artifact_lifecycle(
+                            logger,
+                            action=mutation_action,
+                            outcome="failed_validation",
+                            artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                            semantic_key=plan.semantic_key,
+                            incarnation=staged.identity.incarnation_id,
+                        )
+                        raise
+                    log_plugin_artifact_lifecycle(
+                        logger,
+                        action=mutation_action,
+                        outcome="succeeded",
+                        artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                        semantic_key=identity.semantic_key,
+                        incarnation=identity.incarnation_id,
                     )
         finally:
             writer.close()
@@ -1199,6 +1256,17 @@ class ProjectedPluginArtifactAuthority:
                 plan,
                 expected_identity=identity,
             )
+        except PluginArtifactValidationError:
+            log_plugin_artifact_lifecycle(
+                logger,
+                action="acquire",
+                outcome="failed_validation",
+                artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                semantic_key=plan.semantic_key,
+                incarnation=identity.incarnation_id,
+            )
+            reader.close()
+            raise
         except BaseException:
             reader.close()
             raise
@@ -1212,12 +1280,24 @@ class ProjectedPluginArtifactAuthority:
         reader: ArtifactLease,
     ) -> PluginLaunchBinding:
         owner = ProjectedPluginRetirementOwner(plan.destination.parent)
-        owner.cancel_obsolete_retirements(identity)
-        from autoskillit.workspace._projection_cache import prune_stale_projections
+        try:
+            owner.cancel_obsolete_retirements(identity)
+            from autoskillit.workspace._projection_cache import prune_stale_projections
 
-        prune_stale_projections(
-            plan.destination.parent,
-            active_key=plan.semantic_key,
+            prune_stale_projections(
+                plan.destination.parent,
+                active_key=plan.semantic_key,
+            )
+        except BaseException:
+            reader.close()
+            raise
+        log_plugin_artifact_lifecycle(
+            logger,
+            action="acquire",
+            outcome="succeeded",
+            artifact_kind=_PLUGIN_ARTIFACT_KIND,
+            semantic_key=identity.semantic_key,
+            incarnation=identity.incarnation_id,
         )
         return PluginLaunchBinding(
             load_mode=load_mode,
@@ -1226,7 +1306,13 @@ class ProjectedPluginArtifactAuthority:
             ),
             identity=identity,
             inherited_fds=reader.inherited_fds,
-            _lease=reader,
+            _lease=PluginArtifactLifecycleLease(
+                reader,
+                logger=logger,
+                artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                semantic_key=identity.semantic_key,
+                incarnation=identity.incarnation_id,
+            ),
         )
 
 

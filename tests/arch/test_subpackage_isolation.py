@@ -1202,10 +1202,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and the create/validate/yield/delete ownership proof",
     ),
     "workspace/skill_projection.py": (
-        1400,
+        1500,
         "REQ-CNST-010-E15: issue #4382 keeps projection keying, staged publication, "
         "exact-incarnation validation, and reader/writer lease handoff in one lifecycle "
-        "authority so destructive repair cannot bypass its lock ordering",
+        "authority so destructive repair cannot bypass its lock ordering; lifecycle "
+        "event emission remains at those concrete mutation and ownership boundaries",
     ),
     "rules_skill_content.py": (
         1200,

@@ -913,6 +913,8 @@ class DefaultContextAdmissionLedger:
                     )
                 self._recovered = True
             except _LedgerContended:
+                self._stream_health.clear()
+                self._unresolved_streams.clear()
                 return ContextAdmissionRecoveryResult(
                     status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
                     store_health=self._store_health,
@@ -927,6 +929,8 @@ class DefaultContextAdmissionLedger:
                 if primary_code in _SQLITE_BUSY_CODES:
                     if connection is not None:
                         _rollback(connection)
+                    self._stream_health.clear()
+                    self._unresolved_streams.clear()
                     return ContextAdmissionRecoveryResult(
                         status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
                         store_health=self._store_health,

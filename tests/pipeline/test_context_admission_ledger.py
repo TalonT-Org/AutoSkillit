@@ -743,12 +743,24 @@ def test_recovery_remains_incomplete_when_failure_marker_is_contended(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     authority = _authority(tmp_path)
-    key = stream_key()
+    failed_key = stream_key()
+    healthy_key = replace(
+        failed_key,
+        current_thread_id=ContextThreadId("thread-healthy"),
+    )
     ledger = DefaultContextAdmissionLedger(authority)
-    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    assert (
+        ledger.apply(failed_key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    )
+    assert (
+        ledger.apply(healthy_key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    )
     connection = sqlite3.connect(authority.database_path)
     try:
-        connection.execute("DELETE FROM shadow_decisions")
+        connection.execute(
+            "DELETE FROM shadow_decisions WHERE stream_id = ?",
+            (ledger_module._stream_key_bytes(failed_key),),
+        )
         connection.commit()
     finally:
         connection.close()
@@ -763,6 +775,12 @@ def test_recovery_remains_incomplete_when_failure_marker_is_contended(
 
     assert result.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
     assert recovered.store_health().status is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    assert (
+        recovered.stream_health(healthy_key).status
+        is ContextAdmissionStorageHealthStatus.UNINITIALIZED
+    )
+    assert not recovered._stream_health
+    assert not recovered._unresolved_streams
     assert not recovered._recovered
 
 

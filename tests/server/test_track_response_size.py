@@ -92,7 +92,7 @@ class TestTrackResponseSize:
 
     @pytest.mark.anyio
     async def test_injected_context_admission_ledger_does_not_mutate_response_path(self):
-        """C2 remains an injected shadow service until producer integration lands."""
+        """C2 stays shadow-only; producer integration is tracked by #4336."""
         from autoskillit.server._notify import track_response_size
 
         original = {"success": True, "value": "unchanged"}

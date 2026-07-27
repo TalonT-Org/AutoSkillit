@@ -20,8 +20,8 @@ from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
 from ._json import fast_loads as fast_loads
-from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
+from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import any_kitchen_open as any_kitchen_open
 from ._plugin_cache import append_retiring_record as append_retiring_record
 from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
@@ -587,13 +587,6 @@ from .types import PluginArtifactValidationError as PluginArtifactValidationErro
 from .types import PluginLaunchBinding as PluginLaunchBinding
 from .types import PluginLoadMode as PluginLoadMode
 from .types import PluginRetirementCoordinator as PluginRetirementCoordinator
-from .types import (
-    is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest,
-)
-from .types import (
-    is_canonical_plugin_artifact_incarnation_id as is_canonical_plugin_artifact_incarnation_id,
-)
-from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PrepareBatchEvent as PrepareBatchEvent
@@ -774,12 +767,19 @@ from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
+from .types import (
+    is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest,
+)
+from .types import (
+    is_canonical_plugin_artifact_incarnation_id as is_canonical_plugin_artifact_incarnation_id,
+)
 from .types import is_path_like_token as is_path_like_token
 from .types import is_valid_codex_model_id as is_valid_codex_model_id
 from .types import (
     make_stored_context_admission_envelope as make_stored_context_admission_envelope,
 )
 from .types import model_class as model_class
+from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
 from .types import parse_plan_paths as parse_plan_paths
 from .types import recipe_section_digest as recipe_section_digest
 from .types import recipe_section_element_digest as recipe_section_element_digest

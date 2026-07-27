@@ -6,6 +6,8 @@ import json
 import os
 import sqlite3
 import stat
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
@@ -13,6 +15,7 @@ from types import MappingProxyType
 import pytest
 
 import autoskillit.core.types._type_context_admission_persistence as persistence_types
+import autoskillit.pipeline.context_admission_ledger as ledger_module
 from autoskillit.core import (
     ActiveContextAdmissionState,
     AdmissionDecisionKind,
@@ -121,6 +124,50 @@ def test_recovery_removes_same_inode_crash_window_initialization_link(
     assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
     assert authority.database_path.stat().st_nlink == 1
     assert not orphan.exists()
+
+
+def test_independent_ledgers_race_first_publication_at_shared_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    ledgers = (
+        DefaultContextAdmissionLedger(authority),
+        DefaultContextAdmissionLedger(authority),
+    )
+    publication_barrier = threading.Barrier(2)
+    collision_count = 0
+    collision_lock = threading.Lock()
+    original_link = ledger_module.os.link
+
+    def racing_link(
+        source: Path,
+        destination: Path,
+        *,
+        follow_symlinks: bool = True,
+    ) -> None:
+        nonlocal collision_count
+        publication_barrier.wait(timeout=5)
+        try:
+            original_link(
+                source,
+                destination,
+                follow_symlinks=follow_symlinks,
+            )
+        except FileExistsError:
+            with collision_lock:
+                collision_count += 1
+            raise
+
+    monkeypatch.setattr(ledger_module.os, "link", racing_link)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = tuple(executor.map(lambda ledger: ledger.recover_all(), ledgers))
+
+    assert collision_count == 1
+    assert {result.status for result in results} == {ContextAdmissionStorageHealthStatus.HEALTHY}
+    assert authority.database_path.stat().st_nlink == 1
+    assert not list(authority.database_path.parent.glob("*.tmp"))
 
 
 def test_each_ledger_connection_sets_and_reads_back_required_pragmas(

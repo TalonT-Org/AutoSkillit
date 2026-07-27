@@ -1528,6 +1528,40 @@ def test_preflight_never_derives_expected_identity_from_supplied_authority(
     assert wrong_plan_set.decision.reason is AdmissionReason.PLAN_SET_MISMATCH
 
 
+def test_real_preflight_rejects_terminal_go_with_disposition_report(tmp_path: Path) -> None:
+    store = DefaultAuditCycleHeadStore()
+    authority = _authority(
+        tmp_path,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.GO,
+    )
+    store.publish(authority, expected_parent_digest=None, expected_round=0)
+    authority_path = tmp_path / "authority.json"
+    authority_path.write_bytes(authority.canonical_bytes)
+    report_path = tmp_path / "disposition.json"
+    report_path.write_text("{}")
+    resolver = DefaultInputPreflightResolver(allowed_root=tmp_path, head_store=store)
+
+    result = resolver.resolve(
+        VerifiedInputPreflightRequest(
+            execution_generation="execution-1",
+            step_name="dry",
+            skill_name="dry-walkthrough",
+            plan_path=str(tmp_path / "plan.md"),
+            audit_cycle_path=str(authority_path),
+            plan_disposition_path=str(report_path),
+            expected_plan_set_id=authority.plan_set_id,
+            expected_scope_id=authority.scope_id,
+            expected_part_id=authority.part_id,
+        )
+    )
+
+    assert result.decision.status is AdmissionStatus.REJECT
+    assert result.decision.reason is AdmissionReason.DISPOSITION_MISMATCH
+
+
 @pytest.mark.anyio
 async def test_runtime_attestation_rejects_before_executor(
     tool_ctx_kitchen_open,

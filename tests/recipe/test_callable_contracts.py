@@ -49,3 +49,17 @@ def test_review_path_rebase_contract_inputs_and_outputs():
             assert inp.required is True, f"{inp.name} must be required"
     output_names = {out.name for out in contract.outputs}
     assert "status" in output_names
+
+
+def test_extract_investigation_callable_contract():
+    """extract_investigation must be declared in callable_contracts."""
+    from autoskillit.recipe.contracts import get_callable_contract
+
+    contract = get_callable_contract("autoskillit.smoke_utils.extract_investigation")
+    assert contract is not None, "extract_investigation must be declared in callable_contracts"
+    input_names = {inp.name for inp in contract.inputs}
+    assert "investigation_path" in input_names
+    assert "issue_number" in input_names
+    assert "output_dir" in input_names
+    output_names = {out.name for out in contract.outputs}
+    assert "investigation_report" in output_names

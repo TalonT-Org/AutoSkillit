@@ -23,6 +23,7 @@ from autoskillit.smoke_utils._git import (
     gate_backend_write,
 )
 from autoskillit.smoke_utils._helpers import try_load_json
+from autoskillit.smoke_utils._investigation import extract_investigation
 from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 from autoskillit.smoke_utils._review import (
     LOCAL_ROUND_EXEMPT_VERDICTS,
@@ -61,6 +62,7 @@ __all__ = [
     "detect_zero_changes",
     "diagnose_merge_gate",
     "enrich_diff_context",
+    "extract_investigation",
     "fetch_merge_queue_data",
     "gate_backend_write",
     "init_counter",

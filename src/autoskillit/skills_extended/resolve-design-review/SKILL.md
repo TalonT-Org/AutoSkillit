@@ -29,8 +29,9 @@ loop or halt.
 `/autoskillit:resolve-design-review <evaluation_dashboard_path> <experiment_plan_path> [prior_revision_guidance_path]`
 
 `evaluation_dashboard` and `experiment_plan` each identify one Markdown file; read and
-parse those files as immutable inputs. `prior_revision_guidance_path`, when present,
-likewise identifies one file.
+parse those files as immutable inputs. `revision_guidance`, supplied positionally as
+`prior_revision_guidance_path` when present, likewise identifies one Markdown file;
+read the file as an immutable input.
 
 ## When to Use
 
@@ -193,12 +194,12 @@ When resolution = failed, emit as your final output:
 resolution = failed
 ```
 
-`revision_guidance` is ONLY emitted when resolution = revised.
+The revision-guidance path is ONLY emitted when resolution = revised.
 
 ## Output
 
 All output files are written to `${RESOLVE_DESIGN_REVIEW_OUTPUT_DIR}/`, which defaults to
-`{{AUTOSKILLIT_TEMP}}/resolve-design-review/` relative to the current working directory.
+`{{AUTOSKILLIT_TEMP}}/resolve-design-review/` relative to the current working path.
 
 ```
 ${RESOLVE_DESIGN_REVIEW_OUTPUT_DIR}/

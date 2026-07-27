@@ -1088,11 +1088,7 @@ class DefaultContextAdmissionLedger:
             self._validate_database_file()
         except FileExistsError as exc:
             if self._path.exists():
-                deadline = time.monotonic() + (self._busy_timeout_ms / 1_000)
-                while self._has_initialization_link():
-                    if time.monotonic() >= deadline:
-                        raise _LedgerContended from exc
-                    time.sleep(min(0.005, max(0.0, deadline - time.monotonic())))
+                self._recover_initialization_link()
                 self._validate_database_file()
                 return
             raise _LedgerOpenError(

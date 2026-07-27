@@ -104,7 +104,11 @@ class ContextAdmissionStoreAuthority:
             or not self.database_path.name
         ):
             raise ValueError("invalid_context_admission_store_path")
-        if isinstance(self.expected_owner_id, bool) or self.expected_owner_id < 0:
+        if (
+            not isinstance(self.expected_owner_id, int)
+            or isinstance(self.expected_owner_id, bool)
+            or self.expected_owner_id < 0
+        ):
             raise ValueError("invalid_context_admission_store_owner")
 
 

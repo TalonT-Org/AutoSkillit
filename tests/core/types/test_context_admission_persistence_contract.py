@@ -33,6 +33,7 @@ from autoskillit.core import (
     ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
+    ContextAdmissionStoreAuthority,
     ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
@@ -102,6 +103,18 @@ def _authority_event() -> AuthorityUnavailableEvent:
         reason_code="watermark-unavailable",
         authority_state=CoverageState.PARTIAL,
     )
+
+
+@pytest.mark.parametrize("owner_id", [True, -1, 1000.0, "1000"])
+def test_store_authority_rejects_invalid_owner_ids(
+    tmp_path: Path,
+    owner_id: object,
+) -> None:
+    with pytest.raises(ValueError, match="invalid_context_admission_store_owner"):
+        ContextAdmissionStoreAuthority(
+            database_path=(tmp_path / "ledger.sqlite3").resolve(),
+            expected_owner_id=owner_id,  # type: ignore[arg-type]
+        )
 
 
 def test_stream_key_round_trips_and_partitions_every_lineage_coordinate() -> None:

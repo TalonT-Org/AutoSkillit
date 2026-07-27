@@ -8,6 +8,7 @@ import pytest
 
 import tests._test_filter as test_filter
 from tests._test_filter import (
+    LAYER_CASCADE_CONSERVATIVE,
     MODULE_CASCADE_PIPELINE,
     FilterMode,
     FullRunReason,
@@ -121,6 +122,41 @@ def test_content_aware_path_keeps_ledger_route(
     dir_names = {path.name for path in result if path.is_dir()}
     assert {"pipeline", "server"} <= dir_names
     assert "execution" not in dir_names
+
+
+def _pipeline_fail_open_dirs() -> set[str]:
+    return {Path(entry).parts[0] for entry in LAYER_CASCADE_CONSERVATIVE["pipeline"]}
+
+
+def test_unknown_pipeline_module_uses_full_fail_open_route(tmp_path: Path) -> None:
+    result = build_test_scope(
+        changed_files={"src/autoskillit/pipeline/future_module.py"},
+        mode=FilterMode.CONSERVATIVE,
+        tests_root=_tests_root(tmp_path),
+    )
+
+    assert isinstance(result, set)
+    dir_names = {path.name for path in result if path.is_dir()}
+    assert _pipeline_fail_open_dirs() <= dir_names
+
+
+def test_content_aware_unknown_pipeline_module_uses_full_fail_open_route(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(test_filter, "check_bucket_a_content_aware", lambda *_args: False)
+
+    result = build_test_scope(
+        changed_files={"src/autoskillit/pipeline/future_module.py"},
+        mode=FilterMode.CONSERVATIVE,
+        tests_root=_tests_root(tmp_path),
+        cwd=tmp_path,
+        base_ref="develop",
+    )
+
+    assert isinstance(result, set)
+    dir_names = {path.name for path in result if path.is_dir()}
+    assert _pipeline_fail_open_dirs() <= dir_names
 
 
 @pytest.mark.parametrize(

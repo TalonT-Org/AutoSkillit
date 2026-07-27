@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal, assert_never, cast
 
@@ -163,10 +164,14 @@ def compute_skill_contract_identity(
     skill_name: str,
     *,
     manifest: dict[str, Any] | None = None,
+    contract_resolver: Callable[[str, dict[str, Any]], SkillContract | None] | None = None,
+    manifest_loader: Callable[[], dict[str, Any]] | None = None,
 ) -> str:
     """Hash the canonical runtime-relevant shape of one skill contract."""
-    active_manifest = manifest if manifest is not None else load_bundled_manifest()
-    contract = get_skill_contract(skill_name, active_manifest)
+    active_manifest = (
+        manifest if manifest is not None else (manifest_loader or load_bundled_manifest)()
+    )
+    contract = (contract_resolver or get_skill_contract)(skill_name, active_manifest)
     if contract is None:
         raise ValueError(f"skill contract is unavailable for {skill_name!r}")
     publication = contract.audit_authority_publication

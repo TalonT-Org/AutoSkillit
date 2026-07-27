@@ -24,7 +24,9 @@ from autoskillit.core import (
     resolve_skill_name,
 )
 from autoskillit.recipe._contracts_manifest import (
-    compute_skill_contract_identity,
+    compute_skill_contract_identity as _compute_skill_contract_identity,
+)
+from autoskillit.recipe._contracts_manifest import (
     get_callable_contract,
     get_skill_contract,
     load_bundled_manifest,
@@ -54,6 +56,20 @@ class RuntimeBindingError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+def compute_skill_contract_identity(
+    skill_name: str,
+    *,
+    manifest: dict[str, Any] | None = None,
+) -> str:
+    """Hash a skill contract through this module's patchable resolver seam."""
+    return _compute_skill_contract_identity(
+        skill_name,
+        manifest=manifest,
+        contract_resolver=get_skill_contract,
+        manifest_loader=load_bundled_manifest,
+    )
 
 
 def _is_scalar(value: object) -> TypeGuard[BoundScalar]:

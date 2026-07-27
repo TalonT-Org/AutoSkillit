@@ -69,6 +69,8 @@ abandoning the partial triage.
 
 ### Step 0: Validate Arguments and Parse Dashboard
 
+Resolve relative output paths from the current working directory before writing.
+
 1. Set `RESOLVE_DESIGN_REVIEW_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/resolve-design-review}"` and create it if absent
 2. Parse two positional path arguments: `evaluation_dashboard_path`, `experiment_plan_path`
    - If missing: print `"Error: missing required argument(s) — expected <evaluation_dashboard_path> <experiment_plan_path>"`, then emit `resolution=failed`, and return

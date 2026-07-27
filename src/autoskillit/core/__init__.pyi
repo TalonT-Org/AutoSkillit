@@ -718,10 +718,10 @@ from .types import (
 from .types import compute_remaining as compute_remaining
 from .types import compute_runtime_binding_digest as compute_runtime_binding_digest
 from .types import (
-    decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
+    context_admission_envelope_header as context_admission_envelope_header,
 )
 from .types import (
-    context_admission_envelope_header as context_admission_envelope_header,
+    decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
 )
 from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches

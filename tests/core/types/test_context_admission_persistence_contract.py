@@ -782,6 +782,31 @@ def test_inspection_result_ties_publications_to_latest_sequence() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("status", "state"),
+    [
+        (ContextAdmissionStorageHealthStatus.HEALTHY, None),
+        (ContextAdmissionStorageHealthStatus.UNINITIALIZED, _uninitialized()),
+    ],
+)
+def test_inspection_result_ties_health_to_state_presence(
+    status: ContextAdmissionStorageHealthStatus,
+    state: ContextAdmissionState | None,
+) -> None:
+    key = _stream_key()
+    with pytest.raises(ValueError, match="inspection_health_state_mismatch"):
+        ContextAdmissionInspectionResult(
+            stream_key=key,
+            health=ContextAdmissionStreamHealth(key, status),
+            state=state,
+            events=(),
+            decisions=(),
+            effects=(),
+            shadows=(),
+            latest_journal_sequence=0,
+        )
+
+
 def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:
     with pytest.raises(ValueError, match="nonadmitting"):
         ContextAdmissionAccountingResult(

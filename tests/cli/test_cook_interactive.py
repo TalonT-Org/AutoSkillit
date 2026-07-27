@@ -89,6 +89,7 @@ class _Backend:
         self.context_calls: list[dict[str, object]] = []
         self.validated: list[CmdSpec] = []
         self.recover_count = 0
+        self.extra_inherited_fds: tuple[int, ...] = ()
 
     def binary_name(self) -> str:
         return "claude"
@@ -111,6 +112,10 @@ class _Backend:
         return CmdSpec(
             cmd=tuple(command),
             env=dict(kwargs["env_extras"]),  # type: ignore[arg-type]
+            inherited_fds=(
+                *self.extra_inherited_fds,
+                *getattr(plugin_binding, "inherited_fds", ()),
+            ),
         )
 
     def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
@@ -230,6 +235,7 @@ def test_cook_uses_managed_home_for_final_child_context(
     from autoskillit.core import PluginLoadMode
 
     backend = _Backend()
+    backend.extra_inherited_fds = (17, 13)
     captured = _install_harness(monkeypatch, tmp_path)
     binding = _CookBinding(tmp_path / "projected-plugin")
     binding.inherited_fds = (13, 7)
@@ -257,7 +263,7 @@ def test_cook_uses_managed_home_for_final_child_context(
     assert spec.cwd == str(tmp_path)
     assert spec.env[SESSION_TYPE_ENV_VAR] == "skill"
     assert len(spec.env[LAUNCH_ID_ENV_VAR]) == 16
-    assert captured["run_kwargs"]["pass_fds"] == (13, 7, 9)  # type: ignore[index]
+    assert captured["run_kwargs"]["pass_fds"] == (17, 13, 7, 9)  # type: ignore[index]
     assert binding.closed
 
 

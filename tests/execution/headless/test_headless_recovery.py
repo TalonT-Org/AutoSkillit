@@ -180,8 +180,18 @@ class TestNudgePtyMode:
                 self.request = (backend, load_mode)
                 return self.binding
 
+        authority = Authority()
+
+        class LifetimeRunner(MockSubprocessRunner):
+            observed_live_binding = False
+
+            async def __call__(self, *args, **kwargs):
+                assert authority.binding.closed is False
+                self.observed_live_binding = True
+                return await super().__call__(*args, **kwargs)
+
         marker = "%%NUDGE_DONE%%"
-        runner = MockSubprocessRunner()
+        runner = LifetimeRunner()
         runner.set_default(
             SubprocessResult(
                 returncode=0,
@@ -200,8 +210,6 @@ class TestNudgePtyMode:
         parser = Mock()
         parsed = Mock(output=marker, raw={})
         parser.parse_stdout.return_value = parsed
-        authority = Authority()
-
         result = await _attempt_contract_nudge(
             skill_result=SkillResult(
                 success=False,
@@ -238,6 +246,7 @@ class TestNudgePtyMode:
         assert result is not None and result.success is True
         assert authority.request == (backend, PluginLoadMode.EXPLICIT_PLUGIN_DIR)
         assert authority.binding.closed is True
+        assert runner.observed_live_binding
         call_kwargs = backend.build_resume_cmd.call_args.kwargs
         assert call_kwargs["plugin_binding"] is authority.binding
         assert call_kwargs["env_extras"]["ANTHROPIC_API_KEY"] == "fallback"

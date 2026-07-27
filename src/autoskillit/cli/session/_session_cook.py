@@ -311,11 +311,10 @@ def cook(
                             attempt=attempt,
                             view_id=attempt_handle.view_id,
                         )
-                        binding_fds = () if binding is None else binding.inherited_fds
                         pass_fds = tuple(
                             dict.fromkeys(
                                 (
-                                    *binding_fds,
+                                    *spec.inherited_fds,
                                     *managed_home.pass_fds,
                                     *attempt_handle.pass_fds,
                                 )

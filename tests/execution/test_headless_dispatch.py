@@ -245,7 +245,18 @@ class TestDispatchFoodTruck:
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
 
-        runner = MockSubprocessRunner()
+        finalized_bindings: list[PluginLaunchBinding] = []
+
+        class LifetimeRunner(MockSubprocessRunner):
+            observed_live_binding = False
+
+            async def __call__(self, *args, **kwargs):
+                assert finalized_bindings
+                assert finalized_bindings[0].closed is False
+                self.observed_live_binding = True
+                return await super().__call__(*args, **kwargs)
+
+        runner = LifetimeRunner()
         runner.set_default(
             SubprocessResult(
                 returncode=0,
@@ -256,7 +267,6 @@ class TestDispatchFoodTruck:
             )
         )
         authority = _StaticPluginAuthority(tmp_path)
-        finalized_bindings: list[PluginLaunchBinding] = []
 
         class Preparation:
             def finalize(self, *, backend, binding):
@@ -279,6 +289,7 @@ class TestDispatchFoodTruck:
         )
 
         assert len(finalized_bindings) == 1
+        assert runner.observed_live_binding
         assert finalized_bindings[0].closed is True
 
     @pytest.mark.anyio

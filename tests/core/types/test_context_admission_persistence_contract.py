@@ -419,6 +419,40 @@ def test_shadow_reason_code_must_match_decision() -> None:
         )
 
 
+def test_shadow_versions_must_match_envelope_versions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transition = reduce_context_admission(_uninitialized(), _authority_event())
+    shadow = ShadowContextAdmissionRecord(
+        stream_key=_stream_key(),
+        event_id=_authority_event().event_id,
+        journal_sequence=1,
+        aggregate_revision=transition.next_state.aggregate_revision,
+        admission_sequence=transition.next_state.admission_sequence,
+        decision=transition.decision,
+        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+        encoding_version=CONTEXT_ADMISSION_ENCODING_VERSION,
+        reason_code=transition.decision.reason_code,
+        targets=(),
+    )
+    monkeypatch.setattr(
+        persistence_types,
+        "CONTEXT_ADMISSION_ENCODING_VERSION",
+        CONTEXT_ADMISSION_ENCODING_VERSION + 1,
+    )
+
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="shadow_envelope_version_mismatch",
+    ):
+        StoredContextAdmissionEnvelope(
+            encoding_version=CONTEXT_ADMISSION_ENCODING_VERSION + 1,
+            protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+            type_discriminator="ShadowContextAdmissionRecord",
+            payload=shadow,
+        )
+
+
 @pytest.mark.parametrize("encoding_version", [True, 1.0, "1"])
 def test_shadow_constructor_rejects_non_integer_encoding_versions(
     encoding_version: object,

@@ -270,6 +270,11 @@ class StoredContextAdmissionEnvelope:
         allowed_type = _TOP_LEVEL_TYPE_REGISTRY.get(self.type_discriminator)
         if allowed_type is None or type(self.payload) is not allowed_type:
             raise ContextAdmissionValidationError("invalid_context_admission_discriminator")
+        if isinstance(self.payload, ShadowContextAdmissionRecord) and (
+            self.payload.protocol_version != self.protocol_version
+            or self.payload.encoding_version != self.encoding_version
+        ):
+            raise ContextAdmissionValidationError("shadow_envelope_version_mismatch")
         validate_context_admission_persistence_value(self.payload)
 
 

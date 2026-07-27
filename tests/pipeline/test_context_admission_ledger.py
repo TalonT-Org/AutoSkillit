@@ -595,6 +595,88 @@ def test_recovery_replays_nonempty_stream_and_surfaces_unresolved_work(
     assert replayed.journal_sequence == 3
 
 
+def test_recover_filters_healthy_failed_unresolved_unknown_and_store_failure(
+    tmp_path: Path,
+) -> None:
+    authority = _authority(tmp_path)
+    unresolved_key = stream_key()
+    healthy_key = replace(
+        unresolved_key,
+        current_thread_id=ContextThreadId("thread-healthy"),
+    )
+    failed_key = replace(
+        unresolved_key,
+        current_thread_id=ContextThreadId("thread-failed"),
+    )
+    unknown_key = replace(
+        unresolved_key,
+        current_thread_id=ContextThreadId("thread-unknown"),
+    )
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert (
+        ledger.apply(healthy_key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    )
+    assert (
+        ledger.apply(failed_key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    )
+    opened = ledger.apply(unresolved_key, open_event())
+    assert opened.transition is not None
+    occurrence_value = occurrence()
+    proposed = ledger.apply(
+        unresolved_key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    reserved = ledger.reserve(
+        unresolved_key,
+        reserve_event(
+            proposed.transition.next_state,
+            batch(occurrence_value),
+            occurrence_value,
+        ),
+    )
+    assert reserved.status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            "DELETE FROM shadow_decisions WHERE stream_id = ?",
+            (ledger_module._stream_key_bytes(failed_key),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    recovered = DefaultContextAdmissionLedger(authority)
+
+    healthy = recovered.recover(healthy_key)
+    assert healthy.recovered_streams == (healthy_key,)
+    assert healthy.unresolved_streams == ()
+    assert healthy.stream_healths[0].status is ContextAdmissionStorageHealthStatus.HEALTHY
+
+    unresolved = recovered.recover(unresolved_key)
+    assert unresolved.recovered_streams == (unresolved_key,)
+    assert unresolved.unresolved_streams == (unresolved_key,)
+
+    failed = recovered.recover(failed_key)
+    assert failed.recovered_streams == ()
+    assert failed.unresolved_streams == ()
+    assert failed.stream_healths[0].status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+
+    unknown = recovered.recover(unknown_key)
+    assert unknown.stream_healths == ()
+    assert unknown.recovered_streams == ()
+    assert unknown.unresolved_streams == ()
+
+    failed_authority = ContextAdmissionStoreAuthority(
+        database_path=tmp_path / "failed-store" / "ledger.sqlite3",
+        expected_owner_id=os.getuid(),
+    )
+    failed_authority.database_path.parent.mkdir(mode=0o755)
+    store_failed = DefaultContextAdmissionLedger(failed_authority).recover(unknown_key)
+    assert store_failed.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert store_failed.stream_healths == ()
+
+
 def test_recovery_failure_is_sticky_per_stream_and_isolates_other_streams(
     tmp_path: Path,
 ) -> None:

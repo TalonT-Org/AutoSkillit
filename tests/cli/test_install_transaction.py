@@ -259,6 +259,30 @@ class TestRecordOwnedRetirementDeadline:
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         now = datetime.now(UTC)
+        installed = RetiringArtifactRecord(
+            record_id="installed-due",
+            artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+            semantic_key="plugin:installed",
+            managed_path=(tmp_path / "cache" / "installed").absolute(),
+            manifest_path=(tmp_path / "cache" / ".installed.json").absolute(),
+            incarnation_id="installed-incarnation",
+            manifest_schema_version=1,
+            artifact_digest="a" * 64,
+            retired_at=now - timedelta(hours=2),
+            not_before=now,
+        )
+        projection = RetiringArtifactRecord(
+            record_id="projection-due",
+            artifact_kind=PluginArtifactKind.PROJECTION,
+            semantic_key="plugin:projection",
+            managed_path=(tmp_path / "projections" / "projection").absolute(),
+            manifest_path=(tmp_path / "projections" / ".projection.json").absolute(),
+            incarnation_id="projection-incarnation",
+            manifest_schema_version=2,
+            artifact_digest="b" * 64,
+            retired_at=now - timedelta(hours=2),
+            not_before=now,
+        )
         future = RetiringArtifactRecord(
             record_id="future",
             artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
@@ -271,26 +295,52 @@ class TestRecordOwnedRetirementDeadline:
             retired_at=now,
             not_before=now + timedelta(hours=6),
         )
-        append_retiring_record(future)
-        dispatched: list[str] = []
+        for record in (installed, projection, future):
+            append_retiring_record(record)
+        dispatched: list[tuple[PluginArtifactKind, str, datetime]] = []
 
         class Owner:
-            managed_root = tmp_path / "cache"
+            def __init__(
+                self,
+                *,
+                artifact_kind: PluginArtifactKind,
+                managed_root: Path,
+                outcome: RetirementOutcome,
+            ) -> None:
+                self.artifact_kind = artifact_kind
+                self.managed_root = managed_root
+                self.outcome = outcome
 
             def try_reclaim(self, record, sweep_now):
                 assert sweep_now == now
-                dispatched.append(record.record_id)
-                return RetirementOutcome.RECLAIMED
+                assert record.artifact_kind is self.artifact_kind
+                dispatched.append((record.artifact_kind, record.record_id, sweep_now))
+                return self.outcome
 
-        owner = Owner()
+        installed_owner = Owner(
+            artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+            managed_root=tmp_path / "cache",
+            outcome=RetirementOutcome.RECLAIMED,
+        )
+        projection_owner = Owner(
+            artifact_kind=PluginArtifactKind.PROJECTION,
+            managed_root=tmp_path / "projections",
+            outcome=RetirementOutcome.DEFERRED_CONTENDED,
+        )
         coordinator = DefaultPluginRetirementCoordinator(
-            projection_owner=owner,
-            installed_owner=owner,
+            projection_owner=projection_owner,
+            installed_owner=installed_owner,
             projection_root=tmp_path / "projections",
         )
 
-        assert coordinator.sweep_due(now) == ()
-        assert dispatched == []
+        assert coordinator.sweep_due(now) == (
+            RetirementOutcome.RECLAIMED,
+            RetirementOutcome.DEFERRED_CONTENDED,
+        )
+        assert dispatched == [
+            (PluginArtifactKind.INSTALLED_PLUGIN, "installed-due", now),
+            (PluginArtifactKind.PROJECTION, "projection-due", now),
+        ]
 
 
 class TestClearPluginCacheKeepsItsPromise:

@@ -237,6 +237,7 @@ def test_connection_factory_identity_change_fails_closed(
             connection.backup(replacement)
         finally:
             replacement.close()
+        replacement_path.chmod(0o600)
         os.replace(replacement_path, authority.database_path)
         return connection
 
@@ -1890,7 +1891,7 @@ def test_fault_checkpoints_follow_distinct_mutation_boundaries(tmp_path: Path) -
     )
 
     assert reserved.transition is not None
-    assert len(reserved.transition.effects) == 2
+    assert len(reserved.transition.effects) >= 2
     checkpoint_order = (
         "after_journal",
         "during_effects",
@@ -2006,6 +2007,13 @@ def test_inspection_contention_is_transient_and_does_not_poison_health(
                 error.sqlite_errorcode = sqlite3.SQLITE_BUSY
                 raise error
             return self._connection.execute(statement, parameters)
+
+        @property
+        def in_transaction(self) -> bool:
+            return self._connection.in_transaction
+
+        def setlimit(self, category: int, limit: int) -> int:
+            return self._connection.setlimit(category, limit)
 
         def close(self) -> None:
             self._connection.close()

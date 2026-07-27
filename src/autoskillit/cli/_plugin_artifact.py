@@ -179,7 +179,7 @@ def publish_installed_plugin_artifact(
             )
     except PluginArtifactPublicationError:
         raise
-    except BaseException as exc:
+    except Exception as exc:
         raise PluginArtifactPublicationError(
             f"failed to publish installed plugin artifact at {root}: {exc}"
         ) from exc
@@ -246,13 +246,13 @@ class InstalledPluginArtifactAuthority:
             )
         try:
             managed_path = _canonical_installed_root(self._root)
-        except BaseException as exc:
+        except Exception as exc:
             raise PluginArtifactValidationError(
                 f"installed plugin root is invalid: {self._root}"
             ) from exc
         try:
             lease = ArtifactLease.acquire_shared(installed_artifact_lock_path(managed_path))
-        except BaseException as exc:
+        except Exception as exc:
             raise PluginArtifactPublicationError(
                 f"installed plugin reader lease acquisition failed: {self._semantic_key}"
             ) from exc

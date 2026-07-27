@@ -219,6 +219,48 @@ class TestAllEntrypointsAgree:
 
 
 class TestInstalledPluginArtifactAuthority:
+    def test_publication_does_not_wrap_control_flow_exceptions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli import _plugin_artifact
+
+        def interrupt(_root: Path) -> Path:
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(_plugin_artifact, "_canonical_installed_root", interrupt)
+
+        with pytest.raises(KeyboardInterrupt):
+            _plugin_artifact.publish_installed_plugin_artifact(
+                tmp_path,
+                semantic_key="autoskillit@autoskillit-local:1.2.3",
+            )
+
+    def test_binding_acquisition_does_not_wrap_control_flow_exceptions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli import _plugin_artifact
+        from autoskillit.core import PluginLoadMode
+
+        root = tmp_path.resolve()
+
+        def interrupt(*_args, **_kwargs):
+            raise SystemExit("stop")
+
+        monkeypatch.setattr(
+            _plugin_artifact.ArtifactLease,
+            "acquire_shared",
+            interrupt,
+        )
+
+        with pytest.raises(SystemExit, match="stop"):
+            _plugin_artifact.InstalledPluginArtifactAuthority(
+                root,
+                semantic_key="autoskillit@autoskillit-local:1.2.3",
+            ).acquire_launch_binding(
+                backend=object(),
+                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+            )
+
     def test_publication_round_trips_exact_external_incarnation(self, tmp_path: Path) -> None:
         from autoskillit.cli._plugin_artifact import (
             InstalledPluginArtifactAuthority,

@@ -111,6 +111,81 @@ class TestRollbackOnFailure:
         assert _retiring_paths(tmp_path) == retiring_before
         assert old_cache.is_dir(), "the live cache was destroyed by a failed install"
 
+    def test_publication_failure_rolls_back_while_target_lease_is_held(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        from autoskillit.cli import _marketplace, _plugin_artifact
+        from autoskillit.core import (
+            ArtifactLease,
+            ArtifactLeaseContention,
+            PluginArtifactPublicationError,
+        )
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
+        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
+
+        old_cache = _seed_installed_state(tmp_path, "0.0.1-old")
+        _plugin_artifact.publish_installed_plugin_artifact(
+            old_cache,
+            semantic_key="autoskillit@autoskillit-local:0.0.1-old",
+        )
+        artifact_manifest = _plugin_artifact.installed_artifact_manifest_path(old_cache)
+        manifest_path = _marketplace._marketplace_manifest_path()
+        registry_path = _marketplace._installed_plugins_json_path()
+        artifact_manifest_before = artifact_manifest.read_text()
+        manifest_before = manifest_path.read_text()
+        registry_before = registry_path.read_text()
+        retiring_before = _retiring_paths(tmp_path)
+
+        monkeypatch.setattr(
+            _marketplace.subprocess,
+            "run",
+            lambda cmd, **_kw: subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout="",
+                stderr="",
+            ),
+        )
+
+        def fail_publication(*_args, **_kwargs):
+            raise PluginArtifactPublicationError("injected publication failure")
+
+        monkeypatch.setattr(
+            _plugin_artifact,
+            "publish_installed_plugin_artifact",
+            fail_publication,
+        )
+
+        original_rollback = _marketplace._InstallSnapshot.rollback
+
+        def assert_lease_then_rollback(snapshot) -> None:
+            with pytest.raises(ArtifactLeaseContention):
+                ArtifactLease.acquire_exclusive(
+                    _plugin_artifact.installed_artifact_lock_path(old_cache),
+                    blocking=False,
+                )
+            original_rollback(snapshot)
+
+        monkeypatch.setattr(
+            _marketplace._InstallSnapshot,
+            "rollback",
+            assert_lease_then_rollback,
+        )
+
+        with pytest.raises(SystemExit):
+            _marketplace.install(scope="user")
+        capsys.readouterr()
+
+        assert old_cache.is_dir()
+        assert artifact_manifest.read_text() == artifact_manifest_before
+        assert manifest_path.read_text() == manifest_before
+        assert registry_path.read_text() == registry_before
+        assert _retiring_paths(tmp_path) == retiring_before
+
 
 class TestPreflightOrdering:
     def test_worktree_guard_precedes_the_claudecode_deferral(

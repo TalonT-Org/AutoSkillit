@@ -387,15 +387,22 @@ def install(*, scope: str = "user") -> bool:
 
         _ensure_workspace_ready()
 
-        try:
-            target_writer = ArtifactLease.acquire_exclusive(
-                installed_artifact_lock_path(_installed_plugin_root()),
-                blocking=False,
-            )
-        except ArtifactLeaseContention as exc:
-            raise _InstallFailed(
-                "Installed plugin is in use by an active session; retry after it exits."
-            ) from exc
+        target_writer = ArtifactLease.acquire_exclusive(
+            installed_artifact_lock_path(_installed_plugin_root()),
+            blocking=False,
+        )
+    except ArtifactLeaseContention as exc:
+        snapshot.rollback()
+        print("Installed plugin is in use by an active session; retry after it exits.")
+        raise SystemExit(1) from exc
+    except _InstallFailed as exc:
+        snapshot.rollback()
+        print(str(exc))
+        sys.exit(1)
+    except BaseException:
+        snapshot.rollback()
+        raise
+    else:
         try:
             with _InstallLock():
                 snapshot.stage_target_root()
@@ -446,15 +453,15 @@ def install(*, scope: str = "user") -> bool:
                     f"Failed to publish installed plugin identity: {exc}"
                 ) from exc
             snapshot.commit()
+        except _InstallFailed as exc:
+            snapshot.rollback()
+            print(str(exc))
+            sys.exit(1)
+        except BaseException:
+            snapshot.rollback()
+            raise
         finally:
             target_writer.close()
-    except _InstallFailed as exc:
-        snapshot.rollback()
-        print(str(exc))
-        sys.exit(1)
-    except BaseException:
-        snapshot.rollback()
-        raise
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
 

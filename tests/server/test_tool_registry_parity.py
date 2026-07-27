@@ -101,6 +101,7 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
             "destroy_artifacts": ToolWireType.BOOLEAN,
         },
         "open_kitchen": {"ingredients_only": ToolWireType.BOOLEAN},
+        "load_recipe": {"ingredients_only": ToolWireType.BOOLEAN},
     }
 
     for tool_name, wire_types in expected.items():

@@ -360,6 +360,7 @@ _TOOL_DEFS = (
         required=("name",),
         wire_types={
             "overrides": ToolWireType.OBJECT,
+            "ingredients_only": ToolWireType.BOOLEAN,
             "delivery_request": ToolWireType.OBJECT,
         },
     ),

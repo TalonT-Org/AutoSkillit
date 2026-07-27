@@ -522,6 +522,7 @@ from .types import GitHubFetcher as GitHubFetcher
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract
+from .types import HeadlessSkillDispatchPreparation as HeadlessSkillDispatchPreparation
 from .types import HookTrustPolicy as HookTrustPolicy
 from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect
 from .types import IdempotencyNamespace as IdempotencyNamespace
@@ -579,7 +580,6 @@ from .types import PluginArtifactPublicationError as PluginArtifactPublicationEr
 from .types import PluginArtifactValidationError as PluginArtifactValidationError
 from .types import PluginLaunchBinding as PluginLaunchBinding
 from .types import PluginLoadMode as PluginLoadMode
-from .types import PluginSource as PluginSource
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PrepareBatchEvent as PrepareBatchEvent
@@ -588,7 +588,6 @@ from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef
 from .types import ProducerInstanceId as ProducerInstanceId
 from .types import ProducerSurface as ProducerSurface
-from .types import ProjectedPluginRoot as ProjectedPluginRoot
 from .types import PromptContractError as PromptContractError
 from .types import ProposeOccurrenceEvent as ProposeOccurrenceEvent
 from .types import ProtectedPoolOwnerId as ProtectedPoolOwnerId

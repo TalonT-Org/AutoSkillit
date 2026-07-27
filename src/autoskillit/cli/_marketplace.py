@@ -51,6 +51,12 @@ def _plugin_cache_dir() -> Path:
     )
 
 
+def _installed_plugin_root() -> Path:
+    from autoskillit.cli._plugin_artifact import current_installed_plugin_root
+
+    return current_installed_plugin_root()
+
+
 def _clear_plugin_cache() -> None:
     """Remove the cached plugin snapshot **and** its installed_plugins.json entry.
 
@@ -195,10 +201,13 @@ class _InstallSnapshot:
     """
 
     def __init__(self) -> None:
+        from autoskillit.cli._plugin_artifact import installed_artifact_manifest_path
         from autoskillit.core import retiring_cache_entries
 
         self._marketplace_manifest = self._read(_marketplace_manifest_path())
         self._installed_plugins = self._read(_installed_plugins_json_path())
+        self._artifact_manifest_path = installed_artifact_manifest_path(_installed_plugin_root())
+        self._artifact_manifest = self._read(self._artifact_manifest_path)
         self._retiring_before = {e.get("path", "") for e in retiring_cache_entries()}
 
     @staticmethod
@@ -222,6 +231,7 @@ class _InstallSnapshot:
 
         self._restore(_marketplace_manifest_path(), self._marketplace_manifest)
         self._restore(_installed_plugins_json_path(), self._installed_plugins)
+        self._restore(self._artifact_manifest_path, self._artifact_manifest)
         added = [
             e.get("path", "")
             for e in retiring_cache_entries()
@@ -327,6 +337,7 @@ def install(*, scope: str = "user") -> bool:
                 text=True,
                 stdin=subprocess.DEVNULL,
                 timeout=30,
+                pass_fds=(),
             )
             if result.returncode != 0:
                 raise _InstallFailed(f"Failed to register marketplace: {result.stderr.strip()}")
@@ -339,9 +350,26 @@ def install(*, scope: str = "user") -> bool:
                 text=True,
                 stdin=subprocess.DEVNULL,
                 timeout=30,
+                pass_fds=(),
             )
             if result.returncode != 0:
                 raise _InstallFailed(f"Failed to install plugin: {result.stderr.strip()}")
+            from autoskillit import __version__
+            from autoskillit.cli._plugin_artifact import (
+                installed_plugin_semantic_key,
+                publish_installed_plugin_artifact,
+            )
+            from autoskillit.core import PluginArtifactPublicationError
+
+            try:
+                publish_installed_plugin_artifact(
+                    _installed_plugin_root(),
+                    semantic_key=installed_plugin_semantic_key(plugin_ref, __version__),
+                )
+            except PluginArtifactPublicationError as exc:
+                raise _InstallFailed(
+                    f"Failed to publish installed plugin identity: {exc}"
+                ) from exc
     except _InstallFailed as exc:
         snapshot.rollback()
         print(str(exc))

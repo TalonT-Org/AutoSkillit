@@ -31,12 +31,57 @@ from autoskillit.core import (
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
+class _CookBinding:
+    def __init__(self, plugin_dir: Path) -> None:
+        self.plugin_dir = plugin_dir
+        self.inherited_fds: tuple[int, ...] = ()
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _CookAuthority:
+    def __init__(self, plugin_dir: Path) -> None:
+        self.plugin_dir = plugin_dir
+
+    def acquire_launch_binding(self, **_kwargs: object) -> _CookBinding:
+        return _CookBinding(self.plugin_dir)
+
+
+@pytest.fixture(autouse=True)
+def _stub_plugin_artifact_authority(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import PluginLoadMode
+
+    plugin_dir = tmp_path / ".autoskillit" / "plugin-projections" / "test-artifact"
+    plugin_dir.mkdir(parents=True)
+    plugin_metadata = plugin_dir / ".claude-plugin" / "plugin.json"
+    plugin_metadata.parent.mkdir()
+    plugin_metadata.write_text("{}\n", encoding="utf-8")
+    authority = _CookAuthority(plugin_dir)
+
+    def choose(**kwargs: object):
+        backend = kwargs["backend"]
+        if getattr(backend, "name", None) == "codex" and kwargs["generated_home"] is not None:
+            return None, PluginLoadMode.GENERATED_HOME
+        return authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR
+
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        choose,
+    )
+
+
 class _Backend:
     name = "claude-code"
     conventions = BackendConventions()
     capabilities = SimpleNamespace(
         hook_trust_policy=HookTrustPolicy.AUTOMATED,
         session_dir_persistent=False,
+        skill_injection_capable=True,
     )
 
     def __init__(self) -> None:
@@ -57,8 +102,8 @@ class _Backend:
     def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
         self.build_calls.append(kwargs)
         command = ["claude", "--dangerously-skip-permissions"]
-        plugin_source = kwargs["plugin_source"]
-        plugin_dir = getattr(plugin_source, "plugin_dir", None)
+        plugin_binding = kwargs["plugin_binding"]
+        plugin_dir = getattr(plugin_binding, "plugin_dir", None)
         if plugin_dir is not None:
             command.extend(("--plugin-dir", str(plugin_dir)))
         for add_dir in kwargs["add_dirs"]:  # type: ignore[union-attr]
@@ -182,8 +227,18 @@ def _install_harness(
 def test_cook_uses_managed_home_for_final_child_context(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    from autoskillit.core import PluginLoadMode
+
     backend = _Backend()
     captured = _install_harness(monkeypatch, tmp_path)
+    binding = _CookBinding(tmp_path / "projected-plugin")
+    binding.inherited_fds = (13, 7)
+    authority = _CookAuthority(binding.plugin_dir)
+    authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
+    )
 
     cli.cook(backend=backend)
 
@@ -202,7 +257,8 @@ def test_cook_uses_managed_home_for_final_child_context(
     assert spec.cwd == str(tmp_path)
     assert spec.env[SESSION_TYPE_ENV_VAR] == "skill"
     assert len(spec.env[LAUNCH_ID_ENV_VAR]) == 16
-    assert captured["run_kwargs"]["pass_fds"] == (7, 9)  # type: ignore[index]
+    assert captured["run_kwargs"]["pass_fds"] == (13, 7, 9)  # type: ignore[index]
+    assert binding.closed
 
 
 def test_cook_real_claude_builder_receives_plugin_and_skills(
@@ -375,6 +431,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
+            skill_injection_capable=True,
         )
 
         def binary_name(self) -> str:
@@ -465,6 +522,7 @@ def test_cook_does_not_treat_persistent_sessions_as_codex(
         hook_trust_policy=HookTrustPolicy.AUTOMATED,
         session_dir_persistent=True,
         cook_startup_observer_capable=False,
+        skill_injection_capable=True,
     )
     captured = _install_harness(monkeypatch, tmp_path)
 

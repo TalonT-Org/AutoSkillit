@@ -156,6 +156,7 @@ class FleetTestRunner:
     def __init__(self) -> None:
         self.call_count: int = 0
         self.last_pid: int = 0
+        self.last_pass_fds: tuple[int, ...] = ()
 
     async def __call__(
         self,
@@ -165,6 +166,7 @@ class FleetTestRunner:
         timeout: float,
         env: Any = None,
         on_pid_resolved: Any = None,
+        pass_fds: tuple[int, ...] = (),
         **kwargs: Any,
     ) -> Any:
         from autoskillit.core.runtime._linux_proc import read_starttime_ticks
@@ -177,12 +179,14 @@ class FleetTestRunner:
         from autoskillit.execution import kill_process_tree
 
         self.call_count += 1
+        self.last_pass_fds = pass_fds
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env,
             cwd=str(cwd),
+            pass_fds=pass_fds,
         )
         self.last_pid = proc.pid
         if on_pid_resolved is not None:
@@ -436,6 +440,7 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
 
     result_a = await rt.dispatch("recipe-a", shim_mode="success")
     assert result_a["success"] is True
+    assert rt.runner.last_pass_fds, "fleet child must inherit the plugin artifact lease"
     assert result_a.get("lifespan_started") is not True, (
         "plain success shim must not set lifespan_started"
     )

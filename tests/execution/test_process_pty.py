@@ -8,6 +8,7 @@ _build_skill_result → SkillResult adjudication boundary.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import textwrap
@@ -33,6 +34,35 @@ from autoskillit.execution.session import ClaudeSessionResult
 from tests.execution.conftest import _result_ndjson
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(shutil.which("script") is None, reason="script(1) is required")
+async def test_pty_wrapper_preserves_inherited_descriptors(tmp_path) -> None:
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, b"pty-lease-alive")
+        os.close(write_fd)
+        write_fd = -1
+        result = await run_managed_async(
+            [
+                sys.executable,
+                "-c",
+                "import os,sys; print(os.read(int(sys.argv[1]), 64).decode())",
+                str(read_fd),
+            ],
+            cwd=tmp_path,
+            timeout=10,
+            pty_mode=True,
+            pass_fds=(read_fd, read_fd),
+        )
+        assert result.returncode == 0
+        assert "pty-lease-alive" in result.stdout
+    finally:
+        os.close(read_fd)
+        if write_fd >= 0:
+            os.close(write_fd)
+
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios

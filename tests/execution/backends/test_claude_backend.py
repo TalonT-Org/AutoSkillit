@@ -12,11 +12,11 @@ from autoskillit.core import (
     NamedResume,
     NoResume,
     OutputFormat,
-    ProjectedPluginRoot,
     SessionCheckpoint,
     SkillSessionConfig,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -24,13 +24,13 @@ SKILL_BASE: dict[str, Any] = {
     "cwd": "/work",
     "completion_marker": "%%DONE%%",
     "model": None,
-    "plugin_source": None,
+    "plugin_binding": None,
     "output_format": OutputFormat.JSON,
 }
 
 FOOD_TRUCK_BASE: dict[str, Any] = {
     "orchestrator_prompt": "dispatch the work",
-    "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
+    "plugin_binding": plugin_binding(Path("/pkg")),
     "cwd": "/work",
     "completion_marker": "%%DONE%%",
 }
@@ -91,7 +91,7 @@ class TestResumePromptPreservation:
         backend = ClaudeCodeBackend()
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="Deploy service X with config Y",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
+            plugin_binding=plugin_binding(Path("/fake")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
             resume_session_id="sess-123",
@@ -104,7 +104,7 @@ class TestResumePromptPreservation:
         backend = ClaudeCodeBackend()
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="task context",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
+            plugin_binding=plugin_binding(Path("/fake")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
             resume_session_id="sess-123",
@@ -116,7 +116,7 @@ class TestResumePromptPreservation:
         backend = ClaudeCodeBackend()
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt="task context",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
+            plugin_binding=plugin_binding(Path("/fake")),
             cwd="/tmp",
             completion_marker="%%DONE%%",
             resume_session_id="sess-123",
@@ -132,7 +132,7 @@ class TestResumePromptPreservation:
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
+            plugin_binding=plugin_binding(Path("/fake")),
             output_format=OutputFormat.STREAM_JSON,
             resume_session_id="sess-456",
         )
@@ -146,7 +146,7 @@ class TestResumePromptPreservation:
                 "build_food_truck_cmd",
                 dict(
                     orchestrator_prompt="UNIQUE_TASK_MARKER_12345",
-                    plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
+                    plugin_binding=plugin_binding(Path("/fake")),
                     cwd="/tmp",
                     completion_marker="%%DONE%%",
                     resume_session_id="sess-inv",
@@ -159,7 +159,7 @@ class TestResumePromptPreservation:
                     cwd="/tmp",
                     completion_marker="%%DONE%%",
                     model=None,
-                    plugin_source=ProjectedPluginRoot(plugin_dir=Path("/fake")),
+                    plugin_binding=plugin_binding(Path("/fake")),
                     output_format=OutputFormat.STREAM_JSON,
                     resume_session_id="sess-inv",
                 ),
@@ -224,7 +224,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
         config = SkillSessionConfig(
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.JSON,
         )
         via_config = backend.build_skill_session_cmd("/plan", cwd="/tmp", config=config)
@@ -233,7 +233,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.JSON,
         )
         assert via_config.cmd == via_flat.cmd
@@ -245,7 +245,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
         config = SkillSessionConfig(
             completion_marker="%%MARKER%%",
             model="sonnet",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
+            plugin_binding=plugin_binding(Path("/p")),
             output_format=OutputFormat.STREAM_JSON,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,
@@ -265,7 +265,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
             cwd="/tmp",
             completion_marker="%%MARKER%%",
             model="sonnet",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
+            plugin_binding=plugin_binding(Path("/p")),
             output_format=OutputFormat.STREAM_JSON,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,

@@ -202,14 +202,6 @@ def _get_config() -> AutomationConfig:
     return _get_ctx().config
 
 
-def _get_plugin_dir() -> str | None:
-    """Return the plugin path from the current server context, or None if uninitialized."""
-    # The None guard stays: version_info() depends on it for an uninitialised context.
-    if _ctx is None:
-        return None
-    return str(_ctx.plugin_source.plugin_dir)
-
-
 def _check_rerun(log_dir: str, composite_hash: str) -> dict[str, object] | None:
     """Check sessions.jsonl for prior runs with the same composite hash."""
     if not composite_hash:
@@ -221,6 +213,4 @@ def _check_rerun(log_dir: str, composite_hash: str) -> dict[str, object] | None:
 
 def version_info() -> dict:
     """Return version health information for the running server."""
-
-    plugin_dir = _get_plugin_dir()
-    return _compute_version(plugin_dir)
+    return _compute_version()

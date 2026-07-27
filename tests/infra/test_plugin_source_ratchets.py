@@ -115,8 +115,8 @@ class TestNoHandRolledRegistryResolution:
         assert not violations, (
             "installed_plugins.json is written, versioned, and garbage-collected by "
             "Claude Code — a path read from it can name a directory that no longer "
-            "exists. Resolve plugin sources from pkg_root() via "
-            "project_default_plugin_source(). If a new module genuinely needs to "
+            "exists. Construct lazy artifact authority from pkg_root() via "
+            "project_default_plugin_authority(). If a new module genuinely needs to "
             "*report* on the registry, add it to REGISTRY_READ_ALLOWLIST with a "
             f"rationale.\nViolations: {violations}"
         )
@@ -161,55 +161,38 @@ class TestNoRawResolveInContainmentChecks:
         assert _scan_destination_resolve(ast.parse(injected.read_text()))
 
 
-class TestProjectedRootIsConstructedOnlyByProjection:
-    """`ProjectedPluginRoot` means "already sanitized". Python cannot restrict
-    construction, so the ratchet does: only the projection module may mint one.
-    """
+class TestNoLegacyPluginSourceContext:
+    """A context may carry lazy authority, never a durable bare plugin path."""
 
-    ALLOWLIST = {
-        "core/types/_type_plugin_source.py": "Defines the type.",
-        "workspace/skill_projection.py": "The only producer of projections.",
-        "server/_factory.py": "Test-injection override path only (plugin_source=...).",
-    }
-
-    def test_only_the_projection_module_constructs_one(self) -> None:
+    def test_source_has_no_plugin_source_parameter_or_attribute(self) -> None:
         violations: list[str] = []
         for path in _iter_src_files():
             rel = _rel(path)
-            if rel in self.ALLOWLIST:
-                continue
             for node in ast.walk(ast.parse(path.read_text())):
-                if (
-                    isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Name)
-                    and node.func.id == "ProjectedPluginRoot"
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
+                    arg.arg == "plugin_source"
+                    for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
                 ):
+                    violations.append(f"{rel}:{node.lineno}:parameter")
+                elif isinstance(node, ast.Attribute) and node.attr == "plugin_source":
+                    violations.append(f"{rel}:{node.lineno}:attribute")
+                elif isinstance(node, ast.keyword) and node.arg == "plugin_source":
                     violations.append(f"{rel}:{node.lineno}")
         assert not violations, (
-            "A ProjectedPluginRoot constructed outside workspace/skill_projection.py "
-            "asserts a sanitization that never happened.\n"
+            "plugin_source stores a bare path beyond a launch lifetime; carry "
+            "plugin_authority on contexts and plugin_binding at builders.\n"
             f"Violations: {violations}"
         )
 
 
-class TestEveryPluginDirEmitterIsProjected:
-    """Every `--plugin-dir` value must come from a ProjectedPluginRoot.
+class TestEveryPluginDirEmitterIsBindingDerived:
+    """Every builder classifies plugin paths as launch-binding-derived."""
 
-    Deleting the second PluginSource variant removes today's divergence, but only
-    coincidentally — nothing would stop a future variant reintroducing a raw path
-    at one of the four independent command builders, which is exactly what
-    `build_food_truck_cmd` did with an unsanitized cache path. Builders are
-    enumerated by reflection so a newly added one is covered automatically.
-    """
-
-    def test_all_builders_emit_only_projected_paths(self, tmp_path: Path) -> None:
+    def test_all_builders_accept_bindings_not_raw_paths(self) -> None:
         import inspect
 
-        from autoskillit.core import ProjectedPluginRoot
         from autoskillit.execution.backends import BACKEND_REGISTRY
 
-        # Constructing one proves the invariant is enforceable at this boundary.
-        ProjectedPluginRoot(plugin_dir=tmp_path / "projection")
         checked: list[str] = []
 
         for backend_cls in BACKEND_REGISTRY.values():
@@ -218,24 +201,19 @@ class TestEveryPluginDirEmitterIsProjected:
                 if not name.startswith("build_") or not name.endswith("_cmd"):
                     continue
                 params = inspect.signature(method).parameters
-                if "plugin_source" not in params:
+                assert "plugin_source" not in params, (
+                    f"{backend.name}.{name} still accepts the legacy bare-path context"
+                )
+                assert "plugin_dir" not in params, (
+                    f"{backend.name}.{name} accepts a raw plugin_dir instead of a binding"
+                )
+                if "plugin_binding" not in params:
                     continue
-                annotation = str(params["plugin_source"].annotation)
-                assert "PluginSource" in annotation, (
-                    f"{backend.name}.{name} takes a plugin_source that is not a "
-                    f"PluginSource: {annotation}"
+                annotation = str(params["plugin_binding"].annotation)
+                assert "PluginLaunchBinding" in annotation, (
+                    f"{backend.name}.{name} does not classify its plugin path as "
+                    f"binding-derived: {annotation}"
                 )
                 checked.append(f"{backend.name}.{name}")
 
         assert checked, "reflection found no --plugin-dir emitting builders — scan is broken"
-        # The type is what enforces sanitization; assert it is not bypassable by
-        # a second variant sneaking back in.
-        import typing
-
-        from autoskillit.core import PluginSource
-
-        assert typing.get_args(PluginSource) == (), (
-            "PluginSource gained a second variant. Re-audit every --plugin-dir "
-            f"emitter ({checked}) before allowing it: the last time this union had "
-            "two members, one builder emitted a raw, unprojected cache path."
-        )

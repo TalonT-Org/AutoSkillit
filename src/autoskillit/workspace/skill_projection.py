@@ -22,23 +22,31 @@ import hashlib
 import os
 import shutil
 import tempfile
+import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, assert_never
+from typing import Any, assert_never, cast
 
 import regex as re
 
 from autoskillit.core import (
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
     SKILL_PROJECTION_VERSION,
+    ArtifactLease,
+    ArtifactLeaseContention,
     BackendConventions,
     CodingAgentBackend,
     DirectInstall,
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
-    ProjectedPluginRoot,
+    PluginArtifactContentionError,
+    PluginArtifactIdentity,
+    PluginArtifactPublicationError,
+    PluginArtifactValidationError,
+    PluginLaunchBinding,
+    PluginLoadMode,
     ResolvedSkillAuthority,
     SkillAuthority,
     SkillContractError,
@@ -48,7 +56,6 @@ from autoskillit.core import (
     SkillSourceIdentity,
     SkillSourceRef,
     SkillVisibilitySpec,
-    _InstallLock,
     atomic_write,
     destination_location,
     dump_yaml_str,
@@ -60,7 +67,6 @@ from autoskillit.core import (
 from autoskillit.workspace._projection_cache import (
     ProjectionCacheKey,
     is_projected_asset,
-    prune_stale_projections,
     public_plugin_asset_digest,
 )
 from autoskillit.workspace.skill_format import parse_frontmatter_content
@@ -74,19 +80,22 @@ from autoskillit.workspace.skills import (
 __all__ = [
     "AgentSkillDocument",
     "EffectiveSkillDispatchContract",
+    "EffectiveSkillDispatchPreparation",
+    "ProjectedPluginArtifactAuthority",
     "SkillProjectionContext",
     "build_effective_skill_dispatch_contract",
+    "finalize_effective_skill_dispatch",
     "materialize_agent_skill_tree",
     "materialize_sanitized_plugin_root",
     "prepare_catalog_skill_dispatch",
     "prepare_effective_skill_dispatch",
     "project_agent_skill_document",
-    "project_default_plugin_source",
-    "project_direct_install",
-    "project_plugin_source",
+    "project_default_plugin_authority",
+    "project_direct_install_authority",
     "validate_sanitized_plugin_artifact",
 ]
 _SKILL_NAMESPACE_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
+_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION = 2
 
 
 SkillContractRecord = SkillAuthority
@@ -183,6 +192,7 @@ def _direct_install_projection_context(
     backend: CodingAgentBackend,
     destination: Path,
     default_base_branch: str,
+    projection_version: int = SKILL_PROJECTION_VERSION,
 ) -> SkillProjectionContext:
     """Bind every byte-affecting input shared by a direct install and dispatch."""
     return SkillProjectionContext(
@@ -196,6 +206,7 @@ def _direct_install_projection_context(
             "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
             "{{DEFAULT_BASE_BRANCH}}": default_base_branch,
         },
+        projection_version=projection_version,
     )
 
 
@@ -243,6 +254,41 @@ class EffectiveSkillDispatchContract:
                     f"effective dispatch {field_name} do not match its members"
                 )
             object.__setattr__(self, field_name.replace(" ", "_"), MappingProxyType(dict(mapping)))
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveSkillDispatchPreparation:
+    """Backend-neutral semantic inputs awaiting one exact launch binding."""
+
+    resolved_command: str
+    cwd: Path
+    project_root: Path | None
+    default_base_branch: str
+    catalog: EffectiveSkillCatalogAuthority | None = None
+    invocation: EffectiveSkillInvocationAuthority | None = None
+
+    def __post_init__(self) -> None:
+        if not self.resolved_command:
+            raise SkillContractError("dispatch preparation requires a resolved command")
+        if (self.catalog is None) == (self.invocation is None):
+            raise SkillContractError(
+                "dispatch preparation must bind exactly one catalog or invocation"
+            )
+        object.__setattr__(self, "cwd", Path(self.cwd))
+        if self.project_root is not None:
+            object.__setattr__(self, "project_root", Path(self.project_root))
+
+    def finalize(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        binding: PluginLaunchBinding,
+    ) -> EffectiveSkillDispatchContract:
+        return _finalize_effective_skill_dispatch(
+            self,
+            backend=backend,
+            binding=binding,
+        )
 
 
 def build_effective_skill_dispatch_contract(
@@ -294,6 +340,52 @@ def build_effective_skill_dispatch_contract(
         backend=backend.name if backend is not None else None,
         artifact_paths=tuple(artifact_paths),
     )
+
+
+def _finalize_effective_skill_dispatch(
+    preparation: EffectiveSkillDispatchPreparation,
+    *,
+    backend: CodingAgentBackend,
+    binding: PluginLaunchBinding,
+) -> EffectiveSkillDispatchContract:
+    """Bind backend conventions only after the launch artifact is reader-owned."""
+    if binding.closed:
+        raise PluginArtifactValidationError(
+            "cannot finalize dispatch with a closed plugin launch binding"
+        )
+    if binding.plugin_dir is not None and binding.plugin_dir != binding.identity.managed_path:
+        raise PluginArtifactValidationError(
+            "plugin launch path does not match its leased artifact identity"
+        )
+    destination = binding.plugin_dir or binding.identity.managed_path
+    context = SkillProjectionContext(
+        cwd=preparation.cwd,
+        project_root=preparation.project_root,
+        catalog=preparation.catalog,
+        invocation=preparation.invocation,
+        backend=backend,
+        conventions=backend.conventions,
+        substitutions={
+            "{{AUTOSKILLIT_TEMP}}": temp_dir_display_str(None),
+            "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
+            "{{DEFAULT_BASE_BRANCH}}": preparation.default_base_branch,
+        },
+    )
+    return build_effective_skill_dispatch_contract(
+        preparation.resolved_command,
+        context,
+        artifact_paths=(),
+    )
+
+
+def finalize_effective_skill_dispatch(
+    preparation: EffectiveSkillDispatchPreparation,
+    *,
+    backend: CodingAgentBackend,
+    binding: PluginLaunchBinding,
+) -> EffectiveSkillDispatchContract:
+    """Workspace convenience wrapper around preparation-owned finalization."""
+    return preparation.finalize(backend=backend, binding=binding)
 
 
 def project_agent_skill_document(
@@ -471,6 +563,17 @@ def _manifest_skill_entry(
     }
 
 
+def _projection_skills_manifest(
+    skill_infos: tuple[SkillContractRecord, ...],
+    documents: Mapping[str, AgentSkillDocument],
+) -> dict[str, dict[str, Any]]:
+    skill_by_name = {skill.name: skill for skill in skill_infos}
+    return {
+        name: _manifest_skill_entry(skill_by_name[name], document)
+        for name, document in documents.items()
+    }
+
+
 def materialize_sanitized_plugin_root(
     source_root: Path,
     destination: Path,
@@ -509,14 +612,10 @@ def materialize_sanitized_plugin_root(
         raise
 
     manifest_path = destination.parent / f".{destination.name}.autoskillit-projection.json"
-    skill_by_name = {skill.name: skill for skill in skill_infos}
     manifest = {
         "schema_version": 1,
         "projection_version": context.projection_version,
-        "skills": {
-            name: _manifest_skill_entry(skill_by_name[name], document)
-            for name, document in documents.items()
-        },
+        "skills": _projection_skills_manifest(skill_infos, documents),
     }
     write_versioned_json(manifest_path, manifest, schema_version=1)
     return manifest_path
@@ -529,6 +628,7 @@ def validate_sanitized_plugin_artifact(
     skills_or_catalog: EffectiveSkillCatalogAuthority | Iterable[SkillContractRecord],
     *,
     require_sources_within_root: bool = True,
+    manifest_schema_version: int = 1,
 ) -> tuple[str, ...]:
     """Return all integrity errors for a sanitized public plugin artifact."""
     errors: list[str] = []
@@ -555,11 +655,11 @@ def validate_sanitized_plugin_artifact(
         elif require_sources_within_root:
             errors.append(f"path-free catalog cannot prove source containment: {info.name}")
 
-    manifest = read_versioned_json(manifest_path, 1)
+    manifest = read_versioned_json(manifest_path, manifest_schema_version)
     if manifest is None:
         return tuple([*errors, "projection manifest is unreadable or has an unsupported schema"])
-    if manifest.get("schema_version") != 1:
-        errors.append("projection manifest schema_version must be 1")
+    if manifest.get("schema_version") != manifest_schema_version:
+        errors.append(f"projection manifest schema_version must be {manifest_schema_version}")
     if not isinstance(manifest.get("projection_version"), int):
         errors.append("projection manifest projection_version must be an integer")
     manifest_skills = manifest.get("skills")
@@ -653,193 +753,530 @@ def validate_sanitized_plugin_artifact(
     return tuple(errors)
 
 
-def project_direct_install(
-    source: DirectInstall,
-    *,
-    cwd: Path,
-    backend: CodingAgentBackend,
-    default_base_branch: str,
-    skill_catalog: EffectiveSkillCatalogAuthority | None = None,
-) -> ProjectedPluginRoot:
-    """Return a stable, validated public projection for a direct plugin install."""
-    default_base_branch = _default_base_branch(default_base_branch)
-    source_root = source.plugin_dir.resolve()
-    bundled_root = source_root / "skills"
-    if not source_root.is_dir():
-        raise SkillContractError(f"direct plugin root does not exist: {source_root}")
-    if skill_catalog is None and (not bundled_root.is_dir() or bundled_root.is_symlink()):
-        raise SkillContractError(
-            f"direct plugin has no canonical bundled skill root: {source_root}"
+@dataclass(frozen=True, slots=True)
+class _ProjectedArtifactPlan:
+    source_root: Path
+    destination: Path
+    manifest_path: Path
+    lease_path: Path
+    semantic_key: str
+    catalog: EffectiveSkillCatalogAuthority
+    validation_catalog: tuple[SkillContractRecord, ...] | EffectiveSkillCatalogAuthority
+    require_sources_within_root: bool
+    context: SkillProjectionContext
+
+
+@dataclass(frozen=True, slots=True)
+class _StagedProjectedArtifact:
+    root: Path
+    manifest: Path
+    identity: PluginArtifactIdentity
+
+
+def _projected_plugin_artifact_digest(public_root: Path) -> str:
+    """Digest the complete published tree, including its inventory."""
+    public_root = Path(public_root)
+    if not public_root.is_dir() or public_root.is_symlink():
+        raise PluginArtifactValidationError(
+            f"projected plugin root is missing or is not a directory: {public_root}"
         )
-    source_infos = (
-        tuple()
-        if skill_catalog is not None
-        else tuple(
-            info
-            for entry in sorted(bundled_root.iterdir(), key=lambda item: item.name)
-            if (
-                not entry.is_symlink()
-                and entry.is_dir()
-                and not (entry / "SKILL.md").is_symlink()
-                and (entry / "SKILL.md").is_file()
-            )
-            and (
-                info := _skill_info_from_frontmatter(
-                    entry.name,
-                    SkillSource.BUNDLED,
-                    entry / "SKILL.md",
-                    source_ref=SkillSourceRef(
-                        origin=SkillSource.BUNDLED,
-                        logical_name=entry.name,
-                        skill_path=entry / "SKILL.md",
-                    ),
+    digest = hashlib.sha256()
+    try:
+        entries = sorted(
+            public_root.rglob("*"),
+            key=lambda path: path.relative_to(public_root).as_posix(),
+        )
+        for entry in entries:
+            relative = entry.relative_to(public_root).as_posix()
+            if entry.is_symlink():
+                raise PluginArtifactValidationError(
+                    f"projected plugin artifact contains a symlink: {entry}"
                 )
-            ).execution_role
-            is SkillExecutionRole.SESSION
+            if entry.is_dir():
+                kind = b"d"
+                payload_digest = b""
+            elif entry.is_file():
+                kind = b"f"
+                with entry.open("rb") as handle:
+                    payload_digest = hashlib.file_digest(handle, "sha256").digest()
+            else:
+                raise PluginArtifactValidationError(
+                    f"projected plugin artifact contains a special file: {entry}"
+                )
+            digest.update(kind)
+            digest.update(b"\0")
+            digest.update(relative.encode())
+            digest.update(b"\0")
+            digest.update(payload_digest)
+            digest.update(b"\0")
+    except PluginArtifactValidationError:
+        raise
+    except OSError as exc:
+        raise PluginArtifactValidationError(
+            f"projected plugin artifact cannot be digested: {public_root}"
+        ) from exc
+    return digest.hexdigest()
+
+
+def _stage_projected_plugin_artifact(
+    plan: _ProjectedArtifactPlan,
+) -> _StagedProjectedArtifact:
+    """Build one complete, unpublished artifact incarnation."""
+    staging_root = Path(
+        tempfile.mkdtemp(
+            prefix=f".{plan.destination.name}.plugin-",
+            dir=plan.destination.parent,
         )
     )
-    catalog = skill_catalog or EffectiveSkillCatalog(
-        skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in source_infos),
-        execution_role=SkillExecutionRole.SESSION,
+    staging_manifest = plan.destination.parent / (
+        f".{plan.destination.name}.manifest-{uuid.uuid4()}.json"
     )
-    if not catalog.skills:
-        raise SkillContractError(f"direct plugin has no bundled skills: {source_root}")
-    identity = "\n".join(
-        f"{info.name}:{info.canonical_digest}"
-        for info in sorted(catalog.skills, key=lambda s: s.name)
+    try:
+        _copy_non_skill_plugin_assets(plan.source_root, staging_root)
+        skill_infos = _skill_sequence(plan.catalog)
+        documents = materialize_agent_skill_tree(
+            staging_root / "skills",
+            skill_infos,
+            plan.context,
+        )
+        artifact_digest = _projected_plugin_artifact_digest(staging_root)
+        identity = PluginArtifactIdentity(
+            semantic_key=plan.semantic_key,
+            incarnation_id=str(uuid.uuid4()),
+            manifest_schema_version=_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            artifact_digest=artifact_digest,
+            managed_path=plan.destination,
+            manifest_path=plan.manifest_path,
+        )
+        write_versioned_json(
+            staging_manifest,
+            {
+                "schema_version": identity.manifest_schema_version,
+                "projection_version": plan.context.projection_version,
+                "semantic_key": identity.semantic_key,
+                "incarnation_id": identity.incarnation_id,
+                "artifact_digest": identity.artifact_digest,
+                "skills": _projection_skills_manifest(skill_infos, documents),
+            },
+            schema_version=identity.manifest_schema_version,
+        )
+        return _StagedProjectedArtifact(
+            root=staging_root,
+            manifest=staging_manifest,
+            identity=identity,
+        )
+    except BaseException:
+        shutil.rmtree(staging_root, ignore_errors=True)
+        if staging_manifest.is_symlink() or staging_manifest.is_file():
+            staging_manifest.unlink()
+        raise
+
+
+def _publish_projected_plugin_root(
+    staged: _StagedProjectedArtifact,
+    destination: Path,
+) -> None:
+    """Atomically publish staged public bytes at their stable semantic path."""
+    _replace_directory(staged.root, destination)
+
+
+def _publish_projected_plugin_manifest(
+    staged: _StagedProjectedArtifact,
+    manifest_path: Path,
+) -> None:
+    """Publish identity last, so incomplete root publication is never trusted."""
+    if manifest_path.exists() and not (manifest_path.is_file() or manifest_path.is_symlink()):
+        raise PluginArtifactPublicationError(
+            f"projected plugin manifest destination is not a file: {manifest_path}"
+        )
+    os.replace(staged.manifest, manifest_path)
+
+
+def _manifest_identity(plan: _ProjectedArtifactPlan) -> PluginArtifactIdentity:
+    if plan.manifest_path.is_symlink() or not plan.manifest_path.is_file():
+        raise PluginArtifactValidationError(
+            f"projected plugin identity manifest is not a regular file: {plan.manifest_path}"
+        )
+    manifest = read_versioned_json(
+        plan.manifest_path,
+        _PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
-    namespace_identity = "\n".join(
-        f"{name}:{source.value}" for name, source in sorted(catalog.namespace_sources.items())
+    if manifest is None:
+        raise PluginArtifactValidationError(
+            f"projected plugin identity manifest is unreadable: {plan.manifest_path}"
+        )
+    semantic_key = manifest.get("semantic_key")
+    incarnation_id = manifest.get("incarnation_id")
+    artifact_digest = manifest.get("artifact_digest")
+    if semantic_key != plan.semantic_key:
+        raise PluginArtifactValidationError(
+            f"projected plugin semantic key mismatch: {plan.manifest_path}"
+        )
+    if not isinstance(incarnation_id, str):
+        raise PluginArtifactValidationError(
+            f"projected plugin incarnation is missing: {plan.manifest_path}"
+        )
+    try:
+        parsed_incarnation = uuid.UUID(incarnation_id)
+    except ValueError as exc:
+        raise PluginArtifactValidationError(
+            f"projected plugin incarnation is invalid: {plan.manifest_path}"
+        ) from exc
+    if str(parsed_incarnation) != incarnation_id:
+        raise PluginArtifactValidationError(
+            f"projected plugin incarnation is not canonical: {plan.manifest_path}"
+        )
+    if not isinstance(artifact_digest, str) or len(artifact_digest) != 64:
+        raise PluginArtifactValidationError(
+            f"projected plugin digest is invalid: {plan.manifest_path}"
+        )
+    if manifest.get("projection_version") != plan.context.projection_version:
+        raise PluginArtifactValidationError(
+            f"projected plugin version mismatch: {plan.manifest_path}"
+        )
+    return PluginArtifactIdentity(
+        semantic_key=semantic_key,
+        incarnation_id=incarnation_id,
+        manifest_schema_version=_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        artifact_digest=artifact_digest,
+        managed_path=plan.destination,
+        manifest_path=plan.manifest_path,
     )
-    cache_key = ProjectionCacheKey(
-        source_root=str(source_root),
-        backend_name=backend.name,
-        projection_version=SKILL_PROJECTION_VERSION,
-        default_base_branch=default_base_branch,
-        skill_identity=identity,
-        namespace_identity=namespace_identity,
-        asset_digest=public_plugin_asset_digest(source_root),
-    ).digest()
-    projections_root = Path.home() / ".autoskillit" / "plugin-projections"
-    destination = projections_root / cache_key
-    context = _direct_install_projection_context(
-        cwd=Path(cwd),
-        project_root=None,
-        catalog=catalog,
-        backend=backend,
-        destination=destination,
-        default_base_branch=default_base_branch,
+
+
+def _validate_published_plugin_artifact(
+    plan: _ProjectedArtifactPlan,
+    *,
+    expected_identity: PluginArtifactIdentity | None = None,
+) -> PluginArtifactIdentity:
+    """Validate both semantic content and exact physical incarnation."""
+    identity = _manifest_identity(plan)
+    errors = validate_sanitized_plugin_artifact(
+        plan.source_root,
+        plan.destination,
+        plan.manifest_path,
+        plan.validation_catalog,
+        require_sources_within_root=plan.require_sources_within_root,
+        manifest_schema_version=_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
-    manifest_path = destination.parent / f".{destination.name}.autoskillit-projection.json"
-    with _InstallLock():
-        # Policy (module docstring): a projection destination's prior content is
-        # always replaced. A stale symlink or file here is something to discard,
-        # not something to refuse — matching _replace_directory rather than
-        # contradicting it.
-        if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
-            destination.unlink()
-        if not destination.exists():
-            manifest_path = materialize_sanitized_plugin_root(
-                source_root,
-                destination,
-                catalog,
-                context,
+    if errors:
+        raise PluginArtifactValidationError(
+            "projected plugin content validation failed: " + "; ".join(errors)
+        )
+    actual_digest = _projected_plugin_artifact_digest(plan.destination)
+    if actual_digest != identity.artifact_digest:
+        raise PluginArtifactValidationError(
+            "projected plugin digest mismatch: "
+            f"expected {identity.artifact_digest}, got {actual_digest}"
+        )
+    if _manifest_identity(plan) != identity:
+        raise PluginArtifactValidationError("projected plugin identity changed during validation")
+    if expected_identity is not None and identity != expected_identity:
+        raise PluginArtifactValidationError(
+            "projected plugin incarnation changed before reader lease acquisition"
+        )
+    return identity
+
+
+def _try_validate_published_plugin_artifact(
+    plan: _ProjectedArtifactPlan,
+) -> PluginArtifactIdentity | None:
+    try:
+        return _validate_published_plugin_artifact(plan)
+    except PluginArtifactValidationError:
+        return None
+    except Exception as exc:
+        raise PluginArtifactValidationError(
+            f"projected plugin validation failed: {plan.semantic_key}"
+        ) from exc
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectedPluginArtifactAuthority:
+    """Lazy owner of projected plugin publication and per-launch reader leases."""
+
+    direct_install: DirectInstall
+    projection_version: int = SKILL_PROJECTION_VERSION
+    base_branch: str | None = None
+    catalog: EffectiveSkillCatalogAuthority | None = None
+    namespace_sources: Mapping[str, SkillSource] | None = None
+    cwd: Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.projection_version < 1:
+            raise ValueError("projection_version must be positive")
+        if self.namespace_sources is not None:
+            object.__setattr__(
+                self,
+                "namespace_sources",
+                MappingProxyType(dict(self.namespace_sources)),
             )
-        errors = validate_sanitized_plugin_artifact(
-            source_root,
-            destination,
-            manifest_path,
-            source_infos if source_infos else catalog,
+        if self.cwd is not None:
+            object.__setattr__(self, "cwd", Path(self.cwd))
+
+    def _plan(self, backend: CodingAgentBackend) -> _ProjectedArtifactPlan:
+        source_root = self.direct_install.plugin_dir.resolve()
+        bundled_root = source_root / "skills"
+        if not source_root.is_dir():
+            raise PluginArtifactPublicationError(
+                f"direct plugin root does not exist: {source_root}"
+            )
+        if self.catalog is None and (not bundled_root.is_dir() or bundled_root.is_symlink()):
+            raise PluginArtifactPublicationError(
+                f"direct plugin has no canonical bundled skill root: {source_root}"
+            )
+        source_infos = (
+            tuple()
+            if self.catalog is not None
+            else tuple(
+                info
+                for entry in sorted(bundled_root.iterdir(), key=lambda item: item.name)
+                if (
+                    not entry.is_symlink()
+                    and entry.is_dir()
+                    and not (entry / "SKILL.md").is_symlink()
+                    and (entry / "SKILL.md").is_file()
+                )
+                and (
+                    info := _skill_info_from_frontmatter(
+                        entry.name,
+                        SkillSource.BUNDLED,
+                        entry / "SKILL.md",
+                        source_ref=SkillSourceRef(
+                            origin=SkillSource.BUNDLED,
+                            logical_name=entry.name,
+                            skill_path=entry / "SKILL.md",
+                        ),
+                    )
+                ).execution_role
+                is SkillExecutionRole.SESSION
+            )
+        )
+        namespace_sources = (
+            self.namespace_sources
+            if self.namespace_sources is not None
+            else (self.catalog.namespace_sources if self.catalog is not None else {})
+        )
+        catalog = self.catalog or EffectiveSkillCatalog(
+            skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in source_infos),
+            execution_role=SkillExecutionRole.SESSION,
+            namespace_sources=namespace_sources,
+        )
+        if self.catalog is not None and self.namespace_sources is not None:
+            catalog = EffectiveSkillCatalog(
+                skills=cast(tuple[SkillCatalogEntry, ...], tuple(self.catalog.skills)),
+                execution_role=self.catalog.execution_role,
+                namespace_sources=self.namespace_sources,
+            )
+        if not catalog.skills:
+            raise PluginArtifactPublicationError(
+                f"direct plugin has no bundled skills: {source_root}"
+            )
+        skill_identity = "\n".join(
+            f"{info.name}:{info.canonical_digest}"
+            for info in sorted(catalog.skills, key=lambda skill: skill.name)
+        )
+        namespace_identity = "\n".join(
+            f"{name}:{source.value}" for name, source in sorted(catalog.namespace_sources.items())
+        )
+        semantic_key = ProjectionCacheKey(
+            source_root=str(source_root),
+            backend_name=backend.name,
+            projection_version=self.projection_version,
+            default_base_branch=_default_base_branch(self.base_branch),
+            skill_identity=skill_identity,
+            namespace_identity=namespace_identity,
+            asset_digest=public_plugin_asset_digest(source_root),
+        ).digest()
+        projections_root = Path.home() / ".autoskillit" / "plugin-projections"
+        destination = (projections_root / semantic_key).absolute()
+        context = _direct_install_projection_context(
+            cwd=self.cwd or Path.cwd(),
+            project_root=None,
+            catalog=catalog,
+            backend=backend,
+            destination=destination,
+            default_base_branch=_default_base_branch(self.base_branch),
+            projection_version=self.projection_version,
+        )
+        return _ProjectedArtifactPlan(
+            source_root=source_root,
+            destination=destination,
+            manifest_path=(
+                projections_root / f".{semantic_key}.autoskillit-projection.json"
+            ).absolute(),
+            lease_path=(projections_root / ".artifact-leases" / f"{semantic_key}.lock").absolute(),
+            semantic_key=semantic_key,
+            catalog=catalog,
+            validation_catalog=source_infos if source_infos else catalog,
             require_sources_within_root=bool(source_infos),
+            context=context,
         )
-        if errors:
-            shutil.rmtree(destination)
-            if manifest_path.is_symlink() or manifest_path.is_file():
-                manifest_path.unlink()
-            elif manifest_path.exists():
-                raise SkillContractError(
-                    f"direct plugin projection manifest is not a file: {manifest_path}"
+
+    def acquire_launch_binding(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        load_mode: PluginLoadMode,
+    ) -> PluginLaunchBinding:
+        if not load_mode.consumes_artifact:
+            raise ValueError(
+                f"projected plugin authority cannot bind load mode {load_mode.value!r}"
+            )
+        try:
+            plan = self._plan(backend)
+        except PluginArtifactPublicationError:
+            raise
+        except Exception as exc:
+            raise PluginArtifactPublicationError(
+                "projected plugin publication planning failed"
+            ) from exc
+        try:
+            reader = ArtifactLease.acquire_shared(plan.lease_path)
+        except Exception as exc:
+            raise PluginArtifactPublicationError(
+                f"projected plugin reader lease acquisition failed: {plan.semantic_key}"
+            ) from exc
+        try:
+            identity = _try_validate_published_plugin_artifact(plan)
+        except BaseException:
+            reader.close()
+            raise
+        if identity is not None:
+            return self._binding(load_mode, plan, identity, reader)
+        reader.close()
+
+        try:
+            writer = ArtifactLease.acquire_exclusive(plan.lease_path, blocking=False)
+        except ArtifactLeaseContention as exc:
+            raise PluginArtifactContentionError(
+                f"projected plugin mutation is contended: {plan.semantic_key}"
+            ) from exc
+        try:
+            identity = _try_validate_published_plugin_artifact(plan)
+            if identity is None:
+                plan.destination.parent.mkdir(parents=True, exist_ok=True)
+                staged: _StagedProjectedArtifact | None = None
+                try:
+                    staged = _stage_projected_plugin_artifact(plan)
+                    _publish_projected_plugin_root(staged, plan.destination)
+                    _publish_projected_plugin_manifest(staged, plan.manifest_path)
+                except (
+                    PluginArtifactPublicationError,
+                    PluginArtifactValidationError,
+                ):
+                    raise
+                except BaseException as exc:
+                    raise PluginArtifactPublicationError(
+                        f"projected plugin publication failed: {plan.semantic_key}"
+                    ) from exc
+                finally:
+                    if staged is not None:
+                        shutil.rmtree(staged.root, ignore_errors=True)
+                        if staged.manifest.is_symlink() or staged.manifest.is_file():
+                            staged.manifest.unlink()
+                assert staged is not None
+                identity = _validate_published_plugin_artifact(
+                    plan,
+                    expected_identity=staged.identity,
                 )
-            manifest_path = materialize_sanitized_plugin_root(
-                source_root,
-                destination,
-                catalog,
-                context,
+        finally:
+            writer.close()
+
+        try:
+            reader = ArtifactLease.acquire_shared(plan.lease_path)
+        except Exception as exc:
+            raise PluginArtifactPublicationError(
+                f"projected plugin reader lease acquisition failed: {plan.semantic_key}"
+            ) from exc
+        try:
+            identity = _validate_published_plugin_artifact(
+                plan,
+                expected_identity=identity,
             )
-            errors = validate_sanitized_plugin_artifact(
-                source_root,
-                destination,
-                manifest_path,
-                source_infos if source_infos else catalog,
-                require_sources_within_root=bool(source_infos),
-            )
-        if errors:
-            raise SkillContractError(
-                "direct plugin projection validation failed: " + "; ".join(errors)
-            )
-        prune_stale_projections(projections_root, active_key=cache_key)
-    return ProjectedPluginRoot(plugin_dir=destination)
+        except BaseException:
+            reader.close()
+            raise
+        return self._binding(load_mode, plan, identity, reader)
+
+    @staticmethod
+    def _binding(
+        load_mode: PluginLoadMode,
+        plan: _ProjectedArtifactPlan,
+        identity: PluginArtifactIdentity,
+        reader: ArtifactLease,
+    ) -> PluginLaunchBinding:
+        return PluginLaunchBinding(
+            load_mode=load_mode,
+            plugin_dir=(
+                None if load_mode is PluginLoadMode.IMPLICIT_INSTALLED else plan.destination
+            ),
+            identity=identity,
+            inherited_fds=reader.inherited_fds,
+            _lease=reader,
+        )
 
 
-def project_default_plugin_source(
+def project_direct_install_authority(
+    direct_install: DirectInstall,
     *,
-    cwd: Path,
-    backend: CodingAgentBackend,
-    default_base_branch: str,
-    skill_catalog: EffectiveSkillCatalogAuthority | None = None,
-) -> ProjectedPluginRoot:
-    """Project the running package — the one source that cannot be stale.
-
-    ``pkg_root()`` is the code currently executing. Every other candidate (the
-    Claude Code plugin cache, the local marketplace tree) is a derived copy
-    owned by someone else, and resolving from one is what produced sessions
-    running eleven-versions-old recipes against current code.
-    """
-    return project_direct_install(
-        DirectInstall(plugin_dir=pkg_root()),
+    projection_version: int = SKILL_PROJECTION_VERSION,
+    base_branch: str | None = None,
+    catalog: EffectiveSkillCatalogAuthority | None = None,
+    namespace_sources: Mapping[str, SkillSource] | None = None,
+    cwd: Path | None = None,
+) -> ProjectedPluginArtifactAuthority:
+    return ProjectedPluginArtifactAuthority(
+        direct_install=direct_install,
+        projection_version=projection_version,
+        base_branch=base_branch,
+        catalog=catalog,
+        namespace_sources=namespace_sources,
         cwd=cwd,
-        backend=backend,
-        default_base_branch=default_base_branch,
-        skill_catalog=skill_catalog,
     )
 
 
-#: Historical alias. There is exactly one plugin source and one way to get it;
-#: this exists so callers reading "project whatever source applies" still land
-#: on the single authority.
-project_plugin_source = project_default_plugin_source
+def project_default_plugin_authority(
+    *,
+    projection_version: int = SKILL_PROJECTION_VERSION,
+    base_branch: str | None = None,
+    catalog: EffectiveSkillCatalogAuthority | None = None,
+    namespace_sources: Mapping[str, SkillSource] | None = None,
+    cwd: Path | None = None,
+) -> ProjectedPluginArtifactAuthority:
+    return project_direct_install_authority(
+        DirectInstall(plugin_dir=pkg_root()),
+        projection_version=projection_version,
+        base_branch=base_branch,
+        catalog=catalog,
+        namespace_sources=namespace_sources,
+        cwd=cwd,
+    )
 
 
 def prepare_catalog_skill_dispatch(
     *,
     resolved_command: str,
     cwd: Path,
-    backend: CodingAgentBackend,
     catalog: EffectiveSkillCatalogAuthority,
     default_base_branch: str,
     project_root: Path | None = None,
-) -> tuple[ProjectedPluginRoot, EffectiveSkillDispatchContract]:
-    """Project a visible catalog and bind the artifact to executor authority."""
+) -> tuple[ProjectedPluginArtifactAuthority, EffectiveSkillDispatchPreparation]:
+    """Prepare semantic dispatch state without acquiring or publishing an artifact."""
     default_base_branch = _default_base_branch(default_base_branch)
-    plugin_source = project_default_plugin_source(
+    authority = project_default_plugin_authority(
         cwd=cwd,
-        backend=backend,
+        base_branch=default_base_branch,
+        catalog=catalog,
+    )
+    preparation = EffectiveSkillDispatchPreparation(
+        resolved_command=resolved_command,
+        cwd=cwd,
+        project_root=project_root,
         default_base_branch=default_base_branch,
-        skill_catalog=catalog,
+        catalog=catalog,
     )
-    contract = build_effective_skill_dispatch_contract(
-        resolved_command,
-        _direct_install_projection_context(
-            cwd=cwd,
-            project_root=project_root,
-            catalog=catalog,
-            backend=backend,
-            destination=plugin_source.plugin_dir,
-            default_base_branch=default_base_branch,
-        ),
-        artifact_paths=(str(plugin_source.plugin_dir),),
-    )
-    return plugin_source, contract
+    return authority, preparation
 
 
 def prepare_effective_skill_dispatch(
@@ -847,14 +1284,13 @@ def prepare_effective_skill_dispatch(
     resolved_command: str,
     project_root: Path,
     cwd: Path,
-    backend: CodingAgentBackend,
     resolver: SkillResolver,
     visibility: SkillVisibilitySpec | None,
     default_base_branch: str | None,
     recipe_packs: frozenset[str] | None,
     recipe_features: frozenset[str] | None,
-) -> tuple[ProjectedPluginRoot, EffectiveSkillDispatchContract]:
-    """Resolve visible orchestrator skills, project them, and bind dispatch authority."""
+) -> tuple[ProjectedPluginArtifactAuthority, EffectiveSkillDispatchPreparation]:
+    """Resolve visible orchestrator skills into a backend-neutral preparation."""
     catalog = resolver.list_effective(
         project_root,
         SkillExecutionRole.ORCHESTRATOR,
@@ -865,7 +1301,6 @@ def prepare_effective_skill_dispatch(
     return prepare_catalog_skill_dispatch(
         resolved_command=resolved_command,
         cwd=cwd,
-        backend=backend,
         catalog=catalog,
         default_base_branch=_default_base_branch(default_base_branch),
         project_root=project_root,

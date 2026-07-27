@@ -22,7 +22,6 @@ from autoskillit.core import (
     CodingAgentBackend,
     EnvPolicy,
     OutputFormat,
-    ProjectedPluginRoot,
     ResultParser,
     SessionCheckpoint,
     SessionLocator,
@@ -41,6 +40,7 @@ from autoskillit.execution.backends.codex import (
     CodexSessionLocator,
     CodexStreamParser,
 )
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -513,7 +513,7 @@ class TestCodexBuildSkillSessionCmd:
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
         "model": None,
-        "plugin_source": None,
+        "plugin_binding": None,
         "output_format": OutputFormat.JSON,
     }
 
@@ -642,12 +642,8 @@ class TestCodexBuildSkillSessionCmd:
     def test_default_params_emit_no_warnings(self) -> None:
         with structlog.testing.capture_logs() as cap_logs:
             spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        discard_events = [
-            e
-            for e in cap_logs
-            if e.get("event") in ("codex_plugin_source_discarded", "codex_output_format_coerced")
-        ]
-        assert discard_events == []
+        warning_events = [e for e in cap_logs if e.get("event") == "codex_output_format_coerced"]
+        assert warning_events == []
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
         assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
 
@@ -698,7 +694,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         config = SkillSessionConfig(
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.JSON,
         )
         via_config = CodexBackend().build_skill_session_cmd(
@@ -709,7 +705,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             cwd="/work",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.JSON,
         )
         assert via_config.cmd == via_flat.cmd
@@ -721,7 +717,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         config = SkillSessionConfig(
             completion_marker="%%MARKER%%",
             model="o3",
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.STREAM_JSON,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,
@@ -742,7 +738,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             cwd="/tmp",
             completion_marker="%%MARKER%%",
             model="o3",
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.STREAM_JSON,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,
@@ -773,11 +769,11 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         assert isinstance(result, CmdSpec)
         assert isinstance(result.cmd, tuple)
 
-    def test_config_projects_plugin_source_into_codex_home(self) -> None:
+    def test_config_projects_plugin_binding_into_codex_home(self) -> None:
         config = SkillSessionConfig(
             completion_marker="%%DONE%%",
             output_format=OutputFormat.STREAM_JSON,
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
+            plugin_binding=plugin_binding(Path("/p")),
         )
         spec = CodexBackend().build_skill_session_cmd("/test", cwd="/work", config=config)
         cmd_str = " ".join(spec.cmd)
@@ -792,7 +788,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             cwd="/work",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.JSON,
         )
         assert isinstance(spec, CmdSpec)
@@ -889,14 +885,10 @@ class TestCodexBuildInteractiveCmd:
         spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
         assert spec.cmd[-1] == "hello"
 
-    def test_plugin_source_is_delivered_through_codex_home(self) -> None:
+    def test_plugin_binding_is_delivered_through_codex_home(self) -> None:
         from pathlib import Path
 
-        from autoskillit.core import ProjectedPluginRoot
-
-        spec = CodexBackend().build_interactive_cmd(
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/x"))
-        )
+        spec = CodexBackend().build_interactive_cmd(plugin_binding=plugin_binding(Path("/x")))
         assert "--plugin-dir" not in spec.cmd
         assert "/x" not in spec.cmd
         assert spec.env["CODEX_HOME"] == "/x"
@@ -922,7 +914,7 @@ class TestCodexBuildSkillSessionCmdAgentBackend:
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
         "model": None,
-        "plugin_source": None,
+        "plugin_binding": None,
         "output_format": OutputFormat.JSON,
     }
 
@@ -951,13 +943,13 @@ class TestCodexDynaconfBackendEnv:
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
         "model": None,
-        "plugin_source": None,
+        "plugin_binding": None,
         "output_format": OutputFormat.JSON,
     }
 
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
+        "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -974,7 +966,7 @@ class TestCodexDynaconfBackendEnv:
 class TestCodexBuildFoodTruckCmd:
     BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
+        "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -1241,12 +1233,12 @@ class TestCodexForwardVarsInjection:
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
         "model": None,
-        "plugin_source": None,
+        "plugin_binding": None,
         "output_format": OutputFormat.JSON,
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
+        "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -1306,12 +1298,12 @@ class TestCodexMcpClientBackendRequired:
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
         "model": None,
-        "plugin_source": None,
+        "plugin_binding": None,
         "output_format": OutputFormat.JSON,
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
+        "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
@@ -1401,7 +1393,7 @@ class TestClaudeCodeBackendProcessIdleDefault:
 class TestCodexDiscardDispositions:
     """Codex builder parameter disposition contracts.
 
-    plugin_source -> delivered as a sanitized CODEX_HOME.
+    plugin_binding -> delivered as a sanitized CODEX_HOME.
     output_format -> logged warning when != JSON.
     exit_after_stop_delay_ms -> AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env injection via setdefault.
     stream_idle_timeout_ms -> routed to CmdSpec.process_idle_timeout_ms + env injection.
@@ -1414,26 +1406,20 @@ class TestCodexDiscardDispositions:
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "go",
-        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
+        "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }
 
-    def test_plugin_source_delivered_by_skill_builder(self) -> None:
-        with structlog.testing.capture_logs() as cap_logs:
-            spec = CodexBackend().build_skill_session_cmd(
-                **self.SKILL_BASE,
-                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/pkg")),
-            )
-        events = [e for e in cap_logs if e.get("event") == "codex_plugin_source_discarded"]
-        assert events == []
+    def test_plugin_binding_delivered_by_skill_builder(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            **self.SKILL_BASE,
+            plugin_binding=plugin_binding(Path("/pkg")),
+        )
         assert spec.env["CODEX_HOME"] == "/pkg"
 
-    def test_plugin_source_delivered_by_food_truck_builder(self) -> None:
-        with structlog.testing.capture_logs() as cap_logs:
-            spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
-        events = [e for e in cap_logs if e.get("event") == "codex_plugin_source_discarded"]
-        assert events == []
+    def test_plugin_binding_delivered_by_food_truck_builder(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
         assert spec.env["CODEX_HOME"] == "/pkg"
 
     def test_output_format_warning_skill_builder(self) -> None:
@@ -1531,12 +1517,8 @@ class TestCodexDiscardDispositions:
     def test_no_warnings_on_defaults_skill_builder(self) -> None:
         with structlog.testing.capture_logs() as cap_logs:
             CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
-        discard_events = [
-            e
-            for e in cap_logs
-            if e.get("event") in ("codex_plugin_source_discarded", "codex_output_format_coerced")
-        ]
-        assert discard_events == []
+        warning_events = [e for e in cap_logs if e.get("event") == "codex_output_format_coerced"]
+        assert warning_events == []
 
 
 class TestCodexBackendSetupSessionDir:

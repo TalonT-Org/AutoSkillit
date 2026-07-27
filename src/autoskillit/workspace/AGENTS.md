@@ -23,12 +23,12 @@ IL-1 workspace management — clone lifecycle, worktrees, skill resolution.
 
 ## Architecture Notes
 
-**Plugin sources are always derived from `pkg_root()` and always projected.**
+**Plugin authorities are derived from `pkg_root()` and bind projections per launch.**
 No code here may resolve a plugin root from `installed_plugins.json` or the
 Claude Code plugin cache: those are derived copies that a third party versions
 and garbage-collects, and reading one produces sessions that run stale
-recipes/agents/hooks against current code. `project_default_plugin_source()` is
-the single authority; `ProjectedPluginRoot` makes "already projected" a type.
+recipes/agents/hooks against current code. `project_default_plugin_authority()`
+is lazy; only its launch binding carries a validated artifact path and lease.
 
 **Containment checks over write destinations use `destination_location()`, never
 `Path.resolve()`** — resolve follows a final-component symlink, which answers

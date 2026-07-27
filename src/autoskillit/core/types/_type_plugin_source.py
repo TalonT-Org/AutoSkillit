@@ -7,15 +7,11 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
-from ..paths import pkg_root
-
 __all__ = [
     "DirectInstall",
     "PluginArtifactIdentity",
     "PluginLaunchBinding",
     "PluginLoadMode",
-    "PluginSource",
-    "ProjectedPluginRoot",
 ]
 
 
@@ -127,28 +123,3 @@ class DirectInstall:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "plugin_dir", Path(self.plugin_dir))
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectedPluginRoot:
-    """A sanitized plugin projection — the only root a session may load.
-
-    Constructed exclusively by ``autoskillit.workspace.skill_projection``;
-    an architectural ratchet test forbids construction anywhere else in
-    ``src/``. The invariants below are what the backend command builders used
-    to re-check at runtime.
-    """
-
-    plugin_dir: Path
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "plugin_dir", Path(self.plugin_dir))
-        if not self.plugin_dir.is_absolute():
-            raise ValueError(f"projected plugin root must be an absolute path: {self.plugin_dir}")
-        if self.plugin_dir.resolve() == pkg_root().resolve():
-            raise ValueError(
-                f"projected plugin root must not be the canonical package root: {self.plugin_dir}"
-            )
-
-
-PluginSource = ProjectedPluginRoot

@@ -939,7 +939,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 18,
         "core": 28,  # +context admission +audit-cycle verifier/tool registry
         "core/types": 41,  # +context persistence, audit, binding, execution, intake types
-        "cli": 21,
+        "cli": 22,  # +_plugin_artifact exact installed-incarnation authority (#4382)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 14,  # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
@@ -1201,6 +1201,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "validation; keeping those operations together preserves both assembly ordering "
         "and the create/validate/yield/delete ownership proof",
     ),
+    "workspace/skill_projection.py": (
+        1400,
+        "REQ-CNST-010-E15: issue #4382 keeps projection keying, staged publication, "
+        "exact-incarnation validation, and reader/writer lease handoff in one lifecycle "
+        "authority so destructive repair cannot bypass its lock ordering",
+    ),
     "rules_skill_content.py": (
         1200,
         "REQ-CNST-010-E11: SKILL.md content validation rules registry — accumulating "
@@ -1402,7 +1408,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types.py.
 
     Exempt fields:
-    - plugin_source: PluginSource discriminated union (value type, not a service interface)
+    - plugin_authority: PluginArtifactAuthority (lifetime-owning authority)
     - config: AutomationConfig dataclass (configuration container, not a service interface)
     - recipe_initialization_state: lifecycle value union, not a service interface
     """
@@ -1442,7 +1448,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_tree = ast.parse(context_path.read_text())
 
     EXEMPT = {
-        "plugin_source",
+        "plugin_authority",
         "config",
         "active_recipe_packs",
         "active_recipe_features",

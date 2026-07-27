@@ -23,7 +23,15 @@ def test_cmd_spec_fields():
     from autoskillit.core import CmdSpec
 
     fields = {f.name for f in dataclasses.fields(CmdSpec)}
-    assert fields == {"cmd", "env", "cwd", "origin", "is_resume", "process_idle_timeout_ms"}
+    assert fields == {
+        "cmd",
+        "env",
+        "cwd",
+        "origin",
+        "is_resume",
+        "process_idle_timeout_ms",
+        "inherited_fds",
+    }
 
 
 def test_cmd_spec_is_resume_default():
@@ -38,6 +46,13 @@ def test_cmd_spec_process_idle_timeout_default():
 
     spec = CmdSpec(cmd=(), env={})
     assert spec.process_idle_timeout_ms == 0
+
+
+def test_cmd_spec_inherited_fds_default():
+    from autoskillit.core import CmdSpec
+
+    spec = CmdSpec(cmd=(), env={})
+    assert spec.inherited_fds == ()
 
 
 def test_cmd_spec_env_accepts_mapping():
@@ -378,7 +393,7 @@ def test_skill_session_config_fields_exhaustive():
     assert fields == {
         "completion_marker",
         "model",
-        "plugin_source",
+        "plugin_binding",
         "output_format",
         "add_dirs",
         "exit_after_stop_delay_ms",
@@ -404,7 +419,7 @@ def test_skill_session_config_defaults():
     cfg = SkillSessionConfig()
     assert cfg.completion_marker == ""
     assert cfg.model is None
-    assert cfg.plugin_source is None
+    assert cfg.plugin_binding is None
     assert cfg.output_format == OutputFormat.JSON
     assert cfg.add_dirs == ()
     assert cfg.exit_after_stop_delay_ms == 0
@@ -428,7 +443,7 @@ def test_skill_session_config_field_types():
 
     from autoskillit.core import (
         OutputFormat,
-        PluginSource,
+        PluginLaunchBinding,
         SessionCheckpoint,
         SkillSessionConfig,
         ValidatedAddDir,
@@ -437,7 +452,7 @@ def test_skill_session_config_field_types():
     hints = typing.get_type_hints(SkillSessionConfig)
     assert hints["completion_marker"] is str
     assert hints["model"] == str | None
-    assert hints["plugin_source"] == PluginSource | None
+    assert hints["plugin_binding"] == PluginLaunchBinding | None
     assert hints["output_format"] is OutputFormat
     assert hints["add_dirs"] == tuple[ValidatedAddDir, ...]
     assert hints["exit_after_stop_delay_ms"] is int

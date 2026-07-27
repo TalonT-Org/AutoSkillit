@@ -6,13 +6,19 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ClaudeFlags, OutputFormat, ProjectedPluginRoot
+from autoskillit.core import ClaudeFlags, OutputFormat
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _with_plugin_binding(build_spec):
+    with plugin_binding(Path("/plugins")) as binding:
+        return build_spec(binding)
 
 
 def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
@@ -29,26 +35,30 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.STREAM_JSON,
         ),
         lambda: ClaudeCodeBackend().build_resume_cmd(resume_session_id="abc", prompt="Emit"),
-        lambda: ClaudeCodeBackend().build_food_truck_cmd(
-            orchestrator_prompt="You are an L3 orchestrator",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
+        lambda: _with_plugin_binding(
+            lambda binding: ClaudeCodeBackend().build_food_truck_cmd(
+                orchestrator_prompt="You are an L3 orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+            )
         ),
         lambda: CodexBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
-        lambda: CodexBackend().build_food_truck_cmd(
-            orchestrator_prompt="L3 orchestrator",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
+        lambda: _with_plugin_binding(
+            lambda binding: CodexBackend().build_food_truck_cmd(
+                orchestrator_prompt="L3 orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+            )
         ),
     ],
     ids=[
@@ -76,26 +86,30 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.STREAM_JSON,
         ),
         lambda: ClaudeCodeBackend().build_resume_cmd(resume_session_id="abc", prompt="Emit"),
-        lambda: ClaudeCodeBackend().build_food_truck_cmd(
-            orchestrator_prompt="You are an L3 orchestrator",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
+        lambda: _with_plugin_binding(
+            lambda binding: ClaudeCodeBackend().build_food_truck_cmd(
+                orchestrator_prompt="You are an L3 orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+            )
         ),
         lambda: CodexBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
-        lambda: CodexBackend().build_food_truck_cmd(
-            orchestrator_prompt="L3 orchestrator",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
+        lambda: _with_plugin_binding(
+            lambda binding: CodexBackend().build_food_truck_cmd(
+                orchestrator_prompt="L3 orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+            )
         ),
     ],
     ids=[
@@ -161,30 +175,36 @@ class TestCompletionReminderPositionInvariant:
     @pytest.mark.parametrize(
         "build_spec",
         [
-            lambda marker: ClaudeCodeBackend().build_skill_session_cmd(
-                "/autoskillit:make-plan arg",
-                cwd="/repo",
-                completion_marker=marker,
-                model=None,
-                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-                output_format=OutputFormat.JSON,
-                profile_name="minimax",
+            lambda marker: _with_plugin_binding(
+                lambda binding: ClaudeCodeBackend().build_skill_session_cmd(
+                    "/autoskillit:make-plan arg",
+                    cwd="/repo",
+                    completion_marker=marker,
+                    model=None,
+                    plugin_binding=binding,
+                    output_format=OutputFormat.JSON,
+                    profile_name="minimax",
+                )
             ),
-            lambda marker: ClaudeCodeBackend().build_skill_session_cmd(
-                "/autoskillit:make-plan arg",
-                cwd="/repo",
-                completion_marker=marker,
-                model=None,
-                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-                output_format=OutputFormat.JSON,
-                profile_name="minimax",
-                resume_session_id="sess-abc",
+            lambda marker: _with_plugin_binding(
+                lambda binding: ClaudeCodeBackend().build_skill_session_cmd(
+                    "/autoskillit:make-plan arg",
+                    cwd="/repo",
+                    completion_marker=marker,
+                    model=None,
+                    plugin_binding=binding,
+                    output_format=OutputFormat.JSON,
+                    profile_name="minimax",
+                    resume_session_id="sess-abc",
+                )
             ),
-            lambda marker: ClaudeCodeBackend().build_food_truck_cmd(
-                orchestrator_prompt="Run the campaign",
-                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-                cwd="/repo",
-                completion_marker=marker,
+            lambda marker: _with_plugin_binding(
+                lambda binding: ClaudeCodeBackend().build_food_truck_cmd(
+                    orchestrator_prompt="Run the campaign",
+                    plugin_binding=binding,
+                    cwd="/repo",
+                    completion_marker=marker,
+                )
             ),
         ],
         ids=["skill_session_non_resume", "skill_session_resume", "food_truck_non_resume"],
@@ -225,11 +245,13 @@ def test_cwd_in_headless_exclusive_vars() -> None:
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
-        lambda: CodexBackend().build_food_truck_cmd(
-            orchestrator_prompt="L3 orchestrator",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
+        lambda: _with_plugin_binding(
+            lambda binding: CodexBackend().build_food_truck_cmd(
+                orchestrator_prompt="L3 orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+            )
         ),
         lambda: CodexBackend().build_headless_cmd("do stuff"),
         lambda: CodexBackend().build_resume_cmd(resume_session_id="sess-test", prompt="continue"),
@@ -249,7 +271,7 @@ def test_session_deadline_not_in_l1_subprocess_env(monkeypatch) -> None:
         cwd="/tmp",
         completion_marker="%%DONE%%",
         model=None,
-        plugin_source=None,
+        plugin_binding=None,
         output_format=OutputFormat.STREAM_JSON,
     )
     assert "AUTOSKILLIT_SESSION_DEADLINE" not in spec.env

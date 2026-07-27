@@ -72,6 +72,16 @@ def test_subprocess_runner_pty_mode_default_is_false():
     )
 
 
+def test_subprocess_runner_pass_fds_default_is_empty_tuple():
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    param = inspect.signature(SubprocessRunner.__call__).parameters.get("pass_fds")
+    assert param is not None
+    assert param.default == ()
+
+
 def test_output_path_tokens_contains_all_file_path_contract_outputs() -> None:
     from autoskillit.execution.headless import (
         _INTENTIONALLY_EXCLUDED_PATH_TOKENS,

@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from autoskillit.core.types import (
     CIWatcher,
+    CodingAgentBackend,
     DatabaseReader,
     HeadlessExecutor,
     MergeQueueWatcher,
+    PluginArtifactAuthority,
+    PluginLoadMode,
     RecipeRepository,
     SkillResult,
     SubprocessRunner,
@@ -18,7 +22,9 @@ from autoskillit.core.types import (
     TestRunner,
 )
 from tests.fakes import (
+    DispatchFoodTruckCall,
     ExecutorCall,
+    FakePluginArtifactAuthority,
     InMemoryCIWatcher,
     InMemoryDatabaseReader,
     InMemoryHeadlessExecutor,
@@ -61,6 +67,35 @@ def test_in_memory_database_reader_satisfies_protocol():
 
 def test_mock_subprocess_runner_satisfies_protocol():
     assert isinstance(MockSubprocessRunner(), SubprocessRunner)
+
+
+def test_fake_plugin_artifact_authority_is_lazy_fresh_and_releasable(tmp_path: Path):
+    authority = FakePluginArtifactAuthority(tmp_path)
+    assert isinstance(authority, PluginArtifactAuthority)
+
+    backend = cast(CodingAgentBackend, object())
+    first = authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    second = authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+
+    assert first is not second
+    assert first.identity.incarnation_id == "test-incarnation-1"
+    assert second.identity.incarnation_id == "test-incarnation-2"
+    assert first.plugin_dir == tmp_path
+    assert first.closed is False
+    authority.close()
+    assert first.closed is True
+    assert second.closed is True
+    with pytest.raises(RuntimeError, match="authority is closed"):
+        authority.acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +397,23 @@ def test_executor_fake_captures_all_protocol_parameters():
     missing_in_call = protocol_params - call_fields - {"self"}
     assert not missing_in_fake, f"InMemoryHeadlessExecutor.run() missing params: {missing_in_fake}"
     assert not missing_in_call, f"ExecutorCall missing fields: {missing_in_call}"
+
+
+def test_dispatch_fake_captures_all_protocol_parameters():
+    """The food-truck fake must stay aligned with the dispatch protocol."""
+    import dataclasses
+    import inspect
+
+    protocol_params = set(
+        inspect.signature(HeadlessExecutor.dispatch_food_truck).parameters.keys()
+    )
+    fake_params = set(
+        inspect.signature(InMemoryHeadlessExecutor.dispatch_food_truck).parameters.keys()
+    )
+    call_fields = {f.name for f in dataclasses.fields(DispatchFoodTruckCall)}
+    protocol_params.discard("self")
+    assert not protocol_params - fake_params
+    assert not protocol_params - call_fields
 
 
 @pytest.mark.anyio

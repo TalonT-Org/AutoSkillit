@@ -71,6 +71,8 @@ class TestBackendOverrideCommandRouting:
                 backend_override="claude-code",
             )
 
+            build_spec = mock_exec.call_args.args[0]
+            build_spec(None, None)
             claude_code_backend.build_skill_session_cmd.assert_called_once()
             codex_backend.build_skill_session_cmd.assert_not_called()
 
@@ -138,6 +140,8 @@ class TestBackendOverrideCommandRouting:
                 backend_override="codex",
             )
 
+            build_spec = mock_exec.call_args.args[0]
+            build_spec(None, None)
             codex_backend.build_skill_session_cmd.assert_called_once()
             claude_code_backend.build_skill_session_cmd.assert_not_called()
 
@@ -159,9 +163,9 @@ class TestBackendOverrideCommandRouting:
 
         captured_spec = None
 
-        async def capture_exec(spec, *args, **kwargs):
+        async def capture_exec(build_spec, *args, **kwargs):
             nonlocal captured_spec
-            captured_spec = spec
+            captured_spec = build_spec(None, kwargs.get("provider_extras"))
             return _stub_result()
 
         with (
@@ -220,9 +224,9 @@ class TestBackendOverrideEnvPolicy:
 
         captured_spec = None
 
-        async def capture_exec(spec, *args, **kwargs):
+        async def capture_exec(build_spec, *args, **kwargs):
             nonlocal captured_spec
-            captured_spec = spec
+            captured_spec = build_spec(None, kwargs.get("provider_extras"))
             return _stub_result()
 
         with (
@@ -272,9 +276,9 @@ class TestBackendOverrideEnvPolicy:
 
         captured_spec = None
 
-        async def capture_exec(spec, *args, **kwargs):
+        async def capture_exec(build_spec, *args, **kwargs):
             nonlocal captured_spec
-            captured_spec = spec
+            captured_spec = build_spec(None, kwargs.get("provider_extras"))
             return _stub_result()
 
         with (

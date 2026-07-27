@@ -17,11 +17,11 @@ from autoskillit.core import (
     SESSION_TYPE_FLEET,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
-    ProjectedPluginRoot,
 )
 from autoskillit.core.paths import pkg_root
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend, _generate_agent_tomls
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -32,6 +32,16 @@ def _assert_interactive_primary_channel(backend, spec) -> None:
         assert "--append-system-prompt" in spec.cmd
     else:
         assert any("developer_instructions=" in arg for arg in spec.cmd)
+
+
+def _build_orchestrator_spec(backend):
+    with plugin_binding(Path("/tmp")) as binding:
+        return backend.build_food_truck_cmd(
+            orchestrator_prompt="Run the pipeline",
+            plugin_binding=binding,
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        )
 
 
 def _assert_interactive_intake_digest(backend, spec) -> None:
@@ -136,12 +146,7 @@ class TestOrchestratorHeadless:
         ids=["claude-code", "codex"],
     )
     def test_orchestrator_prompt_non_empty(self, backend) -> None:
-        spec = backend.build_food_truck_cmd(
-            orchestrator_prompt="Run the pipeline",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
-        )
+        spec = _build_orchestrator_spec(backend)
         assert any("Run the pipeline" in arg for arg in spec.cmd)
         assert any("%%DONE%%" in arg for arg in spec.cmd)
 
@@ -151,12 +156,7 @@ class TestOrchestratorHeadless:
         ids=["claude-code", "codex"],
     )
     def test_session_type_orchestrator_in_env(self, backend) -> None:
-        spec = backend.build_food_truck_cmd(
-            orchestrator_prompt="Run the pipeline",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
-        )
+        spec = _build_orchestrator_spec(backend)
         assert spec.env.get(SESSION_TYPE_ENV_VAR) == SESSION_TYPE_ORCHESTRATOR
 
     @pytest.mark.parametrize(
@@ -165,12 +165,7 @@ class TestOrchestratorHeadless:
         ids=["claude-code", "codex"],
     )
     def test_intake_digest_delivery(self, backend) -> None:
-        spec = backend.build_food_truck_cmd(
-            orchestrator_prompt="Run the pipeline",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
-        )
+        spec = _build_orchestrator_spec(backend)
         _assert_headless_intake_digest(backend, spec)
 
 

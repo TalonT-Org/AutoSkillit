@@ -243,6 +243,10 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.publish_installed_plugin_artifact",
+        lambda *args, **kwargs: None,
+    )
 
     from autoskillit.cli._marketplace import install as _install
 

@@ -19,6 +19,40 @@ from autoskillit.core import CmdSpec
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
+def test_launcher_fd_merge_preserves_first_seen_lease_priority() -> None:
+    from autoskillit.cli.session._session_process import _merge_launcher_fds
+
+    assert _merge_launcher_fds((11, 7, 11, 5), 7) == (11, 7, 5)
+    assert _merge_launcher_fds((11, 7), 13) == (11, 7, 13)
+
+
+def test_pty_launcher_argv_preserves_first_seen_lease_priority() -> None:
+    from autoskillit.cli.session.pty._exec import launcher_argv
+
+    master_fd, slave_fd = os.openpty()
+    first_read, first_write = os.pipe()
+    second_read, second_write = os.pipe()
+    try:
+        argv = launcher_argv(
+            slave_fd,
+            ("agent",),
+            lease_fds=(second_write, first_write, second_write),
+        )
+    finally:
+        for fd in (
+            master_fd,
+            slave_fd,
+            first_read,
+            first_write,
+            second_read,
+            second_write,
+        ):
+            os.close(fd)
+
+    separator = argv.index("--")
+    assert argv[4:separator] == (str(second_write), str(first_write))
+
+
 def _spec(tmp_path: Path, code: str, *, env: dict[str, str] | None = None) -> CmdSpec:
     return CmdSpec(
         cmd=(sys.executable, "-c", code),

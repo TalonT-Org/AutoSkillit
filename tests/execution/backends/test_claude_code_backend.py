@@ -13,12 +13,12 @@ from autoskillit.core import (
     CodingAgentBackend,
     EnvPolicy,
     OutputFormat,
-    ProjectedPluginRoot,
     ResultParser,
     SessionLocator,
     StreamParser,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, ClaudeStreamParser
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -124,7 +124,7 @@ class TestClaudeCodeBackendAgentBackendEnv:
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
         "model": None,
-        "plugin_source": None,
+        "plugin_binding": None,
         "output_format": OutputFormat.JSON,
     }
 
@@ -153,13 +153,13 @@ class TestClaudeCodeDynaconfBackendEnv:
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
         "model": None,
-        "plugin_source": None,
+        "plugin_binding": None,
         "output_format": OutputFormat.JSON,
     }
 
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
-        "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
+        "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
     }

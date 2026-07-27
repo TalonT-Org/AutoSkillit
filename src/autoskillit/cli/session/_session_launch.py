@@ -90,47 +90,50 @@ def _run_interactive_session(
         sys.exit(1)
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
     from autoskillit.cli.ui._terminal import terminal_guard
-    from autoskillit.core import (
-        MARKETPLACE_PREFIX,
-        InfraExitCategory,
-        PluginSource,
-        detect_autoskillit_mcp_prefix,
-    )
+    from autoskillit.core import InfraExitCategory
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
-    plugin_source: PluginSource | None
-    if backend.capabilities.skill_injection_capable:
-        if detect_autoskillit_mcp_prefix(backend.capabilities) == MARKETPLACE_PREFIX:
-            plugin_source = None
-        else:
-            from autoskillit.workspace import project_default_plugin_source
+    from autoskillit.cli._plugin_artifact import interactive_plugin_authority
 
-            plugin_source = project_default_plugin_source(
-                cwd=_project_dir,
-                backend=backend,
-                default_base_branch=default_base_branch,
-                skill_catalog=skill_catalog,
-            )
-        tools_arg: tuple[str, ...] = ("AskUserQuestion",)
-    else:
-        plugin_source = None
-        tools_arg = ()
+    artifact_authority, load_mode = interactive_plugin_authority(
+        backend=backend,
+        project_dir=_project_dir,
+        default_base_branch=default_base_branch,
+        skill_catalog=skill_catalog,
+        generated_home=None,
+    )
+    tools_arg: tuple[str, ...] = (
+        ("AskUserQuestion",) if backend.capabilities.skill_injection_capable else ()
+    )
 
     from autoskillit.execution import assert_interactive_ordering
 
-    spec = backend.build_interactive_cmd(
-        initial_prompt=initial_message,
-        resume_spec=resume_spec if resume_spec is not None else NoResume(),
-        system_prompt=system_prompt,
-        env_extras=extra_env,
-        required_env=required_env,
-        plugin_source=plugin_source,
-        tools=tools_arg,
+    binding = (
+        artifact_authority.acquire_launch_binding(backend=backend, load_mode=load_mode)
+        if artifact_authority is not None
+        else None
     )
-    assert_interactive_ordering(spec=spec)
-    cmd = [*spec.cmd]
-    with terminal_guard():
-        result = subprocess.run(cmd, env=spec.env)
+    try:
+        spec = backend.build_interactive_cmd(
+            initial_prompt=initial_message,
+            resume_spec=resume_spec if resume_spec is not None else NoResume(),
+            system_prompt=system_prompt,
+            env_extras=extra_env,
+            required_env=required_env,
+            plugin_binding=binding,
+            tools=tools_arg,
+        )
+        assert_interactive_ordering(spec=spec)
+        cmd = [*spec.cmd]
+        with terminal_guard():
+            result = subprocess.run(
+                cmd,
+                env=spec.env,
+                pass_fds=spec.inherited_fds,
+            )
+    finally:
+        if binding is not None:
+            binding.close()
     reload_session_id = consume_reload_sentinel(_project_dir)
     if reload_session_id is not None:
         return reload_session_id

@@ -1284,12 +1284,14 @@ def test_direct_install_projection_cache_identity_and_reuse(
     from autoskillit.core import (
         BackendConventions,
         DirectInstall,
+        PluginArtifactContentionError,
+        PluginLoadMode,
         SkillSourceRef,
     )
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillCatalogEntry,
-        project_direct_install,
+        project_direct_install_authority,
     )
     from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
@@ -1329,47 +1331,58 @@ def test_direct_install_projection_cache_identity_and_reuse(
     )
     source = DirectInstall(plugin_dir=source_root)
 
-    first = project_direct_install(
+    authority = project_direct_install_authority(
         source,
         cwd=tmp_path,
-        backend=backend,
-        default_base_branch="develop",
-        skill_catalog=catalog,
+        base_branch="develop",
+        catalog=catalog,
     )
+    first = authority.acquire_launch_binding(
+        backend=backend, load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR
+    )
+    assert first.plugin_dir is not None
     first_inode = first.plugin_dir.stat().st_ino
     projected_skill = first.plugin_dir / "skills" / "immutable-cache" / "SKILL.md"
     assert "base branch: develop" in projected_skill.read_text(encoding="utf-8")
-    second = project_direct_install(
-        source,
-        cwd=tmp_path,
+    second = authority.acquire_launch_binding(
         backend=backend,
-        default_base_branch="develop",
-        skill_catalog=catalog,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
     )
-
+    assert second.plugin_dir is not None
     assert second.plugin_dir == first.plugin_dir
     assert second.plugin_dir.stat().st_ino == first_inode
     manifest_path = first.plugin_dir.parent / (
         f".{first.plugin_dir.name}.autoskillit-projection.json"
     )
     manifest_path.unlink()
-    recovered = project_direct_install(
-        source,
-        cwd=tmp_path,
+    with pytest.raises(PluginArtifactContentionError):
+        authority.acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+    assert not manifest_path.exists()
+    assert first.plugin_dir.stat().st_ino == first_inode
+    first.close()
+    second.close()
+    recovered = authority.acquire_launch_binding(
         backend=backend,
-        default_base_branch="develop",
-        skill_catalog=catalog,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
     )
+    assert recovered.plugin_dir is not None
     assert recovered.plugin_dir == first.plugin_dir
     assert manifest_path.is_file()
 
-    main_projection = project_direct_install(
+    main_authority = project_direct_install_authority(
         source,
         cwd=tmp_path,
-        backend=backend,
-        default_base_branch="main",
-        skill_catalog=catalog,
+        base_branch="main",
+        catalog=catalog,
     )
+    main_projection = main_authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    assert main_projection.plugin_dir is not None
     assert main_projection.plugin_dir != first.plugin_dir
     assert "base branch: main" in (
         main_projection.plugin_dir / "skills" / "immutable-cache" / "SKILL.md"
@@ -1380,17 +1393,24 @@ def test_direct_install_projection_cache_identity_and_reuse(
         execution_role=SkillExecutionRole.SESSION,
         namespace_sources={"external": SkillSource.PROJECT_LOCAL},
     )
-    local_namespace_projection = project_direct_install(
+    local_authority = project_direct_install_authority(
         source,
         cwd=tmp_path,
-        backend=backend,
-        default_base_branch="develop",
-        skill_catalog=local_namespace_catalog,
+        base_branch="develop",
+        catalog=local_namespace_catalog,
     )
+    local_namespace_projection = local_authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    assert local_namespace_projection.plugin_dir is not None
     assert local_namespace_projection.plugin_dir != first.plugin_dir
     assert "external skill: /external" in (
         local_namespace_projection.plugin_dir / "skills" / "immutable-cache" / "SKILL.md"
     ).read_text(encoding="utf-8")
+    for binding in (local_namespace_projection, main_projection, recovered, second, first):
+        binding.close()
+        assert binding.closed
 
 
 def test_projection_strips_all_machine_authority_and_preserves_private_deps(

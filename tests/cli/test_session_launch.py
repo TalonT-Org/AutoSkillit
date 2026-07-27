@@ -16,6 +16,41 @@ from autoskillit.execution.backends.codex import CodexFlags
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
+class _TestBinding:
+    def __init__(self, plugin_dir: Path | None) -> None:
+        self.plugin_dir = plugin_dir
+        self.inherited_fds: tuple[int, ...] = ()
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _TestAuthority:
+    def __init__(self, plugin_dir: Path | None) -> None:
+        self.plugin_dir = plugin_dir
+
+    def acquire_launch_binding(self, **_kwargs) -> _TestBinding:
+        return _TestBinding(self.plugin_dir)
+
+
+@pytest.fixture(autouse=True)
+def _stub_artifact_authorities(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path / "autoskillit-test-plugin"
+    plugin_dir.mkdir()
+    monkeypatch.setattr(
+        "autoskillit.workspace.project_default_plugin_authority",
+        lambda **_kwargs: _TestAuthority(plugin_dir),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.current_installed_plugin_authority",
+        lambda: _TestAuthority(None),
+    )
+
+
 class _BackendLifecycleStub:
     """Projection and lifecycle contract shared by local backend doubles."""
 
@@ -66,6 +101,7 @@ def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
     def mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
         captured["cmd"] = list(cmd)
         captured["env"] = kwargs.get("env", {}) or {}
+        captured["pass_fds"] = kwargs.get("pass_fds")
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
     monkeypatch.setattr(subprocess, "run", mock_run)
@@ -118,7 +154,13 @@ def _make_capturing_backend() -> tuple[object, list[dict]]:
 
         def build_interactive_cmd(self, **kwargs):
             captured_kwargs.append(kwargs)
-            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+            binding = kwargs.get("plugin_binding")
+            inherited_fds = () if binding is None else binding.inherited_fds
+            return CmdSpec(
+                cmd=("claude", "--dangerously-skip-permissions"),
+                env={},
+                inherited_fds=inherited_fds,
+            )
 
     return _CapturingBackend(), captured_kwargs
 
@@ -162,6 +204,38 @@ def test_run_interactive_session_appends_system_prompt(monkeypatch: pytest.Monke
     _run_interactive_session(system_prompt="my-unique-prompt", backend=backend)
     assert len(captured_kwargs) == 1
     assert captured_kwargs[0]["system_prompt"] == "my-unique-prompt"
+
+
+def test_run_interactive_session_holds_binding_through_reap_and_passes_descriptors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import PluginLoadMode
+
+    backend, captured_kwargs = _make_capturing_backend()
+    binding = _TestBinding(Path("/dev/null"))
+    binding.inherited_fds = (41, 42)
+    authority = _TestAuthority(None)
+    authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
+    events: list[str] = []
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
+    )
+
+    def run(_cmd, **kwargs):  # type: ignore[no-untyped-def]
+        assert not binding.closed
+        assert kwargs["pass_fds"] == (41, 42)
+        events.append("reaped")
+        return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(subprocess, "run", run)
+    _run_interactive_session(system_prompt="test", backend=backend)
+
+    assert captured_kwargs[0]["plugin_binding"] is binding
+    assert events == ["reaped"]
+    assert binding.closed
 
 
 # ---------------------------------------------------------------------------

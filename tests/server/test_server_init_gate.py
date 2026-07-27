@@ -341,9 +341,6 @@ class TestOpenKitchenVersionReporting:
         (plugin_dir / "plugin.json").write_text(
             json.dumps({"name": "autoskillit", "version": "0.0.0"})
         )
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
-
-        tool_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(tools_kitchen_mod, "_write_hook_config"):
                 await open_kitchen(ctx=mock_ctx)

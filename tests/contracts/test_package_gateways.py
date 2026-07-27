@@ -209,7 +209,9 @@ async def test_migration_check_and_migrate_up_to_date(tmp_path):
 
 def test_factory_make_context_returns_toolcontext(monkeypatch, tmp_path):
     from autoskillit.config import AutomationConfig
+    from autoskillit.core import PluginArtifactAuthority, PluginLoadMode
     from autoskillit.core.paths import pkg_root
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.server._factory import make_context
@@ -219,16 +221,15 @@ def test_factory_make_context_returns_toolcontext(monkeypatch, tmp_path):
     assert ctx.gate.enabled is False  # starts closed
     assert isinstance(ctx.audit, DefaultAuditLog)
     assert ctx.token_log is not None
-    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
-
-    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
-    assert ctx.plugin_source.plugin_dir != pkg_root()
-    assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
-    manifest = (
-        ctx.plugin_source.plugin_dir.parent
-        / f".{ctx.plugin_source.plugin_dir.name}.autoskillit-projection.json"
-    )
-    assert manifest.is_file()
+    assert isinstance(ctx.plugin_authority, PluginArtifactAuthority)
+    with ctx.plugin_authority.acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as binding:
+        assert binding.plugin_dir is not None
+        assert binding.plugin_dir != pkg_root()
+        assert (binding.plugin_dir / "skills").is_dir()
+        assert binding.identity.manifest_path.is_file()
 
 
 def test_factory_make_context_accepts_runner(tmp_path):
@@ -241,13 +242,18 @@ def test_factory_make_context_accepts_runner(tmp_path):
 
 def test_factory_make_context_accepts_plugin_dir(tmp_path):
     from autoskillit.config import AutomationConfig
-    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
+    from autoskillit.core import PluginLoadMode
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
     from autoskillit.server._factory import make_context
 
     ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path), project_dir=tmp_path)
-    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
-    assert ctx.plugin_source.plugin_dir != tmp_path
-    assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
+    with ctx.plugin_authority.acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as binding:
+        assert binding.plugin_dir is not None
+        assert binding.plugin_dir != tmp_path
+        assert (binding.plugin_dir / "skills").is_dir()
 
 
 # ---------------------------------------------------------------------------

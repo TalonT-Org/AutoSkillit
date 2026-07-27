@@ -43,19 +43,19 @@ class TestBackendCompliance:
             )
 
     def test_all_backends_build_food_truck_cmd_returns_cmdspec(self):
-        from pathlib import Path
-
-        from autoskillit.core import CmdSpec, ProjectedPluginRoot
+        from autoskillit.core import CmdSpec
         from autoskillit.execution.backends import BACKEND_REGISTRY
         from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+        from tests.execution.backends._plugin_binding import plugin_binding
 
         for cls in BACKEND_REGISTRY.values():
-            result = cls().build_food_truck_cmd(
-                orchestrator_prompt="test",
-                plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
-                cwd="/tmp",
-                completion_marker="%%TEST%%",
-            )
+            with plugin_binding(Path("/tmp")) as binding:
+                result = cls().build_food_truck_cmd(
+                    orchestrator_prompt="test",
+                    plugin_binding=binding,
+                    cwd="/tmp",
+                    completion_marker="%%TEST%%",
+                )
             assert isinstance(result, CmdSpec)
 
     def test_all_backends_build_interactive_cmd_returns_cmdspec(self):

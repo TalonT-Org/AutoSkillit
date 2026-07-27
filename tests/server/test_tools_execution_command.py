@@ -41,10 +41,15 @@ class TestRunSkillPluginDir:
         cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
+        from tests.fakes import FakePluginArtifactAuthority
 
-        assert isinstance(tool_ctx_kitchen_open.plugin_source, ProjectedPluginRoot)
-        assert cmd[plugin_dir_idx + 1] == str(tool_ctx_kitchen_open.plugin_source.plugin_dir)
+        authority = tool_ctx_kitchen_open.plugin_authority
+        assert isinstance(authority, FakePluginArtifactAuthority)
+        assert authority.bindings
+        binding = authority.bindings[-1]
+        assert binding.plugin_dir is not None
+        assert cmd[plugin_dir_idx + 1] == str(binding.plugin_dir)
+        assert binding.closed
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
         actual_cwd = tool_ctx_kitchen_open.runner.call_args_list[-1][1]

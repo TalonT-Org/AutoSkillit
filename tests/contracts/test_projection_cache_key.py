@@ -130,51 +130,68 @@ class TestAssetChangesForceReprojection:
         Fails both before the fix and after a source-change-without-digest — which
         is precisely why it is the gate.
         """
+        from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         backend = ClaudeCodeBackend()
         catalog = session_catalog()
 
-        first = project_default_plugin_source(
+        first_authority = project_default_plugin_authority(
             cwd=tmp_path,
+            base_branch="main",
+            catalog=catalog,
+        )
+        first = first_authority.acquire_launch_binding(
             backend=backend,
-            default_base_branch="main",
-            skill_catalog=catalog,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
-        marker = first.plugin_dir / "recipes" / "_cache_key_probe.yaml"
-        marker.write_text("probe: 1\n")
+        try:
+            assert first.plugin_dir is not None
+            marker = first.plugin_dir / "recipes" / "_cache_key_probe.yaml"
+            marker.write_text("probe: 1\n")
 
-        from autoskillit.core import pkg_root
+            from autoskillit.core import pkg_root
 
-        real_digest = public_plugin_asset_digest(pkg_root())
-        monkeypatch.setattr(
-            "autoskillit.workspace.skill_projection.public_plugin_asset_digest",
-            lambda _root: real_digest[:-1] + ("0" if real_digest[-1] != "0" else "1"),
-        )
+            real_digest = public_plugin_asset_digest(pkg_root())
+            monkeypatch.setattr(
+                "autoskillit.workspace.skill_projection.public_plugin_asset_digest",
+                lambda _root: real_digest[:-1] + ("0" if real_digest[-1] != "0" else "1"),
+            )
 
-        second = project_default_plugin_source(
-            cwd=tmp_path,
-            backend=backend,
-            default_base_branch="main",
-            skill_catalog=catalog,
-        )
-
-        assert second.plugin_dir != first.plugin_dir, (
-            "an asset-digest change did not change the cache key — a release that "
-            "touches recipes/, agents/ or hooks/ without touching a skill would reuse "
-            "the previous release's projection"
-        )
-        assert not (second.plugin_dir / "recipes" / "_cache_key_probe.yaml").exists(), (
-            "the new projection was not re-materialised from source"
-        )
+            second_authority = project_default_plugin_authority(
+                cwd=tmp_path,
+                base_branch="main",
+                catalog=catalog,
+            )
+            second = second_authority.acquire_launch_binding(
+                backend=backend,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            )
+            try:
+                assert second.plugin_dir is not None
+                assert second.plugin_dir != first.plugin_dir, (
+                    "an asset-digest change did not change the cache key — a release that "
+                    "touches recipes/, agents/ or hooks/ without touching a skill would reuse "
+                    "the previous release's projection"
+                )
+                assert not (second.plugin_dir / "recipes" / "_cache_key_probe.yaml").exists(), (
+                    "the new projection was not re-materialised from source"
+                )
+            finally:
+                second.close()
+            assert second.closed
+        finally:
+            first.close()
+        assert first.closed
 
     def test_identical_inputs_reuse_the_same_projection(self, tmp_path: Path, monkeypatch) -> None:
         """The key must still be stable — invalidation, not churn."""
+        from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -182,53 +199,47 @@ class TestAssetChangesForceReprojection:
         catalog = session_catalog()
         kwargs = {
             "cwd": tmp_path,
-            "backend": backend,
-            "default_base_branch": "main",
-            "skill_catalog": catalog,
+            "base_branch": "main",
+            "catalog": catalog,
         }
-        assert (
-            project_default_plugin_source(**kwargs).plugin_dir
-            == project_default_plugin_source(**kwargs).plugin_dir
+        first = project_default_plugin_authority(**kwargs).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
+        try:
+            second = project_default_plugin_authority(**kwargs).acquire_launch_binding(
+                backend=backend,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            )
+            try:
+                assert second.plugin_dir == first.plugin_dir
+            finally:
+                second.close()
+            assert second.closed
+        finally:
+            first.close()
+        assert first.closed
 
 
-class TestOrphanedProjectionsArePruned:
-    """`plugin-projections/` had no cleanup anywhere.
+class TestOrphanedProjectionRetirementIsLeaseGated:
+    def test_pruning_does_not_mutate_root_or_manifest(self, tmp_path: Path) -> None:
+        from autoskillit.workspace import prune_stale_projections
 
-    Pre-existing, but this change orphans every user's current projection at
-    once (new source, new key composition), so it is the right moment. Pruning
-    reuses the retiring-cache grace/lock machinery rather than inventing a
-    second deletion mechanism — a projection a running session is still reading
-    survives the grace window.
-    """
-
-    def test_orphan_is_retired_and_the_active_projection_is_not(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        import json
-
-        from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
-        from tests.contracts._projection_helpers import session_catalog
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         projections = tmp_path / ".autoskillit" / "plugin-projections"
         projections.mkdir(parents=True)
         orphan = projections / "deadbeefdeadbeefdeadbeef"
         orphan.mkdir()
-        (projections / f".{orphan.name}.autoskillit-projection.json").write_text("{}")
+        manifest = projections / f".{orphan.name}.autoskillit-projection.json"
+        manifest.write_text("{}")
 
-        active = project_default_plugin_source(
-            cwd=tmp_path,
-            backend=ClaudeCodeBackend(),
-            default_base_branch="main",
-            skill_catalog=session_catalog(),
+        assert (
+            prune_stale_projections(
+                projections,
+                active_key="activeactiveactiveactive",
+                grace_hours=0,
+            )
+            == 0
         )
-
-        retiring = json.loads((tmp_path / ".autoskillit" / "retiring_cache.json").read_text())
-        queued = {e["path"] for e in retiring["retiring"]}
-        assert str(orphan) in queued, "the orphaned projection was not queued for retirement"
-        assert str(active.plugin_dir) not in queued, "the live projection was queued for deletion"
-        assert active.plugin_dir.is_dir()
-        assert orphan.is_dir(), "an orphan must survive the grace window, not vanish immediately"
-        assert not (projections / f".{orphan.name}.autoskillit-projection.json").exists()
+        assert orphan.is_dir()
+        assert manifest.is_file()
+        assert not (tmp_path / ".autoskillit" / "retiring_cache.json").exists()

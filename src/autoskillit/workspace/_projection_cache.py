@@ -4,7 +4,7 @@ Split out of ``skill_projection`` because staleness is its own concern: the
 projection cache key used to cover only skill names and digests, so a release
 that changed ``recipes/``, ``agents/``, or ``hooks/`` without touching a skill
 produced an identical key and the previous release's assets were silently
-reused. Keeping the asset inventory, the key record, and the orphan sweep in
+reused. Keeping the asset inventory, the key record, and the retirement boundary in
 one module is what stops those three from drifting apart again.
 """
 
@@ -16,8 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
-from autoskillit.core import append_retiring_entry, sweep_retiring_cache
-
 __all__ = [
     "PROJECTION_CACHE_KEY_EXCLUSIONS",
     "ProjectionCacheKey",
@@ -27,9 +25,7 @@ __all__ = [
     "public_plugin_asset_digest",
 ]
 
-#: Grace window before an orphaned projection directory is actually deleted.
-#: Deliberately generous: a long-running session may still be reading a
-#: projection whose key has just been superseded by an upgrade.
+#: Reserved grace window for lease-aware retirement.
 _PROJECTION_GRACE_HOURS = 6
 
 _CANONICAL_SKILL_DIRS = frozenset({"skills", "skills_extended"})
@@ -152,7 +148,7 @@ PROJECTION_CACHE_KEY_EXCLUSIONS: Mapping[str, str] = MappingProxyType(
             "cached, so two invocations differing only in cwd may safely share a projection."
         ),
         "project_root": (
-            "Not byte-affecting, and constant: project_direct_install always passes "
+            "Not byte-affecting, and constant: projection authority always passes "
             "project_root=None into the projection context."
         ),
         "skills": (
@@ -174,27 +170,13 @@ def prune_stale_projections(
     active_key: str,
     grace_hours: int = _PROJECTION_GRACE_HOURS,
 ) -> int:
-    """Queue non-active projection directories for retirement; return how many.
+    """Defer retirement until it can participate in artifact leases.
 
-    ``plugin-projections/`` had no cleanup at all, and both the source change
-    and the key-composition change orphan every existing user's projection at
-    once. Reuses the retiring-cache grace/lock machinery rather than inventing
-    a second deletion mechanism, so a projection still in use by a running
-    session survives the grace window.
-
-    Caller must already hold ``_InstallLock``.
+    A projection manifest is part of the exact incarnation identity. Removing
+    it independently of the public root makes a reader-held artifact
+    unverifiable. Retirement therefore remains a no-op until its writer path
+    acquires each projection's stable sidecar lease and removes root and
+    manifest as one operation.
     """
-    if not projections_root.is_dir():
-        return 0
-    retired = 0
-    for entry in sorted(projections_root.iterdir(), key=lambda item: item.name):
-        if entry.name == active_key or not entry.is_dir() or entry.is_symlink():
-            continue
-        append_retiring_entry(version=f"projection:{entry.name}", path=str(entry))
-        manifest = projections_root / f".{entry.name}.autoskillit-projection.json"
-        if manifest.is_file():
-            manifest.unlink()
-        retired += 1
-    if retired:
-        sweep_retiring_cache(grace_hours=grace_hours)
-    return retired
+    del projections_root, active_key, grace_hours
+    return 0

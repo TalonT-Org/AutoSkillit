@@ -9,7 +9,16 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import regex as re
 
-from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
+from autoskillit.core import (
+    CliSubtype,
+    OutputFormat,
+    PluginArtifactAuthority,
+    PluginLaunchBinding,
+    PluginLoadMode,
+    RetryReason,
+    SkillResult,
+    get_logger,
+)
 from autoskillit.execution.headless._headless_helpers import _resolve_pty_mode, assert_headless_cmd
 from autoskillit.execution.headless._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
 from autoskillit.execution.process import _marker_is_standalone
@@ -366,6 +375,9 @@ async def _attempt_contract_nudge(
     retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
     pty_override: bool | None = None,
     skill_contract: SkillContract | None = None,
+    plugin_authority: PluginArtifactAuthority | None = None,
+    plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
+    session_env: Mapping[str, str] | None = None,
 ) -> SkillResult | None:
     """Attempt a lightweight resume nudge to recover missing structured output tokens.
 
@@ -428,28 +440,55 @@ async def _attempt_contract_nudge(
         )
         patterns_to_check = list(expected_output_patterns)
 
-    spec = backend.build_resume_cmd(
-        resume_session_id=skill_result.session_id,
-        prompt=prompt,
-        output_format=OutputFormat.JSON,
-        env_extras=dict(provider_extras) if provider_extras else None,
-    )
-    assert_headless_cmd(spec)
-
+    effective_extras = dict(provider_extras or {})
+    if (
+        plugin_load_mode is PluginLoadMode.GENERATED_HOME
+        and session_env is not None
+        and (generated_home := session_env.get("CODEX_HOME"))
+    ):
+        effective_extras["CODEX_HOME"] = generated_home
+    binding: PluginLaunchBinding | None = None
     try:
-        nudge_result = await runner(
-            list(spec.cmd),
-            cwd=Path(cwd),
-            timeout=_NUDGE_TIMEOUT,
-            env=spec.env,
-            pty_mode=(pty_override if pty_override is not None else _resolve_pty_mode(backend)),
+        if plugin_load_mode.consumes_artifact:
+            if plugin_authority is None:
+                logger.warning("nudge_skip_missing_plugin_authority")
+                return None
+            binding = plugin_authority.acquire_launch_binding(
+                backend=backend,
+                load_mode=plugin_load_mode,
+            )
+        spec = backend.build_resume_cmd(
+            resume_session_id=skill_result.session_id,
+            prompt=prompt,
+            output_format=OutputFormat.JSON,
+            plugin_binding=binding,
+            env_extras=effective_extras or None,
         )
+        assert_headless_cmd(spec)
+        try:
+            nudge_result = await runner(
+                list(spec.cmd),
+                cwd=Path(cwd),
+                timeout=_NUDGE_TIMEOUT,
+                env=spec.env,
+                pty_mode=(
+                    pty_override if pty_override is not None else _resolve_pty_mode(backend)
+                ),
+                pass_fds=spec.inherited_fds,
+            )
+        finally:
+            if binding is not None:
+                binding.close()
+                binding = None
     except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)
         return None
     except Exception:
         logger.warning("nudge_runner_failed_unexpected", exc_info=True)
         return None
+    finally:
+        if binding is not None:
+            binding.close()
 
     try:
         nudge_session = result_parser.parse_stdout(nudge_result.stdout)

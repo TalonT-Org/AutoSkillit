@@ -55,7 +55,12 @@ class CmdBuilder:
         self._has_variadic = True
         return self
 
-    def build(self, env: Mapping[str, str] | None = None, cwd: str = "") -> CmdSpec:
+    def build(
+        self,
+        env: Mapping[str, str] | None = None,
+        cwd: str = "",
+        inherited_fds: tuple[int, ...] = (),
+    ) -> CmdSpec:
         cmd: list[str] = [self._binary]
         cmd.extend(self._mode_flags)
         for flag, value in self._kv_flags:
@@ -75,4 +80,5 @@ class CmdBuilder:
             env=env if env is not None else {},
             cwd=cwd,
             origin=origin,
+            inherited_fds=inherited_fds,
         )

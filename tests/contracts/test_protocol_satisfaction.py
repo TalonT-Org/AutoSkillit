@@ -337,6 +337,12 @@ def test_headless_executor_protocol_dispatch_has_marker_params():
         assert params["marker_dir"].default is None, f"{cls.__name__}.marker_dir default != None"
         assert "session_id" in params, f"{cls.__name__} missing session_id"
         assert params["session_id"].default is None, f"{cls.__name__}.session_id default != None"
+        assert "plugin_authority" in params, f"{cls.__name__} missing plugin_authority"
+        assert params["plugin_authority"].default is None
+        assert "capability_preparation" in params, f"{cls.__name__} missing capability_preparation"
+        assert params["capability_preparation"].default is None
+        assert "plugin_source" not in params
+        assert "capability_contract" not in params
 
 
 # ── GateState mutation (REQ-PROTO-009) ────────────────────────────────────────
@@ -444,6 +450,7 @@ class TestGroupDApiContractPreservation:
             "on_session_id_resolved",
             "child_deferral_ceiling",
             "capture_dir",
+            "pass_fds",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -518,6 +525,7 @@ class TestGroupDApiContractPreservation:
             "on_session_id_resolved",
             "child_deferral_ceiling",
             "capture_dir",
+            "pass_fds",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

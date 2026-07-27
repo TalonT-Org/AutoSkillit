@@ -39,7 +39,7 @@ from autoskillit.core import (
     NamedResume,
     NoResume,
     OutputFormat,
-    PluginSource,
+    PluginLaunchBinding,
     ResumeSpec,
     SessionCheckpoint,
     SessionEvent,
@@ -390,7 +390,12 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)
-        return CmdSpec(cmd=spec.cmd, env=spec.env, cwd=cwd)
+        return CmdSpec(
+            cmd=spec.cmd,
+            env=spec.env,
+            cwd=cwd,
+            inherited_fds=spec.inherited_fds,
+        )
 
     def stream_parser(self, completion_marker: str = "") -> ClaudeStreamParser:
         return ClaudeStreamParser(completion_marker=completion_marker)
@@ -450,7 +455,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         *,
         initial_prompt: str | None = None,
         model: str | None = None,
-        plugin_source: PluginSource | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
         resume_spec: ResumeSpec = NoResume(),
@@ -469,7 +474,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             session start.
         model
             Optional model override.
-        plugin_source
+        plugin_binding
             When provided, emits ``--plugin-dir``. The type guarantees the path is
             a sanitized projection. ``None`` omits the flag — that is how "the
             parent session already has the plugin loaded" is expressed.
@@ -513,8 +518,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             builder.kv_flag(ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt)
         if model:
             builder.kv_flag(ClaudeFlags.MODEL, self.translate_model(model))
-        if plugin_source is not None:
-            builder.kv_flag(ClaudeFlags.PLUGIN_DIR, str(plugin_source.plugin_dir))
+        if plugin_binding is not None and plugin_binding.plugin_dir is not None:
+            builder.kv_flag(ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir))
         if initial_prompt is not None:
             builder.positional(initial_prompt)
         for d in add_dirs:
@@ -535,6 +540,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             env=build_agent_env(base=interactive_base, extras=merged, required=required_env),
             origin=partial.origin,
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
+            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
         )
 
     def build_resume_cmd(
@@ -543,7 +549,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         resume_session_id: str,
         prompt: str,
         output_format: OutputFormat = OutputFormat.JSON,
-        plugin_source: PluginSource | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
         env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec:
         cmd: list[str] = [
@@ -555,8 +561,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS,
         ]
         _apply_output_format(cmd, output_format)
-        if plugin_source is not None:
-            cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_source.plugin_dir)]
+        if plugin_binding is not None and plugin_binding.plugin_dir is not None:
+            cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
         merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
@@ -564,7 +570,12 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             merged.update(env_extras)
         env = dict(build_agent_env(base={}, extras=merged))
         env.update(_HEADLESS_ENV_HARDENING)
-        return CmdSpec(cmd=tuple(cmd), env=env, is_resume=True)
+        return CmdSpec(
+            cmd=tuple(cmd),
+            env=env,
+            is_resume=True,
+            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+        )
 
     def build_skill_session_cmd(
         self,
@@ -574,7 +585,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         *,
         completion_marker: str = "",
         model: str | None = None,
-        plugin_source: PluginSource | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
         output_format: OutputFormat = OutputFormat.JSON,
         add_dirs: Sequence[ValidatedAddDir] = (),
         exit_after_stop_delay_ms: int = 0,
@@ -593,7 +604,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cfg = self._apply_config(config)
             completion_marker = cfg["completion_marker"]
             model = cfg["model"]
-            plugin_source = cfg["plugin_source"]
+            plugin_binding = cfg["plugin_binding"]
             output_format = cfg["output_format"]
             add_dirs = cfg["add_dirs"]
             exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]
@@ -677,21 +688,26 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             required=SKILL_SESSION_REQUIRED_ENV,
         )
         cmd: list[str] = [*spec.cmd]
-        if plugin_source is not None:
-            cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_source.plugin_dir)]
+        if plugin_binding is not None and plugin_binding.plugin_dir is not None:
+            cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
         _apply_output_format(cmd, output_format)
         for validated_dir in add_dirs:
             cmd.extend([ClaudeFlags.ADD_DIR, validated_dir.path])
         if resume_session_id:
             cmd += [ClaudeFlags.RESUME, resume_session_id]
 
-        return CmdSpec(cmd=tuple(cmd), env=spec.env, is_resume=bool(resume_session_id))
+        return CmdSpec(
+            cmd=tuple(cmd),
+            env=spec.env,
+            is_resume=bool(resume_session_id),
+            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+        )
 
     def build_food_truck_cmd(
         self,
         *,
         orchestrator_prompt: str,
-        plugin_source: PluginSource | None,
+        plugin_binding: PluginLaunchBinding | None,
         cwd: str,
         completion_marker: str,
         resume_session_id: str | None = None,
@@ -762,14 +778,19 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         )
 
         cmd: list[str] = [*spec.cmd]
-        if plugin_source is not None:
-            cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_source.plugin_dir)]
+        if plugin_binding is not None and plugin_binding.plugin_dir is not None:
+            cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
         _apply_output_format(cmd, output_format)
         cmd += [ClaudeFlags.TOOLS, "AskUserQuestion"]
         if resume_session_id:
             cmd += [ClaudeFlags.RESUME, resume_session_id]
 
-        return CmdSpec(cmd=tuple(cmd), env=spec.env, is_resume=bool(resume_session_id))
+        return CmdSpec(
+            cmd=tuple(cmd),
+            env=spec.env,
+            is_resume=bool(resume_session_id),
+            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+        )
 
     def validate_session_layout(
         self,

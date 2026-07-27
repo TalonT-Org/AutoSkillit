@@ -389,10 +389,9 @@ class TestTestCheckInfrastructure:
     def tool_ctx_custom_cmd(self, monkeypatch, tmp_path):
         """ToolContext with a custom command whose binary is not in PATH."""
         from autoskillit.config import AutomationConfig
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.server import _state
         from autoskillit.server._factory import make_context
-        from tests.fakes import MockSubprocessRunner
+        from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
 
         runner = MockSubprocessRunner()
         config = AutomationConfig()
@@ -400,7 +399,7 @@ class TestTestCheckInfrastructure:
         ctx = make_context(
             config,
             runner=runner,
-            plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+            plugin_authority=FakePluginArtifactAuthority(tmp_path),
             project_dir=tmp_path,
         )
         monkeypatch.setattr(_state, "_ctx", ctx)

@@ -228,11 +228,8 @@ def test_build_skill_session_cmd_protocol_shape_call_succeeds():
 
 
 def test_build_skill_session_cmd_config_produces_same_output():
-    from pathlib import Path
-
     from autoskillit.core import (
         OutputFormat,
-        ProjectedPluginRoot,
         SessionCheckpoint,
         SkillSessionConfig,
     )
@@ -242,7 +239,6 @@ def test_build_skill_session_cmd_config_produces_same_output():
     config = SkillSessionConfig(
         completion_marker="%%VERIFY%%",
         model="sonnet",
-        plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
         output_format=OutputFormat.STREAM_JSON,
         exit_after_stop_delay_ms=120000,
         stream_idle_timeout_ms=30000,
@@ -265,7 +261,7 @@ def test_build_skill_session_cmd_config_produces_same_output():
         "/work",
         completion_marker=config.completion_marker,
         model=config.model,
-        plugin_source=config.plugin_source,
+        plugin_binding=config.plugin_binding,
         output_format=config.output_format,
         add_dirs=config.add_dirs,
         exit_after_stop_delay_ms=config.exit_after_stop_delay_ms,

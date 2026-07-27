@@ -52,6 +52,32 @@ async def test_mock_subprocess_runner_default_when_empty(tmp_path: Path):
     assert result.returncode == 0
 
 
+async def test_mock_subprocess_runner_records_pass_fds(tmp_path: Path):
+    """Inherited plugin lease descriptors remain observable through the shared fake."""
+    from tests.fakes import MockSubprocessRunner
+
+    runner = MockSubprocessRunner()
+    await runner(["cmd"], cwd=tmp_path, timeout=30.0, pass_fds=(7, 11))
+    assert runner.call_args_list[-1][3]["pass_fds"] == (7, 11)
+
+
+def test_tool_ctx_uses_lazy_plugin_artifact_authority(tool_ctx):
+    from autoskillit.core.types import PluginArtifactAuthority, PluginLoadMode
+
+    assert isinstance(tool_ctx.plugin_authority, PluginArtifactAuthority)
+    first = tool_ctx.plugin_authority.acquire_launch_binding(
+        backend=tool_ctx.backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    second = tool_ctx.plugin_authority.acquire_launch_binding(
+        backend=tool_ctx.backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    assert first is not second
+    first.close()
+    second.close()
+
+
 def test_reset_structlog_autouse_removed():
     """_reset_structlog must not exist as a module-level fixture in conftest.
 

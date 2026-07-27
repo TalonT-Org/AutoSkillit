@@ -38,6 +38,11 @@ def test_build_produces_cmdspec_with_origin():
     assert spec.origin.positional == ("hello",)
 
 
+def test_build_preserves_inherited_fds():
+    spec = CmdBuilder("claude").build(inherited_fds=(9, 3))
+    assert spec.inherited_fds == (9, 3)
+
+
 def test_mode_flag_appears_before_positional():
     builder = CmdBuilder("claude")
     builder.mode_flag("--dangerously-skip-permissions")

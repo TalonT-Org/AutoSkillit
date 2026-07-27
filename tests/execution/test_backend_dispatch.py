@@ -224,7 +224,7 @@ class TestStepBackendOverride:
             from autoskillit.execution.headless._headless_execute import _execute_claude_headless
 
             await _execute_claude_headless(
-                CmdSpec(cmd=("codex", "--quiet", "test"), env={}),
+                lambda _binding, _extras: CmdSpec(cmd=("codex", "--quiet", "test"), env={}),
                 "/tmp/cwd",
                 minimal_ctx,
                 timeout=60.0,
@@ -344,7 +344,7 @@ class TestCodexLogDispatch:
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         await _execute_claude_headless(
-            CmdSpec(cmd=("codex", "--quiet", "test"), env={}),
+            lambda _binding, _extras: CmdSpec(cmd=("codex", "--quiet", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -377,7 +377,7 @@ class TestCodexLogDispatch:
         minimal_ctx.backend = backend
 
         await _execute_claude_headless(
-            CmdSpec(cmd=("claude", "--print", "test"), env={}),
+            lambda _binding, _extras: CmdSpec(cmd=("claude", "--print", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,

@@ -73,6 +73,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_plan_experiment_contracts.py` | Contract tests for plan-experiment SKILL.md — data provenance lifecycle |
 | `test_plan_visualization_contracts.py` | Contract tests: select-vis-lenses Tier B experiment-type canonical names match registry |
 | `test_plugin_source_export_chain.py` | Gateway export chain: removed symbols gone from both `__all__` and `getattr`, added symbols importable |
+| `test_plugin_artifact_lifetime.py` | Real-process projection artifact lease, repair, publication, and binding lifetime contracts |
 | `test_pr_traceability_contracts.py` | Cross-skill contract tests for requirement traceability across PR lifecycle skills |
 | `test_prepare_compose_pr_contracts.py` | Contract tests for prepare-pr and compose-pr skills |
 | `test_prepare_issue_contracts.py` | Contract tests for the prepare-issue SKILL.md |

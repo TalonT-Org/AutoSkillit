@@ -158,6 +158,7 @@ class SubprocessRunner(Protocol):
         cwd: Path,
         timeout: float,
         env: Mapping[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,

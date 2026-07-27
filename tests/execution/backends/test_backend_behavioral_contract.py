@@ -6,9 +6,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import CapabilityNotSupportedError, ProjectedPluginRoot
+from autoskillit.core import CapabilityNotSupportedError
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.execution.backends.codex import CodexBackend
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -17,7 +18,7 @@ CAPABILITY_METHOD_MAP: dict[str, tuple[str, dict]] = {
         "build_food_truck_cmd",
         {
             "orchestrator_prompt": "x",
-            "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/tmp")),
+            "plugin_binding": plugin_binding(Path("/tmp")),
             "cwd": "/tmp",
             "completion_marker": "%%X%%",
         },

@@ -19,10 +19,15 @@ from autoskillit.core.types import (
     CIRunScope,
     CIWatcher,
     ClosureAuthoritySpec,
+    CodingAgentBackend,
     DatabaseReader,
     HeadlessExecutor,
+    HeadlessSkillDispatchPreparation,
     MergeQueueWatcher,
-    PluginSource,
+    PluginArtifactAuthority,
+    PluginArtifactIdentity,
+    PluginLaunchBinding,
+    PluginLoadMode,
     ProcessStaleError,
     RecipeNotFoundError,
     RecipeRepository,
@@ -57,6 +62,75 @@ class FakeSkillSessionContractStore:
 
     def discard(self, correlation_key: str) -> None:
         raise AssertionError("unexpected skill session discard")
+
+
+@dataclasses.dataclass
+class _FakePluginLease:
+    """Minimal launch lease with observable, idempotent teardown."""
+
+    closed: bool = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakePluginArtifactAuthority:
+    """Deterministic lazy authority for isolated test contexts.
+
+    Each acquisition returns a fresh real ``PluginLaunchBinding``. The authority
+    owns every binding it creates so fixture teardown can close bindings that a
+    failed test did not release itself.
+    """
+
+    def __init__(self, plugin_dir: Path) -> None:
+        self.plugin_dir = plugin_dir.resolve()
+        self.bindings: list[PluginLaunchBinding] = []
+        self._closed = False
+
+    def acquire_launch_binding(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        load_mode: PluginLoadMode,
+    ) -> PluginLaunchBinding:
+        del backend
+        if self._closed:
+            raise RuntimeError("fake plugin artifact authority is closed")
+        sequence = len(self.bindings) + 1
+        binding = PluginLaunchBinding(
+            load_mode=load_mode,
+            plugin_dir=(
+                None if load_mode is PluginLoadMode.IMPLICIT_INSTALLED else self.plugin_dir
+            ),
+            identity=PluginArtifactIdentity(
+                semantic_key="test-plugin-artifact",
+                incarnation_id=f"test-incarnation-{sequence}",
+                manifest_schema_version=1,
+                artifact_digest=f"test-artifact-digest-{sequence}",
+                managed_path=self.plugin_dir,
+                manifest_path=self.plugin_dir / ".autoskillit-plugin-artifact.json",
+            ),
+            inherited_fds=(),
+            _lease=_FakePluginLease(),
+        )
+        self.bindings.append(binding)
+        return binding
+
+    def close(self) -> None:
+        for binding in self.bindings:
+            binding.close()
+        self._closed = True
+
+    def __enter__(self) -> FakePluginArtifactAuthority:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc: object,
+        traceback: object,
+    ) -> None:
+        self.close()
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +215,7 @@ class DispatchFoodTruckCall:
     orchestrator_prompt: str
     cwd: str
     completion_marker: str = ""
-    plugin_source: PluginSource | None = None
+    plugin_authority: PluginArtifactAuthority | None = None
     resume_session_id: str | None = None
     resume_checkpoint: SessionCheckpoint | None = None
     model: str = ""
@@ -160,6 +234,9 @@ class DispatchFoodTruckCall:
     on_spawn: Callable[[int, int], None] | None = None
     allowed_write_prefix: str = ""
     allowed_write_prefixes: tuple[str, ...] = ()
+    provider_name: str = ""
+    provider_fallback_env: dict[str, str] | None = None
+    provider_fallback_name: str = ""
     sentinel_contract: str = ""
     profile_name: str = ""
     prior_completion_markers: Sequence[str] | None = None
@@ -168,7 +245,7 @@ class DispatchFoodTruckCall:
     resume_message: str | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
     backend_override: str | None = None
-    capability_contract: Any | None = None
+    capability_preparation: HeadlessSkillDispatchPreparation | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -312,7 +389,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         cwd: str,
         *,
         completion_marker: str,
-        plugin_source: PluginSource | None = None,
+        plugin_authority: PluginArtifactAuthority | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
         model: str = "",
@@ -342,14 +419,14 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         resume_message: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         backend_override: str | None = None,
-        capability_contract: Any | None = None,
+        capability_preparation: HeadlessSkillDispatchPreparation | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
                 orchestrator_prompt=orchestrator_prompt,
                 cwd=cwd,
                 completion_marker=completion_marker,
-                plugin_source=plugin_source,
+                plugin_authority=plugin_authority,
                 resume_session_id=resume_session_id,
                 resume_checkpoint=resume_checkpoint,
                 model=model,
@@ -368,6 +445,9 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 on_spawn=on_spawn,
                 allowed_write_prefix=allowed_write_prefix,
                 allowed_write_prefixes=allowed_write_prefixes,
+                provider_name=provider_name,
+                provider_fallback_env=provider_fallback_env,
+                provider_fallback_name=provider_fallback_name,
                 sentinel_contract=sentinel_contract,
                 profile_name=profile_name,
                 prior_completion_markers=prior_completion_markers,
@@ -376,7 +456,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 resume_message=resume_message,
                 on_session_id_resolved=on_session_id_resolved,
                 backend_override=backend_override,
-                capability_contract=capability_contract,
+                capability_preparation=capability_preparation,
             )
         )
         if self._queue:
@@ -900,8 +980,10 @@ class MockSubprocessRunner(SubprocessRunner):
         *,
         cwd: Path,
         timeout: float,
+        pass_fds: tuple[int, ...] = (),
         **kwargs: object,
     ) -> SubprocessResult:
+        kwargs["pass_fds"] = pass_fds
         self.call_args_list.append((cmd, cwd, timeout, kwargs))
         self.last_pty_mode = bool(kwargs.get("pty_mode", False))
         result = self._queue.popleft() if self._queue else self._default

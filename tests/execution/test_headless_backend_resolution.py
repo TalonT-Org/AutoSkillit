@@ -104,7 +104,7 @@ class TestStepBackendPtyOverride:
         spec = CmdSpec(cmd=("codex", "--print", "do something"), env={})
         with patch("autoskillit.execution.headless._headless_execute.assert_headless_cmd"):
             await _execute_claude_headless(
-                spec,
+                lambda _binding, _extras: spec,
                 cwd=str(tmp_path),
                 ctx=minimal_ctx,
                 timeout=10.0,

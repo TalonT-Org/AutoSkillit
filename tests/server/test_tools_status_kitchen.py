@@ -66,16 +66,6 @@ class TestKitchenStatus:
     @pytest.mark.anyio
     async def test_status_returns_version_info(self, tmp_path, tool_ctx_kitchen_open):
         from autoskillit import __version__
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
-
-        # A projection carrying the live package version — the package root itself
-        # is not a representable plugin source any more.
-        projected = tmp_path / "projection"
-        (projected / ".claude-plugin").mkdir(parents=True)
-        (projected / ".claude-plugin" / "plugin.json").write_text(
-            json.dumps({"name": "autoskillit", "version": __version__})
-        )
-        tool_ctx_kitchen_open.plugin_source = ProjectedPluginRoot(plugin_dir=projected)
 
         result = json.loads(await kitchen_status())
         assert result["package_version"] == __version__
@@ -84,15 +74,17 @@ class TestKitchenStatus:
         assert "warning" not in result
 
     @pytest.mark.anyio
-    async def test_status_reports_mismatch(self, tmp_path, tool_ctx_kitchen_open):
-        plugin_dir = tmp_path / ".claude-plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "plugin.json").write_text(
-            json.dumps({"name": "autoskillit", "version": "0.0.0"})
-        )
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
+    async def test_status_reports_mismatch(self, tmp_path, tool_ctx_kitchen_open, monkeypatch):
+        from autoskillit import __version__
 
-        tool_ctx_kitchen_open.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        monkeypatch.setattr(
+            "autoskillit.server.version_info",
+            lambda: {
+                "package_version": __version__,
+                "plugin_json_version": "0.0.0",
+                "match": False,
+            },
+        )
         result = json.loads(await kitchen_status())
         assert result["versions_match"] is False
         assert "warning" in result

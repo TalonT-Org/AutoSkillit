@@ -18,7 +18,12 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 #: Symbols this change removed. Both halves must hold: gone from `__all__` and
 #: gone from `getattr`.
-REMOVED = ("MarketplaceInstall", "_get_autoskillit_install_path")
+REMOVED = (
+    "MarketplaceInstall",
+    "PluginSource",
+    "ProjectedPluginRoot",
+    "_get_autoskillit_install_path",
+)
 
 #: Symbols this change added. Each must be importable from the gateway.
 ADDED = (
@@ -31,7 +36,6 @@ ADDED = (
     "PluginArtifactValidationError",
     "PluginLaunchBinding",
     "PluginLoadMode",
-    "ProjectedPluginRoot",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
     "RetiredArtifactShape",
     "destination_location",

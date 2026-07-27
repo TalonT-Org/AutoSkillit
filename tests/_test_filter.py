@@ -204,7 +204,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "claude_conventions": frozenset({"core", "execution", "server", "workspace"}),
     "_type_resume": frozenset({"core", "cli", "execution", "fleet"}),
     "_type_helpers": frozenset({"core", "execution", "fleet", "pipeline", "recipe", "server"}),
-    "_type_protocols_workspace": frozenset({"core", "pipeline", "recipe", "server", "workspace"}),
+    "_type_protocols_workspace": frozenset(
+        {"cli", "core", "execution", "pipeline", "recipe", "server", "workspace"}
+    ),
     "_type_protocols_backend": frozenset(
         {"_llm_triage", "cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
     ),

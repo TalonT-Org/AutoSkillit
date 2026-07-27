@@ -46,7 +46,7 @@ async def set_commit_status(
         description: Short human-readable status description (max 140 chars).
         target_url: Optional URL linking to review details.
         repo: owner/repo format. Inferred from `cwd` git remote if absent.
-        cwd: Working directory for repo inference. Defaults to plugin_dir.
+        cwd: Working directory for repo inference. Defaults to the project root.
 
     Never raises.
     """
@@ -74,10 +74,7 @@ async def set_commit_status(
         if cwd:
             effective_cwd = cwd
         else:
-            # Recorded, not fixed here: using a *projection* directory as the cwd for
-            # git-remote resolution looks wrong regardless of variant — a projection is
-            # not a git repository. Pre-existing question, deliberately out of scope.
-            effective_cwd = str(tool_ctx.plugin_source.plugin_dir)
+            effective_cwd = str(tool_ctx.project_dir)
 
         # Resolve owner/repo if not provided
         owner_repo = repo

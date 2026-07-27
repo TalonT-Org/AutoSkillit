@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 import pytest
 
-from autoskillit.core import BackendEventKind, ProjectedPluginRoot, SessionEvent
+from autoskillit.core import BackendEventKind, SessionEvent
 from autoskillit.core.types import Severity
 from autoskillit.execution.backends import CompositeSessionLocator
 from autoskillit.execution.backends.codex import (
@@ -24,6 +24,7 @@ from autoskillit.execution.backends.codex import (
     CodexStreamParser,
 )
 from autoskillit.recipe._api import load_and_validate
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 
@@ -123,13 +124,13 @@ class TestCodexSmokeFoodTruckCmdBuild:
     """Verify CodexBackend.build_food_truck_cmd produces a valid CmdSpec."""
 
     def test_food_truck_cmd_has_required_flags(self) -> None:
-        plugin_source = ProjectedPluginRoot(plugin_dir=Path("/tmp/fake-plugin"))
-        cmd = CodexBackend().build_food_truck_cmd(
-            orchestrator_prompt="test",
-            plugin_source=plugin_source,
-            cwd="/tmp",
-            completion_marker="DONE",
-        )
+        with plugin_binding(Path("/tmp/fake-plugin")) as binding:
+            cmd = CodexBackend().build_food_truck_cmd(
+                orchestrator_prompt="test",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="DONE",
+            )
         assert "--json" in cmd.cmd
         assert "--sandbox" in cmd.cmd
         assert cmd.cmd[cmd.cmd.index("--sandbox") + 1] == "read-only"

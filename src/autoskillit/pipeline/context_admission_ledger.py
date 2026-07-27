@@ -449,7 +449,6 @@ class DefaultContextAdmissionLedger:
                     ),
                 )
                 self._fault_callback(_LedgerFaultPoint.AFTER_JOURNAL)
-                self._fault_callback(_LedgerFaultPoint.DURING_EFFECTS)
                 for ordinal, effect in enumerate(transition.effects):
                     connection.execute(
                         """
@@ -468,6 +467,8 @@ class DefaultContextAdmissionLedger:
                             ),
                         ),
                     )
+                    if ordinal == 0:
+                        self._fault_callback(_LedgerFaultPoint.DURING_EFFECTS)
                 shadow = _shadow_record(
                     stream_key,
                     current_state,
@@ -490,6 +491,7 @@ class DefaultContextAdmissionLedger:
                         ),
                     ),
                 )
+                self._fault_callback(_LedgerFaultPoint.AFTER_STATE_SHADOW)
                 cursor = connection.execute(
                     """
                     UPDATE streams
@@ -518,7 +520,6 @@ class DefaultContextAdmissionLedger:
                         ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
                         "stream-publication-cas-failed",
                     )
-                self._fault_callback(_LedgerFaultPoint.AFTER_STATE_SHADOW)
                 self._fault_callback(_LedgerFaultPoint.BEFORE_COMMIT)
                 self._commit(connection)
                 self._fault_callback(_LedgerFaultPoint.AFTER_COMMIT)

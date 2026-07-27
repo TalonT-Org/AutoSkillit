@@ -1758,7 +1758,6 @@ def test_inspection_keeps_transient_sqlite_failures_retryable(
         "before_reduction",
         "after_reduction",
         "after_journal",
-        "during_effects",
         "after_state_shadow",
         "before_commit",
     ],
@@ -1784,6 +1783,62 @@ def test_precommit_faults_roll_back_every_projection(
         assert connection.execute("SELECT COUNT(*) FROM shadow_decisions").fetchone() == (0,)
     finally:
         connection.close()
+
+
+def test_fault_checkpoints_follow_distinct_mutation_boundaries(tmp_path: Path) -> None:
+    authority = _authority(tmp_path)
+    connections: list[sqlite3.Connection] = []
+    observed_changes: dict[str, int] = {}
+    recording = False
+
+    def connection_factory(*args: object, **kwargs: object) -> sqlite3.Connection:
+        connection = sqlite3.connect(*args, **kwargs)  # type: ignore[arg-type]
+        connections.append(connection)
+        return connection
+
+    def record(point: object) -> None:
+        if recording:
+            observed_changes[getattr(point, "value")] = connections[-1].total_changes
+
+    ledger = DefaultContextAdmissionLedger(
+        authority,
+        fault_callback=record,
+        connection_factory=connection_factory,
+    )
+    key = stream_key()
+    occurrence_value = occurrence()
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence_value),
+    )
+    assert proposed.transition is not None
+    batch_value = batch(occurrence_value)
+    recording = True
+
+    reserved = ledger.reserve(
+        key,
+        reserve_event(
+            proposed.transition.next_state,
+            batch_value,
+            occurrence_value,
+            generation_allowance=15,
+        ),
+    )
+
+    assert reserved.transition is not None
+    assert len(reserved.transition.effects) == 2
+    checkpoint_order = (
+        "after_journal",
+        "during_effects",
+        "after_state_shadow",
+        "before_commit",
+    )
+    assert tuple(observed_changes) == checkpoint_order
+    assert tuple(observed_changes[name] for name in checkpoint_order) == tuple(
+        sorted(set(observed_changes.values()))
+    )
 
 
 def test_postcommit_fault_has_unknown_outcome_but_exact_retry_finds_publication(

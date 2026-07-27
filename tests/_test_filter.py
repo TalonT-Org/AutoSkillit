@@ -279,10 +279,15 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
     "bash_write_targets": frozenset({"core", "execution", "server"}),
     "_delivery_bounds": frozenset({"core", "execution", "server"}),
+    "_type_audit_cycle": frozenset({"core", "recipe", "server"}),
+    "_type_recipe_binding": frozenset({"core", "recipe", "server"}),
+    "_type_recipe_execution": frozenset({"core", "pipeline", "recipe", "server"}),
     "_type_closure_report": frozenset({"core"}),
     "context_admission": frozenset({"core"}),
-    "closure_hashing": frozenset({"core"}),
-    "path_containment": frozenset({"core"}),
+    "audit_cycle_verifier": frozenset({"core", "recipe", "server"}),
+    "tool_registry": frozenset({"core", "recipe", "server"}),
+    "closure_hashing": frozenset({"core", "recipe"}),
+    "path_containment": frozenset({"core", "recipe"}),
     "closure_verifier": frozenset({"core", "execution"}),
 }
 
@@ -486,6 +491,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "rules_skill_write_path_alignment": frozenset({"recipe"}),
     # --- Internal utility modules (no external src importers) ---
     "_analysis": frozenset({"recipe"}),
+    "_binding": frozenset({"recipe", "server"}),
     "_analysis_bfs": frozenset({"recipe"}),
     "_analysis_blocks": frozenset({"recipe"}),
     "_analysis_detectors": frozenset({"recipe"}),
@@ -790,6 +796,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "migration",
             # Server file-level entries importing autoskillit.recipe:
             "server/test_serve_idempotence.py",
+            "server/test_open_kitchen_deferred_recall.py",
             "server/test_backend_ingredient_injection.py",
             "server/test_factory.py",
             "server/test_tools_dispatch_validation.py",
@@ -812,6 +819,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_admission_dispatch_agreement.py",
             "server/test_pipeline_deps_derivation.py",
             "server/test_pipeline_tracker.py",
+            "server/test_audit_cycle_delivery_integration.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",

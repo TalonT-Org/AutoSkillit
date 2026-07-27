@@ -19,6 +19,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_audit_trail_artifacts.py` | Tests for audit/ directory creation and artifact copy in create_worktree.sh |
 | `test_audit_trail_format_doc.py` | Tests for audit-trail-format.md documentation |
 | `test_audit_trail_recipe_contracts.py` | Tests for research.yaml audit-trail captures and threading |
+| `test_audit_cycle_lifecycle_integration.py` | Loaded-recipe audit authority, disposition, and exact dry-child tuple integration |
 | `test_closure_contracts_yaml.py` | Contract tests: skill_contracts.yaml audit-impl entry must expose closure inputs/output |
 | `test_closure_recipe_routing.py` | Structural tests: all six consuming recipes must wire closure ingredients to audit_impl |
 | `test_bem_wrapper_structure.py` | Tests for BEM wrapper recipe structure |
@@ -69,6 +70,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_io_discovery.py` | Tests for recipe I/O discovery (list_recipes, recipe iteration) |
 | `test_io_parsing.py` | Tests for recipe YAML parsing and load_recipe |
 | `test_io_schema_fields.py` | Tests for recipe schema field validation in I/O layer |
+| `test_skill_invocation_binding.py` | Canonical tool/skill namespace binding, absence, order, provenance, and YAML/JSON/prune parity |
 | `test_io_json_precompile.py` | Tests for JSON pre-compilation fast path in recipe I/O |
 | `test_issue_url_pipeline.py` | Tests for issue URL pipeline in recipe steps |
 | `test_loader.py` | Tests for path-based recipe metadata utilities |
@@ -240,7 +242,6 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 
 | `test_audit_impl_defaults.py` | Contract test: implementation.yaml and remediation.yaml must default inputs.audit_impl to 'true' |
 | `test_analysis_detectors_rename.py` | Tests for plan-visualization → synthesize-vis-plan rename in _OBSERVABILITY_CAPTURES |
-| `test_false_positive_escape_valve.py` | Tests for false-positive escape valve routing in recipes that invoke make-plan |
 | `test_inline_content_semantic_rule.py` | Tests for inline-content-in-subagent-prompt semantic rule |
 ## Architecture Notes
 

@@ -111,11 +111,11 @@ def test_planner_recipe_validation_has_no_errors(planner_recipe):
     assert_no_rule_errors(findings, context="planner recipe")
 
 
-def test_planner_recipe_extract_domain_uses_positional_args(planner_recipe):
+def test_planner_recipe_extract_domain_uses_structured_inputs(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
-    skill_cmd = step.with_args.get("skill_command", "")
-    assert "analysis.json" in skill_cmd, "Must pass analysis.json as positional arg"
-    assert "context.task_file_path" in skill_cmd, "Must pass task_file_path as positional arg"
+    skill_inputs = step.with_args.get("skill_inputs", {})
+    assert skill_inputs["analysis_path"].endswith("/analysis.json")
+    assert "context.task_file_path" in skill_inputs["task_file_path"]
     assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
@@ -303,17 +303,17 @@ def test_planner_resolve_task_routes_to_analyze(planner_recipe):
     assert step.on_success == "analyze"
 
 
-def test_extract_domain_passes_task_file_path_positionally(planner_recipe):
+def test_extract_domain_passes_task_file_path_by_name(planner_recipe):
     step = planner_recipe.steps["extract_domain"]
-    skill_cmd = step.with_args.get("skill_command", "")
-    assert "context.task_file_path" in skill_cmd
+    skill_inputs = step.with_args.get("skill_inputs", {})
+    assert "context.task_file_path" in skill_inputs["task_file_path"]
     assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 
-def test_generate_phases_passes_task_file_path_positionally(planner_recipe):
+def test_generate_phases_passes_task_file_path_by_name(planner_recipe):
     step = planner_recipe.steps["generate_phases"]
-    skill_cmd = step.with_args.get("skill_command", "")
-    assert "context.task_file_path" in skill_cmd
+    skill_inputs = step.with_args.get("skill_inputs", {})
+    assert "context.task_file_path" in skill_inputs["task_file_path"]
     assert "env" not in step.with_args, "Must not use env: block (ADR-0003)"
 
 

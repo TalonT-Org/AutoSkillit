@@ -74,6 +74,7 @@ def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
         _build_step_graph,
         analyze_dataflow,
     )
+    from autoskillit.recipe._binding import bind_recipe
     from autoskillit.recipe.registry import run_semantic_rules
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
@@ -104,6 +105,7 @@ def test_feature_gate_rule_fires_on_disabled_feature_skill(monkeypatch) -> None:
         recipe=recipe,
         step_graph=step_graph,
         dataflow=analyze_dataflow(recipe, step_graph=step_graph),
+        binding_projection=bind_recipe(recipe),
         disabled_features=frozenset({"test-skill-gate"}),
         skill_category_map={"arch-lens-c4-container": frozenset({"arch-lens"})},
     )

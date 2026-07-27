@@ -137,6 +137,8 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_pr_ops.py` | Tests for server/tools_pr_ops.py |
 | `test_tools_recipe.py` | Tests for autoskillit server validate_recipe tool and recipe docstring contracts |
 | `test_tools_recipe_pull.py` | Tests for the `get_recipe_section` pull tool and bounded envelope architecture (Part B #4304) |
+| `test_tool_registry_parity.py` | Bidirectional AST parity between canonical IL-0 tool metadata and live MCP handler signatures |
+| `test_audit_cycle_delivery_integration.py` | Attested payload installation, exact runtime binding, trusted-head CAS, and zero-read preflight |
 | `test_tools_report_bug.py` | Tests for report_bug MCP tool handler and supporting helpers (_parse_fingerprint, _extract_block, _parse_prepare_result, _parse_enrich_result) |
 | `test_tools_run_cmd.py` | Tests for run_cmd and run_python MCP tool handlers |
 | `test_tools_run_cmd_invariants.py` | Server-side invariant tests for run_cmd: recipe-read prohibition and write-target boundary |

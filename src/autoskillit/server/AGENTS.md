@@ -17,6 +17,7 @@ Sub-package: tools/ (see tools/AGENTS.md).
 | `_response_budget.py` | Lossless response spill, exact canonical projection finalization, measured exemptions, and privacy-safe budget telemetry |
 | `_response_conformance.py` | Post-FastMCP-conversion conformance gate for registered string tool responses |
 | `_recipe_delivery.py` | Unified recipe finalization, content-addressed generations, pull integrity, and receipt completion |
+| `_recipe_execution.py` | Compiled execution snapshot lifecycle, trusted audit-head ledger, runtime binding, and input preflight |
 | `_recipe_section_pagination.py` | Typed recipe-section selection, deterministic byte-bounded page planning, rendering, and verified-plan caching |
 | `recipe_section/__init__.py` | Package marker for focused recipe-section planning support |
 | `recipe_section/_verification.py` | Post-digest descriptor, reconstruction, ordering, and rendered-bound invariant proof |

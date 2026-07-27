@@ -17,6 +17,12 @@ from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
+def _skill_input(step, name: str) -> object:
+    values = step.with_args.get("skill_inputs", {})
+    assert isinstance(values, dict)
+    return values.get(name, "")
+
+
 def _assert_ci_conflict_fix_on_context_limit(recipe) -> None:
     """Shared assertion: ci_conflict_fix routes to diagnose_ci on context limit
     for CI log capture."""
@@ -58,8 +64,8 @@ def _assert_ci_steps(recipe) -> None:
     assert "resolve-failures" in skill_cmd
     assert resolve_ci.retries == 2
     assert resolve_ci.on_exhausted == "release_issue_failure"
-    assert "context.work_dir" in skill_cmd
-    assert "context.plan_path" in skill_cmd
+    assert "context.work_dir" in str(_skill_input(resolve_ci, "worktree_path"))
+    assert "context.plan_path" in str(_skill_input(resolve_ci, "plan_path"))
 
     # re_push step (T_CI6)
     assert "re_push" in recipe.steps
@@ -385,12 +391,12 @@ class TestImplementationPipelineStructure:
         names a git object and survives unconditionally.
         """
         step = recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.base_sha" in skill_cmd, (
+        implementation_ref = str(_skill_input(step, "branch_name"))
+        assert "context.base_sha" in implementation_ref, (
             "audit_impl must use context.base_sha as implementation_ref — "
             "context.branch_name is deleted by merge_worktree before audit_impl runs"
         )
-        assert "context.branch_name" not in skill_cmd, (
+        assert "context.branch_name" not in implementation_ref, (
             "audit_impl must NOT use context.branch_name (deleted by merge_worktree)"
         )
 
@@ -581,23 +587,23 @@ class TestImplementationPipelineStructure:
 
     def test_ip_prepare_pr_references_all_plan_paths(self, recipe) -> None:
         """prepare_pr must pass all accumulated plan paths, not just the last."""
-        cmd = recipe.steps["prepare_pr"].with_args.get("skill_command", "")
-        assert "context.all_plan_paths" in cmd
-        assert "context.plan_path" not in cmd
+        plan_paths = str(_skill_input(recipe.steps["prepare_pr"], "plan_paths"))
+        assert "context.all_plan_paths" in plan_paths
+        assert "context.plan_path" not in plan_paths
 
     def test_ip_plan_step_note_contains_accumulation_instruction(self, recipe) -> None:
         """plan step note must instruct agent to accumulate plan paths across groups."""
         note = recipe.steps["plan"].note or ""
-        assert "ACCUMULATION" in note
+        assert "appends" in note
         assert "all_plan_paths" in note
 
     def test_audit_impl_uses_all_plan_paths(self, recipe) -> None:
         """audit_impl must reference context.all_plan_paths so remediation re-entry accumulates."""
-        cmd = recipe.steps["audit_impl"].with_args.get("skill_command", "")
-        assert "context.all_plan_paths" in cmd, (
+        plan_paths = str(_skill_input(recipe.steps["audit_impl"], "all_plan_paths"))
+        assert "context.all_plan_paths" in plan_paths, (
             f"{recipe.name} audit_impl must reference context.all_plan_paths"
         )
-        assert "context.plan_path" not in cmd, (
+        assert "context.plan_path" not in plan_paths, (
             f"{recipe.name} audit_impl must not reference context.plan_path"
         )
 
@@ -727,9 +733,9 @@ class TestImplementationGroupsStructure:
     def test_ig_audit_impl_uses_base_sha_as_ref(self, recipe) -> None:
         """audit_impl must use context.base_sha as implementation_ref."""
         step = recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.base_sha" in skill_cmd
-        assert "context.branch_name" not in skill_cmd
+        implementation_ref = str(_skill_input(step, "branch_name"))
+        assert "context.base_sha" in implementation_ref
+        assert "context.branch_name" not in implementation_ref
 
     def test_ig_fix_step_routes_via_on_result_to_test(self, recipe) -> None:
         """fix step must route via verdict-gated on_result to test (verify before guard)."""
@@ -858,23 +864,20 @@ class TestInvestigateFirstStructure:
         assert recipe.steps["remediate"].on_success == "make_plan"
 
     def test_if5_make_plan_step_has_correct_structure(self, recipe) -> None:
-        """T_IF5: make_plan step calls make-plan with remediation_path and captures outputs."""
+        """T_IF5: make_plan receives explicit audit authority and captures both artifacts."""
         assert "make_plan" in recipe.steps
         step = recipe.steps["make_plan"]
         assert step.tool == "run_skill"
         skill_cmd = step.with_args.get("skill_command", "")
         assert "/autoskillit:make-plan" in skill_cmd
-        assert "context.remediation_path" in skill_cmd
+        assert "context.audit_cycle_path" in str(_skill_input(step, "audit_cycle_path"))
         assert "plan_path" in step.capture
+        assert "plan_disposition_path" in step.capture
         assert "plan_parts" in step.capture_list
         assert "verdict" in step.capture
         assert step.on_success is None
         assert step.on_result is not None
-        plan_routes = [
-            c
-            for c in step.on_result.conditions
-            if c.when and "plan" in c.when and "false_positive" not in c.when
-        ]
+        plan_routes = [c for c in step.on_result.conditions if c.when and "plan" in c.when]
         assert len(plan_routes) == 1
         assert plan_routes[0].route == "dry_walkthrough"
         assert step.on_failure == "release_issue_failure"
@@ -906,8 +909,8 @@ class TestInvestigateFirstStructure:
     def test_if_b2_audit_impl_uses_branch_name_as_ref(self, recipe) -> None:
         """T_IF_B2: audit_impl with: must reference context.branch_name as implementation_ref."""
         step = recipe.steps["audit_impl"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.branch_name" in skill_cmd, (
+        implementation_ref = str(_skill_input(step, "branch_name"))
+        assert "context.branch_name" in implementation_ref, (
             "audit_impl must pass context.branch_name as implementation_ref — not "
             "context.implementation_ref or context.worktree_path (stale after merge)"
         )
@@ -969,11 +972,11 @@ class TestInvestigateFirstStructure:
         assert step.capture["investigation_path"].from_ == "${{ result.investigation_path }}"
 
     def test_remediation_rectify_uses_context_investigation_path(self, recipe) -> None:
-        """1d: rectify step must pass an investigation path context variable in skill_command."""
+        """1d: rectify receives the bridged investigation path by name."""
         step = recipe.steps["rectify"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "${{ context.effective_investigation_path }}" in skill_cmd, (
-            "rectify step skill_command must include ${{ context.effective_investigation_path }} "
+        investigation_path = str(_skill_input(step, "investigation_path"))
+        assert "${{ context.effective_investigation_path }}" in investigation_path, (
+            "rectify step must bind ${{ context.effective_investigation_path }} "
             "to pass the resolved path from the bridge_investigation step"
         )
 
@@ -997,10 +1000,10 @@ class TestInvestigateFirstStructure:
         )
 
     def test_if_resolve_review_passes_merge_target(self, recipe) -> None:
-        """T_IF_RR2: resolve_review skill_command must pass context.merge_target."""
+        """T_IF_RR2: resolve_review binds context.merge_target as feature_branch."""
         step = recipe.steps["resolve_review"]
-        skill_cmd = step.with_args.get("skill_command", "")
-        assert "context.merge_target" in skill_cmd, (
+        feature_branch = str(_skill_input(step, "feature_branch"))
+        assert "context.merge_target" in feature_branch, (
             "resolve-review requires feature_branch as first arg; "
             "context.merge_target holds the feature branch name"
         )

@@ -157,9 +157,9 @@ class TestInvestigateFirstIssueUrl:
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """investigate step must reference inputs.issue_url, not issue_content."""
         data = load_yaml(_recipe_path("remediation"))
-        skill_step_with = data["steps"]["investigate"].get("with", {})
-        assert any("issue_url" in str(v) for v in skill_step_with.values())
-        assert not any("issue_content" in str(v) for v in skill_step_with.values())
+        topic = data["steps"]["investigate"]["with"]["skill_inputs"]["topic"]
+        assert "inputs.issue_url" in topic
+        assert "issue_content" not in topic
 
     def test_issue_number_referenced_in_prepare_pr_step(self):
         data = load_yaml(_recipe_path("remediation"))

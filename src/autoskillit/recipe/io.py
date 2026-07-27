@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json as _json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -17,12 +16,21 @@ from autoskillit.core import (
     LoadResult,
     RecipeSource,
     get_logger,
-    load_yaml,
     mapping_entry_byte_ranges_from_yaml,
     pkg_root,
 )
-from autoskillit.core import fast_loads as _fast_loads
-from autoskillit.recipe._contracts_types import INPUT_REF_RE
+from autoskillit.recipe._io_loading import (
+    _SCRIPTS_PLACEHOLDER as _SCRIPTS_PLACEHOLDER,
+)
+from autoskillit.recipe._io_loading import (
+    load_recipe_dict_with_declarations,
+)
+from autoskillit.recipe._io_loading import (
+    substitute_scripts_placeholder as substitute_scripts_placeholder,
+)
+from autoskillit.recipe._io_loading import (
+    substitute_temp_placeholder as substitute_temp_placeholder,
+)
 from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
@@ -64,93 +72,6 @@ NON_RECIPE_DIRS: frozenset[str] = frozenset(
 )
 
 
-_TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
-_SCRIPTS_PLACEHOLDER = "{{AUTOSKILLIT_SCRIPTS}}"
-
-
-def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:
-    """Replace ``{{AUTOSKILLIT_TEMP}}`` in raw recipe/skill text.
-
-    Validates that ``temp_dir_relpath`` is YAML-safe (no newlines or
-    ``": "`` sequences); raises ``ValueError`` otherwise. Filesystem paths
-    should never contain these characters, but the guard makes the failure
-    loud and free.
-    """
-    if "\n" in temp_dir_relpath or ": " in temp_dir_relpath:
-        raise ValueError(f"temp_dir_relpath is YAML-unsafe: {temp_dir_relpath!r}")
-    return text.replace(_TEMP_PLACEHOLDER, temp_dir_relpath)
-
-
-def substitute_scripts_placeholder(text: str) -> str:
-    """Replace ``{{AUTOSKILLIT_SCRIPTS}}`` with the absolute path to bundled scripts."""
-    return text.replace(_SCRIPTS_PLACEHOLDER, str(builtin_scripts_dir()))
-
-
-def _assert_no_raw_placeholders(
-    text: str,
-    *,
-    context: str = "",
-    hidden_ingredient_names: frozenset[str] | None = None,
-) -> None:
-    # Content-delivery boundary guard: raises if placeholder substitution was skipped.
-    for placeholder in (_TEMP_PLACEHOLDER, _SCRIPTS_PLACEHOLDER):
-        if placeholder in text:
-            raise ValueError(
-                f"Unresolved {placeholder} in recipe content"
-                + (f" ({context})" if context else "")
-            )
-    if hidden_ingredient_names:
-        for _m in INPUT_REF_RE.finditer(text):
-            _name = _m.group(1)
-            if _name in hidden_ingredient_names:
-                raise ValueError(
-                    f"Unresolved hidden ingredient template ${{{{ inputs.{_name} }}}} "
-                    "in recipe content" + (f" ({context})" if context else "")
-                )
-
-
-def _load_recipe_dict(
-    yaml_path: Path,
-    *,
-    raw_text: str | None = None,
-    temp_dir_relpath: str | None = None,
-) -> dict[str, Any]:
-    """Load a recipe dict, preferring a pre-compiled JSON sibling when fresh.
-
-    Args:
-        yaml_path: Path to the .yaml recipe file.
-        raw_text: Already-read YAML text (avoids redundant I/O on fallback).
-        temp_dir_relpath: When set, ``{{AUTOSKILLIT_TEMP}}`` is replaced in the
-            text before parsing (applies to both JSON and YAML paths).
-    """
-    json_path = yaml_path.with_suffix(".json")
-    try:
-        if json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns:
-            text = json_path.read_text(encoding="utf-8")
-            if temp_dir_relpath is not None:
-                text = substitute_temp_placeholder(text, temp_dir_relpath)
-            text = substitute_scripts_placeholder(text)
-            data = _fast_loads(text)
-            if isinstance(data, dict):
-                return data
-            logger.warning(
-                "Pre-compiled JSON is not a mapping, falling back to YAML: %s", json_path
-            )
-    except _json.JSONDecodeError:
-        logger.warning("Pre-compiled JSON is corrupt, falling back to YAML: %s", json_path)
-    except (FileNotFoundError, OSError):
-        pass
-    if raw_text is None:
-        raw_text = yaml_path.read_text(encoding="utf-8")
-    if temp_dir_relpath is not None:
-        raw_text = substitute_temp_placeholder(raw_text, temp_dir_relpath)
-    raw_text = substitute_scripts_placeholder(raw_text)
-    data = load_yaml(raw_text)
-    if not isinstance(data, dict):
-        raise ValueError(f"Recipe file must contain a YAML mapping: {yaml_path}")
-    return data
-
-
 def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Recipe:
     """Parse a YAML recipe file into a Recipe dataclass.
 
@@ -163,8 +84,11 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
     ``_analysis.py`` imports ``iter_steps_with_context`` from this module, so a
     top-level import here would create a cycle.
     """
-    data = _load_recipe_dict(path, temp_dir_relpath=temp_dir_relpath)
-    recipe = _parse_recipe(data)
+    data, declared_data = load_recipe_dict_with_declarations(
+        path,
+        temp_dir_relpath=temp_dir_relpath,
+    )
+    recipe = _parse_recipe(data, declared_data=declared_data)
     from autoskillit.recipe.staleness_cache import compute_recipe_hash  # noqa: PLC0415
 
     recipe.content_hash = compute_recipe_hash(path)
@@ -368,6 +292,7 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "python",
         "constant",
         "with_args",
+        "declared_with_args",
         "on_success",
         "on_failure",
         "on_context_limit",
@@ -491,7 +416,11 @@ def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
     return result
 
 
-def _parse_recipe(data: dict[str, Any]) -> Recipe:
+def _parse_recipe(
+    data: dict[str, Any],
+    *,
+    declared_data: dict[str, Any] | None = None,
+) -> Recipe:
     name = data.get("name", "")
     description = data.get("description", "")
     summary = data.get("summary", "")
@@ -512,9 +441,14 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     _steps_raw = data.get("steps")
     if _steps_raw is not None and not isinstance(_steps_raw, dict):
         raise ValueError(f"'steps' must be a mapping, got {type(_steps_raw).__name__!r}")
+    declared_steps = declared_data.get("steps", {}) if isinstance(declared_data, dict) else {}
     for step_name, step_data in (_steps_raw or {}).items():
         if isinstance(step_data, dict):
-            step = _parse_step(step_data)
+            declared_step = declared_steps.get(step_name, step_data)
+            step = _parse_step(
+                step_data,
+                declared_data=declared_step if isinstance(declared_step, dict) else step_data,
+            )
             step.name = step_name
             steps[step_name] = step
 
@@ -625,7 +559,34 @@ def _ensure_list(value: Any) -> list[str]:
     return []
 
 
-def _parse_step(data: dict[str, Any]) -> RecipeStep:
+def _normalize_step_with_args(
+    tool: str | None,
+    raw_with: object,
+) -> dict[str, Any]:
+    if raw_with is None:
+        return {}
+    if not isinstance(raw_with, dict):
+        raise TypeError("Recipe step 'with' must be a mapping")
+    normalized = dict(raw_with)
+    # Precompiled JSON normalizes run_python callable arguments beneath
+    # ``args``.  Restore the canonical scalar recipe representation so fresh
+    # YAML and JSON paths produce identical RecipeStep values.
+    if tool == "run_python" and isinstance(normalized.get("args"), dict):
+        args = normalized.pop("args")
+        overlap = normalized.keys() & args.keys()
+        if overlap:
+            raise ValueError(
+                f"run_python precompiled args duplicate outer keys: {sorted(overlap)}"
+            )
+        normalized.update(args)
+    return normalized
+
+
+def _parse_step(
+    data: dict[str, Any],
+    *,
+    declared_data: dict[str, Any] | None = None,
+) -> RecipeStep:
     if "retry" in data:
         raise ValueError(
             "The 'retry:' block is no longer supported. "
@@ -652,12 +613,21 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         if conditions:
             on_result = StepResultRoute(conditions=conditions)
 
+    tool = data.get("tool")
+    declared_source = declared_data or data
+    with_args = _normalize_step_with_args(tool, data.get("with", {}))
+    declared_with_args = _normalize_step_with_args(
+        declared_source.get("tool", tool),
+        declared_source.get("with", {}),
+    )
+
     return RecipeStep(
-        tool=data.get("tool"),
+        tool=tool,
         action=data.get("action"),
         python=data.get("python"),
         constant=data.get("constant"),
-        with_args=data.get("with", {}),
+        with_args=with_args,
+        declared_with_args=declared_with_args,
         on_success=data.get("on_success"),
         on_failure=data.get("on_failure"),
         on_context_limit=data.get("on_context_limit"),
@@ -699,8 +669,8 @@ def _collect_recipes(
         if f.suffix in (".yaml", ".yml") and f.is_file():
             try:
                 raw = f.read_text(encoding="utf-8")
-                data = _load_recipe_dict(f, raw_text=raw)
-                recipe = _parse_recipe(data)
+                data, declared_data = load_recipe_dict_with_declarations(f, raw_text=raw)
+                recipe = _parse_recipe(data, declared_data=declared_data)
                 if recipe.name and recipe.name not in seen:
                     seen.add(recipe.name)
                     from autoskillit.recipe.staleness_cache import (  # noqa: PLC0415

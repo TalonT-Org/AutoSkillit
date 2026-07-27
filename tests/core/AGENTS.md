@@ -71,6 +71,9 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_path_containment.py` | Tests for core.path_containment — symlink/hardlink/traversal guards |
 | `test_closure_verifier.py` | Tests for core.closure_verifier — independent report verifier |
 | `test_closure_attacks.py` | Adversarial attack tests for closure-mode verification (forged verdicts, containment escape, ref drift, unauthorized rows, metadata stability) |
+| `test_audit_cycle_authority.py` | Canonical serialization, digest coverage, and immutable audit-cycle authority contracts |
+| `test_audit_cycle_attacks.py` | Audit-cycle containment, tamper, replay, and lineage attack tests |
+| `test_inventory_admission.py` | Pure evaluator truth table and zero-inventory-read GO/OMIT contracts |
 | `test_closure_authority_spec.py` | Tests for ClosureAuthoritySpec and factory validation |
 | `test_closure_report.py` | Tests for ClosureRow and ClosureReport schema validation |
 | `types/test_context_admission_contract.py` | Frozen context-admission enums, records, unions, validation, serialization, and gateway contract |

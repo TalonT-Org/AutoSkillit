@@ -31,6 +31,15 @@ def test_work_dir_misplacement_rule_fires():
             "done": {"action": "stop", "message": "Done"},
         }
     )
+    recipe.steps["step"].with_args = {
+        "callable": "autoskillit.smoke_utils.annotate_pr_diff",
+        "args": {
+            "pr_number": "1",
+            "cwd": "/path",
+            "output_dir": ".autoskillit/temp/test",
+            "work_dir": "/path",
+        },
+    }
     findings = run_semantic_rules(recipe)
     misplaced = [f for f in findings if f.rule == "work-dir-arg-misplacement"]
     assert len(misplaced) == 1
@@ -52,6 +61,10 @@ def test_work_dir_misplacement_rule_silent_for_valid_callable():
             "done": {"action": "stop", "message": "Done"},
         }
     )
+    recipe.steps["step"].with_args = {
+        "callable": "autoskillit.recipe._cmd_rpc.review_path_rebase",
+        "args": {"work_dir": "/path", "base_branch": "main"},
+    }
     findings = run_semantic_rules(recipe)
     misplaced = [f for f in findings if f.rule == "work-dir-arg-misplacement"]
     assert len(misplaced) == 0

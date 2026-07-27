@@ -164,6 +164,21 @@ def _owner(reserve_class: ReserveClass) -> ProtectedPoolOwnerId | None:
     return None
 
 
+def _allows_release_witness(
+    state: ActiveContextAdmissionState,
+    batch: AdmissionBatch,
+    witness_kind: WitnessKind,
+) -> bool:
+    if batch.protected_pool_owner_id is None:
+        return True
+    return any(
+        pool.reserve_class is batch.reserve_class
+        and pool.capability_owner_id == batch.protected_pool_owner_id
+        and pool.required_release_witness_kind is witness_kind
+        for pool in state.protected_pools
+    )
+
+
 def _occurrence(
     slot: int,
     reserve_class: ReserveClass,
@@ -953,6 +968,9 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
             record = self._find_batch(batch.batch_id)
             if record is None:
                 continue
+            witness_kind = WitnessKind.ROLLBACK if rollback else WitnessKind.NON_ADMISSION
+            if not _allows_release_witness(self.state, batch, witness_kind):
+                continue
             if rollback:
                 if record.state not in {
                     AdmissionState.HISTORY_STAGED,
@@ -998,6 +1016,9 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                 continue
             record = self._find_batch(batch.batch_id)
             if record is None or record.state is not AdmissionState.INDETERMINATE:
+                continue
+            witness_kind = WitnessKind.ROLLBACK if rollback else WitnessKind.NON_ADMISSION
+            if not _allows_release_witness(self.state, batch, witness_kind):
                 continue
             if rollback:
                 event: Any = ResolveIndeterminateRollbackEvent(
@@ -1080,6 +1101,12 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
     @rule()
     def expire_terminal_idempotency_key(self) -> None:
         for record in self.state.idempotency_records:
+            if any(
+                tombstone.namespace == record.namespace
+                and tombstone.reservation_key == record.reservation_key
+                for tombstone in self.state.expired_idempotency_tombstones
+            ):
+                continue
             batch = record.original_descriptor.batch
             occurrence = next(
                 (

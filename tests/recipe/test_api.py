@@ -265,6 +265,33 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     assert len(calls) == 1  # validate_recipe called only once across two loads
 
 
+def test_default_cache_excludes_server_only_compiled_bindings(tmp_path, monkeypatch):
+    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache = cache_mod.LoadCache()
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+
+    default_result = api_mod.load_and_validate("myrecipe", tmp_path)
+
+    assert "_compiled_bindings" not in default_result
+    assert len(cache._store) == 1
+    default_entry = next(iter(cache._store.values()))
+    assert "_compiled_bindings" not in default_entry.result
+
+    server_result = api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        include_compiled_bindings=True,
+    )
+
+    assert "_compiled_bindings" in server_result
+    assert len(cache._store) == 2
+
+
 def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, monkeypatch):
     """Changing the recipe file mtime causes a cache miss."""
     import autoskillit.recipe._api as api_mod
@@ -400,6 +427,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         "backend_name": 10,
         "effective_backend_map": 11,
         "backend_capabilities_map": 12,
+        "include_compiled_bindings": 13,
     }
 
     missing_params: list[str] = []
@@ -520,6 +548,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         backend_name=None,
         effective_backend_map=None,
         backend_origin_map=None,
+        include_compiled_bindings=False,
     ):
         captured["recipe_info"] = recipe_info
         captured["backend_capabilities_map"] = locals().get("backend_capabilities_map")
@@ -539,6 +568,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             effective_backend_map=effective_backend_map,
             backend_capabilities_map=backend_capabilities_map,
             backend_origin_map=backend_origin_map,
+            include_compiled_bindings=include_compiled_bindings,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)

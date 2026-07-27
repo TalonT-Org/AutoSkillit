@@ -80,7 +80,26 @@ class TestLoadYamlExtended:
         else:
             load_yaml("key: val")
 
-        assert captured["Loader"] is _yaml.CSafeLoader
+        assert issubclass(captured["Loader"], _yaml.CSafeLoader)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("input_kind", ["string", "path"])
+    def test_load_yaml_rejects_duplicate_mapping_keys(
+        self,
+        tmp_path: Path,
+        input_kind: str,
+    ) -> None:
+        from autoskillit.core.io import YAMLError, load_yaml
+
+        source = "steps:\n  verify:\n    tool: run_skill\n    tool: run_cmd\n"
+        if input_kind == "path":
+            path = tmp_path / "duplicate.yaml"
+            path.write_text(source, encoding="utf-8")
+            candidate: str | Path = path
+        else:
+            candidate = source
+
+        with pytest.raises(YAMLError, match="duplicate key 'tool'"):
+            load_yaml(candidate)
 
     def test_loader_is_csafe_or_safe(self):
         import yaml as _yaml

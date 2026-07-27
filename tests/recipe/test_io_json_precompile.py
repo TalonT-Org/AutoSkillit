@@ -11,9 +11,9 @@ import yaml
 
 from autoskillit.core import RecipeSource
 from autoskillit.core.io import load_yaml
+from autoskillit.recipe._io_loading import load_recipe_dict, load_recipe_dict_with_declarations
 from autoskillit.recipe.io import (
     _collect_recipes,
-    _load_recipe_dict,
     builtin_recipes_dir,
 )
 
@@ -50,11 +50,11 @@ def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.io.load_yaml",
+        "autoskillit.recipe._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
-    result = _load_recipe_dict(yaml_path)
+    result = load_recipe_dict(yaml_path)
 
     assert result == _MINIMAL_RECIPE
     assert load_yaml_calls == [], "load_yaml should not be called when JSON is fresh"
@@ -66,11 +66,11 @@ def test_load_recipe_dict_falls_back_when_json_missing(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.io.load_yaml",
+        "autoskillit.recipe._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
-    result = _load_recipe_dict(yaml_path)
+    result = load_recipe_dict(yaml_path)
 
     assert result == _MINIMAL_RECIPE
     assert load_yaml_calls == [1], "load_yaml should be called when JSON sibling is absent"
@@ -88,11 +88,11 @@ def test_load_recipe_dict_falls_back_when_json_stale(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.io.load_yaml",
+        "autoskillit.recipe._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
-    result = _load_recipe_dict(yaml_path)
+    result = load_recipe_dict(yaml_path)
 
     assert result == _MINIMAL_RECIPE
     assert load_yaml_calls == [1], "load_yaml should be called when JSON is stale"
@@ -116,9 +116,13 @@ def test_load_recipe_dict_applies_substitution_on_json(tmp_path):
     future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
     os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
 
-    result = _load_recipe_dict(yaml_path, temp_dir_relpath="custom/temp")
+    result, declared = load_recipe_dict_with_declarations(
+        yaml_path,
+        temp_dir_relpath="custom/temp",
+    )
 
     assert result["steps"]["run"]["with"]["worktree_path"] == "custom/temp"
+    assert declared["steps"]["run"]["with"]["worktree_path"] == "{{AUTOSKILLIT_TEMP}}"
 
 
 def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
@@ -132,11 +136,11 @@ def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.io.load_yaml",
+        "autoskillit.recipe._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
-    result = _load_recipe_dict(yaml_path)
+    result = load_recipe_dict(yaml_path)
 
     assert result == _MINIMAL_RECIPE
     assert load_yaml_calls == [1], "load_yaml should be called when JSON is corrupt"
@@ -153,11 +157,11 @@ def test_load_recipe_dict_falls_back_when_json_is_not_mapping(tmp_path, monkeypa
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.io.load_yaml",
+        "autoskillit.recipe._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
-    result = _load_recipe_dict(yaml_path)
+    result = load_recipe_dict(yaml_path)
 
     assert result == _MINIMAL_RECIPE
     assert load_yaml_calls == [1], "load_yaml should be called when JSON is not a mapping"

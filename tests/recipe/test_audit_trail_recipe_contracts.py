@@ -29,14 +29,14 @@ def test_dial_captures_classification_timestamp():
 
 
 def test_generate_report_receives_audit_fields():
-    """generate_report step receives disambiguation, verdict, and timestamp flags."""
+    """generate_report receives disambiguation, verdict, and timestamp inputs."""
     recipe = load_yaml(RECIPE_PATH)
     gr_step = recipe["steps"]["generate_report"]
-    skill_command = gr_step.get("with", {}).get("skill_command", "")
+    skill_inputs = gr_step["with"]["skill_inputs"]
     for field in [
-        "design-review-verdict",
-        "disambiguation-rule-applied",
-        "tier-c-lens",
-        "classification-timestamp",
+        "design_review_verdict",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "classification_timestamp",
     ]:
-        assert field in skill_command, f"generate_report skill_command must contain --{field}"
+        assert field in skill_inputs

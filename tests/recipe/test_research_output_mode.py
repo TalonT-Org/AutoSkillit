@@ -260,16 +260,14 @@ def test_research_output_mode_enum_rule_clean_for_valid_values():
 
 
 def test_generate_report_steps_pass_output_mode(recipe):
-    """All generate_report steps must pass --output-mode flag in skill_command."""
+    """All generate_report steps must bind output_mode through structured inputs."""
     for step_name in ("generate_report", "generate_report_inconclusive", "re_generate_report"):
         step = recipe.steps[step_name]
-        cmd = step.with_args.get("skill_command", "")
-        assert "--output-mode" in cmd, f"{step_name} skill_command must include --output-mode flag"
+        assert step.with_args["skill_inputs"]["output_mode"] == "${{ inputs.output_mode }}"
 
 
 def test_generate_report_steps_pass_issue_url(recipe):
-    """generate_report, generate_report_inconclusive, re_generate_report must pass --issue-url."""
+    """All generate_report steps must bind issue_url through structured inputs."""
     for step_name in ("generate_report", "generate_report_inconclusive", "re_generate_report"):
         step = recipe.steps[step_name]
-        cmd = step.with_args.get("skill_command", "")
-        assert "--issue-url" in cmd, f"{step_name} skill_command must include --issue-url flag"
+        assert step.with_args["skill_inputs"]["issue_url"] == "${{ inputs.issue_url }}"

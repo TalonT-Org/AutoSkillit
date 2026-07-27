@@ -10,6 +10,16 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 logger = get_logger(__name__)
 
 
+def _has_failure_context(ctx: ValidationContext, step_name: str, skill_command: str) -> bool:
+    invocation = ctx.binding_projection.for_step(step_name)
+    if invocation is not None and invocation.skill_inputs:
+        return all(
+            (value := invocation.skill_input(name)) is not None and value.is_present
+            for name in ("ci_conclusion", "diagnosis_path")
+        )
+    return count_skill_args(skill_command) > 3
+
+
 @semantic_rule(
     name="flake-suspected-unwinnable-loop",
     description=(
@@ -55,21 +65,21 @@ def _check_flake_suspected_unwinnable_loop(ctx: ValidationContext) -> list[RuleF
         if not merge_in_cycle:
             continue
 
-        if count_skill_args(cmd) <= 3:
+        if not _has_failure_context(ctx, step_name, cmd):
             findings.append(
                 make_finding(
                     rule_name="flake-suspected-unwinnable-loop",
                     step_name=step_name,
                     message=(
-                        f"Step '{step_name}' invokes resolve-failures with only "
-                        f"{count_skill_args(cmd)} positional arg(s) and routes "
+                        f"Step '{step_name}' invokes resolve-failures without bound "
+                        f"ci_conclusion and diagnosis_path inputs and routes "
                         f"flake_suspected → '{flake_target}', which leads back through "
                         f"a merge_worktree step. Without failure context (ci_conclusion + "
                         f"diagnosis_path), resolve-failures cannot diagnose the specific "
                         f"failing tests, will always produce flake_suspected on a local-pass "
                         f"flake, and the loop is unwinnable. Add a diagnose_merge_gate step "
-                        f"before this step and expand skill_command to 6 args including "
-                        f"merge_gate_ci_conclusion and merge_gate_diagnosis_path."
+                        f"before this step and bind merge_gate_ci_conclusion and "
+                        f"merge_gate_diagnosis_path."
                     ),
                 )
             )

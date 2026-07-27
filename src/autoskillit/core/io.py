@@ -32,6 +32,45 @@ try:
 except ImportError:
     _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
 
+
+class _UniqueKeyLoader(_Loader):
+    """Safe loader that rejects duplicate mapping keys before construction."""
+
+
+def _construct_unique_mapping(
+    loader: _UniqueKeyLoader,
+    node: yaml.MappingNode,
+    deep: bool = False,
+) -> dict[Any, Any]:
+    loader.flatten_mapping(node)
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in mapping
+        except TypeError as exc:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "found an unhashable key",
+                key_node.start_mark,
+            ) from exc
+        if duplicate:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
 try:
     from yaml import CDumper as _Dumper
 except ImportError:
@@ -46,6 +85,7 @@ __all__ = [
     "load_yaml",
     "mapping_entry_byte_ranges_from_yaml",
     "dump_yaml_str",
+    "decode_versioned_json_bytes",
     "read_versioned_json",
     "resolve_skill_temp_dir",
     "resolve_temp_dir",
@@ -53,6 +93,7 @@ __all__ = [
     "spill_output",
     "temp_dir_display_str",
     "write_versioned_json",
+    "write_canonical_versioned_json",
 ]
 
 
@@ -287,6 +328,41 @@ def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: in
     atomic_write(path, _fast_dumps(enriched, indent=True))
 
 
+def write_canonical_versioned_json(
+    path: Path, payload: dict[str, Any], schema_version: int
+) -> None:
+    """Atomically write versioned canonical JSON for hash-bound artifacts."""
+    from .closure_hashing import canonical_json_bytes
+
+    if not isinstance(payload, dict):
+        raise TypeError("write_canonical_versioned_json requires a dict payload")
+    enriched = {**payload, "schema_version": schema_version}
+    atomic_write(path, canonical_json_bytes(enriched).decode("utf-8"))
+
+
+def decode_versioned_json_bytes(
+    data: bytes,
+    expected_version: int,
+    *,
+    require_canonical: bool = False,
+) -> dict[str, Any] | None:
+    """Decode one caller-owned byte buffer and enforce its schema version."""
+    import json as _json
+
+    try:
+        if require_canonical:
+            from .closure_hashing import parse_canonical_json_bytes
+
+            raw = parse_canonical_json_bytes(data)
+        else:
+            raw = _json.loads(data.decode("utf-8", errors="strict"))
+    except (UnicodeDecodeError, _json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(raw, dict) or raw.get("schema_version") != expected_version:
+        return None
+    return raw
+
+
 def read_versioned_json(
     path: Path,
     expected_version: int,
@@ -406,8 +482,8 @@ def load_yaml(source: os.PathLike[str] | str) -> Any:
     """
     if isinstance(source, os.PathLike):
         with open(source, "rb") as fh:
-            return yaml.load(fh, Loader=_Loader)
-    return yaml.load(source, Loader=_Loader)
+            return yaml.load(fh, Loader=_UniqueKeyLoader)
+    return yaml.load(source, Loader=_UniqueKeyLoader)
 
 
 def compose_yaml(source: str) -> yaml.Node | None:

@@ -73,7 +73,9 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:planner-analyze ${{ context.planner_dir }}"
+      skill_command: "/autoskillit:planner-analyze"
+      skill_inputs:
+        planner_dir: "${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
       output_dir: "${{ context.planner_dir }}"
     on_success: extract_domain
@@ -85,10 +87,10 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: >
-        /autoskillit:planner-extract-domain
-        ${{ context.planner_dir }}/analysis.json
-        "${{ context.task_file_path }}"
+      skill_command: "/autoskillit:planner-extract-domain"
+      skill_inputs:
+        analysis_path: "${{ context.planner_dir }}/analysis.json"
+        task_file_path: "${{ context.task_file_path }}"
       cwd: "${{ inputs.source_dir }}"
       output_dir: "${{ context.planner_dir }}"
     on_success: generate_phases
@@ -100,11 +102,11 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: >
-        /autoskillit:planner-generate-phases
-        ${{ context.planner_dir }}/analysis.json
-        ${{ context.planner_dir }}/domain_knowledge.md
-        "${{ context.task_file_path }}"
+      skill_command: "/autoskillit:planner-generate-phases"
+      skill_inputs:
+        analysis_path: "${{ context.planner_dir }}/analysis.json"
+        domain_knowledge_path: "${{ context.planner_dir }}/domain_knowledge.md"
+        task_file_path: "${{ context.task_file_path }}"
       cwd: "${{ inputs.source_dir }}"
       output_dir: "${{ context.planner_dir }}"
     capture:
@@ -413,10 +415,11 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }}"
+      skill_command: "/autoskillit:planner-reconcile-deps"
+      skill_inputs:
+        planner_dir: "${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
       output_dir: "${{ context.planner_dir }}"
-      consolidated_wps_path: "${{ context.consolidated_wps_path }}"
     on_success: planner_assess_review_approach
     on_failure: escalate_stop
     on_context_limit: planner_assess_review_approach
@@ -467,10 +470,10 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: >
-        /autoskillit:planner-refine
-        ${{ context.planner_dir }}/validation.json
-        ${{ context.planner_dir }}
+      skill_command: "/autoskillit:planner-refine"
+      skill_inputs:
+        validation_path: "${{ context.planner_dir }}/validation.json"
+        planner_dir: "${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"
       output_dir: "${{ context.planner_dir }}"
     capture:

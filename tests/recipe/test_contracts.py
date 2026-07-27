@@ -58,6 +58,17 @@ def test_load_bundled_manifest_callable_inputs_have_explicit_required() -> None:
             assert "required" in inp, f"{dotted_path}: input {inp['name']} missing 'required'"
 
 
+def test_resolve_design_review_revision_guidance_is_a_file() -> None:
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("resolve-design-review", manifest)
+    assert contract is not None
+    revision_guidance = next(
+        input_def for input_def in contract.inputs if input_def.name == "revision_guidance"
+    )
+
+    assert revision_guidance.type == "file_path"
+
+
 def test_get_skill_contract_defaults_required_false() -> None:
     from autoskillit.recipe.contracts import get_skill_contract
 
@@ -595,6 +606,10 @@ def test_sc1_audit_impl_has_real_inputs_and_outputs() -> None:
     assert verdict_out["type"] == "string"
     remediation_out = next(o for o in audit_impl["outputs"] if o["name"] == "remediation_path")
     assert remediation_out["type"] == "file_path"
+    assert audit_impl["audit_authority_publication"] == {
+        "output_field": "audit_cycle_path",
+        "prior_input_field": "prior_audit_cycle_path",
+    }
 
 
 def test_sc2_resolve_failures_declares_verdict_output() -> None:
@@ -748,14 +763,13 @@ def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_write_behavior_conditional_make_plan_loaded() -> None:
-    """make-plan contract declares write_behavior='conditional' gated on verdict."""
+def test_write_behavior_always_make_plan_loaded() -> None:
+    """make-plan cannot succeed without publishing a plan."""
     manifest = load_bundled_manifest()
     contract = get_skill_contract("make-plan", manifest)
     assert contract is not None
-    assert contract.write_behavior == "conditional"
-    assert len(contract.write_expected_when) > 0
-    assert any("verdict" in p for p in contract.write_expected_when)
+    assert contract.write_behavior == "always"
+    assert contract.completion_required is True
 
 
 def test_write_behavior_conditional_loaded() -> None:
@@ -799,6 +813,7 @@ ALWAYS_WRITE_SKILLS = {
     "investigate",
     "make-campaign",
     "make-groups",
+    "make-plan",
     "phoropter-null-synthesis",
     "phoropter-priority-synthesis",
     "plan-experiment",
@@ -862,7 +877,6 @@ def test_always_write_skills_matches_yaml() -> None:
 CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
     # skill_name → substring that must appear in write_expected_when patterns
     "compose-pr": "pr_url",
-    "make-plan": "verdict",
     "promote-to-main": "verdict",
     "resolve-failures": "verdict",
     "resolve-merge-conflicts": "conflict_report_path",

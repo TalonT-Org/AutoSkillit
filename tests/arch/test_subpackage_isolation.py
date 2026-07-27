@@ -99,6 +99,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # module-load self-check block (#4351).
         "_type_intake_policy",
         "_type_constants_registries",  # measured response-exemption registry digest
+        "tool_registry",  # immutable canonical MCP tool definition registry
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
@@ -897,11 +898,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
             logic on DispatchRecord.from_dict. Exempt at 15 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 16,  # +_recipe_section_pagination deterministic bounded planner
+        "server": 17,  # +_recipe_section_pagination planner +_recipe_execution attestation
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 26,  # +_context_admission pure reducer
-        "core/types": 37,  # +_type_intake_policy evidence-bound Codex intake rule registry
+        "core": 28,  # +context admission +audit-cycle verifier/tool registry
+        "core/types": 40,  # context, recipe-section, audit, binding, execution, intake types
         "cli": 21,
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 14,  # +_install_state (single install-state consistency authority,
@@ -1013,8 +1014,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "fleet-resume-precondition-chokepoint plan: prepare_resume chokepoint, "
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
+    "server/_recipe_delivery.py": (
+        1100,
+        "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
+        "selection, receipt reservation, and compiled-execution publication form one "
+        "transactional authority boundary; the snapshot carrier keeps installation before "
+        "durable delivery commit without introducing a second finalization path",
+    ),
     "tools_kitchen.py": (
-        1660,
+        1670,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1056,10 +1064,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "cleanup at close_kitchen (#4293 pipeline tracker split-brain, +42 net lines)"
         "; envelope integration on both deferred-recall and normal open_kitchen paths: "
         "resolve_general_output_token_limit + BackendCapabilities isinstance guard + "
-        "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)",
+        "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)"
+        "; compiled recipe binding publication and execution-lifecycle cleanup across "
+        "recipe load, kitchen open, and kitchen close (+13 net lines)",
     ),
     "tools_execution.py": (
-        1650,
+        1800,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
@@ -1089,7 +1099,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; server-authoritative step completion: _mark_step_complete_server_side helper "
         "called at the run_skill adjudication point, shared resolve_tracker_order_id "
         "resolver, and deny_envelope conversion of all pre-flight deny sites "
-        "(#4293 pipeline tracker split-brain, +65 net lines)",
+        "(#4293 pipeline tracker split-brain, +65 net lines)"
+        "; attested recipe execution identity/template verification, structured skill-input "
+        "binding, runtime-binding digest capture, and inventory-admission preflight keep all "
+        "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
         1800,
@@ -1353,6 +1366,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_protocols_recipe.py",
         "core/types/_type_protocols_infra.py",
         "core/types/_type_protocols_backend.py",
+        "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
@@ -1378,6 +1392,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "active_recipe_features",
         "active_recipe_steps",
         "active_recipe_ingredients",
+        "active_recipe_execution",
         "temp_dir",
         "project_dir",
         "ephemeral_root",

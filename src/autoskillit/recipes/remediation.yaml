@@ -238,13 +238,12 @@ steps:
     skip_when_false: inputs.investigate
     model: ${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}
     with:
-      skill_command: /autoskillit:investigate ${{ '--depth deep ' if inputs.depth
-        == 'deep' else '' }}${{ inputs.task }}
+      skill_command: "/autoskillit:investigate"
+      skill_inputs:
+        topic: "${{ '--depth deep ' if inputs.depth == 'deep' else '' }}${{ inputs.task }} ${{ inputs.issue_url }}"
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/investigate'
       step_name: investigate
-      issue_url: ${{ inputs.issue_url }}
-      issue_title: ${{ context.issue_title }}
     capture:
       investigation_path: ${{ result.investigation_path }}
     on_success: bridge_investigation
@@ -290,7 +289,9 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:rectify ${{ context.effective_investigation_path }}
+      skill_command: "/autoskillit:rectify"
+      skill_inputs:
+        investigation_path: "${{ context.effective_investigation_path }}"
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/rectify'
       step_name: rectify
@@ -310,8 +311,7 @@ steps:
       ACCUMULATION: all_plan_paths accumulates across any re-entries to the rectify step.
       On re-entry, the agent MUST append the captured plan_path to context.all_plan_paths
       using a comma separator instead of letting the capture block overwrite the
-      accumulated value. When verdict=false_positive, do NOT overwrite all_plan_paths —
-      preserve the existing accumulated value from prior plan executions.
+      accumulated value.
 
       '
   salvage_rectify_plan:
@@ -339,7 +339,9 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:review-approach ${{ context.plan_path }}
+      skill_command: "/autoskillit:review-approach"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
       cwd: ${{ context.work_dir }}
       step_name: review_approach
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-approach'
@@ -357,12 +359,15 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:dry-walkthrough ${{ context.plan_path }}
+      skill_command: "/autoskillit:dry-walkthrough"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        issue_url: "${{ inputs.issue_url }}"
+        review_path: "${{ context.review_path }}"
+        audit_cycle_path: "${{ context.audit_cycle_path }}"
+        plan_disposition_path: "${{ context.plan_disposition_path }}"
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}'
-      review_path: ${{ context.review_path }}
-      issue_url: ${{ inputs.issue_url }}
-      remediation_path: ${{ context.remediation_path }}
       step_name: dry_walkthrough
     on_success: create_impl_worktree
     on_failure: release_issue_failure
@@ -370,19 +375,23 @@ steps:
     on_exhausted: release_issue_failure
     on_context_limit: retry_walkthrough
     optional_context_refs:
-    - remediation_path
+    - review_path
+    - audit_cycle_path
+    - plan_disposition_path
     note: Dry walkthrough retries on failure. It never routes back to a previous step.
   retry_walkthrough:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:dry-walkthrough ${{ context.plan_path }} remediation_path=${{
-        context.remediation_path }}
+      skill_command: "/autoskillit:dry-walkthrough"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        issue_url: "${{ inputs.issue_url }}"
+        review_path: "${{ context.review_path }}"
+        audit_cycle_path: "${{ context.audit_cycle_path }}"
+        plan_disposition_path: "${{ context.plan_disposition_path }}"
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}'
-      review_path: ${{ context.review_path }}
-      issue_url: ${{ inputs.issue_url }}
-      remediation_path: ${{ context.remediation_path }}
       step_name: retry_walkthrough
     retries: 0
     on_success: create_impl_worktree
@@ -390,7 +399,9 @@ steps:
     on_context_limit: release_issue_failure
     on_rate_limit: release_issue_failure
     optional_context_refs:
-    - remediation_path
+    - review_path
+    - audit_cycle_path
+    - plan_disposition_path
     note: Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble
       on the primary dry_walkthrough step. Never routes back to dry_walkthrough —
       on_failure and on_context_limit both fall through to the original failure
@@ -412,8 +423,9 @@ steps:
     model: ''
     stale_threshold: 2400
     with:
-      skill_command: /autoskillit:implement-worktree-no-merge ${{ context.plan_path
-        }}
+      skill_command: "/autoskillit:implement-worktree-no-merge"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
       cwd: ${{ context.worktree_path }}
       step_name: implement
       output_dir: '.'
@@ -434,8 +446,10 @@ steps:
     model: ''
     stale_threshold: 2400
     with:
-      skill_command: /autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path
-        }}
+      skill_command: "/autoskillit:retry-worktree"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        worktree_path: "${{ context.worktree_path }}"
       cwd: ${{ context.worktree_path }}
       step_name: retry_worktree
       output_dir: '.'
@@ -850,9 +864,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-failures ${{ context.worktree_path }} ${{
-        context.plan_path }} ${{ inputs.base_branch }} ${{ context.merge_gate_ci_conclusion
-        }} - ${{ context.merge_gate_diagnosis_path }}
+      skill_command: "/autoskillit:resolve-failures"
+      skill_inputs:
+        base_branch: "${{ inputs.base_branch }}"
+        diagnosis_path: "${{ context.merge_gate_diagnosis_path }}"
+        ci_conclusion: "${{ context.merge_gate_ci_conclusion }}"
+        plan_path: "${{ context.plan_path }}"
+        worktree_path: "${{ context.worktree_path }}"
       cwd: ${{ context.worktree_path }}
       step_name: assess
       output_dir: '.'
@@ -906,9 +924,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-failures ${{ context.worktree_path }} ${{
-        context.plan_path }} ${{ inputs.base_branch }} ${{ context.merge_gate_ci_conclusion
-        }} - ${{ context.merge_gate_diagnosis_path }}
+      skill_command: "/autoskillit:resolve-failures"
+      skill_inputs:
+        base_branch: "${{ inputs.base_branch }}"
+        diagnosis_path: "${{ context.merge_gate_diagnosis_path }}"
+        ci_conclusion: "${{ context.merge_gate_ci_conclusion }}"
+        plan_path: "${{ context.plan_path }}"
+        worktree_path: "${{ context.worktree_path }}"
       cwd: ${{ context.worktree_path }}
       step_name: merge_gate_assess
       output_dir: '.'
@@ -972,8 +994,11 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-merge-conflicts ${{ context.worktree_path
-        }} ${{ context.plan_path }} ${{ inputs.base_branch }}
+      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: "${{ context.worktree_path }}"
       cwd: ${{ context.worktree_path }}
       step_name: rebase_conflict_fix
       output_dir: '.'
@@ -994,9 +1019,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:audit-impl ${{ context.all_plan_paths }} ${{ context.branch_name
-        }} ${{ inputs.base_branch }} deviation_manifest_path=${{ context.deviation_manifest_path
-        }}
+      skill_command: "/autoskillit:audit-impl"
+      skill_inputs:
+        all_plan_paths: "${{ context.all_plan_paths }}"
+        deviation_manifest_path: "${{ context.deviation_manifest_path }}"
+        branch_name: "${{ context.branch_name }}"
+        base_branch: "${{ inputs.base_branch }}"
+        prior_audit_cycle_path: "${{ context.audit_cycle_path }}"
       cwd: ${{ context.work_dir }}
       step_name: audit_impl
       output_dir: '{{AUTOSKILLIT_TEMP}}/audit-impl'
@@ -1008,6 +1037,7 @@ steps:
       closure_target_sha: ""
     capture:
       remediation_path: ${{ result.remediation_path }}
+      audit_cycle_path: ${{ result.audit_cycle_path }}
     on_result:
     - when: ${{ result.verdict }} == GO
       route: commit_guard
@@ -1023,61 +1053,58 @@ steps:
     skip_when_false: inputs.audit_impl
     optional_context_refs:
     - deviation_manifest_path
+    - audit_cycle_path
     note: Only run if inputs.audit_impl = true. If inputs.audit_impl = false, skip directly
       to commit_guard.
   remediate:
     action: route
     with:
-      remediation_path: ${{ context.remediation_path }}
+      audit_cycle_path: ${{ context.audit_cycle_path }}
     on_success: make_plan
   make_plan:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:make-plan ${{ context.remediation_path }}
-      task: ${{ inputs.task }}
+      skill_command: "/autoskillit:make-plan"
+      skill_inputs:
+        adversarial_review_level: "${{ inputs.adversarial_review_level }}"
+        task: "${{ inputs.task }}"
+        issue_url: "${{ inputs.issue_url }}"
+        audit_cycle_path: "${{ context.audit_cycle_path }}"
       cwd: ${{ context.work_dir }}
       step_name: make_plan
-      adversarial_review_level: ${{ inputs.adversarial_review_level }}
       output_dir: '.'
     capture:
       plan_path: ${{ result.plan_path }}
       all_plan_paths: ${{ result.plan_path }}
       verdict: ${{ result.verdict }}
+      plan_disposition_path: ${{ result.plan_disposition_path }}
     capture_list:
       plan_parts: ${{ result.plan_parts }}
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == plan
       route: dry_walkthrough
-    - when: ${{ result.verdict }} == false_positive
-      route: check_has_commits
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
     on_context_limit: salvage_plan
-    note: 'ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty
-      string, append it to the skill_command: "/autoskillit:make-plan {task}\n\nadversarial_review_level={inputs.adversarial_review_level}"
-      AUDIT REMEDIATION MODE: This step is always in remediation context (invoked
-      from the remediate route step). Always append audit_remediation_mode=true to
-      the skill_command at runtime: "/autoskillit:make-plan {remediation_path}\n\naudit_remediation_mode=true"
-      VERDICT: The skill emits verdict=plan (produce implementation plan) or verdict=false_positive
-      (audit finding is a false positive, skip implement). false_positive routes to
-      check_has_commits. ACCUMULATION: all_plan_paths accumulates across any re-entries
-      to the make_plan step. On re-entry, the agent MUST append the captured plan_path
-      to context.all_plan_paths using a comma separator instead of letting the capture
-      block overwrite the accumulated value. When verdict=false_positive, do NOT overwrite
-      all_plan_paths — preserve the existing accumulated value from prior plan executions.
-
-      '
+    note: 'Consumes the exact current NO GO audit_cycle_path and emits verdict=plan,
+      plan_path, and plan_disposition_path. all_plan_paths appends the recovered plan;
+      make-plan cannot close the audit lineage.'
   salvage_plan:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.verify_plan_artifacts
       plan_parts: ${{ context.plan_parts }}
+      audit_cycle_path: ${{ context.audit_cycle_path }}
     capture:
       plan_path: ${{ result.plan_path }}
+      plan_disposition_path: ${{ result.plan_disposition_path }}
+      all_plan_paths: ${{ result.plan_path }}
     capture_list:
       plan_parts: ${{ result.plan_parts }}
+    optional_context_refs:
+    - audit_cycle_path
     retries: 0
     on_result:
     - when: ${{ result.verdict }} == salvaged
@@ -1237,8 +1264,13 @@ steps:
     model: ''
     retries: 1
     with:
-      skill_command: /autoskillit:prepare-pr ${{ context.all_plan_paths }} ${{ inputs.run_name
-        }} ${{ inputs.base_branch }} ${{ context.issue_number }} ${{ inputs.arch_lenses }}
+      skill_command: "/autoskillit:prepare-pr"
+      skill_inputs:
+        arch_lenses: "${{ inputs.arch_lenses }}"
+        plan_paths: "${{ context.all_plan_paths }}"
+        closing_issue: "${{ context.issue_number }}"
+        base_branch: "${{ inputs.base_branch }}"
+        run_name: "${{ inputs.run_name }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: prepare_pr
@@ -1267,7 +1299,9 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:arch-lens-{slug} {context_path}
+      skill_command: "/autoskillit:arch-lens-{slug}"
+      skill_inputs:
+        context_path: "{context_path}"
       cwd: ${{ context.work_dir }}
       step_name: run_arch_lenses
     capture_list:
@@ -1291,9 +1325,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:compose-pr ${{ context.prep_path }} "${{ context.all_diagram_paths
-        }}" ${{ context.work_dir }} ${{ inputs.base_branch }} ${{ context.issue_number
-        }}
+      skill_command: "/autoskillit:compose-pr"
+      skill_inputs:
+        work_dir: "${{ context.work_dir }}"
+        closing_issue: "${{ context.issue_number }}"
+        all_diagram_paths: "${{ context.all_diagram_paths }}"
+        base_branch: "${{ inputs.base_branch }}"
+        prep_path: "${{ context.prep_path }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: compose_pr
@@ -1382,11 +1420,16 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch
-        }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{
-        context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }}
-        diff_metrics_path=${{ context.diff_metrics_path
-        }} mode=${{ context.review_mode }} pr_head_sha=${{ context.pr_head_sha }}
+      skill_command: "/autoskillit:review-pr"
+      skill_inputs:
+        feature_branch: "${{ context.merge_target }}"
+        base_branch: "${{ inputs.base_branch }}"
+        annotated_diff_path: "${{ context.annotated_diff_path }}"
+        hunk_ranges_path: "${{ context.hunk_ranges_path }}"
+        valid_lines_path: "${{ context.valid_lines_path }}"
+        diff_metrics_path: "${{ context.diff_metrics_path }}"
+        mode: "${{ context.review_mode }}"
+        pr_head_sha: "${{ context.pr_head_sha }}"
       cwd: ${{ context.work_dir }}
       step_name: review_pr
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}'
@@ -1425,8 +1468,11 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch
-        }} mode=${{ context.review_mode }}
+      skill_command: "/autoskillit:resolve-review"
+      skill_inputs:
+        base_branch: "${{ inputs.base_branch }}"
+        feature_branch: "${{ context.merge_target }}"
+        mode: "${{ context.review_mode }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: resolve_review
@@ -1473,8 +1519,11 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-merge-conflicts ${{ context.work_dir }}
-        ${{ context.plan_path }} ${{ inputs.base_branch }}
+      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: "${{ context.work_dir }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: resolve_pre_review_conflicts
@@ -1799,9 +1848,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
-        --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir
-        }}
+      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_inputs:
+        kitchen_id: "${{ inputs.kitchen_id }}"
+        dispatch_id: "${{ inputs.dispatch_id }}"
+        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: escalate_stop_no_ci
@@ -2068,8 +2119,11 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-merge-conflicts ${{ context.work_dir }}
-        ${{ context.plan_path }} ${{ inputs.base_branch }}
+      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: "${{ context.work_dir }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: resolve_queue_merge_conflicts
@@ -2274,8 +2328,11 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-merge-conflicts ${{ context.work_dir }}
-        ${{ context.plan_path }} ${{ inputs.base_branch }}
+      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: "${{ context.work_dir }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: resolve_direct_merge_conflicts
@@ -2380,8 +2437,11 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-merge-conflicts ${{ context.work_dir }}
-        ${{ context.plan_path }} ${{ inputs.base_branch }}
+      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: "${{ context.work_dir }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: resolve_immediate_merge_conflicts
@@ -2430,12 +2490,14 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:diagnose-ci ${{ context.merge_target }} - - - ${{
-        context.ci_event }}
+      skill_command: "/autoskillit:diagnose-ci"
+      skill_inputs:
+        ci_failed_jobs: "${{ context.ci_failed_jobs }}"
+        event: "${{ context.ci_event }}"
+        branch: "${{ context.merge_target }}"
       cwd: ${{ context.work_dir }}
       step_name: diagnose_ci
-      ci_failed_jobs: ${{ context.ci_failed_jobs }}
-      output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-ci'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-ci/rebase_${{ context.ci_rebase_count }}_flake_${{ context.ci_flake_count }}'
     capture:
       diagnosis_path: ${{ result.diagnosis_path }}
     on_success: resolve_ci
@@ -2443,6 +2505,9 @@ steps:
     on_context_limit: resolve_ci
     on_rate_limit: resolve_ci
     optional: true
+    optional_context_refs:
+    - ci_rebase_count
+    - ci_flake_count
     skip_when_false: inputs.open_pr
     note: 'Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and
       writes a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to
@@ -2455,9 +2520,14 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path
-        }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs
-        }} ${{ context.diagnosis_path }}
+      skill_command: "/autoskillit:resolve-failures"
+      skill_inputs:
+        base_branch: "${{ inputs.base_branch }}"
+        diagnosis_path: "${{ context.diagnosis_path }}"
+        ci_failed_jobs: "${{ context.ci_failed_jobs }}"
+        ci_conclusion: "${{ context.ci_conclusion }}"
+        plan_path: "${{ context.plan_path }}"
+        worktree_path: "${{ context.work_dir }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: resolve_ci
@@ -2514,8 +2584,11 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-merge-conflicts ${{ context.work_dir }}
-        ${{ context.plan_path }} ${{ inputs.base_branch }}
+      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: "${{ context.work_dir }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: resolve_pre_resolve_conflicts
@@ -2617,8 +2690,11 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-merge-conflicts ${{ context.work_dir }}
-        ${{ context.plan_path }} ${{ inputs.base_branch }}
+      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_inputs:
+        plan_path: "${{ context.plan_path }}"
+        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: "${{ context.work_dir }}"
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: ci_conflict_fix
@@ -2668,9 +2744,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
-        --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir
-        }}
+      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_inputs:
+        kitchen_id: "${{ inputs.kitchen_id }}"
+        dispatch_id: "${{ inputs.dispatch_id }}"
+        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done_unconfirmed
@@ -2757,9 +2835,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
-        --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir
-        }}
+      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_inputs:
+        kitchen_id: "${{ inputs.kitchen_id }}"
+        dispatch_id: "${{ inputs.dispatch_id }}"
+        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done
@@ -2778,9 +2858,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
-        --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir
-        }}
+      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_inputs:
+        kitchen_id: "${{ inputs.kitchen_id }}"
+        dispatch_id: "${{ inputs.dispatch_id }}"
+        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: escalate_stop
@@ -2808,9 +2890,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
-        --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir
-        }}
+      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_inputs:
+        kitchen_id: "${{ inputs.kitchen_id }}"
+        dispatch_id: "${{ inputs.dispatch_id }}"
+        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done_no_changes
@@ -2838,9 +2922,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
-        --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir
-        }}
+      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_inputs:
+        kitchen_id: "${{ inputs.kitchen_id }}"
+        dispatch_id: "${{ inputs.dispatch_id }}"
+        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done_already_done

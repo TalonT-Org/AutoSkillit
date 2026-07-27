@@ -154,7 +154,12 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
         if step.tool not in SKILL_TOOLS:
             continue
 
-        producer_skill = resolve_skill_name(step.with_args.get("skill_command", ""))
+        producer_invocation = ctx.binding_projection.for_step(step_name)
+        producer_skill = (
+            producer_invocation.skill_name
+            if producer_invocation is not None
+            else resolve_skill_name(step.with_args.get("skill_command", ""))
+        )
         if not producer_skill:
             continue
 
@@ -170,7 +175,12 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
             if successor_step is None or successor_step.tool not in SKILL_TOOLS:
                 continue
 
-            consumer_skill = resolve_skill_name(successor_step.with_args.get("skill_command", ""))
+            consumer_invocation = ctx.binding_projection.for_step(successor_name)
+            consumer_skill = (
+                consumer_invocation.skill_name
+                if consumer_invocation is not None
+                else resolve_skill_name(successor_step.with_args.get("skill_command", ""))
+            )
             if not consumer_skill:
                 continue
 
@@ -187,7 +197,17 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
                 continue
 
             skill_cmd = successor_step.with_args.get("skill_command", "")
-            unwired = [inp for inp in file_path_inputs if f"context.{inp.name}" not in skill_cmd]
+            unwired = [
+                inp
+                for inp in file_path_inputs
+                if not (
+                    consumer_invocation is not None
+                    and (value := consumer_invocation.skill_input(inp.name)) is not None
+                    and value.is_present
+                    and value.context_dependencies
+                )
+                and f"context.{inp.name}" not in skill_cmd
+            ]
             if not unwired:
                 continue  # all file-path inputs wired via context refs
 

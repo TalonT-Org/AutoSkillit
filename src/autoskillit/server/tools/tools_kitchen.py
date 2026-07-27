@@ -73,6 +73,7 @@ from autoskillit.server._recipe_delivery import (
     finalize_recipe_delivery,
     retire_recipe_artifacts,
 )
+from autoskillit.server._recipe_execution import clear_recipe_execution
 from autoskillit.server.tools._authority_feedback import (
     build_authority_clobber_warnings,
     build_authority_rejection_envelope,
@@ -91,6 +92,7 @@ from autoskillit.server.tools._preflight import (
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
+    pop_compiled_bindings,
     project_orchestrator_guidance,
     render_served_response,
     response_backstop_tool_meta,
@@ -468,6 +470,7 @@ async def _open_kitchen_handler() -> str | None:
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
     ctx.active_recipe_ingredients = frozenset()
+    clear_recipe_execution(ctx)
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _supports_quota = _backend_supports_quota(ctx)
 
@@ -596,6 +599,7 @@ def _close_kitchen_handler() -> None:
     ctx.recipe_content_hash = ""
     ctx.recipe_composite_hash = ""
     ctx.recipe_version = ""
+    clear_recipe_execution(ctx)
     ctx.gate_infrastructure_ready = False
     logger.info("close_kitchen", gate_state="closed")
     if (log := ctx.github_api_log) is not None:
@@ -720,6 +724,7 @@ def get_recipe(name: str) -> str:
             backend_capabilities_map=_backend_capabilities_map,
             backend_origin_map=_backend_origin_map,
         )
+        _resource_compiled_bindings = pop_compiled_bindings(result)
     except ProcessStaleError:
         logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
         return json.dumps({"error": f"Recipe '{name}' composition failed — process stale."})
@@ -748,6 +753,7 @@ def get_recipe(name: str) -> str:
         surface="get_recipe",
         recipe_name=name,
         tool_ctx=ctx,
+        compiled_bindings=_resource_compiled_bindings,
     )
     return enforce_recipe_resource_response(finalized, tool_ctx=ctx)
 
@@ -913,6 +919,8 @@ async def open_kitchen(
 
         if name is not None:
             tool_ctx = _get_ctx()
+            if not ingredients_only:
+                clear_recipe_execution(tool_ctx)
             if tool_ctx.recipes is None:
                 return _kitchen_failure_envelope(
                     RuntimeError("Server not initialized"),
@@ -989,6 +997,7 @@ async def open_kitchen(
                         backend_capabilities_map=_backend_capabilities_map,
                         backend_origin_map=_backend_origin_map,
                     )
+                    _deferred_compiled_bindings = pop_compiled_bindings(result)
                 except ProcessStaleError as exc:
                     logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
                     return _kitchen_failure_envelope(exc, stage="process_stale")
@@ -1095,6 +1104,7 @@ async def open_kitchen(
                             recipe_name=name,
                             tool_ctx=tool_ctx,
                             delivery_request=delivery_request,
+                            compiled_bindings=_deferred_compiled_bindings,
                         ),
                     )
                 return render_served_response(result)
@@ -1113,6 +1123,7 @@ async def open_kitchen(
                     backend_capabilities_map=_backend_capabilities_map,
                     backend_origin_map=_backend_origin_map,
                 )
+                _normal_compiled_bindings = pop_compiled_bindings(result)
             except ProcessStaleError as exc:
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="process_stale")
@@ -1259,6 +1270,7 @@ async def open_kitchen(
                         recipe_name=name,
                         tool_ctx=tool_ctx,
                         delivery_request=delivery_request,
+                        compiled_bindings=_normal_compiled_bindings,
                     ),
                 )
 

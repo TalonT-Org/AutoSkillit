@@ -18,6 +18,7 @@ from autoskillit.recipe._api import (  # noqa: E402
     load_and_validate,
     validate_from_path,
 )
+from autoskillit.recipe._binding import bind_recipe, bind_step_invocation  # noqa: E402
 from autoskillit.recipe._recipe_ingredients import (  # noqa: E402
     ListRecipesResult,
     LoadRecipeResult,
@@ -288,6 +289,12 @@ from autoskillit.recipe.validator import (  # noqa: E402
 _reg._finalize_registry()  # pyright: ignore[reportAttributeAccessIssue]  # lazy-registry: method added by _register_rule_module() side effects
 del _reg
 
+from autoskillit.recipe._binding import (  # noqa: E402
+    RuntimeBindingError,
+    bind_runtime_skill_invocation,
+    compute_skill_contract_identity,
+)
+
 __all__ = [
     "GROUP_LABELS",
     "all_validated_recipe_names",
@@ -340,6 +347,11 @@ __all__ = [
     "DefaultRecipeRepository",
     "parse_recipe_metadata",
     "load_and_validate",
+    "bind_recipe",
+    "bind_runtime_skill_invocation",
+    "bind_step_invocation",
+    "compute_skill_contract_identity",
+    "RuntimeBindingError",
     "validate_from_path",
     "list_all",
     "format_ingredients_table",

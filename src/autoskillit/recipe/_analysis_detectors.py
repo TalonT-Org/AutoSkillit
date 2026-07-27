@@ -17,6 +17,23 @@ from autoskillit.recipe.schema import DataFlowWarning, Recipe, RecipeStep
 # ---------------------------------------------------------------------------
 
 
+def _context_refs_in_value(value: object) -> set[str]:
+    if isinstance(value, str):
+        return set(_CONTEXT_REF_RE.findall(value))
+    if isinstance(value, dict):
+        refs: set[str] = set()
+        for key, nested in value.items():
+            refs.update(_context_refs_in_value(key))
+            refs.update(_context_refs_in_value(nested))
+        return refs
+    if isinstance(value, (list, tuple)):
+        refs = set()
+        for nested in value:
+            refs.update(_context_refs_in_value(nested))
+        return refs
+    return set()
+
+
 def _detect_ref_invalidations(recipe: Recipe, graph: dict[str, set[str]]) -> list[DataFlowWarning]:
     """Detect context variables consumed after the step that invalidated the
     underlying resource.
@@ -260,9 +277,7 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         for reachable_name in reachable:
             reachable_step = recipe.steps[reachable_name]
             for arg_val in reachable_step.with_args.values():
-                if not isinstance(arg_val, str):
-                    continue
-                consumed.update(_CONTEXT_REF_RE.findall(arg_val))
+                consumed.update(_context_refs_in_value(arg_val))
             # message fields are not recipe args; scanner must handle them separately.
             if reachable_step.message and isinstance(reachable_step.message, str):
                 consumed.update(_CONTEXT_REF_RE.findall(reachable_step.message))

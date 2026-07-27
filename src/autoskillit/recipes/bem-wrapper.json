@@ -51,7 +51,11 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:build-execution-map ${{ context.issue_numbers }} --base-ref ${{ inputs.base_branch }}",
+        "skill_command": "/autoskillit:build-execution-map",
+        "skill_inputs": {
+          "issue_numbers": "${{ context.issue_numbers }}",
+          "base_ref": "${{ inputs.base_branch }}"
+        },
         "step_name": "run_bem",
         "output_dir": "."
       },

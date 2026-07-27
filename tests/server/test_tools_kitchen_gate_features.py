@@ -419,6 +419,7 @@ def test_recipe_resource_returns_composed_content():
     mock_ctx.recipes.load_and_validate.assert_called_once_with(
         "test-recipe",
         mock_ctx.project_dir,
+        include_compiled_bindings=True,
         ingredient_overrides={
             "kitchen_id": ANY,
             "diagnostics_log_dir": ANY,
@@ -435,6 +436,23 @@ def test_recipe_resource_returns_composed_content():
     )
     assert "optional: true" not in parsed["content"]
     assert "skip_when_false:" not in parsed["content"]
+
+
+def test_missing_recipe_resource_preserves_active_execution():
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.find.return_value = None
+    previous = MagicMock()
+    previous.snapshot.execution_id = "previous-execution"
+    mock_ctx.active_recipe_execution = previous
+
+    with patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx):
+        from autoskillit.server.tools.tools_kitchen import get_recipe
+
+        result = json.loads(get_recipe("missing"))
+
+    assert result == {"error": "No recipe named 'missing'."}
+    assert mock_ctx.active_recipe_execution is previous
 
 
 # 1h: get_recipe resource returns error for invalid recipe

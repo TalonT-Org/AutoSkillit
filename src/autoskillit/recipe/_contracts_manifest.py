@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal, assert_never, cast
 
@@ -20,6 +22,7 @@ from autoskillit.recipe._contracts_types import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,
+    AuditAuthorityPublicationSpec,
     OutcomeInvariantEntry,
     ResultFieldSpec,
     SkillContract,
@@ -33,6 +36,7 @@ from autoskillit.recipe._contracts_types import (
 logger = get_logger(__name__)
 
 _MANIFEST_CACHE = YamlFileCache()
+_SKILL_CONTRACT_IDENTITY_DOMAIN = b"autoskillit:skill-contract:v1\0"
 
 
 def load_bundled_manifest() -> dict[str, Any]:
@@ -47,7 +51,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     skill_data = skills.get(skill_name)
     if skill_data is None:
         return None
-    inputs = [
+    inputs = tuple(
         SkillInput(
             name=inp["name"],
             type=inp["type"],
@@ -56,7 +60,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             recommended=inp.get("recommended", False),
         )
         for inp in skill_data.get("inputs", [])
-    ]
+    )
     outputs = [
         SkillOutput(
             name=out["name"],
@@ -118,6 +122,31 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             )
         success_qualifiers.append(SuccessQualifierEntry(when=w, qualifier=q))
 
+    authority_data = skill_data.get("audit_authority_publication")
+    authority_publication = None
+    if authority_data is not None:
+        if not isinstance(authority_data, Mapping):
+            raise ValueError(
+                f"audit_authority_publication for skill '{skill_name}' must be a mapping"
+            )
+        output_field = authority_data.get("output_field", "")
+        prior_input_field = authority_data.get("prior_input_field", "")
+        input_names = {item.name for item in inputs}
+        if output_field not in output_names:
+            raise ValueError(
+                f"audit_authority_publication references undeclared output "
+                f"'{output_field}' in skill '{skill_name}'"
+            )
+        if prior_input_field not in input_names:
+            raise ValueError(
+                f"audit_authority_publication references undeclared input "
+                f"'{prior_input_field}' in skill '{skill_name}'"
+            )
+        authority_publication = AuditAuthorityPublicationSpec(
+            output_field=output_field,
+            prior_input_field=prior_input_field,
+        )
+
     return SkillContract(
         inputs=inputs,
         outputs=outputs,
@@ -130,7 +159,54 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         result_fields=result_fields,
         outcome_invariants=outcome_invariants,
         success_qualifiers=success_qualifiers,
+        input_preflight=skill_data.get("input_preflight"),
+        audit_authority_publication=authority_publication,
     )
+
+
+def compute_skill_contract_identity(
+    skill_name: str,
+    *,
+    manifest: dict[str, Any] | None = None,
+    contract_resolver: Callable[[str, dict[str, Any]], SkillContract | None] | None = None,
+    manifest_loader: Callable[[], dict[str, Any]] | None = None,
+) -> str:
+    """Hash the canonical runtime-relevant shape of one skill contract."""
+    active_manifest = (
+        manifest if manifest is not None else (manifest_loader or load_bundled_manifest)()
+    )
+    contract = (contract_resolver or get_skill_contract)(skill_name, active_manifest)
+    if contract is None:
+        raise ValueError(f"skill contract is unavailable for {skill_name!r}")
+    publication = contract.audit_authority_publication
+    payload = json.dumps(
+        {
+            "audit_authority_publication": (
+                {
+                    "output_field": publication.output_field,
+                    "prior_input_field": publication.prior_input_field,
+                }
+                if publication is not None
+                else None
+            ),
+            "completion_required": contract.completion_required,
+            "input_preflight": contract.input_preflight,
+            "inputs": [
+                {
+                    "name": item.name,
+                    "nullable": item.nullable,
+                    "required": item.required,
+                    "type": item.type,
+                }
+                for item in contract.inputs
+            ],
+            "skill_name": skill_name,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(_SKILL_CONTRACT_IDENTITY_DOMAIN + payload).hexdigest()
 
 
 def resolve_input_specs(skill_command: str) -> tuple[InputSpec, ...]:
@@ -184,7 +260,7 @@ def get_callable_contract(
     entry = callables.get(dotted_path)
     if entry is None:
         return None
-    inputs = [
+    inputs = tuple(
         SkillInput(
             name=inp["name"],
             type=inp["type"],
@@ -193,7 +269,7 @@ def get_callable_contract(
             nullable=inp.get("nullable", True),
         )
         for inp in entry.get("inputs", [])
-    ]
+    )
     outputs = [
         SkillOutput(
             name=out["name"],

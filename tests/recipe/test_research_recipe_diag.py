@@ -26,10 +26,10 @@ def test_research_recipe_has_troubleshoot_step(recipe):
     assert "route_implement_failure" in step_names
 
 
-def test_implement_phase_failure_routes_to_troubleshoot(recipe):
-    """implement_phase on_failure must route to troubleshoot_implement_failure."""
+def test_implement_phase_failure_routes_through_loop_guard(recipe):
+    """implement_phase failures increment the loop counter before troubleshooting."""
     step = recipe.steps["implement_phase"]
-    assert step.on_failure == "troubleshoot_implement_failure"
+    assert step.on_failure == "check_implement_fix_loop"
 
 
 def test_implement_phase_exhausted_routes_to_audit_impl(recipe):
@@ -101,9 +101,9 @@ def test_prepare_research_pr_captures_prep_path(recipe):
 def test_prepare_research_pr_uses_context_experiment_plan(recipe):
     """prepare_research_pr must pass ${{ context.experiment_plan }}, not a hardcoded path."""
     step = recipe.steps["prepare_research_pr"]
-    skill_cmd = step.with_args.get("skill_command", "")
-    assert "context.experiment_plan" in skill_cmd
-    assert ".autoskillit/temp/experiment-plan.md" not in skill_cmd
+    plan_input = step.with_args["skill_inputs"]["experiment_plan_path"]
+    assert plan_input == "${{ context.experiment_plan }}"
+    assert ".autoskillit/temp/experiment-plan.md" not in plan_input
 
 
 def test_run_experiment_lenses_has_capture_list_for_diagram_paths(recipe):
@@ -117,10 +117,10 @@ def test_stage_bundle_exists(recipe):
     assert "stage_bundle" in recipe.steps, "research.yaml must have a stage_bundle step"
 
 
-def test_run_experiment_failure_routes_to_troubleshoot(recipe):
-    """run_experiment on_failure must route to troubleshoot_run_failure."""
+def test_run_experiment_failure_routes_through_loop_guard(recipe):
+    """run_experiment failures increment the loop counter before troubleshooting."""
     step = recipe.steps["run_experiment"]
-    assert step.on_failure == "troubleshoot_run_failure"
+    assert step.on_failure == "check_run_fix_loop"
 
 
 def test_research_recipe_has_troubleshoot_run_steps(recipe):
@@ -138,12 +138,11 @@ def test_troubleshoot_run_captures_required_tokens(recipe):
 
 
 def test_troubleshoot_run_uses_run_experiment_step_name(recipe):
-    """troubleshoot_run_failure skill_command must pass run_experiment, not implement_phase."""
+    """troubleshoot_run_failure must bind run_experiment, not implement_phase."""
     step = recipe.steps["troubleshoot_run_failure"]
     skill_cmd = step.with_args.get("skill_command", "")
     assert "troubleshoot-experiment" in skill_cmd
-    assert "run_experiment" in skill_cmd
-    assert "implement_phase" not in skill_cmd
+    assert step.with_args["skill_inputs"]["step_name"] == "run_experiment"
 
 
 def test_route_run_failure_routes_fixable_to_adjust(recipe):
@@ -163,18 +162,18 @@ def test_route_run_failure_default_escalates(recipe):
     assert default_cond.route == "escalate_stop"
 
 
-def test_adjust_experiment_routing_unchanged(recipe):
-    """adjust_experiment uses on_result for all verdict values (not on_success)."""
+def test_adjust_experiment_routes_completed_adjustments_to_delay_gate(recipe):
+    """Completed adjustments proceed through the retry-delay gate."""
     step = recipe.steps["adjust_experiment"]
     assert step.on_result is not None, "adjust_experiment must use on_result for verdict routing"
     assert step.on_success is None, "adjust_experiment must not use on_success"
     conditions = step.on_result.conditions
     conclusive = next((c for c in conditions if c.when and "CONCLUSIVE" in c.when), None)
-    assert conclusive is not None and conclusive.route == "check_run_fix_loop"
+    assert conclusive is not None and conclusive.route == "route_run_retry_delay"
     blocked = next((c for c in conditions if c.when and "BLOCKED" in c.when), None)
     assert blocked is not None and blocked.route == "escalate_stop"
     inconclusive = next((c for c in conditions if c.when and "INCONCLUSIVE" in c.when), None)
-    assert inconclusive is not None and inconclusive.route == "check_run_fix_loop"
+    assert inconclusive is not None and inconclusive.route == "route_run_retry_delay"
     assert step.on_failure == "ensure_results"
 
 
@@ -228,24 +227,24 @@ def test_research_recipe_has_route_run_retry_delay(recipe):
     assert step.action == "route"
 
 
-def test_check_implement_fix_loop_routes_to_delay_gate(recipe):
-    """Loop guard must route through delay gate, not directly to plan_phase."""
+def test_check_implement_fix_loop_routes_to_troubleshoot(recipe):
+    """Loop guard increments the counter before launching troubleshoot."""
     step = recipe.steps["check_implement_fix_loop"]
     assert step.on_result is not None, "check_implement_fix_loop must have on_result"
     conditions = step.on_result.conditions
     assert conditions, "check_implement_fix_loop on_result must have non-empty conditions"
     non_exhausted = [c for c in conditions if c.when is None or "max_exceeded" not in c.when]
-    assert any(c.route == "route_implement_retry_delay" for c in non_exhausted)
+    assert any(c.route == "troubleshoot_implement_failure" for c in non_exhausted)
 
 
-def test_check_run_fix_loop_routes_to_delay_gate(recipe):
-    """Run loop guard must route through delay gate, not directly to run_experiment."""
+def test_check_run_fix_loop_routes_to_troubleshoot(recipe):
+    """Run loop guard increments the counter before launching troubleshoot."""
     step = recipe.steps["check_run_fix_loop"]
     assert step.on_result is not None, "check_run_fix_loop must have on_result"
     conditions = step.on_result.conditions
     assert conditions, "check_run_fix_loop on_result must have non-empty conditions"
     non_exhausted = [c for c in conditions if c.when is None or "max_exceeded" not in c.when]
-    assert any(c.route == "route_run_retry_delay" for c in non_exhausted)
+    assert any(c.route == "troubleshoot_run_failure" for c in non_exhausted)
 
 
 def test_run_experiment_uses_verdict_routing(recipe):

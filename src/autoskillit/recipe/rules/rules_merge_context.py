@@ -136,20 +136,29 @@ def _check_merge_test_gate_context_not_forwarded(
                 )
 
             cmd = rf_step.with_args.get("skill_command", "")
-            if count_skill_args(cmd) <= 3:
+            invocation = ctx.binding_projection.for_step(rf_step_name)
+            has_failure_context = (
+                invocation is not None
+                and bool(invocation.skill_inputs)
+                and all(
+                    (value := invocation.skill_input(name)) is not None and value.is_present
+                    for name in ("ci_conclusion", "diagnosis_path")
+                )
+            ) or count_skill_args(cmd) > 3
+            if not has_failure_context:
                 findings.append(
                     make_finding(
                         rule_name="merge-test-gate-context-not-forwarded",
                         step_name=rf_step_name,
                         message=(
-                            f"Step '{rf_step_name}' invokes resolve-failures with only "
-                            f"{count_skill_args(cmd)} positional arg(s) (worktree, plan, "
-                            f"branch), but is reachable from merge_worktree step "
+                            f"Step '{rf_step_name}' invokes resolve-failures without "
+                            f"bound ci_conclusion and diagnosis_path inputs, but is "
+                            f"reachable from merge_worktree step "
                             f"'{step_name}' via test_gate/post_rebase_test_gate. "
                             f"Without failure context (ci_conclusion + diagnosis_path), "
                             f"resolve-failures cannot investigate the specific failure. "
-                            f"Expand skill_command to 6 args including merge_gate_ci_conclusion "
-                            f"and merge_gate_diagnosis_path."
+                            f"Bind merge_gate_ci_conclusion and "
+                            f"merge_gate_diagnosis_path."
                         ),
                     )
                 )

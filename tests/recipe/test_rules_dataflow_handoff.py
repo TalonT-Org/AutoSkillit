@@ -77,8 +77,8 @@ class TestUncapturedHandoffConsumerRule:
     def test_uncaptured_handoff_consumer_silent_when_no_file_path_inputs(self) -> None:
         """1h: rule is silent when consumer has no file-path or directory-path inputs.
 
-        Uses audit-friction (outputs: []) as producer and make-plan (single task: string
-        input — no file-path inputs) as consumer. The rule must be silent.
+        Uses audit-friction (outputs: []) as producer and mermaid (no declared
+        inputs) as consumer. The rule must be silent.
         """
         steps = {
             "friction": {
@@ -88,7 +88,7 @@ class TestUncapturedHandoffConsumerRule:
             },
             "plan": {
                 "tool": "run_skill",
-                "with": {"skill_command": "/autoskillit:make-plan some task"},
+                "with": {"skill_command": "/autoskillit:mermaid"},
                 "on_success": "done",
             },
             "done": {"action": "stop", "message": "Done."},

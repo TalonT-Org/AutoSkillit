@@ -250,7 +250,15 @@
         "worktree_path"
       ],
       "with": {
-        "skill_command": "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }}",
+        "skill_command": "/autoskillit:review-research-pr",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}",
+          "base_branch": "${{ inputs.base_branch }}",
+          "pr_url": "${{ context.pr_url }}",
+          "annotated_diff_path": "${{ context.annotated_diff_path }}",
+          "hunk_ranges_path": "${{ context.hunk_ranges_path }}",
+          "valid_lines_path": "${{ context.valid_lines_path }}"
+        },
         "cwd": "${{ context.worktree_path }}",
         "step_name": "review_research_pr",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-research-pr"
@@ -395,7 +403,11 @@
         "worktree_path"
       ],
       "with": {
-        "skill_command": "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust",
+        "skill_command": "/autoskillit:run-experiment",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}",
+          "adjust": true
+        },
         "cwd": "${{ context.worktree_path }}",
         "step_name": "re_run_experiment",
         "output_dir": "."
@@ -431,7 +443,13 @@
         "experiment_results"
       ],
       "with": {
-        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}",
+        "skill_command": "/autoskillit:generate-report",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}",
+          "results_path": "${{ context.experiment_results }}",
+          "output_mode": "${{ inputs.output_mode }}",
+          "issue_url": "${{ inputs.issue_url }}"
+        },
         "cwd": "${{ context.worktree_path }}",
         "step_name": "re_generate_report",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"

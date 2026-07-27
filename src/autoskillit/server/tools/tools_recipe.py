@@ -48,6 +48,7 @@ from autoskillit.server._recipe_delivery import (
     recipe_pull_producers,
     recipe_recreation_producers,
 )
+from autoskillit.server._recipe_execution import get_recipe_execution
 from autoskillit.server._recipe_section_pagination import (
     RecipeSectionBoundError,
     RecipeSectionNonConvergenceError,
@@ -70,6 +71,7 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
+    pop_compiled_bindings,
     render_served_response,
     response_backstop_tool_meta,
     serve_recipe,
@@ -389,6 +391,7 @@ async def load_recipe(
                 backend_capabilities_map=_backend_capabilities_map,
                 backend_origin_map=_backend_origin_map,
             )
+            _compiled_bindings = pop_compiled_bindings(result)
             recipe_info = _recipe_info_pre
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             if not result.get("valid", False):
@@ -448,6 +451,9 @@ async def load_recipe(
                         recipe_name=name,
                         tool_ctx=tool_ctx,
                         delivery_request=delivery_request,
+                        compiled_bindings=(
+                            _compiled_bindings if result.get("valid", False) else None
+                        ),
                     ),
                 )
             return render_served_response(result)
@@ -603,6 +609,7 @@ async def get_recipe_section(
                         resolved_defaults=_defaults,
                         ingredients_only=False,
                     )
+                    pop_compiled_bindings(_recreate)
                     if not _recreate.get("valid", False):
                         return _recipe_section_failure(
                             "recipe_artifact_unavailable",
@@ -612,6 +619,21 @@ async def get_recipe_section(
                         _recreate = build_open_kitchen_recipe_payload(
                             _recreate, version=__version__
                         )
+                    installed_execution = get_recipe_execution(tool_ctx)
+                    if (
+                        installed_execution is not None
+                        and installed_execution.snapshot.recipe_name == requested_recipe_name
+                        and installed_execution.snapshot.content_hash
+                        == _recreate.get("content_hash")
+                        and installed_execution.snapshot.composite_hash
+                        == _recreate.get("composite_hash")
+                    ):
+                        snapshot = installed_execution.snapshot
+                        _recreate["recipe_execution"] = {
+                            "execution_id": snapshot.execution_id,
+                            "invocation_template_digests": dict(snapshot.template_digests),
+                            "snapshot_digest": snapshot.snapshot_digest,
+                        }
 
                     try:
                         recreated_generation = persist_recipe_artifact(

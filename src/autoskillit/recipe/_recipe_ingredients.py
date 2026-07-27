@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, NotRequired, TypedDict
 
 from autoskillit.core import (
+    RecipeBindingProjection,
     TerminalColumn,
     _render_gfm_table,
 )
@@ -132,6 +133,9 @@ class LoadRecipeResult(TypedDict, total=False):
     dispatch_feasible: bool
     infeasible_steps: list[str]
     warnings: NotRequired[list[str]]
+    # Internal-only. Recipe API callers receive this only when they explicitly
+    # request the attested server-delivery carrier.
+    _compiled_bindings: RecipeBindingProjection
 
 
 class OpenKitchenResult(TypedDict, total=False):

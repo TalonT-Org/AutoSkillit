@@ -30,9 +30,14 @@ The plan file must remain a **clean, self-contained implementation instruction s
 
 ## Arguments
 
-`{plan_path}`       — Absolute path to the plan file to validate (optional: falls back to most recent {{AUTOSKILLIT_TEMP}}/ artifact if omitted)
-`{issue_url}`       — (Optional) GitHub issue URL. When provided, enables plan-vs-issue coverage check in Step 4.6.
-`{remediation_path}` — (Optional) Absolute path to the current audit-impl remediation findings file. When provided together with a pinned inventory, enables the two-disposition plan-vs-inventory gate in Step 4.7.
+- `plan_path` — Required absolute path to the exact plan file to validate.
+- `issue_url` (optional) — GitHub issue URL consumed by Step 4.6.
+- `review_path` (optional) — Exact review-approach report whose accepted
+  recommendations must be reflected by the plan.
+- `audit_cycle_path` (optional) — Exact authority supplied to the server-side
+  `audit_cycle_inventory` input preflight.
+- `plan_disposition_path` (optional) — Exact `PlanDispositionReport` paired with the
+  authority and plan by input preflight.
 
 ## Critical Constraints
 
@@ -53,6 +58,8 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Write plan content, corrections, or the verification marker to any file other than the original plan file path provided as input. If the Edit tool is denied on the plan file, do NOT create a copy elsewhere — output a failure message instead.
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Discover a latest plan, audit cycle, inventory, or disposition report
+- Open audit-cycle artifacts directly in Step 4.7 or reinterpret the verified preflight result
 
 **ALWAYS:**
 - Keep the plan as clean implementation instructions only (information/background helpful to implementation is okay)
@@ -78,10 +85,10 @@ limited blast radius. The downstream step will restart the walkthrough on retry.
 
 ### Step 1: Load the Plan
 
-Read the plan from:
-- Path provided by user
-- Plan content pasted directly
-- Most recent plan in {{AUTOSKILLIT_TEMP}}/ subdirectories
+Read only the exact `plan_path` supplied by the caller. If it is absent, stop with an input
+error; never search `{{AUTOSKILLIT_TEMP}}` for a recent or singleton artifact.
+When `review_path` is supplied, read that exact report and verify accepted recommendations
+against the plan during the walkthrough; never discover a replacement review artifact.
 
 ### Multi-Part Plan Detection
 
@@ -280,43 +287,38 @@ If `issue_url` or `issue_number` was provided to this skill, verify that the pla
 
 ### Step 4.7: Plan-vs-Inventory Coverage Check
 
-When `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` exists (indicating the pipeline has run at least one audit round), perform a two-disposition plan-vs-inventory coverage check. This mode fires in remediation context where the remediation plan must cover both the delta findings AND carry forward all original requirements.
+This check consumes only the server-provided `audit_cycle_inventory` preflight evidence. The
+server has already verified recipe identity, current-head authority, exact artifact bytes,
+plan/report/parent lineage, and the production evaluator decision. Do not open, search for,
+or reconstruct any inventory, remediation, authority, or report.
 
-**Precondition:** This disposition depends on audit-impl re-evaluating the entire requirements inventory each round (not a diff-only subset). If audit-impl were changed to emit partial findings, silence would become ambiguous rather than confirmatory.
+1. If preflight is `OMIT`, record its stable reason (`no_authority`, `trusted_go`, or
+   `trusted_go_successor`) and omit Step 4.7. Absence is distinct from an authoritative
+   empty inventory; do not convert one into the other.
+2. If preflight is `PASS`, copy its exact ordered rows into the walkthrough record. Preserve
+   every `satisfied-by-round-N` and `carried@step` value and the cited implementation step
+   without reclassification.
+3. If preflight is `REJECT`, or any returned row is `UNMAPPED`, do not stamp or edit the plan
+   to cure the decision. Output:
 
-1. **Guard:** If `requirements_inventory.json` does not exist, omit this check with note: "Plan-vs-inventory coverage check omitted — requirements_inventory.json not present."
-
-2. **Read the pinned inventory** from `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`. Each entry contains a `REQ-NNN` id, requirement text, and source location.
-
-3. **Read the current remediation findings** from the `remediation_path` argument (threaded from recipe context). If `remediation_path` was not provided, treat the findings as empty — every inventory requirement is therefore UNMAPPED and the gate blocks.
-
-4. **For each `REQ-NNN` in the inventory**, classify using a two-disposition evaluation:
-   - **satisfied** — the requirement is NOT cited in the current remediation findings. This means audit-impl round N re-verified this requirement and did not flag it; the prior round already confirmed completion. Pass.
-   - **carried** — the requirement IS cited in the current remediation findings, AND the plan contains a matching Implementation Steps directive that addresses it. Pass.
-   - **UNMAPPED** — the requirement IS cited in the current remediation findings, BUT no matching Implementation Steps directive exists in the plan. Blocking failure.
-
-5. **If any requirement is UNMAPPED:** Do NOT stamp the plan. Output a blocking failure:
    ```
    ## Dry Walkthrough FAILED — Plan-vs-Inventory Coverage Gap
 
    **Plan:** {path}
-   **Inventory:** {{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json
-   **Findings:** {remediation_path}
-   **Status:** FAILED — plan does not cover all remediation-cited requirements
+   **Status:** FAILED — audit-cycle inventory admission rejected
+   **Reason:** {stable_preflight_reason}
 
    ### Unmapped Items
-   - {req_id}: {requirement_text} — cited by finding but no Implementation Steps directive addresses it
+   - {exact evaluator row and detail}
 
-   The remediation plan must carry forward every requirement cited in the current
-   audit findings. If a finding was a false positive, update the finding's status
-   via the audit-impl verdict mechanism rather than dropping the requirement from
-   the plan.
+   The evaluator result is authoritative. Resolve disputed findings through a successor
+   audit-impl verdict; do not drop or pad requirements here.
    ```
+
    Stop execution — do not proceed to Step 5.
 
-6. **If all requirements are satisfied or carried:** Record the disposition summary and proceed to Step 5.
-
-This check composes with the existing plan-vs-issue check in Step 4.6 (both can fire independently if both inputs are present). The two-disposition gate prevents the one-sided failure mode where audit-impl round >=2 structurally fails because every delta-only plan is rejected as UNMAPPED.
+4. Only `PASS` and `OMIT` may proceed to Step 5. This check composes independently with the
+   plan-vs-issue check in Step 4.6.
 
 ### Step 5: Fix the Plan
 
@@ -324,6 +326,9 @@ For each issue found:
 1. Directly edit the plan file to fix it
 2. Do NOT add any "gap analysis" or "issues" sections to the plan
 3. The plan should read as if it was correct from the start
+4. Never add carry-forward padding, add/remove Requirements Map rows, or change a
+   `satisfied-by-round-N`/`carried@step` result to make Step 4.7 pass. Step 5 cannot
+   override the evaluator.
 
 ### Step 6: Mark Plan as Verified
 

@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 import regex as re
 
@@ -115,7 +115,10 @@ class RecipeStep:
     action: str | None = None  # Built-in action: "route", "stop", "confirm"
     python: str | None = None
     constant: str | None = None  # Literal output value — no subprocess or MCP call
-    with_args: dict[str, str] = field(default_factory=dict)
+    # Tool-specific binding validates ordinary values. Runtime validation below
+    # reserves the one generic nested channel for structured child-skill inputs.
+    with_args: dict[str, Any] = field(default_factory=dict)
+    declared_with_args: dict[str, Any] | None = field(default=None, repr=False)
     on_success: str | None = None
     on_failure: str | None = None
     on_context_limit: str | None = None
@@ -147,6 +150,32 @@ class RecipeStep:
     skip_when_true: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.with_args, dict):
+            raise TypeError("RecipeStep.with_args must be a mapping")
+        for key, value in self.with_args.items():
+            if key == "skill_inputs":
+                if self.tool != "run_skill" or not isinstance(value, dict):
+                    raise TypeError(
+                        "Only run_skill.with.skill_inputs may declare structured "
+                        "child-skill inputs"
+                    )
+                if not all(
+                    isinstance(input_name, str)
+                    and isinstance(input_value, (str, int, bool))
+                    and input_value is not None
+                    for input_name, input_value in value.items()
+                ):
+                    raise TypeError(
+                        "run_skill.with.skill_inputs must map names to strict scalar values"
+                    )
+        if self.declared_with_args is not None:
+            if not self.declared_with_args.keys() <= self.with_args.keys():
+                raise ValueError(
+                    "RecipeStep declared with mapping cannot contain keys absent "
+                    "from the effective mapping"
+                )
+        else:
+            self.declared_with_args = dict(self.with_args)
         self.capture = _coerce_capture_dict(self.capture)
         self.capture_list = _coerce_capture_dict(self.capture_list)
         if self.capture_list and self.retries > 0:

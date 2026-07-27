@@ -6,6 +6,8 @@ autoskillit.core (the package gateway) in production code — not from here.
 
 from __future__ import annotations
 
+from ._type_audit_cycle import *  # noqa: F401, F403
+from ._type_audit_cycle import __all__ as _audit_cycle_all
 from ._type_backend import *  # noqa: F401, F403
 from ._type_backend import __all__ as _backend_all
 from ._type_capture import *  # noqa: F401, F403
@@ -58,8 +60,12 @@ from ._type_protocols_recipe import *  # noqa: F401, F403
 from ._type_protocols_recipe import __all__ as _protocols_recipe_all
 from ._type_protocols_workspace import *  # noqa: F401, F403
 from ._type_protocols_workspace import __all__ as _protocols_workspace_all
+from ._type_recipe_binding import *  # noqa: F401, F403
+from ._type_recipe_binding import __all__ as _recipe_binding_all
 from ._type_recipe_delivery import *  # noqa: F401, F403
 from ._type_recipe_delivery import __all__ as _recipe_delivery_all
+from ._type_recipe_execution import *  # noqa: F401, F403
+from ._type_recipe_execution import __all__ as _recipe_execution_all
 from ._type_recipe_sections import *  # noqa: F401, F403
 from ._type_recipe_sections import __all__ as _recipe_sections_all
 from ._type_results import *  # noqa: F401, F403
@@ -80,7 +86,8 @@ from ._type_tradition_manifest import *  # noqa: F401, F403
 from ._type_tradition_manifest import __all__ as _tradition_manifest_all
 
 __all__ = (
-    _backend_all
+    _audit_cycle_all
+    + _backend_all
     + _capture_all
     + _checkpoint_all
     + _closure_report_all
@@ -108,6 +115,8 @@ __all__ = (
     + _protocols_backend_all
     + _results_all
     + _results_execution_all
+    + _recipe_binding_all
+    + _recipe_execution_all
     + _recipe_delivery_all
     + _recipe_sections_all
     + _resume_all

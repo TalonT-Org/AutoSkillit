@@ -534,6 +534,7 @@ class TestOutputPathTokensDerivedFromContracts:
     _EXPECTED_OUTPUT_PATH_TOKENS = frozenset(
         {
             "analysis_file",
+            "audit_cycle_path",
             "campaign_path",
             "conflict_report_path",
             "diagnosis_path",
@@ -546,6 +547,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "manifest_path",
             "plan_parts",
             "plan_path",
+            "plan_disposition_path",
             "pr_order_file",
             "prep_path",
             "recipe_path",

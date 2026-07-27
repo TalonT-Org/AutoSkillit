@@ -181,7 +181,7 @@ def test_identify_optional_output_fields_extracts_from_contract() -> None:
 
     # Pattern with optional group matching a known output name — field is optional
     contract = SkillContract(
-        inputs=[],
+        inputs=(),
         outputs=[SkillOutput(name="pr_url", type="string")],
         expected_output_patterns=[r"pr_url[ \t]*=[ \t]*(https://github\.com/.*/pull/\d+)?"],
     )
@@ -189,7 +189,7 @@ def test_identify_optional_output_fields_extracts_from_contract() -> None:
 
     # Pattern without optional group — field is mandatory, not returned
     contract_mandatory = SkillContract(
-        inputs=[],
+        inputs=(),
         outputs=[SkillOutput(name="pr_url", type="string")],
         expected_output_patterns=[r"pr_url[ \t]*=[ \t]*https://github\.com/.+"],
     )
@@ -197,7 +197,7 @@ def test_identify_optional_output_fields_extracts_from_contract() -> None:
 
     # Pattern whose leading identifier does not match any output name — skipped
     contract_no_match = SkillContract(
-        inputs=[],
+        inputs=(),
         outputs=[SkillOutput(name="category_summary", type="string")],
         expected_output_patterns=[r"pr_url[ \t]*=[ \t]*(https://github\.com/.*/pull/\d+)?"],
     )

@@ -105,3 +105,24 @@ def test_get_skill_contract_defaults_allowed_values_to_empty_list() -> None:
                 assert o.allowed_values == []
             return
     pytest.skip("No suitable skill found for default-empty assertion")
+
+
+@pytest.mark.parametrize("authority_data", [[], "invalid", 1])
+def test_get_skill_contract_rejects_non_mapping_authority_publication(
+    authority_data: object,
+) -> None:
+    manifest = {
+        "skills": {
+            "demo-skill": {
+                "inputs": [{"name": "prior_authority", "type": "file_path"}],
+                "outputs": [{"name": "authority", "type": "file_path"}],
+                "audit_authority_publication": authority_data,
+            }
+        }
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="audit_authority_publication for skill 'demo-skill' must be a mapping",
+    ):
+        get_skill_contract("demo-skill", manifest)

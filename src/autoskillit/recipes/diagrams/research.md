@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:fd5a9ab1cdee02ecafd4b7a0452754e3a0e5535742bc4cc6a0e99c13d33d4b56 -->
+<!-- autoskillit-recipe-hash: sha256:74af95393d86d3c554cc234bc82c21e6a1e528a5628bd7401665e38da673a238 -->
 <!-- autoskillit-diagram-format: v7 -->
 
 ## research
@@ -44,7 +44,7 @@ decompose_phases
 |    |
 |    plan_phase
 |    |
-|    implement_phase <-> [x fail -> troubleshoot_implement_failure]
+|    implement_phase <-> [x fail -> check_implement_fix_loop -> troubleshoot_implement_failure]
 |    |    x exhausted [-> run_experiment]
 |
 +----+
@@ -60,7 +60,7 @@ check_audit_retry_loop (max 2)
 pre_remediation_cleanup
 |
 run_experiment <-> [adjust_experiment] (optional)
-|    x fail [-> troubleshoot_run_failure]
+|    x fail [-> check_run_fix_loop -> troubleshoot_run_failure]
 |    x exhausted [-> ensure_results]
 |
 generate_report

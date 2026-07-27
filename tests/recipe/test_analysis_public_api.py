@@ -51,6 +51,7 @@ def test_bfs_reachable_traverses_graph() -> None:
 def test_validation_context_skill_resolver_default() -> None:
     """ValidationContext.skill_resolver defaults to None."""
     from autoskillit.recipe._analysis import ValidationContext
+    from autoskillit.recipe._binding import bind_recipe
     from autoskillit.recipe.schema import DataFlowReport, Recipe
 
     recipe = Recipe(name="t", description="t", steps={}, kitchen_rules=["t"])
@@ -58,6 +59,7 @@ def test_validation_context_skill_resolver_default() -> None:
         recipe=recipe,
         step_graph={},
         dataflow=DataFlowReport(warnings=[], summary=""),
+        binding_projection=bind_recipe(recipe),
     )
     assert ctx.skill_resolver is None
 

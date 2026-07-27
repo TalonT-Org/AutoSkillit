@@ -325,8 +325,9 @@ def test_retry_worktree_captures_deviation_manifest_path(recipe) -> None:
 def test_audit_impl_forwards_deviation_manifest_path(recipe) -> None:
     """audit_impl must forward deviation_manifest_path kwarg and declare it optional."""
     step = recipe.steps["audit_impl"]
-    cmd = step.with_args.get("skill_command", "")
-    assert "deviation_manifest_path=" in cmd
+    assert step.with_args["skill_inputs"]["deviation_manifest_path"] == (
+        "${{ context.deviation_manifest_path }}"
+    )
     assert "deviation_manifest_path" in (step.optional_context_refs or [])
 
 
@@ -345,6 +346,7 @@ def test_audit_impl_deviation_manifest_path_kwarg_consistency(recipe_name: str) 
     """Both recipes must forward deviation_manifest_path identically to audit_impl."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     step = recipe.steps["audit_impl"]
-    cmd = step.with_args.get("skill_command", "")
-    assert "deviation_manifest_path=${{ context.deviation_manifest_path }}" in cmd
+    assert step.with_args["skill_inputs"]["deviation_manifest_path"] == (
+        "${{ context.deviation_manifest_path }}"
+    )
     assert "deviation_manifest_path" in (step.optional_context_refs or [])

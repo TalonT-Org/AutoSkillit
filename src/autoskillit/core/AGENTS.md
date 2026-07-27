@@ -33,6 +33,8 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 | `path_containment.py` | Path containment guards — symlink/hardlink check, TOCTOU guard (stdlib-only, IL-0) |
 | `closure_verifier.py` | Independent verifier for closure-mode reports (stdlib-only, IL-0) |
 | `context_admission.py` | Pure protocol-v1 cumulative context-admission reducer, replay, and coverage resolution |
+| `audit_cycle_verifier.py` | Bounded verifier and pure evaluator for provenance-bound audit-cycle inventory admission |
+| `tool_registry.py` | Canonical stdlib-only MCP tool and parameter definitions shared by recipe compilation and server parity guards |
 
 ## Architecture Notes
 

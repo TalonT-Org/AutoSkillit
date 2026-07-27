@@ -9,18 +9,15 @@ from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
     CONFIG_AUTHORITY_KEYS,
     SKILL_TOOLS,
+    BindingFailureCode,
+    BoundValueOrigin,
     Severity,
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
-    classify_step_arg_style,
-    count_positional_args,
-    extract_context_refs,
-    extract_input_refs,
     get_skill_contract,
     load_bundled_manifest,
-    resolve_skill_name,
 )
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
@@ -62,52 +59,74 @@ def _check_outdated_version(ctx: ValidationContext) -> list[RuleFinding]:
 def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
     findings: list[RuleFinding] = []
-    manifest = load_bundled_manifest()
     ingredient_names = set(wf.ingredients.keys())
 
     for step_name, step, available_context in iter_steps_with_context(wf):
-        if step.tool in SKILL_TOOLS:
-            skill_cmd = step.with_args.get("skill_command", "")
-            skill_name = resolve_skill_name(skill_cmd)
-            if skill_name:
-                contract = get_skill_contract(skill_name, manifest)
-                if contract:
-                    all_input_names = {i.name for i in contract.inputs}
-                    if classify_step_arg_style(skill_cmd, all_input_names) != "named":
-                        continue
+        if step.tool not in SKILL_TOOLS:
+            continue
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None:
+            continue
+        for failure in invocation.failures:
+            if failure.code is not BindingFailureCode.MISSING_SKILL_INPUT:
+                continue
+            name = failure.name
+            skill_name = invocation.skill_name or "selected skill"
+            if name in available_context or name in ingredient_names:
+                msg = (
+                    f"Step '{step_name}' invokes {skill_name} which requires "
+                    f"'{name}', and '{name}' is available in the recipe context, "
+                    "but the compiled child invocation does not bind it by name."
+                )
+            else:
+                msg = (
+                    f"Step '{step_name}' invokes {skill_name} which requires "
+                    f"'{name}', but '{name}' is not available at this point in the recipe."
+                )
+            findings.append(
+                make_finding(
+                    rule_name="missing-ingredient",
+                    step_name=step_name,
+                    message=msg,
+                )
+            )
 
-                    ctx_refs = extract_context_refs(step)
-                    inp_refs = extract_input_refs(step)
-                    provided = ctx_refs | inp_refs
+    return findings
 
-                    for req_input in contract.inputs:
-                        if not req_input.required:
-                            continue
-                        name = req_input.name
-                        if name not in provided:
-                            if name in available_context or name in ingredient_names:
-                                msg = (
-                                    f"Step '{step_name}' invokes {skill_name} which requires "
-                                    f"'{name}', and '{name}' is available in the recipe "
-                                    f"context, but the step does not reference it. Add "
-                                    f"'${{{{ context.{name} }}}}' to the step's skill_command "
-                                    f"or with: block."
-                                )
-                            else:
-                                msg = (
-                                    f"Step '{step_name}' invokes {skill_name} which requires "
-                                    f"'{name}', but '{name}' is not available at this point "
-                                    f"in the recipe. No prior step captures it and it is "
-                                    f"not a recipe ingredient."
-                                )
-                            findings.append(
-                                make_finding(
-                                    rule_name="missing-ingredient",
-                                    step_name=step_name,
-                                    message=msg,
-                                )
-                            )
 
+@semantic_rule(
+    name="invalid-skill-invocation-binding",
+    description="Structured child-skill inputs must bind unambiguously to the selected contract.",
+    severity=Severity.ERROR,
+)
+def _check_invalid_skill_invocation_binding(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    reported_codes = {
+        BindingFailureCode.UNKNOWN_SKILL,
+        BindingFailureCode.UNKNOWN_SKILL_INPUT,
+        BindingFailureCode.DEAD_SKILL_INPUT,
+        BindingFailureCode.AMBIGUOUS_SKILL_INPUT,
+        BindingFailureCode.INVALID_SKILL_INPUT_TYPE,
+        BindingFailureCode.INVALID_SKILL_COMMAND,
+    }
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None:
+            continue
+        for failure in invocation.failures:
+            if failure.code not in reported_codes:
+                continue
+            findings.append(
+                make_finding(
+                    rule_name="invalid-skill-invocation-binding",
+                    step_name=step_name,
+                    message=failure.message,
+                )
+            )
     return findings
 
 
@@ -119,33 +138,29 @@ def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
 def _check_missing_recommended_input(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
     findings: list[RuleFinding] = []
-    manifest = load_bundled_manifest()
-
     for step_name, step, _available_context in iter_steps_with_context(wf):
         if step.tool not in SKILL_TOOLS:
             continue
-        skill_cmd = step.with_args.get("skill_command", "") if step.with_args else ""
-        if not skill_cmd:
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None or invocation.skill_name is None:
             continue
-        skill_name = resolve_skill_name(skill_cmd)
-        if not skill_name:
-            continue
-        contract = get_skill_contract(skill_name, manifest)
+        contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
         if not contract:
             continue
 
         for inp in contract.inputs:
             if not inp.recommended or inp.required:
                 continue
-            if not re.search(rf"(?:^|\s){re.escape(inp.name)}=", skill_cmd):
+            bound = invocation.skill_input(inp.name)
+            if bound is None or not bound.is_present:
                 findings.append(
                     make_finding(
                         rule_name="missing-recommended-input",
                         step_name=step_name,
-                        message=f"Step '{step_name}' invokes {skill_name} which recommends "
+                        message=f"Step '{step_name}' invokes {invocation.skill_name} "
+                        f"which recommends "
                         f"'{inp.name}' for full-quality output, but the step does not "
-                        f"pass it. Add '{inp.name}=${{{{ context.{inp.name} }}}}' to "
-                        f"the skill_command or add a pre-computation step.",
+                        "bind it in the compiled child invocation.",
                     )
                 )
 
@@ -164,34 +179,27 @@ def _check_missing_recommended_input(ctx: ValidationContext) -> list[RuleFinding
 def _check_shadowed_required_inputs(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
     findings: list[RuleFinding] = []
-    manifest = load_bundled_manifest()
     ingredient_names = set(wf.ingredients.keys())
 
     for step_name, step, available_context in iter_steps_with_context(wf):
         if step.tool not in SKILL_TOOLS:
             continue
-        skill_cmd = step.with_args.get("skill_command", "") if step.with_args else ""
-        if not skill_cmd:
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None or invocation.skill_name is None:
             continue
-        # Only applies when there are positional (non-template) args.
-        # Steps with count == 0 are already handled by missing-ingredient.
-        if count_positional_args(skill_cmd) == 0:
-            continue
-        skill_name = resolve_skill_name(skill_cmd)
-        if not skill_name:
-            continue
-        contract = get_skill_contract(skill_name, manifest)
+        contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
         if not contract:
             continue
-
-        used_refs = extract_context_refs(step) | extract_input_refs(step)
 
         for req_input in contract.inputs:
             if not req_input.required:
                 continue
             name = req_input.name
-            if name in used_refs:
-                continue  # Correctly passed as template ref
+            bound = invocation.skill_input(name)
+            if bound is None or not bound.is_present:
+                continue
+            if bound.origin is not BoundValueOrigin.LITERAL:
+                continue
             # Only fire when the input IS available — if it's not in context yet,
             # the missing-ingredient rule (or runtime) will surface that separately.
             if name not in available_context and name not in ingredient_names:
@@ -200,7 +208,7 @@ def _check_shadowed_required_inputs(ctx: ValidationContext) -> list[RuleFinding]
                 make_finding(
                     rule_name="shadowed-required-input",
                     step_name=step_name,
-                    message=f"Step '{step_name}' invokes /{skill_name} which requires "
+                    message=f"Step '{step_name}' invokes /{invocation.skill_name} which requires "
                     f"'{name}' (type: {req_input.type}), and '{name}' is available "
                     f"in the recipe context, but the skill_command passes prose text "
                     f"instead of the template reference. "

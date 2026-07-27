@@ -91,7 +91,10 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:stage-data ${{ inputs.experiment_plan }}",
+        "skill_command": "/autoskillit:stage-data",
+        "skill_inputs": {
+          "experiment_plan": "${{ inputs.experiment_plan }}"
+        },
         "cwd": "${{ inputs.worktree_path }}",
         "step_name": "stage_data",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/stage-data"
@@ -119,7 +122,10 @@
       "retries": 1,
       "on_exhausted": "escalate_stop",
       "with": {
-        "skill_command": "/autoskillit:download-data ${{ inputs.experiment_plan }}",
+        "skill_command": "/autoskillit:download-data",
+        "skill_inputs": {
+          "experiment_plan": "${{ inputs.experiment_plan }}"
+        },
         "cwd": "${{ inputs.worktree_path }}",
         "step_name": "download_data",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/download-data"
@@ -143,7 +149,10 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:make-groups ${{ inputs.experiment_plan }}",
+        "skill_command": "/autoskillit:make-groups",
+        "skill_inputs": {
+          "source_doc": "${{ inputs.experiment_plan }}"
+        },
         "cwd": "${{ inputs.worktree_path }}",
         "step_name": "decompose",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/make-groups"
@@ -173,15 +182,19 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:make-plan ${{ context.group_files }}",
+        "skill_command": "/autoskillit:make-plan",
+        "skill_inputs": {
+          "task": "FIRST REMAINING phase file path from ${{ context.group_files }}",
+          "audit_cycle_path": "${{ context.audit_cycle_path }}"
+        },
         "cwd": "${{ inputs.worktree_path }}",
         "step_name": "plan_phase",
-        "output_dir": ".",
-        "group_files": "${{ context.group_files }}"
+        "output_dir": "."
       },
       "capture": {
         "phase_plan_path": "${{ result.plan_path }}",
-        "verdict": "${{ result.verdict }}"
+        "verdict": "${{ result.verdict }}",
+        "plan_disposition_path": "${{ result.plan_disposition_path }}"
       },
       "capture_list": {
         "plan_parts": "${{ result.plan_parts }}"
@@ -191,28 +204,32 @@
         {
           "when": "${{ result.verdict }} == plan",
           "route": "implement_phase"
-        },
-        {
-          "when": "${{ result.verdict }} == false_positive",
-          "route": "implement_phase"
         }
       ],
       "on_failure": "escalate_stop",
       "on_context_limit": "salvage_plan_phase",
-      "note": "Plans the current setup phase. Replace ${{ context.group_files }} in the skill_command with the FIRST REMAINING phase file path from the list — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob plan_dir for *_part_*.md or single plan file. ITERATION: After each implement_phase cycle, advance to the next entry in context.group_files for the following plan_phase iteration. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan_phase from the remediate step via check_audit_retry_loop; pass it inline in the skill_command rather than as a named with: key.\n"
+      "note": "Plans the current setup phase. Set skill_inputs.task to the FIRST REMAINING phase file path selected from context.group_files — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob plan_dir for *_part_*.md or single plan file. ITERATION: After each implement_phase cycle, advance to the next entry in context.group_files for the following plan_phase iteration. REMEDIATION MODE: consume the exact audit_cycle_path from the NO GO producer and emit its plan_disposition_path. verdict=plan is the only success.\n",
+      "optional_context_refs": [
+        "audit_cycle_path"
+      ]
     },
     "salvage_plan_phase": {
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.verify_plan_artifacts",
-        "plan_parts": "${{ context.plan_parts }}"
+        "plan_parts": "${{ context.plan_parts }}",
+        "audit_cycle_path": "${{ context.audit_cycle_path }}"
       },
       "capture": {
-        "phase_plan_path": "${{ result.plan_path }}"
+        "phase_plan_path": "${{ result.plan_path }}",
+        "plan_disposition_path": "${{ result.plan_disposition_path }}"
       },
       "capture_list": {
         "plan_parts": "${{ result.plan_parts }}"
       },
+      "optional_context_refs": [
+        "audit_cycle_path"
+      ],
       "retries": 0,
       "on_result": [
         {
@@ -232,7 +249,10 @@
       "stale_threshold": 2400,
       "idle_output_timeout": 0,
       "with": {
-        "skill_command": "/autoskillit:implement-experiment ${{ context.phase_plan_path }}",
+        "skill_command": "/autoskillit:implement-experiment",
+        "skill_inputs": {
+          "plan_path": "${{ context.phase_plan_path }}"
+        },
         "cwd": "${{ inputs.worktree_path }}",
         "step_name": "implement_phase",
         "output_dir": "."
@@ -242,7 +262,7 @@
       },
       "retries": 0,
       "on_success": "next_phase_or_experiment",
-      "on_failure": "troubleshoot_implement_failure",
+      "on_failure": "check_implement_fix_loop",
       "on_exhausted": "audit_impl",
       "on_context_limit": "audit_impl",
       "skip_when_false": "inputs.backend_supports_git_write",
@@ -254,11 +274,18 @@
       "stale_threshold": 2400,
       "idle_output_timeout": 0,
       "with": {
-        "skill_command": "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} implement_phase",
+        "skill_command": "/autoskillit:troubleshoot-experiment",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}",
+          "step_name": "implement_phase"
+        },
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "troubleshoot_implement_failure",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/implement_${{ context.implement_fix_count }}"
       },
+      "optional_context_refs": [
+        "implement_fix_count"
+      ],
       "capture": {
         "is_fixable": "${{ result.is_fixable }}",
         "retry_delay": "${{ result.retry_delay }}"
@@ -271,7 +298,7 @@
       "on_result": [
         {
           "when": "${{ context.is_fixable }} == true",
-          "route": "check_implement_fix_loop"
+          "route": "route_implement_retry_delay"
         },
         {
           "route": "escalate_stop"
@@ -294,7 +321,7 @@
           "route": "audit_impl"
         },
         {
-          "route": "route_implement_retry_delay"
+          "route": "troubleshoot_implement_failure"
         }
       ],
       "on_failure": "audit_impl",
@@ -382,7 +409,13 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:audit-impl \"${{ context.group_files }}\" ${{ context.impl_base_sha }} ${{ inputs.base_branch }}",
+        "skill_command": "/autoskillit:audit-impl",
+        "skill_inputs": {
+          "all_plan_paths": "${{ context.group_files }}",
+          "branch_name": "${{ context.impl_base_sha }}",
+          "base_branch": "${{ inputs.base_branch }}",
+          "prior_audit_cycle_path": "${{ context.audit_cycle_path }}"
+        },
         "cwd": "${{ context.worktree_path }}",
         "step_name": "audit_impl",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl",
@@ -394,7 +427,8 @@
         "closure_target_sha": ""
       },
       "capture": {
-        "remediation_path": "${{ result.remediation_path }}"
+        "remediation_path": "${{ result.remediation_path }}",
+        "audit_cycle_path": "${{ result.audit_cycle_path }}"
       },
       "on_result": [
         {
@@ -416,15 +450,18 @@
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
       "skip_when_false": "inputs.audit_impl",
+      "optional_context_refs": [
+        "audit_cycle_path"
+      ],
       "note": "Diffs impl_base_sha..HEAD (two-dot SHA-mode) and verifies all decomposed phases from group_files have corresponding implementation commits. impl_base_sha is captured by capture_impl_base before phase implementation begins. Catches silent group abandonment when on_context_limit fires mid-iteration — reports exactly which phases were completed vs. skipped. On GO, proceeds to run_experiment. On error, escalates immediately. On NO GO, routes to remediate which re-enters plan_phase via check_audit_retry_loop (max 2 cycles). If false (inputs.audit_impl=false), skip directly to run_experiment.\n"
     },
     "remediate": {
       "action": "route",
       "with": {
-        "remediation_path": "${{ context.remediation_path }}"
+        "audit_cycle_path": "${{ context.audit_cycle_path }}"
       },
       "on_success": "check_audit_retry_loop",
-      "note": "Pure routing step carrying the remediation file path from audit_impl's capture into the retry cycle. The remediation_path contains the list of missing phases identified by audit-impl.\n"
+      "note": "Carries the exact current NO GO authority into the bounded retry. The successor audit receives it as prior_audit_cycle_path; GO replaces it.\n"
     },
     "check_audit_retry_loop": {
       "tool": "run_python",
@@ -467,7 +504,10 @@
       "stale_threshold": 2400,
       "idle_output_timeout": 0,
       "with": {
-        "skill_command": "/autoskillit:run-experiment ${{ context.worktree_path }}",
+        "skill_command": "/autoskillit:run-experiment",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}"
+        },
         "cwd": "${{ context.worktree_path }}",
         "step_name": "run_experiment",
         "output_dir": "."
@@ -492,7 +532,7 @@
           "route": "ensure_results"
         }
       ],
-      "on_failure": "troubleshoot_run_failure",
+      "on_failure": "check_run_fix_loop",
       "on_exhausted": "ensure_results",
       "on_context_limit": "escalate_stop"
     },
@@ -502,11 +542,18 @@
       "stale_threshold": 2400,
       "idle_output_timeout": 0,
       "with": {
-        "skill_command": "/autoskillit:troubleshoot-experiment ${{ context.worktree_path }} run_experiment",
+        "skill_command": "/autoskillit:troubleshoot-experiment",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}",
+          "step_name": "run_experiment"
+        },
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "troubleshoot_run_failure",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/run_${{ context.run_fix_count }}"
       },
+      "optional_context_refs": [
+        "run_fix_count"
+      ],
       "capture": {
         "run_is_fixable": "${{ result.is_fixable }}",
         "run_retry_delay": "${{ result.retry_delay }}"
@@ -532,7 +579,11 @@
       "stale_threshold": 2400,
       "idle_output_timeout": 0,
       "with": {
-        "skill_command": "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust",
+        "skill_command": "/autoskillit:run-experiment",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}",
+          "adjust": true
+        },
         "cwd": "${{ context.worktree_path }}",
         "step_name": "adjust",
         "output_dir": "."
@@ -545,11 +596,11 @@
       "on_result": [
         {
           "when": "${{ result.verdict }} == CONCLUSIVE",
-          "route": "check_run_fix_loop"
+          "route": "route_run_retry_delay"
         },
         {
           "when": "${{ result.verdict }} == INCONCLUSIVE",
-          "route": "check_run_fix_loop"
+          "route": "route_run_retry_delay"
         },
         {
           "when": "${{ result.verdict }} == BLOCKED",
@@ -575,7 +626,7 @@
           "route": "ensure_results"
         },
         {
-          "route": "route_run_retry_delay"
+          "route": "troubleshoot_run_failure"
         }
       ],
       "on_failure": "ensure_results",
@@ -630,7 +681,13 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}",
+        "skill_command": "/autoskillit:generate-report",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}",
+          "results_path": "${{ context.experiment_results }}",
+          "output_mode": "${{ inputs.output_mode }}",
+          "issue_url": "${{ inputs.issue_url }}"
+        },
         "cwd": "${{ context.worktree_path }}",
         "step_name": "generate_report",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"
@@ -648,7 +705,14 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:generate-report ${{ context.worktree_path }} ${{ context.experiment_results }} --inconclusive --output-mode ${{ inputs.output_mode }} --issue-url ${{ inputs.issue_url }}",
+        "skill_command": "/autoskillit:generate-report",
+        "skill_inputs": {
+          "worktree_path": "${{ context.worktree_path }}",
+          "results_path": "${{ context.experiment_results }}",
+          "inconclusive": true,
+          "output_mode": "${{ inputs.output_mode }}",
+          "issue_url": "${{ inputs.issue_url }}"
+        },
         "cwd": "${{ context.worktree_path }}",
         "step_name": "generate_report_inconclusive",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"
@@ -675,7 +739,12 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ inputs.experiment_plan }} ${{ inputs.base_branch }}",
+        "skill_command": "/autoskillit:resolve-failures",
+        "skill_inputs": {
+          "plan_path": "${{ inputs.experiment_plan }}",
+          "base_branch": "${{ inputs.base_branch }}",
+          "worktree_path": "${{ context.worktree_path }}"
+        },
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "fix",
         "output_dir": "."

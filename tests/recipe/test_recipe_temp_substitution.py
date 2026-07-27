@@ -58,6 +58,9 @@ def test_load_recipe_custom_temp_dir_substituted(tmp_path: Path) -> None:
     recipe = load_recipe(path, temp_dir_relpath="custom/x")
     cmd = recipe.steps["setup"].with_args["cmd"]
     assert cmd == 'mkdir -p "custom/x/worktrees"'
+    declared_with_args = recipe.steps["setup"].declared_with_args
+    assert declared_with_args is not None
+    assert declared_with_args["cmd"] == 'mkdir -p "{{AUTOSKILLIT_TEMP}}/worktrees"'
 
 
 def test_load_recipe_rejects_yaml_unsafe_temp_dir_relpath(tmp_path: Path) -> None:
@@ -155,19 +158,19 @@ def test_load_and_validate_different_temp_dir_relpath_produces_different_content
 
 
 def test_assert_no_raw_placeholders_raises_on_literal_placeholder() -> None:
-    """_assert_no_raw_placeholders must raise ValueError on unresolved placeholders."""
-    from autoskillit.recipe.io import _assert_no_raw_placeholders
+    """assert_no_raw_placeholders must raise ValueError on unresolved placeholders."""
+    from autoskillit.recipe._io_loading import assert_no_raw_placeholders
 
     with pytest.raises(ValueError, match="Unresolved"):
-        _assert_no_raw_placeholders("some text with {{AUTOSKILLIT_TEMP}} inside")
+        assert_no_raw_placeholders("some text with {{AUTOSKILLIT_TEMP}} inside")
 
 
 def test_assert_no_raw_placeholders_passes_on_substituted_text() -> None:
-    """_assert_no_raw_placeholders must pass silently on substituted text."""
-    from autoskillit.recipe.io import _assert_no_raw_placeholders
+    """assert_no_raw_placeholders must pass silently on substituted text."""
+    from autoskillit.recipe._io_loading import assert_no_raw_placeholders
 
-    _assert_no_raw_placeholders("already substituted .autoskillit/temp/path")
-    _assert_no_raw_placeholders("")
+    assert_no_raw_placeholders("already substituted .autoskillit/temp/path")
+    assert_no_raw_placeholders("")
 
 
 def test_all_bundled_recipes_content_no_raw_placeholders(
@@ -194,36 +197,36 @@ def test_all_bundled_recipes_content_no_raw_placeholders(
 
 
 # ---------------------------------------------------------------------------
-# Tests for hidden ingredient residual check in _assert_no_raw_placeholders
+# Tests for hidden ingredient residual check in assert_no_raw_placeholders
 # ---------------------------------------------------------------------------
 
 
 def test_assert_no_raw_placeholders_rejects_hidden_input_template() -> None:
-    """_assert_no_raw_placeholders raises ValueError for residual hidden ${{ inputs.X }}."""
-    from autoskillit.recipe.io import _assert_no_raw_placeholders
+    """assert_no_raw_placeholders raises ValueError for residual hidden inputs."""
+    from autoskillit.recipe._io_loading import assert_no_raw_placeholders
 
     with pytest.raises(ValueError, match="kitchen_id"):
-        _assert_no_raw_placeholders(
+        assert_no_raw_placeholders(
             "skill_command: /autoskillit:diag ${{ inputs.kitchen_id }}",
             hidden_ingredient_names=frozenset({"kitchen_id"}),
         )
 
 
 def test_assert_no_raw_placeholders_allows_visible_ingredient_template() -> None:
-    """_assert_no_raw_placeholders does NOT raise for visible ingredient ${{ inputs.X }}."""
-    from autoskillit.recipe.io import _assert_no_raw_placeholders
+    """assert_no_raw_placeholders allows visible ingredient templates."""
+    from autoskillit.recipe._io_loading import assert_no_raw_placeholders
 
-    _assert_no_raw_placeholders(
+    assert_no_raw_placeholders(
         "skill_command: /autoskillit:implement ${{ inputs.task }}",
         hidden_ingredient_names=frozenset({"kitchen_id"}),
     )
 
 
 def test_assert_no_raw_placeholders_no_hidden_names_passes() -> None:
-    """_assert_no_raw_placeholders skips hidden check when hidden_ingredient_names is None."""
-    from autoskillit.recipe.io import _assert_no_raw_placeholders
+    """assert_no_raw_placeholders skips hidden checks when names are absent."""
+    from autoskillit.recipe._io_loading import assert_no_raw_placeholders
 
-    _assert_no_raw_placeholders(
+    assert_no_raw_placeholders(
         "skill_command: /autoskillit:diag ${{ inputs.kitchen_id }}",
         hidden_ingredient_names=None,
     )

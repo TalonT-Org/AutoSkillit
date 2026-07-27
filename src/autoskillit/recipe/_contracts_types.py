@@ -6,19 +6,40 @@ import dataclasses
 
 import regex as re
 
+from autoskillit.core import PreflightKind
+
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, slots=True)
 class SkillInput:
     name: str
     type: str
     required: bool
     recommended: bool = False
     nullable: bool = True
+
+    def accepts(self, value: object) -> bool:
+        normalized = self.type
+        if normalized in {
+            "str",
+            "string",
+            "optional_string",
+            "file_path",
+            "file_path_list",
+            "directory_path",
+        }:
+            return isinstance(value, str)
+        if normalized == "integer":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if normalized in {"number", "float"}:
+            return isinstance(value, int) and not isinstance(value, bool)
+        if normalized in {"boolean", "bool"}:
+            return isinstance(value, bool)
+        return False
 
 
 @dataclasses.dataclass
@@ -47,9 +68,15 @@ class SuccessQualifierEntry:
     qualifier: str
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class AuditAuthorityPublicationSpec:
+    output_field: str
+    prior_input_field: str
+
+
 @dataclasses.dataclass
 class SkillContract:
-    inputs: list[SkillInput]
+    inputs: tuple[SkillInput, ...]
     outputs: list[SkillOutput]
     expected_output_patterns: list[str] = dataclasses.field(default_factory=list)
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
@@ -60,6 +87,16 @@ class SkillContract:
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
     outcome_invariants: list[OutcomeInvariantEntry] = dataclasses.field(default_factory=list)
     success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
+    input_preflight: str | None = None
+    audit_authority_publication: AuditAuthorityPublicationSpec | None = None
+
+    def __post_init__(self) -> None:
+        if self.input_preflight is None:
+            return
+        try:
+            self.input_preflight = PreflightKind(self.input_preflight).value
+        except ValueError as exc:
+            raise ValueError(f"unsupported input preflight: {self.input_preflight!r}") from exc
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

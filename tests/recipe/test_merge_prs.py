@@ -108,13 +108,13 @@ def test_pmp_plan_step_captures_all_plan_paths(recipe) -> None:
 
 
 def test_pmp_audit_impl_uses_all_plan_paths(recipe) -> None:
-    """audit_impl skill_command must reference context.all_plan_paths, not inputs.plans_dir."""
+    """audit_impl binds context.all_plan_paths by name, not inputs.plans_dir."""
     step = recipe.steps["audit_impl"]
-    cmd = step.with_args["skill_command"]
-    assert "${{ context.all_plan_paths }}" in cmd, (
-        "audit_impl skill_command must reference context.all_plan_paths"
+    skill_inputs = step.with_args["skill_inputs"]
+    assert "${{ context.all_plan_paths }}" in skill_inputs["all_plan_paths"], (
+        "audit_impl all_plan_paths input must reference context.all_plan_paths"
     )
-    assert "inputs.plans_dir" not in cmd, (
+    assert all("inputs.plans_dir" not in str(value) for value in skill_inputs.values()), (
         "audit_impl must not pass inputs.plans_dir — directory discovery is fragile "
         "and inconsistent with how every other recipe invokes audit-impl"
     )
@@ -167,16 +167,13 @@ def test_pmp_open_integration_pr_captures_pr_url(recipe) -> None:
 
 
 def test_pmp_open_integration_pr_passes_four_args(recipe) -> None:
-    """skill_command must supply batch_branch, base_branch, pr_order_file, verdict."""
+    """Structured inputs supply batch_branch, base_branch, pr_order_file, and verdict."""
     step = recipe.steps["open_integration_pr"]
-    cmd = step.with_args.get("skill_command", "")
-    for arg in [
-        "context.batch_branch",
-        "inputs.base_branch",
-        "context.pr_order_file",
-        "context.verdict",
-    ]:
-        assert arg in cmd, f"open_integration_pr skill_command must include {arg}"
+    skill_inputs = step.with_args["skill_inputs"]
+    assert "context.batch_branch" in skill_inputs["batch_branch"]
+    assert "inputs.base_branch" in skill_inputs["base_branch"]
+    assert "context.pr_order_file" in skill_inputs["pr_order_file"]
+    assert "context.verdict" in skill_inputs["audit_verdict"]
 
 
 def test_pmp_base_branch_auto_detects(recipe) -> None:
@@ -261,9 +258,9 @@ def test_pmp_has_create_persistent_integration_step(recipe) -> None:
 
 def test_pmp_create_persistent_integration_passes_required_args(recipe) -> None:
     """create_persistent_integration must pass work_dir and base_branch."""
-    nested_args = recipe.steps["create_persistent_integration"].with_args.get("args", {})
-    assert "work_dir" in nested_args
-    assert "base_branch" in nested_args
+    with_args = recipe.steps["create_persistent_integration"].with_args
+    assert "work_dir" in with_args
+    assert "base_branch" in with_args
 
 
 def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None:
@@ -504,9 +501,9 @@ def test_pmp_has_review_pr_integration_step(recipe) -> None:
 
 
 def test_pmp_review_pr_integration_uses_batch_branch(recipe) -> None:
-    """B14: review_pr_integration skill_command must reference context.batch_branch."""
+    """B14: review_pr_integration binds context.batch_branch as feature_branch."""
     step = recipe.steps["review_pr_integration"]
-    assert "context.batch_branch" in step.with_args.get("skill_command", "")
+    assert "context.batch_branch" in step.with_args["skill_inputs"]["feature_branch"]
 
 
 def test_pmp_review_pr_integration_routes_changes_requested_to_resolve_review(recipe) -> None:

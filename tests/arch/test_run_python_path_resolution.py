@@ -158,12 +158,13 @@ def test_sentinel_keys_do_not_collide_with_callable_params() -> None:
 
 def test_sentinel_keys_subset_of_tool_params() -> None:
     """Sentinel keys must be a subset of run_python's tool-level params."""
-    from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS
-    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
+    from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, get_tool_def
 
-    tool_params = _TOOL_PARAMS["run_python"]
+    tool_def = get_tool_def("run_python")
+    assert tool_def is not None
+    tool_params = tool_def.param_set
     assert RUN_PYTHON_SENTINEL_KEYS < tool_params, (
-        f"Sentinel keys {RUN_PYTHON_SENTINEL_KEYS - tool_params} are not in _TOOL_PARAMS"
+        f"Sentinel keys {RUN_PYTHON_SENTINEL_KEYS - tool_params} are not in TOOL_REGISTRY"
     )
     non_sentinel_tool_params = tool_params - RUN_PYTHON_SENTINEL_KEYS - {"args"}
     assert non_sentinel_tool_params == set(), (

@@ -290,6 +290,32 @@ def test_shadow_publication_is_a_released_top_level_envelope() -> None:
     assert "ShadowContextAdmissionRecord" in CONTEXT_ADMISSION_TOP_LEVEL_DISCRIMINATORS
 
 
+@pytest.mark.parametrize("encoding_version", [True, 1.0, "1"])
+def test_shadow_constructor_rejects_non_integer_encoding_versions(
+    encoding_version: object,
+) -> None:
+    event = _authority_event()
+    transition = reduce_context_admission(_uninitialized(), event)
+    shadow = ShadowContextAdmissionRecord(
+        stream_key=_stream_key(),
+        event_id=event.event_id,
+        journal_sequence=1,
+        aggregate_revision=transition.next_state.aggregate_revision,
+        admission_sequence=transition.next_state.admission_sequence,
+        decision=transition.decision,
+        protocol_version=CONTEXT_ADMISSION_PROTOCOL_VERSION,
+        encoding_version=CONTEXT_ADMISSION_ENCODING_VERSION,
+        reason_code=transition.decision.reason_code,
+        targets=(),
+    )
+
+    with pytest.raises(
+        ContextAdmissionValidationError,
+        match="unsupported_context_admission_encoding",
+    ):
+        replace(shadow, encoding_version=encoding_version)  # type: ignore[arg-type]
+
+
 def test_top_level_discriminator_allowlist_matches_released_unions_exactly() -> None:
     expected = {
         value_type.__name__

@@ -189,7 +189,11 @@ class ShadowContextAdmissionRecord(_ContractValue):
         if self.journal_sequence == 0:
             _raise_invalid("invalid_shadow_journal_sequence")
         _validate_protocol_version(self.protocol_version)
-        if self.encoding_version != CONTEXT_ADMISSION_ENCODING_VERSION:
+        if (
+            isinstance(self.encoding_version, bool)
+            or not isinstance(self.encoding_version, int)
+            or self.encoding_version != CONTEXT_ADMISSION_ENCODING_VERSION
+        ):
             _raise_invalid("unsupported_context_admission_encoding")
         _validate_reason_code(self.reason_code)
         target_keys = tuple(_shadow_target_key(target) for target in self.targets)

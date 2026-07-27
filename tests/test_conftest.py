@@ -344,3 +344,28 @@ def test_resolve_test_config_cache_persists_across_calls():
         assert info.hits >= 1, "Expected at least 1 cache hit"
     finally:
         _resolve_test_config.cache_clear()
+
+
+def test_resolve_test_config_raises_on_load_failure(monkeypatch):
+    """_resolve_test_config must raise on config-resolution failure (fail-closed).
+
+    Previously the function caught Exception, emitted a warnings.warn (suppressed
+    by --disable-warnings under task test-check), and returned None. The fail-open
+    direction silently downgraded the test scope to per-feature default_enabled,
+    which is False for every registered feature (FEATURE_REGISTRY at
+    autoskillit/core/types/_type_constants_features.py:42-100). After the fix, a
+    broken config aborts collection instead of silently skipping 100+ tests.
+    """
+    from tests.conftest import _resolve_test_config
+
+    def _broken_load_config(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("broken")
+
+    monkeypatch.setattr("autoskillit.config.load_config", _broken_load_config)
+    _resolve_test_config.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match="broken"):
+            _resolve_test_config()
+    finally:
+        _resolve_test_config.cache_clear()

@@ -21,6 +21,7 @@ tasks:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
     cmds:
       - |
         mkdir -p temp
@@ -54,6 +55,7 @@ tasks:
       PYTHONDONTWRITEBYTECODE: "1"
       OMP_NUM_THREADS: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+      AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
     cmds:
       - |
         mkdir -p temp

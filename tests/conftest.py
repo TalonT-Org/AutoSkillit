@@ -71,11 +71,13 @@ _filter_mode_key = pytest.StashKey[str | None]()
 _selected_count_key = pytest.StashKey[int | None]()
 _deselected_count_key = pytest.StashKey[int | None]()
 _full_run_reason_key = pytest.StashKey[str | None]()
+_feature_scope_key = pytest.StashKey[dict[str, bool] | None]()
 
 # Module-level accumulator for xdist worker-to-controller IPC.
 # Populated by pytest_testnodedown (controller); cleared by pytest_configure
 # at session start so in-process pytester reruns don't leak stale data.
 _worker_filter_counts: dict[str, int | None] = {}
+_worker_feature_scope: dict[str, bool] = {}
 
 
 class TimeoutTier:
@@ -557,10 +559,12 @@ def pytest_configure(config: pytest.Config) -> None:
 
     # Reset xdist IPC accumulator so in-process pytester reruns don't leak counts.
     _worker_filter_counts.clear()
+    _worker_feature_scope.clear()
 
     config.stash[_scope_key] = None
     config.stash[_filter_mode_key] = None
     config.stash[_full_run_reason_key] = None
+    config.stash[_feature_scope_key] = None
 
     cli_mode = config.getoption("--filter-mode", default=None)
     env_val = os.environ.get("AUTOSKILLIT_TEST_FILTER", "")
@@ -635,34 +639,35 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @functools.lru_cache(maxsize=1)
-def _resolve_test_config() -> "AutomationConfig | None":
+def _resolve_test_config() -> "AutomationConfig":
     """Resolve full config for test collection via full config resolution.
 
     Uses the same dynaconf chain as production: defaults.yaml → project config → env vars.
-    Returns None on any failure (fail-open: individual features fall back to
-    FEATURE_REGISTRY[name].default_enabled).
+
+    Fail-closed: any exception raised by ``load_config`` (or a type mismatch in
+    the returned value) propagates to the caller. Since this function runs at
+    pytest collection time inside ``pytest_collection_modifyitems``, an unhandled
+    exception aborts collection with a clear error rather than silently
+    downgrading the test scope to per-feature ``default_enabled`` (which is
+    ``False`` for every currently-registered feature — see
+    ``FEATURE_REGISTRY`` in
+    ``src/autoskillit/core/types/_type_constants_features.py:42-100``).
+
+    ``lru_cache`` only caches successful returns; a transient failure will
+    retry on the next call.
     """
-    try:
-        from pathlib import Path
+    from pathlib import Path
 
-        from autoskillit.config.settings import AutomationConfig as _AutomationConfig
-        from autoskillit.config.settings import load_config
+    from autoskillit.config import load_config
+    from autoskillit.config.settings import AutomationConfig as _AutomationConfig
 
-        # Anchor to repo root via this file's known location (tests/conftest.py)
-        # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.
-        repo_root = Path(__file__).resolve().parent.parent
-        cfg = load_config(repo_root)
-        if not isinstance(cfg, _AutomationConfig):
-            raise TypeError(f"load_config returned {type(cfg)!r}, expected AutomationConfig")
-        return cfg
-    except Exception as exc:
-        import warnings
-
-        warnings.warn(
-            f"Feature flag config resolution failed, falling back to defaults: {exc}",
-            stacklevel=1,
-        )
-        return None
+    # Anchor to repo root via this file's known location (tests/conftest.py)
+    # rather than Path.cwd(), which varies across IDE runners and monkeypatch.chdir.
+    repo_root = Path(__file__).resolve().parent.parent
+    cfg = load_config(repo_root)
+    if not isinstance(cfg, _AutomationConfig):
+        raise TypeError(f"load_config returned {type(cfg)!r}, expected AutomationConfig")
+    return cfg
 
 
 def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
@@ -674,7 +679,6 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
     2. If unset, resolve via full config chain (defaults.yaml → project config
        → env vars) using load_config().  This respects experimental_enabled and
        per-feature config overrides.
-    3. If config resolution fails, fall back to FEATURE_REGISTRY[name].default_enabled.
        Unknown feature names return True (fail-open).
 
     Args:
@@ -700,9 +704,6 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
         return True
 
     cfg = _resolve_test_config()
-    if cfg is None:
-        return defn.default_enabled
-
     return is_feature_enabled(
         feature_name, cfg.features, experimental_enabled=cfg.experimental_enabled
     )
@@ -741,6 +742,18 @@ def pytest_collection_modifyitems(
 
     # Feature gate pass — orthogonal to layer/size, runs on every worker
     _test_features_env = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
+    # Stash the full feature scope for all registered features (not just those
+    # encountered on items) so pytest_terminal_summary can emit a single line
+    # describing the test run's effective feature scope. Under xdist
+    # (-n 4 --dist worksteal) this is populated on each worker, then
+    # transferred to the controller via workeroutput in pytest_sessionfinish.
+    from autoskillit.core import FEATURE_REGISTRY
+
+    _feature_scope: dict[str, bool] = {
+        name: _is_test_feature_enabled(name, env_val=_test_features_env)
+        for name in FEATURE_REGISTRY
+    }
+    config.stash[_feature_scope_key] = _feature_scope
     for item in items:
         marker = item.get_closest_marker("feature")
         if marker and marker.args:
@@ -753,16 +766,20 @@ def pytest_collection_modifyitems(
                 )
                 continue
             if not _is_test_feature_enabled(feature_name, env_val=_test_features_env):
-                env_display = _test_features_env or ""
-                item.add_marker(
-                    pytest.mark.skip(
-                        reason=(
-                            f"feature '{feature_name}' disabled"
-                            f" (AUTOSKILLIT_TEST_FEATURES='{env_display}'"
-                            f" does not include '{feature_name}')"
-                        )
+                # Step 2E: split skip reason by gating mechanism. Whitelist
+                # mode (AUTOSKILLIT_TEST_FEATURES set) names the env var;
+                # config-resolution mode uses a dedicated message so users
+                # can tell at a glance which path actually disabled the test.
+                if _test_features_env is not None:
+                    env_display = _test_features_env or ""
+                    reason = (
+                        f"feature '{feature_name}' disabled"
+                        f" (AUTOSKILLIT_TEST_FEATURES='{env_display}'"
+                        f" does not include '{feature_name}')"
                     )
-                )
+                else:
+                    reason = f"feature '{feature_name}' disabled via config resolution"
+                item.add_marker(pytest.mark.skip(reason=reason))
 
     scope: set[_Path] | None = config.stash.get(_scope_key, None)
     if scope is None:
@@ -865,6 +882,12 @@ def pytest_sessionfinish(session, exitstatus):
         session.config.workeroutput["filter_deselected"] = session.config.stash.get(
             _deselected_count_key, None
         )
+        # Step 2D: feature-scope propagation. Must happen BEFORE the early
+        # return — the controller only receives data via workeroutput, and
+        # any write after `return` is dead code on workers.
+        session.config.workeroutput["feature_scope"] = session.config.stash.get(
+            _feature_scope_key, None
+        )
         return
     out_path = os.environ.get("AUTOSKILLIT_FILTER_STATS_FILE")
     if not out_path:
@@ -915,3 +938,34 @@ def pytest_testnodedown(node, error):
     if selected is not None and deselected is not None:
         _worker_filter_counts["selected"] = selected
         _worker_filter_counts["deselected"] = deselected
+    # Step 2D: feature-scope aggregation from the first reporting worker.
+    # All workers run pytest_collection_modifyitems over the full pre-distribution
+    # item list (identical resolution across workers under --dist worksteal), so
+    # any single worker's scope is representative. "First worker wins" avoids
+    # pathological cases where a worker's scope is unexpectedly empty.
+    if not _worker_feature_scope:
+        scope = wo.get("feature_scope")
+        if scope:
+            _worker_feature_scope.update(scope)
+
+
+def pytest_terminal_summary(terminalreporter, config: pytest.Config) -> None:
+    """Emit a single ``Feature scope:`` line so the test run's effective feature
+    gate state is visible regardless of ``--disable-warnings``.
+
+    Fallback order: stash first (in-process / non-xdist runs where
+    ``pytest_collection_modifyitems`` populated it), then the
+    ``_worker_feature_scope`` accumulator (xdist runs where data was
+    transferred via ``workeroutput`` -> ``pytest_testnodedown``). If both are
+    empty, no summary is emitted.
+    """
+    scope = config.stash.get(_feature_scope_key, None)
+    if scope is None:
+        scope = _worker_feature_scope or None
+    if not scope:
+        return
+    parts = " ".join(
+        f"{name}=enabled" if enabled else f"{name}=disabled"
+        for name, enabled in sorted(scope.items())
+    )
+    terminalreporter.write_line(f"Feature scope: {parts}")

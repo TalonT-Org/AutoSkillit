@@ -400,10 +400,14 @@ class TestCIWorkflowExpressions:
             "Run tests step env block"
         )
 
-        exp_str = str(exp_val)
-        assert "merge_group" in exp_str, (
-            "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED expression must "
-            "handle merge_group events. Current expression: " + exp_str
+        # Issue #4385: the env var is set unconditionally to "true" across all
+        # event types (pull_request, merge_group, push) so the test suite has a
+        # single deterministic feature scope. The previous conditional
+        # expression was the source of install-type-dependent test scope.
+        exp_str = str(exp_val).strip().strip('"').strip("'").lower()
+        assert exp_str == "true", (
+            "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED must be set to "
+            "unconditional 'true' (issue #4385). Current expression: " + exp_str
         )
 
 

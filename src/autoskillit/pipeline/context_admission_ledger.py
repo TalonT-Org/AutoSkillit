@@ -812,13 +812,22 @@ class DefaultContextAdmissionLedger:
                 self._ensure_store()
                 connection = self._connect()
                 connection.execute("BEGIN")
+                connection.setlimit(
+                    sqlite3.SQLITE_LIMIT_LENGTH,
+                    max(1, _MAX_RECOVERY_BYTES),
+                )
+                read_budget = _LedgerReadBudget("recovery-read-limit-exceeded")
                 self._validate_integrity(connection)
-                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+                metadata = dict(
+                    _read_bounded_rows(
+                        connection.execute("SELECT key, value FROM metadata"),
+                        read_budget,
+                    )
+                )
                 self._validate_metadata(metadata)
-                _preflight_storage_routes(connection)
+                _preflight_storage_routes(connection, read_budget)
                 self._stream_health.clear()
                 self._unresolved_streams.clear()
-                read_budget = _LedgerReadBudget("recovery-read-limit-exceeded")
                 stream_rows = _read_bounded_rows(
                     connection.execute(
                         """
@@ -938,6 +947,12 @@ class DefaultContextAdmissionLedger:
                         recovered_streams=(),
                         unresolved_streams=(),
                     )
+                if primary_code == sqlite3.SQLITE_TOOBIG:
+                    self._set_store_failure(
+                        ContextAdmissionStorageFailureReason.INTEGRITY,
+                        "recovery-read-limit-exceeded",
+                    )
+                    return self._recovery_result()
                 reason = (
                     ContextAdmissionStorageFailureReason.INTEGRITY
                     if primary_code == sqlite3.SQLITE_CORRUPT
@@ -977,6 +992,10 @@ class DefaultContextAdmissionLedger:
             try:
                 connection = self._connect()
                 connection.execute("BEGIN")
+                connection.setlimit(
+                    sqlite3.SQLITE_LIMIT_LENGTH,
+                    max(1, _MAX_RECOVERY_BYTES),
+                )
                 read_budget = _LedgerReadBudget("inspection-read-limit-exceeded")
                 row = connection.execute(
                     """
@@ -1098,6 +1117,20 @@ class DefaultContextAdmissionLedger:
                     _rollback(connection)
                 if primary_code in _SQLITE_BUSY_CODES or primary_code in _SQLITE_RECOVERY_CODES:
                     return _contended_inspection(stream_key)
+                if primary_code == sqlite3.SQLITE_TOOBIG:
+                    self._set_store_failure(
+                        ContextAdmissionStorageFailureReason.INTEGRITY,
+                        "inspection-read-limit-exceeded",
+                    )
+                    return _empty_inspection(
+                        stream_key,
+                        ContextAdmissionStreamHealth(
+                            stream_key,
+                            ContextAdmissionStorageHealthStatus.FAIL_CLOSED,
+                            failure_reason=self._store_health.failure_reason,
+                            reason_code=self._store_health.reason_code,
+                        ),
+                    )
                 reason = (
                     ContextAdmissionStorageFailureReason.INTEGRITY
                     if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
@@ -1565,7 +1598,10 @@ def _stored_stream_health(
     )
 
 
-def _preflight_storage_routes(connection: sqlite3.Connection) -> None:
+def _preflight_storage_routes(
+    connection: sqlite3.Connection,
+    read_budget: _LedgerReadBudget,
+) -> None:
     queries = (
         "SELECT genesis_envelope FROM streams",
         "SELECT state_envelope FROM streams",
@@ -1575,7 +1611,7 @@ def _preflight_storage_routes(connection: sqlite3.Connection) -> None:
         "SELECT shadow_envelope FROM shadow_decisions",
     )
     for query in queries:
-        for (encoded,) in connection.execute(query):
+        for (encoded,) in _read_bounded_rows(connection.execute(query), read_budget):
             encoded_bytes = bytes(encoded)
             encoding_version, protocol_version, discriminator = _envelope_header(encoded_bytes)
             if encoding_version != CONTEXT_ADMISSION_ENCODING_VERSION:

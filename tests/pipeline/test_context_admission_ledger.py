@@ -245,7 +245,29 @@ def test_recovery_and_inspection_hold_one_snapshot_across_projection_reads(
     assert 0 < inspection_stream_index < inspection_journal_index
 
 
-def test_recovery_enforces_aggregate_row_and_byte_budgets(
+@pytest.mark.parametrize("row_limit", [3, 5])
+def test_recovery_enforces_metadata_and_preflight_row_budgets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    row_limit: int,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    assert (
+        DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
+        is ContextAdmissionAccountingStatus.RECORDED
+    )
+    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_ROWS", row_limit)
+
+    row_bounded = DefaultContextAdmissionLedger(authority)
+    recovered = row_bounded.recover_all()
+
+    assert recovered.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert recovered.store_health.failure_reason is ContextAdmissionStorageFailureReason.INTEGRITY
+    assert recovered.store_health.reason_code == "recovery-read-limit-exceeded"
+
+
+def test_recovery_enforces_sqlite_value_and_aggregate_byte_budgets(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -255,18 +277,7 @@ def test_recovery_enforces_aggregate_row_and_byte_budgets(
         DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
         is ContextAdmissionAccountingStatus.RECORDED
     )
-    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_ROWS", 2)
 
-    row_bounded = DefaultContextAdmissionLedger(authority)
-    recovered = row_bounded.recover_all()
-
-    assert recovered.status is ContextAdmissionStorageHealthStatus.HEALTHY
-    health = row_bounded.stream_health(key)
-    assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
-    assert health.failure_reason is ContextAdmissionStorageFailureReason.INTEGRITY
-    assert health.reason_code == "recovery-read-limit-exceeded"
-
-    monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_ROWS", 100_000)
     monkeypatch.setattr(ledger_module, "_MAX_RECOVERY_BYTES", 1)
     byte_bounded = DefaultContextAdmissionLedger(authority)
 

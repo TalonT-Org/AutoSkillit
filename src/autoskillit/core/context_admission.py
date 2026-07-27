@@ -2939,14 +2939,13 @@ def replay_context_admission(
     return AdmissionReplay(final_state=state, transitions=tuple(transitions))
 
 
+_CONTEXT_ADMISSION_REDUCER_V1 = ContextAdmissionReducerDef(
+    protocol_version=1,
+    reduce_transition=reduce_context_admission,
+    replay_stream=replay_context_admission,
+)
 CONTEXT_ADMISSION_REDUCER_REGISTRY: Mapping[int, ContextAdmissionReducerDef] = MappingProxyType(
-    {
-        1: ContextAdmissionReducerDef(
-            protocol_version=1,
-            reduce_transition=reduce_context_admission,
-            replay_stream=replay_context_admission,
-        )
-    }
+    {_CONTEXT_ADMISSION_REDUCER_V1.protocol_version: _CONTEXT_ADMISSION_REDUCER_V1}
 )
 
 

@@ -402,6 +402,7 @@ def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:
 def test_reducer_registry_is_exact_and_rejects_unsupported_versions() -> None:
     assert tuple(CONTEXT_ADMISSION_REDUCER_REGISTRY) == (1,)
     reducer_def = context_admission_reducer_for_protocol(1)
+    assert reducer_def.protocol_version == tuple(CONTEXT_ADMISSION_REDUCER_REGISTRY)[0]
     assert reducer_def.reduce_transition is reduce_context_admission
     with pytest.raises(UnsupportedContextAdmissionProtocolError):
         context_admission_reducer_for_protocol(2)

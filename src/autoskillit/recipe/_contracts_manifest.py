@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal, assert_never, cast
 
@@ -125,6 +125,10 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     authority_data = skill_data.get("audit_authority_publication")
     authority_publication = None
     if authority_data is not None:
+        if not isinstance(authority_data, Mapping):
+            raise ValueError(
+                f"audit_authority_publication for skill '{skill_name}' must be a mapping"
+            )
         output_field = authority_data.get("output_field", "")
         prior_input_field = authority_data.get("prior_input_field", "")
         input_names = {item.name for item in inputs}

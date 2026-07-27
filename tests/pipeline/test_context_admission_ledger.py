@@ -798,6 +798,47 @@ def test_apply_persists_sticky_failure_for_corrupt_materialized_state(
     )
 
 
+@pytest.mark.parametrize(
+    ("status", "failure_reason", "reason_code"),
+    [
+        ("unknown", None, None),
+        (
+            ContextAdmissionStorageHealthStatus.HEALTHY.value,
+            ContextAdmissionStorageFailureReason.IO.value,
+            "inconsistent-health",
+        ),
+    ],
+)
+def test_apply_rejects_invalid_persisted_stream_health(
+    tmp_path: Path,
+    status: str,
+    failure_reason: str | None,
+    reason_code: str | None,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        connection.execute(
+            """
+            UPDATE streams
+            SET health_status = ?, failure_reason = ?, reason_code = ?
+            """,
+            (status, failure_reason, reason_code),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    failed = ledger.apply(key, open_event())
+
+    assert failed.status is ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED
+    assert failed.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert failed.reason_code == "invalid-stream-health"
+
+
 def test_apply_retries_when_corruption_failure_marker_is_contended(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

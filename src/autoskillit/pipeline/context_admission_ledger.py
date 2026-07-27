@@ -309,13 +309,30 @@ class DefaultContextAdmissionLedger:
                             ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
                             "stream-key-mismatch",
                         )
-                    if row[5] == ContextAdmissionStorageHealthStatus.FAIL_CLOSED.value:
+                    try:
+                        persisted_health = _stored_stream_health(
+                            stream_key,
+                            row[5],
+                            row[6],
+                            row[7],
+                        )
+                    except (ContextAdmissionValidationError, ValueError) as exc:
+                        raise _LedgerOpenError(
+                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                            "invalid-stream-health",
+                        ) from exc
+                    if persisted_health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
                         _rollback(connection)
                         return ContextAdmissionAccountingResult(
                             status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
                             stream_key=stream_key,
-                            failure_reason=ContextAdmissionStorageFailureReason(row[6]),
-                            reason_code=str(row[7]),
+                            failure_reason=persisted_health.failure_reason,
+                            reason_code=persisted_health.reason_code,
+                        )
+                    if persisted_health.status is not ContextAdmissionStorageHealthStatus.HEALTHY:
+                        raise _LedgerOpenError(
+                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                            "invalid-stream-health",
                         )
                     try:
                         current_state = _decode_state(bytes(row[1]))

@@ -1322,6 +1322,11 @@ class DefaultContextAdmissionLedger:
                 sidecar.lstat()
             except FileNotFoundError:
                 continue
+            except OSError as exc:
+                raise _LedgerOpenError(
+                    ContextAdmissionStorageFailureReason.IO,
+                    "store-sidecar-unavailable",
+                ) from exc
             if not allow_regular:
                 raise _LedgerOpenError(
                     ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,

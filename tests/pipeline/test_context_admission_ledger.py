@@ -566,6 +566,31 @@ def test_existing_store_rejects_insecure_private_file_modes_without_repair(
     assert stat.S_IMODE(target.stat().st_mode) == 0o644
 
 
+def test_existing_store_normalizes_sidecar_metadata_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = _authority(tmp_path)
+    assert (
+        DefaultContextAdmissionLedger(authority).recover_all().status
+        is ContextAdmissionStorageHealthStatus.HEALTHY
+    )
+    original_lstat = Path.lstat
+
+    def fail_sidecar(path: Path) -> os.stat_result:
+        if str(path).endswith("-journal"):
+            raise OSError("sidecar metadata unavailable")
+        return original_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", fail_sidecar)
+
+    result = DefaultContextAdmissionLedger(authority).recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert result.store_health.failure_reason is ContextAdmissionStorageFailureReason.IO
+    assert result.store_health.reason_code == "store-sidecar-unavailable"
+
+
 def test_existing_database_hard_link_fails_closed_without_unlinking(
     tmp_path: Path,
 ) -> None:

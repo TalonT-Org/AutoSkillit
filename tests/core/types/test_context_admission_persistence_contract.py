@@ -365,6 +365,98 @@ def test_envelope_decoder_consumes_deterministic_upcaster_route(
     assert decoded.payload == _authority_event()
 
 
+def _legacy_envelope_bytes() -> bytes:
+    encoded = encode_stored_context_admission_envelope(
+        make_stored_context_admission_envelope(_authority_event())
+    )
+    return encoded.replace(b'"encoding_version":1', b'"encoding_version":0', 1)
+
+
+@pytest.mark.parametrize(
+    "routes",
+    [
+        {},
+        {
+            (0, 1): lambda value: value,
+            (0, 2): lambda value: value,
+        },
+    ],
+)
+def test_envelope_decoder_rejects_missing_or_ambiguous_upcaster_routes(
+    monkeypatch: pytest.MonkeyPatch,
+    routes: dict[tuple[int, int], Callable[[bytes], bytes]],
+) -> None:
+    monkeypatch.setattr(
+        persistence_types,
+        "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
+        MappingProxyType(routes),
+    )
+
+    with pytest.raises(ContextAdmissionValidationError, match="unsupported"):
+        decode_stored_context_admission_envelope(_legacy_envelope_bytes())
+
+
+@pytest.mark.parametrize("target_version", [0, 2])
+def test_envelope_decoder_rejects_invalid_upcaster_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    target_version: int,
+) -> None:
+    monkeypatch.setattr(
+        persistence_types,
+        "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
+        MappingProxyType({(0, target_version): lambda value: value}),
+    )
+
+    with pytest.raises(ContextAdmissionValidationError, match="ambiguous"):
+        decode_stored_context_admission_envelope(_legacy_envelope_bytes())
+
+
+def test_envelope_decoder_rejects_nonbytes_upcaster_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invalid_upcaster = cast(Callable[[bytes], bytes], lambda _value: "not-bytes")
+    monkeypatch.setattr(
+        persistence_types,
+        "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
+        MappingProxyType({(0, 1): invalid_upcaster}),
+    )
+
+    with pytest.raises(ContextAdmissionValidationError, match="invalid_context_admission_upcast"):
+        decode_stored_context_admission_envelope(_legacy_envelope_bytes())
+
+
+@pytest.mark.parametrize(
+    ("old_header", "new_header"),
+    [
+        (b'"protocol_version":1', b'"protocol_version":2'),
+        (
+            b'"type_discriminator":"AuthorityUnavailableEvent"',
+            b'"type_discriminator":"AdmissionDecision"',
+        ),
+    ],
+)
+def test_envelope_decoder_rejects_upcaster_header_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    old_header: bytes,
+    new_header: bytes,
+) -> None:
+    def alter_header(value: bytes) -> bytes:
+        return value.replace(
+            b'"encoding_version":0',
+            b'"encoding_version":1',
+            1,
+        ).replace(old_header, new_header, 1)
+
+    monkeypatch.setattr(
+        persistence_types,
+        "CONTEXT_ADMISSION_ENVELOPE_UPCASTERS",
+        MappingProxyType({(0, 1): alter_header}),
+    )
+
+    with pytest.raises(ContextAdmissionValidationError, match="invalid_context_admission_upcast"):
+        decode_stored_context_admission_envelope(_legacy_envelope_bytes())
+
+
 @pytest.mark.parametrize(
     "value",
     [

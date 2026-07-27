@@ -493,6 +493,8 @@ class ContextAdmissionInspectionResult:
     latest_journal_sequence: int
 
     def __post_init__(self) -> None:
+        if self.stream_key != self.health.stream_key:
+            raise ValueError("inspection_stream_health_identity_mismatch")
         _validate_non_negative(
             self.latest_journal_sequence,
             "invalid_latest_journal_sequence",

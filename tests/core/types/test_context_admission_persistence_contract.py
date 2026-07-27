@@ -26,8 +26,11 @@ from autoskillit.core import (
     ContextAdmissionAccountingResult,
     ContextAdmissionAccountingStatus,
     ContextAdmissionEvent,
+    ContextAdmissionInspectionResult,
     ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
+    ContextAdmissionStorageHealthStatus,
+    ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
     ContextSessionId,
@@ -288,6 +291,28 @@ def test_recursive_persistence_boundary_rejects_sensitive_values(
 def test_recursive_persistence_boundary_rejects_mutable_mappings() -> None:
     with pytest.raises(ContextAdmissionValidationError, match="invalid_persistence_value"):
         validate_context_admission_persistence_value({"benign": 1})
+
+
+def test_inspection_result_rejects_mismatched_stream_health_identity() -> None:
+    key = _stream_key()
+    mismatched_key = replace(
+        key,
+        current_thread_id=ContextThreadId("thread-other"),
+    )
+    with pytest.raises(ValueError, match="inspection_stream_health_identity_mismatch"):
+        ContextAdmissionInspectionResult(
+            stream_key=key,
+            health=ContextAdmissionStreamHealth(
+                mismatched_key,
+                ContextAdmissionStorageHealthStatus.HEALTHY,
+            ),
+            state=None,
+            events=(),
+            decisions=(),
+            effects=(),
+            shadows=(),
+            latest_journal_sequence=0,
+        )
 
 
 def test_accounting_results_enforce_nonadmitting_storage_outcomes() -> None:

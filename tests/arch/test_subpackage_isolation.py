@@ -1205,11 +1205,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "downstream layers from defining incompatible wire contracts.",
     ),
     "pipeline/context_admission_ledger.py": (
-        2150,
+        2300,
         "REQ-CNST-010-E15: #4334 keeps the crash-safe SQLite transaction boundary, "
         "journal replay verification, sticky health fencing, and exhaustive shadow "
-        "projection in one IL-1 authority so storage and reducer publication invariants "
-        "cannot drift across independently mutable modules.",
+        "projection in one IL-1 authority; consistent recovery snapshots and shared "
+        "row/byte budgets remain beside replay validation so storage and reducer "
+        "publication invariants cannot drift across independently mutable modules.",
     ),
 }
 

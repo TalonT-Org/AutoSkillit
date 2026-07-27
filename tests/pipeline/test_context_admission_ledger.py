@@ -1238,6 +1238,115 @@ def test_inspection_replays_validly_encoded_publications_after_recovery(
     assert inspection.health.reason_code == "journal-decision-mismatch"
 
 
+@pytest.mark.parametrize(
+    ("corruption", "expected_reason"),
+    [
+        ("effect-ordinal", "effect-sequence-gap"),
+        ("effect-payload", "journal-effects-mismatch"),
+        ("prior-coordinate", "journal-prior-coordinate-mismatch"),
+        ("result-coordinate", "journal-result-coordinate-mismatch"),
+        ("shadow-content", "journal-shadow-mismatch"),
+    ],
+)
+def test_recovery_rejects_projection_corruption_with_exact_reason(
+    tmp_path: Path,
+    corruption: str,
+    expected_reason: str,
+) -> None:
+    authority = _authority(tmp_path)
+    key = stream_key()
+    ledger = DefaultContextAdmissionLedger(authority)
+    opened = ledger.apply(key, open_event())
+    assert opened.transition is not None
+    assert opened.status is ContextAdmissionAccountingStatus.RECORDED
+    proposed = ledger.apply(
+        key,
+        propose_event(opened.transition.next_state, occurrence()),
+    )
+    assert proposed.status is ContextAdmissionAccountingStatus.RECORDED
+    connection = sqlite3.connect(authority.database_path)
+    try:
+        if corruption == "effect-ordinal":
+            connection.execute(
+                """
+                UPDATE effect_outbox
+                SET effect_ordinal = 1
+                WHERE journal_sequence = 1 AND effect_ordinal = 0
+                """
+            )
+        elif corruption == "effect-payload":
+            connection.execute(
+                """
+                UPDATE effect_outbox
+                SET effect_envelope = (
+                    SELECT effect_envelope
+                    FROM effect_outbox
+                    WHERE journal_sequence = 2 AND effect_ordinal = 0
+                )
+                WHERE journal_sequence = 1 AND effect_ordinal = 0
+                """
+            )
+        elif corruption == "prior-coordinate":
+            connection.execute(
+                """
+                UPDATE journal_events
+                SET prior_aggregate_revision = prior_aggregate_revision + 1
+                WHERE journal_sequence = 2
+                """
+            )
+        elif corruption == "result-coordinate":
+            connection.execute(
+                """
+                UPDATE journal_events
+                SET resulting_aggregate_revision = resulting_aggregate_revision + 1
+                WHERE journal_sequence = 2
+                """
+            )
+        else:
+            encoded = bytes(
+                connection.execute(
+                    """
+                    SELECT shadow_envelope
+                    FROM shadow_decisions
+                    WHERE journal_sequence = 1
+                    """
+                ).fetchone()[0]
+            )
+            envelope = persistence_types.decode_stored_context_admission_envelope(encoded)
+            assert isinstance(
+                envelope.payload,
+                persistence_types.ShadowContextAdmissionRecord,
+            )
+            tampered = replace(
+                envelope.payload,
+                journal_sequence=envelope.payload.journal_sequence + 1,
+            )
+            connection.execute(
+                """
+                UPDATE shadow_decisions
+                SET shadow_envelope = ?
+                WHERE journal_sequence = 1
+                """,
+                (
+                    persistence_types.encode_stored_context_admission_envelope(
+                        persistence_types.make_stored_context_admission_envelope(tampered)
+                    ),
+                ),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+    recovered = DefaultContextAdmissionLedger(authority)
+    result = recovered.recover_all()
+
+    assert result.status is ContextAdmissionStorageHealthStatus.HEALTHY
+    health = recovered.stream_health(key)
+    assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+    assert health.failure_reason is ContextAdmissionStorageFailureReason.REPLAY_MISMATCH
+    assert health.reason_code == expected_reason
+
+
 def test_expired_event_exact_replay_revalidates_stored_decision(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

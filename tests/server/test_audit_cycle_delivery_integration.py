@@ -591,6 +591,7 @@ def test_skill_contract_identity_fails_closed_for_stale_contract_shape(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     stale_contract = SimpleNamespace(
+        audit_authority_publication=None,
         completion_required=True,
         inputs=(),
     )
@@ -884,7 +885,12 @@ def test_successful_audit_result_publishes_protected_successor_identity(
                         }
                     ],
                     "outputs": [{"name": "authority_file", "type": "file_path"}],
-                }
+                },
+                "dry-walkthrough": {
+                    "input_preflight": "audit_cycle_inventory",
+                    "inputs": [],
+                    "outputs": [],
+                },
             }
         },
     )

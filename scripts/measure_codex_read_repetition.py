@@ -70,7 +70,9 @@ _CUSTOM_TOOL_CALL_CMD_PAT = re.compile(
 _VERSION_V2_MARKER = "Context Intake Discipline v2:"
 _VERSION_V1_MARKER = "Context Intake Discipline v1:"
 
-_ROLLOUT_DATE_PAT = re.compile(r"(\d{4})/(\d{2})/rollout-")
+# The YYYY/MM directory pair is month precision only; day precision lives in the
+# filename itself, e.g. rollout-2026-05-26T07-30-33-<thread-id>.jsonl.
+_ROLLOUT_DATE_PAT = re.compile(r"rollout-(\d{4}-\d{2}-\d{2})T")
 
 
 def is_bounded_read(cmd: str) -> bool:
@@ -234,18 +236,30 @@ def aggregate_report(rollout_paths: list[Path]) -> dict[str, Any]:
     }
 
 
+def _date_within_bound(date: str, bound: str, *, is_lower: bool) -> bool:
+    """Compare a day-precision date against a since/until bound of either precision.
+
+    A month-precision bound (`YYYY-MM`) is matched against the date's month only, so
+    every day in that month satisfies it. A day-precision bound (`YYYY-MM-DD`)
+    compares in full, per the inclusive-boundary contract documented on --since/--until.
+    """
+    if len(bound) == len("YYYY-MM"):
+        date = date[: len(bound)]
+    return date >= bound if is_lower else date <= bound
+
+
 def _find_rollouts(log_root: Path, since: str | None, until: str | None) -> list[Path]:
     paths = sorted(log_root.glob("*/*/rollout-*.jsonl"))
     if since is None and until is None:
         return paths
     filtered = []
     for p in paths:
-        m = _ROLLOUT_DATE_PAT.search(p.as_posix())
-        date = "-".join(m.groups()) if m else None
+        m = _ROLLOUT_DATE_PAT.search(p.name)
+        date = m.group(1) if m else None
         if date is not None:
-            if since is not None and date < since:
+            if since is not None and not _date_within_bound(date, since, is_lower=True):
                 continue
-            if until is not None and date > until:
+            if until is not None and not _date_within_bound(date, until, is_lower=False):
                 continue
         filtered.append(p)
     return filtered

@@ -145,17 +145,42 @@ def test_find_rollouts_matches_the_real_two_level_yyyy_mm_layout(tmp_path: Path)
     assert found == [rollout]
 
 
-def test_find_rollouts_date_filter_actually_filters(tmp_path: Path) -> None:
-    paths = {}
-    for year_month in ("2026/06", "2026/07", "2026/08"):
-        directory = tmp_path / year_month
-        directory.mkdir(parents=True)
-        path = directory / "rollout-x.jsonl"
-        path.write_text("{}")
-        paths[year_month] = path
+def _write_dated_rollout(tmp_path: Path, year: str, month: str, day: str, thread: str) -> Path:
+    directory = tmp_path / year / month
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"rollout-{year}-{month}-{day}T10-00-00-{thread}.jsonl"
+    path.write_text("{}")
+    return path
 
+
+def test_find_rollouts_date_filter_actually_filters(tmp_path: Path) -> None:
+    june = _write_dated_rollout(tmp_path, "2026", "06", "15", "thread-june")
+    july_01 = _write_dated_rollout(tmp_path, "2026", "07", "01", "thread-july-01")
+    july_15 = _write_dated_rollout(tmp_path, "2026", "07", "15", "thread-july-15")
+    july_31 = _write_dated_rollout(tmp_path, "2026", "07", "31", "thread-july-31")
+    august = _write_dated_rollout(tmp_path, "2026", "08", "05", "thread-august")
+
+    # Month-precision bounds still work at day-precision resolution: every day
+    # inside the bounded month is included.
     found = measurer._find_rollouts(tmp_path, "2026-07", "2026-07")
-    assert found == [paths["2026/07"]]
+    assert found == [july_01, july_15, july_31]
+
+    # Day-precision --since must not silently drop the whole target month. Before
+    # the fix, the extracted date key was month precision ("2026-07"), which
+    # string-sorts before any day-precision --since ("2026-07" < "2026-07-18"),
+    # so every rollout in the target month was incorrectly dropped.
+    found = measurer._find_rollouts(tmp_path, "2026-07-18", None)
+    assert found == [july_31, august]
+
+    # Day-precision --until must not symmetrically over-include the whole target
+    # month ("2026-07" > "2026-07-18" was False, so all of July was kept).
+    found = measurer._find_rollouts(tmp_path, None, "2026-07-18")
+    assert found == [june, july_01, july_15]
+
+    # --since/--until are documented as inclusive: the exact boundary date itself
+    # must be kept, not excluded.
+    found = measurer._find_rollouts(tmp_path, "2026-07-15", "2026-07-15")
+    assert found == [july_15]
 
 
 def test_extract_target_path_survives_pipe_alternation_in_rg_pattern() -> None:

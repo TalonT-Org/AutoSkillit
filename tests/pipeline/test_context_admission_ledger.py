@@ -1300,7 +1300,7 @@ def test_postcommit_fault_has_unknown_outcome_but_exact_retry_finds_publication(
 @pytest.mark.parametrize(
     ("fault_name", "expected_status"),
     [
-        ("before_commit", ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED),
+        ("before_commit", ContextAdmissionAccountingStatus.CONTENDED),
         ("after_commit", ContextAdmissionAccountingStatus.EXACT_REPLAY),
     ],
 )
@@ -1331,17 +1331,16 @@ def test_sqlite_result_class_recovery_reopens_and_resolves_publication(
             error.sqlite_errorcode = sqlite_code
             raise error
 
-    result = DefaultContextAdmissionLedger(
+    ledger = DefaultContextAdmissionLedger(
         authority,
         fault_callback=inject,
-    ).apply(stream_key(), open_event())
+    )
+    event = open_event()
+    result = ledger.apply(stream_key(), event)
 
     assert result.status is expected_status
     expected_journal_sequence = 1 if fault_name == "after_commit" else None
     assert result.journal_sequence == expected_journal_sequence
-    if fault_name == "before_commit":
-        assert result.failure_reason is ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY
-        assert result.reason_code == "sqlite-publication-absent"
     connection = sqlite3.connect(authority.database_path)
     try:
         expected_rows = 1 if fault_name == "after_commit" else 0
@@ -1350,6 +1349,10 @@ def test_sqlite_result_class_recovery_reopens_and_resolves_publication(
         )
     finally:
         connection.close()
+    if fault_name == "before_commit":
+        assert (
+            ledger.apply(stream_key(), event).status is ContextAdmissionAccountingStatus.RECORDED
+        )
 
 
 def test_inspection_contention_is_transient_and_does_not_poison_health(

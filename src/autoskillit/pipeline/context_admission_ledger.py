@@ -575,6 +575,12 @@ class DefaultContextAdmissionLedger:
         recovery = self.recover_all()
         if recovery.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
             return self._storage_failure_result(stream_key)
+        if not self._recovered:
+            return ContextAdmissionAccountingResult(
+                status=ContextAdmissionAccountingStatus.CONTENDED,
+                stream_key=stream_key,
+                reason_code="busy",
+            )
         health = self.stream_health(stream_key)
         if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
             return ContextAdmissionAccountingResult(
@@ -584,6 +590,12 @@ class DefaultContextAdmissionLedger:
                 reason_code=health.reason_code,
             )
         inspection = self.inspect_stream(stream_key)
+        if inspection.health.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED:
+            return ContextAdmissionAccountingResult(
+                status=ContextAdmissionAccountingStatus.CONTENDED,
+                stream_key=stream_key,
+                reason_code="busy",
+            )
         if any(stored_event.event_id == event.event_id for stored_event in inspection.events):
             return self.apply(stream_key, event)
         self._set_store_failure(

@@ -2455,10 +2455,12 @@ async def test_run_skill_containment_root_anchors_to_cwd_not_orchestrator_temp_d
     )
 
     # Recipe install happens with the orchestrator's temp_dir bound, exactly
-    # as production's prepare_recipe_execution() does.
+    # as production's prepare_recipe_execution() does. The helper stages
+    # initialization before installing, mirroring the open_kitchen -> run_skill
+    # production lifecycle.
     monkeypatch.setattr(tool_ctx_kitchen_open, "temp_dir", orchestrator_root)
     _wire_recipe_execution_factory(tool_ctx_kitchen_open)
-    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    installed = _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
 
     authority = _authority(
         clone_root,
@@ -2469,11 +2471,14 @@ async def test_run_skill_containment_root_anchors_to_cwd_not_orchestrator_temp_d
         materialize=True,
     )
     clone_temp.joinpath("authority.json").write_bytes(authority.canonical_bytes)
-    installed.audit_cycle_heads.publish(authority, expected_parent_digest=None, expected_round=0)
-    tool_ctx_kitchen_open.active_recipe_execution = replace(
-        installed,
-        preflight_identities={"dry": ("plans-1", "scope-1", "part-a")},
+    installed = _replace_test_recipe_execution(
+        tool_ctx_kitchen_open,
+        replace(
+            installed,
+            preflight_identities={"dry": ("plans-1", "scope-1", "part-a")},
+        ),
     )
+    installed.audit_cycle_heads.publish(authority, expected_parent_digest=None, expected_round=0)
 
     marker = "%%ORDER_UP::12345678%%"
     monkeypatch.setattr(

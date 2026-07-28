@@ -25,7 +25,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._capture.authority import (
+    from autoskillit.hooks._capture._authority import (
         _DIRECTORY_FLAGS,
         _READ_FLAGS,
         _UNTRUSTED_WRITE_BITS,
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     )
     from autoskillit.hooks._policy_event import PolicyEvent, render_capture_marker
 else:
-    from _capture.authority import (
+    from _capture._authority import (
         _DIRECTORY_FLAGS,
         _READ_FLAGS,
         _UNTRUSTED_WRITE_BITS,

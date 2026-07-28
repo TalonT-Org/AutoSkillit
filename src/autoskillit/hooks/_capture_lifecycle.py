@@ -9,6 +9,7 @@ from __future__ import annotations
 import errno
 import fcntl
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -21,16 +22,29 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
-if __package__:
-    from autoskillit.hooks._capture import types as _capture_types
+if TYPE_CHECKING:
+    from autoskillit.hooks._capture._types import (
+        CaptureCleanupOutcome,
+    )
+    from autoskillit.hooks._capture._types import (
+        ObservedArtifact as _ObservedArtifact,
+    )
+    from autoskillit.hooks._capture._types import (
+        Tampered as _Tampered,
+    )
+    from autoskillit.hooks._capture._types import (
+        WriterLive as _WriterLive,
+    )
 else:
-    from _capture import types as _capture_types  # type: ignore[no-redef]
-
-CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
-_ObservedArtifact = _capture_types.ObservedArtifact
-_Tampered = _capture_types.Tampered
-_WriterLive = _capture_types.WriterLive
+    _capture_types = importlib.import_module(
+        f"{__package__}._capture._types" if __package__ else "_capture._types"
+    )
+    CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
+    _ObservedArtifact = _capture_types.ObservedArtifact
+    _Tampered = _capture_types.Tampered
+    _WriterLive = _capture_types.WriterLive
 
 __all__ = [
     "CaptureCleanupOutcome",

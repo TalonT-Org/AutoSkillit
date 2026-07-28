@@ -8,6 +8,5 @@ owners. Modules must remain importable when the hooks directory alone is on
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Package marker |
-| `authority.py` | Project/root descriptor authority and lifecycle context factory |
-| `types.py` | Lifecycle outcome, observation, and internal signal types |
+| `_authority.py` | Project/root descriptor authority and lifecycle context factory |
+| `_types.py` | Lifecycle outcome, observation, and internal signal types |

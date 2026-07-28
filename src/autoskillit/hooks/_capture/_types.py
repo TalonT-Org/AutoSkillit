@@ -1,4 +1,4 @@
-"""Lifecycle result and internal signal types."""
+"""Shell-capture lifecycle result and internal signal types."""
 
 from __future__ import annotations
 

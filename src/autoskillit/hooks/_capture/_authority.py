@@ -1,4 +1,4 @@
-"""Minimal descriptor authority shared by shell-capture lifecycle owners.
+"""Minimal descriptor authority shared by shell-capture producer and cleanup owners.
 
 This stdlib-only module opens and retains the project and capture-root
 directories. It deliberately excludes command execution, policy, replay, and

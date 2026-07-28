@@ -261,10 +261,10 @@ def test_finalized_projection_preserves_ordered_steps_entrypoint_and_routes(tmp_
 def test_finalized_projection_rejects_an_empty_entrypoint() -> None:
     from autoskillit.core import FinalizedRecipeProjection, RecipeBindingProjection
 
-    with pytest.raises(ValueError, match="at least one ordered step"):
+    with pytest.raises(ValueError, match="entrypoint must be a non-empty string"):
         FinalizedRecipeProjection(
             binding_projection=RecipeBindingProjection(invocations={}),
-            ordered_step_names=(),
+            ordered_step_names=("step",),
             entrypoint="",
             ordered_flow_edges=(),
         )

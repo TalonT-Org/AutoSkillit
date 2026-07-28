@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,6 +10,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol, TypeGuard
 from uuid import UUID, uuid4
+
+logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 types cannot import core.logging
 
 __all__ = [
     "DirectInstall",
@@ -320,6 +323,10 @@ class PluginLaunchBinding:
             self.close()
         except BaseException as cleanup_error:
             exc.add_note(f"Plugin artifact binding cleanup failed: {cleanup_error!r}")
+            logger.warning(
+                "plugin_artifact_binding_cleanup_failed",
+                exc_info=True,
+            )
 
 
 @dataclass(frozen=True, slots=True)

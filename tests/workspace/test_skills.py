@@ -1212,7 +1212,7 @@ def test_effective_invocation_rejects_inconsistent_direct_construction(
 
 
 def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypatch) -> None:
-    import autoskillit.workspace.skill_projection as projection_module
+    import autoskillit.workspace._projected_artifact.materialization as projection_module
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillCatalogEntry,

@@ -116,15 +116,27 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Named publication seam called only while the projection authority owns LOCK_EX.",
     ),
-    ("workspace/skill_projection.py", "_replace_directory", "destination.unlink"): (
+    (
+        "workspace/_projected_artifact/materialization.py",
+        "_replace_directory",
+        "destination.unlink",
+    ): (
         1,
         "Named root-publication seam called only while the projection authority owns LOCK_EX.",
     ),
-    ("workspace/skill_projection.py", "_replace_directory", "os.replace"): (
+    (
+        "workspace/_projected_artifact/materialization.py",
+        "_replace_directory",
+        "os.replace",
+    ): (
         1,
         "Named root-publication seam called only while the projection authority owns LOCK_EX.",
     ),
-    ("workspace/skill_projection.py", "_replace_directory", "shutil.rmtree"): (
+    (
+        "workspace/_projected_artifact/materialization.py",
+        "_replace_directory",
+        "shutil.rmtree",
+    ): (
         1,
         "Named root-publication seam called only while the projection authority owns LOCK_EX.",
     ),
@@ -404,7 +416,8 @@ def _scan_plugin_mutation_trees(
 ) -> Counter[tuple[str, str, str]]:
     hits: Counter[tuple[str, str, str]] = Counter()
     for rel, tree in sources:
-        if not _is_plugin_lifecycle_tree(tree):
+        is_projected_artifact_module = rel.startswith("workspace/_projected_artifact/")
+        if not is_projected_artifact_module and not _is_plugin_lifecycle_tree(tree):
             continue
         hits.update(_scan_plugin_mutations_in_tree(rel, tree))
     return hits

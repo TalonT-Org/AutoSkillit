@@ -341,6 +341,7 @@ class TestOpenKitchenVersionReporting:
 
         mock_ctx = MagicMock()
         mock_ctx.enable_components = AsyncMock()
+        tool_ctx.backend = None
         monkeypatch.setattr(
             _state,
             "_compute_version",

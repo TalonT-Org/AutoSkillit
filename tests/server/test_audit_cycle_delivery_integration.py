@@ -85,7 +85,7 @@ from autoskillit.server._recipe_execution import (
 )
 from autoskillit.server._recipe_generation import RecipeGenerationError
 from autoskillit.server._recipe_initialization import stage_recipe_initialization
-from autoskillit.server.tools.tools_execution import run_skill
+from autoskillit.server.tools.tools_execution import _recipe_execution_deny, run_skill
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -874,6 +874,7 @@ def test_published_audit_head_binds_preflight_template_identity(
         authority_path=str(authority_path),
         expected_parent_digest=None,
         expected_round=0,
+        allowed_root=Path(tool_ctx_kitchen_open.temp_dir),
     )
 
     installed = get_recipe_execution(tool_ctx_kitchen_open)
@@ -937,6 +938,7 @@ def test_audit_publication_does_not_mutate_replaced_execution(
             authority_path=str(authority_path),
             expected_parent_digest=None,
             expected_round=0,
+            allowed_root=Path(tool_ctx_kitchen_open.temp_dir),
         )
 
     assert get_recipe_execution(tool_ctx_kitchen_open) is replacement
@@ -982,6 +984,7 @@ def test_audit_publication_rejects_tampered_referenced_artifact(
             authority_path=str(authority_path),
             expected_parent_digest=None,
             expected_round=0,
+            allowed_root=Path(tool_ctx_kitchen_open.temp_dir),
         )
 
     assert (
@@ -1064,6 +1067,7 @@ def test_successful_audit_result_publishes_protected_successor_identity(
         result,
         installed,
         (),
+        allowed_root=Path(tool_ctx_kitchen_open.temp_dir),
     )
 
     installed = get_recipe_execution(tool_ctx_kitchen_open)
@@ -1102,6 +1106,7 @@ def test_reported_audit_cycle_cannot_replace_attested_prior_lineage(
         authority_path=str(prior_path),
         expected_parent_digest=None,
         expected_round=0,
+        allowed_root=Path(tool_ctx_kitchen_open.temp_dir),
     )
     unrelated = _authority(
         root,
@@ -1120,6 +1125,7 @@ def test_reported_audit_cycle_cannot_replace_attested_prior_lineage(
             tool_ctx_kitchen_open,
             authority_path=str(unrelated_path),
             prior_authority_path=str(prior_path),
+            allowed_root=Path(tool_ctx_kitchen_open.temp_dir),
         )
 
     current = installed.audit_cycle_heads.get(
@@ -2078,8 +2084,10 @@ async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
         def resolve(
             self,
             request: VerifiedInputPreflightRequest,
+            *,
+            allowed_root: Path | None = None,
         ) -> VerifiedInputPreflightResult:
-            self.result = self._wrapped.resolve(request)
+            self.result = self._wrapped.resolve(request, allowed_root=allowed_root)
             return self.result
 
     recording_resolver = RecordingResolver(installed.input_preflight_resolver)
@@ -2163,7 +2171,7 @@ async def test_preflight_rejects_before_executor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class RejectingResolver:
-        def resolve(self, request):
+        def resolve(self, request, *, allowed_root: Path | None = None):
             assert request.expected_plan_set_id == "plans-1"
             assert request.expected_scope_id == "scope-1"
             assert request.expected_part_id == "part-a"
@@ -2212,3 +2220,154 @@ async def test_preflight_rejects_before_executor(
     assert result["success"] is False
     assert "input_preflight_plan_mismatch" in result["error"]
     assert len(tool_ctx_kitchen_open.runner.call_args_list) == calls_before
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for #4387: audit_impl preflight rejects the plan path the
+# recipe supplies. These tests construct genuinely disjoint directory trees
+# to lock down the architectural invariant: containment root must match the
+# directory tree where artifacts were written.
+# ---------------------------------------------------------------------------
+
+
+def test_clone_layout_containment_root_required(tmp_path: Path) -> None:
+    """Containment root must match where artifacts live.
+
+    Disjoint directory tree (orchestrator_root vs clone_temp). Without the
+    fix, passing orchestrator_root as allowed_root rejects the request even
+    though the request is legitimate (artifacts are valid under clone_temp).
+    With the fix (allowed_root override), passing clone_temp accepts the
+    request and publishes the head.
+    """
+    orchestrator_root = tmp_path / "orchestrator" / ".autoskillit" / "temp"
+    orchestrator_root.mkdir(parents=True)
+    clone_root = tmp_path / "clone"
+    clone_root.mkdir()
+    clone_temp = clone_root / ".autoskillit" / "temp"
+    clone_temp.mkdir(parents=True)
+
+    store = DefaultAuditCycleHeadStore()
+    authority = _authority(
+        clone_root,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.GO,
+        materialize=True,
+    )
+    clone_temp.joinpath("authority.json").write_bytes(authority.canonical_bytes)
+
+    request = VerifiedInputPreflightRequest(
+        execution_generation="execution-1",
+        step_name="dry",
+        skill_name="dry-walkthrough",
+        plan_path=str(clone_root / "plan.md"),
+        audit_cycle_path=str(clone_temp / "authority.json"),
+        plan_disposition_path=None,
+        expected_plan_set_id="plans-1",
+        expected_scope_id="scope-1",
+        expected_part_id="part-a",
+    )
+
+    # Sanity check: orchestrator_root is disjoint from clone_temp.
+    assert not orchestrator_root.is_relative_to(clone_temp)  # type: ignore[attr-defined]
+    assert not clone_temp.is_relative_to(orchestrator_root)  # type: ignore[attr-defined]
+
+    # Without override (factory-time bound root = orchestrator_root), the
+    # audit-cycle authority path is rejected — it lies outside the
+    # orchestrator's trust boundary. This reproduces the bug from #4387.
+    broken_resolver = DefaultInputPreflightResolver(
+        allowed_root=orchestrator_root,
+        head_store=store,
+    )
+    broken_result = broken_resolver.resolve(request)
+    assert broken_result.decision.status.value == "REJECT"
+
+    # With the fix (allowed_root=clone_temp), the same request is accepted
+    # because containment anchors to the clone's temp directory.
+    fixed_resolver = DefaultInputPreflightResolver(
+        allowed_root=clone_temp,
+        head_store=store,
+    )
+    fixed_result = fixed_resolver.resolve(request)
+    assert fixed_result.decision.status.value == "ACCEPT"
+
+
+def test_recipe_execution_deny_envelope_carries_preflight_stage() -> None:
+    """Lock down the deny envelope shape so the recipe's preflight routing
+    condition can rely on ``stage`` starting with ``preflight:``.
+
+    Regression guard for #4387 acceptance criterion #2: distinguish
+    preflight/infrastructure failure from a genuine NO GO verdict.
+    """
+    envelope_text = _recipe_execution_deny(
+        "recipe_execution_attestation_missing",
+        "an active recipe requires recipe_execution_id and invocation_template_digest",
+    )
+    envelope = json.loads(envelope_text)
+    assert envelope["success"] is False
+    assert envelope["is_error"] is True
+    assert "stage" in envelope
+    assert envelope["stage"].startswith("preflight:")
+    assert envelope["retriable"] is False
+
+
+def test_preflight_resolver_protocol_accepts_allowed_root_override(
+    tmp_path: Path,
+) -> None:
+    """``DefaultInputPreflightResolver.resolve()`` accepts an optional
+    ``allowed_root`` keyword that overrides the constructor-bound root.
+
+    Backward-compatible: callers that omit ``allowed_root`` get the
+    constructor-bound root. Callers that pass ``allowed_root=<Path>`` get a
+    fresh verifier anchored to that path — necessary because the
+    orchestrator's temp directory is disjoint from the clone's temp
+    directory in clone-based pipelines.
+    """
+    orchestrator_root = tmp_path / "orchestrator" / ".autoskillit" / "temp"
+    orchestrator_root.mkdir(parents=True)
+    clone_root = tmp_path / "clone"
+    clone_root.mkdir()
+    clone_temp = clone_root / ".autoskillit" / "temp"
+    clone_temp.mkdir(parents=True)
+
+    store = DefaultAuditCycleHeadStore()
+    authority = _authority(
+        clone_root,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.GO,
+        materialize=True,
+    )
+    clone_temp.joinpath("authority.json").write_bytes(authority.canonical_bytes)
+
+    request = VerifiedInputPreflightRequest(
+        execution_generation="execution-1",
+        step_name="dry",
+        skill_name="dry-walkthrough",
+        plan_path=str(clone_root / "plan.md"),
+        audit_cycle_path=str(clone_temp / "authority.json"),
+        plan_disposition_path=None,
+        expected_plan_set_id="plans-1",
+        expected_scope_id="scope-1",
+        expected_part_id="part-a",
+    )
+
+    # Constructor-bound root is orchestrator_root (the broken case).
+    resolver = DefaultInputPreflightResolver(
+        allowed_root=orchestrator_root,
+        head_store=store,
+    )
+
+    # Default (no override) ⇒ rejects because the request lives under clone_temp.
+    default_result = resolver.resolve(request)
+    assert default_result.decision.status.value == "REJECT"
+
+    # Override with clone_temp ⇒ accepts because containment anchors to the clone.
+    override_result = resolver.resolve(request, allowed_root=clone_temp)
+    assert override_result.decision.status.value == "ACCEPT"
+
+    # ``allowed_root=None`` falls back to the constructor-bound root (rejects).
+    none_result = resolver.resolve(request, allowed_root=None)
+    assert none_result.decision.status.value == "REJECT"

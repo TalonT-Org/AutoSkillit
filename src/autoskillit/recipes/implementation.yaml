@@ -961,8 +961,14 @@ steps:
     on_result:
     - when: ${{ result.verdict }} == GO
       route: check_has_commits
-    - when: result.error
+    - when: ${{ result.stage }} starts with preflight
       route: register_clone_failure
+      note: >
+        Preflight/infrastructure failure — the gate could not run.
+        Distinct from a genuine NO GO verdict. register_clone_failure
+        preserves the clone for diagnosis.
+    - when: result.error
+      route: check_audit_remediation_loop
     - when: ${{ result.verdict }} == NO GO
       route: check_audit_remediation_loop
     - route: check_audit_remediation_loop

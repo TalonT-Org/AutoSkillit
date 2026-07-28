@@ -254,6 +254,8 @@ class InputPreflightResolver(Protocol):
     def resolve(
         self,
         request: VerifiedInputPreflightRequest,
+        *,
+        allowed_root: Path | None = None,
     ) -> VerifiedInputPreflightResult: ...
 
 

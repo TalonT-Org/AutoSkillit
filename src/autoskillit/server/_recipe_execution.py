@@ -222,6 +222,8 @@ class DefaultInputPreflightResolver:
     def resolve(
         self,
         request: VerifiedInputPreflightRequest,
+        *,
+        allowed_root: Path | None = None,
     ) -> VerifiedInputPreflightResult:
         authority_path = request.audit_cycle_path or None
         report_path = request.plan_disposition_path or None
@@ -234,8 +236,9 @@ class DefaultInputPreflightResolver:
                     "a disposition report cannot activate without authority",
                 )
             )
+        verifier = AuditCycleVerifier(allowed_root) if allowed_root is not None else self._verifier
         try:
-            authority = self._verifier.load_authority(authority_path)
+            authority = verifier.load_authority(authority_path)
         except Exception as exc:
             get_logger(__name__).error(
                 "audit-cycle authority verification failed",
@@ -511,6 +514,7 @@ def resolve_attested_input_preflight(
     step_name: str,
     template: InvocationTemplate,
     bound_inputs: tuple[tuple[str, BoundScalar], ...],
+    allowed_root: Path | None = None,
 ) -> VerifiedInputPreflightResult | None:
     """Resolve a compiled invocation's optional input preflight or fail closed."""
     contract = (
@@ -563,7 +567,8 @@ def resolve_attested_input_preflight(
             expected_plan_set_id=expected_identity[0],
             expected_scope_id=expected_identity[1],
             expected_part_id=expected_identity[2],
-        )
+        ),
+        allowed_root=allowed_root,
     )
     if result.decision.status is AdmissionStatus.REJECT:
         raise RecipeExecutionAdmissionError(
@@ -647,10 +652,11 @@ def _publish_loaded_audit_cycle(
     expected_parent_digest: str | None,
     expected_round: int,
     authorized_successor_part_id: str | None = None,
+    allowed_root: Path,
 ) -> AuditCycleHead:
     if authority.execution_generation != installed.snapshot.execution_id:
         raise AuditCycleHeadConflict("authority crosses recipe execution generations")
-    verifier = AuditCycleVerifier(tool_ctx.temp_dir)
+    verifier = AuditCycleVerifier(allowed_root)
     for audited_plan_ref in authority.audited_plan_refs:
         verifier.verify_artifact_ref(audited_plan_ref)
     verifier.verify_artifact_ref(authority.inventory_ref)
@@ -699,12 +705,13 @@ def publish_verified_audit_cycle(
     expected_parent_digest: str | None,
     expected_round: int,
     authorized_successor_part_id: str | None = None,
+    allowed_root: Path,
 ) -> AuditCycleHead:
     """Verify an explicit child output, then CAS-publish it as trusted."""
     installed = get_recipe_execution(tool_ctx)
     if installed is None:
         raise AuditCycleHeadConflict("no active recipe execution")
-    authority = AuditCycleVerifier(tool_ctx.temp_dir).load_authority(authority_path)
+    authority = AuditCycleVerifier(allowed_root).load_authority(authority_path)
     return _publish_loaded_audit_cycle(
         tool_ctx,
         installed=installed,
@@ -712,6 +719,7 @@ def publish_verified_audit_cycle(
         expected_parent_digest=expected_parent_digest,
         expected_round=expected_round,
         authorized_successor_part_id=authorized_successor_part_id,
+        allowed_root=allowed_root,
     )
 
 
@@ -720,12 +728,13 @@ def publish_reported_audit_cycle(
     *,
     authority_path: str,
     prior_authority_path: str | None,
+    allowed_root: Path,
 ) -> AuditCycleHead:
     """Verify and publish the authority path reported by a successful audit child."""
     installed = get_recipe_execution(tool_ctx)
     if installed is None:
         raise AuditCycleHeadConflict("no active recipe execution")
-    verifier = AuditCycleVerifier(tool_ctx.temp_dir)
+    verifier = AuditCycleVerifier(allowed_root)
     authority = verifier.load_authority(authority_path)
     if prior_authority_path:
         prior = verifier.load_authority(prior_authority_path)
@@ -768,6 +777,7 @@ def publish_reported_audit_cycle(
         authority=authority,
         expected_parent_digest=(current.current_authority_digest if current is not None else None),
         expected_round=current.audit_round if current is not None else 0,
+        allowed_root=allowed_root,
     )
 
 
@@ -777,6 +787,7 @@ def publish_audit_cycle_result(
     skill_result: SkillResult,
     installed: InstalledRecipeExecution | None,
     bound_inputs: tuple[tuple[str, BoundScalar], ...],
+    allowed_root: Path,
 ) -> None:
     """Publish a successful attested audit child's declared authority."""
     if not skill_result.success or target_name is None or installed is None:
@@ -801,4 +812,5 @@ def publish_audit_cycle_result(
             if isinstance(prior_authority_path, str) and prior_authority_path
             else None
         ),
+        allowed_root=allowed_root,
     )

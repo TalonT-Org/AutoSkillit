@@ -715,6 +715,38 @@ def test_incomplete_final_ledger_frame_is_recovered(tmp_path: Path) -> None:
         anchor.close()
 
 
+def test_compaction_replace_failure_removes_temporary_control_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        store.reserve_capture(_CAPTURE_ID)
+        monkeypatch.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 1)
+
+        def fail_replace(
+            _src: str,
+            _dst: str,
+            *,
+            src_dir_fd: int,
+            dst_dir_fd: int,
+        ) -> None:
+            del src_dir_fd, dst_dir_fd
+            raise OSError("injected replacement failure")
+
+        monkeypatch.setattr(capture_lifecycle.os, "replace", fail_replace)
+        with pytest.raises(OSError, match="replacement failure"):
+            store.reserve_capture("1" * 16)
+
+        assert not list(_capture_dir(project).glob(".capture-lifecycle-compact-*"))
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
+    finally:
+        root.close()
+        anchor.close()
+
+
 @pytest.mark.parametrize("force_compaction", [False, True])
 def test_ledger_writes_retry_short_writes(
     tmp_path: Path,

@@ -475,12 +475,19 @@ class CaptureLifecycleStore:
             raise
         else:
             os.close(fd)
-        os.replace(
-            temp_name,
-            LEDGER_NAME,
-            src_dir_fd=self._root_fd,
-            dst_dir_fd=self._root_fd,
-        )
+        try:
+            os.replace(
+                temp_name,
+                LEDGER_NAME,
+                src_dir_fd=self._root_fd,
+                dst_dir_fd=self._root_fd,
+            )
+        except BaseException:
+            try:
+                os.unlink(temp_name, dir_fd=self._root_fd)
+            except OSError:
+                pass
+            raise
         os.fsync(self._root_fd)
 
     def _commit(self, record: CaptureLifecycleRecord) -> CaptureLifecycleRecord:

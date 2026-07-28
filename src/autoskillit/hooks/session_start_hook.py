@@ -16,14 +16,6 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-_HOOKS_DIR = str(Path(__file__).resolve().parent)
-if _HOOKS_DIR not in sys.path:
-    sys.path.insert(0, _HOOKS_DIR)
-
-from _capture_artifacts import (  # type: ignore[import-not-found]  # noqa: E402
-    classify_stale_captures,
-)
-
 
 def main() -> None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
@@ -84,11 +76,6 @@ def main() -> None:
                         _tp.unlink()
                     except OSError:
                         pass
-    except Exception:
-        pass
-
-    try:
-        classify_stale_captures(Path.cwd())
     except Exception:
         pass
 

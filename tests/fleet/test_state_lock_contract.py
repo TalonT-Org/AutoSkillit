@@ -51,6 +51,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "server/tools/tools_pipeline_tracker.py",  # mark_step_complete: flock sidecar
         "server/_recipe_delivery.py",  # shared/exclusive immutable-generation lifecycle lock
         "hooks/resume_gate_post_hook.py",
+        "hooks/_capture_lifecycle.py",
     }
 )
 
@@ -88,7 +89,12 @@ class TestFlockLockTarget:
         src_root = fleet_root.parent
 
         FCNTL_ALLOWED_MODULES = {src_root / p for p in _FCNTL_ALLOWED_RELATIVE_PATHS}
-        FLOCK_DATA_FILE_EXCEPTIONS = {src_root / "planner" / "merge.py"}
+        FLOCK_DATA_FILE_EXCEPTIONS: dict[Path, frozenset[str] | None] = {
+            src_root / "planner" / "merge.py": None,
+            src_root / "hooks" / "_capture_lifecycle.py": frozenset(
+                {"acquire_writer_lease", "_try_artifact_lease"}
+            ),
+        }
 
         scan_roots = [fleet_root, cli_fleet_root] + list(FCNTL_ALLOWED_MODULES)
 
@@ -119,7 +125,8 @@ class TestFlockLockTarget:
             for node in ast.walk(tree):
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
-                if py_file in FLOCK_DATA_FILE_EXCEPTIONS:
+                exempt_functions = FLOCK_DATA_FILE_EXCEPTIONS.get(py_file, frozenset())
+                if exempt_functions is None or node.name in exempt_functions:
                     continue
 
                 open_calls: list[tuple[str, int]] = []
@@ -135,6 +142,7 @@ class TestFlockLockTarget:
                         ".lock" in arg_src
                         or "with_suffix('.lock')" in arg_src
                         or "lock_path" in arg_src
+                        or "LOCK_NAME" in arg_src
                     ):
                         continue
                     has_flock = any(

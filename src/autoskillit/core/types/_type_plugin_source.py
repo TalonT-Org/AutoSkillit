@@ -191,6 +191,10 @@ class RetiringArtifactRecord:
             raise ValueError("retiring artifact record_id must not be empty")
         if not self.semantic_key or not self.incarnation_id or not self.artifact_digest:
             raise ValueError("retiring artifact identity fields must not be empty")
+        if not is_canonical_plugin_artifact_incarnation_id(self.incarnation_id):
+            raise ValueError("retiring artifact incarnation_id must be canonical uuid4 hex")
+        if not is_canonical_plugin_artifact_digest(self.artifact_digest):
+            raise ValueError("retiring artifact digest must be lowercase SHA-256 hex")
         if not self.managed_path.is_absolute() or not self.manifest_path.is_absolute():
             raise ValueError("retiring artifact paths must be absolute")
         if self.manifest_schema_version < 1:

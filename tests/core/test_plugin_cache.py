@@ -52,7 +52,7 @@ def _retiring_record(tmp_path: Path) -> RetiringArtifactRecord:
         semantic_key="plugin:1",
         managed_path=(tmp_path / "managed" / "1").absolute(),
         manifest_path=(tmp_path / "managed" / ".1.manifest.json").absolute(),
-        incarnation_id="incarnation-1",
+        incarnation_id="00000000000040008000000000000001",
         manifest_schema_version=1,
         artifact_digest="a" * 64,
         retired_at=retired_at,
@@ -97,6 +97,8 @@ class TestRetiringCacheSchemaValidation:
             ("managed_path", ["/managed/1"]),
             ("manifest_schema_version", True),
             ("schema_version", float("inf")),
+            ("incarnation_id", "not-canonical"),
+            ("artifact_digest", "z" * 64),
         ],
     )
     def test_v2_record_fields_require_exact_json_types(

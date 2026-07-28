@@ -70,13 +70,13 @@ def test_exact_append_is_ordered_idempotent_and_removed_by_record_id(
     first = _record(
         tmp_path,
         record_id="record-a",
-        incarnation_id="incarnation-a",
+        incarnation_id="00000000000040008000000000000001",
         not_before=deadline,
     )
     second = _record(
         tmp_path,
         record_id="record-b",
-        incarnation_id="incarnation-b",
+        incarnation_id="00000000000040008000000000000002",
         not_before=deadline,
     )
 

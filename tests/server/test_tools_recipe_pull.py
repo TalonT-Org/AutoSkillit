@@ -904,9 +904,7 @@ async def test_initialization_pull_rejections_preserve_progress(
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = f"initialization-rejection-{case}"
-    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(
-        response_max_bytes=RECIPE_SECTION_RESPONSE_FLOOR_BYTES + 500
-    )
+    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(response_max_bytes=8_000)
     payload = _payload(
         "name: remediation\nsteps:\n  first:\n    action: stop\n    message: "
         + ("x" * 20_000)

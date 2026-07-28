@@ -77,9 +77,6 @@ from autoskillit.server._recipe_delivery import (
 )
 from autoskillit.server._recipe_execution import clear_recipe_execution
 from autoskillit.server._recipe_generation import (
-    activate_kitchen as activate_recipe_generation,
-)
-from autoskillit.server._recipe_generation import (
     retire_kitchen as retire_recipe_generation,
 )
 from autoskillit.server.tools._authority_feedback import (
@@ -518,10 +515,9 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         logger.warning("open_kitchen_clear_pid_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+        _register_active_recipe_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("open_kitchen_registry_failed", exc_info=True)
-    activate_recipe_generation(ctx.kitchen_id)
 
     try:
         prune_stale_kitchen_state(ctx.project_dir, ctx.kitchen_id)
@@ -1770,3 +1766,15 @@ async def reload_session() -> str:
     except Exception as exc:
         logger.error("reload_session unhandled exception", exc_info=True)
         return json.dumps({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
+
+
+def _register_active_recipe_kitchen(
+    kitchen_id: str,
+    pid: int,
+    project_path: str,
+) -> None:
+    """Publish one kitchen to both process and recipe-generation lifecycles."""
+    from autoskillit.server._recipe_generation import activate_kitchen
+
+    register_active_kitchen(kitchen_id, pid, project_path)
+    activate_kitchen(kitchen_id)

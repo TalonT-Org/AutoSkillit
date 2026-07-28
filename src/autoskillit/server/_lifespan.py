@@ -61,9 +61,6 @@ from autoskillit.hook_registry import (
 )
 from autoskillit.pipeline import create_background_task
 from autoskillit.server._guards import _backend_supports_quota
-from autoskillit.server._recipe_generation import (
-    activate_kitchen as activate_recipe_generation,
-)
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 from autoskillit.workspace import verify_install_state
 
@@ -99,6 +96,18 @@ def run_startup_drift_check() -> None:
             logger.info("startup_drift_check_ok")
     except Exception:
         logger.exception("startup_drift_check_failed")
+
+
+def _register_active_recipe_kitchen(
+    kitchen_id: str,
+    pid: int,
+    project_path: str,
+) -> None:
+    """Publish one kitchen to both process and recipe-generation lifecycles."""
+    from autoskillit.server._recipe_generation import activate_kitchen
+
+    register_active_kitchen(kitchen_id, pid, project_path)
+    activate_kitchen(kitchen_id)
 
 
 def run_startup_hook_health_check() -> list[str]:
@@ -321,10 +330,13 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+        _register_active_recipe_kitchen(
+            ctx.kitchen_id,
+            os.getpid(),
+            str(ctx.project_dir),
+        )
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
-    activate_recipe_generation(ctx.kitchen_id)
 
     _campaign_state_paths: list[Path] = []
     try:
@@ -375,8 +387,11 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
         _mcp.disable(tags={subset})
     for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):
         _mcp.disable(tags={tag})
-    register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
-    activate_recipe_generation(ctx.kitchen_id)
+    _register_active_recipe_kitchen(
+        ctx.kitchen_id,
+        os.getpid(),
+        str(ctx.project_dir),
+    )
     _write_hook_config()
     _supports_quota = _backend_supports_quota(ctx)
     await _prime_quota_cache(supports_quota_check=_supports_quota)
@@ -458,10 +473,13 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_refresh_loop_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+        _register_active_recipe_kitchen(
+            ctx.kitchen_id,
+            os.getpid(),
+            str(ctx.project_dir),
+        )
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
-    activate_recipe_generation(ctx.kitchen_id)
 
     try:
         _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
@@ -560,10 +578,13 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         logger.warning("skill_auto_gate_boot_quota_cache_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+        _register_active_recipe_kitchen(
+            ctx.kitchen_id,
+            os.getpid(),
+            str(ctx.project_dir),
+        )
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)
-    activate_recipe_generation(ctx.kitchen_id)
 
 
 _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | None] = {

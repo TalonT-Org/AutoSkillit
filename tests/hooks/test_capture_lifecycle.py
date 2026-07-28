@@ -8,6 +8,7 @@ import os
 import stat
 import subprocess
 import sys
+import time
 from dataclasses import FrozenInstanceError, asdict, replace
 from pathlib import Path
 
@@ -1150,6 +1151,50 @@ def test_sweep_continues_after_failed_due_record(
         assert (_capture_dir(project) / artifact_names[0]).exists()
         assert not (_capture_dir(project) / artifact_names[1]).exists()
     finally:
+        root.close()
+        anchor.close()
+
+
+def test_sweep_defers_without_blocking_on_contended_ledger_lock(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    clock.advance(3601)
+    lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
+    holder_script = (
+        "import fcntl, os, sys, time\n"
+        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "print('ready', flush=True)\n"
+        "time.sleep(1.0)\n"
+        "os.close(fd)\n"
+    )
+    holder = subprocess.Popen(
+        [sys.executable, "-c", holder_script, str(lock_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline() == "ready\n"
+
+        started = time.monotonic()
+        outcome = store.sweep(max_items=8, max_duration_seconds=0.05)
+        elapsed = time.monotonic() - started
+
+        assert elapsed < 0.5
+        assert outcome.examined == 0
+        assert outcome.remaining_due >= 1
+        assert (_capture_dir(project) / artifact.name).exists()
+    finally:
+        try:
+            holder.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            holder.terminate()
+            holder.communicate(timeout=3)
         root.close()
         anchor.close()
 

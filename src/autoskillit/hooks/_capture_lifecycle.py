@@ -33,6 +33,7 @@ else:
 
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 _ObservedArtifact = _capture_types.ObservedArtifact
+_LockContended = _capture_types.LockContended
 _Tampered = _capture_types.Tampered
 _WriterLive = _capture_types.WriterLive
 
@@ -308,7 +309,7 @@ class CaptureLifecycleStore:
             raise CaptureLifecycleError("capture root identity changed")
 
     @contextmanager
-    def _locked(self) -> Iterator[None]:
+    def _locked(self, *, blocking: bool = True) -> Iterator[None]:
         self._validate_root()
         try:
             fd = os.open(LOCK_NAME, _CONTROL_FLAGS, 0o600, dir_fd=self._root_fd)
@@ -317,8 +318,13 @@ class CaptureLifecycleStore:
         try:
             _validate_control_file(fd, LOCK_NAME)
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX)
+                operation = fcntl.LOCK_EX
+                if not blocking:
+                    operation |= fcntl.LOCK_NB
+                fcntl.flock(fd, operation)
             except OSError as exc:
+                if not blocking and exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                    raise _LockContended from exc
                 raise CaptureLifecycleError("cannot acquire lifecycle lock") from exc
             self._validate_root()
             yield
@@ -910,7 +916,7 @@ class CaptureLifecycleStore:
         )
 
     def _sweep_one(self, capture_id: str) -> tuple[str, int, int]:
-        with self._locked():
+        with self._locked(blocking=False):
             records, generation, size = self._load_locked()
             record = records.get(capture_id)
             now = self._wall_clock()
@@ -973,7 +979,7 @@ class CaptureLifecycleStore:
                 return ("error", 0, 1)
 
     def _due_ids(self, now: float) -> list[str]:
-        with self._locked():
+        with self._locked(blocking=False):
             records, _generation, _size = self._load_locked()
         due = [
             record
@@ -995,11 +1001,23 @@ class CaptureLifecycleStore:
         started = self._monotonic()
         examined = deleted = deleted_bytes = writer_live = 0
         not_due = tampered = errors = retry_count = 0
-        for capture_id in self._due_ids(self._wall_clock())[:max_items]:
+        try:
+            due_ids = self._due_ids(self._wall_clock())
+        except _LockContended:
+            return CaptureCleanupOutcome(
+                remaining_due=1,
+                duration=max(0.0, self._monotonic() - started),
+            )
+        lock_contended = False
+        for capture_id in due_ids[:max_items]:
             if self._monotonic() - started >= max_duration_seconds:
                 break
+            try:
+                result, logical_bytes, retries = self._sweep_one(capture_id)
+            except _LockContended:
+                lock_contended = True
+                break
             examined += 1
-            result, logical_bytes, retries = self._sweep_one(capture_id)
             deleted_bytes += logical_bytes
             retry_count += retries
             if result == "deleted":
@@ -1012,7 +1030,13 @@ class CaptureLifecycleStore:
                 errors += 1
             else:
                 not_due += 1
-        remaining_due = len(self._due_ids(self._wall_clock()))
+        if lock_contended:
+            remaining_due = max(1, len(due_ids) - examined)
+        else:
+            try:
+                remaining_due = len(self._due_ids(self._wall_clock()))
+            except _LockContended:
+                remaining_due = max(1, len(due_ids) - examined)
         return CaptureCleanupOutcome(
             examined=examined,
             deleted=deleted,

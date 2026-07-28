@@ -33,5 +33,9 @@ class WriterLive(Exception):
     pass
 
 
+class LockContended(Exception):
+    pass
+
+
 class Tampered(Exception):
     pass

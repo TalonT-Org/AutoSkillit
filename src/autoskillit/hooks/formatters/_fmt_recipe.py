@@ -25,6 +25,18 @@ else:
     from _recipe_delivery_framing import is_attested_recipe_delivery
 
 
+_RECIPE_INITIALIZATION_FIELDS: tuple[str, ...] = (
+    "finalized_recipe_projection",
+    "flow_records",
+    "recipe_execution",
+    "recipe_flow",
+    "recipe_pull",
+    "delivery_bound_spill",
+    "initialization_id",
+    "recovery",
+    "required_sections",
+)
+
 _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
     {
         "valid",
@@ -34,18 +46,9 @@ _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
         "diagram",
         "ingredients_table",
         "orchestration_rules",
-        "finalized_recipe_projection",
-        "flow_records",
-        "recipe_execution",
-        "recipe_flow",
-        "recipe_pull",
-        "delivery_bound_spill",
-        "initialization_id",
-        "recovery",
-        "required_sections",
         "warnings",
     }
-)
+).union(_RECIPE_INITIALIZATION_FIELDS)
 _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
     {
         "greeting",  # delivered via positional CLI arg, not MCP response
@@ -113,18 +116,9 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
         lines.append("\n--- RECIPE ---")
         lines.append(display_content)
         lines.append("--- END RECIPE ---")
-    initialization_fields = (
-        "finalized_recipe_projection",
-        "flow_records",
-        "recipe_execution",
-        "recipe_flow",
-        "recipe_pull",
-        "delivery_bound_spill",
-        "initialization_id",
-        "recovery",
-        "required_sections",
-    )
-    initialization = {key: data[key] for key in initialization_fields if data.get(key) is not None}
+    initialization = {
+        key: data[key] for key in _RECIPE_INITIALIZATION_FIELDS if data.get(key) is not None
+    }
     if initialization:
         lines.append("\n--- RECIPE INITIALIZATION ---")
         lines.append(
@@ -200,19 +194,10 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
         "diagram",
         "ingredients_table",
         "orchestration_rules",
-        "finalized_recipe_projection",
-        "flow_records",
-        "recipe_execution",
-        "recipe_flow",
-        "recipe_pull",
-        "delivery_bound_spill",
-        "initialization_id",
-        "recovery",
-        "required_sections",
         "version",
         "warnings",
     }
-)
+).union(_RECIPE_INITIALIZATION_FIELDS)
 _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
     {
         "success",  # metadata — model infers success from formatted output

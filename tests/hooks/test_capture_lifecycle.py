@@ -956,7 +956,6 @@ def test_finalized_capture_ttl_begins_at_terminal_commit(tmp_path: Path) -> None
         (0, "0" * 63, False),
         (0, "G" * 64, False),
         (0, "invalid", True),
-        (0, _DIGEST, False),
         (0, _DIGEST, 1),
         (0, "", 0),
     ],
@@ -984,6 +983,38 @@ def test_finalize_rejects_invalid_integrity_metadata(
                 failed=failed,  # type: ignore[arg-type]
             )
         assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
+    finally:
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize("mark_staged", (False, True))
+def test_successful_finalize_requires_published_identity(
+    tmp_path: Path,
+    *,
+    mark_staged: bool,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        record = store.reserve_capture(_CAPTURE_ID)
+        if mark_staged:
+            staging = _capture_dir(project) / record.staging_name
+            staging.write_bytes(b"staged")
+            value = staging.stat()
+            store.mark_staged(_CAPTURE_ID, (value.st_dev, value.st_ino))
+
+        with pytest.raises(
+            capture_lifecycle.CaptureLifecycleError,
+            match="invalid successful capture finalization",
+        ):
+            store.finalize_capture(
+                _CAPTURE_ID,
+                size=0,
+                sha256=_DIGEST,
+                failed=False,
+            )
     finally:
         root.close()
         anchor.close()

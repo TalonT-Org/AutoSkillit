@@ -37,9 +37,10 @@ def _bounded_stderr(message: str) -> None:
 
 def main() -> int:
     try:
-        raw = sys.stdin.read(_MAX_INPUT_BYTES + 1)
-        if len(raw) > _MAX_INPUT_BYTES:
+        raw_bytes = sys.stdin.buffer.read(_MAX_INPUT_BYTES + 1)
+        if len(raw_bytes) > _MAX_INPUT_BYTES:
             return 0
+        raw = raw_bytes.decode("utf-8")
         payload = json.loads(raw)
         if not isinstance(payload, dict):
             return 0

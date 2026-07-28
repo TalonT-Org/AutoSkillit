@@ -53,7 +53,7 @@ def _run_hook(
         env.pop("AUTOSKILLIT_HEADLESS", None)
     return subprocess.run(
         [sys.executable, str(SCRIPT)],
-        input=json.dumps(payload),
+        input=json.dumps(payload, ensure_ascii=False),
         capture_output=True,
         text=True,
         cwd=project,
@@ -129,6 +129,23 @@ def test_cleanup_hook_rejects_invalid_payload_without_output(
     assert completed.stdout == ""
     assert completed.stderr == ""
     assert not (project / ".autoskillit").exists()
+
+
+def test_cleanup_hook_rejects_multibyte_payload_over_byte_limit(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    artifact = _seed_due_capture(project)
+
+    completed = _run_hook(
+        project,
+        {"cwd": str(project), "padding": "🔥" * 20_000},
+        headless=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == ""
+    assert completed.stderr == ""
+    assert artifact.read_bytes() == b"due"
 
 
 def test_cleanup_hook_does_not_create_absent_store(tmp_path: Path) -> None:

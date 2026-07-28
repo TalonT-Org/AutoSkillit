@@ -5,12 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 if TYPE_CHECKING:
-    from autoskillit.pipeline import ToolContext
     from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
 
 from autoskillit.core import (

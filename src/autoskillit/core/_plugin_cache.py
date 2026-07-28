@@ -739,6 +739,14 @@ class PluginArtifactRetirementEngine:
         try:
             with _InstallLock():
                 state = read_retiring_cache()
+                if state.state is RetiringCacheState.ABSENT:
+                    return RetirementOutcome.RECORD_REMOVED
+                if state.state is not RetiringCacheState.EXACT_V2:
+                    return self._log_reclaim(
+                        record,
+                        RetirementOutcome.DEFERRED_IO_ERROR,
+                        detail=f"retiring cache became unsafe: {state.state.value}",
+                    )
                 queued = next(
                     (
                         current

@@ -255,6 +255,44 @@ def test_creation_failure_preserves_failed_state_recovery_error(
         anchor.close()
 
 
+def test_failed_recovery_without_identity_preserves_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+
+    def fail_mark_staged(_capture_id: str, _identity: tuple[int, int]) -> None:
+        raise capture_lifecycle.CaptureLifecycleError("primary creation failure")
+
+    try:
+        monkeypatch.setattr(store, "mark_staged", fail_mark_staged)
+        with pytest.raises(
+            capture_lifecycle.CaptureLifecycleError,
+            match="primary creation failure",
+        ):
+            store.create_artifact(_CAPTURE_ID)
+
+        failed = store.get_record(_CAPTURE_ID)
+        assert failed is not None
+        assert failed.state is CaptureState.FAILED
+        assert failed.artifact_identity is None
+        staging = _capture_dir(project) / failed.staging_name
+        staging.unlink()
+        staging.write_bytes(b"replacement")
+
+        clock.advance(3601)
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+
+        assert outcome.tampered == 1
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
+        assert staging.read_bytes() == b"replacement"
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_interrupted_publication_fsync_recovers_public_artifact(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

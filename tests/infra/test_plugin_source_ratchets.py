@@ -125,19 +125,16 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ),
     (
         "workspace/skill_projection.py",
-        "_stage_projected_plugin_artifact",
-        "staging_manifest.unlink",
+        "_discard_staging_manifest",
+        "manifest.unlink",
     ): (
         1,
-        "Failure cleanup removes a private unpublished staging manifest.",
+        "The shared best-effort cleanup seam removes only a private unpublished "
+        "staging manifest and preserves any active publication exception.",
     ),
     ("workspace/skill_projection.py", "acquire_launch_binding", "shutil.rmtree"): (
         1,
         "Post-publication cleanup removes the private staging root, never the public root.",
-    ),
-    ("workspace/skill_projection.py", "acquire_launch_binding", "staged.manifest.unlink"): (
-        1,
-        "Post-publication cleanup removes the private staging manifest.",
     ),
     ("workspace/skill_projection.py", "materialize_agent_skill_tree", "shutil.rmtree"): (
         1,

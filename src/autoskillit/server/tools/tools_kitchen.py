@@ -927,16 +927,16 @@ async def open_kitchen(
             # Scope-placement invariant (REQ-#4399): this branch is gated on
             # `gate_infrastructure_ready == False` — i.e., tags can only be
             # disabled by close_kitchen(), which always calls
-            # _close_kitchen_handler() (line 1468), and that handler
-            # unconditionally sets `gate_infrastructure_ready = False` (line
-            # 612). When _skip_handler=True (gate_infrastructure_ready was
-            # already True), tags are already correctly enabled — either from
-            # _pre_reveal_kitchen() at boot or from a prior open_kitchen() that
-            # ran the enable block. Therefore _skip_handler=True is
-            # structurally unreachable after a close_kitchen call; any future
-            # change to close_kitchen's gate_infrastructure_ready transition
-            # must preserve this invariant or it will silently break the
-            # notification asymmetry fixed in #4399.
+            # _close_kitchen_handler(), and that handler unconditionally sets
+            # `gate_infrastructure_ready = False`. When _skip_handler=True
+            # (gate_infrastructure_ready was already True), tags are already
+            # correctly enabled — either from _pre_reveal_kitchen() at boot or
+            # from a prior open_kitchen() that ran the enable block. Therefore
+            # _skip_handler=True is structurally unreachable after a
+            # close_kitchen call; any future change to close_kitchen's
+            # gate_infrastructure_ready transition must preserve this
+            # invariant or it will silently break the notification asymmetry
+            # fixed in #4399.
             _kctx_pre = _get_ctx()
             _use_global_enable = (
                 _kctx_pre.backend is not None

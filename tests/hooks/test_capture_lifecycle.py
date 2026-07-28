@@ -871,6 +871,58 @@ def test_writer_lease_is_visible_to_an_independent_process(tmp_path: Path) -> No
         anchor.close()
 
 
+def test_terminated_producer_is_recovered_by_independent_store(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    producer_script = (
+        "import os, sys, time\n"
+        "from autoskillit.hooks._capture._authority import "
+        "open_capture_root, open_project_anchor\n"
+        "from autoskillit.hooks._capture_artifacts import create_capture_artifact\n"
+        "from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore\n"
+        "anchor = open_project_anchor(sys.argv[1])\n"
+        "root = open_capture_root(anchor, create=True)\n"
+        "store = CaptureLifecycleStore.from_open_authorities(anchor, root)\n"
+        "artifact = create_capture_artifact(root, sys.argv[2], store)\n"
+        "os.write(artifact.fd, b'abandoned')\n"
+        "os.fsync(artifact.fd)\n"
+        "print(artifact.name, flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    producer = subprocess.Popen(
+        [sys.executable, "-c", producer_script, str(project), _CAPTURE_ID],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=project,
+    )
+    try:
+        assert producer.stdout is not None
+        artifact_name = producer.stdout.readline().strip()
+        assert artifact_name == f"shell_{_CAPTURE_ID}.log"
+        producer.terminate()
+        producer.wait(timeout=5)
+    finally:
+        if producer.poll() is None:
+            producer.kill()
+            producer.wait(timeout=5)
+
+    clock = _Clock(time.time() + 7200)
+    anchor, root, store = _open_store(project, clock)
+    try:
+        artifact = _capture_dir(project) / artifact_name
+        assert artifact.read_bytes() == b"abandoned"
+
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+
+        assert outcome.deleted == 1
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
+        assert not artifact.exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_finalized_capture_ttl_begins_at_terminal_commit(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

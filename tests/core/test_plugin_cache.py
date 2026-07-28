@@ -118,6 +118,62 @@ class TestRetiringCacheSchemaValidation:
         assert result.state is RetiringCacheState.CORRUPT
         assert result.records == ()
 
+    def test_v2_record_rejects_unexpected_fields(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        append_retiring_record(_retiring_record(tmp_path))
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        payload = json.loads(cache.read_text())
+        payload["records"][0]["unexpected_authority"] = "accepted"
+        cache.write_text(json.dumps(payload))
+
+        result = read_retiring_cache()
+
+        assert result.state is RetiringCacheState.CORRUPT
+        assert result.records == ()
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "{not-json",
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "records": {},
+                    "legacy_evidence": [],
+                }
+            ),
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "records": [],
+                    "legacy_evidence": {},
+                }
+            ),
+        ],
+    )
+    def test_malformed_v2_cache_is_corrupt_and_preserved(
+        self,
+        monkeypatch,
+        tmp_path,
+        content,
+    ) -> None:
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text(content)
+        before = cache.read_bytes()
+
+        result = read_retiring_cache()
+
+        assert result.state is RetiringCacheState.CORRUPT
+        assert result.records == ()
+        assert result.legacy_evidence == ()
+        assert cache.read_bytes() == before
+
     def test_boolean_root_schema_is_corrupt_not_legacy(
         self,
         monkeypatch,

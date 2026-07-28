@@ -35,6 +35,21 @@ logger = get_logger(__name__)
 
 _ACTIVE_KITCHENS_SCHEMA_VERSION = 1
 _RETIRING_CACHE_SCHEMA_VERSION = 2
+_RETIRING_RECORD_FIELDS = frozenset(
+    {
+        "record_id",
+        "artifact_kind",
+        "semantic_key",
+        "managed_path",
+        "manifest_path",
+        "incarnation_id",
+        "manifest_schema_version",
+        "artifact_digest",
+        "retired_at",
+        "not_before",
+        "schema_version",
+    }
+)
 
 
 def _autoskillit_home() -> Path:
@@ -84,6 +99,8 @@ def _parse_utc(value: object, *, field_name: str) -> datetime:
 def _record_from_json(raw: object) -> RetiringArtifactRecord:
     if not isinstance(raw, dict):
         raise ValueError("retiring record must be an object")
+    if frozenset(raw) != _RETIRING_RECORD_FIELDS:
+        raise ValueError("retiring record fields do not match the exact v2 schema")
     string_fields = (
         "record_id",
         "artifact_kind",

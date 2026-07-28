@@ -19,6 +19,7 @@ from autoskillit.core import (
     PluginLoadMode,
     RetryReason,
     SessionCheckpoint,
+    SkillContractView,
     SkillResult,
     SkillSessionConfig,
     StreamParser,
@@ -40,7 +41,6 @@ from autoskillit.execution.session import _check_expected_patterns
 
 if TYPE_CHECKING:
     from autoskillit.core import ResultParser, SubprocessResult, SubprocessRunner
-    from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
 
@@ -312,7 +312,7 @@ async def _attempt_contract_nudge(
     provider_extras: Mapping[str, str] | None = None,
     retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
     pty_override: bool | None = None,
-    skill_contract: SkillContract | None = None,
+    skill_contract: SkillContractView | None = None,
     plugin_authority: PluginArtifactAuthority | None = None,
     plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
     session_env: Mapping[str, str] | None = None,

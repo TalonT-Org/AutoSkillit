@@ -13,6 +13,7 @@ import regex as re
 
 from autoskillit.core import (
     CliSubtype,
+    SkillContractView,
     extract_bash_write_targets,
     get_logger,
 )
@@ -30,7 +31,6 @@ from autoskillit.execution.session._session_model import _is_parent_assistant_re
 
 if TYPE_CHECKING:
     from autoskillit.core import ResultParser
-    from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
 
@@ -242,7 +242,7 @@ def _synthesize_from_write_artifacts(
 
 
 def _parse_single_enum_binding(
-    skill_contract: SkillContract | None,
+    skill_contract: SkillContractView | None,
 ) -> tuple[str, str] | None:
     """Return (token_name, literal_value) iff write_expected_when soundly binds one enum value.
 
@@ -277,7 +277,7 @@ def _parse_single_enum_binding(
 def _infer_enum_token_from_write_contract(
     session: ClaudeSessionResult,
     expected_output_patterns: Sequence[str],
-    skill_contract: SkillContract | None,
+    skill_contract: SkillContractView | None,
     write_call_count: int,
     file_changes: Sequence[str] = (),
 ) -> ClaudeSessionResult | None:
@@ -352,7 +352,7 @@ def _extract_missing_token_hints(
     expected_output_patterns: Sequence[str],
     result_parser: ResultParser,
     write_tool_names: frozenset[str],
-    skill_contract: SkillContract | None = None,
+    skill_contract: SkillContractView | None = None,
 ) -> list[_PathHint | _EnumHint]:
     """Extract missing-token hints for patterns missing from the result.
 

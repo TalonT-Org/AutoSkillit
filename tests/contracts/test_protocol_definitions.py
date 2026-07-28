@@ -51,6 +51,15 @@ def test_skill_resolver_satisfies_skill_lister() -> None:
     assert callable(instance.list_all)
 
 
+def test_recipe_skill_contract_satisfies_execution_view() -> None:
+    from autoskillit.core import SkillContractView
+    from autoskillit.recipe._contracts_types import SkillContract
+
+    contract = SkillContract(inputs=(), outputs=[])
+
+    assert isinstance(contract, SkillContractView)
+
+
 def test_recipe_repository_load_and_validate_project_dir_annotation() -> None:
     import typing
     from pathlib import Path

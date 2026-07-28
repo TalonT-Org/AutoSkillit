@@ -33,9 +33,35 @@ __all__ = [
     "HeadlessSkillDispatchContract",
     "HeadlessSkillDispatchPreparation",
     "OutputPatternResolver",
+    "SkillContractView",
     "SkillSessionContractStore",
     "WriteExpectedResolver",
 ]
+
+
+class _SkillContractOutputView(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def type(self) -> str: ...
+
+    @property
+    def allowed_values(self) -> Sequence[str]: ...
+
+
+@runtime_checkable
+class SkillContractView(Protocol):
+    """Execution-safe shape consumed from a higher-layer skill contract."""
+
+    @property
+    def outputs(self) -> Sequence[_SkillContractOutputView]: ...
+
+    @property
+    def write_behavior(self) -> str | None: ...
+
+    @property
+    def write_expected_when(self) -> Sequence[str]: ...
 
 
 @runtime_checkable

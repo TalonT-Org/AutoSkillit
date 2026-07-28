@@ -51,6 +51,7 @@ _FRAME_HEADER_FORMAT = ">4sI"
 _FRAME_HEADER_BYTES = 8
 _CHECKSUM_BYTES = hashlib.sha256().digest_size
 _CAPTURE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
 _STAGING_NAME_RE = re.compile(r"^\.capture-staging-[0-9a-f]{16}-[0-9a-f]{16}$")
 _QUARANTINE_NAME_RE = re.compile(r"^\.capture-quarantine-[0-9a-f]{16}-[0-9a-f]{16}$")
@@ -205,7 +206,8 @@ def _record_from_dict(value: object) -> CaptureLifecycleRecord:
         or isinstance(size, bool)
         or size < 0
         or not isinstance(sha256, str)
-        or len(sha256) > 64
+        or bool(sha256)
+        and not _SHA256_RE.fullmatch(sha256)
         or not isinstance(retry_count, int)
         or isinstance(retry_count, bool)
         or retry_count < 0
@@ -618,6 +620,16 @@ class CaptureLifecycleStore:
         sha256: str,
         failed: bool,
     ) -> CaptureLifecycleRecord:
+        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            raise CaptureLifecycleError("invalid terminal capture size")
+        if (
+            not isinstance(sha256, str)
+            or bool(sha256)
+            and not _SHA256_RE.fullmatch(sha256)
+            or not failed
+            and not sha256
+        ):
+            raise CaptureLifecycleError("invalid terminal capture digest")
         record = self.get_record(capture_id)
         if record is None or record.state not in {
             CaptureState.PUBLISHED_WRITING,

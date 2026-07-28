@@ -2376,3 +2376,141 @@ def test_preflight_resolver_protocol_accepts_allowed_root_override(
     # ``allowed_root=None`` falls back to the constructor-bound root (rejects).
     none_result = resolver.resolve(request, allowed_root=None)
     assert none_result.decision.status.value == "REJECT"
+
+
+@pytest.mark.anyio
+async def test_run_skill_containment_root_anchors_to_cwd_not_orchestrator_temp_dir(
+    tool_ctx_kitchen_open,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reproduce #4387 through the actual ``run_skill()`` entry point.
+
+    Disjoint directory tree: ``tool_ctx.temp_dir`` (orchestrator_root) is set at
+    recipe-install time, exactly like production's
+    ``prepare_recipe_execution(tool_ctx, ...)`` -> ``factory(..., allowed_root=
+    tool_ctx.temp_dir)``. The audit-cycle authority is materialized under a
+    genuinely disjoint ``clone_temp`` tree instead, and ``run_skill()`` is
+    called with ``cwd=str(clone_root)``.
+
+    Without the fix, ``run_skill`` never threads a cwd-derived containment
+    root through to ``resolve_attested_input_preflight``, so the resolver
+    falls back to its constructor-bound root (orchestrator_root) and rejects
+    the legitimate request. With the fix (``_clone_allowed_root`` computed
+    from ``cwd`` and passed as ``allowed_root``), the request is admitted.
+    This closes the gap left by ``test_clone_layout_containment_root_required``
+    and ``test_preflight_resolver_protocol_accepts_allowed_root_override``,
+    which only exercise ``DefaultInputPreflightResolver.resolve()`` directly.
+    """
+    orchestrator_root = tmp_path / "orchestrator" / ".autoskillit" / "temp"
+    orchestrator_root.mkdir(parents=True)
+    clone_root = tmp_path / "clone"
+    clone_root.mkdir()
+    clone_temp = clone_root / ".autoskillit" / "temp"
+    clone_temp.mkdir(parents=True)
+    assert not orchestrator_root.is_relative_to(clone_temp)  # type: ignore[attr-defined]
+    assert not clone_temp.is_relative_to(orchestrator_root)  # type: ignore[attr-defined]
+
+    projection = RecipeBindingProjection(
+        {
+            "dry": BoundStepInvocation(
+                step_name="dry",
+                tool_name="run_skill",
+                mode=BindingMode.RECIPE,
+                skill_name="dry-walkthrough",
+                mcp_kwargs=(
+                    _present("skill_command", "/dry-walkthrough"),
+                    _present(
+                        "cwd",
+                        "${{ context.worktree_path }}",
+                        origin=BoundValueOrigin.CONTEXT,
+                        dependencies=("worktree_path",),
+                    ),
+                ),
+                skill_inputs=(
+                    _present(
+                        "plan_path",
+                        "${{ context.plan_path }}",
+                        origin=BoundValueOrigin.CONTEXT,
+                        dependencies=("plan_path",),
+                    ),
+                    _present("issue_url", ""),
+                    _present(
+                        "audit_cycle_path",
+                        "${{ context.audit_cycle_path }}",
+                        origin=BoundValueOrigin.CONTEXT,
+                        dependencies=("audit_cycle_path",),
+                    ),
+                    BoundValue.absent("plan_disposition_path"),
+                ),
+            )
+        }
+    )
+    snapshot = build_recipe_execution_snapshot(
+        recipe_name="demo",
+        content_hash=_HASH_A,
+        composite_hash=_HASH_B,
+        projection=projection,
+        execution_id="execution-1",
+    )
+
+    # Recipe install happens with the orchestrator's temp_dir bound, exactly
+    # as production's prepare_recipe_execution() does.
+    monkeypatch.setattr(tool_ctx_kitchen_open, "temp_dir", orchestrator_root)
+    _wire_recipe_execution_factory(tool_ctx_kitchen_open)
+    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+
+    authority = _authority(
+        clone_root,
+        generation="execution-1",
+        round_=1,
+        parent=None,
+        verdict=AuditVerdict.GO,
+        materialize=True,
+    )
+    clone_temp.joinpath("authority.json").write_bytes(authority.canonical_bytes)
+    installed.audit_cycle_heads.publish(authority, expected_parent_digest=None, expected_round=0)
+    tool_ctx_kitchen_open.active_recipe_execution = replace(
+        installed,
+        preflight_identities={"dry": ("plans-1", "scope-1", "part-a")},
+    )
+
+    marker = "%%ORDER_UP::12345678%%"
+    monkeypatch.setattr(
+        "uuid.uuid4",
+        lambda: SimpleNamespace(hex="12345678000000000000000000000000"),
+    )
+    tool_ctx_kitchen_open.write_expected_resolver = None
+    tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+    tool_ctx_kitchen_open.runner.push(
+        _make_result(
+            0,
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": f"done\n{marker}",
+                    "session_id": "session-1",
+                }
+            ),
+            "",
+        )
+    )
+
+    result = json.loads(
+        await run_skill(
+            "/dry-walkthrough",
+            str(clone_root),
+            step_name="dry",
+            recipe_execution_id="execution-1",
+            invocation_template_digest=snapshot.templates["dry"].template_digest,
+            skill_inputs={
+                "plan_path": str(clone_root / "plan.md"),
+                "issue_url": "",
+                "audit_cycle_path": str(clone_temp / "authority.json"),
+            },
+        )
+    )
+
+    assert result["success"] is True, result

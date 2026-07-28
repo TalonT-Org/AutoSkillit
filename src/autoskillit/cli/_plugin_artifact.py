@@ -23,6 +23,7 @@ from autoskillit.core import (
     RetiringAppendResult,
     RetiringArtifactRecord,
     RetiringCacheState,
+    destination_location,
     directory_tree_digest,
     due_retiring_records,
     get_logger,
@@ -77,7 +78,7 @@ def installed_plugin_semantic_key(plugin_ref: str, version: str) -> str:
 
 
 def current_installed_plugin_root() -> Path:
-    """Return the cache root created by the current install transaction."""
+    """Return the lexical cache root created by the current install transaction."""
     from autoskillit import __version__
 
     return (
@@ -88,7 +89,43 @@ def current_installed_plugin_root() -> Path:
         / DIRECT_INSTALL_CACHE_SUBDIR
         / "autoskillit"
         / __version__
-    ).resolve(strict=False)
+    )
+
+
+def _validate_installed_plugin_destination(root: Path) -> None:
+    """Reject a target whose lexical location cannot be mutated safely."""
+    supplied = Path(root)
+    expected = current_installed_plugin_root()
+    if supplied != expected or not supplied.is_absolute():
+        raise PluginArtifactValidationError(
+            f"installed plugin target is outside the current managed cache: {supplied}"
+        )
+    if supplied.is_symlink():
+        raise PluginArtifactValidationError(
+            f"installed plugin target must not be a symlink: {supplied}"
+        )
+    if supplied.exists() and not supplied.is_dir():
+        raise PluginArtifactValidationError(
+            f"installed plugin target must be a directory: {supplied}"
+        )
+    expected_parent = (
+        Path.home().resolve(strict=False)
+        / ".claude"
+        / "plugins"
+        / "cache"
+        / DIRECT_INSTALL_CACHE_SUBDIR
+        / "autoskillit"
+    )
+    try:
+        location = destination_location(supplied)
+    except (OSError, ValueError) as exc:
+        raise PluginArtifactValidationError(
+            f"installed plugin target cannot be located safely: {supplied}"
+        ) from exc
+    if location.parent != expected_parent:
+        raise PluginArtifactValidationError(
+            f"installed plugin target escapes the managed cache: {supplied}"
+        )
 
 
 def current_installed_plugin_authority() -> InstalledPluginArtifactAuthority:

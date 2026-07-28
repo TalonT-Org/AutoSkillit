@@ -371,6 +371,16 @@ def install(*, scope: str = "user") -> bool:
     for repaired in reconcile_install_artifacts():
         print(f"Repaired legacy install artifact: ~/{repaired}")
 
+    from autoskillit.cli._plugin_artifact import _validate_installed_plugin_destination
+    from autoskillit.core import PluginArtifactValidationError
+
+    target_root = _installed_plugin_root()
+    try:
+        _validate_installed_plugin_destination(target_root)
+    except PluginArtifactValidationError as exc:
+        print(f"Unsafe installed plugin target: {exc}")
+        raise SystemExit(1) from exc
+
     snapshot = _InstallSnapshot()
 
     from autoskillit.cli._plugin_artifact import installed_artifact_lock_path

@@ -242,6 +242,41 @@ class TestPreflightOrdering:
         assert not (tmp_path / ".autoskillit" / "marketplace").exists()
 
 
+class TestInstallTargetSafety:
+    def test_symlinked_version_target_is_rejected_without_following_it(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        capsys,
+    ) -> None:
+        from autoskillit.cli import _marketplace
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
+        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
+        monkeypatch.setattr(
+            _marketplace,
+            "_ensure_marketplace",
+            lambda: pytest.fail("unsafe target reached marketplace mutation"),
+        )
+        outside = tmp_path / "outside-managed-cache"
+        outside.mkdir()
+        marker = outside / "must-survive"
+        marker.write_text("owned elsewhere")
+        target = _marketplace._installed_plugin_root()
+        target.parent.mkdir(parents=True)
+        target.symlink_to(outside, target_is_directory=True)
+
+        with pytest.raises(SystemExit):
+            _marketplace.install(scope="user")
+
+        assert "Unsafe installed plugin target" in capsys.readouterr().out
+        assert target.is_symlink()
+        assert marker.read_text() == "owned elsewhere"
+
+
 class TestRecordOwnedRetirementDeadline:
     def test_coordinator_dispatches_only_due_exact_records(
         self,

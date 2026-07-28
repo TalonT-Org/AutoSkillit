@@ -567,13 +567,25 @@ def remove_retiring_records(record_ids: Iterable[str]) -> int:
         fh.close()
 
 
+def _read_exact_retiring_cache(
+    *,
+    operation: str,
+) -> RetiringCacheReadResult | None:
+    state = read_retiring_cache()
+    if state.state is RetiringCacheState.ABSENT:
+        return None
+    if state.state is not RetiringCacheState.EXACT_V2:
+        raise RuntimeError(f"retiring cache cannot {operation} in state {state.state.value}")
+    return state
+
+
 def due_retiring_records(now: datetime) -> tuple[RetiringArtifactRecord, ...]:
-    """Return exact records whose persisted deadline is due."""
+    """Return due records without collapsing an unsafe cache state to empty."""
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("retirement sweep time must be timezone-aware")
     normalized_now = now.astimezone(UTC)
-    state = read_retiring_cache()
-    if state.state is not RetiringCacheState.EXACT_V2:
+    state = _read_exact_retiring_cache(operation="enumerate due records")
+    if state is None:
         return ()
     return tuple(record for record in state.records if record.not_before <= normalized_now)
 
@@ -673,9 +685,9 @@ class PluginArtifactRetirementEngine:
         self,
         identity: PluginArtifactIdentity,
     ) -> tuple[str, ...]:
-        """Remove exact and migrated retirement entries superseded by *identity*."""
-        state = read_retiring_cache()
-        if state.state is not RetiringCacheState.EXACT_V2:
+        """Remove superseded entries without erasing an unsafe cache state."""
+        state = _read_exact_retiring_cache(operation="cancel obsolete records")
+        if state is None:
             return ()
         record_ids = tuple(
             record.record_id

@@ -11,9 +11,12 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    PluginArtifactIdentity,
     PluginArtifactKind,
+    PluginArtifactRetirementEngine,
     RetiringArtifactRecord,
     RetiringCacheState,
+    due_retiring_records,
 )
 from autoskillit.core._plugin_cache import (
     any_kitchen_open,
@@ -80,6 +83,50 @@ def test_retirement_deduplication_ignores_regenerated_deadline(
     assert repeated_result.created is False
     assert repeated_result.record_id == original.record_id
     assert read_retiring_cache().records == (original,)
+
+
+@pytest.mark.parametrize(
+    ("state_name", "cache_bytes"),
+    [
+        ("corrupt", b"{not-json"),
+        ("unsupported_future", b'{"schema_version":99,"records":[]}'),
+        ("legacy_v1", b'{"schema_version":1,"retiring":[]}'),
+    ],
+)
+def test_unsafe_retirement_state_is_not_collapsed_to_empty(
+    state_name: str,
+    cache_bytes: bytes,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+    cache.parent.mkdir(parents=True)
+    cache.write_bytes(cache_bytes)
+    record = _retiring_record(tmp_path)
+    identity = PluginArtifactIdentity(
+        artifact_kind=record.artifact_kind,
+        semantic_key=record.semantic_key,
+        managed_path=record.managed_path,
+        manifest_path=record.manifest_path,
+        incarnation_id=record.incarnation_id,
+        manifest_schema_version=record.manifest_schema_version,
+        artifact_digest=record.artifact_digest,
+    )
+    engine = PluginArtifactRetirementEngine(
+        managed_root=tmp_path / "managed",
+        artifact_kind=record.artifact_kind,
+        manifest_path=lambda path: path.parent / f".{path.name}.manifest.json",
+        lease_path=lambda path: path.parent / f".{path.name}.lease",
+        current_identity=lambda _record: identity,
+        logger=None,
+    )
+
+    with pytest.raises(RuntimeError, match=state_name):
+        due_retiring_records(datetime.now(UTC))
+    with pytest.raises(RuntimeError, match=state_name):
+        engine.cancel_obsolete_retirements(identity)
+    assert cache.read_bytes() == cache_bytes
 
 
 # ---------------------------------------------------------------------------

@@ -299,7 +299,7 @@ class InstalledPluginArtifactAuthority:
                     incarnation=identity.incarnation_id,
                 ),
             )
-        except PluginArtifactValidationError:
+        except PluginArtifactValidationError as primary_error:
             log_plugin_artifact_lifecycle(
                 logger,
                 action="acquire",
@@ -308,10 +308,10 @@ class InstalledPluginArtifactAuthority:
                 semantic_key=self._semantic_key,
                 incarnation="unknown",
             )
-            lease.close()
+            lease.close_preserving(primary_error)
             raise
-        except BaseException:
-            lease.close()
+        except BaseException as primary_error:
+            lease.close_preserving(primary_error)
             raise
 
 

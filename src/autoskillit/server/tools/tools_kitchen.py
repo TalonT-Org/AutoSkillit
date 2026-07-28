@@ -813,6 +813,30 @@ def _check_override_keys(
     return warnings
 
 
+def _render_ingredients_only_response(
+    result: dict[str, Any],
+    *,
+    declared_ingredients: frozenset[str] | None,
+    overrides: dict[str, str] | None,
+    session_keys: set[str],
+    config_layer: dict[str, str],
+) -> str:
+    """Build the canonical ingredients-only inspection response."""
+    inspection = strip_ingredients_only_keys(
+        build_open_kitchen_recipe_payload(result, version=__version__)
+    )
+    if declared_ingredients is not None:
+        warnings = _check_override_keys(
+            overrides,
+            declared_ingredients,
+            session_keys,
+            config_layer,
+        )
+        if warnings:
+            inspection["warnings"] = warnings
+    return render_served_response(inspection)
+
+
 @mcp.tool(
     tags={"autoskillit"},
     annotations={"readOnlyHint": True},
@@ -1043,18 +1067,15 @@ async def open_kitchen(
                     )
                     return _kitchen_failure_envelope(exc, stage="load_and_validate")
                 if ingredients_only:
-                    inspection = build_open_kitchen_recipe_payload(result, version=__version__)
-                    inspection = strip_ingredients_only_keys(inspection)
-                    if _raw_recipe is not None:
-                        warnings = _check_override_keys(
-                            overrides,
-                            frozenset(_raw_recipe.ingredients.keys()),
-                            set(_session_overrides.keys()),
-                            _config_layer,
-                        )
-                        if warnings:
-                            inspection["warnings"] = warnings
-                    return render_served_response(inspection)
+                    return _render_ingredients_only_response(
+                        result,
+                        declared_ingredients=(
+                            frozenset(_raw_recipe.ingredients) if _raw_recipe is not None else None
+                        ),
+                        overrides=overrides,
+                        session_keys=set(_session_overrides),
+                        config_layer=_config_layer,
+                    )
                 tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
                 tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
                 tool_ctx.recipe_content_hash = result.get("content_hash", "")
@@ -1196,18 +1217,15 @@ async def open_kitchen(
                 logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
             if ingredients_only:
-                inspection = build_open_kitchen_recipe_payload(result, version=__version__)
-                inspection = strip_ingredients_only_keys(inspection)
-                if _raw_recipe is not None:
-                    warnings = _check_override_keys(
-                        overrides,
-                        frozenset(_raw_recipe.ingredients.keys()),
-                        set(_session_overrides.keys()),
-                        _config_layer,
-                    )
-                    if warnings:
-                        inspection["warnings"] = warnings
-                return render_served_response(inspection)
+                return _render_ingredients_only_response(
+                    result,
+                    declared_ingredients=(
+                        frozenset(_raw_recipe.ingredients) if _raw_recipe is not None else None
+                    ),
+                    overrides=overrides,
+                    session_keys=set(_session_overrides),
+                    config_layer=_config_layer,
+                )
 
             tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
             tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))

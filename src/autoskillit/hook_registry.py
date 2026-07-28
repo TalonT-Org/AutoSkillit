@@ -559,13 +559,23 @@ def validate_lifecycle_contracts(
 ) -> None:
     """Fail closed when a deployed producer loses a required cleanup owner."""
     contract_keys = {
-        (contract.resource, contract.producer_script) for contract in lifecycle_contracts
+        (contract.resource, contract.producer_script, contract.backend)
+        for contract in lifecycle_contracts
     }
     for hook_def in registry:
         for resource in hook_def.produces_resources:
-            if not any(
-                resource == contract_resource and producer_script in hook_def.scripts
-                for contract_resource, producer_script in contract_keys
+            reachable = hook_applies_to_backend(
+                hook_def,
+                backend=backend,
+                session_scope="headless",
+            ) or hook_applies_to_backend(
+                hook_def,
+                backend=backend,
+                session_scope="interactive",
+            )
+            if reachable and not any(
+                (resource, producer_script, backend) in contract_keys
+                for producer_script in hook_def.scripts
             ):
                 raise ValueError(f"persistent resource {resource!r} has no lifecycle contract")
 

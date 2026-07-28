@@ -63,6 +63,28 @@ def test_every_resource_producer_requires_a_contract() -> None:
         validate_lifecycle_contracts(registry, LIFECYCLE_CONTRACTS, backend="codex")
 
 
+def test_every_reachable_backend_requires_its_own_contract() -> None:
+    producer = HookDef(
+        matcher="Bash",
+        scripts=["multi_backend_producer.py"],
+        produces_resources=frozenset({"multi-backend-resource"}),
+        reclaims_resources=frozenset({"multi-backend-resource"}),
+        self_reclaims_resources=frozenset({"multi-backend-resource"}),
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+    )
+    codex_contract = LifecycleContractDef(
+        resource="multi-backend-resource",
+        producer_script="multi_backend_producer.py",
+        backend="codex",
+        session_scope="any",
+        required_owner_roles=frozenset({"same_runner"}),
+    )
+
+    validate_lifecycle_contracts([producer], [codex_contract], backend="codex")
+    with pytest.raises(ValueError, match="has no lifecycle contract"):
+        validate_lifecycle_contracts([producer], [codex_contract], backend="claude_code")
+
+
 def test_same_runner_metadata_is_required() -> None:
     registry = _replace_hook(
         "shell_capture_hook.py",

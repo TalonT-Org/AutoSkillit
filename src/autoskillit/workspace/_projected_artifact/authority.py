@@ -24,6 +24,7 @@ from autoskillit.core import (
     PluginArtifactKind,
     PluginArtifactLifecycleLease,
     PluginArtifactPublicationError,
+    PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     PluginLaunchBinding,
     PluginLoadMode,
@@ -231,6 +232,8 @@ def _try_validate_published_plugin_artifact(
 ) -> PluginArtifactIdentity | None:
     try:
         return _validate_published_plugin_artifact(plan)
+    except PluginArtifactUnavailableError:
+        raise
     except PluginArtifactValidationError:
         return None
     except Exception as exc:

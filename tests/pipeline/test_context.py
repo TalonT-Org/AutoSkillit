@@ -419,7 +419,7 @@ def test_toolcontext_raises_typeerror_when_context_ledger_unset(tmp_path):
             token_log=DefaultTokenLog(),
             timing_log=DefaultTimingLog(),
             gate=DefaultGateState(),
-            plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+            plugin_authority=_UnusedPluginAuthority(),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,

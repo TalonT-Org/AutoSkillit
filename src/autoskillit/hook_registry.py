@@ -60,12 +60,18 @@ class LifecycleContractDef:
     required_owner_roles: frozenset[Literal["same_runner", "session_start"]]
 
     def __post_init__(self) -> None:
-        if not self.resource:
+        if not isinstance(self.resource, str) or not self.resource:
             raise ValueError("LifecycleContractDef.resource must be non-empty")
-        if not self.producer_script:
+        if not isinstance(self.producer_script, str) or not self.producer_script:
             raise ValueError("LifecycleContractDef.producer_script must be non-empty")
-        if not self.required_owner_roles:
+        if self.backend not in ("claude_code", "codex"):
+            raise ValueError("LifecycleContractDef.backend is invalid")
+        if self.session_scope not in ("any", "headless_only", "interactive_only"):
+            raise ValueError("LifecycleContractDef.session_scope is invalid")
+        if not isinstance(self.required_owner_roles, frozenset) or not (self.required_owner_roles):
             raise ValueError("LifecycleContractDef.required_owner_roles must be non-empty")
+        if not self.required_owner_roles <= {"same_runner", "session_start"}:
+            raise ValueError("LifecycleContractDef.required_owner_roles contains an invalid role")
 
 
 # ---------------------------------------------------------------------------

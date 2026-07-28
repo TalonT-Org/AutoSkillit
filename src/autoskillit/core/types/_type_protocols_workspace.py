@@ -56,6 +56,9 @@ class PluginArtifactAuthority(Protocol):
 class PluginArtifactRetirementOwner(Protocol):
     """Artifact-specific exact-identity retirement authority."""
 
+    @property
+    def managed_root(self) -> Path: ...
+
     def enqueue_retirement(
         self,
         identity: PluginArtifactIdentity,

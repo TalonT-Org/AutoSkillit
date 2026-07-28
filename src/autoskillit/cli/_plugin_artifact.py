@@ -378,15 +378,14 @@ class DefaultPluginRetirementCoordinator:
         self,
         *,
         projection_owner: PluginArtifactRetirementOwner,
-        installed_owner: InstalledPluginArtifactRetirementOwner,
-        projection_root: Path,
+        installed_owner: PluginArtifactRetirementOwner,
     ) -> None:
         self._owners = {
             PluginArtifactKind.PROJECTION: projection_owner,
             PluginArtifactKind.INSTALLED_PLUGIN: installed_owner,
         }
         self._managed_roots = {
-            PluginArtifactKind.PROJECTION: Path(projection_root),
+            PluginArtifactKind.PROJECTION: projection_owner.managed_root,
             PluginArtifactKind.INSTALLED_PLUGIN: installed_owner.managed_root,
         }
 
@@ -428,7 +427,6 @@ def default_plugin_retirement_coordinator() -> DefaultPluginRetirementCoordinato
     return DefaultPluginRetirementCoordinator(
         projection_owner=ProjectedPluginRetirementOwner(projection_root),
         installed_owner=installed_owner,
-        projection_root=projection_root,
     )
 
 

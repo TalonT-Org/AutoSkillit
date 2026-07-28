@@ -476,7 +476,6 @@ class TestRecordOwnedRetirementDeadline:
                 artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
                 managed_root=tmp_path / "cache",
             ),
-            projection_root=tmp_path / "projections",
         )
 
         with pytest.warns(RuntimeWarning, match="sweep skipped unsafe state"):
@@ -571,7 +570,6 @@ class TestRecordOwnedRetirementDeadline:
         coordinator = DefaultPluginRetirementCoordinator(
             projection_owner=projection_owner,
             installed_owner=installed_owner,
-            projection_root=tmp_path / "projections",
         )
 
         assert coordinator.sweep_due(now) == (

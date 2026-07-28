@@ -25,26 +25,16 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._capture._types import (
-        CaptureCleanupOutcome,
-    )
-    from autoskillit.hooks._capture._types import (
-        ObservedArtifact as _ObservedArtifact,
-    )
-    from autoskillit.hooks._capture._types import (
-        Tampered as _Tampered,
-    )
-    from autoskillit.hooks._capture._types import (
-        WriterLive as _WriterLive,
-    )
+    from autoskillit.hooks._capture import _types as _capture_types
 else:
     _capture_types = importlib.import_module(
         f"{__package__}._capture._types" if __package__ else "_capture._types"
     )
-    CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
-    _ObservedArtifact = _capture_types.ObservedArtifact
-    _Tampered = _capture_types.Tampered
-    _WriterLive = _capture_types.WriterLive
+
+CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
+_ObservedArtifact = _capture_types.ObservedArtifact
+_Tampered = _capture_types.Tampered
+_WriterLive = _capture_types.WriterLive
 
 __all__ = [
     "CaptureCleanupOutcome",

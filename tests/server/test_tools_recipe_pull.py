@@ -1044,11 +1044,12 @@ def test_exemption_overrides_envelope_for_exempt_surface_within_ceiling(tool_ctx
     assert len(oversized_content.encode("utf-8")) > ordinary_limit * 4
     assert len(oversized_content.encode("utf-8")) < ceiling
 
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         _payload(oversized_content),
         surface="open_kitchen",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
@@ -1070,11 +1071,12 @@ def test_exemption_override_retains_envelope_for_payload_above_ceiling(tool_ctx)
         RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes + 1_000
     )
 
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         _payload(oversized_content),
         surface="open_kitchen",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
@@ -1091,11 +1093,12 @@ def test_exemption_override_does_not_apply_to_non_exempt_surface(tool_ctx) -> No
     ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
     oversized_content = "z" * (ordinary_limit * 4 + 5_000)
 
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         _payload(oversized_content),
         surface="get_recipe",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE

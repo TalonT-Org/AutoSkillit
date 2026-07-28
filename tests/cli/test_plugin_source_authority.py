@@ -315,9 +315,14 @@ class TestInstalledPluginArtifactAuthority:
     def test_content_change_after_publication_fails_closed(self, tmp_path: Path) -> None:
         from autoskillit.cli._plugin_artifact import (
             InstalledPluginArtifactAuthority,
+            installed_artifact_lock_path,
             publish_installed_plugin_artifact,
         )
-        from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
+        from autoskillit.core import (
+            ArtifactLease,
+            PluginArtifactValidationError,
+            PluginLoadMode,
+        )
 
         root = (tmp_path / "installed" / "1.2.3").resolve()
         root.mkdir(parents=True)
@@ -335,6 +340,11 @@ class TestInstalledPluginArtifactAuthority:
                 backend=object(),
                 load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
             )
+        with ArtifactLease.acquire_exclusive(
+            installed_artifact_lock_path(root),
+            blocking=False,
+        ):
+            pass
 
     def test_publication_rejects_internal_symlink_without_touching_target(
         self,

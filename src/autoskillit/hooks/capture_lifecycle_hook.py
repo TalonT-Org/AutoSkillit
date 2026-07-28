@@ -26,7 +26,11 @@ _MAX_DIAGNOSTIC_BYTES = 512
 
 def _bounded_stderr(message: str) -> None:
     try:
-        sys.stderr.write(message[:_MAX_DIAGNOSTIC_BYTES])
+        bounded = message.encode("utf-8")[:_MAX_DIAGNOSTIC_BYTES].decode(
+            "utf-8",
+            errors="ignore",
+        )
+        sys.stderr.write(bounded)
     except (OSError, RuntimeError, UnicodeError):
         pass
 

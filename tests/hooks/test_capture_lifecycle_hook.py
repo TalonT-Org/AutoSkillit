@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
+from autoskillit.hooks import capture_lifecycle_hook
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     create_capture_artifact,
@@ -145,6 +146,16 @@ def test_cleanup_hook_fails_open_with_bounded_stderr(tmp_path: Path) -> None:
     assert completed.stdout == ""
     assert "capture lifecycle cleanup failed" in completed.stderr
     assert len(completed.stderr.encode()) <= 512
+
+
+def test_cleanup_hook_bounds_multibyte_diagnostic_bytes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    capture_lifecycle_hook._bounded_stderr("🔥" * 512)
+
+    captured = capsys.readouterr()
+    assert captured.err
+    assert len(captured.err.encode("utf-8")) <= 512
 
 
 def test_generated_codex_session_start_executes_cleanup_dispatcher(tmp_path: Path) -> None:

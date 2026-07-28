@@ -7,6 +7,7 @@ import select
 import stat
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -91,6 +92,38 @@ def test_exclusive_lease_waits_for_final_shared_close(tmp_path: Path) -> None:
     finally:
         first.close()
         second.close()
+
+
+def test_blocking_exclusive_lease_waits_then_acquires(tmp_path: Path) -> None:
+    lock_path = tmp_path / "projection.lock"
+    reader = ArtifactLease.acquire_shared(lock_path)
+    writer_started = threading.Event()
+    writer_acquired = threading.Event()
+    failures: list[BaseException] = []
+
+    def acquire_writer() -> None:
+        writer_started.set()
+        try:
+            with ArtifactLease.acquire_exclusive(lock_path, blocking=True):
+                writer_acquired.set()
+        except BaseException as exc:
+            failures.append(exc)
+
+    writer = threading.Thread(target=acquire_writer)
+    writer.start()
+    try:
+        assert writer_started.wait(timeout=5)
+        assert not writer_acquired.wait(timeout=0.1)
+
+        reader.close()
+
+        assert writer_acquired.wait(timeout=5)
+        writer.join(timeout=5)
+        assert not writer.is_alive()
+        assert failures == []
+    finally:
+        reader.close()
+        writer.join(timeout=5)
 
 
 def test_inherited_descriptor_keeps_lease_after_parent_close(tmp_path: Path) -> None:

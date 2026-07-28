@@ -2,5 +2,5 @@
 
 Guardrails that prevent destructive or out-of-scope actions.
 
-- [hooks.md](hooks.md) — 43 hook scripts (32 PreToolUse, 10 PostToolUse, 1 SessionStart)
+- [hooks.md](hooks.md) — 43 hook scripts (32 PreToolUse, 9 PostToolUse, 2 SessionStart)
 - [workspace.md](workspace.md) — clone-based isolation, merge_worktree pipeline, registry

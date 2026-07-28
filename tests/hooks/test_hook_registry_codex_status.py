@@ -9,6 +9,7 @@ import pytest
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import (
     HOOK_REGISTRY_HASH,
+    LIFECYCLE_CONTRACTS,
     RETIRED_SCRIPT_BASENAMES,
     HookDef,
     _canonical_registry_payload,
@@ -68,6 +69,7 @@ class TestHookDefCodexStatus:
                 "additionalContext",
                 "output-rewrite",
                 "input-rewrite",
+                "side-effect",
             ), f"Hook {hook_def.scripts} has invalid mechanism: {hook_def.mechanism!r}"
 
     def test_pretooluse_deny_mechanism_is_set(self):
@@ -134,14 +136,24 @@ class TestHookDefCodexStatus:
             enforcement_strength={"claude_code": "hard", "codex": "test-sentinel"},
         )
         mutated_registry = [mutated_entry, *HOOK_REGISTRY[1:]]
-        new_hash = compute_registry_hash(mutated_registry, RETIRED_SCRIPT_BASENAMES)
+        new_hash = compute_registry_hash(
+            mutated_registry,
+            RETIRED_SCRIPT_BASENAMES,
+            LIFECYCLE_CONTRACTS,
+        )
         assert new_hash != HOOK_REGISTRY_HASH
 
-    def test_format_version_is_3(self):
+    def test_format_version_is_4(self):
         import json
 
-        payload = json.loads(_canonical_registry_payload(HOOK_REGISTRY, RETIRED_SCRIPT_BASENAMES))
-        assert payload["format_version"] == 3
+        payload = json.loads(
+            _canonical_registry_payload(
+                HOOK_REGISTRY,
+                RETIRED_SCRIPT_BASENAMES,
+                LIFECYCLE_CONTRACTS,
+            )
+        )
+        assert payload["format_version"] == 4
 
     def test_enforcement_strength_round_trip(self):
         es = {"claude_code": "hard", "codex": "works-as-is"}
@@ -153,7 +165,11 @@ class TestHookDefCodexStatus:
     def test_canonical_registry_payload_includes_enforcement_strength(self):
         import json
 
-        payload_str = _canonical_registry_payload(HOOK_REGISTRY, RETIRED_SCRIPT_BASENAMES)
+        payload_str = _canonical_registry_payload(
+            HOOK_REGISTRY,
+            RETIRED_SCRIPT_BASENAMES,
+            LIFECYCLE_CONTRACTS,
+        )
         payload = json.loads(payload_str)
         for row in payload["registry"]:
             assert "enforcement_strength" in row, (

@@ -12,7 +12,7 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _capture_authority import (  # type: ignore[import-not-found]  # noqa: E402
+from _capture.authority import (  # type: ignore[import-not-found]  # noqa: E402
     CaptureSetupError,
     open_capture_lifecycle,
 )

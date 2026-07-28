@@ -16,7 +16,7 @@ from dataclasses import InitVar, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-_HOOKS_DIR = str(Path(__file__).resolve().parent)
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 

@@ -17,14 +17,20 @@ import secrets
 import stat
 import struct
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
+if __package__:
+    from autoskillit.hooks._capture import types as _capture_types
+else:
+    from _capture import types as _capture_types  # type: ignore[no-redef]
+
+CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
+_ObservedArtifact = _capture_types.ObservedArtifact
+_Tampered = _capture_types.Tampered
+_WriterLive = _capture_types.WriterLive
 
 __all__ = [
     "CaptureCleanupOutcome",
@@ -102,36 +108,6 @@ class CaptureLifecycleRecord:
     retry_count: int = 0
     deletion_nonce: str = ""
     quarantine_name: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class CaptureCleanupOutcome:
-    examined: int = 0
-    deleted: int = 0
-    deleted_bytes: int = 0
-    writer_live: int = 0
-    not_due: int = 0
-    tampered: int = 0
-    errors: int = 0
-    retry_count: int = 0
-    remaining_due: int = 0
-    duration: float = 0.0
-
-
-@dataclass(frozen=True, slots=True)
-class _ObservedArtifact:
-    fd: int
-    identity: tuple[int, int]
-    nlink: int
-    size: int
-
-
-class _WriterLive(Exception):
-    pass
-
-
-class _Tampered(Exception):
-    pass
 
 
 def _identity(value: os.stat_result) -> tuple[int, int]:

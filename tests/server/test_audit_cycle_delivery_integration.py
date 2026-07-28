@@ -2256,6 +2256,7 @@ def test_clone_layout_containment_root_required(tmp_path: Path) -> None:
         materialize=True,
     )
     clone_temp.joinpath("authority.json").write_bytes(authority.canonical_bytes)
+    store.publish(authority, expected_parent_digest=None, expected_round=0)
 
     request = VerifiedInputPreflightRequest(
         execution_generation="execution-1",
@@ -2283,14 +2284,16 @@ def test_clone_layout_containment_root_required(tmp_path: Path) -> None:
     broken_result = broken_resolver.resolve(request)
     assert broken_result.decision.status.value == "REJECT"
 
-    # With the fix (allowed_root=clone_temp), the same request is accepted
-    # because containment anchors to the clone's temp directory.
+    # With the fix (allowed_root=clone_temp), the same request is admitted
+    # because containment anchors to the clone's temp directory. A trusted GO
+    # authority at the same part_id admits as OMIT/TRUSTED_GO — the cycle is
+    # already terminal and no further audit gating is needed.
     fixed_resolver = DefaultInputPreflightResolver(
         allowed_root=clone_temp,
         head_store=store,
     )
     fixed_result = fixed_resolver.resolve(request)
-    assert fixed_result.decision.status.value == "ACCEPT"
+    assert fixed_result.decision.status.value == "OMIT"
 
 
 def test_recipe_execution_deny_envelope_carries_preflight_stage() -> None:
@@ -2341,6 +2344,7 @@ def test_preflight_resolver_protocol_accepts_allowed_root_override(
         materialize=True,
     )
     clone_temp.joinpath("authority.json").write_bytes(authority.canonical_bytes)
+    store.publish(authority, expected_parent_digest=None, expected_round=0)
 
     request = VerifiedInputPreflightRequest(
         execution_generation="execution-1",
@@ -2364,9 +2368,10 @@ def test_preflight_resolver_protocol_accepts_allowed_root_override(
     default_result = resolver.resolve(request)
     assert default_result.decision.status.value == "REJECT"
 
-    # Override with clone_temp ⇒ accepts because containment anchors to the clone.
+    # Override with clone_temp ⇒ admits (OMIT/TRUSTED_GO) because containment
+    # now anchors to the clone's temp directory where the authority lives.
     override_result = resolver.resolve(request, allowed_root=clone_temp)
-    assert override_result.decision.status.value == "ACCEPT"
+    assert override_result.decision.status.value == "OMIT"
 
     # ``allowed_root=None`` falls back to the constructor-bound root (rejects).
     none_result = resolver.resolve(request, allowed_root=None)

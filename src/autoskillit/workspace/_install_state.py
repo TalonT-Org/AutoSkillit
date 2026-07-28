@@ -138,7 +138,27 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
     #    the same incarnation.
     registered = frozenset(registered_install_paths())
     retirement = read_retiring_cache()
-    if retirement.state is RetiringCacheState.EXACT_V2:
+    if retirement.state is RetiringCacheState.CORRUPT:
+        detail = retirement.error or "unknown parse failure"
+        findings.append(
+            InstallStateFinding(
+                Severity.ERROR,
+                "retiring_cache_corrupt",
+                "retiring_cache.json is corrupt and cannot be interpreted safely: "
+                f"{detail}. Run `autoskillit install` to rebuild it.",
+            )
+        )
+    elif retirement.state is RetiringCacheState.UNSUPPORTED_FUTURE:
+        findings.append(
+            InstallStateFinding(
+                Severity.ERROR,
+                "retiring_cache_unsupported_future",
+                "retiring_cache.json uses unsupported schema "
+                f"{retirement.schema_version}; this version cannot determine deletion "
+                "authority safely. Run `autoskillit install` with a compatible version.",
+            )
+        )
+    elif retirement.state is RetiringCacheState.EXACT_V2:
         for evidence in retirement.legacy_evidence:
             findings.append(
                 InstallStateFinding(

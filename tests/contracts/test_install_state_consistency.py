@@ -132,6 +132,38 @@ class TestVerifyInstallState:
         )
         assert finding.severity is Severity.WARNING
 
+    def test_corrupt_retirement_cache_is_an_explicit_error(self, home: Path) -> None:
+        from autoskillit.workspace import verify_install_state
+
+        cache = home / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text("{not-json")
+
+        finding = next(
+            item for item in verify_install_state() if item.check == "retiring_cache_corrupt"
+        )
+
+        assert finding.severity is Severity.ERROR
+        assert "retiring_cache.json" in finding.message
+        assert "autoskillit install" in finding.message
+
+    def test_future_retirement_cache_schema_is_an_explicit_error(self, home: Path) -> None:
+        from autoskillit.workspace import verify_install_state
+
+        cache = home / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text(json.dumps({"schema_version": 99, "records": []}))
+
+        finding = next(
+            item
+            for item in verify_install_state()
+            if item.check == "retiring_cache_unsupported_future"
+        )
+
+        assert finding.severity is Severity.ERROR
+        assert "schema 99" in finding.message
+        assert "autoskillit install" in finding.message
+
     def test_version_drift_names_each_derived_file(self, home: Path) -> None:
         """Three files carry a version and all three are derived.
 

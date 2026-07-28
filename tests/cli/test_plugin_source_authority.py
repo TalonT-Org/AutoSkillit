@@ -14,6 +14,7 @@ read, so no externally-owned path can be a projection source at all.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -334,6 +335,49 @@ class TestInstalledPluginArtifactAuthority:
                 backend=object(),
                 load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
             )
+
+    def test_publication_rejects_internal_symlink_without_touching_target(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from autoskillit.cli._plugin_artifact import (
+            installed_artifact_manifest_path,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import PluginArtifactValidationError
+
+        root = (tmp_path / "installed" / "1.2.3").resolve()
+        root.mkdir(parents=True)
+        external = tmp_path / "external"
+        external.write_text("must survive")
+        internal_link = root / "linked-content"
+        internal_link.symlink_to(external)
+
+        with pytest.raises(PluginArtifactValidationError, match="cannot be digested"):
+            publish_installed_plugin_artifact(root, semantic_key="plugin:1.2.3")
+
+        assert internal_link.is_symlink()
+        assert external.read_text() == "must survive"
+        assert not installed_artifact_manifest_path(root).exists()
+
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation requires POSIX")
+    def test_publication_rejects_internal_special_file(self, tmp_path: Path) -> None:
+        from autoskillit.cli._plugin_artifact import (
+            installed_artifact_manifest_path,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import PluginArtifactValidationError
+
+        root = (tmp_path / "installed" / "1.2.3").resolve()
+        root.mkdir(parents=True)
+        special = root / "named-pipe"
+        os.mkfifo(special)
+
+        with pytest.raises(PluginArtifactValidationError, match="cannot be digested"):
+            publish_installed_plugin_artifact(root, semantic_key="plugin:1.2.3")
+
+        assert special.exists()
+        assert not installed_artifact_manifest_path(root).exists()
 
     def test_generated_home_codex_does_not_construct_projection_authority(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

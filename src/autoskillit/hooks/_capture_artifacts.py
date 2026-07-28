@@ -889,26 +889,69 @@ def _decode_command(value: str) -> str:
     return command
 
 
-def _main(argv: list[str] | None = None) -> int:
-    args = sys.argv[1:] if argv is None else argv
-    if len(args) == 2 and args[0] == "reject":
-        if not _CAPTURE_ID_RE.fullmatch(args[1]):
-            _emit_failure("invalid capture id")
-            return 1
+def _dispatch_runner(
+    verb: str,
+    payload: str,
+    requested_cwd: str,
+    capture_id: str,
+) -> int:
+    if verb == "reject":
         _emit_failure("capture request rejected before command execution")
         return 1
-    if len(args) != 4 or args[0] != "run":
-        _emit_failure("invalid capture runner invocation")
-        return 1
     try:
-        command = _decode_command(args[1])
-        return run_capture(command, args[2], args[3])
+        command = _decode_command(payload)
+        return run_capture(command, requested_cwd, capture_id)
     except CaptureSetupError as exc:
         _emit_failure(str(exc))
         return 1
     except (OSError, subprocess.SubprocessError):
         _emit_failure("capture runner failed")
         return 1
+
+
+def _emit_cleanup_failure(detail: str) -> None:
+    safe_detail = " ".join(detail.split()).replace("]", "\\u005d")[:240]
+    try:
+        sys.stderr.write(f"[AutoSkillit shell capture cleanup failed: {safe_detail}]\n")
+    except _CAPTURE_RUNTIME_ERRORS:
+        pass
+
+
+def _sweep_after_runner(requested_cwd: str) -> None:
+    try:
+        with open_capture_lifecycle(requested_cwd, create=False) as lifecycle:
+            lifecycle.sweep()
+    except CaptureSetupError:
+        return
+    except (CaptureLifecycleError, OSError) as exc:
+        _emit_cleanup_failure(f"{type(exc).__name__}: {exc}")
+
+
+def _main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) != 4:
+        _emit_failure("invalid capture runner invocation")
+        return 1
+    verb, payload, requested_cwd, capture_id = args
+    if (
+        verb not in {"run", "reject"}
+        or (verb == "reject" and payload)
+        or not isinstance(requested_cwd, str)
+        or not requested_cwd
+        or not os.path.isabs(requested_cwd)
+        or "\x00" in requested_cwd
+    ):
+        _emit_failure("invalid capture runner invocation")
+        return 1
+    if not _CAPTURE_ID_RE.fullmatch(capture_id):
+        _emit_failure("invalid capture id")
+        return 1
+    try:
+        user_result = _dispatch_runner(verb, payload, requested_cwd, capture_id)
+    except _CAPTURE_RUNTIME_ERRORS:
+        user_result = _capture_failure_return("capture runner failed", None)
+    _sweep_after_runner(requested_cwd)
+    return user_result
 
 
 if __name__ == "__main__":

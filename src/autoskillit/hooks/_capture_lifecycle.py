@@ -704,7 +704,9 @@ class CaptureLifecycleStore:
         try:
             fd = os.open(name, _OBSERVE_FLAGS, dir_fd=self._root_fd)
         except OSError as exc:
-            raise _Tampered from exc
+            if exc.errno == errno.ELOOP:
+                raise _Tampered from exc
+            raise CaptureLifecycleError("cannot open managed capture") from exc
         try:
             value = os.fstat(fd)
             identity = _identity(value)

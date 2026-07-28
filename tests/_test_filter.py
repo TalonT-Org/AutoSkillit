@@ -180,6 +180,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     # registered_install_paths() (IL-005 forbids reaching for cli.InstalledPluginsFile).
     "_plugin_ids": frozenset({"core", "cli", "hook_registry", "server", "workspace"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
+    "_plugin_artifact_identity": frozenset({"core", "cli", "server", "workspace"}),
     "_plugin_cache": frozenset({"core", "cli", "server", "workspace"}),
     "git_remote": frozenset({"core", "execution"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server"}),

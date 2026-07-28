@@ -218,7 +218,7 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.core._plugin_cache as plugin_cache
+    import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
     from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -231,7 +231,11 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
     def fail_digest(_path: Path) -> str:
         raise PermissionError("injected transient digest failure")
 
-    monkeypatch.setattr(plugin_cache, "directory_tree_digest", fail_digest)
+    monkeypatch.setattr(
+        plugin_artifact_identity,
+        "directory_tree_digest",
+        fail_digest,
+    )
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
     assert read_retiring_cache().records == (record,)

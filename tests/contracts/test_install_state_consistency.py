@@ -118,7 +118,7 @@ class TestVerifyInstallState:
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import autoskillit.core._plugin_cache as plugin_cache
+        import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
         from autoskillit.workspace import verify_install_state
 
         identity = _queue_registered_retirement(home)
@@ -126,7 +126,11 @@ class TestVerifyInstallState:
         def fail_digest(_path: Path) -> str:
             raise PermissionError("injected diagnostic read failure")
 
-        monkeypatch.setattr(plugin_cache, "directory_tree_digest", fail_digest)
+        monkeypatch.setattr(
+            plugin_artifact_identity,
+            "directory_tree_digest",
+            fail_digest,
+        )
 
         finding = next(
             item for item in verify_install_state() if item.check == "retiring_artifact_unreadable"

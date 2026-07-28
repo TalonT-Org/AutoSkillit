@@ -94,6 +94,7 @@ class TestModuleCascadeCore:
             "branch_guard",
             "_plugin_ids",
             "_terminal_table",
+            "_plugin_artifact_identity",
             "_plugin_cache",
             "github_url",
             "paths",

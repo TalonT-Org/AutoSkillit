@@ -136,6 +136,41 @@ def test_managed_artifact_is_published_only_after_durable_identity(tmp_path: Pat
         anchor.close()
 
 
+@pytest.mark.parametrize(
+    "identity",
+    (
+        (1,),
+        (1, 2, 3),
+        (True, 2),
+        (-1, 2),
+        ("1", 2),
+        [1, 2],
+    ),
+)
+def test_mark_staged_rejects_invalid_artifact_identity(
+    tmp_path: Path,
+    identity: object,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        store.reserve_capture(_CAPTURE_ID)
+        with pytest.raises(
+            capture_lifecycle.CaptureLifecycleError,
+            match="invalid staged artifact identity",
+        ):
+            store.mark_staged(_CAPTURE_ID, identity)  # type: ignore[arg-type]
+
+        record = store.get_record(_CAPTURE_ID)
+        assert record is not None
+        assert record.state is CaptureState.RESERVED
+        assert record.artifact_identity is None
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_staged_identity_is_committed_before_publication(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

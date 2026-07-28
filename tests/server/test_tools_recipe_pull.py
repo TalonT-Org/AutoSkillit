@@ -190,6 +190,26 @@ def test_prepare_generation_rejects_non_finite_compile_values(tool_ctx) -> None:
         )
 
 
+def test_compile_identity_and_artifact_share_one_source_projection(tool_ctx) -> None:
+    payload = _payload()
+    payload["custom_generation_input"] = {"value": 3}
+    payload["initialization_id"] = "caller-owned-stale-id"
+
+    prepared = prepare_recipe_delivery_generation(
+        payload,
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+    )
+    source_payload = prepared.compile_inputs["source_payload"]
+
+    assert isinstance(source_payload, dict)
+    assert source_payload["custom_generation_input"] == {"value": 3}
+    assert prepared.canonical_artifact_payload["custom_generation_input"] == {"value": 3}
+    assert "initialization_id" not in source_payload
+    assert "initialization_id" not in prepared.canonical_artifact_payload
+
+
 def _persist_finalized_generation(
     tool_ctx: Any,
     payload: dict[str, object] | None = None,

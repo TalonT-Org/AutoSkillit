@@ -129,6 +129,23 @@ class PreparedRecipeGeneration:
     compile_inputs: dict[str, Any]
 
 
+_RECIPE_GENERATION_SOURCE_EXCLUDED_FIELDS = frozenset(
+    {
+        "_finalized_projection",
+        "delivery_bound_spill",
+        "hook_warning",
+        "initialization_id",
+        "kitchen",
+        "recipe_pull",
+        "recovery",
+        "required_sections",
+        "success",
+        "version",
+        "warnings",
+    }
+)
+
+
 def _qualified_sha256(data: bytes) -> str:
     return f"sha256:{hashlib.sha256(data).hexdigest()}"
 
@@ -162,6 +179,15 @@ def _finalized_projection_payload(
     if not isinstance(primitive, dict):
         raise TypeError("finalized recipe projection did not serialize to a mapping")
     return primitive
+
+
+def _recipe_generation_source_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Project caller payload fields shared by compile identity and persistence."""
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in _RECIPE_GENERATION_SOURCE_EXCLUDED_FIELDS
+    }
 
 
 def build_recipe_flow_generation(
@@ -214,24 +240,7 @@ def build_canonical_recipe_artifact_payload(
     execution_snapshot: RecipeExecutionSnapshot,
 ) -> dict[str, Any]:
     """Return the primitive, generation-bound canonical artifact payload."""
-    candidate_payload = {
-        key: value
-        for key, value in payload.items()
-        if key
-        not in {
-            "_finalized_projection",
-            "delivery_bound_spill",
-            "hook_warning",
-            "initialization_id",
-            "kitchen",
-            "recipe_pull",
-            "recovery",
-            "required_sections",
-            "success",
-            "version",
-            "warnings",
-        }
-    }
+    candidate_payload = _recipe_generation_source_payload(payload)
     candidate_payload["finalized_recipe_projection"] = _finalized_projection_payload(
         finalized_projection
     )
@@ -258,24 +267,7 @@ def prepare_recipe_delivery_generation(
     )
 
     flow_generation = build_recipe_flow_generation(finalized_projection)
-    source_payload = {
-        key: value
-        for key, value in payload.items()
-        if key
-        not in {
-            "_finalized_projection",
-            "delivery_bound_spill",
-            "hook_warning",
-            "initialization_id",
-            "kitchen",
-            "recipe_pull",
-            "recovery",
-            "required_sections",
-            "success",
-            "version",
-            "warnings",
-        }
-    }
+    source_payload = _recipe_generation_source_payload(payload)
     compile_inputs = {
         "recipe_name": recipe_name,
         "content_hash": source_payload.get("content_hash"),

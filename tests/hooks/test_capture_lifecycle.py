@@ -683,10 +683,12 @@ def test_incomplete_final_ledger_frame_is_recovered(tmp_path: Path) -> None:
     try:
         store.reserve_capture(_CAPTURE_ID)
         ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+        valid_size = ledger.stat().st_size
         with ledger.open("ab") as stream:
             stream.write(capture_lifecycle.FRAME_MAGIC + b"\x00\x00")
+        assert ledger.stat().st_size > valid_size
         assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
-        assert ledger.stat().st_size < capture_lifecycle.MAX_LEDGER_BYTES
+        assert ledger.stat().st_size == valid_size
     finally:
         root.close()
         anchor.close()

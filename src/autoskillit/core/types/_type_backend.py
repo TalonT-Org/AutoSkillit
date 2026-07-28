@@ -11,7 +11,7 @@ from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import BackendEventKind, HookTrustPolicy, OutputFormat
-from ._type_plugin_source import PluginLaunchBinding
+from ._type_plugin_source import PluginLaunchBinding, normalize_inherited_fds
 from ._type_recipe_delivery import RecipeDeliveryBudgetDef
 from ._type_results import ValidatedAddDir
 
@@ -386,6 +386,13 @@ class CmdSpec:
     is_resume: bool = False
     process_idle_timeout_ms: int = 0
     inherited_fds: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "inherited_fds",
+            normalize_inherited_fds(self.inherited_fds),
+        )
 
 
 @dataclass(frozen=True, slots=True)

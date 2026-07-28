@@ -55,6 +55,22 @@ def test_cmd_spec_inherited_fds_default():
     assert spec.inherited_fds == ()
 
 
+def test_cmd_spec_normalizes_inherited_fds():
+    from autoskillit.core import CmdSpec
+
+    spec = CmdSpec(cmd=(), env={}, inherited_fds=(7, 3, 7))
+
+    assert spec.inherited_fds == (7, 3)
+
+
+@pytest.mark.parametrize("invalid", [True, -1, 1.5, "3"])
+def test_cmd_spec_rejects_invalid_inherited_fds(invalid: object):
+    from autoskillit.core import CmdSpec
+
+    with pytest.raises(ValueError, match="non-negative integers"):
+        CmdSpec(cmd=(), env={}, inherited_fds=(invalid,))  # type: ignore[arg-type]
+
+
 def test_cmd_spec_env_accepts_mapping():
     from collections.abc import Mapping
 

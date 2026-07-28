@@ -32,9 +32,9 @@ class _StaticPluginAuthority:
             plugin_dir=self.plugin_dir,
             identity=PluginArtifactIdentity(
                 semantic_key="test-plugin",
-                incarnation_id=f"test-{len(self.leases)}",
+                incarnation_id="00000000000040008000000000000001",
                 manifest_schema_version=1,
-                artifact_digest="test-digest",
+                artifact_digest="a" * 64,
                 managed_path=self.plugin_dir,
                 manifest_path=self.plugin_dir.parent / "test-plugin.manifest.json",
             ),
@@ -80,9 +80,9 @@ def test_plugin_binding_cleanup_does_not_replace_primary_error(
         plugin_dir=tmp_path,
         identity=PluginArtifactIdentity(
             semantic_key="test-plugin",
-            incarnation_id="test-incarnation",
+            incarnation_id="00000000000040008000000000000001",
             manifest_schema_version=1,
-            artifact_digest="test-digest",
+            artifact_digest="a" * 64,
             managed_path=tmp_path,
             manifest_path=tmp_path.parent / "test-plugin.manifest.json",
         ),

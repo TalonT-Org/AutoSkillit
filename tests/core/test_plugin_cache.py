@@ -105,7 +105,6 @@ def test_unsafe_retirement_state_is_not_collapsed_to_empty(
     cache.write_bytes(cache_bytes)
     record = _retiring_record(tmp_path)
     identity = PluginArtifactIdentity(
-        artifact_kind=record.artifact_kind,
         semantic_key=record.semantic_key,
         managed_path=record.managed_path,
         manifest_path=record.manifest_path,

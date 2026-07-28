@@ -28,9 +28,9 @@ def plugin_binding(
         plugin_dir=path,
         identity=PluginArtifactIdentity(
             semantic_key=f"test:{path}",
-            incarnation_id="test-incarnation",
+            incarnation_id="00000000000040008000000000000001",
             manifest_schema_version=1,
-            artifact_digest="test-digest",
+            artifact_digest="a" * 64,
             managed_path=path,
             manifest_path=path.with_name(f"{path.name}.json"),
         ),

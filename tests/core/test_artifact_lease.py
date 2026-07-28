@@ -34,9 +34,9 @@ pytestmark = [
 def _identity(tmp_path: Path) -> PluginArtifactIdentity:
     return PluginArtifactIdentity(
         semantic_key="semantic-key",
-        incarnation_id="incarnation-id",
+        incarnation_id="00000000000040008000000000000001",
         manifest_schema_version=1,
-        artifact_digest="artifact-digest",
+        artifact_digest="a" * 64,
         managed_path=tmp_path / "projection",
         manifest_path=tmp_path / "projection.json",
     )
@@ -290,11 +290,19 @@ def test_directory_close_failure_releases_acquired_lease_fd(
     ("field", "invalid"),
     [
         ("semantic_key", ""),
+        ("semantic_key", 1),
         ("incarnation_id", ""),
+        ("incarnation_id", "not-canonical"),
         ("manifest_schema_version", 0),
+        ("manifest_schema_version", True),
+        ("manifest_schema_version", 1.5),
         ("artifact_digest", ""),
+        ("artifact_digest", "z" * 64),
+        ("artifact_digest", 1),
         ("managed_path", Path("relative-projection")),
+        ("managed_path", "/absolute-but-not-a-Path"),
         ("manifest_path", Path("relative-manifest.json")),
+        ("manifest_path", "/absolute-but-not-a-Path"),
     ],
 )
 def test_plugin_artifact_identity_rejects_invalid_fields(
@@ -304,9 +312,9 @@ def test_plugin_artifact_identity_rejects_invalid_fields(
 ) -> None:
     values: dict[str, object] = {
         "semantic_key": "semantic-key",
-        "incarnation_id": "incarnation-id",
+        "incarnation_id": "00000000000040008000000000000001",
         "manifest_schema_version": 1,
-        "artifact_digest": "artifact-digest",
+        "artifact_digest": "a" * 64,
         "managed_path": tmp_path / "projection",
         "manifest_path": tmp_path / "projection.json",
     }

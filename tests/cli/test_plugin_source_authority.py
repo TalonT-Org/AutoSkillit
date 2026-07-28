@@ -162,9 +162,9 @@ class TestPluginArtifactAuthoritySurface:
                 plugin_dir=Path("relative/plugin"),
                 identity=PluginArtifactIdentity(
                     semantic_key="test",
-                    incarnation_id="one",
+                    incarnation_id="00000000000040008000000000000001",
                     manifest_schema_version=1,
-                    artifact_digest="digest",
+                    artifact_digest="a" * 64,
                     managed_path=absolute,
                     manifest_path=Path("/plugin.json"),
                 ),

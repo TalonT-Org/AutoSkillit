@@ -96,7 +96,6 @@ class FakePluginArtifactAuthority:
         del backend
         if self._closed:
             raise RuntimeError("fake plugin artifact authority is closed")
-        sequence = len(self.bindings) + 1
         binding = PluginLaunchBinding(
             load_mode=load_mode,
             plugin_dir=(
@@ -104,9 +103,9 @@ class FakePluginArtifactAuthority:
             ),
             identity=PluginArtifactIdentity(
                 semantic_key="test-plugin-artifact",
-                incarnation_id=f"test-incarnation-{sequence}",
+                incarnation_id="00000000000040008000000000000001",
                 manifest_schema_version=1,
-                artifact_digest=f"test-artifact-digest-{sequence}",
+                artifact_digest="a" * 64,
                 managed_path=self.plugin_dir,
                 manifest_path=self.plugin_dir / ".autoskillit-plugin-artifact.json",
             ),

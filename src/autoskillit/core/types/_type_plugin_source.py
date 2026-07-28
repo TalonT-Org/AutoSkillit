@@ -134,16 +134,18 @@ class PluginArtifactIdentity:
     manifest_path: Path
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "managed_path", Path(self.managed_path))
-        object.__setattr__(self, "manifest_path", Path(self.manifest_path))
-        if not self.semantic_key:
-            raise ValueError("plugin artifact semantic_key must not be empty")
-        if not self.incarnation_id:
-            raise ValueError("plugin artifact incarnation_id must not be empty")
-        if self.manifest_schema_version < 1:
-            raise ValueError("plugin artifact manifest schema version must be positive")
-        if not self.artifact_digest:
-            raise ValueError("plugin artifact digest must not be empty")
+        if not isinstance(self.semantic_key, str) or not self.semantic_key:
+            raise ValueError("plugin artifact semantic_key must be a non-empty string")
+        if not is_canonical_plugin_artifact_incarnation_id(self.incarnation_id):
+            raise ValueError("plugin artifact incarnation_id must be canonical uuid4 hex")
+        if type(self.manifest_schema_version) is not int or self.manifest_schema_version < 1:
+            raise ValueError("plugin artifact manifest schema version must be a positive integer")
+        if not is_canonical_plugin_artifact_digest(self.artifact_digest):
+            raise ValueError("plugin artifact digest must be lowercase SHA-256 hex")
+        if not isinstance(self.managed_path, Path):
+            raise ValueError("plugin artifact managed path must be a Path")
+        if not isinstance(self.manifest_path, Path):
+            raise ValueError("plugin artifact manifest path must be a Path")
         if not self.managed_path.is_absolute():
             raise ValueError(f"plugin artifact managed path must be absolute: {self.managed_path}")
         if not self.manifest_path.is_absolute():

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 import sys
 from dataclasses import FrozenInstanceError, asdict
@@ -413,15 +414,72 @@ def test_quarantine_replacement_is_preserved_as_tampered(
 
         public = _capture_dir(project) / retry.public_name
         quarantine = _capture_dir(project) / retry.quarantine_name
-        public.write_bytes(b"replacement")
+        assert not public.exists()
         assert quarantine.exists()
+        quarantine.unlink()
+        quarantine.write_bytes(b"replacement")
 
         clock.advance(3)
         second = store.sweep(max_items=8, max_duration_seconds=1)
         assert second.tampered == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
-        assert public.read_bytes() == b"replacement"
-        assert quarantine.exists()
+        assert not public.exists()
+        assert quarantine.read_bytes() == b"replacement"
+    finally:
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize(
+    "substitute_kind",
+    ("symlink", "fifo", "hardlink", "world-writable"),
+)
+def test_unsafe_public_substitutes_survive_as_tampered(
+    tmp_path: Path,
+    substitute_kind: str,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    public = _capture_dir(project) / artifact.name
+    public.unlink()
+    external = tmp_path / "external"
+    try:
+        if substitute_kind == "symlink":
+            external.write_bytes(b"external")
+            public.symlink_to(external)
+        elif substitute_kind == "fifo":
+            os.mkfifo(public)
+        elif substitute_kind == "hardlink":
+            external.write_bytes(b"external")
+            try:
+                os.link(external, public)
+            except OSError:
+                pytest.skip("hardlinks unavailable")
+        else:
+            public.write_bytes(b"replacement")
+            public.chmod(0o666)
+
+        clock.advance(3601)
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+
+        record = store.get_record(_CAPTURE_ID)
+        assert outcome.tampered == 1
+        assert record is not None
+        assert record.state is CaptureState.TAMPERED
+        assert os.path.lexists(public)
+        if substitute_kind == "fifo":
+            assert stat.S_ISFIFO(public.lstat().st_mode)
+        elif substitute_kind == "symlink":
+            assert public.is_symlink()
+            assert external.read_bytes() == b"external"
+        elif substitute_kind == "hardlink":
+            assert public.samefile(external)
+            assert external.read_bytes() == b"external"
+        else:
+            assert public.read_bytes() == b"replacement"
     finally:
         root.close()
         anchor.close()

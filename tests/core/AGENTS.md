@@ -18,6 +18,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_cmd_runner.py` | Tests for core/_cmd_runner.py — CmdRunner protocol, default_cmd_runner, run_git, run_gh |
 | `test_core.py` | Tests for the core/ sub-package foundation layer |
 | `test_core_terminal_table.py` | Tests for core/_terminal_table.py — the L0 shared table primitive |
+| `test_detect_body_marker.py` | Tests for detect_body_marker and strip_markdown_code_regions in core.types._type_helpers |
 | `test_context_admission_coverage.py` | Exact producer/control-point coverage registry and evidence metadata contract |
 | `test_context_admission_reducer.py` | Pure context-admission reducer transition and replay tests |
 | `test_context_admission_state_machine.py` | Property-based context-admission accounting and lifecycle invariants |

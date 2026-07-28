@@ -1052,6 +1052,81 @@ def test_incomplete_final_ledger_frame_is_recovered(tmp_path: Path) -> None:
         anchor.close()
 
 
+def test_active_record_bound_preserves_valid_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+    try:
+        monkeypatch.setattr(capture_lifecycle, "MAX_ACTIVE_RECORDS", 1)
+        store.reserve_capture(_CAPTURE_ID)
+        valid_ledger = ledger.read_bytes()
+
+        with pytest.raises(CaptureLedgerError, match="active lifecycle record bound"):
+            store.reserve_capture("1" * 16)
+
+        assert ledger.read_bytes() == valid_ledger
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
+        assert store.get_record("1" * 16) is None
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_ledger_size_bound_rejects_without_mutating_valid_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+    try:
+        store.reserve_capture(_CAPTURE_ID)
+        valid_ledger = ledger.read_bytes()
+
+        with monkeypatch.context() as bound:
+            bound.setattr(capture_lifecycle, "MAX_LEDGER_BYTES", len(valid_ledger) - 1)
+            with pytest.raises(CaptureLedgerError, match="ledger exceeds bound"):
+                store.get_record(_CAPTURE_ID)
+
+        assert ledger.read_bytes() == valid_ledger
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_compaction_size_bound_preserves_valid_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+    try:
+        store.reserve_capture(_CAPTURE_ID)
+        valid_ledger = ledger.read_bytes()
+
+        with monkeypatch.context() as bound:
+            bound.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 0)
+            bound.setattr(capture_lifecycle, "_MAX_COMPACTION_BYTES", 1)
+            with pytest.raises(CaptureLedgerError, match="compaction exceeds bound"):
+                store.reserve_capture("1" * 16)
+
+        assert ledger.read_bytes() == valid_ledger
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
+        assert store.get_record("1" * 16) is None
+        assert not list(_capture_dir(project).glob(".capture-lifecycle-compact-*"))
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_compaction_replace_failure_removes_temporary_control_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

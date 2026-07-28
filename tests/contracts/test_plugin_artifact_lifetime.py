@@ -14,6 +14,7 @@ from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
     PluginArtifactContentionError,
+    PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     PluginLoadMode,
     RetirementOutcome,
@@ -327,6 +328,44 @@ def test_corrupt_live_incarnation_is_not_replaced_until_reader_closes(
         assert replacement.identity.managed_path == old_identity.managed_path
         assert replacement.identity.incarnation_id != old_identity.incarnation_id
         assert not probe.exists()
+
+
+def test_transient_projection_io_does_not_trigger_destructive_repair(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import autoskillit.workspace._projection_cache as projection_cache
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    authority = _authority(tmp_path)
+    backend = ClaudeCodeBackend()
+    with authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as initial:
+        identity = initial.identity
+    manifest_before = identity.manifest_path.read_bytes()
+    original_digest = projection_cache.directory_tree_digest
+
+    def fail_digest(_path: Path) -> str:
+        raise PermissionError("injected transient projection digest failure")
+
+    monkeypatch.setattr(projection_cache, "directory_tree_digest", fail_digest)
+
+    with pytest.raises(PluginArtifactUnavailableError, match="cannot be read for digest"):
+        authority.acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+
+    assert identity.managed_path.is_dir()
+    assert identity.manifest_path.read_bytes() == manifest_before
+    monkeypatch.setattr(projection_cache, "directory_tree_digest", original_digest)
+    with authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as revalidated:
+        assert revalidated.identity.incarnation_id == identity.incarnation_id
 
 
 def test_mode_only_mutation_invalidates_projection_identity(

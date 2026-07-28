@@ -79,7 +79,6 @@ class CaptureState(StrEnum):
     FAILED = "FAILED"
     ABANDONED = "ABANDONED"
     DELETING = "DELETING"
-    RETRY = "RETRY"
     TAMPERED = "TAMPERED"
     DELETED = "DELETED"
 
@@ -853,7 +852,6 @@ class CaptureLifecycleStore:
         delay = min(float(2 ** min(retry_count, 12)), _MAX_RETRY_SECONDS)
         return replace(
             record,
-            state=CaptureState.RETRY,
             retry_count=retry_count,
             next_attempt_at=self._wall_clock() + delay,
         )

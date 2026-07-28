@@ -189,6 +189,110 @@ def test_unlocked_abandoned_writer_is_recovered_and_deleted(tmp_path: Path) -> N
         anchor.close()
 
 
+def test_staging_normalization_retry_preserves_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    record = store.reserve_capture(_CAPTURE_ID)
+    staging = _capture_dir(project) / record.staging_name
+    fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        identity = os.fstat(fd)
+        store.mark_staged(_CAPTURE_ID, (identity.st_dev, identity.st_ino))
+    finally:
+        os.close(fd)
+
+    real_link = os.link
+    fail_once = True
+
+    def interrupted_link(
+        src: str,
+        dst: str,
+        *,
+        src_dir_fd: int | None = None,
+        dst_dir_fd: int | None = None,
+        follow_symlinks: bool = True,
+    ) -> None:
+        nonlocal fail_once
+        if fail_once:
+            fail_once = False
+            raise OSError("injected publication interruption")
+        real_link(
+            src,
+            dst,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+            follow_symlinks=follow_symlinks,
+        )
+
+    try:
+        clock.advance(3601)
+        monkeypatch.setattr(capture_lifecycle.os, "link", interrupted_link)
+        first = store.sweep(max_items=8, max_duration_seconds=1)
+
+        retry = store.get_record(_CAPTURE_ID)
+        assert first.errors == 1
+        assert retry is not None
+        assert retry.state is CaptureState.STAGED
+        assert retry.retry_count == 1
+        assert staging.exists()
+
+        clock.advance(3)
+        second = store.sweep(max_items=8, max_duration_seconds=1)
+        assert second.deleted == 1
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
+        assert not staging.exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_quarantine_retry_reuses_committed_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close()
+    artifact.release_lease()
+    clock.advance(3601)
+    real_unlink = os.unlink
+    fail_once = True
+
+    def interrupted_unlink(path: str, *, dir_fd: int | None = None) -> None:
+        nonlocal fail_once
+        if fail_once and path.startswith(".capture-quarantine-"):
+            fail_once = False
+            raise OSError("injected quarantine interruption")
+        real_unlink(path, dir_fd=dir_fd)
+
+    try:
+        monkeypatch.setattr(capture_lifecycle.os, "unlink", interrupted_unlink)
+        first = store.sweep(max_items=8, max_duration_seconds=1)
+
+        retry = store.get_record(_CAPTURE_ID)
+        assert first.errors == 1
+        assert retry is not None
+        assert retry.state is CaptureState.DELETING
+        assert retry.retry_count == 1
+        assert retry.quarantine_name
+        assert (_capture_dir(project) / retry.quarantine_name).exists()
+        assert not (_capture_dir(project) / artifact.name).exists()
+
+        clock.advance(3)
+        second = store.sweep(max_items=8, max_duration_seconds=1)
+        assert second.deleted == 1
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
+        assert not (_capture_dir(project) / retry.quarantine_name).exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_sweep_is_bounded_and_repeated_calls_make_progress(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

@@ -149,7 +149,15 @@ def test_completion_rejects_stale_or_altered_initialization_id(
     minimal_ctx,
     tmp_path,
 ) -> None:
-    _stage(minimal_ctx, tmp_path)
+    state = _stage(minimal_ctx, tmp_path)
+    with minimal_ctx.recipe_execution_lock:
+        minimal_ctx.recipe_initialization_state = record_initialization_page(
+            state,
+            initialization_id="initialization",
+            section="flow_records",
+            page_plan_sha256=_hash("flow-plan"),
+            part=0,
+        )
 
     assert json.loads(build_completion_response(minimal_ctx, "altered")) == {
         "success": False,

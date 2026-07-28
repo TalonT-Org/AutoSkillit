@@ -328,19 +328,30 @@ class TestOpenKitchenVersionReporting:
         )
 
     @pytest.mark.anyio
-    async def test_open_kitchen_still_enables_on_mismatch(self, tmp_path, tool_ctx):
+    async def test_open_kitchen_still_enables_on_mismatch(
+        self,
+        monkeypatch,
+        tool_ctx,
+    ):
         from unittest.mock import AsyncMock, MagicMock
 
+        from autoskillit.server import _state, version_info
         from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
         mock_ctx = MagicMock()
         mock_ctx.enable_components = AsyncMock()
-        plugin_dir = tmp_path / ".claude-plugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "plugin.json").write_text(
-            json.dumps({"name": "autoskillit", "version": "0.0.0"})
+        monkeypatch.setattr(
+            _state,
+            "_compute_version",
+            lambda: {
+                "package_version": "1.2.3",
+                "plugin_json_version": "0.0.0",
+                "match": False,
+            },
         )
+        assert version_info()["match"] is False
+
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(tools_kitchen_mod, "_write_hook_config"):
                 await open_kitchen(ctx=mock_ctx)

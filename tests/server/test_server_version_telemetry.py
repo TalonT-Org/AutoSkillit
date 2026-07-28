@@ -51,6 +51,48 @@ class TestVersionInfo:
         assert info["package_version"] == __version__
         assert info["match"] is True
 
+    @pytest.mark.parametrize(
+        ("manifest_version", "expected_plugin_version"),
+        [
+            pytest.param("0.0.0", "0.0.0", id="mismatch"),
+            pytest.param(None, None, id="missing-manifest"),
+        ],
+    )
+    def test_version_info_reports_package_root_negative_states(
+        self,
+        tmp_path,
+        monkeypatch,
+        manifest_version: str | None,
+        expected_plugin_version: str | None,
+    ):
+        import autoskillit.version as version_module
+        from autoskillit.server import version_info
+
+        package_root = tmp_path / "autoskillit"
+        package_root.mkdir()
+        if manifest_version is not None:
+            manifest = package_root / ".claude-plugin" / "plugin.json"
+            manifest.parent.mkdir()
+            manifest.write_text(json.dumps({"name": "autoskillit", "version": manifest_version}))
+
+        monkeypatch.setattr(version_module.ir, "files", lambda _package: package_root)
+        monkeypatch.setattr(
+            version_module.importlib.metadata,
+            "version",
+            lambda _package: "1.2.3",
+        )
+        version_module.version_info.cache_clear()
+        try:
+            info = version_info()
+        finally:
+            version_module.version_info.cache_clear()
+
+        assert info == {
+            "package_version": "1.2.3",
+            "plugin_json_version": expected_plugin_version,
+            "match": False,
+        }
+
     def test_version_info_does_not_acquire_runtime_plugin_artifacts(self, tool_ctx):
         from autoskillit.server import version_info
 

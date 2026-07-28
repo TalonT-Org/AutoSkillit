@@ -825,6 +825,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             _emit_capture(result, artifact_path, policy.inline_bytes)
             return returncode
         except _CAPTURE_RUNTIME_ERRORS as exc:
+            recovery_detail = ""
             if returncode is None and process is not None:
                 returncode = _settle_failed_capture(process)
             if not terminal_committed:
@@ -840,10 +841,13 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                         failed=True,
                     )
                     terminal_committed = True
-                except _CAPTURE_RUNTIME_ERRORS:
-                    failure_stage = "capture failed-state commit"
+                except _CAPTURE_RUNTIME_ERRORS as recovery_error:
+                    recovery_detail = (
+                        "; failed-state recovery also failed: "
+                        f"{type(recovery_error).__name__}: {recovery_error}"
+                    )
             return _capture_failure_return(
-                f"{failure_stage} failed: {type(exc).__name__}: {exc}",
+                f"{failure_stage} failed: {type(exc).__name__}: {exc}{recovery_detail}",
                 returncode,
             )
     finally:

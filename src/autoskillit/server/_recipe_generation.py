@@ -34,6 +34,7 @@ __all__ = [
     "RecipeGenerationRecord",
     "RecipeGenerationRetiredError",
     "RecipeGenerationStore",
+    "generation_json_primitive",
     "get_recipe_generation_store",
     "recipe_generation_weight_bytes",
     "retire_kitchen",
@@ -89,34 +90,34 @@ def _freeze_primitive_mapping(
     return cast(Mapping[str, object], frozen)
 
 
-def _weight_primitive(value: object) -> object:
+def generation_json_primitive(value: object) -> object:
     """Convert retained immutable values to a deterministic JSON primitive tree."""
     if isinstance(value, Enum):
-        return _weight_primitive(value.value)
+        return generation_json_primitive(value.value)
     if value is None or isinstance(value, (str, bool, int)):
         return value
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise ValueError("generation weight input contains a non-finite float")
+            raise ValueError("recipe generation contains a non-finite float")
         return value
     if isinstance(value, Mapping):
         if any(not isinstance(key, str) for key in value):
-            raise TypeError("generation weight mapping keys must be strings")
+            raise TypeError("recipe generation mapping keys must be strings")
         result: dict[str, object] = {}
         for key in sorted(value):
-            result[key] = _weight_primitive(value[key])
+            result[key] = generation_json_primitive(value[key])
         return result
     if isinstance(value, (list, tuple)):
-        return [_weight_primitive(item) for item in value]
+        return [generation_json_primitive(item) for item in value]
     if isinstance(value, (set, frozenset)):
-        converted = [_weight_primitive(item) for item in value]
+        converted = [generation_json_primitive(item) for item in value]
         return sorted(converted, key=_canonical_json)
     if is_dataclass(value) and not isinstance(value, type):
         return {
-            item.name: _weight_primitive(getattr(value, item.name))
+            item.name: generation_json_primitive(getattr(value, item.name))
             for item in fields(cast(Any, value))
         }
-    raise TypeError(f"generation weight input contains unsupported value {type(value).__name__}")
+    raise TypeError(f"recipe generation contains unsupported value {type(value).__name__}")
 
 
 def _canonical_json(value: object) -> str:
@@ -192,7 +193,7 @@ def recipe_generation_weight_bytes(record: RecipeGenerationRecord) -> int:
     """Return the exact UTF-8 size of the canonical retained-record projection."""
     if not isinstance(record, RecipeGenerationRecord):
         raise TypeError("record must be a RecipeGenerationRecord")
-    primitive = _weight_primitive(record)
+    primitive = generation_json_primitive(record)
     return len(_canonical_json(primitive).encode("utf-8"))
 
 
@@ -200,7 +201,7 @@ def thaw_recipe_generation_mapping(
     value: Mapping[str, object],
 ) -> dict[str, object]:
     """Return a mutable JSON-primitive copy of one retained mapping."""
-    primitive = _weight_primitive(value)
+    primitive = generation_json_primitive(value)
     if not isinstance(primitive, dict):
         raise TypeError("recipe generation mapping did not thaw to a JSON object")
     return primitive

@@ -177,6 +177,19 @@ def _finalize_recipe_delivery(
     )
 
 
+def test_prepare_generation_rejects_non_finite_compile_values(tool_ctx) -> None:
+    payload = _payload()
+    payload["runtime_metadata"] = {"limit": float("nan")}
+
+    with pytest.raises(ValueError, match="non-finite float"):
+        prepare_recipe_delivery_generation(
+            payload,
+            recipe_name="remediation",
+            tool_ctx=tool_ctx,
+            finalized_projection=_test_projection(),
+        )
+
+
 def _persist_finalized_generation(
     tool_ctx: Any,
     payload: dict[str, object] | None = None,

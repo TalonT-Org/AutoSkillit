@@ -7,10 +7,9 @@ import hashlib
 import json
 import shutil
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, fields, is_dataclass, replace
-from enum import Enum
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -64,6 +63,7 @@ from autoskillit.server._recipe_execution import (
 from autoskillit.server._recipe_generation import (
     RecipeGenerationError,
     RecipeGenerationRecord,
+    generation_json_primitive,
     get_recipe_generation_store,
 )
 from autoskillit.server._recipe_initialization import stage_recipe_initialization
@@ -155,41 +155,10 @@ def _canonical_flow_record(record: dict[str, Any]) -> str:
     )
 
 
-def _generation_json_primitive(value: object) -> object:
-    """Convert immutable compile values to a deterministic JSON primitive tree."""
-    if isinstance(value, Enum):
-        return _generation_json_primitive(value.value)
-    if value is None or isinstance(value, (str, bool, int, float)):
-        return value
-    if isinstance(value, Mapping):
-        if any(not isinstance(key, str) for key in value):
-            raise TypeError("recipe generation mappings require string keys")
-        return {key: _generation_json_primitive(value[key]) for key in sorted(value)}
-    if isinstance(value, (list, tuple)):
-        return [_generation_json_primitive(item) for item in value]
-    if isinstance(value, (set, frozenset)):
-        converted = [_generation_json_primitive(item) for item in value]
-        return sorted(
-            converted,
-            key=lambda item: json.dumps(
-                item,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ),
-        )
-    if is_dataclass(value) and not isinstance(value, type):
-        return {
-            item.name: _generation_json_primitive(getattr(value, item.name))
-            for item in fields(value)
-        }
-    raise TypeError(f"recipe generation contains unsupported value {type(value).__name__}")
-
-
 def _finalized_projection_payload(
     projection: FinalizedRecipeProjection,
 ) -> dict[str, Any]:
-    primitive = _generation_json_primitive(projection)
+    primitive = generation_json_primitive(projection)
     if not isinstance(primitive, dict):
         raise TypeError("finalized recipe projection did not serialize to a mapping")
     return primitive
@@ -311,7 +280,7 @@ def prepare_recipe_delivery_generation(
         "recipe_name": recipe_name,
         "content_hash": source_payload.get("content_hash"),
         "composite_hash": source_payload.get("composite_hash"),
-        "source_payload": _generation_json_primitive(source_payload),
+        "source_payload": generation_json_primitive(source_payload),
         "finalized_projection": _finalized_projection_payload(finalized_projection),
         "flow_generation": flow_generation.identity(),
     }
@@ -330,8 +299,8 @@ def prepare_recipe_delivery_generation(
             raise RecipeGenerationError(
                 "normalized compile generation resolved to different canonical outputs"
             )
-        artifact_payload = _generation_json_primitive(existing.artifact_payload)
-        compile_inputs_copy = _generation_json_primitive(existing.compile_inputs)
+        artifact_payload = generation_json_primitive(existing.artifact_payload)
+        compile_inputs_copy = generation_json_primitive(existing.compile_inputs)
         if not isinstance(artifact_payload, dict) or not isinstance(compile_inputs_copy, dict):
             raise RecipeGenerationError("stored recipe generation did not reconstruct to mappings")
         expected_payload = build_canonical_recipe_artifact_payload(
@@ -387,8 +356,8 @@ def prepare_recipe_delivery_generation(
             compile_inputs=compile_inputs,
         )
     )
-    admitted_payload = _generation_json_primitive(admitted.artifact_payload)
-    admitted_inputs = _generation_json_primitive(admitted.compile_inputs)
+    admitted_payload = generation_json_primitive(admitted.artifact_payload)
+    admitted_inputs = generation_json_primitive(admitted.compile_inputs)
     if not isinstance(admitted_payload, dict) or not isinstance(admitted_inputs, dict):
         raise RecipeGenerationError("admitted recipe generation is not reconstructable")
     return PreparedRecipeGeneration(

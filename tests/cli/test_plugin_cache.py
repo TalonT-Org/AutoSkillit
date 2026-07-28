@@ -129,6 +129,32 @@ def test_installed_reclaim_defers_until_final_reader_closes(
     assert not identity.manifest_path.exists()
 
 
+def test_installed_reclaim_io_failure_stays_queued_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.core._plugin_cache as plugin_cache
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    append_result = owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
+
+    def fail_reclaim(_path):
+        raise PermissionError("injected installed reclaim failure")
+
+    monkeypatch.setattr(plugin_cache.shutil, "rmtree", fail_reclaim)
+
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
+    assert identity.managed_path.is_dir()
+    assert append_result.record_id in {
+        queued.record_id for queued in read_retiring_cache().records
+    }
+
+
 def test_installed_lifecycle_events_use_the_shared_schema(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

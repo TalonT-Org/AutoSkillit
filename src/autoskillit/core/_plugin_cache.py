@@ -589,10 +589,17 @@ class PluginArtifactRetirementEngine:
                         record,
                         RetirementOutcome.REJECTED_IDENTITY,
                     )
-                shutil.rmtree(record.managed_path)
-                if record.manifest_path.is_file() or record.manifest_path.is_symlink():
-                    record.manifest_path.unlink()
-                remove_retiring_records((record.record_id,))
+                try:
+                    shutil.rmtree(record.managed_path)
+                    if record.manifest_path.is_file() or record.manifest_path.is_symlink():
+                        record.manifest_path.unlink()
+                    remove_retiring_records((record.record_id,))
+                except OSError as exc:
+                    return self._log_reclaim(
+                        record,
+                        RetirementOutcome.DEFERRED_IO_ERROR,
+                        detail=str(exc),
+                    )
                 return self._log_reclaim(record, RetirementOutcome.RECLAIMED)
         finally:
             writer.close()
@@ -608,6 +615,7 @@ class PluginArtifactRetirementEngine:
         event_outcome = {
             RetirementOutcome.RECLAIMED: "succeeded",
             RetirementOutcome.DEFERRED_CONTENDED: "deferred_contended",
+            RetirementOutcome.DEFERRED_IO_ERROR: "deferred_io_error",
             RetirementOutcome.REJECTED_IDENTITY: "rejected_identity",
         }[outcome]
         if failed_validation:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -14,8 +15,10 @@ from autoskillit.core import (
     PluginArtifactContentionError,
     PluginArtifactValidationError,
     PluginLoadMode,
+    RetirementOutcome,
     is_canonical_plugin_artifact_incarnation_id,
     new_plugin_artifact_incarnation_id,
+    read_retiring_cache,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.workspace import (
@@ -138,6 +141,37 @@ def test_projection_lifecycle_events_cover_publication_and_binding(
     assert all(entry["artifact_kind"] == "projection" for entry in lifecycle)
     assert all(entry["semantic_key"] == identity.semantic_key for entry in lifecycle)
     assert all(entry["incarnation"] == identity.incarnation_id for entry in lifecycle)
+
+
+def test_projection_reclaim_io_failure_stays_queued_for_retry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import autoskillit.core._plugin_cache as plugin_cache
+    from autoskillit.workspace import ProjectedPluginRetirementOwner
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    binding = _authority(tmp_path).acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    identity = binding.identity
+    binding.close()
+    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    append_result = owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
+
+    def fail_reclaim(_path):
+        raise PermissionError("injected projection reclaim failure")
+
+    monkeypatch.setattr(plugin_cache.shutil, "rmtree", fail_reclaim)
+
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
+    assert identity.managed_path.is_dir()
+    assert append_result.record_id in {
+        queued.record_id for queued in read_retiring_cache().records
+    }
 
 
 def test_corrupt_live_incarnation_is_not_replaced_until_reader_closes(

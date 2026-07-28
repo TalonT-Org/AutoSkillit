@@ -75,6 +75,7 @@ class RetirementOutcome(StrEnum):
     RECLAIMED = "reclaimed"
     DEFERRED_NOT_DUE = "deferred_not_due"
     DEFERRED_CONTENDED = "deferred_contended"
+    DEFERRED_IO_ERROR = "deferred_io_error"
     REJECTED_IDENTITY = "rejected_identity"
     RECORD_REMOVED = "record_removed"
     LEGACY_EVIDENCE = "legacy_evidence"

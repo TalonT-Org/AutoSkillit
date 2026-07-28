@@ -65,7 +65,7 @@ the only case where file-redirected output would change observable behavior.
 
 The lifecycle store durably records `RESERVED`, `STAGED`,
 `PUBLISHED_WRITING`, `FINALIZED`, `FAILED`, `ABANDONED`, `DELETING`,
-`DELETED`, `RETRY`, and `TAMPERED`. The writer lease spans command execution,
+`DELETED`, and `TAMPERED`. The writer lease spans command execution,
 drain, settlement, integrity verification, durable finalization, and marker
 flush. A finalized or failed artifact becomes eligible one hour after its
 terminal transition; an abandoned producer becomes eligible one hour after its

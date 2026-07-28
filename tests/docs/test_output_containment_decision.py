@@ -45,7 +45,6 @@ def test_decision_names_both_installed_cleanup_owners(lifecycle_docs: str) -> No
         "ABANDONED",
         "DELETING",
         "DELETED",
-        "RETRY",
         "TAMPERED",
     ],
 )

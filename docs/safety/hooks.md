@@ -119,7 +119,8 @@ shape after verified policy loading.
 The durable lifecycle is `RESERVED` → `STAGED` → `PUBLISHED_WRITING` →
 `FINALIZED` or `FAILED`. An unlocked active record becomes `ABANDONED`.
 Eligible terminal or abandoned records move through `DELETING` to `DELETED`,
-`RETRY`, or `TAMPERED`. The per-artifact writer lease is held until output
+or `TAMPERED`; operational failures preserve the current phase and reschedule
+it with capped backoff. The per-artifact writer lease is held until output
 drain, process settlement, integrity verification, durable terminal
 finalization, and marker flush have finished. Finalized and failed records use
 their terminal transition as the retention clock; abandoned records use their

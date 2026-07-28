@@ -41,7 +41,7 @@ from autoskillit.execution import (
     RecipeDeliveryReceiptLedger,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
-from autoskillit.pipeline import RecipeInitializationRequirement
+from autoskillit.pipeline import InitializingRecipe, RecipeInitializationRequirement
 from autoskillit.recipe import load_and_validate
 from autoskillit.server import _recipe_delivery as recipe_delivery
 from autoskillit.server import _recipe_section_pagination as pagination
@@ -886,6 +886,75 @@ def test_initialization_requirements_use_the_pull_response_bound(
             CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_error"),
+    [
+        ("stale_initialization_id", "invalid_recipe_initialization_identity"),
+        ("altered_page_plan", "invalid_recipe_page_plan_identity"),
+        ("missing_continuation", "invalid_recipe_section_continuation"),
+        ("wrong_continuation", "invalid_recipe_section_continuation"),
+    ],
+)
+async def test_initialization_pull_rejections_preserve_progress(
+    tool_ctx_kitchen_open,
+    case: str,
+    expected_error: str,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = f"initialization-rejection-{case}"
+    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(
+        response_max_bytes=RECIPE_SECTION_RESPONSE_FLOOR_BYTES + 500
+    )
+    payload = _payload(
+        "name: remediation\nsteps:\n  first:\n    action: stop\n    message: "
+        + ("x" * 20_000)
+        + "\n"
+    )
+    finalized = _finalize_recipe_delivery(
+        payload,
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx_kitchen_open,
+        finalized_projection=_test_projection(),
+    )
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert complete_finalized_recipe_response(finalized, finalized.rendered) == (
+        finalized.rendered
+    )
+    envelope = json.loads(finalized.rendered)
+    requirement = next(item for item in envelope["required_sections"] if item["total_parts"] > 1)
+    identity = dict(envelope["recipe_pull"])
+    identity.pop("pull_tool")
+    initialization_id = envelope["initialization_id"]
+    page_plan_sha256 = requirement["page_plan_sha256"]
+    part = 0
+    continuation = None
+    if case == "stale_initialization_id":
+        initialization_id = "stale-initialization"
+    elif case == "altered_page_plan":
+        page_plan_sha256 = "sha256:" + ("0" * 64)
+    else:
+        part = 1
+        if case == "wrong_continuation":
+            continuation = "wrong-continuation"
+
+    before = tool_ctx_kitchen_open.recipe_initialization_state
+    assert isinstance(before, InitializingRecipe)
+    response = json.loads(
+        await get_recipe_section(
+            section=requirement["section"],
+            part=part,
+            initialization_id=initialization_id,
+            page_plan_sha256=page_plan_sha256,
+            continuation=continuation,
+            **identity,
+        )
+    )
+
+    assert response["error"] == expected_error
+    assert tool_ctx_kitchen_open.recipe_initialization_state == before
 
 
 def test_envelope_manifest_ignores_ambient_multibyte_fields(tmp_path: Path) -> None:

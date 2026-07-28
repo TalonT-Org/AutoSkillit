@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 import autoskillit.hooks._capture_artifacts as capture_artifacts
+import autoskillit.hooks._capture_authority as capture_authority
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CapturePolicy,
@@ -257,9 +258,9 @@ def test_symlinked_cwd_is_opened_before_path_derivation_and_descendants(
         events.append(("derive", None))
         return real_realpath(path)
 
-    monkeypatch.setattr(capture_artifacts, "_require_capabilities", lambda: None)
-    monkeypatch.setattr(capture_artifacts.os, "open", track_open)
-    monkeypatch.setattr(capture_artifacts.os.path, "realpath", track_realpath)
+    monkeypatch.setattr(capture_authority, "_require_capabilities", lambda: None)
+    monkeypatch.setattr(capture_authority.os, "open", track_open)
+    monkeypatch.setattr(capture_authority.os.path, "realpath", track_realpath)
 
     anchor, root = _open_authority(supplied_cwd)
     try:
@@ -277,32 +278,32 @@ def test_symlinked_cwd_is_opened_before_path_derivation_and_descendants(
 def test_capability_probe_requires_descriptor_relative_stat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    supported = set(capture_artifacts.os.supports_dir_fd)
-    supported.discard(capture_artifacts.os.stat)
-    monkeypatch.setattr(capture_artifacts.os, "supports_dir_fd", supported)
+    supported = set(capture_authority.os.supports_dir_fd)
+    supported.discard(capture_authority.os.stat)
+    monkeypatch.setattr(capture_authority.os, "supports_dir_fd", supported)
 
     with pytest.raises(CaptureSetupError, match="filesystem primitives unavailable"):
-        capture_artifacts._require_capabilities()
+        capture_authority._require_capabilities()
 
 
 def test_capability_probe_requires_exclusive_creation_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(capture_artifacts.os, "O_EXCL", 0)
+    monkeypatch.setattr(capture_authority.os, "O_EXCL", 0)
 
     with pytest.raises(CaptureSetupError, match="filesystem primitives unavailable"):
-        capture_artifacts._require_capabilities()
+        capture_authority._require_capabilities()
 
 
 def test_capability_probe_requires_descriptor_relative_unlink(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    supported = set(capture_artifacts.os.supports_dir_fd)
-    supported.discard(capture_artifacts.os.unlink)
-    monkeypatch.setattr(capture_artifacts.os, "supports_dir_fd", supported)
+    supported = set(capture_authority.os.supports_dir_fd)
+    supported.discard(capture_authority.os.unlink)
+    monkeypatch.setattr(capture_authority.os, "supports_dir_fd", supported)
 
     with pytest.raises(CaptureSetupError, match="filesystem primitives unavailable"):
-        capture_artifacts._require_capabilities()
+        capture_authority._require_capabilities()
 
 
 @pytest.mark.parametrize("component", CAPTURE_PATH_COMPONENTS)

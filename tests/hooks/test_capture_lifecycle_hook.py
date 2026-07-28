@@ -14,9 +14,9 @@ import pytest
 
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hooks import capture_lifecycle_hook
-from autoskillit.hooks._capture_artifacts import (
+from autoskillit.hooks._capture_artifacts import create_capture_artifact
+from autoskillit.hooks._capture_authority import (
     CAPTURE_PATH_COMPONENTS,
-    create_capture_artifact,
     open_capture_root,
     open_project_anchor,
 )
@@ -26,6 +26,12 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/capture_lifecycle_hook.py"
 _CAPTURE_ID = "0123456789abcdef"
+
+
+def test_cleanup_hook_imports_minimal_shared_authority() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "from _capture_authority import" in source
+    assert "from _capture_artifacts import" not in source
 
 
 def _run_hook(

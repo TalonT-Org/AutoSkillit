@@ -38,6 +38,13 @@ logger = get_logger(__name__)
 
 _ACTIVE_KITCHENS_SCHEMA_VERSION = 1
 _RETIRING_CACHE_SCHEMA_VERSION = 2
+_RETIRING_CACHE_V2_FIELDS = frozenset(
+    {
+        "schema_version",
+        "records",
+        "legacy_evidence",
+    }
+)
 _INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION = 1
 _INSTALLED_ARTIFACT_MANIFEST_FIELDS = frozenset(
     {
@@ -307,8 +314,10 @@ def _read_retiring_cache_unlocked() -> RetiringCacheReadResult:
             )
         if schema_version != _RETIRING_CACHE_SCHEMA_VERSION:
             raise ValueError(f"unsupported retiring cache schema {schema_version}")
-        records_raw = raw.get("records", [])
-        legacy_raw = raw.get("legacy_evidence", [])
+        if frozenset(raw) != _RETIRING_CACHE_V2_FIELDS:
+            raise ValueError("v2 retiring cache root has unexpected fields")
+        records_raw = raw["records"]
+        legacy_raw = raw["legacy_evidence"]
         if not isinstance(records_raw, list) or not isinstance(legacy_raw, list):
             raise ValueError("v2 retirement arrays are malformed")
         return RetiringCacheReadResult(

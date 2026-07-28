@@ -155,6 +155,15 @@ class TestRetiringCacheSchemaValidation:
                     "legacy_evidence": {},
                 }
             ),
+            json.dumps({"schema_version": 2}),
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "records": [],
+                    "legacy_evidence": [],
+                    "unexpected_authority": True,
+                }
+            ),
         ],
     )
     def test_malformed_v2_cache_is_corrupt_and_preserved(

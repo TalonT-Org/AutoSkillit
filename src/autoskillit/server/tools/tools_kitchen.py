@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
+from mcp.types import ToolListChangedNotification
 
 from autoskillit import __version__
 from autoskillit.config import (
@@ -923,20 +924,46 @@ async def open_kitchen(
                     )
 
         if not _skip_handler:
+            # Scope-placement invariant (REQ-#4399): this branch is gated on
+            # `gate_infrastructure_ready == False` — i.e., tags can only be
+            # disabled by close_kitchen(), which always calls
+            # _close_kitchen_handler() (line 1468), and that handler
+            # unconditionally sets `gate_infrastructure_ready = False` (line
+            # 612). When _skip_handler=True (gate_infrastructure_ready was
+            # already True), tags are already correctly enabled — either from
+            # _pre_reveal_kitchen() at boot or from a prior open_kitchen() that
+            # ran the enable block. Therefore _skip_handler=True is
+            # structurally unreachable after a close_kitchen call; any future
+            # change to close_kitchen's gate_infrastructure_ready transition
+            # must preserve this invariant or it will silently break the
+            # notification asymmetry fixed in #4399.
             _kctx_pre = _get_ctx()
-            _skip_notify = (
+            _use_global_enable = (
                 _kctx_pre.backend is not None
                 and not _kctx_pre.backend.capabilities.supports_tool_list_changed
             )
-            if _skip_notify:
+            if _use_global_enable:
                 # Issue #4399: when the backend can't process tool/list_changed
-                # notifications, ctx.enable_components() is skipped. close_kitchen()
-                # appends global mcp.disable() for these tags, so without a
-                # refresh here, the tags would never re-enable. Append global
-                # enables to override the prior disables via FastMCP's last-match-wins.
+                # notifications, ctx.enable_components() is skipped.
+                # close_kitchen() appends global mcp.disable() for these tags,
+                # so without a refresh here, the tags would never re-enable.
+                # Append global enables to override the prior disables via
+                # FastMCP's last-match-wins, then send an explicit
+                # ToolListChangedNotification so any connected Client refreshes
+                # its stale tool cache. (close_kitchen's notification only
+                # refreshes after disable; without an explicit re-enable
+                # notification, the client keeps serving the post-close list.)
                 mcp.enable(tags={"kitchen"})
                 mcp.enable(tags={"plan-review"})
-                logger.debug("open_kitchen_skip_enable", reason="global_enables_refreshed")
+                logger.debug("open_kitchen_global_enables", reason="use_global_enable")
+                try:
+                    await ctx.send_notification(ToolListChangedNotification())
+                except Exception:
+                    logger.warning(
+                        "open_kitchen_notify_failed",
+                        stage="send_notification",
+                        exc_info=True,
+                    )
             else:
                 try:
                     await ctx.enable_components(tags={"kitchen"})

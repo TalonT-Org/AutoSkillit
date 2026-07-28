@@ -114,13 +114,89 @@ async def test_close_kitchen_hides_pre_revealed_tools(tmp_path, monkeypatch):
     )
 
 
+# T-VISIBILITY-3a: client-cache coherence — close→open roundtrip restores tools via session
+@pytest.mark.anyio
+async def test_close_open_roundtrip_restores_tools_via_session(tool_ctx):
+    """Issue #4399 criterion 2: after close_kitchen() hides pre-revealed kitchen tools from a
+    connected Client session, a subsequent open_kitchen() must restore them — even when the
+    backend declares `supports_tool_list_changed=False` (Claude Code / Codex).
+
+    This test fails before the fix because open_kitchen's `_use_global_enable` branch
+    (formerly `_skip_notify`) silently re-enables the global tags without sending a
+    ToolListChangedNotification. The connected Client keeps serving the stale post-close
+    cache, so `client.list_tools()` returns an empty kitchen-tools set even though the
+    server-side state is correct.
+
+    The fix adds an explicit `ctx.send_notification(ToolListChangedNotification())` call
+    inside the `_use_global_enable` branch, which causes the Client to invalidate its
+    cache and re-query tools/list — restoring the kitchen tools to the next
+    `client.list_tools()` response.
+    """
+    from unittest.mock import MagicMock
+
+    from fastmcp.client import Client
+
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
+    from autoskillit.server import mcp
+
+    # Mirror production Claude Code / Codex: backend present and
+    # supports_tool_list_changed=False so open_kitchen enters the _use_global_enable
+    # branch. The Client is in-process (no subprocess); the FastMCP Context it creates
+    # has a real `.session` so `ctx.reset_visibility()` and `ctx.send_notification()`
+    # actually send notifications through the wire.
+    mock_backend = MagicMock()
+    mock_backend.capabilities.supports_tool_list_changed = False
+    tool_ctx.backend = mock_backend
+
+    # Simulate _pre_reveal_kitchen()'s effect on the global mcp singleton (boot-time
+    # global enable; per the established convention used by kitchen_enabled and
+    # test_server_init_gate::test_tool_list_changes_after_enable_within_session).
+    mcp.enable(tags={"kitchen"})
+    mcp.enable(tags={"plan-review"})
+
+    # tool_ctx.gate_infrastructure_ready=True mirrors the post-_pre_reveal_kitchen()
+    # boot state so the first open_kitchen would take the _skip_handler branch; close
+    # unconditionally flips it back to False (line 612), so the subsequent open_kitchen
+    # correctly enters `if not _skip_handler:` and exercises the _use_global_enable path.
+    tool_ctx.gate_infrastructure_ready = True
+    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+
+    async with Client(mcp) as client:
+        # Step 3: tools visible after global pre-reveal.
+        tools_before = {t.name for t in await client.list_tools()}
+        assert kitchen_gated.issubset(tools_before), (
+            "kitchen tools should be visible after pre-reveal enable"
+        )
+
+        # Step 4: real close_kitchen through the connected Client session.
+        await client.call_tool("close_kitchen", {})
+
+        # Step 5: tools hidden after close_kitchen's notification propagates.
+        tools_after_close = {t.name for t in await client.list_tools()}
+        assert not kitchen_gated.intersection(tools_after_close), (
+            "kitchen tools should be hidden after close_kitchen"
+        )
+
+        # Step 6: real open_kitchen (Claude Code backend, no tool_list_changed).
+        await client.call_tool("open_kitchen", {})
+
+        # Step 7: tools restored after open_kitchen's notification propagates.
+        # BEFORE the fix, this fails — the global mcp.enable() calls succeed
+        # server-side but no notification reaches the Client, so the Client keeps
+        # serving the stale post-close cache.
+        tools_after_reopen = {t.name for t in await client.list_tools()}
+        assert kitchen_gated.issubset(tools_after_reopen), (
+            "kitchen tools should be visible after open_kitchen restores pre-revealed tags"
+        )
+
+
 # T-VISIBILITY-3: close_kitchen→open_kitchen roundtrip — pre-revealed kitchen tools restored
 @pytest.mark.anyio
 async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, monkeypatch):
     """Issue #4399: after close_kitchen() hides pre-revealed kitchen tools, a subsequent
-    open_kitchen() with `_skip_notify=True` (Claude Code backend, no tool/list_changed
+    open_kitchen() with `_use_global_enable=True` (Claude Code backend, no tool/list_changed
     notification) must re-enable the kitchen and plan-review tags so the tools return
-    to list_tools(). Without the fix, the `_skip_notify` branch only logs a debug
+    to list_tools(). Without the fix, the `_use_global_enable` branch only logs a debug
     message and never calls `mcp.enable()`, leaving tools invisible.
     """
     monkeypatch.chdir(tmp_path)
@@ -159,7 +235,7 @@ async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, mo
     # Second lifecycle: open_kitchen with Claude Code backend (no tool_list_changed).
     # _skip_handler = False (gate_infrastructure_ready was reset by close_kitchen),
     # so we enter the `if not _skip_handler:` block at line 876. Inside it,
-    # _skip_notify = (backend is not None and not supports_tool_list_changed) = True,
+    # _use_global_enable = (backend is not None and not supports_tool_list_changed) = True,
     # so the buggy branch at line 882 is executed. Without the fix, the tools
     # remain hidden. With the fix, global mcp.enable() restores visibility.
     mock_ctx.backend.capabilities.supports_tool_list_changed = False

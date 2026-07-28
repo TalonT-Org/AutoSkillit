@@ -1063,7 +1063,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "for registered non-protected surfaces.",
     ),
     "tools_kitchen.py": (
-        1800,
+        1830,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1109,7 +1109,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; compiled recipe binding publication and execution-lifecycle cleanup across "
         "recipe load, kitchen open, and kitchen close (+13 net lines)"
         "; #4399 close→open visibility restore: mcp.enable() refresh in open_kitchen's "
-        "_skip_notify branch to override prior global mcp.disable() from close_kitchen (+2 lines)"
+        "_use_global_enable branch to override prior global mcp.disable() from close_kitchen "
+        "(+2 lines), plus ToolListChangedNotification send through ctx.send_notification so "
+        "connected Clients refresh their stale tool cache; rename of _skip_notify → "
+        "_use_global_enable clarifies the branch is about the enable mechanism, not "
+        "notification suppression; scope-placement invariant comment at the "
+        "`if not _skip_handler:` guard (+10 net lines)"
         "; finalized projection/flow generation and explicit activating-surface delivery "
         "are threaded through normal, deferred, and resource paths while named-open "
         "replacement clears stale readiness before every early return",

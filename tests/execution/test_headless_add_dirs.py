@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import ValidatedAddDir
-from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -66,3 +66,42 @@ async def test_run_headless_core_two_add_dirs(minimal_ctx, tmp_path):
     dirs_passed = [captured_cmd[i + 1] for i in add_dir_positions]
     assert str(tmp_path / "a") in dirs_passed
     assert str(tmp_path / "b") in dirs_passed
+
+
+@pytest.mark.anyio
+async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
+    minimal_ctx,
+    tmp_path,
+) -> None:
+    from autoskillit.execution.headless import run_headless_core
+    from tests.conftest import _make_result
+
+    class NoArtifactAuthority:
+        acquired = False
+
+        def acquire_launch_binding(self, *, backend, load_mode):
+            self.acquired = True
+            pytest.fail(f"Codex add-dir must not acquire {load_mode.value} artifact authority")
+
+    generated_home = tmp_path / "codex-home"
+    generated_home.mkdir()
+    authority = NoArtifactAuthority()
+    captured_kwargs = {}
+
+    async def mock_runner(_cmd, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _make_result()
+
+    minimal_ctx.runner = mock_runner
+    minimal_ctx.backend = CodexBackend()
+    minimal_ctx.plugin_authority = authority
+    await run_headless_core(
+        "/autoskillit:investigate foo",
+        str(tmp_path),
+        minimal_ctx,
+        add_dirs=[ValidatedAddDir(path=str(generated_home))],
+    )
+
+    assert authority.acquired is False
+    assert captured_kwargs["pass_fds"] == ()
+    assert captured_kwargs["env"]["CODEX_HOME"] == str(generated_home)

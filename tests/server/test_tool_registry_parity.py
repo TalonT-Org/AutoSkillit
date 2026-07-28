@@ -145,26 +145,89 @@ def test_tool_contract_identity_tracks_registry_parameter_shape() -> None:
 
 
 def test_every_tool_has_an_explicit_initialization_operation() -> None:
-    assert all(
-        isinstance(definition.initialization_operation, ToolInitializationOperation)
-        for definition in TOOL_REGISTRY.values()
-    )
-    assert (
-        TOOL_REGISTRY["complete_recipe_initialization"].initialization_operation
-        is ToolInitializationOperation.RECOVERY
-    )
-    assert (
-        TOOL_REGISTRY["get_recipe_section"].initialization_operation
-        is ToolInitializationOperation.RECOVERY
-    )
-    assert (
-        TOOL_REGISTRY["open_kitchen"].initialization_operation
-        is ToolInitializationOperation.LIFECYCLE_CONTROL
-    )
-    assert (
-        TOOL_REGISTRY["run_skill"].initialization_operation
-        is ToolInitializationOperation.EXECUTION
-    )
+    expected = {
+        ToolInitializationOperation.RECOVERY: {
+            "complete_recipe_initialization",
+            "get_recipe_section",
+        },
+        ToolInitializationOperation.INSPECTION: {
+            "analyze_tool_sequences",
+            "check_pr_mergeable",
+            "check_repo_merge_state",
+            "fetch_github_issue",
+            "get_ci_status",
+            "get_issue_title",
+            "get_pipeline_report",
+            "get_pr_reviews",
+            "get_quota_events",
+            "get_timing_summary",
+            "get_token_summary",
+            "kitchen_status",
+            "list_recipes",
+            "load_recipe",
+            "read_db",
+            "validate_recipe",
+        },
+        ToolInitializationOperation.LIFECYCLE_CONTROL: {
+            "close_kitchen",
+            "open_kitchen",
+        },
+        ToolInitializationOperation.EXECUTION: {
+            "run_cmd",
+            "run_python",
+            "run_skill",
+            "test_check",
+        },
+        ToolInitializationOperation.MUTATION: {
+            "batch_cleanup_clones",
+            "bootstrap_clone",
+            "bulk_close_issues",
+            "claim_and_resolve_issue",
+            "claim_issue",
+            "classify_fix",
+            "clone_repo",
+            "commit_files",
+            "configure_fleet",
+            "configure_order",
+            "create_and_publish_branch",
+            "create_unique_branch",
+            "disable_quota_guard",
+            "dispatch_food_truck",
+            "enqueue_pr",
+            "enrich_issues",
+            "lock_ingredients",
+            "merge_worktree",
+            "migrate_recipe",
+            "prepare_issue",
+            "push_to_remote",
+            "record_gate_dispatch",
+            "record_pipeline_step",
+            "register_clone_status",
+            "release_issue",
+            "reload_session",
+            "remove_clone",
+            "report_bug",
+            "reset_dispatch",
+            "reset_test_dir",
+            "reset_workspace",
+            "set_commit_status",
+            "toggle_auto_merge",
+            "unlock_agent_pack",
+            "wait_for_ci",
+            "wait_for_merge_queue",
+            "write_telemetry_files",
+        },
+    }
+    actual = {
+        operation: {
+            name
+            for name, definition in TOOL_REGISTRY.items()
+            if definition.initialization_operation is operation
+        }
+        for operation in ToolInitializationOperation
+    }
+
+    assert actual == expected
 
 
 def test_tool_contract_identity_tracks_initialization_operation() -> None:

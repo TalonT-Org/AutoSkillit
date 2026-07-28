@@ -108,6 +108,16 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The retired-shape registry identifies the exact obsolete install artifact "
         "before reconciliation removes a directory tree.",
     ),
+    ("workspace/session_skills.py", "_remove_and_verify", "shutil.rmtree"): (
+        1,
+        "Generated session homes are ephemeral lease-owned artifacts, and cleanup "
+        "refuses symlinks before recursively removing the exact requested home.",
+    ),
+    ("workspace/session_skills.py", "resolve_ephemeral_root", "probe.unlink"): (
+        1,
+        "The writable-root probe removes only the sentinel file it created in the "
+        "candidate ephemeral session-artifact directory.",
+    ),
     (
         "workspace/_projected_artifact/authority.py",
         "_publish_projected_plugin_manifest",
@@ -284,11 +294,13 @@ STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
 
 _PLUGIN_LIFECYCLE_SYMBOLS = frozenset(
     {
+        "ArtifactLease",
         "InstalledPluginArtifactRetirementOwner",
         "PluginArtifactIdentity",
         "PluginArtifactKind",
         "PluginArtifactRetirementOwner",
         "PluginArtifactValidationError",
+        "PluginLaunchBinding",
         "ProjectedPluginRetirementOwner",
         "RETIRED_INSTALL_ARTIFACT_SHAPES",
         "RetiringArtifactRecord",
@@ -774,9 +786,16 @@ class TestPluginMutationInventory:
             }
         )
 
-    def test_mutation_ratchet_discovers_new_lifecycle_module(self) -> None:
+    @pytest.mark.parametrize(
+        "lifecycle_symbol",
+        ["ArtifactLease", "PluginLaunchBinding", "RetiringArtifactRecord"],
+    )
+    def test_mutation_ratchet_discovers_new_lifecycle_module(
+        self,
+        lifecycle_symbol: str,
+    ) -> None:
         injected = ast.parse(
-            "def reclaim(record: RetiringArtifactRecord):\n    record.manifest_path.unlink()\n"
+            f"def reclaim(record: {lifecycle_symbol}):\n    record.manifest_path.unlink()\n"
         )
         hits = _scan_plugin_mutation_trees([("new_plugin_owner.py", injected)])
         assert hits == Counter(

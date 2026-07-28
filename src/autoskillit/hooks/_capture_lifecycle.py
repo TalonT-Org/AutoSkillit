@@ -835,6 +835,10 @@ class CaptureLifecycleStore:
         expected = record.artifact_identity
         if expected is None:
             raise _Tampered
+
+        def unlink_quarantine() -> None:
+            os.unlink(record.quarantine_name, dir_fd=self._root_fd)
+
         public: _ObservedArtifact | None = None
         quarantine: _ObservedArtifact | None = None
         try:
@@ -870,10 +874,7 @@ class CaptureLifecycleStore:
                         expected,
                         valid_name=_QUARANTINE_NAME_RE,
                     ),
-                    rollback=lambda: os.unlink(
-                        record.quarantine_name,
-                        dir_fd=self._root_fd,
-                    ),
+                    rollback=unlink_quarantine,
                     sync=lambda: os.fsync(self._root_fd),
                 )
                 os.close(linked.fd)
@@ -890,7 +891,7 @@ class CaptureLifecycleStore:
                     os.close(verified.fd)
                 raise _Tampered
             os.close(verified.fd)
-            os.unlink(record.quarantine_name, dir_fd=self._root_fd)
+            unlink_quarantine()
             os.fsync(self._root_fd)
             return record.size
         finally:

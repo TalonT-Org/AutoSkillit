@@ -239,7 +239,8 @@ class TestLoopBudgetSeparation:
         fallthrough = [
             c.route
             for c in audit_step.on_result.conditions
-            if c.when is None or ("GO" not in c.when and "error" not in c.when)
+            if c.when is None
+            or ("GO" not in c.when and "error" not in c.when and "preflight" not in c.when)
         ]
         assert fallthrough == ["check_audit_remediation_loop"]
 

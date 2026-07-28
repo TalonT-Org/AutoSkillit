@@ -279,7 +279,7 @@ class DefaultInputPreflightResolver:
                     "a terminal GO cannot carry a plan disposition report",
                 )
             )
-        decision = self._verifier.evaluate_paths(
+        decision = verifier.evaluate_paths(
             authority_path=authority_path,
             report_path=report_path,
             trusted_head=head,

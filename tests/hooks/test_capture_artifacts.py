@@ -7,10 +7,9 @@ import json
 import os
 import stat
 import subprocess
-import sys
-import time
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,7 +18,6 @@ from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CapturePolicy,
     CaptureSetupError,
-    classify_stale_captures,
     create_capture_artifact,
     current_artifact_path_if_bound,
     open_capture_root,
@@ -27,6 +25,7 @@ from autoskillit.hooks._capture_artifacts import (
     read_capture_policy,
     run_capture,
 )
+from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -45,6 +44,11 @@ def _open_authority(project: Path):
         anchor.close()
         raise
     return anchor, root
+
+
+def _create_artifact(anchor, root, capture_id: str = _CAPTURE_ID):
+    lifecycle = CaptureLifecycleStore.from_open_authorities(anchor, root)
+    return create_capture_artifact(root, capture_id, lifecycle)
 
 
 def test_capture_authorities_are_factory_only_and_externally_immutable(tmp_path: Path) -> None:
@@ -66,7 +70,12 @@ def test_capture_authorities_are_factory_only_and_externally_immutable(tmp_path:
             identity=identity,
         )
     with pytest.raises(CaptureSetupError, match="create_capture_artifact"):
-        capture_artifacts.CaptureArtifact(fd=-1, name="shell.log", identity=identity)
+        capture_artifacts.CaptureArtifact(
+            fd=-1,
+            name="shell.log",
+            identity=identity,
+            lease_fd=-1,
+        )
 
     anchor = open_project_anchor(str(tmp_path))
     try:
@@ -115,8 +124,8 @@ def _record_artifact_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     observed_fds: list[int] = []
     real_create = capture_artifacts.create_capture_artifact
 
-    def record_artifact(root, capture_id):
-        artifact = real_create(root, capture_id)
+    def record_artifact(root, capture_id, lifecycle):
+        artifact = real_create(root, capture_id, lifecycle)
         observed_fds.append(artifact.fd)
         return artifact
 
@@ -176,8 +185,8 @@ def _record_owned_capture_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
         observed_fds.extend((root.autoskillit_fd, root.temp_fd, root.fd))
         return root
 
-    def record_artifact(root, capture_id):
-        artifact = real_create(root, capture_id)
+    def record_artifact(root, capture_id, lifecycle):
+        artifact = real_create(root, capture_id, lifecycle)
         observed_fds.append(artifact.fd)
         return artifact
 
@@ -194,7 +203,7 @@ def test_project_anchor_accepts_symlink_cwd(tmp_path: Path) -> None:
     supplied_cwd.symlink_to(project, target_is_directory=True)
 
     anchor, root = _open_authority(supplied_cwd)
-    artifact = create_capture_artifact(root, _CAPTURE_ID)
+    artifact = _create_artifact(anchor, root)
     try:
         assert anchor.physical_path == project.resolve()
         assert _capture_dir(project).is_dir()
@@ -203,6 +212,7 @@ def test_project_anchor_accepts_symlink_cwd(tmp_path: Path) -> None:
         )
     finally:
         artifact.close()
+        artifact.release_lease()
         root.close()
         anchor.close()
 
@@ -268,16 +278,15 @@ def test_capability_probe_requires_exclusive_creation_flag(
         capture_artifacts._require_capabilities()
 
 
-def test_cleanup_capability_probe_selects_safe_retention_without_dir_fd_unlink(
+def test_capability_probe_requires_descriptor_relative_unlink(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     supported = set(capture_artifacts.os.supports_dir_fd)
     supported.discard(capture_artifacts.os.unlink)
     monkeypatch.setattr(capture_artifacts.os, "supports_dir_fd", supported)
 
-    mode = capture_artifacts._probe_cleanup_deletion_mode()
-
-    assert mode is capture_artifacts._CleanupDeletionMode.SAFE_RETENTION_WITHOUT_DIR_FD_UNLINK
+    with pytest.raises(CaptureSetupError, match="filesystem primitives unavailable"):
+        capture_artifacts._require_capabilities()
 
 
 @pytest.mark.parametrize("component", CAPTURE_PATH_COMPONENTS)
@@ -502,7 +511,7 @@ def test_artifact_creation_rejects_existing_entries(collision: str, tmp_path: Pa
             artifact_path.write_bytes(b"existing")
 
         with pytest.raises(CaptureSetupError):
-            create_capture_artifact(root, _CAPTURE_ID)
+            _create_artifact(anchor, root)
 
         assert external.read_bytes() == b"must-survive"
         if collision == "regular":
@@ -516,7 +525,7 @@ def test_marker_path_requires_current_directory_binding(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
     anchor, root = _open_authority(project)
-    artifact = create_capture_artifact(root, _CAPTURE_ID)
+    artifact = _create_artifact(anchor, root)
     capture_dir = _capture_dir(project)
     displaced = capture_dir.with_name("shell_capture-displaced")
     try:
@@ -525,6 +534,7 @@ def test_marker_path_requires_current_directory_binding(tmp_path: Path) -> None:
         assert current_artifact_path_if_bound(anchor, root, artifact) is None
     finally:
         artifact.close()
+        artifact.release_lease()
         root.close()
         anchor.close()
 
@@ -537,7 +547,7 @@ def test_marker_path_rederives_symlinked_project_path(tmp_path: Path) -> None:
     supplied_cwd = tmp_path / "project-link"
     supplied_cwd.symlink_to(project, target_is_directory=True)
     anchor, root = _open_authority(supplied_cwd)
-    artifact = create_capture_artifact(root, _CAPTURE_ID)
+    artifact = _create_artifact(anchor, root)
     try:
         supplied_cwd.unlink()
         supplied_cwd.symlink_to(replacement, target_is_directory=True)
@@ -545,6 +555,7 @@ def test_marker_path_rederives_symlinked_project_path(tmp_path: Path) -> None:
         assert current_artifact_path_if_bound(anchor, root, artifact) is None
     finally:
         artifact.close()
+        artifact.release_lease()
         root.close()
         anchor.close()
 
@@ -606,191 +617,6 @@ def test_marker_directory_identity_failure_closes_partial_open_fd(
             os.fstat(opened_fds[0])
     finally:
         anchor.close()
-
-
-def test_stale_capture_is_safely_retained_without_identity_unlink(tmp_path: Path) -> None:
-    project = tmp_path / "project"
-    capture_dir = _capture_dir(project)
-    capture_dir.mkdir(parents=True)
-    stale = capture_dir / f"shell_{_CAPTURE_ID}.log"
-    stale.write_bytes(b"retained")
-    old = time.time() - 7200
-    os.utime(stale, (old, old))
-
-    assert classify_stale_captures(project, max_age_seconds=3600) == 0
-    assert stale.read_bytes() == b"retained"
-
-
-def test_name_matching_fifo_does_not_block_stale_cleanup(tmp_path: Path) -> None:
-    project = tmp_path / "project"
-    capture_dir = _capture_dir(project)
-    capture_dir.mkdir(parents=True)
-    fifo = capture_dir / f"shell_{_CAPTURE_ID}.log"
-    try:
-        os.mkfifo(fifo)
-    except OSError as exc:
-        pytest.skip(f"FIFO unavailable: {exc}")
-    code = (
-        "import sys\n"
-        "from autoskillit.hooks._capture_artifacts import classify_stale_captures\n"
-        "raise SystemExit(classify_stale_captures(sys.argv[1], max_age_seconds=0))\n"
-    )
-
-    completed = subprocess.run(
-        [sys.executable, "-c", code, str(project)],
-        capture_output=True,
-        text=True,
-        timeout=2,
-        check=False,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    assert fifo.is_fifo()
-
-
-def test_cleanup_candidate_classification_rejects_unsafe_entries(tmp_path: Path) -> None:
-    project = tmp_path / "project"
-    project.mkdir()
-    anchor, root = _open_authority(project)
-    capture_dir = _capture_dir(project)
-    valid = capture_dir / "shell_1111111111111111.log"
-    valid.write_text("valid")
-    world_writable = capture_dir / "shell_2222222222222222.log"
-    world_writable.write_text("unsafe")
-    os.chmod(world_writable, 0o666)
-    hardlink_source = tmp_path / "hardlink-source"
-    hardlink_source.write_text("unsafe")
-    hardlink = capture_dir / "shell_3333333333333333.log"
-    try:
-        os.link(hardlink_source, hardlink)
-    except OSError:
-        root.close()
-        anchor.close()
-        pytest.skip("hardlinks unavailable")
-
-    try:
-        threshold = time.time() - 100
-        assert (
-            capture_artifacts._open_stale_candidate(
-                root,
-                valid.name,
-                mtime_threshold=threshold,
-            )
-            is None
-        )
-        os.utime(valid, (threshold - 100, threshold - 100))
-        candidate = capture_artifacts._open_stale_candidate(
-            root,
-            valid.name,
-            mtime_threshold=threshold,
-        )
-        assert candidate is not None
-        assert candidate.inode == valid.stat().st_ino
-        candidate.close()
-        assert (
-            capture_artifacts._open_stale_candidate(
-                root,
-                world_writable.name,
-                mtime_threshold=time.time() + 1,
-            )
-            is None
-        )
-        assert (
-            capture_artifacts._open_stale_candidate(
-                root,
-                hardlink.name,
-                mtime_threshold=time.time() + 1,
-            )
-            is None
-        )
-    finally:
-        root.close()
-        anchor.close()
-
-
-def test_cleanup_rejects_symlinked_capture_root(tmp_path: Path) -> None:
-    project = tmp_path / "project"
-    temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
-    temp_dir.mkdir(parents=True)
-    external = tmp_path / "external"
-    external.mkdir()
-    stale = external / f"shell_{_CAPTURE_ID}.log"
-    stale.write_bytes(b"must-survive")
-    old = time.time() - 7200
-    os.utime(stale, (old, old))
-    (temp_dir / CAPTURE_PATH_COMPONENTS[2]).symlink_to(external, target_is_directory=True)
-
-    assert classify_stale_captures(project, max_age_seconds=0) == 0
-    assert stale.read_bytes() == b"must-survive"
-
-
-def test_cleanup_retains_replacement_raced_after_validation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = tmp_path / "project"
-    capture_dir = _capture_dir(project)
-    capture_dir.mkdir(parents=True)
-    stale = capture_dir / f"shell_{_CAPTURE_ID}.log"
-    stale.write_bytes(b"validated")
-    os.utime(stale, (0, 0))
-    displaced = capture_dir / "validated-inode"
-    real_open = capture_artifacts._open_stale_candidate
-    swapped = False
-
-    def swap_after_validation(root, name, *, mtime_threshold):
-        nonlocal swapped
-        candidate = real_open(root, name, mtime_threshold=mtime_threshold)
-        if candidate is not None and not swapped:
-            stale.rename(displaced)
-            stale.write_bytes(b"replacement")
-            swapped = True
-        return candidate
-
-    monkeypatch.setattr(
-        capture_artifacts,
-        "_open_stale_candidate",
-        swap_after_validation,
-    )
-
-    assert classify_stale_captures(project, max_age_seconds=0) == 0
-    assert stale.read_bytes() == b"replacement"
-    assert displaced.read_bytes() == b"validated"
-
-
-def test_cleanup_failure_for_one_entry_does_not_skip_later_entries(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = tmp_path / "project"
-    capture_dir = _capture_dir(project)
-    capture_dir.mkdir(parents=True)
-    stale_paths = [
-        capture_dir / "shell_1111111111111111.log",
-        capture_dir / "shell_2222222222222222.log",
-    ]
-    for path in stale_paths:
-        path.write_text(path.name)
-        os.utime(path, (0, 0))
-    calls: list[str] = []
-    real_open = capture_artifacts._open_stale_candidate
-
-    def fail_first_entry(root, name, *, mtime_threshold):
-        calls.append(name)
-        if len(calls) == 1:
-            raise OSError("fault injection")
-        return real_open(root, name, mtime_threshold=mtime_threshold)
-
-    monkeypatch.setattr(
-        capture_artifacts,
-        "_open_stale_candidate",
-        fail_first_entry,
-    )
-
-    assert classify_stale_captures(project, max_age_seconds=0) == 0
-    assert len(calls) == 2
-    assert {path.name for path in stale_paths} == set(calls)
-    assert all(path.exists() for path in stale_paths)
 
 
 def test_setup_failure_prevents_user_command_and_emits_failure_marker(
@@ -912,7 +738,7 @@ def test_post_duplication_failure_closes_all_fds_and_prevents_command(
     assert not (project / "command_ran").exists()
     assert artifact_path.read_bytes() == b""
     assert len(observed_fds) == 5
-    assert len(duplicated_fds) == 1
+    assert len(duplicated_fds) == 2
     for fd in [*observed_fds, *duplicated_fds]:
         with pytest.raises(OSError):
             os.fstat(fd)
@@ -1104,8 +930,8 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
 
     process = FailingProcess()
 
-    def record_artifact(root, capture_id):
-        artifact = real_create(root, capture_id)
+    def record_artifact(root, capture_id, lifecycle):
+        artifact = real_create(root, capture_id, lifecycle)
         observed_fds.append(artifact.fd)
         return artifact
 
@@ -1186,7 +1012,7 @@ def test_digest_failure_emits_failure_and_closes_runtime_resources(
             raise AssertionError("digest failure must stop before finalization")
 
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(capture_artifacts.hashlib, "sha256", BrokenDigest)
+    monkeypatch.setattr(capture_artifacts, "hashlib", SimpleNamespace(sha256=BrokenDigest))
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()

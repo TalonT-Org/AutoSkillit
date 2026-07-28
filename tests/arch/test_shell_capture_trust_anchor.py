@@ -120,45 +120,6 @@ def _imports_symbol(tree: ast.Module, module: str, symbol: str) -> bool:
     )
 
 
-def _is_path_cwd_call(node: ast.expr) -> bool:
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and isinstance(node.func.value, ast.Name)
-        and node.func.value.id == "Path"
-        and node.func.attr == "cwd"
-        and not node.args
-        and not node.keywords
-    )
-
-
-def _main_directly_classifies_captures(tree: ast.Module) -> bool:
-    main = next(
-        (
-            node
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "main"
-        ),
-        None,
-    )
-    if main is None:
-        return False
-    for statement in main.body:
-        if not isinstance(statement, ast.Try):
-            continue
-        for guarded in statement.body:
-            if (
-                isinstance(guarded, ast.Expr)
-                and isinstance(guarded.value, ast.Call)
-                and isinstance(guarded.value.func, ast.Name)
-                and guarded.value.func.id == "classify_stale_captures"
-                and len(guarded.value.args) == 1
-                and _is_path_cwd_call(guarded.value.args[0])
-            ):
-                return True
-    return False
-
-
 def _capture_path_redirections(source: str) -> list[str]:
     tree = ast.parse(source)
     capture_path_names = {
@@ -201,18 +162,17 @@ def _capture_path_redirections(source: str) -> list[str]:
     return violations
 
 
-def test_session_start_calls_canonical_capture_classification() -> None:
+def test_resume_reminder_does_not_own_capture_lifecycle() -> None:
     source = _source("hooks/session_start_hook.py")
     tree = ast.parse(source)
-    assert _imports_symbol(tree, "_capture_artifacts", "classify_stale_captures")
-    assert _main_directly_classifies_captures(tree)
+    assert not _imports_symbol(tree, "_capture_artifacts", "classify_stale_captures")
     imported_modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module is not None:
             imported_modules.add(node.module)
         elif isinstance(node, ast.Import):
             imported_modules.update(alias.name for alias in node.names)
-    assert not any("shell_capture" in module for module in imported_modules)
+    assert not any("capture" in module for module in imported_modules)
 
 
 def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
@@ -239,6 +199,38 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
     )
 
 
+def test_capture_deletion_is_confined_to_lifecycle_transactions() -> None:
+    tree = ast.parse(_source("hooks/_capture_lifecycle.py"))
+    functions_with_unlink = {
+        function.name
+        for function in ast.walk(tree)
+        if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(
+            isinstance(node, ast.Call) and _called_operation_name(node.func) == "unlink"
+            for node in ast.walk(function)
+        )
+    }
+    assert functions_with_unlink == {
+        "_compact_locked",
+        "_normalize_abandoned",
+        "_quarantine_delete",
+        "create_artifact",
+    }
+
+    quarantine = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_quarantine_delete"
+    )
+    assert (
+        sum(
+            isinstance(node, ast.Call) and _called_operation_name(node.func) == "unlink"
+            for node in ast.walk(quarantine)
+        )
+        == 2
+    )
+
+
 @pytest.mark.parametrize(
     "source",
     [
@@ -250,17 +242,6 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
 )
 def test_pathname_operation_guard_rejects_aliases_and_getattr(source: str) -> None:
     assert _pathname_operation_calls(source)
-
-
-def test_canonical_classification_guard_rejects_dead_branch() -> None:
-    tree = ast.parse(
-        "from _capture_artifacts import classify_stale_captures\n"
-        "from pathlib import Path\n"
-        "def main():\n"
-        "    if False:\n"
-        "        classify_stale_captures(Path.cwd())\n"
-    )
-    assert not _main_directly_classifies_captures(tree)
 
 
 @pytest.mark.parametrize(

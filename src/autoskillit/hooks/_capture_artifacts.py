@@ -1,8 +1,8 @@
-"""Descriptor-anchored shell-capture artifacts and lifecycle helpers.
+"""Descriptor-anchored shell-capture authority and isolated runner.
 
 This module is stdlib-only and is executable under Python isolated mode. It
-owns the trust boundary for capture policy reads, artifact creation, replay,
-and stale-candidate classification.
+owns the trust boundary for capture policy reads, artifact publication, and
+replay.  Durable state and reclamation live in ``_capture_lifecycle``.
 """
 
 from __future__ import annotations
@@ -13,13 +13,12 @@ import errno
 import hashlib
 import json
 import os
-import re
 import stat
 import subprocess
 import sys
-import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import InitVar, dataclass
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,6 +28,10 @@ if _HOOKS_DIR not in sys.path:
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
+    from autoskillit.hooks._capture_lifecycle import (
+        CaptureLifecycleError,
+        CaptureLifecycleStore,
+    )
     from autoskillit.hooks._hook_settings import (
         HOOK_CONFIG_FILENAME,
         HOOK_CONFIG_OVERLAY_FILENAME,
@@ -37,6 +40,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._policy_event import PolicyEvent, render_capture_marker
 else:
     from _capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
+    from _capture_lifecycle import CaptureLifecycleError, CaptureLifecycleStore
     from _hook_settings import (
         HOOK_CONFIG_FILENAME,
         HOOK_CONFIG_OVERLAY_FILENAME,
@@ -51,18 +55,16 @@ __all__ = [
     "CaptureRoot",
     "CaptureSetupError",
     "ProjectAnchor",
-    "_CAPTURE_FILENAME_RE",
     "create_capture_artifact",
     "current_artifact_path_if_bound",
+    "open_capture_lifecycle",
     "open_capture_root",
     "open_project_anchor",
     "read_capture_policy",
     "run_capture",
-    "classify_stale_captures",
 ]
 
 CAPTURE_PATH_COMPONENTS = (".autoskillit", "temp", "shell_capture")
-_CAPTURE_FILENAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
 
 _DEFAULT_INLINE_BYTES = 12_000
 _MAX_INLINE_BYTES = 1_000_000
@@ -90,24 +92,11 @@ _DIRECTORY_FLAGS = (
     | getattr(os, "O_CLOEXEC", 0)
     | getattr(os, "O_NOFOLLOW", 0)
 )
-_ARTIFACT_FLAGS = (
-    os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-)
 _READ_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-_STALE_READ_FLAGS = _READ_FLAGS | getattr(os, "O_NONBLOCK", 0)
 
 
 class CaptureSetupError(RuntimeError):
     """Raised when the descriptor-anchored capture authority cannot be established."""
-
-
-class _CleanupDeletionMode(Enum):
-    """Observed cleanup capability; neither stdlib mode permits identity-bound deletion."""
-
-    SAFE_RETENTION_WITHOUT_DIR_FD_UNLINK = "safe-retention-without-dir-fd-unlink"
-    SAFE_RETENTION_WITH_UNCONDITIONAL_DIR_FD_UNLINK = (
-        "safe-retention-with-unconditional-dir-fd-unlink"
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +160,7 @@ class CaptureArtifact:
     fd: int
     name: str
     identity: FileIdentity
+    lease_fd: int
     _factory_token: InitVar[object | None] = None
 
     def __post_init__(self, _factory_token: object | None) -> None:
@@ -181,6 +171,11 @@ class CaptureArtifact:
         if self.fd >= 0:
             os.close(self.fd)
             object.__setattr__(self, "fd", -1)
+
+    def release_lease(self) -> None:
+        if self.lease_fd >= 0:
+            os.close(self.lease_fd)
+            object.__setattr__(self, "lease_fd", -1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,30 +194,8 @@ class _DrainResult:
     write_error: OSError | None
 
 
-@dataclass(slots=True)
-class _CleanupCandidate:
-    name: str
-    fd: int
-    device: int
-    inode: int
-    mode: int
-    nlink: int
-    mtime: float
-
-    def close(self) -> None:
-        if self.fd >= 0:
-            os.close(self.fd)
-            self.fd = -1
-
-
-def _probe_cleanup_deletion_mode() -> _CleanupDeletionMode:
-    if os.unlink in getattr(os, "supports_dir_fd", ()):
-        return _CleanupDeletionMode.SAFE_RETENTION_WITH_UNCONDITIONAL_DIR_FD_UNLINK
-    return _CleanupDeletionMode.SAFE_RETENTION_WITHOUT_DIR_FD_UNLINK
-
-
-def _require_capabilities() -> _CleanupDeletionMode:
-    required_dir_fd = (os.open, os.mkdir, os.stat)
+def _require_capabilities() -> None:
+    required_dir_fd = (os.link, os.mkdir, os.open, os.stat, os.unlink)
     required_flags = ("O_CLOEXEC", "O_CREAT", "O_DIRECTORY", "O_EXCL", "O_NOFOLLOW", "O_NONBLOCK")
     if (
         any(getattr(os, flag, 0) == 0 for flag in required_flags)
@@ -234,7 +207,6 @@ def _require_capabilities() -> _CleanupDeletionMode:
         or os.listdir not in getattr(os, "supports_fd", ())
     ):
         raise CaptureSetupError("required descriptor-relative filesystem primitives unavailable")
-    return _probe_cleanup_deletion_mode()
 
 
 def _identity(fd: int) -> FileIdentity:
@@ -333,29 +305,48 @@ def open_capture_root(anchor: ProjectAnchor, *, create: bool) -> CaptureRoot:
         raise
 
 
-def create_capture_artifact(root: CaptureRoot, capture_id: str) -> CaptureArtifact:
-    """Create the final artifact exclusively beneath an already-open capture root."""
+@contextmanager
+def open_capture_lifecycle(
+    requested_cwd: str,
+    *,
+    create: bool = False,
+) -> Iterator[CaptureLifecycleStore]:
+    """Open a lifecycle store from a validated payload cwd."""
+
+    anchor = open_project_anchor(requested_cwd)
+    root: CaptureRoot | None = None
+    try:
+        root = open_capture_root(anchor, create=create)
+        yield CaptureLifecycleStore.from_open_authorities(anchor, root)
+    finally:
+        try:
+            if root is not None:
+                root.close()
+        finally:
+            anchor.close()
+
+
+def create_capture_artifact(
+    root: CaptureRoot,
+    capture_id: str,
+    lifecycle: CaptureLifecycleStore,
+) -> CaptureArtifact:
+    """Stage and publish a managed artifact beneath an open capture root."""
 
     if not _CAPTURE_ID_RE.fullmatch(capture_id):
         raise CaptureSetupError("invalid capture id")
-    name = f"shell_{capture_id}.log"
     try:
-        fd = os.open(name, _ARTIFACT_FLAGS, mode=0o600, dir_fd=root.fd)
-    except OSError as exc:
-        raise CaptureSetupError("cannot create exclusive capture artifact") from exc
-    try:
-        value = os.fstat(fd)
-        if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1 or value.st_mode & stat.S_IWOTH:
-            raise CaptureSetupError("unsafe capture artifact")
+        fd, lease_fd, public_name, raw_identity = lifecycle.create_artifact(capture_id)
+        identity = FileIdentity(device=raw_identity[0], inode=raw_identity[1])
         return CaptureArtifact(
             fd=fd,
-            name=name,
-            identity=FileIdentity.from_stat(value),
+            name=public_name,
+            identity=identity,
+            lease_fd=lease_fd,
             _factory_token=_AUTHORITY_FACTORY_TOKEN,
         )
-    except BaseException:
-        os.close(fd)
-        raise
+    except (CaptureLifecycleError, OSError) as exc:
+        raise CaptureSetupError("cannot create managed capture artifact") from exc
 
 
 def _duplicate_artifact_writer(artifact: CaptureArtifact) -> int:
@@ -781,6 +772,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
 
     anchor = open_project_anchor(cwd)
     root: CaptureRoot | None = None
+    lifecycle: CaptureLifecycleStore | None = None
     artifact: CaptureArtifact | None = None
     artifact_writer_fd = -1
     process: subprocess.Popen[bytes] | None = None
@@ -792,27 +784,62 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             return _normalized_returncode(process.wait())
 
         root = open_capture_root(anchor, create=True)
-        artifact = create_capture_artifact(root, capture_id)
+        lifecycle = CaptureLifecycleStore.from_open_authorities(anchor, root)
+        artifact = create_capture_artifact(root, capture_id, lifecycle)
         artifact_writer_fd = _duplicate_artifact_writer(artifact)
-        process = _spawn_bash(anchor, bash_path, command, capture_output=True)
         returncode: int | None = None
-        failure_stage = "capture readback"
+        result: _DrainResult | None = None
+        terminal_committed = False
+        failure_stage = "capture process spawn"
         try:
+            process = _spawn_bash(anchor, bash_path, command, capture_output=True)
+            failure_stage = "capture readback"
             result = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
             failure_stage = "capture process wait"
             returncode = _normalized_returncode(process.wait())
             if result.write_error is not None:
+                failure_stage = "capture failed-state commit"
+                lifecycle.finalize_capture(
+                    capture_id,
+                    size=result.total_bytes,
+                    sha256=result.sha256,
+                    failed=True,
+                )
+                terminal_committed = True
                 return _capture_failure_return("capture artifact write failed", returncode)
             failure_stage = "capture artifact integrity verification"
             _verify_capture_artifact(artifact, result)
+            failure_stage = "capture finalization"
+            lifecycle.finalize_capture(
+                capture_id,
+                size=result.total_bytes,
+                sha256=result.sha256,
+                failed=False,
+            )
+            terminal_committed = True
             failure_stage = "capture marker verification"
             artifact_path = current_artifact_path_if_bound(anchor, root, artifact)
             failure_stage = "capture replay emission"
             _emit_capture(result, artifact_path, policy.inline_bytes)
             return returncode
         except _CAPTURE_RUNTIME_ERRORS as exc:
-            if returncode is None:
+            if returncode is None and process is not None:
                 returncode = _settle_failed_capture(process)
+            if not terminal_committed:
+                try:
+                    lifecycle.finalize_capture(
+                        capture_id,
+                        size=(
+                            result.total_bytes
+                            if result is not None
+                            else max(0, os.fstat(artifact.fd).st_size)
+                        ),
+                        sha256=result.sha256 if result is not None else "",
+                        failed=True,
+                    )
+                    terminal_committed = True
+                except _CAPTURE_RUNTIME_ERRORS:
+                    failure_stage = "capture failed-state commit"
             return _capture_failure_return(
                 f"{failure_stage} failed: {type(exc).__name__}: {exc}",
                 returncode,
@@ -842,94 +869,11 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             anchor.close()
         except _CAPTURE_RUNTIME_ERRORS:
             pass
-
-
-def _open_stale_candidate(
-    root: CaptureRoot,
-    name: str,
-    *,
-    mtime_threshold: float,
-) -> _CleanupCandidate | None:
-    if not _CAPTURE_FILENAME_RE.fullmatch(name):
-        return None
-    try:
-        observed = os.stat(name, dir_fd=root.fd, follow_symlinks=False)
-    except OSError:
-        return None
-    if (
-        not stat.S_ISREG(observed.st_mode)
-        or observed.st_nlink != 1
-        or observed.st_mode & stat.S_IWOTH
-        or observed.st_mtime > mtime_threshold
-    ):
-        return None
-    try:
-        fd = os.open(name, _STALE_READ_FLAGS, dir_fd=root.fd)
-    except OSError:
-        return None
-    try:
-        value = os.fstat(fd)
-    except OSError:
-        os.close(fd)
-        return None
-    if (
-        FileIdentity.from_stat(value) != FileIdentity.from_stat(observed)
-        or not stat.S_ISREG(value.st_mode)
-        or value.st_nlink != 1
-        or value.st_mode & stat.S_IWOTH
-        or value.st_mtime > mtime_threshold
-    ):
-        os.close(fd)
-        return None
-    return _CleanupCandidate(
-        name=name,
-        fd=fd,
-        device=value.st_dev,
-        inode=value.st_ino,
-        mode=value.st_mode,
-        nlink=value.st_nlink,
-        mtime=value.st_mtime,
-    )
-
-
-def classify_stale_captures(
-    project_root: str | Path,
-    *,
-    max_age_seconds: int = 3600,
-) -> int:
-    """Classify stale captures without path-only deletion.
-
-    The portable stdlib has no identity-conditioned unlink primitive. Validated
-    stale files are therefore retained, and the deleted count is always zero.
-    """
-
-    anchor: ProjectAnchor | None = None
-    root: CaptureRoot | None = None
-    try:
-        _cleanup_mode = _require_capabilities()
-        anchor = open_project_anchor(os.fspath(project_root))
-        root = open_capture_root(anchor, create=False)
-        threshold = time.time() - max_age_seconds
-        try:
-            names = os.listdir(root.fd)
-        except OSError:
-            return 0
-        for name in names:
+        if artifact is not None:
             try:
-                candidate = _open_stale_candidate(root, name, mtime_threshold=threshold)
-                if candidate is not None:
-                    # Neither probed stdlib mode can bind unlink to this fd identity.
-                    candidate.close()
-            except (CaptureSetupError, OSError):
-                continue
-        return 0
-    except (CaptureSetupError, OSError):
-        return 0
-    finally:
-        if root is not None:
-            root.close()
-        if anchor is not None:
-            anchor.close()
+                artifact.release_lease()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
 
 
 def _decode_command(value: str) -> str:

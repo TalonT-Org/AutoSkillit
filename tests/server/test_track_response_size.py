@@ -385,3 +385,72 @@ class TestTrackResponseSize:
         assert result == bounded
         ledger.commit.assert_not_called()
         ledger.abort.assert_called_once_with(finalized.receipt_handle)
+
+    @pytest.mark.parametrize(
+        ("carrier_kind", "completion_target"),
+        [
+            (
+                "section",
+                "autoskillit.server._notify.complete_section_response",
+            ),
+            (
+                "initialization",
+                "autoskillit.server._notify.complete_initialization_response",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("enforced", ["exact response", "transformed response"])
+    @pytest.mark.anyio
+    async def test_initialization_carriers_complete_through_decorated_boundary(
+        self,
+        carrier_kind: str,
+        completion_target: str,
+        enforced: str,
+    ):
+        from autoskillit.server._notify import track_response_size
+        from autoskillit.server._recipe_initialization import (
+            FinalizedRecipeInitializationResponse,
+            FinalizedRecipeSectionResponse,
+        )
+
+        tool_ctx = MagicMock()
+        artifact_generation = MagicMock()
+        if carrier_kind == "section":
+            finalized = FinalizedRecipeSectionResponse(
+                rendered="exact response",
+                tool_ctx=tool_ctx,
+                initialization_id="initialization",
+                artifact_generation=artifact_generation,
+                section="flow_records",
+                page_plan_sha256="sha256:plan",
+                part=0,
+            )
+        else:
+            finalized = FinalizedRecipeInitializationResponse(
+                rendered="exact response",
+                tool_ctx=tool_ctx,
+                initialization_id="initialization",
+                artifact_generation=artifact_generation,
+                staged_snapshot=MagicMock(),
+                completion_receipt="sha256:receipt",
+            )
+
+        @track_response_size("initialization_boundary")
+        async def fake_handler():
+            return finalized
+
+        with (
+            patch(
+                "autoskillit.server._notify._get_ctx_or_none",
+                return_value=_tracking_ctx(),
+            ),
+            patch(
+                "autoskillit.server._notify.enforce_response_budget",
+                return_value=enforced,
+            ),
+            patch(completion_target, return_value=enforced) as complete,
+        ):
+            result = await fake_handler()
+
+        assert result == enforced
+        complete.assert_called_once_with(finalized, enforced)

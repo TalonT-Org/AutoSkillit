@@ -97,6 +97,224 @@ def test_managed_artifact_is_published_only_after_durable_identity(tmp_path: Pat
         anchor.close()
 
 
+def test_staged_identity_is_committed_before_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    staged_record: capture_lifecycle.CaptureLifecycleRecord | None = None
+    staged_identity: tuple[int, int] | None = None
+
+    def interrupt_publication(
+        src: str,
+        _dst: str,
+        *,
+        src_dir_fd: int | None = None,
+        dst_dir_fd: int | None = None,
+        follow_symlinks: bool = True,
+    ) -> None:
+        del dst_dir_fd, follow_symlinks
+        nonlocal staged_record, staged_identity
+        staged_record = store.get_record(_CAPTURE_ID)
+        value = os.stat(src, dir_fd=src_dir_fd, follow_symlinks=False)
+        staged_identity = (value.st_dev, value.st_ino)
+        raise OSError("injected publication interruption")
+
+    try:
+        monkeypatch.setattr(capture_lifecycle.os, "link", interrupt_publication)
+        with pytest.raises(OSError, match="publication interruption"):
+            store.create_artifact(_CAPTURE_ID)
+
+        assert staged_record is not None
+        assert staged_record.state is CaptureState.STAGED
+        assert staged_record.artifact_identity == staged_identity
+        failed = store.get_record(_CAPTURE_ID)
+        assert failed is not None
+        assert failed.state is CaptureState.FAILED
+        assert failed.artifact_identity == staged_identity
+        assert (_capture_dir(project) / failed.staging_name).exists()
+        assert not (_capture_dir(project) / failed.public_name).exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_interrupted_publication_fsync_recovers_public_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    real_fsync = os.fsync
+    fail_once = True
+
+    def interrupted_fsync(fd: int) -> None:
+        nonlocal fail_once
+        if fail_once and fd == root.fd:
+            fail_once = False
+            raise OSError("injected publication fsync interruption")
+        real_fsync(fd)
+
+    try:
+        monkeypatch.setattr(capture_lifecycle.os, "fsync", interrupted_fsync)
+        with pytest.raises(OSError, match="publication fsync interruption"):
+            store.create_artifact(_CAPTURE_ID)
+
+        failed = store.get_record(_CAPTURE_ID)
+        assert failed is not None
+        assert failed.state is CaptureState.FAILED
+        assert failed.artifact_identity is not None
+        assert not (_capture_dir(project) / failed.staging_name).exists()
+        assert (_capture_dir(project) / failed.public_name).exists()
+
+        clock.advance(3601)
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        assert outcome.deleted == 1
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_failed_published_commit_recovers_public_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+
+    def interrupt_published_commit(
+        _capture_id: str,
+    ) -> capture_lifecycle.CaptureLifecycleRecord:
+        raise OSError("injected published commit interruption")
+
+    try:
+        monkeypatch.setattr(store, "mark_published", interrupt_published_commit)
+        with pytest.raises(OSError, match="published commit interruption"):
+            store.create_artifact(_CAPTURE_ID)
+
+        failed = store.get_record(_CAPTURE_ID)
+        assert failed is not None
+        assert failed.state is CaptureState.FAILED
+        assert failed.artifact_identity is not None
+        assert (_capture_dir(project) / failed.public_name).exists()
+
+        clock.advance(3601)
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        assert outcome.deleted == 1
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_staged_identity_replacement_is_preserved_as_tampered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    real_link = os.link
+
+    def replace_before_link(
+        src: str,
+        dst: str,
+        *,
+        src_dir_fd: int | None = None,
+        dst_dir_fd: int | None = None,
+        follow_symlinks: bool = True,
+    ) -> None:
+        staging = _capture_dir(project) / src
+        staging.unlink()
+        staging.write_bytes(b"replacement")
+        real_link(
+            src,
+            dst,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+            follow_symlinks=follow_symlinks,
+        )
+
+    try:
+        monkeypatch.setattr(capture_lifecycle.os, "link", replace_before_link)
+        with pytest.raises(
+            capture_lifecycle.CaptureLifecycleError,
+            match="publication identity changed",
+        ):
+            store.create_artifact(_CAPTURE_ID)
+
+        failed = store.get_record(_CAPTURE_ID)
+        assert failed is not None
+        staging = _capture_dir(project) / failed.staging_name
+        public = _capture_dir(project) / failed.public_name
+        assert failed.artifact_identity is not None
+        assert (staging.stat().st_dev, staging.stat().st_ino) != failed.artifact_identity
+
+        clock.advance(3601)
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        assert outcome.tampered == 1
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
+        assert staging.read_bytes() == b"replacement"
+        assert public.read_bytes() == b"replacement"
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_quarantine_replacement_is_preserved_as_tampered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close()
+    artifact.release_lease()
+    clock.advance(3601)
+    real_unlink = os.unlink
+    fail_once = True
+
+    def interrupt_quarantine_unlink(path: str, *, dir_fd: int | None = None) -> None:
+        nonlocal fail_once
+        if fail_once and path.startswith(".capture-quarantine-"):
+            fail_once = False
+            raise OSError("injected quarantine interruption")
+        real_unlink(path, dir_fd=dir_fd)
+
+    try:
+        monkeypatch.setattr(
+            capture_lifecycle.os,
+            "unlink",
+            interrupt_quarantine_unlink,
+        )
+        first = store.sweep(max_items=8, max_duration_seconds=1)
+        retry = store.get_record(_CAPTURE_ID)
+        assert first.errors == 1
+        assert retry is not None
+        assert retry.state is CaptureState.DELETING
+        assert retry.retry_count == 1
+
+        public = _capture_dir(project) / retry.public_name
+        quarantine = _capture_dir(project) / retry.quarantine_name
+        public.write_bytes(b"replacement")
+        assert quarantine.exists()
+
+        clock.advance(3)
+        second = store.sweep(max_items=8, max_duration_seconds=1)
+        assert second.tampered == 1
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
+        assert public.read_bytes() == b"replacement"
+        assert quarantine.exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_quiet_live_writer_survives_past_abandonment_deadline(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

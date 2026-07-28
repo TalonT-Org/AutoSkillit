@@ -54,9 +54,9 @@ from autoskillit.execution.headless._headless_recovery import (
     _infer_enum_token_from_write_contract,
     _recover_block_from_assistant_messages,
     _recover_from_separate_marker,
+    _scan_jsonl_write_paths,
     _synthesize_from_write_artifacts,
 )
-from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths
 from autoskillit.execution.session._exit_classification import (
     classify_infra_exit,
     has_rate_limit_signal,

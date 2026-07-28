@@ -187,8 +187,8 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The context probe is not a physical artifact-consuming agent launch.",
     ),
     (
-        "execution/headless/_headless_execute.py",
-        "_execute_claude_headless",
+        "execution/headless/_headless_launch.py",
+        "_run_headless_attempt",
         "spec.inherited_fds",
     ): (
         1,

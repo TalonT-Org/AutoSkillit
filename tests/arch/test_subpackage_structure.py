@@ -124,7 +124,6 @@ class TestExecutionSubpackages:
             "_headless_path_tokens",
             "_headless_recovery",
             "_headless_result",
-            "_headless_scan",
         }
         actual = {p.stem for p in (SRC / "execution" / "headless").glob("_headless_*.py")}
         assert actual == expected

@@ -102,7 +102,7 @@ class TestStepBackendPtyOverride:
         codex_step.result_parser.return_value = _mock_parser
 
         spec = CmdSpec(cmd=("codex", "--print", "do something"), env={})
-        with patch("autoskillit.execution.headless._headless_execute.assert_headless_cmd"):
+        with patch("autoskillit.execution.headless._headless_launch.assert_headless_cmd"):
             await _execute_claude_headless(
                 lambda _binding, _extras: spec,
                 cwd=str(tmp_path),

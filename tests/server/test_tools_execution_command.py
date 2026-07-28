@@ -201,7 +201,7 @@ class TestRunSkillPassesSessionLogDir:
         log_dir = tmp_path / "logs" / "some-project"
         log_dir.mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute._resolve_session_log_dir",
+            "autoskillit.execution.headless._headless_launch._resolve_session_log_dir",
             lambda cwd, backend: log_dir,
         )
 

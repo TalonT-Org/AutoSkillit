@@ -800,8 +800,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
             etc.) that cannot be merged without re-introducing the coupling they isolate.
             recording.py adds the RecordingSubprocessRunner decorator as a separate module
             to keep scenario recording concerns isolated from the core process lifecycle.
-            _headless_scan.py extracts write-path JSONL scanning from headless.py to keep
-            that module within its REQ-CNST-010-E2 line budget.
+            _headless_recovery.py owns both result recovery and write-path JSONL scanning.
             _headless_recovery.py, _headless_path_tokens.py, and _headless_result.py
             split the remaining headless.py concern groups into private sub-modules
             following the _process_*.py precedent (P8-F1), bringing the count to 29.

@@ -13,7 +13,7 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
 _GUARDED_FILES = [
     SRC / "execution" / "session" / "_session_model.py",
-    SRC / "execution" / "headless" / "_headless_scan.py",
+    SRC / "execution" / "headless" / "_headless_recovery.py",
     SRC / "execution" / "headless" / "_headless_evidence.py",
     SRC / "core" / "tool_sequence_analysis.py",
     SRC / "fleet" / "result_parser.py",

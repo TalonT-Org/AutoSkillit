@@ -84,6 +84,7 @@ from autoskillit.execution.headless._headless_recovery import (
     _parse_single_enum_binding,  # noqa: F401
     _recover_block_from_assistant_messages,  # noqa: F401
     _recover_from_separate_marker,  # noqa: F401
+    _scan_jsonl_write_paths,  # noqa: F401
     _synthesize_from_write_artifacts,  # noqa: F401
 )
 from autoskillit.execution.headless._headless_result import (
@@ -91,7 +92,6 @@ from autoskillit.execution.headless._headless_result import (
     _parse_stdout,  # noqa: F401
     _resolve_skill_session_id,  # noqa: F401
 )
-from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths  # noqa: F401
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
 if TYPE_CHECKING:

@@ -42,6 +42,31 @@ def test_resource_fields_are_immutable_with_independent_factories() -> None:
         assert isinstance(getattr(HookDef(matcher="one"), name), frozenset)
 
 
+@pytest.mark.parametrize(
+    "field_name",
+    (
+        "produces_resources",
+        "reclaims_resources",
+        "self_reclaims_resources",
+    ),
+)
+@pytest.mark.parametrize(
+    "replacement",
+    (
+        {_RESOURCE},
+        _RESOURCE,
+        frozenset({""}),
+        frozenset({1}),
+    ),
+)
+def test_hook_def_rejects_runtime_invalid_resource_metadata(
+    field_name: str,
+    replacement: object,
+) -> None:
+    with pytest.raises(ValueError, match=field_name):
+        HookDef(matcher="Bash", **{field_name: replacement})
+
+
 def test_real_lifecycle_contract_passes_every_generator_boundary() -> None:
     validate_lifecycle_contracts(HOOK_REGISTRY, LIFECYCLE_CONTRACTS, backend="codex")
     validate_lifecycle_contracts(HOOK_REGISTRY, LIFECYCLE_CONTRACTS, backend="claude_code")

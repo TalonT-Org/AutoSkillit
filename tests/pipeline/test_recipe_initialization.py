@@ -25,6 +25,7 @@ from autoskillit.pipeline import (
     RecipeInitializationRequirement,
     initialization_is_complete,
     record_initialization_page,
+    replace_ready_execution,
     start_recipe_initialization,
     transition_recipe_ready,
 )
@@ -241,3 +242,38 @@ def test_ready_recipe_rejects_direct_construction_without_transition_authority()
             completion_receipt=_hash("receipt"),
             _transition_token=object(),
         )
+
+
+def test_ready_execution_replacement_rejects_cross_generation_without_mutation() -> None:
+    state = _initializing()
+    for requirement in state.requirements:
+        for part in range(requirement.total_parts):
+            state = cast(
+                InitializingRecipe,
+                record_initialization_page(
+                    state,
+                    initialization_id=state.initialization_id,
+                    section=requirement.section,
+                    page_plan_sha256=requirement.page_plan_sha256,
+                    part=part,
+                ),
+            )
+    installed = InstalledRecipeExecution(
+        snapshot=state.staged_snapshot,
+        runtime_binding_digests={},
+        audit_cycle_heads=cast(Any, object()),
+        input_preflight_resolver=cast(Any, object()),
+    )
+    ready = transition_recipe_ready(
+        state,
+        installed_execution=installed,
+        completion_receipt=_hash("receipt"),
+    )
+    original = ready
+    replacement = replace(installed, snapshot=_snapshot("execution-b"))
+
+    with pytest.raises(ValueError, match="crosses generations"):
+        replace_ready_execution(ready, replacement)
+
+    assert ready == original
+    assert ready.installed_execution is installed

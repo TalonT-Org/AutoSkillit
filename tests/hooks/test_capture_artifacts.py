@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import importlib
 import json
 import os
 import stat
@@ -14,7 +15,6 @@ from types import SimpleNamespace
 import pytest
 
 import autoskillit.hooks._capture_artifacts as capture_artifacts
-import autoskillit.hooks._capture_authority as capture_authority
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CapturePolicy,
@@ -27,6 +27,8 @@ from autoskillit.hooks._capture_artifacts import (
     run_capture,
 )
 from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
+
+capture_authority = importlib.import_module(capture_artifacts.open_project_anchor.__module__)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -209,6 +211,8 @@ def _record_owned_capture_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
     monkeypatch.setattr(capture_artifacts, "open_project_anchor", record_anchor)
     monkeypatch.setattr(capture_artifacts, "open_capture_root", record_root)
+    monkeypatch.setattr(capture_authority, "open_project_anchor", record_anchor)
+    monkeypatch.setattr(capture_authority, "open_capture_root", record_root)
     monkeypatch.setattr(capture_artifacts, "create_capture_artifact", record_artifact)
     return observed_fds
 
@@ -856,7 +860,7 @@ def test_spawn_failure_reports_failed_state_recovery_error(
         raise capture_artifacts.CaptureLifecycleError("secondary recovery failure")
 
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", fail_spawn)
-    monkeypatch.setattr(CaptureLifecycleStore, "finalize_capture", fail_recovery)
+    monkeypatch.setattr(capture_artifacts.CaptureLifecycleStore, "finalize_capture", fail_recovery)
 
     assert run_capture("printf never", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()

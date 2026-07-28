@@ -11,15 +11,15 @@ import time
 from pathlib import Path
 
 import pytest
-
-from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
-from autoskillit.hooks import capture_lifecycle_hook
-from autoskillit.hooks._capture_artifacts import create_capture_artifact
 from autoskillit.hooks._capture_authority import (
     CAPTURE_PATH_COMPONENTS,
     open_capture_root,
     open_project_anchor,
 )
+
+from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
+from autoskillit.hooks import capture_lifecycle_hook
+from autoskillit.hooks._capture_artifacts import create_capture_artifact
 from autoskillit.hooks._capture_lifecycle import LEDGER_NAME, CaptureLifecycleStore
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -30,7 +30,7 @@ _CAPTURE_ID = "0123456789abcdef"
 
 def test_cleanup_hook_imports_minimal_shared_authority() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
-    assert "from _capture_authority import" in source
+    assert "from _capture.authority import" in source
     assert "from _capture_artifacts import" not in source
 
 

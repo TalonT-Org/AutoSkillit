@@ -46,7 +46,7 @@ def _seed_due_capture(project: Path) -> Path:
         failed=False,
     )
     artifact_path = project.joinpath(*CAPTURE_PATH_COMPONENTS, artifact.name)
-    artifact.close()
+    artifact.close_artifact_fd()
     root.close()
     anchor.close()
     artifact.release_lease()

@@ -85,6 +85,22 @@ def test_capture_authorities_are_factory_only_and_externally_immutable(tmp_path:
         anchor.close()
 
 
+def test_capture_artifact_partial_close_keeps_writer_lease_explicit(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor, root = _open_authority(project)
+    artifact = _create_artifact(anchor, root)
+    lease_fd = artifact.lease_fd
+    try:
+        artifact.close_artifact_fd()
+        assert artifact.fd == -1
+        os.fstat(lease_fd)
+    finally:
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
 class _ReadableStream:
     def __init__(self, value: bytes) -> None:
         self._value = value
@@ -211,7 +227,7 @@ def test_project_anchor_accepts_symlink_cwd(tmp_path: Path) -> None:
             _capture_dir(project) / artifact.name
         )
     finally:
-        artifact.close()
+        artifact.close_artifact_fd()
         artifact.release_lease()
         root.close()
         anchor.close()
@@ -533,7 +549,7 @@ def test_marker_path_requires_current_directory_binding(tmp_path: Path) -> None:
         capture_dir.mkdir()
         assert current_artifact_path_if_bound(anchor, root, artifact) is None
     finally:
-        artifact.close()
+        artifact.close_artifact_fd()
         artifact.release_lease()
         root.close()
         anchor.close()
@@ -554,7 +570,7 @@ def test_marker_path_rederives_symlinked_project_path(tmp_path: Path) -> None:
 
         assert current_artifact_path_if_bound(anchor, root, artifact) is None
     finally:
-        artifact.close()
+        artifact.close_artifact_fd()
         artifact.release_lease()
         root.close()
         anchor.close()

@@ -167,7 +167,9 @@ class CaptureArtifact:
         if _factory_token is not _AUTHORITY_FACTORY_TOKEN:
             raise CaptureSetupError("CaptureArtifact must be created by create_capture_artifact")
 
-    def close(self) -> None:
+    def close_artifact_fd(self) -> None:
+        """Close only the artifact data descriptor; keep the writer lease held."""
+
         if self.fd >= 0:
             os.close(self.fd)
             object.__setattr__(self, "fd", -1)
@@ -857,7 +859,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 pass
         if artifact is not None:
             try:
-                artifact.close()
+                artifact.close_artifact_fd()
             except _CAPTURE_RUNTIME_ERRORS:
                 pass
         if root is not None:

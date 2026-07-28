@@ -1116,10 +1116,37 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     ``remediation.yaml`` legitimately grew the rendered payload)."""
     from autoskillit.core import resolve_general_output_token_limit
     from autoskillit.execution.backends import BACKEND_REGISTRY
+    from autoskillit.hooks.formatters import _fmt_recipe_compact
     from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
     from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.server._recipe_delivery import build_recipe_envelope, persist_recipe_artifact
+
+    def _strip_yaml_ingredients_block(yaml_text: str) -> str:
+        """Mirror hooks/formatters/_fmt_recipe.py::_strip_yaml_ingredients_block.
+
+        Drops the top-level ``ingredients:`` mapping plus all indented children.
+        Used by the formatter when ``ingredients_table`` is present so the
+        INGREDIENTS TABLE block does not duplicate the RECIPE body's ingredients
+        section. Mirror lives here in tests because the production helper is
+        stdlib-only and uses bare relative imports incompatible with this test's
+        Python-imported test harness.
+        """
+        lines = yaml_text.splitlines(keepends=True)
+        result: list[str] = []
+        in_ingredients = False
+        for line in lines:
+            if line.startswith("ingredients:"):
+                in_ingredients = True
+                continue
+            if in_ingredients:
+                if line and not line[0].isspace():
+                    in_ingredients = False
+                    result.append(line)
+                # else: still inside ingredients block — drop
+            else:
+                result.append(line)
+        return "".join(result)
 
     project_root = Path(__file__).resolve().parent.parent.parent
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
@@ -1187,14 +1214,25 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
                 ordinary_rendered = _fmt_open_kitchen(
                     cast("OpenKitchenResult", dict(result)), pipeline=False
                 )
-                # Recipe YAML content must survive rendering for the exempt ORDINARY path
-                recipe_content = result.get("content") or ""
-                assert recipe_content, (
+                # Recipe YAML content must survive rendering for the exempt ORDINARY path.
+                # _fmt_recipe_body applies compact_recipe_display (strips top-level
+                # name/description/summary/recipe_version, step descriptions, then halves
+                # structural indentation) — and additionally strips the YAML
+                # ``ingredients:`` block when ``ingredients_table`` is present so the
+                # INGREDIENTS TABLE block doesn't duplicate it. Mirror that projection
+                # before substring-checking rather than comparing against raw bytes.
+                raw_recipe_content = result.get("content") or ""
+                assert raw_recipe_content, (
                     f"{recipe_name} ({mode_name}): recipe payload missing 'content' field"
                 )
-                assert recipe_content in ordinary_rendered, (
+                display_content = raw_recipe_content
+                if result.get("ingredients_table"):
+                    display_content = _strip_yaml_ingredients_block(display_content)
+                compacted_content = _fmt_recipe_compact.compact_recipe_display(display_content)
+                assert compacted_content in ordinary_rendered, (
                     f"{recipe_name} ({mode_name}): rendered ORDINARY_INLINE output "
-                    f"missing recipe content (only {len(ordinary_rendered)} bytes rendered)"
+                    f"missing compacted recipe content "
+                    f"(only {len(ordinary_rendered)} bytes rendered)"
                 )
 
     max_bytes, max_recipe, max_mode = maximum

@@ -1048,11 +1048,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "server/_recipe_delivery.py": (
-        1100,
+        1150,
         "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
         "selection, receipt reservation, and compiled-execution publication form one "
         "transactional authority boundary; the snapshot carrier keeps installation before "
-        "durable delivery commit without introducing a second finalization path",
+        "durable delivery commit without introducing a second finalization path. "
+        "Bumped to 1150 for #4399: exemption-aware ENVELOPE→ORDINARY_INLINE override "
+        "(scope-check + byte budget + decision.replace; +18 net lines) and success=True "
+        "injection on candidate_payload before serialization (+8 net lines).",
     ),
     "tools_kitchen.py": (
         1700,

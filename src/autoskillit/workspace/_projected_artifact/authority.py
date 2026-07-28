@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Protocol, cast
+from typing import cast
 
 from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
@@ -73,22 +73,6 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
 ]
-
-
-class _Closable(Protocol):
-    def close(self) -> None: ...
-
-
-def _close_preserving_primary(owner: _Closable, primary_error: BaseException) -> None:
-    try:
-        owner.close()
-    except BaseException as cleanup_error:
-        primary_error.add_note(f"Projected artifact lease cleanup failed: {cleanup_error!r}")
-        logger.warning(
-            "projected_artifact_lease_cleanup_failed",
-            error=str(cleanup_error),
-            exc_info=True,
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -405,7 +389,7 @@ class ProjectedPluginArtifactAuthority:
         try:
             identity = _try_validate_published_plugin_artifact(plan)
         except BaseException as primary_error:
-            _close_preserving_primary(reader, primary_error)
+            reader.close_preserving(primary_error)
             raise
         if identity is not None:
             return self._binding(load_mode, plan, identity, reader)
@@ -497,7 +481,7 @@ class ProjectedPluginArtifactAuthority:
                         incarnation=identity.incarnation_id,
                     )
         except BaseException as primary_error:
-            _close_preserving_primary(writer, primary_error)
+            writer.close_preserving(primary_error)
             raise
         else:
             writer.close()
@@ -522,10 +506,10 @@ class ProjectedPluginArtifactAuthority:
                 semantic_key=plan.semantic_key,
                 incarnation=identity.incarnation_id,
             )
-            _close_preserving_primary(reader, primary_error)
+            reader.close_preserving(primary_error)
             raise
         except BaseException as primary_error:
-            _close_preserving_primary(reader, primary_error)
+            reader.close_preserving(primary_error)
             raise
         return self._binding(load_mode, plan, identity, reader)
 
@@ -544,7 +528,7 @@ class ProjectedPluginArtifactAuthority:
                 active_key=plan.semantic_key,
             )
         except BaseException as primary_error:
-            _close_preserving_primary(reader, primary_error)
+            reader.close_preserving(primary_error)
             raise
         log_plugin_artifact_lifecycle(
             logger,

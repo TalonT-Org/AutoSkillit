@@ -840,6 +840,29 @@ def test_spawn_failure_closes_created_artifact_fd(
             os.fstat(fd)
 
 
+def test_spawn_failure_reports_failed_state_recovery_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    def fail_spawn(*_args, **_kwargs):
+        raise OSError("primary spawn failure")
+
+    def fail_recovery(*_args, **_kwargs):
+        raise capture_artifacts.CaptureLifecycleError("secondary recovery failure")
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", fail_spawn)
+    monkeypatch.setattr(CaptureLifecycleStore, "finalize_capture", fail_recovery)
+
+    assert run_capture("printf never", str(project), _CAPTURE_ID) == 1
+    captured = capfd.readouterr()
+    assert "primary spawn failure" in captured.err
+    assert "secondary recovery failure" in captured.err
+
+
 def test_post_duplication_failure_closes_all_fds_and_prevents_command(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

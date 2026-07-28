@@ -215,6 +215,44 @@ def test_staged_identity_is_committed_before_publication(
         anchor.close()
 
 
+def test_creation_failure_preserves_failed_state_recovery_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+
+    def fail_mark_staged(_capture_id: str, _identity: tuple[int, int]) -> None:
+        raise capture_lifecycle.CaptureLifecycleError("primary creation failure")
+
+    def fail_recovery(
+        _capture_id: str,
+        *,
+        size: int,
+        sha256: str,
+        failed: bool,
+    ) -> None:
+        del size, sha256, failed
+        raise capture_lifecycle.CaptureLifecycleError("secondary recovery failure")
+
+    try:
+        monkeypatch.setattr(store, "mark_staged", fail_mark_staged)
+        monkeypatch.setattr(store, "finalize_capture", fail_recovery)
+        with pytest.raises(
+            capture_lifecycle.CaptureLifecycleError,
+            match="primary creation failure",
+        ) as raised:
+            store.create_artifact(_CAPTURE_ID)
+
+        assert any(
+            "secondary recovery failure" in note for note in getattr(raised.value, "__notes__", ())
+        )
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_interrupted_publication_fsync_recovers_public_artifact(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

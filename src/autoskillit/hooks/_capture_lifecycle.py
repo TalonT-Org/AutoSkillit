@@ -617,7 +617,7 @@ class CaptureLifecycleStore:
                 raise CaptureLifecycleError("capture publication did not settle")
             self.mark_published(capture_id)
             return fd, lease_fd, record.public_name, identity
-        except (CaptureLifecycleError, OSError):
+        except (CaptureLifecycleError, OSError) as primary_error:
             try:
                 self.finalize_capture(
                     capture_id,
@@ -625,8 +625,11 @@ class CaptureLifecycleStore:
                     sha256="",
                     failed=True,
                 )
-            except (CaptureLifecycleError, OSError):
-                pass
+            except (CaptureLifecycleError, OSError) as recovery_error:
+                primary_error.add_note(
+                    "failed-state recovery also failed: "
+                    f"{type(recovery_error).__name__}: {recovery_error}"
+                )
             if lease_fd >= 0:
                 os.close(lease_fd)
             if fd >= 0:

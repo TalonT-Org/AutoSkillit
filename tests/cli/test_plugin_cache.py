@@ -214,13 +214,15 @@ def test_identity_mismatch_removes_record_without_deleting_current_path(
     record = read_retiring_cache().records[0]
     raw = json.loads(identity.manifest_path.read_text(encoding="utf-8"))
     raw["incarnation_id"] = "0" * 32
-    identity.manifest_path.write_text(json.dumps(raw), encoding="utf-8")
+    mutated_manifest = json.dumps(raw).encode()
+    identity.manifest_path.write_bytes(mutated_manifest)
 
     assert (
         owner.try_reclaim(record, deadline + timedelta(seconds=1))
         is RetirementOutcome.REJECTED_IDENTITY
     )
     assert identity.managed_path.is_dir()
+    assert identity.manifest_path.read_bytes() == mutated_manifest
     assert append_result.record_id not in {
         queued.record_id for queued in read_retiring_cache().records
     }

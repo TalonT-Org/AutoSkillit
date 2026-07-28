@@ -344,7 +344,7 @@ class TestInstalledPluginArtifactAuthority:
             installed_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
-        from autoskillit.core import PluginArtifactValidationError
+        from autoskillit.core import PluginArtifactPublicationError
 
         root = (tmp_path / "installed" / "1.2.3").resolve()
         root.mkdir(parents=True)
@@ -353,7 +353,7 @@ class TestInstalledPluginArtifactAuthority:
         internal_link = root / "linked-content"
         internal_link.symlink_to(external)
 
-        with pytest.raises(PluginArtifactValidationError, match="cannot be digested"):
+        with pytest.raises(PluginArtifactPublicationError, match="cannot be digested"):
             publish_installed_plugin_artifact(root, semantic_key="plugin:1.2.3")
 
         assert internal_link.is_symlink()
@@ -366,14 +366,14 @@ class TestInstalledPluginArtifactAuthority:
             installed_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
-        from autoskillit.core import PluginArtifactValidationError
+        from autoskillit.core import PluginArtifactPublicationError
 
         root = (tmp_path / "installed" / "1.2.3").resolve()
         root.mkdir(parents=True)
         special = root / "named-pipe"
         os.mkfifo(special)
 
-        with pytest.raises(PluginArtifactValidationError, match="cannot be digested"):
+        with pytest.raises(PluginArtifactPublicationError, match="cannot be digested"):
             publish_installed_plugin_artifact(root, semantic_key="plugin:1.2.3")
 
         assert special.exists()

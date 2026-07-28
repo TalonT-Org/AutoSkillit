@@ -596,6 +596,7 @@ from .types import PluginArtifactIdentity as PluginArtifactIdentity
 from .types import PluginArtifactKind as PluginArtifactKind
 from .types import PluginArtifactPublicationError as PluginArtifactPublicationError
 from .types import PluginArtifactRetirementOwner as PluginArtifactRetirementOwner
+from .types import PluginArtifactUnavailableError as PluginArtifactUnavailableError
 from .types import PluginArtifactValidationError as PluginArtifactValidationError
 from .types import PluginLaunchBinding as PluginLaunchBinding
 from .types import PluginLoadMode as PluginLoadMode

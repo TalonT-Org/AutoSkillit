@@ -6,6 +6,7 @@ __all__ = [
     "CapabilityNotSupportedError",
     "PluginArtifactContentionError",
     "PluginArtifactPublicationError",
+    "PluginArtifactUnavailableError",
     "PluginArtifactValidationError",
     "SkillContractError",
     "RecipeLoadError",
@@ -45,6 +46,10 @@ class PluginArtifactContentionError(RuntimeError):
 
 class PluginArtifactPublicationError(RuntimeError):
     """A complete plugin artifact incarnation could not be published."""
+
+
+class PluginArtifactUnavailableError(RuntimeError):
+    """A plugin artifact could not be read because of a retryable filesystem error."""
 
 
 class PluginArtifactValidationError(RuntimeError):

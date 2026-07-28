@@ -24,16 +24,17 @@ from autoskillit.core import (
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
+    PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     RetirementOutcome,
     RetiringAppendResult,
     RetiringArtifactRecord,
     _InstallLock,
+    decode_versioned_json_bytes,
     directory_tree_digest,
     get_logger,
     is_canonical_plugin_artifact_digest,
     is_canonical_plugin_artifact_incarnation_id,
-    read_versioned_json,
 )
 
 logger = get_logger(__name__)
@@ -100,7 +101,11 @@ def projected_plugin_artifact_digest(public_root: Path) -> str:
     """Hash the complete projection with the canonical artifact-tree contract."""
     try:
         return directory_tree_digest(public_root)
-    except (OSError, ValueError) as exc:
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"projected plugin artifact cannot be read for digest: {public_root}"
+        ) from exc
+    except ValueError as exc:
         raise PluginArtifactValidationError(
             f"projected plugin artifact cannot be digested: {public_root}"
         ) from exc
@@ -122,9 +127,13 @@ def read_projected_plugin_identity(
     try:
         canonical_root = supplied_root.resolve(strict=True)
         root_stat = canonical_root.stat(follow_symlinks=False)
-    except OSError as exc:
+    except FileNotFoundError as exc:
         raise PluginArtifactValidationError(
             f"projected plugin root is unavailable: {supplied_root}"
+        ) from exc
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"projected plugin root cannot be read: {supplied_root}"
         ) from exc
     if supplied_root != canonical_root or not stat.S_ISDIR(root_stat.st_mode):
         raise PluginArtifactValidationError(
@@ -139,16 +148,30 @@ def read_projected_plugin_identity(
         )
     try:
         manifest_stat = selected_manifest.stat(follow_symlinks=False)
-    except OSError as exc:
+    except FileNotFoundError as exc:
         raise PluginArtifactValidationError(
             f"projected plugin identity manifest is missing: {selected_manifest}"
+        ) from exc
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"projected plugin identity manifest cannot be read: {selected_manifest}"
         ) from exc
     if not stat.S_ISREG(manifest_stat.st_mode):
         raise PluginArtifactValidationError(
             f"projected plugin identity manifest is not a regular file: {selected_manifest}"
         )
-    manifest = read_versioned_json(
-        selected_manifest,
+    try:
+        manifest_bytes = selected_manifest.read_bytes()
+    except FileNotFoundError as exc:
+        raise PluginArtifactValidationError(
+            f"projected plugin identity manifest is missing: {selected_manifest}"
+        ) from exc
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"projected plugin identity manifest cannot be read: {selected_manifest}"
+        ) from exc
+    manifest = decode_versioned_json_bytes(
+        manifest_bytes,
         PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
     if manifest is None:

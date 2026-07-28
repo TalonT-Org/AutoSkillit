@@ -214,6 +214,31 @@ def test_installed_reclaim_defers_when_cache_reread_is_unsafe(
     assert cache.read_text() == "{not-json"
 
 
+def test_installed_reclaim_keeps_authority_on_identity_io_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.core._plugin_cache as plugin_cache
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
+
+    def fail_digest(_path: Path) -> str:
+        raise PermissionError("injected transient digest failure")
+
+    monkeypatch.setattr(plugin_cache, "directory_tree_digest", fail_digest)
+
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
+    assert read_retiring_cache().records == (record,)
+    assert identity.managed_path.is_dir()
+    assert identity.manifest_path.is_file()
+
+
 def test_installed_lifecycle_events_use_the_shared_schema(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

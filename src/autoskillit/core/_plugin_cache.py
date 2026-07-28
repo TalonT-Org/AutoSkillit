@@ -18,6 +18,7 @@ import psutil
 
 from .io import (
     _AtomicWriteDurabilityError,
+    decode_versioned_json_bytes,
     directory_tree_digest,
     read_versioned_json,
     write_versioned_json,
@@ -29,6 +30,7 @@ from .types import (
     LegacyRetiringEvidence,
     PluginArtifactIdentity,
     PluginArtifactKind,
+    PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     RetirementOutcome,
     RetiringAppendResult,
@@ -112,9 +114,13 @@ def read_installed_plugin_artifact_identity(
     try:
         canonical_root = supplied_root.resolve(strict=True)
         root_stat = canonical_root.stat(follow_symlinks=False)
-    except OSError as exc:
+    except FileNotFoundError as exc:
         raise PluginArtifactValidationError(
             f"installed plugin root is unavailable: {supplied_root}"
+        ) from exc
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"installed plugin root cannot be read: {supplied_root}"
         ) from exc
     if supplied_root != canonical_root or not stat.S_ISDIR(root_stat.st_mode):
         raise PluginArtifactValidationError(
@@ -131,17 +137,31 @@ def read_installed_plugin_artifact_identity(
         )
     try:
         manifest_stat = selected_manifest.stat(follow_symlinks=False)
-    except OSError as exc:
+    except FileNotFoundError as exc:
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest is missing: {selected_manifest}"
+        ) from exc
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"installed plugin incarnation manifest cannot be read: {selected_manifest}"
         ) from exc
     if not stat.S_ISREG(manifest_stat.st_mode):
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest is not a regular file: {selected_manifest}"
         )
 
-    raw = read_versioned_json(
-        selected_manifest,
+    try:
+        manifest_bytes = selected_manifest.read_bytes()
+    except FileNotFoundError as exc:
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation manifest is missing: {selected_manifest}"
+        ) from exc
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"installed plugin incarnation manifest cannot be read: {selected_manifest}"
+        ) from exc
+    raw = decode_versioned_json_bytes(
+        manifest_bytes,
         INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
     if raw is None:
@@ -187,7 +207,11 @@ def read_installed_plugin_artifact_identity(
         raise PluginArtifactValidationError("installed plugin manifest path identity mismatch")
     try:
         observed_digest = directory_tree_digest(canonical_root)
-    except (OSError, ValueError) as exc:
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"installed plugin artifact cannot be read for digest: {canonical_root}"
+        ) from exc
+    except ValueError as exc:
         raise PluginArtifactValidationError(
             f"installed plugin artifact cannot be digested: {canonical_root}"
         ) from exc
@@ -783,6 +807,12 @@ class PluginArtifactRetirementEngine:
                 else:
                     try:
                         current = self._current_identity(record)
+                    except PluginArtifactUnavailableError as exc:
+                        return self._log_reclaim(
+                            record,
+                            RetirementOutcome.DEFERRED_IO_ERROR,
+                            detail=str(exc),
+                        )
                     except PluginArtifactValidationError:
                         remove_retiring_records((record.record_id,))
                         return self._log_reclaim(

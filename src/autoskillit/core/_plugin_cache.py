@@ -493,7 +493,6 @@ def _retirement_intent(record: RetiringArtifactRecord) -> tuple[object, ...]:
         record.incarnation_id,
         record.manifest_schema_version,
         record.artifact_digest,
-        record.not_before,
     )
 
 

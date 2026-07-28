@@ -4,6 +4,7 @@ validation."""
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -58,6 +59,27 @@ def _retiring_record(tmp_path: Path) -> RetiringArtifactRecord:
         retired_at=retired_at,
         not_before=retired_at + timedelta(hours=6),
     )
+
+
+def test_retirement_deduplication_ignores_regenerated_deadline(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    original = _retiring_record(tmp_path)
+    repeated_scan = replace(
+        original,
+        record_id="record-2",
+        retired_at=original.retired_at + timedelta(minutes=5),
+        not_before=original.not_before + timedelta(minutes=5),
+    )
+
+    assert append_retiring_record(original).created is True
+    repeated_result = append_retiring_record(repeated_scan)
+
+    assert repeated_result.created is False
+    assert repeated_result.record_id == original.record_id
+    assert read_retiring_cache().records == (original,)
 
 
 # ---------------------------------------------------------------------------

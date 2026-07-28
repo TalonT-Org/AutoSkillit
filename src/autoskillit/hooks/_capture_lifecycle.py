@@ -624,6 +624,8 @@ class CaptureLifecycleStore:
         sha256: str,
         failed: bool,
     ) -> CaptureLifecycleRecord:
+        if not isinstance(failed, bool):
+            raise CaptureLifecycleError("invalid terminal capture failure annotation")
         if not isinstance(size, int) or isinstance(size, bool) or size < 0:
             raise CaptureLifecycleError("invalid terminal capture size")
         if (
@@ -641,6 +643,10 @@ class CaptureLifecycleStore:
             CaptureState.RESERVED,
         }:
             raise CaptureLifecycleError("invalid terminal lifecycle transition")
+        if not failed and (
+            record.state is not CaptureState.PUBLISHED_WRITING or record.artifact_identity is None
+        ):
+            raise CaptureLifecycleError("invalid successful capture finalization")
         now = self._wall_clock()
         return self._commit(
             replace(

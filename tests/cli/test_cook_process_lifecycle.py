@@ -251,6 +251,20 @@ def test_callback_failure_still_terminates_and_reaps_child(tmp_path: Path) -> No
     assert _wait_until_gone(identity[0][0])
 
 
+def test_process_group_permission_error_means_group_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.cli.session._session_process as process_mod
+
+    monkeypatch.setattr(
+        process_mod.os,
+        "killpg",
+        Mock(side_effect=PermissionError("process group exists but is not signalable")),
+    )
+
+    assert process_mod._process_group_exists(12345)
+
+
 def test_pty_attempt_retains_lease_fd_and_owns_controlling_slave(
     tmp_path: Path,
 ) -> None:

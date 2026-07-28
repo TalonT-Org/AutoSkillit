@@ -201,6 +201,7 @@ tests/
 ├── test_test_filter_config_cascade.py
 ├── test_test_filter_content_aware.py
 ├── test_test_filter_core_cascade.py
+├── test_test_filter_core_completeness.py
 ├── test_test_filter_coverage_map.py
 ├── test_test_filter_execution_cascade.py
 ├── test_test_filter_pipeline_cascade.py   # Focused ledger/ToolContext/server-recovery routes

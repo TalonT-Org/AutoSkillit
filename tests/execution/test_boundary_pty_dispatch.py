@@ -73,8 +73,9 @@ class TestBoundaryPtyDispatch:
             pty_mode=True,
         )
 
-        assert result.returncode in {143, -signal.SIGTERM}, (
-            f"Expected SIGTERM exit (143 or -{signal.SIGTERM}), got {result.returncode}"
+        assert result.returncode in {signal.SIGTERM, 143, -signal.SIGTERM}, (
+            "Expected raw, shell-normalized, or subprocess-normalized SIGTERM exit "
+            f"({signal.SIGTERM}, 143, or -{signal.SIGTERM}), got {result.returncode}"
         )
         assert result.termination in {
             TerminationReason.NATURAL_EXIT,

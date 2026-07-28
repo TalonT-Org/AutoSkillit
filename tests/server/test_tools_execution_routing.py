@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.server.tools.tools_execution import run_skill
@@ -21,7 +23,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx_kitchen_open, mo
     await run_skill("/test skill", "/tmp")
     assert len(executor.calls) == 1
     assert executor.calls[0].skill_command == "/test skill"
-    assert executor.calls[0].cwd == "/tmp"
+    assert executor.calls[0].cwd == str(Path("/tmp").resolve())
 
 
 @pytest.mark.anyio

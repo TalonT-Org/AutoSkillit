@@ -186,11 +186,24 @@ def _decode_mount_path(value: str) -> str:
     )
 
 
+def _filesystem_mount_root(path: Path) -> Path:
+    resolved = path.resolve(strict=True)
+    device = resolved.stat().st_dev
+    mount_root = resolved
+    while mount_root.parent != mount_root:
+        parent = mount_root.parent
+        if parent.stat().st_dev != device:
+            break
+        mount_root = parent
+    return mount_root
+
+
 def _filesystem_type(path: Path) -> str:
     if sys.platform == "darwin":
         try:
+            mount_root = _filesystem_mount_root(path)
             result = subprocess.run(
-                ("/usr/sbin/diskutil", "info", "-plist", str(path.resolve(strict=True))),
+                ("/usr/sbin/diskutil", "info", "-plist", str(mount_root)),
                 capture_output=True,
                 check=False,
                 timeout=5,

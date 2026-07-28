@@ -62,10 +62,19 @@ def _run_guard(
     base_env = {k: v for k, v in os.environ.items() if k not in env_removals}
     base_env.update(env_updates)
 
+    def find_isolated_project_root() -> Path:
+        for ancestor in [tmp_dir, *tmp_dir.parents]:
+            if (ancestor / ".autoskillit").is_dir():
+                return ancestor
+        return tmp_dir
+
     with (
         patch.dict(os.environ, base_env, clear=True),
         patch("sys.stdin", io.StringIO(stdin_content)),
-        patch("autoskillit.hooks.guards.skill_load_guard.Path.cwd", return_value=tmp_dir),
+        patch(
+            "autoskillit.hooks.guards.skill_load_guard.find_project_root",
+            side_effect=find_isolated_project_root,
+        ),
     ):
         buf = io.StringIO()
         with redirect_stdout(buf):

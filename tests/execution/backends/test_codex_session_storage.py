@@ -517,6 +517,7 @@ def test_darwin_filesystem_classification_uses_diskutil(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+    mount_root = tmp_path / "volume-root"
     result = storage.subprocess.CompletedProcess(
         args=(),
         returncode=0,
@@ -530,11 +531,12 @@ def test_darwin_filesystem_classification_uses_diskutil(
 
     monkeypatch.setattr(storage.sys, "platform", "darwin")
     monkeypatch.setattr(storage.subprocess, "run", run)
+    monkeypatch.setattr(storage, "_filesystem_mount_root", lambda _path: mount_root)
 
     assert storage._filesystem_type(tmp_path) == "apfs"
     assert calls == [
         (
-            ("/usr/sbin/diskutil", "info", "-plist", str(tmp_path.resolve())),
+            ("/usr/sbin/diskutil", "info", "-plist", str(mount_root)),
             {"capture_output": True, "check": False, "timeout": 5},
         )
     ]

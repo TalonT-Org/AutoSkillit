@@ -208,7 +208,9 @@ class TestRunSkillPrefix:
         prompt_idx = cmd.index("--print") + 1 if "--print" in cmd else cmd.index("-p") + 1
         assert cmd[prompt_idx].startswith("Use the /investigate skill error")
         actual_cwd = tool_ctx_kitchen_open.runner.call_args_list[-1][1]
-        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
+        assert actual_cwd == Path("/tmp").resolve(), (
+            f"Subprocess cwd mismatch: {actual_cwd} != {Path('/tmp').resolve()}"
+        )
 
     @pytest.mark.anyio
     async def test_run_skill_rejects_prose_without_slash(self, tool_ctx):
@@ -266,7 +268,9 @@ class TestRunSkillPrefix:
         from pathlib import Path
 
         actual_cwd = tool_ctx_kitchen_open.runner.call_args_list[-1][1]
-        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
+        assert actual_cwd == Path("/tmp").resolve(), (
+            f"Subprocess cwd mismatch: {actual_cwd} != {Path('/tmp').resolve()}"
+        )
 
 
 class TestValidateSkillCommand:

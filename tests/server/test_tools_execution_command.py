@@ -66,7 +66,9 @@ class TestRunSkillPluginDir:
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
         actual_cwd = tool_ctx_kitchen_open.runner.call_args_list[-1][1]
-        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
+        assert actual_cwd == Path("/tmp").resolve(), (
+            f"Subprocess cwd mismatch: {actual_cwd} != {Path('/tmp').resolve()}"
+        )
 
 
 class TestRunSkillTimeoutFromConfig:

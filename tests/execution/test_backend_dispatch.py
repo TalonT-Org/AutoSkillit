@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -56,7 +57,7 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     backend.build_skill_session_cmd.assert_called_once()
     call_args = backend.build_skill_session_cmd.call_args
     assert call_args.args[0] == "/autoskillit:test-skill"
-    assert call_args.args[1] == "/tmp/test-cwd"
+    assert call_args.args[1] == str(Path("/tmp/test-cwd").resolve())
     config = call_args.args[2]
     assert config.completion_marker == "%%DONE%%"
 

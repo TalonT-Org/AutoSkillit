@@ -67,9 +67,10 @@ class RecipeFlowGeneration:
     def __post_init__(self) -> None:
         if self.schema_version != RECIPE_FLOW_SCHEMA_VERSION:
             raise ValueError("unsupported recipe flow schema version")
-        if not self.records:
+        records = tuple(self.records)
+        if not records:
             raise ValueError("recipe flow generation must contain records")
-        for record in self.records:
+        for record in records:
             if not isinstance(record, str):
                 raise TypeError("recipe flow records must be strings")
             try:
@@ -84,10 +85,10 @@ class RecipeFlowGeneration:
             )
             if not isinstance(parsed, dict) or canonical != record:
                 raise ValueError("recipe flow record is not canonical")
-        generated = _flow_generation_bytes(self.records)
+        generated = _flow_generation_bytes(records)
         expected_digest = _qualified_sha256(b"autoskillit.recipe-flow.v1\0" + generated)
         expected_size = len(generated)
-        expected_count = len(self.records)
+        expected_count = len(records)
         for supplied, expected, label in (
             (self.flow_sha256, expected_digest, "flow digest"),
             (self.flow_size_bytes, expected_size, "flow size"),
@@ -95,6 +96,7 @@ class RecipeFlowGeneration:
         ):
             if supplied not in ("", 0) and supplied != expected:
                 raise ValueError(f"{label} mismatch")
+        object.__setattr__(self, "records", records)
         object.__setattr__(self, "flow_sha256", expected_digest)
         object.__setattr__(self, "flow_size_bytes", expected_size)
         object.__setattr__(self, "record_count", expected_count)

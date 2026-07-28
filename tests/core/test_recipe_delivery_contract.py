@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import cast
 
 import pytest
 
@@ -10,6 +11,7 @@ from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_CODEX,
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
+    RECIPE_FLOW_SCHEMA_VERSION,
     BackendCapabilities,
     RecipeDeliveryAttestation,
     RecipeDeliveryBudgetDef,
@@ -17,6 +19,7 @@ from autoskillit.core import (
     RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
+    RecipeFlowGeneration,
     recipe_delivery_request_digest,
     resolve_general_output_token_limit,
     resolve_recipe_delivery_decision,
@@ -361,3 +364,18 @@ def test_history_retention_never_becomes_selected_outer_result() -> None:
 def test_negative_required_tokens_fail_closed() -> None:
     decision = _resolve(required=-1)
     assert decision.mode is RecipeDeliveryMode.ENVELOPE
+
+
+def test_flow_generation_owns_an_immutable_record_tuple() -> None:
+    caller_records = ['{"kind":"entrypoint","name":"step"}']
+
+    generation = RecipeFlowGeneration(
+        schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        records=cast(tuple[str, ...], caller_records),
+    )
+    original_identity = generation.identity()
+    caller_records.append('{"kind":"step","name":"later"}')
+
+    assert generation.records == ('{"kind":"entrypoint","name":"step"}',)
+    assert generation.record_count == 1
+    assert generation.identity() == original_identity

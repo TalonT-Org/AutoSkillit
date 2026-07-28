@@ -738,6 +738,38 @@ class CaptureLifecycleStore:
                 raise _WriterLive from exc
             raise CaptureLifecycleError("artifact lease capability failure") from exc
 
+    def _create_verified_recovery_link(
+        self,
+        source: str,
+        destination: str,
+        expected: tuple[int, int],
+        *,
+        valid_name: re.Pattern[str],
+    ) -> _ObservedArtifact:
+        os.link(
+            source,
+            destination,
+            src_dir_fd=self._root_fd,
+            dst_dir_fd=self._root_fd,
+            follow_symlinks=False,
+        )
+        try:
+            linked = self._observe(destination, expected, valid_name=valid_name)
+            if linked is None or linked.nlink != 2:
+                if linked is not None:
+                    os.close(linked.fd)
+                raise _Tampered
+            return linked
+        except BaseException:
+            try:
+                os.unlink(destination, dir_fd=self._root_fd)
+                os.fsync(self._root_fd)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                raise CaptureLifecycleError("cannot roll back recovery link") from exc
+            raise
+
     def _normalize_abandoned(
         self,
         record: CaptureLifecycleRecord,
@@ -771,24 +803,14 @@ class CaptureLifecycleStore:
                 os.fsync(self._root_fd)
             elif staging is not None:
                 try:
-                    os.link(
+                    linked = self._create_verified_recovery_link(
                         record.staging_name,
                         record.public_name,
-                        src_dir_fd=self._root_fd,
-                        dst_dir_fd=self._root_fd,
-                        follow_symlinks=False,
+                        identity,
+                        valid_name=_PUBLIC_NAME_RE,
                     )
                 except FileExistsError as exc:
                     raise _Tampered from exc
-                linked = self._observe(
-                    record.public_name,
-                    identity,
-                    valid_name=_PUBLIC_NAME_RE,
-                )
-                if linked is None or linked.nlink != 2:
-                    if linked is not None:
-                        os.close(linked.fd)
-                    raise _Tampered
                 os.close(linked.fd)
                 os.unlink(record.staging_name, dir_fd=self._root_fd)
                 os.fsync(self._root_fd)
@@ -825,6 +847,8 @@ class CaptureLifecycleStore:
 
     def _quarantine_delete(self, record: CaptureLifecycleRecord) -> int:
         expected = record.artifact_identity
+        if expected is None:
+            raise _Tampered
         public: _ObservedArtifact | None = None
         quarantine: _ObservedArtifact | None = None
         try:
@@ -847,22 +871,12 @@ class CaptureLifecycleStore:
                 ):
                     raise _Tampered
             elif public is not None:
-                os.link(
+                linked = self._create_verified_recovery_link(
                     record.public_name,
-                    record.quarantine_name,
-                    src_dir_fd=self._root_fd,
-                    dst_dir_fd=self._root_fd,
-                    follow_symlinks=False,
-                )
-                linked = self._observe(
                     record.quarantine_name,
                     expected,
                     valid_name=_QUARANTINE_NAME_RE,
                 )
-                if linked is None or linked.nlink != 2:
-                    if linked is not None:
-                        os.close(linked.fd)
-                    raise _Tampered
                 os.close(linked.fd)
             if public is not None:
                 os.unlink(record.public_name, dir_fd=self._root_fd)

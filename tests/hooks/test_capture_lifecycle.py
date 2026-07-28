@@ -469,6 +469,61 @@ def test_quarantine_replacement_is_preserved_as_tampered(
         anchor.close()
 
 
+def test_normalization_rolls_back_unverified_public_link(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    record = store.reserve_capture(_CAPTURE_ID)
+    staging = _capture_dir(project) / record.staging_name
+    staging.write_bytes(b"staged")
+    identity = staging.stat()
+    store.mark_staged(_CAPTURE_ID, (identity.st_dev, identity.st_ino))
+    external = tmp_path / "external-link"
+    os.link(staging, external)
+
+    try:
+        clock.advance(3601)
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+
+        current = store.get_record(_CAPTURE_ID)
+        assert outcome.tampered == 1
+        assert current is not None
+        assert current.state is CaptureState.TAMPERED
+        assert not (_capture_dir(project) / record.public_name).exists()
+        assert staging.read_bytes() == b"staged"
+        assert external.read_bytes() == b"staged"
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_quarantine_rolls_back_unverified_recovery_link(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    public = _capture_dir(project) / artifact.name
+    external = tmp_path / "external-link"
+    os.link(public, external)
+
+    try:
+        clock.advance(3601)
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+
+        current = store.get_record(_CAPTURE_ID)
+        assert outcome.tampered == 1
+        assert current is not None
+        assert current.state is CaptureState.TAMPERED
+        assert current.quarantine_name
+        assert not (_capture_dir(project) / current.quarantine_name).exists()
+        assert public.read_bytes() == b"captured"
+        assert external.read_bytes() == b"captured"
+    finally:
+        root.close()
+        anchor.close()
+
+
 @pytest.mark.parametrize(
     "substitute_kind",
     ("symlink", "fifo", "hardlink", "world-writable"),

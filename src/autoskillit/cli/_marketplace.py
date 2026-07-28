@@ -70,6 +70,7 @@ def _clear_plugin_cache(
     from autoskillit.cli._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
         _read_installed_plugin_identity,
+        default_plugin_retirement_coordinator,
         installed_artifact_lock_path,
     )
     from autoskillit.core import (
@@ -82,6 +83,7 @@ def _clear_plugin_cache(
     cache_dir = _plugin_cache_dir()
     owner = InstalledPluginArtifactRetirementOwner(cache_dir)
     with _InstallLock():
+        default_plugin_retirement_coordinator().migrate_legacy_cache()
         candidates = (
             tuple(
                 path

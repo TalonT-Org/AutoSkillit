@@ -226,6 +226,48 @@ class TestRollbackOnFailure:
         assert "Installed plugin is in use" in capsys.readouterr().out
         assert marker.read_text() == "leased live tree"
 
+    def test_cache_clear_migrates_legacy_retirements_without_candidates(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from datetime import UTC, datetime
+
+        from autoskillit import __version__
+        from autoskillit.cli import _marketplace
+        from autoskillit.core import (
+            PluginArtifactKind,
+            RetiringCacheState,
+            read_retiring_cache,
+        )
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        _seed_installed_state(tmp_path, __version__)
+        legacy_path = tmp_path / ".autoskillit" / "plugin-projections" / "old"
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "retiring": [
+                        {
+                            "version": "old",
+                            "path": str(legacy_path),
+                            "retired_at": datetime.now(UTC).isoformat(),
+                        }
+                    ],
+                }
+            )
+        )
+
+        assert _marketplace._clear_plugin_cache() == ()
+
+        state = read_retiring_cache()
+        assert state.state is RetiringCacheState.EXACT_V2
+        assert len(state.legacy_evidence) == 1
+        assert state.legacy_evidence[0].recognized_kind is PluginArtifactKind.PROJECTION
+
     def test_partial_cache_clear_registers_retirement_before_later_failure(
         self,
         tmp_path: Path,

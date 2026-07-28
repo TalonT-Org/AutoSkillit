@@ -24,6 +24,7 @@ from autoskillit.core import (
     RetirementOutcome,
     RetiringAppendResult,
     RetiringArtifactRecord,
+    RetiringCacheReadResult,
     RetiringCacheState,
     destination_location,
     directory_tree_digest,
@@ -389,13 +390,18 @@ class DefaultPluginRetirementCoordinator:
             PluginArtifactKind.INSTALLED_PLUGIN: installed_owner.managed_root,
         }
 
+    def migrate_legacy_cache(self) -> RetiringCacheReadResult:
+        """Upgrade path-only retirement evidence before exact-v2 mutations."""
+        state = read_retiring_cache()
+        if state.state is RetiringCacheState.LEGACY_V1:
+            return migrate_retiring_cache_v1(self._managed_roots)
+        return state
+
     def sweep_due(self, now: datetime) -> tuple[RetirementOutcome, ...]:
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("retirement coordinator time must be timezone-aware")
         now = now.astimezone(UTC)
-        state = read_retiring_cache()
-        if state.state is RetiringCacheState.LEGACY_V1:
-            state = migrate_retiring_cache_v1(self._managed_roots)
+        state = self.migrate_legacy_cache()
         if state.state is not RetiringCacheState.EXACT_V2:
             if state.state in {
                 RetiringCacheState.CORRUPT,

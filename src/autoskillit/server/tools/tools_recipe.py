@@ -459,7 +459,17 @@ async def load_recipe(
                 return _validation_err
             if not ingredients_only:
                 if _finalized_projection is None:
-                    return render_served_response(result)
+                    logger.error(
+                        "load_recipe_fail_closed",
+                        tool="load_recipe",
+                        stage="finalized_projection",
+                    )
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": f"Recipe '{name}' has no finalized projection.",
+                        }
+                    )
                 _prepared_generation = prepare_recipe_delivery_generation(
                     result,
                     recipe_name=name,

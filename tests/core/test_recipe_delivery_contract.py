@@ -10,9 +10,12 @@ import pytest
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_CODEX,
+    RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+    RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
     RECIPE_FLOW_SCHEMA_VERSION,
     BackendCapabilities,
+    RecipeArtifactGeneration,
     RecipeDeliveryAttestation,
     RecipeDeliveryBudgetDef,
     RecipeDeliveryDecision,
@@ -379,3 +382,44 @@ def test_flow_generation_owns_an_immutable_record_tuple() -> None:
     assert generation.records == ('{"kind":"entrypoint","name":"step"}',)
     assert generation.record_count == 1
     assert generation.identity() == original_identity
+
+
+def _artifact_generation(**changes: object) -> RecipeArtifactGeneration:
+    values: dict[str, object] = {
+        "producer_tool": "open_kitchen",
+        "recipe_name": "demo",
+        "descriptor_version": RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+        "schema_version": RECIPE_ARTIFACT_SCHEMA_VERSION,
+        "payload_sha256": f"sha256:{'1' * 64}",
+        "artifact_blob_sha256": f"sha256:{'2' * 64}",
+        "artifact_blob_size_bytes": 100,
+        "body_sha256": f"sha256:{'3' * 64}",
+        "body_size_bytes": 50,
+        "flow_schema_version": RECIPE_FLOW_SCHEMA_VERSION,
+        "flow_sha256": f"sha256:{'4' * 64}",
+        "flow_size_bytes": 25,
+        "flow_record_count": 1,
+    }
+    values.update(changes)
+    return RecipeArtifactGeneration(**values)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"producer_tool": ""}, "producer_tool"),
+        ({"recipe_name": ""}, "recipe_name"),
+        ({"descriptor_version": 0}, "descriptor_version"),
+        ({"payload_sha256": "not-a-digest"}, "payload_sha256"),
+        ({"artifact_blob_size_bytes": 0}, "artifact_blob_size_bytes"),
+        ({"body_size_bytes": 101}, "body_size_bytes"),
+        ({"flow_size_bytes": 101}, "flow_size_bytes"),
+        ({"flow_record_count": 0}, "flow_record_count"),
+    ],
+)
+def test_artifact_generation_rejects_malformed_identity_at_construction(
+    changes: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _artifact_generation(**changes)

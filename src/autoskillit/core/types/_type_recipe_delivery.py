@@ -45,6 +45,16 @@ def _qualified_sha256(data: bytes) -> str:
     return f"sha256:{hashlib.sha256(data).hexdigest()}"
 
 
+def _is_sha256_identity(value: object) -> bool:
+    prefix = "sha256:"
+    return (
+        isinstance(value, str)
+        and value.startswith(prefix)
+        and len(value) == len(prefix) + 64
+        and all(character in "0123456789abcdef" for character in value[len(prefix) :])
+    )
+
+
 def _flow_generation_bytes(records: tuple[str, ...]) -> bytes:
     generated = bytearray()
     for record in records:
@@ -127,6 +137,45 @@ class RecipeArtifactGeneration:
     flow_sha256: str
     flow_size_bytes: int
     flow_record_count: int
+
+    def __post_init__(self) -> None:
+        for field_name in ("producer_tool", "recipe_name"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, expected in (
+            ("descriptor_version", RECIPE_ARTIFACT_DESCRIPTOR_VERSION),
+            ("schema_version", RECIPE_ARTIFACT_SCHEMA_VERSION),
+            ("flow_schema_version", RECIPE_FLOW_SCHEMA_VERSION),
+        ):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int) or value != expected:
+                raise ValueError(f"unsupported {field_name}")
+        for field_name in (
+            "payload_sha256",
+            "artifact_blob_sha256",
+            "body_sha256",
+            "flow_sha256",
+        ):
+            if not _is_sha256_identity(getattr(self, field_name)):
+                raise ValueError(f"{field_name} must be an algorithm-qualified sha256 digest")
+        for field_name in (
+            "artifact_blob_size_bytes",
+            "body_size_bytes",
+            "flow_size_bytes",
+            "flow_record_count",
+        ):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"{field_name} must be an integer")
+        if not 0 < self.artifact_blob_size_bytes <= RECIPE_ARTIFACT_MAX_BLOB_BYTES:
+            raise ValueError("artifact_blob_size_bytes is outside supported bounds")
+        if not 0 <= self.body_size_bytes <= self.artifact_blob_size_bytes:
+            raise ValueError("body_size_bytes must fit within the artifact blob")
+        if not 0 < self.flow_size_bytes <= self.artifact_blob_size_bytes:
+            raise ValueError("flow_size_bytes must fit within the artifact blob")
+        if self.flow_record_count <= 0:
+            raise ValueError("flow_record_count must be positive")
 
     def has_valid_read_bounds(self) -> bool:
         """Return whether caller-provided sizes stay within server ceilings."""

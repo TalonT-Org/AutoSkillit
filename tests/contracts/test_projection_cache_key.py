@@ -158,7 +158,7 @@ class TestAssetChangesForceReprojection:
 
             real_digest = public_plugin_asset_digest(pkg_root())
             monkeypatch.setattr(
-                "autoskillit.workspace.skill_projection.public_plugin_asset_digest",
+                "autoskillit.workspace._projected_artifact.authority.public_plugin_asset_digest",
                 lambda _root: real_digest[:-1] + ("0" if real_digest[-1] != "0" else "1"),
             )
 

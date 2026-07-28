@@ -5,18 +5,33 @@ from __future__ import annotations
 import errno
 import os
 import stat
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
+
+from ..logging import get_logger
+from ..types import (
+    CodingAgentBackend,
+    PluginArtifactAuthority,
+    PluginLaunchBinding,
+    PluginLoadMode,
+)
 
 try:
     import fcntl
 except ImportError:  # pragma: no cover - exercised through the platform guard
     fcntl = None  # type: ignore[assignment]
 
-__all__ = ["ArtifactLease", "ArtifactLeaseContention"]
+__all__ = [
+    "ArtifactLease",
+    "ArtifactLeaseContention",
+    "plugin_launch_binding_scope",
+]
 
 _ARTIFACT_LEASE_CONSTRUCTION_TOKEN = object()
+logger = get_logger(__name__)
 
 
 def _close_preserving_primary(fd: int, primary: BaseException) -> None:
@@ -24,6 +39,11 @@ def _close_preserving_primary(fd: int, primary: BaseException) -> None:
         os.close(fd)
     except BaseException as cleanup_error:
         primary.add_note(f"Artifact lease descriptor cleanup failed: {cleanup_error!r}")
+        logger.warning(
+            "artifact_lease_descriptor_cleanup_failed",
+            error=str(cleanup_error),
+            exc_info=True,
+        )
 
 
 class ArtifactLeaseContention(RuntimeError):
@@ -177,3 +197,65 @@ class ArtifactLease:
         traceback: object,
     ) -> None:
         self.close()
+
+
+_CloseFailureReporter = Callable[[BaseException, BaseException], None]
+
+
+def _close_binding_preserving_primary(
+    binding: PluginLaunchBinding,
+    primary_error: BaseException,
+    reporter: _CloseFailureReporter | None,
+) -> None:
+    try:
+        binding.close()
+    except BaseException as cleanup_error:
+        primary_error.add_note(f"Plugin artifact binding cleanup failed: {cleanup_error!r}")
+        logger.warning(
+            "plugin_artifact_binding_cleanup_failed",
+            error=str(cleanup_error),
+            exc_info=True,
+        )
+        if reporter is None:
+            return
+        try:
+            reporter(primary_error, cleanup_error)
+        except BaseException as reporter_error:
+            primary_error.add_note(f"Plugin artifact cleanup reporting failed: {reporter_error!r}")
+            logger.warning(
+                "plugin_artifact_cleanup_reporting_failed",
+                error=str(reporter_error),
+                exc_info=True,
+            )
+
+
+@contextmanager
+def plugin_launch_binding_scope(
+    *,
+    authority: PluginArtifactAuthority | None,
+    backend: CodingAgentBackend,
+    load_mode: PluginLoadMode,
+    on_suppressed_close_error: _CloseFailureReporter | None = None,
+) -> Iterator[PluginLaunchBinding | None]:
+    """Own a nullable launch binding without replacing an active failure."""
+    if not load_mode.consumes_artifact:
+        yield None
+        return
+    if authority is None:
+        raise RuntimeError(f"{load_mode.value} launch requires plugin artifact authority")
+
+    binding = authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=load_mode,
+    )
+    try:
+        yield binding
+    except BaseException as primary_error:
+        _close_binding_preserving_primary(
+            binding,
+            primary_error,
+            on_suppressed_close_error,
+        )
+        raise
+    else:
+        binding.close()

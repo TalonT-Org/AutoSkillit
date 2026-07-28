@@ -543,8 +543,8 @@ def append_retiring_record(
 
 def remove_retiring_records(record_ids: Iterable[str]) -> int:
     """Remove exact records or migrated evidence by stable record ID."""
-    record_ids = frozenset(record_ids)
-    if not record_ids:
+    ids = frozenset(record_ids)
+    if not ids:
         return 0
     fh = _open_lock(_retiring_cache_lock())
     try:
@@ -553,13 +553,9 @@ def remove_retiring_records(record_ids: Iterable[str]) -> int:
             return 0
         if state.state is not RetiringCacheState.EXACT_V2:
             raise RuntimeError(f"retiring cache is not mutable in state {state.state.value}")
-        records = tuple(record for record in state.records if record.record_id not in record_ids)
-        evidence = tuple(
-            item for item in state.legacy_evidence if item.record_id not in record_ids
-        )
-        removed = (len(state.records) - len(records)) + (
-            len(state.legacy_evidence) - len(evidence)
-        )
+        records = tuple(record for record in state.records if record.record_id not in ids)
+        evidence = tuple(item for item in state.legacy_evidence if item.record_id not in ids)
+        removed = len(state.records) - len(records) + len(state.legacy_evidence) - len(evidence)
         if removed:
             _write_retiring_cache_unlocked(records, evidence)
         return removed
@@ -567,10 +563,7 @@ def remove_retiring_records(record_ids: Iterable[str]) -> int:
         fh.close()
 
 
-def _read_exact_retiring_cache(
-    *,
-    operation: str,
-) -> RetiringCacheReadResult | None:
+def _read_exact_retiring_cache(*, operation: str) -> RetiringCacheReadResult | None:
     state = read_retiring_cache()
     if state.state is RetiringCacheState.ABSENT:
         return None
@@ -580,7 +573,6 @@ def _read_exact_retiring_cache(
 
 
 def due_retiring_records(now: datetime) -> tuple[RetiringArtifactRecord, ...]:
-    """Return due records without collapsing an unsafe cache state to empty."""
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("retirement sweep time must be timezone-aware")
     normalized_now = now.astimezone(UTC)
@@ -681,11 +673,7 @@ class PluginArtifactRetirementEngine:
         )
         return result
 
-    def cancel_obsolete_retirements(
-        self,
-        identity: PluginArtifactIdentity,
-    ) -> tuple[str, ...]:
-        """Remove superseded entries without erasing an unsafe cache state."""
+    def cancel_obsolete_retirements(self, identity: PluginArtifactIdentity) -> tuple[str, ...]:
         state = _read_exact_retiring_cache(operation="cancel obsolete records")
         if state is None:
             return ()
@@ -713,11 +701,7 @@ class PluginArtifactRetirementEngine:
         )
         return record_ids
 
-    def try_reclaim(
-        self,
-        record: RetiringArtifactRecord,
-        now: datetime,
-    ) -> RetirementOutcome:
+    def try_reclaim(self, record: RetiringArtifactRecord, now: datetime) -> RetirementOutcome:
         """Reclaim one queued record only while its lease and identity remain exact."""
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("artifact retirement sweep time must be timezone-aware")

@@ -103,7 +103,7 @@ class FakePluginArtifactAuthority:
             ),
             identity=PluginArtifactIdentity(
                 semantic_key="test-plugin-artifact",
-                incarnation_id="00000000000040008000000000000001",
+                incarnation_id=(f"00000000000040008000{len(self.bindings) + 1:012x}"),
                 manifest_schema_version=1,
                 artifact_digest="a" * 64,
                 managed_path=self.plugin_dir,

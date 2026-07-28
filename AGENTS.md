@@ -98,6 +98,7 @@ generic_automation_mcp/
 | `pipeline/` | IL-1 | Pipeline state — `ToolContext` DI, gate, audit log, telemetry |
 | `execution/` | IL-1 | Headless sessions (headless/, process/, merge_queue/, session/), backends/, CI/GitHub |
 | `workspace/` | IL-1 | Clone management, worktrees, skill resolution |
+| `workspace/_projected_artifact/` | IL-1 | Projected plugin publication, exact validation, and lease ownership |
 | `planner/` | IL-1 | Progressive resolution planner — phases, assignments, WPs, validation |
 | `report/` | IL-1 | HTML report renderer — `renderer.py` uses `pkg_root()` for asset resolution |
 | `recipe/` | IL-2 | Recipe schema, validation, semantic rules/ (campaign/, ci/, dataflow/, graph/) |

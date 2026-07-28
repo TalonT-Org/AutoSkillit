@@ -17,6 +17,7 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 _SHARED_READ_SIDE_VALIDATORS = {
     "read_installed_plugin_artifact_identity": "src/autoskillit/core/_plugin_cache.py",
+    "read_projected_plugin_identity": ("src/autoskillit/workspace/_projection_cache.py"),
 }
 
 

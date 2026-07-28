@@ -28,6 +28,7 @@ def test_execution_shard_all():
         "TestRunner",
         "HeadlessExecutor",
         "OutputPatternResolver",
+        "SkillContractView",
         "SkillSessionContractStore",
         "WriteExpectedResolver",
     }

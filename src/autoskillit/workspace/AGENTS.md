@@ -15,6 +15,7 @@ IL-1 workspace management — clone lifecycle, worktrees, skill resolution.
 | `skill_capabilities.py` | Semantic classification, bounded process-local evidence memoization, and capability validation |
 | `skill_format.py` | SKILL.md frontmatter validation per agentskills.io spec |
 | `skill_projection.py` | Agent-safe projections of typed skill machine contracts |
+| `_projected_artifact/` | Projected plugin publication, validation, and launch-lease lifecycle |
 | `_projection_cache.py` | Projection asset inventory, cache-key record, and orphan sweep |
 | `_install_state.py` | `verify_install_state()` + retired-artifact-shape reconciler |
 | `clone_registry.py` | Shared file-based coordination for deferred cleanup |

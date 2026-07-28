@@ -88,6 +88,11 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The shared retirement engine revalidates the owner-specific exact queued "
         "incarnation before deleting its canonical manifest.",
     ),
+    ("core/_plugin_cache.py", "try_reclaim", "os.rename"): (
+        1,
+        "The shared retirement engine moves an exact incarnation to its private "
+        "retry-staging path while holding the owner-specific exclusive lease.",
+    ),
     ("core/_plugin_cache.py", "try_reclaim", "shutil.rmtree"): (
         1,
         "The shared retirement engine holds the owner-specific exclusive lease and "
@@ -103,7 +108,11 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The retired-shape registry identifies the exact obsolete install artifact "
         "before reconciliation removes a directory tree.",
     ),
-    ("workspace/skill_projection.py", "_publish_projected_plugin_manifest", "os.replace"): (
+    (
+        "workspace/_projected_artifact/authority.py",
+        "_publish_projected_plugin_manifest",
+        "os.replace",
+    ): (
         1,
         "Named publication seam called only while the projection authority owns LOCK_EX.",
     ),
@@ -119,12 +128,16 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Named root-publication seam called only while the projection authority owns LOCK_EX.",
     ),
-    ("workspace/skill_projection.py", "_stage_projected_plugin_artifact", "shutil.rmtree"): (
+    (
+        "workspace/_projected_artifact/authority.py",
+        "_stage_projected_plugin_artifact",
+        "shutil.rmtree",
+    ): (
         1,
         "Failure cleanup removes a private unpublished staging directory.",
     ),
     (
-        "workspace/skill_projection.py",
+        "workspace/_projected_artifact/authority.py",
         "_discard_staging_manifest",
         "manifest.unlink",
     ): (
@@ -132,7 +145,11 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The shared best-effort cleanup seam removes only a private unpublished "
         "staging manifest and preserves any active publication exception.",
     ),
-    ("workspace/skill_projection.py", "acquire_launch_binding", "shutil.rmtree"): (
+    (
+        "workspace/_projected_artifact/authority.py",
+        "acquire_launch_binding",
+        "shutil.rmtree",
+    ): (
         1,
         "Post-publication cleanup removes the private staging root, never the public root.",
     ),
@@ -240,7 +257,7 @@ STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Installed incarnation publication persists exact identity before launch.",
     ),
     (
-        "workspace/skill_projection.py",
+        "workspace/_projected_artifact/authority.py",
         "_stage_projected_plugin_artifact",
         "write_versioned_json:strict=True",
     ): (

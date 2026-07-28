@@ -1200,13 +1200,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "validation; keeping those operations together preserves both assembly ordering "
         "and the create/validate/yield/delete ownership proof",
     ),
-    "workspace/skill_projection.py": (
-        1500,
-        "REQ-CNST-010-E15: issue #4382 keeps projection keying, staged publication, "
-        "exact-incarnation validation, and reader/writer lease handoff in one lifecycle "
-        "authority so destructive repair cannot bypass its lock ordering; lifecycle "
-        "event emission remains at those concrete mutation and ownership boundaries",
-    ),
     "rules_skill_content.py": (
         1200,
         "REQ-CNST-010-E11: SKILL.md content validation rules registry — accumulating "

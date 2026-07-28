@@ -52,7 +52,7 @@ def test_projection_publication_preserves_control_flow_exceptions(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    import autoskillit.workspace.skill_projection as projection
+    import autoskillit.workspace._projected_artifact.authority as projection
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -78,7 +78,7 @@ def test_projection_staging_cleanup_preserves_primary_error(
 ) -> None:
     from unittest.mock import Mock
 
-    import autoskillit.workspace.skill_projection as projection
+    import autoskillit.workspace._projected_artifact.authority as projection
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     plan = _authority(tmp_path)._plan(ClaudeCodeBackend())
@@ -199,14 +199,20 @@ def test_projection_reclaim_io_failure_stays_queued_for_retry(
     append_result = owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
 
+    real_rmtree = plugin_cache.shutil.rmtree
+
     def fail_reclaim(_path):
         raise PermissionError("injected projection reclaim failure")
 
     monkeypatch.setattr(plugin_cache.shutil, "rmtree", fail_reclaim)
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
-    assert identity.managed_path.is_dir()
     assert append_result.record_id in {
+        queued.record_id for queued in read_retiring_cache().records
+    }
+    monkeypatch.setattr(plugin_cache.shutil, "rmtree", real_rmtree)
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.RECLAIMED
+    assert append_result.record_id not in {
         queued.record_id for queued in read_retiring_cache().records
     }
 

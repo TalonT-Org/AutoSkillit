@@ -20,22 +20,22 @@ from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
 from ._json import fast_loads as fast_loads
-from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
 )
 from ._plugin_cache import (
-    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
 )
+from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import any_kitchen_open as any_kitchen_open
 from ._plugin_cache import append_retiring_record as append_retiring_record
 from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
 from ._plugin_cache import due_retiring_records as due_retiring_records
-from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
 from ._plugin_cache import (
     installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
 )
+from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
 from ._plugin_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
 from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry
 from ._plugin_cache import (
@@ -152,12 +152,12 @@ from .paths import is_in_git_repo as is_in_git_repo
 from .paths import pkg_root as pkg_root
 from .paths import resolve_main_worktree as resolve_main_worktree
 from .paths import resolve_project_dir as resolve_project_dir
-from .plugin_artifact import plugin_launch_binding_scope as plugin_launch_binding_scope
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
+from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
 from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir

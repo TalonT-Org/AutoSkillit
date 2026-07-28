@@ -84,8 +84,8 @@ def test_fake_plugin_artifact_authority_is_lazy_fresh_and_releasable(tmp_path: P
     )
 
     assert first is not second
-    assert first.identity.incarnation_id == "test-incarnation-1"
-    assert second.identity.incarnation_id == "test-incarnation-2"
+    assert first.identity.incarnation_id == "00000000000040008000000000000001"
+    assert second.identity.incarnation_id == "00000000000040008000000000000002"
     assert first.plugin_dir == tmp_path
     assert first.closed is False
     authority.close()

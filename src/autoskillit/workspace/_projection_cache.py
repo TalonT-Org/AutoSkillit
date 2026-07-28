@@ -181,7 +181,7 @@ def read_projected_plugin_identity(
     projection_version = manifest.get("projection_version")
     if type(projection_version) is not int or projection_version < 1:
         raise PluginArtifactValidationError(
-            f"projected plugin version is invalid: {selected_manifest}"
+            f"projected plugin version mismatch (invalid value): {selected_manifest}"
         )
     if expected_projection_version is not None and (
         projection_version != expected_projection_version

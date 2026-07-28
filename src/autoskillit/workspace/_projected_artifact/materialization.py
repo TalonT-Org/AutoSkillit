@@ -87,6 +87,8 @@ class SkillProjectionContext:
     projection_version: int = SKILL_PROJECTION_VERSION
 
     def __post_init__(self) -> None:
+        if type(self.projection_version) is not int or self.projection_version < 1:
+            raise SkillContractError("projection version must be a positive integer")
         if (self.catalog is None) == (self.invocation is None):
             raise SkillContractError(
                 "projection context must bind exactly one effective catalog or invocation"
@@ -423,8 +425,9 @@ def validate_sanitized_plugin_artifact(
         return tuple([*errors, "projection manifest is unreadable or has an unsupported schema"])
     if manifest.get("schema_version") != manifest_schema_version:
         errors.append(f"projection manifest schema_version must be {manifest_schema_version}")
-    if not isinstance(manifest.get("projection_version"), int):
-        errors.append("projection manifest projection_version must be an integer")
+    projection_version = manifest.get("projection_version")
+    if type(projection_version) is not int or projection_version < 1:
+        errors.append("projection manifest projection_version must be a positive integer")
     manifest_skills = manifest.get("skills")
     if not isinstance(manifest_skills, dict):
         return tuple([*errors, "projection manifest skills must be a JSON object"])

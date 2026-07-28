@@ -1277,6 +1277,26 @@ def test_projection_context_derives_and_validates_backend_conventions(
         )
 
 
+@pytest.mark.parametrize("invalid_version", [True, 0, -1])
+def test_projection_context_requires_exact_positive_version(
+    tmp_path: Path,
+    invalid_version: object,
+) -> None:
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillProjectionContext
+
+    catalog = EffectiveSkillCatalog(
+        skills=(),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    with pytest.raises(SkillContractError, match="positive integer"):
+        SkillProjectionContext(
+            cwd=tmp_path,
+            catalog=catalog,
+            projection_version=invalid_version,  # type: ignore[arg-type]
+        )
+
+
 def test_direct_install_projection_cache_identity_and_reuse(
     tmp_path: Path,
     monkeypatch,

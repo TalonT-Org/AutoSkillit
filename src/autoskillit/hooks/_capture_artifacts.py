@@ -99,6 +99,7 @@ _MAX_ENCODED_COMMAND_BYTES = ((_MAX_COMMAND_BYTES + 2) // 3) * 4
 _DRAIN_CHUNK_BYTES = 64 * 1024
 _CAPTURE_FAILURE_RETURN_CODE = 1
 _PROCESS_SETTLE_TIMEOUT_SECONDS = 2
+_MAX_CLEANUP_DETAIL_BYTES = 240
 _TRUSTED_BASH_CANDIDATES = ("/bin/bash", "/usr/bin/bash")
 _EXECUTABLE_MODE_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
 _CAPTURE_RUNTIME_ERRORS = (
@@ -743,9 +744,13 @@ def _dispatch_runner(
 
 
 def _emit_cleanup_failure(detail: str) -> None:
-    safe_detail = " ".join(detail.split()).replace("]", "\\u005d")[:240]
+    safe_detail = " ".join(detail.split()).replace("]", "\\u005d")
+    bounded_detail = safe_detail.encode("utf-8")[:_MAX_CLEANUP_DETAIL_BYTES].decode(
+        "utf-8",
+        errors="ignore",
+    )
     try:
-        sys.stderr.write(f"[AutoSkillit shell capture cleanup failed: {safe_detail}]\n")
+        sys.stderr.write(f"[AutoSkillit shell capture cleanup failed: {bounded_detail}]\n")
     except _CAPTURE_RUNTIME_ERRORS:
         pass
 

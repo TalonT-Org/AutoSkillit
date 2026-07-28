@@ -546,10 +546,17 @@ def hook_applies_to_backend(
         raise ValueError(f"unsupported hook session scope: {session_scope!r}")
     match backend:
         case "codex":
-            return hook_def.session_scope != "interactive_only" and hook_def.codex_status not in {
+            if hook_def.codex_status in {
                 "fix-required",
                 "not-applicable",
-            }
+            }:
+                return False
+            return hook_def.session_scope == "any" or (
+                session_scope == "headless"
+                and hook_def.session_scope == "headless_only"
+                or session_scope == "interactive"
+                and hook_def.session_scope == "interactive_only"
+            )
         case "claude_code":
             if hook_def.enforcement_strength.get("claude_code") == "not-applicable":
                 return False

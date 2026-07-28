@@ -85,8 +85,8 @@ eligible. Fresh records, live writers, nonmatching names, symlinks, FIFOs,
 hardlinks, world-writable files, identity replacements, unexpected link
 counts, and tampered observations survive. Row, monotonic-time, frame, ledger,
 and compaction bounds limit each sweep and its backlog; contention and operational
-failures become durable capped-backoff retries. `deleted_bytes` counts logical
-managed bytes, not evidence of physical block reclamation.
+failures become durable capped-backoff retries. `deleted_bytes` counts
+logical managed bytes, not evidence of physical block reclamation.
 
 The guarantee is process-termination recovery on supported local Linux and macOS filesystems.
 It does not claim Darwin OS-crash or power-loss durability
@@ -130,8 +130,8 @@ hook can be retired in favor of that mechanism.
    publication/privacy contract
    ([#4326](https://github.com/TalonT-Org/AutoSkillit/issues/4326)), and quota
    accounting ([#4327](https://github.com/TalonT-Org/AutoSkillit/issues/4327));
-   this decision does not claim those features are implemented. These features
-   are not implemented by this lifecycle.
+   this decision does not claim those features are implemented. Those
+   features are not implemented by this lifecycle.
 
 ## Consequences
 

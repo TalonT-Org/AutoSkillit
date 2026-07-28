@@ -14,6 +14,7 @@ import pytest
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
+    CaptureRoot,
     create_capture_artifact,
     open_capture_root,
     open_project_anchor,
@@ -72,6 +73,23 @@ def _finalized_capture(project: Path, clock: _Clock, capture_id: str = _CAPTURE_
     os.fsync(artifact.fd)
     store.finalize_capture(capture_id, size=8, sha256=_DIGEST, failed=False)
     return anchor, root, store, artifact
+
+
+def _seed_finalized_captures(
+    root: CaptureRoot,
+    store: CaptureLifecycleStore,
+    *,
+    count: int,
+) -> list[str]:
+    names = []
+    for index in range(count):
+        capture_id = f"{index + 1:016x}"
+        artifact = create_capture_artifact(root, capture_id, store)
+        store.finalize_capture(capture_id, size=index + 1, sha256=_DIGEST, failed=False)
+        names.append(artifact.name)
+        artifact.close()
+        artifact.release_lease()
+    return names
 
 
 def test_managed_artifact_is_published_only_after_durable_identity(tmp_path: Path) -> None:
@@ -590,15 +608,8 @@ def test_sweep_is_bounded_and_repeated_calls_make_progress(tmp_path: Path) -> No
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store = _open_store(project, clock)
-    artifacts = []
     try:
-        for index in range(5):
-            capture_id = f"{index + 1:016x}"
-            artifact = create_capture_artifact(root, capture_id, store)
-            store.finalize_capture(capture_id, size=index + 1, sha256=_DIGEST, failed=False)
-            artifact.close()
-            artifact.release_lease()
-            artifacts.append(artifact)
+        artifact_names = _seed_finalized_captures(root, store, count=5)
 
         clock.advance(3601)
         first = store.sweep(max_items=2, max_duration_seconds=1)
@@ -613,7 +624,37 @@ def test_sweep_is_bounded_and_repeated_calls_make_progress(tmp_path: Path) -> No
         third = store.sweep(max_items=2, max_duration_seconds=1)
         assert third.deleted == 1
         assert third.remaining_due == 0
-        assert not any((_capture_dir(project) / artifact.name).exists() for artifact in artifacts)
+        assert not any((_capture_dir(project) / name).exists() for name in artifact_names)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_sweep_is_bounded_by_elapsed_duration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    real_sweep_one = store._sweep_one
+
+    def advancing_sweep(capture_id: str) -> tuple[str, int, int]:
+        result = real_sweep_one(capture_id)
+        clock.advance(0.6)
+        return result
+
+    try:
+        _seed_finalized_captures(root, store, count=5)
+        clock.advance(3601)
+        monkeypatch.setattr(store, "_sweep_one", advancing_sweep)
+
+        outcome = store.sweep(max_items=5, max_duration_seconds=1)
+
+        assert outcome.examined == 2
+        assert outcome.deleted == 2
+        assert outcome.remaining_due == 3
+        assert outcome.duration >= 1
     finally:
         root.close()
         anchor.close()

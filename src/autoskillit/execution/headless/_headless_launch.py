@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
-import sys
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +24,7 @@ from autoskillit.core import (
     StreamParser,
     ValidatedAddDir,
     get_logger,
+    plugin_launch_binding_scope,
 )
 from autoskillit.execution.headless._headless_helpers import (
     _resolve_pty_mode,
@@ -185,37 +185,30 @@ def _food_truck_launch_spec_builder(
     return build
 
 
-@contextmanager
+def _report_plugin_binding_close_failure(
+    primary_error: BaseException,
+    _cleanup_error: BaseException,
+) -> None:
+    logger.warning(
+        "plugin_launch_binding_close_failed",
+        primary_error=repr(primary_error),
+        exc_info=True,
+    )
+
+
 def _plugin_launch_binding(
     *,
     authority: PluginArtifactAuthority | None,
     backend: CodingAgentBackend,
     load_mode: PluginLoadMode,
-) -> Iterator[PluginLaunchBinding | None]:
+) -> AbstractContextManager[PluginLaunchBinding | None]:
     """Own one exact artifact binding for the complete child attempt."""
-    binding: PluginLaunchBinding | None = None
-    if load_mode.consumes_artifact:
-        if authority is None:
-            raise RuntimeError(f"{load_mode.value} launch requires plugin artifact authority")
-        binding = authority.acquire_launch_binding(
-            backend=backend,
-            load_mode=load_mode,
-        )
-    try:
-        yield binding
-    finally:
-        if binding is not None:
-            primary_error = sys.exc_info()[1]
-            try:
-                binding.close()
-            except BaseException:
-                if primary_error is None:
-                    raise
-                logger.warning(
-                    "plugin_launch_binding_close_failed",
-                    primary_error=repr(primary_error),
-                    exc_info=True,
-                )
+    return plugin_launch_binding_scope(
+        authority=authority,
+        backend=backend,
+        load_mode=load_mode,
+        on_suppressed_close_error=_report_plugin_binding_close_failure,
+    )
 
 
 async def _run_headless_attempt(

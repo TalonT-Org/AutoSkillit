@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import NamedResume, NoResume
+from autoskillit.core import NamedResume, NoResume, plugin_launch_binding_scope
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend, ResumeSpec
@@ -108,12 +108,11 @@ def _run_interactive_session(
 
     from autoskillit.execution import assert_interactive_ordering
 
-    binding = (
-        artifact_authority.acquire_launch_binding(backend=backend, load_mode=load_mode)
-        if artifact_authority is not None
-        else None
-    )
-    try:
+    with plugin_launch_binding_scope(
+        authority=artifact_authority,
+        backend=backend,
+        load_mode=load_mode,
+    ) as binding:
         spec = backend.build_interactive_cmd(
             initial_prompt=initial_message,
             resume_spec=resume_spec if resume_spec is not None else NoResume(),
@@ -131,9 +130,6 @@ def _run_interactive_session(
                 env=spec.env,
                 pass_fds=spec.inherited_fds,
             )
-    finally:
-        if binding is not None:
-            binding.close()
     reload_session_id = consume_reload_sentinel(_project_dir)
     if reload_session_id is not None:
         return reload_session_id

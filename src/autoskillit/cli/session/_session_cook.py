@@ -10,7 +10,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import is_feature_enabled, resolve_project_dir
+from autoskillit.core import (
+    is_feature_enabled,
+    plugin_launch_binding_scope,
+    resolve_project_dir,
+)
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -257,15 +261,11 @@ def cook(
         try:
             while True:
                 attempt += 1
-                binding = (
-                    artifact_authority.acquire_launch_binding(
-                        backend=backend,
-                        load_mode=load_mode,
-                    )
-                    if artifact_authority is not None
-                    else None
-                )
-                try:
+                with plugin_launch_binding_scope(
+                    authority=artifact_authority,
+                    backend=backend,
+                    load_mode=load_mode,
+                ) as binding:
                     built_spec = backend.build_interactive_cmd(
                         plugin_binding=binding,
                         add_dirs=[managed_home.skills_dir],
@@ -331,9 +331,6 @@ def cook(
                         reload_session_id = consume_reload_sentinel(project_dir)
                         _require_observer_ready(observer)
                         trace.require_startup_budgets()
-                finally:
-                    if binding is not None:
-                        binding.close()
 
                 if reload_session_id is None:
                     if result.returncode != 0:

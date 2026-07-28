@@ -152,6 +152,7 @@ from .paths import is_in_git_repo as is_in_git_repo
 from .paths import pkg_root as pkg_root
 from .paths import resolve_main_worktree as resolve_main_worktree
 from .paths import resolve_project_dir as resolve_project_dir
+from .plugin_artifact import plugin_launch_binding_scope as plugin_launch_binding_scope
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks

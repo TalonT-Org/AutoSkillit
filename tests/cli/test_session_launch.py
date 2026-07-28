@@ -276,6 +276,42 @@ def test_run_interactive_session_closes_binding_on_launch_failure(
     assert binding.closed
 
 
+def test_run_interactive_session_preserves_failure_when_binding_close_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import PluginLoadMode
+
+    backend, _captured_kwargs = _make_capturing_backend()
+    expected = RuntimeError("injected build failure")
+    cleanup = OSError("injected binding close failure")
+
+    class FailingCloseBinding(_TestBinding):
+        def close(self) -> None:
+            self.closed = True
+            raise cleanup
+
+    binding = FailingCloseBinding(Path("/dev/null"))
+    authority = _TestAuthority(None)
+    authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
+    )
+
+    def fail_build(**_kwargs):
+        raise expected
+
+    monkeypatch.setattr(backend, "build_interactive_cmd", fail_build)
+
+    with pytest.raises(RuntimeError) as caught:
+        _run_interactive_session(system_prompt="test", backend=backend)
+
+    assert caught.value is expected
+    assert binding.closed
+    assert any("injected binding close failure" in note for note in expected.__notes__)
+
+
 # ---------------------------------------------------------------------------
 # env extras passed through
 # ---------------------------------------------------------------------------

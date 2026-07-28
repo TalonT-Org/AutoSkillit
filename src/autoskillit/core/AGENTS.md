@@ -12,6 +12,7 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 | `_cmd_runner.py` | `CmdRunner` protocol, `default_cmd_runner`, `run_git`, `run_gh` — sync subprocess for git/gh CLI |
 | `_json.py` | Fast JSON via orjson (with stdlib fallback) — `fast_loads`, `fast_dumps` |
 | `logging.py` | Logging configuration plus canonical plugin-artifact lifecycle event and release wrapper |
+| `plugin_artifact.py` | Shared error-preserving scope for nullable per-launch plugin artifact bindings |
 | `paths.py` | `pkg_root()`, `is_git_worktree()`, `is_git_main_checkout()`, `is_in_git_repo()` |
 | `_claude_env.py` | IDE-scrubbing canonical env builder for agent subprocesses |
 | `_delivery_bounds.py` | General-output limit accessor plus typed recipe-delivery decision resolver |

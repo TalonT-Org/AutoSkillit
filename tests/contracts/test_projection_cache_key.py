@@ -264,6 +264,98 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
         finally:
             binding.close()
 
+    @pytest.mark.parametrize(
+        ("field", "value", "message"),
+        [
+            ("unexpected", True, "unexpected fields"),
+            ("artifact_kind", "installed_plugin", "artifact kind"),
+        ],
+    )
+    def test_projection_identity_requires_exact_manifest_contract(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        field: str,
+        value: object,
+        message: str,
+    ) -> None:
+        from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        binding = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="main",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        binding.close()
+        manifest_path = binding.identity.manifest_path
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest[field] = value
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        with pytest.raises(PluginArtifactValidationError, match=message):
+            read_projected_plugin_identity(
+                binding.identity.managed_path,
+                manifest_path=manifest_path,
+                expected_semantic_key=binding.identity.semantic_key,
+            )
+
+    def test_projection_identity_requires_canonical_paths_and_current_digest(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        binding = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="main",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        binding.close()
+        identity = binding.identity
+        alias = identity.managed_path.parent / "projection-alias"
+        alias.symlink_to(identity.managed_path, target_is_directory=True)
+
+        with pytest.raises(PluginArtifactValidationError, match="canonical directory"):
+            read_projected_plugin_identity(
+                alias,
+                manifest_path=identity.manifest_path,
+                expected_semantic_key=identity.semantic_key,
+            )
+        with pytest.raises(PluginArtifactValidationError, match="manifest path"):
+            read_projected_plugin_identity(
+                identity.managed_path,
+                manifest_path=identity.manifest_path.with_name("other-manifest.json"),
+                expected_semantic_key=identity.semantic_key,
+            )
+
+        (identity.managed_path / "tampered-after-publication").write_text(
+            "changed",
+            encoding="utf-8",
+        )
+        with pytest.raises(PluginArtifactValidationError, match="digest mismatch"):
+            read_projected_plugin_identity(
+                identity.managed_path,
+                manifest_path=identity.manifest_path,
+                expected_semantic_key=identity.semantic_key,
+            )
+
     def test_pruning_queues_only_after_reader_release(
         self,
         tmp_path: Path,

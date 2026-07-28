@@ -11,6 +11,7 @@ one module is what stops those three from drifting apart again.
 from __future__ import annotations
 
 import hashlib
+import stat
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -55,6 +56,17 @@ __all__ = [
 #: Reserved grace window for lease-aware retirement.
 _PROJECTION_GRACE_HOURS = 6
 PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION = 2
+_PROJECTION_ARTIFACT_MANIFEST_FIELDS = frozenset(
+    {
+        "schema_version",
+        "artifact_kind",
+        "projection_version",
+        "semantic_key",
+        "incarnation_id",
+        "artifact_digest",
+        "skills",
+    }
+)
 
 _CANONICAL_SKILL_DIRS = frozenset({"skills", "skills_extended"})
 _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
@@ -102,45 +114,95 @@ def read_projected_plugin_identity(
     expected_projection_version: int | None = None,
 ) -> PluginArtifactIdentity:
     """Read and validate one exact projected artifact identity."""
-    managed_path = Path(managed_path)
-    manifest_path = Path(manifest_path)
-    if manifest_path.is_symlink() or not manifest_path.is_file():
+    supplied_root = Path(managed_path)
+    if not supplied_root.is_absolute():
         raise PluginArtifactValidationError(
-            f"projected plugin identity manifest is not a regular file: {manifest_path}"
+            f"projected plugin root must be absolute: {supplied_root}"
+        )
+    try:
+        canonical_root = supplied_root.resolve(strict=True)
+        root_stat = canonical_root.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise PluginArtifactValidationError(
+            f"projected plugin root is unavailable: {supplied_root}"
+        ) from exc
+    if supplied_root != canonical_root or not stat.S_ISDIR(root_stat.st_mode):
+        raise PluginArtifactValidationError(
+            f"projected plugin root must be a canonical directory: {supplied_root}"
+        )
+
+    canonical_manifest = projected_artifact_manifest_path(canonical_root)
+    selected_manifest = Path(manifest_path)
+    if selected_manifest != canonical_manifest:
+        raise PluginArtifactValidationError(
+            f"projected plugin manifest path is not canonical: {selected_manifest}"
+        )
+    try:
+        manifest_stat = selected_manifest.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise PluginArtifactValidationError(
+            f"projected plugin identity manifest is missing: {selected_manifest}"
+        ) from exc
+    if not stat.S_ISREG(manifest_stat.st_mode):
+        raise PluginArtifactValidationError(
+            f"projected plugin identity manifest is not a regular file: {selected_manifest}"
         )
     manifest = read_versioned_json(
-        manifest_path,
+        selected_manifest,
         PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
     if manifest is None:
         raise PluginArtifactValidationError(
-            f"projected plugin identity manifest is unreadable: {manifest_path}"
+            f"projected plugin identity manifest is unreadable: {selected_manifest}"
+        )
+    if frozenset(manifest) != _PROJECTION_ARTIFACT_MANIFEST_FIELDS:
+        raise PluginArtifactValidationError(
+            f"projected plugin identity manifest has unexpected fields: {selected_manifest}"
+        )
+    if manifest.get("artifact_kind") != PluginArtifactKind.PROJECTION.value:
+        raise PluginArtifactValidationError(
+            f"projected plugin artifact kind is invalid: {selected_manifest}"
         )
     semantic_key = manifest.get("semantic_key")
-    if semantic_key != expected_semantic_key:
+    if not isinstance(semantic_key, str) or semantic_key != expected_semantic_key:
         raise PluginArtifactValidationError(
-            f"projected plugin semantic key mismatch: {manifest_path}"
+            f"projected plugin semantic key mismatch: {selected_manifest}"
         )
     incarnation_id = manifest.get("incarnation_id")
     if not is_canonical_plugin_artifact_incarnation_id(incarnation_id):
         raise PluginArtifactValidationError(
-            f"projected plugin incarnation is not canonical uuid4 hex: {manifest_path}"
+            f"projected plugin incarnation is not canonical uuid4 hex: {selected_manifest}"
         )
     artifact_digest = manifest.get("artifact_digest")
     if not is_canonical_plugin_artifact_digest(artifact_digest):
-        raise PluginArtifactValidationError(f"projected plugin digest is invalid: {manifest_path}")
+        raise PluginArtifactValidationError(
+            f"projected plugin digest is invalid: {selected_manifest}"
+        )
     projection_version = manifest.get("projection_version")
+    if type(projection_version) is not int or projection_version < 1:
+        raise PluginArtifactValidationError(
+            f"projected plugin version is invalid: {selected_manifest}"
+        )
     if expected_projection_version is not None and (
-        type(projection_version) is not int or projection_version != expected_projection_version
+        projection_version != expected_projection_version
     ):
-        raise PluginArtifactValidationError(f"projected plugin version mismatch: {manifest_path}")
+        raise PluginArtifactValidationError(
+            f"projected plugin version mismatch: {selected_manifest}"
+        )
+    if not isinstance(manifest.get("skills"), dict):
+        raise PluginArtifactValidationError(
+            f"projected plugin skills manifest is invalid: {selected_manifest}"
+        )
+    observed_digest = projected_plugin_artifact_digest(canonical_root)
+    if artifact_digest != observed_digest:
+        raise PluginArtifactValidationError("projected plugin content digest mismatch")
     return PluginArtifactIdentity(
         semantic_key=semantic_key,
         incarnation_id=incarnation_id,
         manifest_schema_version=PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
         artifact_digest=artifact_digest,
-        managed_path=managed_path,
-        manifest_path=manifest_path,
+        managed_path=canonical_root,
+        manifest_path=canonical_manifest,
     )
 
 
@@ -318,8 +380,6 @@ class ProjectedPluginRetirementOwner:
             manifest_path=manifest_path,
             expected_semantic_key=managed_path.name,
         )
-        if projected_plugin_artifact_digest(managed_path) != identity.artifact_digest:
-            raise PluginArtifactValidationError("projected retirement digest mismatch")
         return identity
 
     def _current_identity(

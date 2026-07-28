@@ -834,6 +834,7 @@ def _stage_projected_plugin_artifact(
             staging_manifest,
             {
                 "schema_version": identity.manifest_schema_version,
+                "artifact_kind": _PLUGIN_ARTIFACT_KIND,
                 "projection_version": plan.context.projection_version,
                 "semantic_key": identity.semantic_key,
                 "incarnation_id": identity.incarnation_id,

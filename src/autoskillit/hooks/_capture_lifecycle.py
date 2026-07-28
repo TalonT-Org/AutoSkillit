@@ -961,7 +961,7 @@ class CaptureLifecycleStore:
             except (CaptureLifecycleError, OSError):
                 retry = self._retry(record)
                 self._append_locked(retry, records, generation, size)
-                return ("error", 0, retry.retry_count)
+                return ("error", 0, 1)
 
     def _due_ids(self, now: float) -> list[str]:
         with self._locked():

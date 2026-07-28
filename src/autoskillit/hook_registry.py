@@ -47,6 +47,16 @@ class HookDef:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
             )
+        for field_name in (
+            "produces_resources",
+            "reclaims_resources",
+            "self_reclaims_resources",
+        ):
+            resources = getattr(self, field_name)
+            if not isinstance(resources, frozenset) or any(
+                not isinstance(resource, str) or not resource for resource in resources
+            ):
+                raise ValueError(f"HookDef.{field_name} must be a frozenset of non-empty strings")
 
 
 @dataclass(frozen=True, slots=True)

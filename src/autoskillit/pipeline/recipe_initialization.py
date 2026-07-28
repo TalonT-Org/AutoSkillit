@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TypeAlias
 
 from autoskillit.core import (
@@ -25,6 +25,8 @@ __all__ = [
     "start_recipe_initialization",
     "transition_recipe_ready",
 ]
+
+_READY_RECIPE_TRANSITION_TOKEN = object()
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +127,34 @@ class ReadyRecipe:
     installed_execution: InstalledRecipeExecution
     generation_store_key: str
     completion_receipt: str
+    _transition_token: object = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self._transition_token is not _READY_RECIPE_TRANSITION_TOKEN:
+            raise ValueError("ready recipe requires a completed initialization transition")
+        if not all(
+            isinstance(value, str) and value
+            for value in (
+                self.kitchen_id,
+                self.recipe_name,
+                self.initialization_id,
+                self.generation_store_key,
+                self.completion_receipt,
+            )
+        ):
+            raise ValueError("ready recipe identity and completion receipt must be non-empty")
+        if (
+            self.artifact_generation.recipe_name != self.recipe_name
+            or self.installed_execution.snapshot.recipe_name != self.recipe_name
+        ):
+            raise ValueError("ready recipe generation identity differs from installed snapshot")
+        if (
+            self.artifact_generation.flow_schema_version != self.flow_generation.schema_version
+            or self.artifact_generation.flow_sha256 != self.flow_generation.flow_sha256
+            or self.artifact_generation.flow_size_bytes != self.flow_generation.flow_size_bytes
+            or self.artifact_generation.flow_record_count != self.flow_generation.record_count
+        ):
+            raise ValueError("ready recipe artifact and flow generation differ")
 
 
 RecipeInitializationState: TypeAlias = NoActiveRecipe | InitializingRecipe | ReadyRecipe
@@ -225,6 +255,7 @@ def transition_recipe_ready(
         installed_execution=installed_execution,
         generation_store_key=state.generation_store_key,
         completion_receipt=completion_receipt,
+        _transition_token=_READY_RECIPE_TRANSITION_TOKEN,
     )
 
 

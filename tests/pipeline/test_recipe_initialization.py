@@ -21,6 +21,7 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline import (
     InitializingRecipe,
+    ReadyRecipe,
     RecipeInitializationRequirement,
     initialization_is_complete,
     record_initialization_page,
@@ -217,3 +218,26 @@ def test_ready_requires_complete_coverage_and_the_staged_snapshot() -> None:
     assert ready.initialization_id == state.initialization_id
     assert ready.artifact_generation == state.artifact_generation
     assert ready.flow_generation == state.flow_generation
+
+
+def test_ready_recipe_rejects_direct_construction_without_transition_authority() -> None:
+    state = _initializing()
+    installed = InstalledRecipeExecution(
+        snapshot=state.staged_snapshot,
+        runtime_binding_digests={},
+        audit_cycle_heads=cast(Any, object()),
+        input_preflight_resolver=cast(Any, object()),
+    )
+
+    with pytest.raises(ValueError, match="completed initialization transition"):
+        ReadyRecipe(
+            kitchen_id=state.kitchen_id,
+            recipe_name=state.recipe_name,
+            artifact_generation=state.artifact_generation,
+            flow_generation=state.flow_generation,
+            initialization_id=state.initialization_id,
+            installed_execution=installed,
+            generation_store_key=state.generation_store_key,
+            completion_receipt=_hash("receipt"),
+            _transition_token=object(),
+        )

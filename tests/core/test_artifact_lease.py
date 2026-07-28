@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import select
 import stat
@@ -215,6 +216,74 @@ def test_lease_rejects_non_regular_file(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="regular file"):
         ArtifactLease.acquire_shared(lock_path)
+
+
+def test_acquire_preserves_primary_error_when_descriptor_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from autoskillit.core.runtime import artifact_lease
+
+    real_open = artifact_lease.os.open
+    real_close = artifact_lease.os.close
+    opened_fds: list[int] = []
+
+    def recording_open(*args, **kwargs):
+        fd = real_open(*args, **kwargs)
+        opened_fds.append(fd)
+        return fd
+
+    def failing_flock(_fd, _operation):
+        raise OSError(errno.EIO, "primary flock failure")
+
+    def failing_close(_fd):
+        raise OSError(errno.EBADF, "cleanup close failure")
+
+    monkeypatch.setattr(artifact_lease.os, "open", recording_open)
+    monkeypatch.setattr(artifact_lease.os, "close", failing_close)
+    monkeypatch.setattr(artifact_lease.fcntl, "flock", failing_flock)
+
+    try:
+        with pytest.raises(OSError, match="primary flock failure") as caught:
+            ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+        assert caught.value.errno == errno.EIO
+        assert sum("cleanup close failure" in note for note in caught.value.__notes__) == 2
+    finally:
+        for fd in reversed(opened_fds):
+            real_close(fd)
+
+
+def test_directory_close_failure_releases_acquired_lease_fd(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from autoskillit.core.runtime import artifact_lease
+
+    real_open = artifact_lease.os.open
+    real_close = artifact_lease.os.close
+    opened_fds: list[int] = []
+
+    def recording_open(*args, **kwargs):
+        fd = real_open(*args, **kwargs)
+        opened_fds.append(fd)
+        return fd
+
+    def fail_directory_close(fd: int) -> None:
+        if fd == opened_fds[0]:
+            raise OSError(errno.EIO, "directory close failure")
+        real_close(fd)
+
+    monkeypatch.setattr(artifact_lease.os, "open", recording_open)
+    monkeypatch.setattr(artifact_lease.os, "close", fail_directory_close)
+
+    try:
+        with pytest.raises(OSError, match="directory close failure"):
+            ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+        assert len(opened_fds) == 2
+        with pytest.raises(OSError):
+            os.fstat(opened_fds[1])
+    finally:
+        real_close(opened_fds[0])
 
 
 @pytest.mark.parametrize(

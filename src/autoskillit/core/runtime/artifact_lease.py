@@ -19,6 +19,13 @@ __all__ = ["ArtifactLease", "ArtifactLeaseContention"]
 _ARTIFACT_LEASE_CONSTRUCTION_TOKEN = object()
 
 
+def _close_preserving_primary(fd: int, primary: BaseException) -> None:
+    try:
+        os.close(fd)
+    except BaseException as cleanup_error:
+        primary.add_note(f"Artifact lease descriptor cleanup failed: {cleanup_error!r}")
+
+
 class ArtifactLeaseContention(RuntimeError):
     """Raised when a nonblocking artifact lease cannot be acquired."""
 
@@ -115,18 +122,28 @@ class ArtifactLease:
                 if not blocking and exc.errno in cls._CONTENTION_ERRNOS:
                     raise ArtifactLeaseContention(lock_path) from exc
                 raise
+        except BaseException as primary:
+            if fd is not None:
+                _close_preserving_primary(fd, primary)
+            _close_preserving_primary(directory_fd, primary)
+            raise
+        try:
+            os.close(directory_fd)
+        except BaseException as directory_close_error:
+            if fd is not None:
+                _close_preserving_primary(fd, directory_close_error)
+            raise
+        assert fd is not None
+        try:
             return cls(
                 path=lock_path,
                 fd=fd,
                 shared=shared,
                 _construction_token=_ARTIFACT_LEASE_CONSTRUCTION_TOKEN,
             )
-        except BaseException:
-            if fd is not None:
-                os.close(fd)
+        except BaseException as construction_error:
+            _close_preserving_primary(fd, construction_error)
             raise
-        finally:
-            os.close(directory_fd)
 
     @property
     def inherited_fds(self) -> tuple[int, ...]:

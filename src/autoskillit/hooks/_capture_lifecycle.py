@@ -536,6 +536,15 @@ class CaptureLifecycleStore:
         capture_id: str,
         artifact_identity: tuple[int, int],
     ) -> CaptureLifecycleRecord:
+        if (
+            not isinstance(artifact_identity, tuple)
+            or len(artifact_identity) != 2
+            or any(
+                not isinstance(part, int) or isinstance(part, bool) or part < 0
+                for part in artifact_identity
+            )
+        ):
+            raise CaptureLifecycleError("invalid staged artifact identity")
         record = self.get_record(capture_id)
         if record is None or record.state is not CaptureState.RESERVED:
             raise CaptureLifecycleError("invalid lifecycle transition to STAGED")

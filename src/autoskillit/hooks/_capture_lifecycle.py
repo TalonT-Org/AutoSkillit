@@ -256,6 +256,19 @@ def _encode_frame(record: CaptureLifecycleRecord, generation: int) -> bytes:
     )
 
 
+def _write_all(fd: int, payload: bytes) -> None:
+    view = memoryview(payload)
+    offset = 0
+    while offset < len(view):
+        try:
+            written = os.write(fd, view[offset:])
+        except InterruptedError:
+            continue
+        if written <= 0 or written > len(view) - offset:
+            raise CaptureLedgerError("lifecycle ledger write made no progress")
+        offset += written
+
+
 def _validate_control_file(fd: int, name: str) -> None:
     value = os.fstat(fd)
     if (
@@ -417,7 +430,7 @@ class CaptureLifecycleStore:
             return
         fd = self._open_ledger()
         try:
-            os.write(fd, frame)
+            _write_all(fd, frame)
             os.fsync(fd)
         finally:
             os.close(fd)
@@ -445,7 +458,7 @@ class CaptureLifecycleStore:
         try:
             _validate_control_file(fd, temp_name)
             for frame in frames:
-                os.write(fd, frame)
+                _write_all(fd, frame)
             os.fsync(fd)
         except BaseException:
             os.close(fd)

@@ -254,6 +254,56 @@ def test_incomplete_final_ledger_frame_is_recovered(tmp_path: Path) -> None:
         anchor.close()
 
 
+@pytest.mark.parametrize("force_compaction", [False, True])
+def test_ledger_writes_retry_short_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    force_compaction: bool,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    real_write = os.write
+    write_calls = 0
+
+    def short_write(fd: int, payload: bytes | memoryview) -> int:
+        nonlocal write_calls
+        write_calls += 1
+        limit = max(1, len(payload) // 2)
+        return real_write(fd, payload[:limit])
+
+    try:
+        if force_compaction:
+            monkeypatch.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 1)
+        monkeypatch.setattr(capture_lifecycle.os, "write", short_write)
+        store.reserve_capture(_CAPTURE_ID)
+
+        record = store.get_record(_CAPTURE_ID)
+        assert record is not None
+        assert record.state is CaptureState.RESERVED
+        assert write_calls > 1
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_zero_byte_ledger_write_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        monkeypatch.setattr(capture_lifecycle.os, "write", lambda _fd, _payload: 0)
+        with pytest.raises(CaptureLedgerError, match="write made no progress"):
+            store.reserve_capture(_CAPTURE_ID)
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_bad_ledger_checksum_fails_closed(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

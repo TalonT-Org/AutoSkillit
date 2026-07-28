@@ -75,7 +75,7 @@ trusted trigger, not by a wall-clock scheduler.
 There are two installed cleanup roles. Every valid runner invocation performs
 one bounded tail sweep after all producer resources and the writer lease are
 released. The independent cleanup-only `capture_lifecycle_hook.py` performs a
-bounded `SessionStart` sweep without an interactive/headless distinction.
+bounded `SessionStart` sweep in interactive and headless sessions.
 Cleanup failure is fail-open and cannot replace the mapped command result. If
 hooks are disabled, neither owner runs and eligible artifacts remain.
 
@@ -84,9 +84,9 @@ transaction. Only lifecycle-recorded `shell_[0-9a-f]{16}.log` artifacts are
 eligible. Fresh records, live writers, nonmatching names, symlinks, FIFOs,
 hardlinks, world-writable files, identity replacements, unexpected link
 counts, and tampered observations survive. Row, monotonic-time, frame, ledger,
-and compaction bounds limit each sweep; contention and operational failures
-become durable capped-backoff retries. `deleted_bytes` is a logical managed-byte
-count, not evidence of physical block reclamation.
+and compaction bounds limit each sweep and its backlog; contention and operational
+failures become durable capped-backoff retries. `deleted_bytes` counts logical
+managed bytes, not evidence of physical block reclamation.
 
 The guarantee is process-termination recovery on supported local Linux and macOS filesystems.
 It does not claim Darwin OS-crash or power-loss durability
@@ -130,7 +130,8 @@ hook can be retired in favor of that mechanism.
    publication/privacy contract
    ([#4326](https://github.com/TalonT-Org/AutoSkillit/issues/4326)), and quota
    accounting ([#4327](https://github.com/TalonT-Org/AutoSkillit/issues/4327));
-   this decision does not claim those features are implemented.
+   this decision does not claim those features are implemented. These features
+   are not implemented by this lifecycle.
 
 ## Consequences
 

@@ -17,10 +17,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _EXEMPT_FUNCTIONS: frozenset[str] = frozenset({"unlock_agent_pack"})
 
 # The guard variable names that signal a non-notification fallback.
-# `_use_global_enable` is the post-#4399 name (replaces `_skip_notify`); the old
-# name is kept so any in-flight rename passes both old and new symbols until the
-# rename lands everywhere.
-_SKIP_GUARD_NAMES: frozenset[str] = frozenset({"_skip_notify", "_use_global_enable"})
+_SKIP_GUARD_NAMES: frozenset[str] = frozenset({"_use_global_enable"})
 
 
 class _EnableComponentsCallFinder(ast.NodeVisitor):

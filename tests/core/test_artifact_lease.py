@@ -133,7 +133,11 @@ def test_blocking_exclusive_lease_waits_then_acquires(tmp_path: Path) -> None:
         except BaseException as exc:
             failures.append(exc)
 
-    writer = threading.Thread(target=acquire_writer)
+    writer = threading.Thread(
+        target=acquire_writer,
+        name="artifact-lease-blocking-writer",
+        daemon=True,
+    )
     writer.start()
     try:
         assert writer_started.wait(timeout=5)

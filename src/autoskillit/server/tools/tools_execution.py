@@ -45,6 +45,7 @@ from autoskillit.core import (
     is_feature_enabled,
     parse_plan_paths,
     render_target_skill_command,
+    resolve_temp_dir,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
@@ -846,6 +847,25 @@ async def run_skill(
             and step_name
             and step_name in _installed_execution.snapshot.dynamic_skill_step_names
         )
+        # Resolved from cwd so the audit-cycle containment anchor matches the
+        # clone's actual artifact directory (orchestrator's tool_ctx.temp_dir
+        # is disjoint from the clone's temp tree in clone-based pipelines).
+        # See #4387 — this must be defined BEFORE the if/elif chain so the
+        # publish call site (later in the function) can reach it regardless
+        # of which branch was taken above. An empty cwd is only rejected here
+        # (rather than by the earlier boundary guards) because it is only
+        # security-relevant once a recipe execution is active and this anchor
+        # is actually consumed as a containment root — ad-hoc skill calls with
+        # no active recipe execution never read _clone_allowed_root.
+        if _installed_execution is not None and not cwd:
+            return json.dumps(
+                deny_envelope(
+                    "run_skill: cwd must not be empty when a recipe execution is active.",
+                    stage="preflight:cwd",
+                    retriable=False,
+                )
+            )
+        _clone_allowed_root = resolve_temp_dir(Path(cwd), tool_ctx.config.workspace.temp_dir)
         if _dynamic_recipe_call:
             if _claims_recipe_execution:
                 return _recipe_execution_deny(
@@ -918,6 +938,7 @@ async def run_skill(
                     step_name=step_name,
                     template=_invocation_template,
                     bound_inputs=_bound_recipe_inputs,
+                    allowed_root=_clone_allowed_root,
                 )
             except RecipeExecutionAdmissionError as exc:
                 return _recipe_execution_deny(exc.code, str(exc))
@@ -1607,6 +1628,7 @@ async def run_skill(
                         skill_result,
                         (_installed_execution if _invocation_template is not None else None),
                         _bound_recipe_inputs,
+                        allowed_root=_clone_allowed_root,
                     )
                     tool_ctx.audit.record_success(skill_command)
                     clear_run_skill_state(tool_ctx.project_dir)

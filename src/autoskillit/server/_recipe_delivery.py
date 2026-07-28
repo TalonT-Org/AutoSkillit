@@ -69,6 +69,7 @@ from autoskillit.server._recipe_generation import (
 from autoskillit.server._recipe_initialization import stage_recipe_initialization
 from autoskillit.server._recipe_section_pagination import (
     get_or_build_recipe_section_page_plan,
+    resolve_recipe_section_bound_bytes,
     select_recipe_section,
 )
 from autoskillit.server._response_budget import enforce_response_budget
@@ -1001,6 +1002,14 @@ def finalize_recipe_delivery(
         if isinstance(response_max_bytes, int) and response_max_bytes > 0
         else None
     )
+    section_response_bound_bytes = resolve_recipe_section_bound_bytes(
+        (
+            response_ceiling_bytes
+            if response_ceiling_bytes is not None
+            else OutputBudgetConfig().response_max_bytes
+        ),
+        ordinary_limit,
+    )
     if (
         decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
         and surface_definition.response_exemption_tool is None
@@ -1105,7 +1114,7 @@ def finalize_recipe_delivery(
                 generation=generation,
                 payload=candidate_payload,
                 entrypoint=finalized_projection.entrypoint,
-                bound_bytes=envelope_bound_bytes,
+                bound_bytes=section_response_bound_bytes,
                 initialization_id=initialization_id,
             )
             rendered = json.dumps(

@@ -849,6 +849,45 @@ def test_token_dense_payload_does_not_use_four_byte_ordinary_estimate(tool_ctx) 
     )
 
 
+def test_initialization_requirements_use_the_pull_response_bound(
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response_max_bytes = RECIPE_SECTION_RESPONSE_FLOOR_BYTES + 500
+    tool_ctx.backend = CodexBackend()
+    tool_ctx.kitchen_id = "initialization-page-bound"
+    tool_ctx.config.output_budget = OutputBudgetConfig(response_max_bytes=response_max_bytes)
+    captured_bounds: list[int] = []
+
+    def _capture_requirements(
+        **kwargs: Any,
+    ) -> tuple[RecipeInitializationRequirement, ...]:
+        captured_bounds.append(kwargs["bound_bytes"])
+        return ()
+
+    monkeypatch.setattr(
+        recipe_delivery,
+        "_initialization_requirements",
+        _capture_requirements,
+    )
+
+    finalized = _finalize_recipe_delivery(
+        _payload("!" * 20_000),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert captured_bounds == [
+        resolve_recipe_section_bound_bytes(
+            response_max_bytes,
+            CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit,
+        )
+    ]
+
+
 def test_envelope_manifest_ignores_ambient_multibyte_fields(tmp_path: Path) -> None:
     payload = _payload()
     payload["orchestration_rules"] = "雪" * 1_000

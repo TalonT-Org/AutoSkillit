@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -59,7 +60,10 @@ def _installed_plugin_root() -> Path:
     return current_installed_plugin_root()
 
 
-def _clear_plugin_cache() -> tuple[str, ...]:
+def _clear_plugin_cache(
+    *,
+    on_retirement_created: Callable[[str], None] | None = None,
+) -> tuple[str, ...]:
     """Queue exact old versions and remove their installed_plugins.json reference."""
     from autoskillit import __version__
     from autoskillit.cli._installed_plugins import InstalledPluginsFile
@@ -111,6 +115,8 @@ def _clear_plugin_cache() -> tuple[str, ...]:
                 result = owner.enqueue_retirement(identity, deadline)
                 if result.created:
                     created_ids.append(result.record_id)
+                    if on_retirement_created is not None:
+                        on_retirement_created(result.record_id)
         finally:
             writer.close()
 
@@ -271,8 +277,8 @@ class _InstallSnapshot:
         if self._artifact_manifest_path.is_file() or self._artifact_manifest_path.is_symlink():
             self._artifact_manifest_path.unlink()
 
-    def track_retirements(self, record_ids: tuple[str, ...]) -> None:
-        self._created_retiring_record_ids.update(record_ids)
+    def track_retirement(self, record_id: str) -> None:
+        self._created_retiring_record_ids.add(record_id)
 
     def rollback(self) -> None:
         """Restore the manifest, the registry, and the retiring queue."""
@@ -422,7 +428,7 @@ def install(*, scope: str = "user") -> bool:
         try:
             with _InstallLock():
                 snapshot.stage_target_root()
-            snapshot.track_retirements(_clear_plugin_cache())
+            _clear_plugin_cache(on_retirement_created=snapshot.track_retirement)
 
             # Register the marketplace (idempotent)
             result = subprocess.run(

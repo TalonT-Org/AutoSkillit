@@ -147,6 +147,43 @@ class TestRollbackOnFailure:
         assert "Installed plugin is in use" in capsys.readouterr().out
         assert marker.read_text() == "leased live tree"
 
+    def test_partial_cache_clear_registers_retirement_before_later_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.cli import _marketplace, _plugin_artifact
+        from autoskillit.cli._installed_plugins import InstalledPluginsFile
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
+        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
+        monkeypatch.setattr(
+            _marketplace,
+            "_ensure_marketplace",
+            lambda: tmp_path / ".autoskillit" / "marketplace",
+        )
+        monkeypatch.setattr(_marketplace, "_ensure_workspace_ready", lambda: None)
+        old_cache = _seed_installed_state(tmp_path, "0.0.1-old")
+        _plugin_artifact.publish_installed_plugin_artifact(
+            old_cache,
+            semantic_key="autoskillit@autoskillit-local:0.0.1-old",
+        )
+        retiring_before = _retiring_paths(tmp_path)
+
+        def fail_remove(self, plugin_key):
+            raise OSError(f"injected removal failure for {plugin_key}")
+
+        monkeypatch.setattr(InstalledPluginsFile, "remove", fail_remove)
+
+        with pytest.raises(OSError, match="injected removal failure"):
+            _marketplace.install(scope="user")
+
+        assert old_cache.is_dir()
+        assert _retiring_paths(tmp_path) == retiring_before
+
     def test_publication_failure_rolls_back_while_target_lease_is_held(
         self, tmp_path: Path, monkeypatch, capsys
     ) -> None:

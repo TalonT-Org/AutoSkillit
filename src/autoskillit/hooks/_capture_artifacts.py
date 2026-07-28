@@ -32,6 +32,7 @@ if TYPE_CHECKING:
         CAPTURE_PATH_COMPONENTS,
         CaptureRoot,
         CaptureSetupError,
+        CaptureStoreAbsentError,
         FileIdentity,
         ProjectAnchor,
         _open_directory_component,
@@ -59,6 +60,7 @@ else:
         CAPTURE_PATH_COMPONENTS,
         CaptureRoot,
         CaptureSetupError,
+        CaptureStoreAbsentError,
         FileIdentity,
         ProjectAnchor,
         _open_directory_component,
@@ -761,8 +763,10 @@ def _sweep_after_runner(requested_cwd: str) -> None:
             outcome = lifecycle.sweep()
             if outcome.errors:
                 _emit_cleanup_failure(f"cleanup deferred after {outcome.errors} errors")
-    except CaptureSetupError:
+    except CaptureStoreAbsentError:
         return
+    except CaptureSetupError as exc:
+        _emit_cleanup_failure(f"{type(exc).__name__}: {exc}")
     except (CaptureLifecycleError, OSError) as exc:
         _emit_cleanup_failure(f"{type(exc).__name__}: {exc}")
 

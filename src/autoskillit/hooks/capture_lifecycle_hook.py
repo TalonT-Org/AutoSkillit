@@ -14,6 +14,7 @@ if _HOOKS_DIR not in sys.path:
 
 from _capture._authority import (  # type: ignore[import-not-found]  # noqa: E402
     CaptureSetupError,
+    CaptureStoreAbsentError,
     open_capture_lifecycle,
 )
 from _capture_lifecycle import (  # type: ignore[import-not-found]  # noqa: E402
@@ -60,8 +61,11 @@ def main() -> int:
                         "[AutoSkillit capture lifecycle cleanup deferred after "
                         f"{outcome.errors} errors]\n"
                     )
-        except CaptureSetupError:
+        except CaptureStoreAbsentError:
             return 0
+        except CaptureSetupError as exc:
+            detail = " ".join(str(exc).split()).replace("]", "\\u005d")
+            _bounded_stderr(f"[AutoSkillit capture lifecycle cleanup failed: {detail}]\n")
         except (CaptureLifecycleError, OSError) as exc:
             detail = " ".join(str(exc).split()).replace("]", "\\u005d")
             _bounded_stderr(f"[AutoSkillit capture lifecycle cleanup failed: {detail}]\n")

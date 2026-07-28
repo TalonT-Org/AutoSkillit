@@ -35,6 +35,7 @@ __all__ = [
     "CAPTURE_PATH_COMPONENTS",
     "CaptureRoot",
     "CaptureSetupError",
+    "CaptureStoreAbsentError",
     "FileIdentity",
     "ProjectAnchor",
     "open_capture_lifecycle",
@@ -57,6 +58,10 @@ _READ_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLO
 
 class CaptureSetupError(RuntimeError):
     """Raised when the descriptor-anchored capture authority cannot be established."""
+
+
+class CaptureStoreAbsentError(CaptureSetupError):
+    """Raised when a cleanup-only open finds no existing capture store."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +153,7 @@ def _open_directory_component(parent_fd: int, name: str, *, create: bool) -> int
         fd = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
     except FileNotFoundError:
         if not create:
-            raise CaptureSetupError(f"missing capture path component: {name}") from None
+            raise CaptureStoreAbsentError(f"missing capture path component: {name}") from None
         try:
             os.mkdir(name, mode=0o700, dir_fd=parent_fd)
         except FileExistsError:

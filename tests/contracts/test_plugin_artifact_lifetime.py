@@ -45,6 +45,30 @@ def test_authority_creation_is_lazy(tmp_path: Path, monkeypatch) -> None:
     assert not (tmp_path / ".autoskillit").exists()
 
 
+def test_projection_publication_preserves_control_flow_exceptions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import autoskillit.workspace.skill_projection as projection
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    def interrupt_publication(_plan):
+        raise KeyboardInterrupt("stop projection publication")
+
+    monkeypatch.setattr(
+        projection,
+        "_stage_projected_plugin_artifact",
+        interrupt_publication,
+    )
+
+    with pytest.raises(KeyboardInterrupt, match="stop projection publication"):
+        _authority(tmp_path).acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+
+
 def test_binding_owns_exact_v2_incarnation_and_stable_sidecar(
     tmp_path: Path,
     monkeypatch,

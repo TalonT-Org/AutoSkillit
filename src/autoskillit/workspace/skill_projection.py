@@ -1117,7 +1117,7 @@ class ProjectedPluginArtifactAuthority:
                             ),
                         )
                         raise
-                    except BaseException as exc:
+                    except Exception as exc:
                         log_plugin_artifact_lifecycle(
                             logger,
                             action=mutation_action,

@@ -15,6 +15,10 @@ import pytest
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
+_SHARED_READ_SIDE_VALIDATORS = {
+    "read_installed_plugin_artifact_identity": "src/autoskillit/core/_plugin_cache.py",
+}
+
 
 def _scan_write_versioned_json_callers() -> set[str]:
     """AST-scan src/autoskillit/ for modules that call write_versioned_json.
@@ -46,7 +50,7 @@ def _scan_write_versioned_json_callers() -> set[str]:
 
 
 def _scan_read_versioned_json_callers() -> set[str]:
-    """AST-scan src/autoskillit/ for modules that call read_versioned_json.
+    """AST-scan for modules that call a direct or shared versioned-JSON validator.
 
     Returns set of repo-relative module paths.
     """
@@ -63,10 +67,14 @@ def _scan_read_versioned_json_callers() -> set[str]:
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
-            is_read_versioned_json = (
-                isinstance(func, ast.Name) and func.id == "read_versioned_json"
-            ) or (isinstance(func, ast.Attribute) and func.attr == "read_versioned_json")
-            if is_read_versioned_json:
+            call_name = (
+                func.id
+                if isinstance(func, ast.Name)
+                else func.attr
+                if isinstance(func, ast.Attribute)
+                else None
+            )
+            if call_name == "read_versioned_json" or (call_name in _SHARED_READ_SIDE_VALIDATORS):
                 rel = str(py_file.relative_to(src_root.parent.parent))
                 modules.add(rel)
                 break
@@ -103,8 +111,9 @@ class TestSchemaReadConvention:
         for module in sorted(writers):
             if module not in readers and module not in _READ_SIDE_EXCEPTIONS:
                 missing_read[module] = (
-                    f"{module} calls write_versioned_json but not read_versioned_json. "
-                    f"Add read_versioned_json to reads, or add to _READ_SIDE_EXCEPTIONS."
+                    f"{module} calls write_versioned_json but no canonical read-side "
+                    "validator. Add read_versioned_json or a registered shared validator "
+                    "to reads, or add to _READ_SIDE_EXCEPTIONS."
                 )
 
         assert not missing_read, "\n".join(
@@ -115,6 +124,32 @@ class TestSchemaReadConvention:
         """Every entry in _READ_SIDE_EXCEPTIONS must have a non-empty rationale comment."""
         for module, reason in _READ_SIDE_EXCEPTIONS.items():
             assert reason, f"{module} has an empty exception reason — document why it is exempt"
+
+    def test_shared_read_side_validators_delegate_to_versioned_reader(self):
+        """Every registered shared validator must itself call read_versioned_json."""
+        repo_root = Path(__file__).resolve().parents[2]
+        for function_name, relative_path in _SHARED_READ_SIDE_VALIDATORS.items():
+            source_path = repo_root / relative_path
+            tree = ast.parse(source_path.read_text(), filename=str(source_path))
+            function = next(
+                (
+                    node
+                    for node in tree.body
+                    if isinstance(node, ast.FunctionDef) and node.name == function_name
+                ),
+                None,
+            )
+            assert function is not None, (
+                f"shared read-side validator {function_name} is missing from {relative_path}"
+            )
+            call_names = {
+                node.func.id if isinstance(node.func, ast.Name) else node.func.attr
+                for node in ast.walk(function)
+                if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
+            }
+            assert "read_versioned_json" in call_names, (
+                f"{function_name} no longer delegates to read_versioned_json"
+            )
 
     def test_new_write_versioned_json_caller_without_read_side_fails(self, monkeypatch):
         """Meta-test: injecting a fake writer without a reader must cause the ratchet to fail."""

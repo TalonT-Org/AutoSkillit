@@ -17,7 +17,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import RETIRED_INSTALL_ARTIFACT_SHAPES, Severity
+from autoskillit.core import (
+    RETIRED_INSTALL_ARTIFACT_SHAPES,
+    PluginArtifactIdentity,
+    Severity,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -52,6 +56,29 @@ def _checks(home: Path) -> set[str]:
     return {f.check for f in verify_install_state()}
 
 
+def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
+    from datetime import UTC, datetime, timedelta
+
+    from autoskillit.cli._plugin_artifact import (
+        InstalledPluginArtifactRetirementOwner,
+        publish_installed_plugin_artifact,
+    )
+
+    live = home / "cache" / "1.0.0"
+    live.mkdir(parents=True)
+    (live / "plugin.json").write_text('{"name":"autoskillit"}')
+    _write_registry(home, live)
+    identity = publish_installed_plugin_artifact(
+        live,
+        semantic_key="autoskillit@autoskillit-local:1.0.0",
+    )
+    InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
+        identity,
+        datetime.now(UTC) + timedelta(hours=6),
+    )
+    return identity
+
+
 class TestVerifyInstallState:
     def test_clean_state_reports_nothing(self, home: Path) -> None:
         from autoskillit.workspace import verify_install_state
@@ -75,27 +102,16 @@ class TestVerifyInstallState:
         assert "retired_install_artifact_shape" in _checks(home)
 
     def test_retiring_entry_the_registry_still_references(self, home: Path) -> None:
-        from datetime import UTC, datetime, timedelta
-
-        from autoskillit.cli._plugin_artifact import (
-            InstalledPluginArtifactRetirementOwner,
-            publish_installed_plugin_artifact,
-        )
-
-        live = home / "cache" / "1.0.0"
-        live.mkdir(parents=True)
-        (live / "plugin.json").write_text('{"name":"autoskillit"}')
-        _write_registry(home, live)
-        identity = publish_installed_plugin_artifact(
-            live,
-            semantic_key="autoskillit@autoskillit-local:1.0.0",
-        )
-        InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
-            identity,
-            datetime.now(UTC) + timedelta(hours=6),
-        )
-
+        _queue_registered_retirement(home)
         assert "retiring_exact_identity_still_registered" in _checks(home)
+
+    def test_launch_invalid_retiring_manifest_is_not_recognized(self, home: Path) -> None:
+        identity = _queue_registered_retirement(home)
+        raw = json.loads(identity.manifest_path.read_text(encoding="utf-8"))
+        raw["unexpected"] = True
+        identity.manifest_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        assert "retiring_exact_identity_still_registered" not in _checks(home)
 
     def test_migrated_legacy_evidence_is_a_warning_not_deletion_authority(
         self,

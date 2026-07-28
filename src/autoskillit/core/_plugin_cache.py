@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
@@ -15,7 +16,7 @@ from typing import IO, Any
 
 import psutil
 
-from .io import read_versioned_json, write_versioned_json
+from .io import directory_tree_digest, read_versioned_json, write_versioned_json
 from .logging import get_logger, log_plugin_artifact_lifecycle
 from .paths import destination_location
 from .runtime.artifact_lease import ArtifactLease, ArtifactLeaseContention
@@ -29,12 +30,26 @@ from .types import (
     RetiringArtifactRecord,
     RetiringCacheReadResult,
     RetiringCacheState,
+    is_canonical_plugin_artifact_digest,
+    is_canonical_plugin_artifact_incarnation_id,
 )
 
 logger = get_logger(__name__)
 
 _ACTIVE_KITCHENS_SCHEMA_VERSION = 1
 _RETIRING_CACHE_SCHEMA_VERSION = 2
+_INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION = 1
+_INSTALLED_ARTIFACT_MANIFEST_FIELDS = frozenset(
+    {
+        "schema_version",
+        "artifact_kind",
+        "semantic_key",
+        "incarnation_id",
+        "artifact_digest",
+        "managed_path",
+        "manifest_path",
+    }
+)
 _RETIRING_RECORD_FIELDS = frozenset(
     {
         "record_id",
@@ -50,6 +65,112 @@ _RETIRING_RECORD_FIELDS = frozenset(
         "schema_version",
     }
 )
+
+
+def read_installed_plugin_artifact_identity(
+    managed_path: Path,
+    *,
+    expected_semantic_key: str | None = None,
+    manifest_path: Path | None = None,
+) -> PluginArtifactIdentity:
+    """Validate one installed artifact using the launch-time identity contract."""
+    supplied_root = Path(managed_path)
+    if not supplied_root.is_absolute():
+        raise PluginArtifactValidationError(
+            f"installed plugin root must be absolute: {supplied_root}"
+        )
+    try:
+        canonical_root = supplied_root.resolve(strict=True)
+        root_stat = canonical_root.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise PluginArtifactValidationError(
+            f"installed plugin root is unavailable: {supplied_root}"
+        ) from exc
+    if supplied_root != canonical_root or not stat.S_ISDIR(root_stat.st_mode):
+        raise PluginArtifactValidationError(
+            f"installed plugin root must be a canonical directory: {supplied_root}"
+        )
+
+    canonical_manifest = canonical_root.parent / (
+        f".{canonical_root.name}.autoskillit-artifact.json"
+    )
+    selected_manifest = canonical_manifest if manifest_path is None else Path(manifest_path)
+    if selected_manifest != canonical_manifest:
+        raise PluginArtifactValidationError(
+            f"installed plugin manifest path is not canonical: {selected_manifest}"
+        )
+    try:
+        manifest_stat = selected_manifest.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation manifest is missing: {selected_manifest}"
+        ) from exc
+    if not stat.S_ISREG(manifest_stat.st_mode):
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation manifest is not a regular file: {selected_manifest}"
+        )
+
+    raw = read_versioned_json(
+        selected_manifest,
+        _INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    )
+    if raw is None:
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation manifest is missing or invalid: {selected_manifest}"
+        )
+    if frozenset(raw) != _INSTALLED_ARTIFACT_MANIFEST_FIELDS:
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation manifest has unexpected fields: {selected_manifest}"
+        )
+    if (
+        type(raw.get("schema_version")) is not int
+        or raw["schema_version"] != _INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION
+    ):
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation manifest schema is invalid: {selected_manifest}"
+        )
+    if raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value:
+        raise PluginArtifactValidationError(
+            f"installed plugin artifact kind is invalid: {selected_manifest}"
+        )
+    scalar_fields = ("semantic_key", "incarnation_id", "artifact_digest")
+    if any(not isinstance(raw.get(field), str) or not raw[field] for field in scalar_fields):
+        raise PluginArtifactValidationError(
+            "installed plugin incarnation manifest has invalid identity fields: "
+            f"{selected_manifest}"
+        )
+    if not is_canonical_plugin_artifact_incarnation_id(raw["incarnation_id"]):
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation is not canonical uuid4 hex: {selected_manifest}"
+        )
+    if not is_canonical_plugin_artifact_digest(raw["artifact_digest"]):
+        raise PluginArtifactValidationError(
+            f"installed plugin artifact digest is invalid: {selected_manifest}"
+        )
+    if expected_semantic_key is not None and raw["semantic_key"] != expected_semantic_key:
+        raise PluginArtifactValidationError(
+            "installed plugin semantic identity does not match the current transaction"
+        )
+    if raw.get("managed_path") != str(canonical_root):
+        raise PluginArtifactValidationError("installed plugin managed path identity mismatch")
+    if raw.get("manifest_path") != str(canonical_manifest):
+        raise PluginArtifactValidationError("installed plugin manifest path identity mismatch")
+    try:
+        observed_digest = directory_tree_digest(canonical_root)
+    except (OSError, ValueError) as exc:
+        raise PluginArtifactValidationError(
+            f"installed plugin artifact cannot be digested: {canonical_root}"
+        ) from exc
+    if raw["artifact_digest"] != observed_digest:
+        raise PluginArtifactValidationError("installed plugin content digest mismatch")
+    return PluginArtifactIdentity(
+        semantic_key=raw["semantic_key"],
+        incarnation_id=raw["incarnation_id"],
+        manifest_schema_version=_INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        artifact_digest=raw["artifact_digest"],
+        managed_path=canonical_root,
+        manifest_path=canonical_manifest,
+    )
 
 
 def _autoskillit_home() -> Path:

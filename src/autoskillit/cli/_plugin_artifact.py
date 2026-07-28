@@ -27,13 +27,11 @@ from autoskillit.core import (
     directory_tree_digest,
     due_retiring_records,
     get_logger,
-    is_canonical_plugin_artifact_digest,
-    is_canonical_plugin_artifact_incarnation_id,
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
     new_plugin_artifact_incarnation_id,
+    read_installed_plugin_artifact_identity,
     read_retiring_cache,
-    read_versioned_json,
     write_versioned_json,
 )
 
@@ -41,18 +39,6 @@ logger = get_logger(__name__)
 
 _SCHEMA_VERSION = 1
 _ARTIFACT_KIND = "installed_plugin"
-_MANIFEST_FIELDS = frozenset(
-    {
-        "schema_version",
-        "artifact_kind",
-        "semantic_key",
-        "incarnation_id",
-        "artifact_digest",
-        "managed_path",
-        "manifest_path",
-    }
-)
-
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend, PluginArtifactAuthority
     from autoskillit.workspace import EffectiveSkillCatalog
@@ -451,86 +437,18 @@ def _read_and_validate_identity(
     *,
     expected_semantic_key: str,
 ) -> PluginArtifactIdentity:
-    manifest_path = installed_artifact_manifest_path(managed_path)
-    try:
-        manifest_stat = manifest_path.stat(follow_symlinks=False)
-    except OSError as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest is missing: {manifest_path}"
-        ) from exc
-    if not stat.S_ISREG(manifest_stat.st_mode):
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest is not a regular file: {manifest_path}"
-        )
-    raw = read_versioned_json(manifest_path, _SCHEMA_VERSION)
-    if raw is None:
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest is missing or invalid: {manifest_path}"
-        )
-    if frozenset(raw) != _MANIFEST_FIELDS:
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest has unexpected fields: {manifest_path}"
-        )
-    if (
-        isinstance(raw.get("schema_version"), bool)
-        or not isinstance(raw.get("schema_version"), int)
-        or raw["schema_version"] != _SCHEMA_VERSION
-    ):
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest schema is invalid: {manifest_path}"
-        )
-    if raw.get("artifact_kind") != _ARTIFACT_KIND:
-        raise PluginArtifactValidationError(
-            f"installed plugin artifact kind is invalid: {manifest_path}"
-        )
-    scalar_fields = ("semantic_key", "incarnation_id", "artifact_digest")
-    if any(not isinstance(raw.get(field), str) or not raw[field] for field in scalar_fields):
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation manifest has invalid identity fields: {manifest_path}"
-        )
-    incarnation_id = raw["incarnation_id"]
-    if not is_canonical_plugin_artifact_incarnation_id(incarnation_id):
-        raise PluginArtifactValidationError(
-            f"installed plugin incarnation is not canonical uuid4 hex: {manifest_path}"
-        )
-    artifact_digest = raw["artifact_digest"]
-    if not is_canonical_plugin_artifact_digest(artifact_digest):
-        raise PluginArtifactValidationError(
-            f"installed plugin artifact digest is invalid: {manifest_path}"
-        )
-    if raw["semantic_key"] != expected_semantic_key:
-        raise PluginArtifactValidationError(
-            "installed plugin semantic identity does not match the current transaction"
-        )
-    if raw.get("managed_path") != str(managed_path):
-        raise PluginArtifactValidationError("installed plugin managed path identity mismatch")
-    if raw.get("manifest_path") != str(manifest_path):
-        raise PluginArtifactValidationError("installed plugin manifest path identity mismatch")
-    observed_digest = _complete_tree_digest(managed_path)
-    if raw["artifact_digest"] != observed_digest:
-        raise PluginArtifactValidationError("installed plugin content digest mismatch")
-    return PluginArtifactIdentity(
-        semantic_key=raw["semantic_key"],
-        incarnation_id=raw["incarnation_id"],
-        manifest_schema_version=_SCHEMA_VERSION,
-        artifact_digest=raw["artifact_digest"],
-        managed_path=managed_path,
-        manifest_path=manifest_path,
+    return read_installed_plugin_artifact_identity(
+        managed_path,
+        expected_semantic_key=expected_semantic_key,
+        manifest_path=installed_artifact_manifest_path(managed_path),
     )
 
 
 def _read_installed_plugin_identity(managed_path: Path) -> PluginArtifactIdentity:
     """Validate an installed identity whose semantic key is persisted on disk."""
-    managed_path = _canonical_installed_root(managed_path)
-    manifest_path = installed_artifact_manifest_path(managed_path)
-    raw = read_versioned_json(manifest_path, _SCHEMA_VERSION)
-    if raw is None or not isinstance(raw.get("semantic_key"), str):
-        raise PluginArtifactValidationError(
-            f"installed plugin semantic identity is unavailable: {manifest_path}"
-        )
-    return _read_and_validate_identity(
+    return read_installed_plugin_artifact_identity(
         managed_path,
-        expected_semantic_key=raw["semantic_key"],
+        manifest_path=installed_artifact_manifest_path(managed_path),
     )
 
 

@@ -38,13 +38,13 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     DIRECT_INSTALL_CACHE_SUBDIR,
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactKind,
+    PluginArtifactValidationError,
     RetiringArtifactRecord,
     RetiringCacheState,
     Severity,
-    directory_tree_digest,
     get_logger,
+    read_installed_plugin_artifact_identity,
     read_retiring_cache,
-    read_versioned_json,
     registered_install_paths,
 )
 
@@ -194,24 +194,14 @@ def _record_matches_current_installed_artifact(
     record: RetiringArtifactRecord,
 ) -> bool:
     try:
-        raw = read_versioned_json(
-            record.manifest_path,
-            record.manifest_schema_version,
+        identity = read_installed_plugin_artifact_identity(
+            record.managed_path,
+            expected_semantic_key=record.semantic_key,
+            manifest_path=record.manifest_path,
         )
-        if raw is None:
-            return False
-        if (
-            raw.get("artifact_kind") != PluginArtifactKind.INSTALLED_PLUGIN.value
-            or raw.get("semantic_key") != record.semantic_key
-            or raw.get("incarnation_id") != record.incarnation_id
-            or raw.get("artifact_digest") != record.artifact_digest
-            or raw.get("managed_path") != str(record.managed_path)
-            or raw.get("manifest_path") != str(record.manifest_path)
-        ):
-            return False
-        return directory_tree_digest(record.managed_path) == record.artifact_digest
-    except (OSError, ValueError):
+    except PluginArtifactValidationError:
         return False
+    return identity == record.identity
 
 
 def _has_retired_shape(artifact: Path, shape: str) -> bool:

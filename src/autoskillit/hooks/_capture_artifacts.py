@@ -758,7 +758,9 @@ def _emit_cleanup_failure(detail: str) -> None:
 def _sweep_after_runner(requested_cwd: str) -> None:
     try:
         with open_capture_lifecycle(requested_cwd, create=False) as lifecycle:
-            lifecycle.sweep()
+            outcome = lifecycle.sweep()
+            if outcome.errors:
+                _emit_cleanup_failure(f"cleanup deferred after {outcome.errors} errors")
     except CaptureSetupError:
         return
     except (CaptureLifecycleError, OSError) as exc:

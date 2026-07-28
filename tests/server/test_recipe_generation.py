@@ -137,6 +137,11 @@ def _generation(
     )
 
 
+def test_record_rejects_empty_kitchen_id() -> None:
+    with pytest.raises(ValueError, match="kitchen_id must be a non-empty string"):
+        _record(kitchen_id="")
+
+
 def test_record_owns_canonical_immutable_primitive_copies() -> None:
     payload = {"nested": {"items": [1, 2]}}
     compile_inputs = {"names": ["first"]}

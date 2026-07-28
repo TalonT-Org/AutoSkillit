@@ -149,8 +149,8 @@ class RecipeGenerationRecord:
     surface_bindings: Mapping[str, RecipeArtifactGeneration] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.kitchen_id, str):
-            raise TypeError("RecipeGenerationRecord.kitchen_id must be a string")
+        if not isinstance(self.kitchen_id, str) or not self.kitchen_id:
+            raise ValueError("RecipeGenerationRecord.kitchen_id must be a non-empty string")
         for field_name in ("normalized_compile_key", "recipe_name", "execution_id"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value:

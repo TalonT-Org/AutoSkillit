@@ -25,11 +25,12 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from autoskillit.hooks._capture import _sweep as _capture_sweep
     from autoskillit.hooks._capture import _types as _capture_types
 else:
-    _capture_types = importlib.import_module(
-        f"{__package__}._capture._types" if __package__ else "_capture._types"
-    )
+    _CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
+    _capture_sweep = importlib.import_module(f"{_CAPTURE_PACKAGE}._sweep")
+    _capture_types = importlib.import_module(f"{_CAPTURE_PACKAGE}._types")
 
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 _ObservedArtifact = _capture_types.ObservedArtifact
@@ -67,9 +68,7 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
 _STAGING_NAME_RE = re.compile(r"^\.capture-staging-[0-9a-f]{16}-[0-9a-f]{16}$")
 _QUARANTINE_NAME_RE = re.compile(r"^\.capture-quarantine-[0-9a-f]{16}-[0-9a-f]{16}$")
-_CLOEXEC = os.O_CLOEXEC
-_NOFOLLOW = os.O_NOFOLLOW
-_NONBLOCK = os.O_NONBLOCK
+_CLOEXEC, _NOFOLLOW, _NONBLOCK = os.O_CLOEXEC, os.O_NOFOLLOW, os.O_NONBLOCK
 _CONTROL_FLAGS = os.O_RDWR | os.O_CREAT | _CLOEXEC | _NOFOLLOW
 _OBSERVE_FLAGS = os.O_RDWR | _CLOEXEC | _NOFOLLOW | _NONBLOCK
 _ARTIFACT_FLAGS = os.O_RDWR | os.O_CREAT | os.O_EXCL | _CLOEXEC | _NOFOLLOW
@@ -744,38 +743,6 @@ class CaptureLifecycleStore:
                 raise _WriterLive from exc
             raise CaptureLifecycleError("artifact lease capability failure") from exc
 
-    def _create_verified_recovery_link(
-        self,
-        source: str,
-        destination: str,
-        expected: tuple[int, int],
-        *,
-        valid_name: re.Pattern[str],
-    ) -> _ObservedArtifact:
-        os.link(
-            source,
-            destination,
-            src_dir_fd=self._root_fd,
-            dst_dir_fd=self._root_fd,
-            follow_symlinks=False,
-        )
-        try:
-            linked = self._observe(destination, expected, valid_name=valid_name)
-            if linked is None or linked.nlink != 2:
-                if linked is not None:
-                    os.close(linked.fd)
-                raise _Tampered
-            return linked
-        except BaseException:
-            try:
-                os.unlink(destination, dir_fd=self._root_fd)
-                os.fsync(self._root_fd)
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                raise CaptureLifecycleError("cannot roll back recovery link") from exc
-            raise
-
     def _normalize_abandoned(
         self,
         record: CaptureLifecycleRecord,
@@ -809,11 +776,24 @@ class CaptureLifecycleStore:
                 os.fsync(self._root_fd)
             elif staging is not None:
                 try:
-                    linked = self._create_verified_recovery_link(
-                        record.staging_name,
-                        record.public_name,
-                        identity,
-                        valid_name=_PUBLIC_NAME_RE,
+                    linked = _capture_sweep.create_verified_recovery_link(
+                        link=lambda: os.link(
+                            record.staging_name,
+                            record.public_name,
+                            src_dir_fd=self._root_fd,
+                            dst_dir_fd=self._root_fd,
+                            follow_symlinks=False,
+                        ),
+                        observe=lambda: self._observe(
+                            record.public_name,
+                            identity,
+                            valid_name=_PUBLIC_NAME_RE,
+                        ),
+                        rollback=lambda: os.unlink(
+                            record.public_name,
+                            dir_fd=self._root_fd,
+                        ),
+                        sync=lambda: os.fsync(self._root_fd),
                     )
                 except FileExistsError as exc:
                     raise _Tampered from exc
@@ -877,11 +857,24 @@ class CaptureLifecycleStore:
                 ):
                     raise _Tampered
             elif public is not None:
-                linked = self._create_verified_recovery_link(
-                    record.public_name,
-                    record.quarantine_name,
-                    expected,
-                    valid_name=_QUARANTINE_NAME_RE,
+                linked = _capture_sweep.create_verified_recovery_link(
+                    link=lambda: os.link(
+                        record.public_name,
+                        record.quarantine_name,
+                        src_dir_fd=self._root_fd,
+                        dst_dir_fd=self._root_fd,
+                        follow_symlinks=False,
+                    ),
+                    observe=lambda: self._observe(
+                        record.quarantine_name,
+                        expected,
+                        valid_name=_QUARANTINE_NAME_RE,
+                    ),
+                    rollback=lambda: os.unlink(
+                        record.quarantine_name,
+                        dir_fd=self._root_fd,
+                    ),
+                    sync=lambda: os.fsync(self._root_fd),
                 )
                 os.close(linked.fd)
             if public is not None:
@@ -981,14 +974,11 @@ class CaptureLifecycleStore:
     def _due_ids(self, now: float) -> list[str]:
         with self._locked(blocking=False):
             records, _generation, _size = self._load_locked()
-        due = [
-            record
-            for record in records.values()
-            if record.state not in {CaptureState.DELETED, CaptureState.TAMPERED}
-            and record.next_attempt_at <= now
-        ]
-        due.sort(key=lambda record: (record.next_attempt_at, record.capture_id))
-        return [record.capture_id for record in due]
+        return _capture_sweep.due_capture_ids(
+            records.values(),
+            now,
+            {CaptureState.DELETED, CaptureState.TAMPERED},
+        )
 
     def sweep(
         self,
@@ -998,54 +988,11 @@ class CaptureLifecycleStore:
     ) -> CaptureCleanupOutcome:
         if max_items <= 0 or max_duration_seconds <= 0:
             raise CaptureLifecycleError("cleanup bounds must be positive")
-        started = self._monotonic()
-        examined = deleted = deleted_bytes = writer_live = 0
-        not_due = tampered = errors = retry_count = 0
-        try:
-            due_ids = self._due_ids(self._wall_clock())
-        except _LockContended:
-            return CaptureCleanupOutcome(
-                remaining_due=1,
-                duration=max(0.0, self._monotonic() - started),
-            )
-        lock_contended = False
-        for capture_id in due_ids[:max_items]:
-            if self._monotonic() - started >= max_duration_seconds:
-                break
-            try:
-                result, logical_bytes, retries = self._sweep_one(capture_id)
-            except _LockContended:
-                lock_contended = True
-                break
-            examined += 1
-            deleted_bytes += logical_bytes
-            retry_count += retries
-            if result == "deleted":
-                deleted += 1
-            elif result == "writer_live":
-                writer_live += 1
-            elif result == "tampered":
-                tampered += 1
-            elif result == "error":
-                errors += 1
-            else:
-                not_due += 1
-        if lock_contended:
-            remaining_due = max(1, len(due_ids) - examined)
-        else:
-            try:
-                remaining_due = len(self._due_ids(self._wall_clock()))
-            except _LockContended:
-                remaining_due = max(1, len(due_ids) - examined)
-        return CaptureCleanupOutcome(
-            examined=examined,
-            deleted=deleted,
-            deleted_bytes=deleted_bytes,
-            writer_live=writer_live,
-            not_due=not_due,
-            tampered=tampered,
-            errors=errors,
-            retry_count=retry_count,
-            remaining_due=remaining_due,
-            duration=max(0.0, self._monotonic() - started),
+        return _capture_sweep.run_bounded_sweep(
+            max_items=max_items,
+            max_duration_seconds=max_duration_seconds,
+            monotonic=self._monotonic,
+            wall_clock=self._wall_clock,
+            due_ids=self._due_ids,
+            sweep_one=self._sweep_one,
         )

@@ -87,7 +87,7 @@ def _seed_finalized_captures(
         artifact = create_capture_artifact(root, capture_id, store)
         store.finalize_capture(capture_id, size=index + 1, sha256=_DIGEST, failed=False)
         names.append(artifact.name)
-        artifact.close()
+        artifact.close_artifact_fd()
         artifact.release_lease()
     return names
 
@@ -109,7 +109,7 @@ def test_managed_artifact_is_published_only_after_durable_identity(tmp_path: Pat
         assert (_capture_dir(project) / artifact.name).is_file()
         assert not (_capture_dir(project) / record.staging_name).exists()
     finally:
-        artifact.close()
+        artifact.close_artifact_fd()
         artifact.release_lease()
         root.close()
         anchor.close()
@@ -291,7 +291,7 @@ def test_quarantine_replacement_is_preserved_as_tampered(
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store, artifact = _finalized_capture(project, clock)
-    artifact.close()
+    artifact.close_artifact_fd()
     artifact.release_lease()
     clock.advance(3601)
     real_unlink = os.unlink
@@ -345,7 +345,7 @@ def test_quiet_live_writer_survives_past_abandonment_deadline(tmp_path: Path) ->
         assert outcome.deleted == 0
         assert (_capture_dir(project) / artifact.name).exists()
     finally:
-        artifact.close()
+        artifact.close_artifact_fd()
         artifact.release_lease()
         root.close()
         anchor.close()
@@ -380,7 +380,7 @@ def test_live_writer_sweep_closes_observation_descriptor(
         with pytest.raises(OSError):
             os.fstat(observed_fd)
     finally:
-        artifact.close()
+        artifact.close_artifact_fd()
         artifact.release_lease()
         root.close()
         anchor.close()
@@ -413,7 +413,7 @@ def test_writer_lease_is_visible_to_an_independent_process(tmp_path: Path) -> No
         )
         assert completed.returncode == 2, completed.stderr
     finally:
-        artifact.close()
+        artifact.close_artifact_fd()
         artifact.release_lease()
         root.close()
         anchor.close()
@@ -423,7 +423,7 @@ def test_finalized_capture_ttl_begins_at_terminal_commit(tmp_path: Path) -> None
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store, artifact = _finalized_capture(project, clock)
-    artifact.close()
+    artifact.close_artifact_fd()
     artifact.release_lease()
     try:
         clock.advance(3599)
@@ -487,7 +487,7 @@ def test_unlocked_abandoned_writer_is_recovered_and_deleted(tmp_path: Path) -> N
     clock = _Clock()
     anchor, root, store = _open_store(project, clock)
     artifact = create_capture_artifact(root, _CAPTURE_ID, store)
-    artifact.close()
+    artifact.close_artifact_fd()
     artifact.release_lease()
     try:
         clock.advance(3601)
@@ -568,7 +568,7 @@ def test_quarantine_retry_reuses_committed_phase(
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store, artifact = _finalized_capture(project, clock)
-    artifact.close()
+    artifact.close_artifact_fd()
     artifact.release_lease()
     clock.advance(3601)
     real_unlink = os.unlink

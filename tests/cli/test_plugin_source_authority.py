@@ -76,7 +76,9 @@ class TestDanglingInstallPathIsHarmless:
         self, tmp_path: Path, monkeypatch
     ) -> None:
         """`cook` shares make_context's authority; exercise it the way cook calls it."""
-        from autoskillit.core import PluginLoadMode
+        from autoskillit.core import (
+            PluginLoadMode,
+        )
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import project_default_plugin_authority
         from tests.contracts._projection_helpers import session_catalog
@@ -267,7 +269,12 @@ class TestInstalledPluginArtifactAuthority:
             installed_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
-        from autoskillit.core import PluginLoadMode
+        from autoskillit.core import (
+            INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
+            INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            PluginArtifactKind,
+            PluginLoadMode,
+        )
 
         root = (tmp_path / "cache" / "autoskillit" / "1.2.3").resolve()
         root.mkdir(parents=True)
@@ -279,6 +286,14 @@ class TestInstalledPluginArtifactAuthority:
         assert published.manifest_path == manifest_path
         assert manifest_path.parent == root.parent
         assert not manifest_path.is_relative_to(root)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert frozenset(manifest) == INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS
+        assert (
+            manifest["schema_version"]
+            == INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION
+            == published.manifest_schema_version
+        )
+        assert manifest["artifact_kind"] == PluginArtifactKind.INSTALLED_PLUGIN.value
 
         binding = InstalledPluginArtifactAuthority(
             root,

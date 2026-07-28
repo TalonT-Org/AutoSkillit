@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     DIRECT_INSTALL_CACHE_SUBDIR,
+    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ArtifactLease,
     PluginArtifactIdentity,
     PluginArtifactKind,
@@ -27,6 +28,7 @@ from autoskillit.core import (
     directory_tree_digest,
     due_retiring_records,
     get_logger,
+    installed_plugin_artifact_manifest_payload,
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
     new_plugin_artifact_incarnation_id,
@@ -37,8 +39,6 @@ from autoskillit.core import (
 
 logger = get_logger(__name__)
 
-_SCHEMA_VERSION = 1
-_ARTIFACT_KIND = "installed_plugin"
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend, PluginArtifactAuthority
     from autoskillit.workspace import EffectiveSkillCatalog
@@ -216,29 +216,22 @@ def _publish_installed_plugin_artifact_locked(
     identity = PluginArtifactIdentity(
         semantic_key=semantic_key,
         incarnation_id=new_plugin_artifact_incarnation_id(),
-        manifest_schema_version=_SCHEMA_VERSION,
+        manifest_schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
         artifact_digest=_complete_tree_digest(managed_path),
         managed_path=managed_path,
         manifest_path=manifest_path,
     )
     write_versioned_json(
         manifest_path,
-        {
-            "artifact_kind": _ARTIFACT_KIND,
-            "semantic_key": identity.semantic_key,
-            "incarnation_id": identity.incarnation_id,
-            "artifact_digest": identity.artifact_digest,
-            "managed_path": str(identity.managed_path),
-            "manifest_path": str(identity.manifest_path),
-        },
-        schema_version=_SCHEMA_VERSION,
+        installed_plugin_artifact_manifest_payload(identity),
+        schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
         strict_durability=True,
     )
     log_plugin_artifact_lifecycle(
         logger,
         action="publish",
         outcome="succeeded",
-        artifact_kind=_ARTIFACT_KIND,
+        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
         semantic_key=identity.semantic_key,
         incarnation=identity.incarnation_id,
     )
@@ -288,7 +281,7 @@ class InstalledPluginArtifactAuthority:
                 logger,
                 action="acquire",
                 outcome="succeeded",
-                artifact_kind=_ARTIFACT_KIND,
+                artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
                 semantic_key=identity.semantic_key,
                 incarnation=identity.incarnation_id,
             )
@@ -300,7 +293,7 @@ class InstalledPluginArtifactAuthority:
                 _lease=PluginArtifactLifecycleLease(
                     lease,
                     logger=logger,
-                    artifact_kind=_ARTIFACT_KIND,
+                    artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
                     semantic_key=identity.semantic_key,
                     incarnation=identity.incarnation_id,
                 ),
@@ -310,7 +303,7 @@ class InstalledPluginArtifactAuthority:
                 logger,
                 action="acquire",
                 outcome="failed_validation",
-                artifact_kind=_ARTIFACT_KIND,
+                artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
                 semantic_key=self._semantic_key,
                 incarnation="unknown",
             )

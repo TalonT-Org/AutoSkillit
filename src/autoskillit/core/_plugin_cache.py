@@ -45,8 +45,8 @@ _RETIRING_CACHE_V2_FIELDS = frozenset(
         "legacy_evidence",
     }
 )
-_INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION = 1
-_INSTALLED_ARTIFACT_MANIFEST_FIELDS = frozenset(
+INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION = 1
+INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS = frozenset(
     {
         "schema_version",
         "artifact_kind",
@@ -72,6 +72,24 @@ _RETIRING_RECORD_FIELDS = frozenset(
         "schema_version",
     }
 )
+
+
+def installed_plugin_artifact_manifest_payload(
+    identity: PluginArtifactIdentity,
+) -> dict[str, object]:
+    """Return the canonical installed-plugin manifest payload."""
+    if identity.manifest_schema_version != INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION:
+        raise PluginArtifactValidationError(
+            "installed plugin identity uses an unsupported manifest schema"
+        )
+    return {
+        "artifact_kind": PluginArtifactKind.INSTALLED_PLUGIN.value,
+        "semantic_key": identity.semantic_key,
+        "incarnation_id": identity.incarnation_id,
+        "artifact_digest": identity.artifact_digest,
+        "managed_path": str(identity.managed_path),
+        "manifest_path": str(identity.manifest_path),
+    }
 
 
 def read_installed_plugin_artifact_identity(
@@ -119,19 +137,19 @@ def read_installed_plugin_artifact_identity(
 
     raw = read_versioned_json(
         selected_manifest,
-        _INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
     if raw is None:
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest is missing or invalid: {selected_manifest}"
         )
-    if frozenset(raw) != _INSTALLED_ARTIFACT_MANIFEST_FIELDS:
+    if frozenset(raw) != INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS:
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest has unexpected fields: {selected_manifest}"
         )
     if (
         type(raw.get("schema_version")) is not int
-        or raw["schema_version"] != _INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION
+        or raw["schema_version"] != INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION
     ):
         raise PluginArtifactValidationError(
             f"installed plugin incarnation manifest schema is invalid: {selected_manifest}"
@@ -173,7 +191,7 @@ def read_installed_plugin_artifact_identity(
     return PluginArtifactIdentity(
         semantic_key=raw["semantic_key"],
         incarnation_id=raw["incarnation_id"],
-        manifest_schema_version=_INSTALLED_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+        manifest_schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
         artifact_digest=raw["artifact_digest"],
         managed_path=canonical_root,
         manifest_path=canonical_manifest,

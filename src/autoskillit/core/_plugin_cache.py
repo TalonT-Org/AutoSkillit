@@ -684,6 +684,12 @@ class PluginArtifactRetirementEngine:
                 RetirementOutcome.DEFERRED_CONTENDED,
                 detail=str(exc),
             )
+        except (OSError, RuntimeError) as exc:
+            return self._log_reclaim(
+                record,
+                RetirementOutcome.DEFERRED_IO_ERROR,
+                detail=str(exc),
+            )
         try:
             with _InstallLock():
                 state = read_retiring_cache()

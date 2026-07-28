@@ -155,6 +155,34 @@ def test_installed_reclaim_io_failure_stays_queued_for_retry(
     }
 
 
+@pytest.mark.parametrize("error", [PermissionError("denied"), RuntimeError("invalid sidecar")])
+def test_installed_reclaim_lease_failure_stays_queued_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+) -> None:
+    import autoskillit.core._plugin_cache as plugin_cache
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    append_result = owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
+
+    def fail_acquire(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(plugin_cache.ArtifactLease, "acquire_exclusive", fail_acquire)
+
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
+    assert identity.managed_path.is_dir()
+    assert append_result.record_id in {
+        queued.record_id for queued in read_retiring_cache().records
+    }
+
+
 def test_installed_lifecycle_events_use_the_shared_schema(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

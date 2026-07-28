@@ -731,11 +731,10 @@ def test_exemption_overrides_envelope_for_exempt_surface_within_ceiling(tool_ctx
     ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
     # Payload whose ordinary JSON exceeds the ordinary_limit (in bytes) but stays
     # under the 195,000-byte exemption ceiling.
-    oversized_content = "x" * (ordinary_limit * 4 + 10_000)
+    ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+    oversized_content = "x" * (min(ceiling - 1_000, ordinary_limit * 4 + 5_000))
     assert len(oversized_content.encode("utf-8")) > ordinary_limit * 4
-    assert len(oversized_content.encode("utf-8")) < (
-        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
-    )
+    assert len(oversized_content.encode("utf-8")) < ceiling
 
     finalized = finalize_recipe_delivery(
         _payload(oversized_content),

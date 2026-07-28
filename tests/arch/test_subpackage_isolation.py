@@ -1055,7 +1055,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "durable delivery commit without introducing a second finalization path",
     ),
     "tools_kitchen.py": (
-        1670,
+        1700,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1099,7 +1099,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "resolve_general_output_token_limit + BackendCapabilities isinstance guard + "
         "maybe_envelope_recipe_response call (#4304 Part B, +24 net lines)"
         "; compiled recipe binding publication and execution-lifecycle cleanup across "
-        "recipe load, kitchen open, and kitchen close (+13 net lines)",
+        "recipe load, kitchen open, and kitchen close (+13 net lines)"
+        "; #4399 close→open visibility restore: mcp.enable() refresh in open_kitchen's "
+        "_skip_notify branch to override prior global mcp.disable() from close_kitchen (+2 lines)",
     ),
     "tools_execution.py": (
         1800,

@@ -144,8 +144,10 @@ async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, mo
     mock_ctx.reset_visibility = AsyncMock()
 
     # close_kitchen uses real _close_kitchen_handler so gate_infrastructure_ready
-    # transition (True → False) is authentic.
-    await close_kitchen(ctx=mock_ctx)
+    # transition (True → False) is authentic. Patch _get_ctx so _close_kitchen_handler
+    # operates on mock_ctx (the function reads from _get_ctx, not the ctx parameter).
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        await close_kitchen(ctx=mock_ctx)
     assert mock_ctx.gate_infrastructure_ready is False
 
     tools_after_close = {t.name for t in await mcp.list_tools()}

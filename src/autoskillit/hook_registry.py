@@ -540,6 +540,10 @@ def hook_applies_to_backend(
     session_scope: Literal["headless", "interactive"],
 ) -> bool:
     """Return whether a hook is reachable for one deployed backend/session scope."""
+    if backend not in ("claude_code", "codex"):
+        raise ValueError(f"unsupported hook backend: {backend!r}")
+    if session_scope not in ("headless", "interactive"):
+        raise ValueError(f"unsupported hook session scope: {session_scope!r}")
     match backend:
         case "codex":
             return hook_def.session_scope != "interactive_only" and hook_def.codex_status not in {

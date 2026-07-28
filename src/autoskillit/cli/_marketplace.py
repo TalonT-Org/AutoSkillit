@@ -405,19 +405,66 @@ def install(*, scope: str = "user") -> bool:
     )
 
     try:
-        marketplace_dir = _ensure_marketplace()
-        print(f"Marketplace prepared: {marketplace_dir}")
-
-        _ensure_workspace_ready()
-
         target_writer = ArtifactLease.acquire_exclusive(
             installed_artifact_lock_path(_installed_plugin_root()),
             blocking=False,
         )
     except ArtifactLeaseContention as exc:
-        snapshot.rollback()
         print("Installed plugin is in use by an active session; retry after it exits.")
         raise SystemExit(1) from exc
+    try:
+        marketplace_dir = _ensure_marketplace()
+        print(f"Marketplace prepared: {marketplace_dir}")
+
+        _ensure_workspace_ready()
+
+        with _InstallLock():
+            snapshot.stage_target_root()
+        _clear_plugin_cache(on_retirement_created=snapshot.track_retirement)
+
+        # Register the marketplace (idempotent)
+        result = subprocess.run(
+            ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=30,
+            pass_fds=(),
+        )
+        if result.returncode != 0:
+            raise _InstallFailed(f"Failed to register marketplace: {result.stderr.strip()}")
+        print("Marketplace registered.")
+
+        # Install the plugin
+        result = subprocess.run(
+            ["claude", "plugin", "install", plugin_ref, "--scope", scope],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=30,
+            pass_fds=(),
+        )
+        if result.returncode != 0:
+            raise _InstallFailed(f"Failed to install plugin: {result.stderr.strip()}")
+        from autoskillit import __version__
+        from autoskillit.cli._plugin_artifact import (
+            installed_plugin_semantic_key,
+            publish_installed_plugin_artifact,
+        )
+
+        try:
+            with _InstallLock():
+                publish_installed_plugin_artifact(
+                    _installed_plugin_root(),
+                    semantic_key=installed_plugin_semantic_key(
+                        plugin_ref,
+                        __version__,
+                    ),
+                    _owned_exclusive_lease=target_writer,
+                )
+        except PluginArtifactPublicationError as exc:
+            raise _InstallFailed(f"Failed to publish installed plugin identity: {exc}") from exc
+        snapshot.commit()
     except _InstallFailed as exc:
         snapshot.rollback()
         print(str(exc))
@@ -425,66 +472,8 @@ def install(*, scope: str = "user") -> bool:
     except BaseException:
         snapshot.rollback()
         raise
-    else:
-        try:
-            with _InstallLock():
-                snapshot.stage_target_root()
-            _clear_plugin_cache(on_retirement_created=snapshot.track_retirement)
-
-            # Register the marketplace (idempotent)
-            result = subprocess.run(
-                ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=30,
-                pass_fds=(),
-            )
-            if result.returncode != 0:
-                raise _InstallFailed(f"Failed to register marketplace: {result.stderr.strip()}")
-            print("Marketplace registered.")
-
-            # Install the plugin
-            result = subprocess.run(
-                ["claude", "plugin", "install", plugin_ref, "--scope", scope],
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=30,
-                pass_fds=(),
-            )
-            if result.returncode != 0:
-                raise _InstallFailed(f"Failed to install plugin: {result.stderr.strip()}")
-            from autoskillit import __version__
-            from autoskillit.cli._plugin_artifact import (
-                installed_plugin_semantic_key,
-                publish_installed_plugin_artifact,
-            )
-
-            try:
-                with _InstallLock():
-                    publish_installed_plugin_artifact(
-                        _installed_plugin_root(),
-                        semantic_key=installed_plugin_semantic_key(
-                            plugin_ref,
-                            __version__,
-                        ),
-                        _owned_exclusive_lease=target_writer,
-                    )
-            except PluginArtifactPublicationError as exc:
-                raise _InstallFailed(
-                    f"Failed to publish installed plugin identity: {exc}"
-                ) from exc
-            snapshot.commit()
-        except _InstallFailed as exc:
-            snapshot.rollback()
-            print(str(exc))
-            sys.exit(1)
-        except BaseException:
-            snapshot.rollback()
-            raise
-        finally:
-            target_writer.close()
+    finally:
+        target_writer.close()
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
 

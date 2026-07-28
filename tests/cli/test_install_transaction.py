@@ -199,9 +199,18 @@ class TestRollbackOnFailure:
         monkeypatch.setattr(
             _marketplace,
             "_ensure_marketplace",
-            lambda: tmp_path / ".autoskillit" / "marketplace",
+            lambda: pytest.fail("marketplace mutation started before target lease ownership"),
         )
-        monkeypatch.setattr(_marketplace, "_ensure_workspace_ready", lambda: None)
+        monkeypatch.setattr(
+            _marketplace,
+            "_ensure_workspace_ready",
+            lambda: pytest.fail("workspace mutation started before target lease ownership"),
+        )
+        monkeypatch.setattr(
+            _marketplace._InstallSnapshot,
+            "rollback",
+            lambda _snapshot: pytest.fail("contention rolled back unowned shared state"),
+        )
         target = _seed_installed_state(tmp_path, __version__)
         marker = target / "must-survive"
         marker.write_text("leased live tree")

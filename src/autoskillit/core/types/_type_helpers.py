@@ -436,9 +436,12 @@ _INLINE_CODE_RE = re.compile(r"`[^`]*`")
 
 def strip_markdown_code_regions(text: str) -> str:
     """Remove fenced code blocks and inline code spans from markdown text."""
-    text = _CODE_BLOCK_RE.sub("", text)
-    text = _INLINE_CODE_RE.sub("", text)
-    return text
+    while True:
+        stripped = _CODE_BLOCK_RE.sub("", text)
+        stripped = _INLINE_CODE_RE.sub("", stripped)
+        if stripped == text:
+            return stripped
+        text = stripped
 
 
 def detect_body_marker(body: str, marker: str) -> bool:

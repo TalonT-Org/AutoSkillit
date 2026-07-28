@@ -192,6 +192,7 @@ def test_prepare_generation_rejects_non_finite_compile_values(tool_ctx) -> None:
 
 
 def test_compile_identity_and_artifact_share_one_source_projection(tool_ctx) -> None:
+    tool_ctx.kitchen_id = "compile-identity"
     payload = _payload()
     payload["custom_generation_input"] = {"value": 3}
     payload["initialization_id"] = "caller-owned-stale-id"
@@ -571,7 +572,7 @@ def test_persistence_collision_checks_use_bounded_descriptor_reads(
         ("producer_tool", "invalid"),
         ("payload_sha256", "sha256:" + ("0" * 64)),
         ("artifact_blob_sha256", "sha256:" + ("1" * 64)),
-        ("artifact_blob_size_bytes", 1),
+        ("artifact_blob_size_bytes", 999_999),
         ("body_sha256", "sha256:" + ("2" * 64)),
         ("body_size_bytes", 1),
     ],

@@ -172,8 +172,8 @@ class RecipeArtifactGeneration:
             raise ValueError("artifact_blob_size_bytes is outside supported bounds")
         if not 0 <= self.body_size_bytes <= self.artifact_blob_size_bytes:
             raise ValueError("body_size_bytes must fit within the artifact blob")
-        if not 0 < self.flow_size_bytes <= self.artifact_blob_size_bytes:
-            raise ValueError("flow_size_bytes must fit within the artifact blob")
+        if self.flow_size_bytes <= 0:
+            raise ValueError("flow_size_bytes must be positive")
         if self.flow_record_count <= 0:
             raise ValueError("flow_record_count must be positive")
 

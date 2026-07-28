@@ -457,19 +457,9 @@ async def load_recipe(
                     stage="validate_result",
                 )
                 return _validation_err
-            if not ingredients_only:
+            if not ingredients_only and result.get("valid", False):
                 if _finalized_projection is None:
-                    logger.error(
-                        "load_recipe_fail_closed",
-                        tool="load_recipe",
-                        stage="finalized_projection",
-                    )
-                    return json.dumps(
-                        {
-                            "success": False,
-                            "error": f"Recipe '{name}' has no finalized projection.",
-                        }
-                    )
+                    raise RuntimeError("valid recipe is missing its finalized projection")
                 _prepared_generation = prepare_recipe_delivery_generation(
                     result,
                     recipe_name=name,
@@ -591,22 +581,24 @@ async def get_recipe_section(
             artifact_dir = getattr(tool_ctx, "temp_dir", None)
             if not isinstance(artifact_dir, Path):
                 return _recipe_section_failure("invalid_recipe_artifact_identity")
-
-            identity = RecipeArtifactGeneration(
-                producer_tool=producer_tool,
-                recipe_name=requested_recipe_name,
-                descriptor_version=descriptor_version,
-                schema_version=schema_version,
-                payload_sha256=payload_sha256,
-                artifact_blob_sha256=artifact_blob_sha256,
-                artifact_blob_size_bytes=artifact_blob_size_bytes,
-                body_sha256=body_sha256,
-                body_size_bytes=body_size_bytes,
-                flow_schema_version=flow_schema_version,
-                flow_sha256=flow_sha256,
-                flow_size_bytes=flow_size_bytes,
-                flow_record_count=flow_record_count,
-            )
+            try:
+                identity = RecipeArtifactGeneration(
+                    producer_tool=producer_tool,
+                    recipe_name=requested_recipe_name,
+                    descriptor_version=descriptor_version,
+                    schema_version=schema_version,
+                    payload_sha256=payload_sha256,
+                    artifact_blob_sha256=artifact_blob_sha256,
+                    artifact_blob_size_bytes=artifact_blob_size_bytes,
+                    body_sha256=body_sha256,
+                    body_size_bytes=body_size_bytes,
+                    flow_schema_version=flow_schema_version,
+                    flow_sha256=flow_sha256,
+                    flow_size_bytes=flow_size_bytes,
+                    flow_record_count=flow_record_count,
+                )
+            except (TypeError, ValueError):
+                return _recipe_section_failure("invalid_recipe_artifact_identity")
             if not identity.has_valid_read_bounds():
                 return _recipe_section_failure("invalid_recipe_artifact_identity")
             if part < 0:

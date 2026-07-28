@@ -238,6 +238,44 @@ def test_run_interactive_session_holds_binding_through_reap_and_passes_descripto
     assert binding.closed
 
 
+@pytest.mark.parametrize("failure_site", ["build", "spawn"])
+def test_run_interactive_session_closes_binding_on_launch_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_site: str,
+) -> None:
+    from autoskillit.core import PluginLoadMode
+
+    backend, _captured_kwargs = _make_capturing_backend()
+    binding = _TestBinding(Path("/dev/null"))
+    authority = _TestAuthority(None)
+    authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
+    expected = RuntimeError(f"injected {failure_site} failure")
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
+    )
+    if failure_site == "build":
+
+        def fail_build(**_kwargs):
+            raise expected
+
+        monkeypatch.setattr(backend, "build_interactive_cmd", fail_build)
+    else:
+
+        def fail_spawn(*_args, **_kwargs):
+            raise expected
+
+        monkeypatch.setattr(subprocess, "run", fail_spawn)
+
+    with pytest.raises(RuntimeError) as caught:
+        _run_interactive_session(system_prompt="test", backend=backend)
+
+    assert caught.value is expected
+    assert binding.closed
+
+
 # ---------------------------------------------------------------------------
 # env extras passed through
 # ---------------------------------------------------------------------------

@@ -145,6 +145,29 @@ def test_generator_validates_the_exact_registry_passed_by_caller() -> None:
 
 
 @pytest.mark.parametrize(
+    ("field_name", "replacement", "message"),
+    [
+        ("resource", 1, "resource"),
+        ("producer_script", None, "producer_script"),
+        ("backend", "unknown", "backend"),
+        ("session_scope", "unknown", "session_scope"),
+        ("required_owner_roles", {"same_runner"}, "required_owner_roles"),
+        ("required_owner_roles", frozenset({"unknown"}), "invalid role"),
+    ],
+)
+def test_lifecycle_contract_rejects_runtime_invalid_fields(
+    field_name: str,
+    replacement: object,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        dataclasses.replace(
+            LIFECYCLE_CONTRACTS[0],
+            **{field_name: replacement},
+        )
+
+
+@pytest.mark.parametrize(
     ("field_name", "replacement"),
     [
         ("produces_resources", frozenset({_RESOURCE, "other"})),

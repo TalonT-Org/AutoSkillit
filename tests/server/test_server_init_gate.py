@@ -354,7 +354,10 @@ class TestOpenKitchenVersionReporting:
 
         with patch.object(tools_kitchen_mod, "_prime_quota_cache", new=AsyncMock()):
             with patch.object(tools_kitchen_mod, "_write_hook_config"):
-                await open_kitchen(ctx=mock_ctx)
+                result = json.loads(await open_kitchen(ctx=mock_ctx))
+        assert result["success"] is True
+        assert result["kitchen"] == "open"
+        mock_ctx.enable_components.assert_awaited_once_with(tags={"kitchen"})
         assert tool_ctx.gate.enabled is True
 
 

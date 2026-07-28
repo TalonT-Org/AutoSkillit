@@ -239,6 +239,7 @@ class _InstallSnapshot:
         self._artifact_manifest_path = installed_artifact_manifest_path(self._target_root)
         self._artifact_manifest = self._read(self._artifact_manifest_path)
         self._target_backup: Path | None = None
+        self._target_mutation_owned = False
         self._created_retiring_record_ids: set[str] = set()
 
     @staticmethod
@@ -259,12 +260,14 @@ class _InstallSnapshot:
     def stage_target_root(self) -> None:
         """Move the unleased target aside while its exclusive lease is held."""
         if not self._target_root.exists():
+            self._target_mutation_owned = True
             return
         backup = self._target_root.parent / (
             f".{self._target_root.name}.autoskillit-install-backup-{uuid.uuid4().hex}"
         )
         os.replace(self._target_root, backup)
         self._target_backup = backup
+        self._target_mutation_owned = True
         if self._artifact_manifest_path.is_file() or self._artifact_manifest_path.is_symlink():
             self._artifact_manifest_path.unlink()
 
@@ -275,13 +278,15 @@ class _InstallSnapshot:
         """Restore the manifest, the registry, and the retiring queue."""
         from autoskillit.core import remove_retiring_records
 
-        if self._target_root.is_dir():
-            shutil.rmtree(self._target_root)
-        elif self._target_root.exists() or self._target_root.is_symlink():
-            self._target_root.unlink()
-        if self._target_backup is not None and self._target_backup.exists():
-            os.replace(self._target_backup, self._target_root)
-            self._target_backup = None
+        if self._target_mutation_owned:
+            if self._target_root.is_dir():
+                shutil.rmtree(self._target_root)
+            elif self._target_root.exists() or self._target_root.is_symlink():
+                self._target_root.unlink()
+            if self._target_backup is not None and self._target_backup.exists():
+                os.replace(self._target_backup, self._target_root)
+                self._target_backup = None
+            self._target_mutation_owned = False
 
         self._restore(_marketplace_manifest_path(), self._marketplace_manifest)
         self._restore(_installed_plugins_json_path(), self._installed_plugins)
@@ -293,6 +298,7 @@ class _InstallSnapshot:
         if self._target_backup is not None and self._target_backup.is_dir():
             shutil.rmtree(self._target_backup)
         self._target_backup = None
+        self._target_mutation_owned = False
 
 
 def _marketplace_manifest_path() -> Path:

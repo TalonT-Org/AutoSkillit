@@ -111,6 +111,42 @@ class TestRollbackOnFailure:
         assert _retiring_paths(tmp_path) == retiring_before
         assert old_cache.is_dir(), "the live cache was destroyed by a failed install"
 
+    def test_target_lease_contention_does_not_mutate_the_live_root(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        capsys,
+    ) -> None:
+        from autoskillit import __version__
+        from autoskillit.cli import _marketplace, _plugin_artifact
+        from autoskillit.core import ArtifactLease
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
+        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
+        monkeypatch.setattr(
+            _marketplace,
+            "_ensure_marketplace",
+            lambda: tmp_path / ".autoskillit" / "marketplace",
+        )
+        monkeypatch.setattr(_marketplace, "_ensure_workspace_ready", lambda: None)
+        target = _seed_installed_state(tmp_path, __version__)
+        marker = target / "must-survive"
+        marker.write_text("leased live tree")
+        reader = ArtifactLease.acquire_shared(
+            _plugin_artifact.installed_artifact_lock_path(target)
+        )
+        try:
+            with pytest.raises(SystemExit):
+                _marketplace.install(scope="user")
+        finally:
+            reader.close()
+
+        assert "Installed plugin is in use" in capsys.readouterr().out
+        assert marker.read_text() == "leased live tree"
+
     def test_publication_failure_rolls_back_while_target_lease_is_held(
         self, tmp_path: Path, monkeypatch, capsys
     ) -> None:

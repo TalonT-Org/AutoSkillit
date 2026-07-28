@@ -129,9 +129,9 @@ def read_projected_plugin_identity(
     artifact_digest = manifest.get("artifact_digest")
     if not is_canonical_plugin_artifact_digest(artifact_digest):
         raise PluginArtifactValidationError(f"projected plugin digest is invalid: {manifest_path}")
-    if (
-        expected_projection_version is not None
-        and manifest.get("projection_version") != expected_projection_version
+    projection_version = manifest.get("projection_version")
+    if expected_projection_version is not None and (
+        type(projection_version) is not int or projection_version != expected_projection_version
     ):
         raise PluginArtifactValidationError(f"projected plugin version mismatch: {manifest_path}")
     return PluginArtifactIdentity(

@@ -19,6 +19,7 @@ hence this test.
 from __future__ import annotations
 
 import dataclasses
+import json
 from pathlib import Path
 
 import pytest
@@ -222,6 +223,47 @@ class TestAssetChangesForceReprojection:
 
 
 class TestOrphanedProjectionRetirementIsLeaseGated:
+    @pytest.mark.parametrize("malformed_version", [True, 1.0])
+    def test_projection_identity_rejects_non_integer_version_aliases(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        malformed_version: object,
+    ) -> None:
+        from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        binding = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="main",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        try:
+            binding.close()
+            manifest = json.loads(binding.identity.manifest_path.read_text(encoding="utf-8"))
+            manifest["projection_version"] = malformed_version
+            binding.identity.manifest_path.write_text(
+                json.dumps(manifest),
+                encoding="utf-8",
+            )
+
+            with pytest.raises(PluginArtifactValidationError, match="version mismatch"):
+                read_projected_plugin_identity(
+                    binding.identity.managed_path,
+                    manifest_path=binding.identity.manifest_path,
+                    expected_semantic_key=binding.identity.semantic_key,
+                    expected_projection_version=1,
+                )
+        finally:
+            binding.close()
+
     def test_pruning_queues_only_after_reader_release(
         self,
         tmp_path: Path,

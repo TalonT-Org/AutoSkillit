@@ -72,6 +72,7 @@ def _retiring_record(tmp_path: Path) -> RetiringArtifactRecord:
         ("semantic_key", True),
         ("manifest_schema_version", True),
         ("manifest_schema_version", 1.5),
+        ("schema_version", 2.0),
     ],
 )
 def test_retiring_record_requires_exact_authority_types(

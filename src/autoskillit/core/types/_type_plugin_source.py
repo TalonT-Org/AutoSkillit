@@ -210,7 +210,7 @@ class RetiringArtifactRecord:
             raise ValueError("retiring artifact digest must be lowercase SHA-256 hex")
         if not self.managed_path.is_absolute() or not self.manifest_path.is_absolute():
             raise ValueError("retiring artifact paths must be absolute")
-        if self.schema_version != 2:
+        if type(self.schema_version) is not int or self.schema_version != 2:
             raise ValueError("retiring artifact record schema_version must be 2")
         if self.not_before < self.retired_at:
             raise ValueError("retiring artifact not_before cannot precede retired_at")

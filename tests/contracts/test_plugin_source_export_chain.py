@@ -61,6 +61,7 @@ ADDED = (
     "is_canonical_plugin_artifact_incarnation_id",
     "migrate_retiring_cache_v1",
     "new_plugin_artifact_incarnation_id",
+    "normalize_inherited_fds",
     "read_retiring_cache",
     "registered_install_paths",
     "remove_retiring_records",

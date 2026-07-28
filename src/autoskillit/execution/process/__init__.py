@@ -29,6 +29,7 @@ from autoskillit.core import (
     TerminationAction,
     TerminationReason,
     get_logger,
+    normalize_inherited_fds,
     read_starttime_ticks,
 )
 from autoskillit.execution.process._process_io import (
@@ -127,15 +128,7 @@ def _resolve_session_id(
 
 def _normalize_pass_fds(pass_fds: tuple[int, ...]) -> tuple[int, ...]:
     """Validate and de-duplicate inherited descriptors without reordering them."""
-    normalized: list[int] = []
-    seen: set[int] = set()
-    for descriptor in pass_fds:
-        if isinstance(descriptor, bool) or not isinstance(descriptor, int) or descriptor < 0:
-            raise ValueError("pass_fds must contain non-negative integer descriptors")
-        if descriptor not in seen:
-            normalized.append(descriptor)
-            seen.add(descriptor)
-    return tuple(normalized)
+    return normalize_inherited_fds(pass_fds)
 
 
 def decide_termination_action(

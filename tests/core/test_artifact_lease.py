@@ -240,6 +240,25 @@ def test_launch_binding_rejects_path_identity_mismatch(tmp_path: Path) -> None:
         lease.close()
 
 
+@pytest.mark.parametrize("inherited_fds", [(-1,), (True,), ("3",)])
+def test_launch_binding_rejects_invalid_inherited_descriptors(
+    tmp_path: Path,
+    inherited_fds: tuple[object, ...],
+) -> None:
+    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    try:
+        with pytest.raises(ValueError, match="non-negative integer"):
+            PluginLaunchBinding(
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+                plugin_dir=tmp_path / "projection",
+                identity=_identity(tmp_path),
+                inherited_fds=inherited_fds,  # type: ignore[arg-type]
+                _lease=lease,
+            )
+    finally:
+        lease.close()
+
+
 @pytest.mark.parametrize(
     "load_mode",
     [PluginLoadMode.GENERATED_HOME, PluginLoadMode.NONE],

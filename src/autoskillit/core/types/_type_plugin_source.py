@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -24,6 +25,7 @@ __all__ = [
     "is_canonical_plugin_artifact_digest",
     "is_canonical_plugin_artifact_incarnation_id",
     "new_plugin_artifact_incarnation_id",
+    "normalize_inherited_fds",
 ]
 
 
@@ -105,6 +107,19 @@ def is_canonical_plugin_artifact_digest(value: object) -> TypeGuard[str]:
         and value.lower() == value
         and all(character in "0123456789abcdef" for character in value)
     )
+
+
+def normalize_inherited_fds(descriptors: Iterable[int]) -> tuple[int, ...]:
+    """Validate and de-duplicate inherited descriptors without reordering."""
+    normalized: list[int] = []
+    seen: set[int] = set()
+    for descriptor in descriptors:
+        if isinstance(descriptor, bool) or not isinstance(descriptor, int) or descriptor < 0:
+            raise ValueError("inherited descriptors must be non-negative integers")
+        if descriptor not in seen:
+            normalized.append(descriptor)
+            seen.add(descriptor)
+    return tuple(normalized)
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,10 +279,11 @@ class PluginLaunchBinding:
                 )
         if self.load_mode is not PluginLoadMode.IMPLICIT_INSTALLED and self.plugin_dir is None:
             raise ValueError(f"{self.load_mode.value} requires a plugin path")
-        normalized_fds = tuple(dict.fromkeys(self.inherited_fds))
-        if any(fd < 0 for fd in normalized_fds):
-            raise ValueError("plugin launch inherited descriptors must be non-negative")
-        object.__setattr__(self, "inherited_fds", normalized_fds)
+        object.__setattr__(
+            self,
+            "inherited_fds",
+            normalize_inherited_fds(self.inherited_fds),
+        )
 
     @property
     def closed(self) -> bool:

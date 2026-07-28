@@ -780,6 +780,7 @@ from .types import (
 )
 from .types import model_class as model_class
 from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
+from .types import normalize_inherited_fds as normalize_inherited_fds
 from .types import parse_plan_paths as parse_plan_paths
 from .types import recipe_section_digest as recipe_section_digest
 from .types import recipe_section_element_digest as recipe_section_element_digest

@@ -9,6 +9,8 @@ import termios
 from collections.abc import Mapping, Sequence
 from typing import NoReturn
 
+from autoskillit.core import normalize_inherited_fds
+
 _MODULE_NAME = "autoskillit.cli.session.pty._exec"
 
 
@@ -126,8 +128,8 @@ def _validate_lease_fds(
     slave_fd: int,
 ) -> tuple[int, ...]:
     normalized: dict[int, None] = {}
-    for fd in lease_fds:
-        if isinstance(fd, bool) or not isinstance(fd, int) or fd < 3:
+    for fd in normalize_inherited_fds(lease_fds):
+        if fd < 3:
             raise ValueError("lease descriptors must be integers greater than two")
         os.fstat(fd)
         if fd != slave_fd:

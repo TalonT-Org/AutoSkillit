@@ -806,7 +806,7 @@ class PluginArtifactRetirementEngine:
                     )
                 return self._log_reclaim(record, RetirementOutcome.RECLAIMED)
         finally:
-            writer.close()
+            writer.close_preserving()
 
     def _log_reclaim(
         self,

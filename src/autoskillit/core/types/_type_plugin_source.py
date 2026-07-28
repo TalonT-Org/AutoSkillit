@@ -307,7 +307,13 @@ class PluginLaunchBinding:
         exc: object,
         traceback: object,
     ) -> None:
-        self.close()
+        if not isinstance(exc, BaseException):
+            self.close()
+            return
+        try:
+            self.close()
+        except BaseException as cleanup_error:
+            exc.add_note(f"Plugin artifact binding cleanup failed: {cleanup_error!r}")
 
 
 @dataclass(frozen=True, slots=True)

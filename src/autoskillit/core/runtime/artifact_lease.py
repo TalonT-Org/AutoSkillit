@@ -187,6 +187,21 @@ class ArtifactLease:
         self.fd = None
         os.close(fd)
 
+    def close_preserving(self, primary_error: BaseException | None = None) -> None:
+        """Release ownership without replacing an outcome already in flight."""
+        try:
+            self.close()
+        except BaseException as cleanup_error:
+            if primary_error is not None:
+                primary_error.add_note(
+                    f"Artifact lease descriptor cleanup failed: {cleanup_error!r}"
+                )
+            logger.warning(
+                "artifact_lease_descriptor_cleanup_failed",
+                error=str(cleanup_error),
+                exc_info=True,
+            )
+
     def __enter__(self) -> ArtifactLease:
         return self
 
@@ -196,7 +211,10 @@ class ArtifactLease:
         exc: object,
         traceback: object,
     ) -> None:
-        self.close()
+        if isinstance(exc, BaseException):
+            self.close_preserving(exc)
+        else:
+            self.close()
 
 
 _CloseFailureReporter = Callable[[BaseException, BaseException], None]

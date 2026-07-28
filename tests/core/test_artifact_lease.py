@@ -72,6 +72,29 @@ def test_independent_shared_readers_own_distinct_descriptors(tmp_path: Path) -> 
             assert second.inherited_fds == (second.fileno(),)
 
 
+def test_artifact_lease_context_preserves_body_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    real_close = ArtifactLease.close
+
+    def fail_after_close(owner: ArtifactLease) -> None:
+        real_close(owner)
+        raise OSError("injected lease close failure")
+
+    monkeypatch.setattr(ArtifactLease, "close", fail_after_close)
+
+    with pytest.raises(RuntimeError, match="primary body failure") as caught:
+        with lease:
+            raise RuntimeError("primary body failure")
+
+    assert lease.closed is True
+    assert any(
+        "injected lease close failure" in note for note in getattr(caught.value, "__notes__", ())
+    )
+
+
 def test_exclusive_lease_waits_for_final_shared_close(tmp_path: Path) -> None:
     lock_path = tmp_path / "projection.lock"
     first = ArtifactLease.acquire_shared(lock_path)
@@ -349,6 +372,36 @@ def test_launch_binding_context_closes_lease_idempotently(tmp_path: Path) -> Non
 
     assert binding.closed is True
     binding.close()
+
+
+def test_launch_binding_context_preserves_body_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    binding = PluginLaunchBinding(
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        plugin_dir=tmp_path / "projection",
+        identity=_identity(tmp_path),
+        inherited_fds=lease.inherited_fds,
+        _lease=lease,
+    )
+    real_close = ArtifactLease.close
+
+    def fail_after_close(owner: ArtifactLease) -> None:
+        real_close(owner)
+        raise OSError("injected binding close failure")
+
+    monkeypatch.setattr(ArtifactLease, "close", fail_after_close)
+
+    with pytest.raises(RuntimeError, match="primary launch failure") as caught:
+        with binding:
+            raise RuntimeError("primary launch failure")
+
+    assert binding.closed is True
+    assert any(
+        "injected binding close failure" in note for note in getattr(caught.value, "__notes__", ())
+    )
 
 
 def test_launch_binding_rejects_path_identity_mismatch(tmp_path: Path) -> None:

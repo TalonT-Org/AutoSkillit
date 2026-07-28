@@ -24,6 +24,7 @@ from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.workspace import (
     ProjectedPluginArtifactAuthority,
     project_default_plugin_authority,
+    prune_stale_projections,
 )
 from tests._helpers import _flush_structlog_proxy_caches
 from tests.contracts._projection_helpers import session_catalog
@@ -215,6 +216,52 @@ def test_projection_reclaim_io_failure_stays_queued_for_retry(
     assert append_result.record_id not in {
         queued.record_id for queued in read_retiring_cache().records
     }
+
+
+def test_projection_reclaim_preserves_outcome_when_writer_close_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    binding = _authority(tmp_path).acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    identity = binding.identity
+    binding.close()
+
+    from autoskillit.workspace import ProjectedPluginRetirementOwner
+
+    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
+    real_close = ArtifactLease.close
+
+    def fail_after_close(lease: ArtifactLease) -> None:
+        real_close(lease)
+        raise OSError("injected retirement writer close failure")
+
+    monkeypatch.setattr(ArtifactLease, "close", fail_after_close)
+
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.RECLAIMED
+
+
+def test_projection_prune_preserves_validation_skip_when_writer_close_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    projections_root = tmp_path / "projections"
+    (projections_root / "invalid-stale-projection").mkdir(parents=True)
+    real_close = ArtifactLease.close
+
+    def fail_after_close(lease: ArtifactLease) -> None:
+        real_close(lease)
+        raise OSError("injected prune writer close failure")
+
+    monkeypatch.setattr(ArtifactLease, "close", fail_after_close)
+
+    assert prune_stale_projections(projections_root, active_key="active") == 0
 
 
 def test_corrupt_live_incarnation_is_not_replaced_until_reader_closes(

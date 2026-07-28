@@ -447,5 +447,5 @@ def prune_stale_projections(
                     continue
                 created += int(owner.enqueue_retirement(identity, not_before).created)
         finally:
-            writer.close()
+            writer.close_preserving()
     return created

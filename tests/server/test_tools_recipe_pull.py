@@ -17,6 +17,7 @@ from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     RECIPE_DELIVERY_SURFACE_REGISTRY,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RecipeDeliveryAttestation,
     RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
@@ -29,7 +30,7 @@ from autoskillit.execution import (
     ProtectedStoreAuthority,
     RecipeDeliveryReceiptLedger,
 )
-from autoskillit.execution.backends import CodexBackend
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.recipe import load_and_validate
 from autoskillit.server import _recipe_delivery as recipe_delivery
 from autoskillit.server import _recipe_section_pagination as pagination
@@ -712,6 +713,86 @@ def test_finalizer_uses_backend_selected_recipe_budget(tool_ctx) -> None:
 
     assert finalized.decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
     assert finalized.decision.contract_digest == selected_budget.contract_digest
+
+
+def test_exemption_overrides_envelope_for_exempt_surface_within_ceiling(tool_ctx) -> None:
+    """Issue #4399: when an exempt surface's ordinary-rendered payload exceeds the
+    backend's ordinary token limit but fits within the registered exemption ceiling,
+    finalize_recipe_delivery() must upgrade ENVELOPE back to ORDINARY_INLINE so the
+    full recipe body survives.
+
+    Claude Code backend: protected_recipe_delivery_capable=False → decision resolver
+    returns ENVELOPE based on ordinary_limit alone. The exemption override added in
+    Issue #4399 must catch this case and re-route to ORDINARY_INLINE.
+    """
+    tool_ctx.backend = ClaudeCodeBackend()
+    tool_ctx.kitchen_id = "claude-code-exemption"
+
+    ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
+    # Payload whose ordinary JSON exceeds the ordinary_limit (in bytes) but stays
+    # under the 195,000-byte exemption ceiling.
+    oversized_content = "x" * (ordinary_limit * 4 + 10_000)
+    assert len(oversized_content.encode("utf-8")) > ordinary_limit * 4
+    assert len(oversized_content.encode("utf-8")) < (
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+    )
+
+    finalized = finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
+    assert finalized.decision.reason == "exemption_overrides_envelope"
+    # Recipe content must be present in the rendered string (not stripped by ENVELOPE).
+    assert oversized_content in finalized.rendered
+
+
+def test_exemption_override_retains_envelope_for_payload_above_ceiling(tool_ctx) -> None:
+    """Issue #4399 boundary: payloads exceeding the 195KB exemption ceiling must
+    remain ENVELOPE — the override only applies when the ordinary-rendered payload
+    fits within the registered exemption.
+    """
+    tool_ctx.backend = ClaudeCodeBackend()
+    tool_ctx.kitchen_id = "claude-code-over-ceiling"
+
+    # Payload whose ordinary JSON exceeds the 195,000-byte exemption ceiling.
+    oversized_content = "y" * (
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes + 1_000
+    )
+
+    finalized = finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert finalized.decision.reason != "exemption_overrides_envelope"
+
+
+def test_exemption_override_does_not_apply_to_non_exempt_surface(tool_ctx) -> None:
+    """Issue #4399 boundary: get_recipe has no response_exemption_tool registration,
+    so the override must not apply — ENVELOPE remains the result.
+    """
+    tool_ctx.backend = ClaudeCodeBackend()
+    tool_ctx.kitchen_id = "claude-code-get-recipe"
+
+    ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
+    oversized_content = "z" * (ordinary_limit * 4 + 5_000)
+
+    finalized = finalize_recipe_delivery(
+        _payload(oversized_content),
+        surface="get_recipe",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+    )
+
+    assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
+    assert finalized.decision.reason != "exemption_overrides_envelope"
 
 
 def _request() -> RecipeDeliveryRequest:

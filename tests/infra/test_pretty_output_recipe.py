@@ -11,6 +11,7 @@ import pytest
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
+    from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
 
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
@@ -1170,6 +1171,31 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
             maximum = max(maximum, (byte_len, recipe_name, mode_name))
             if byte_len > ceiling:
                 over_budget.append(f"{recipe_name} ({mode_name}): {byte_len} bytes > {ceiling}")
+
+            # Issue #4399 content gate: when the ordinary-rendered payload fits within
+            # the exemption ceiling, the formatter must receive the raw ORDINARY_INLINE
+            # payload (containing `content`, `summary`, `diagram`) — not the stripped
+            # envelope — so the rendered output retains the recipe body. The envelope
+            # path strips `content`/`summary`/`diagram`, producing a degenerate
+            # `## open_kitchen ✓ v{version}` with no recipe body. This assertion
+            # fails before the fix because the test currently feeds the envelope
+            # to `_fmt_open_kitchen` regardless of size.
+            ordinary_payload_bytes = len(
+                json.dumps(dict(result), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            )
+            if ordinary_payload_bytes <= ceiling:
+                ordinary_rendered = _fmt_open_kitchen(
+                    cast("OpenKitchenResult", dict(result)), pipeline=False
+                )
+                # Recipe YAML content must survive rendering for the exempt ORDINARY path
+                recipe_content = result.get("content") or ""
+                assert recipe_content, (
+                    f"{recipe_name} ({mode_name}): recipe payload missing 'content' field"
+                )
+                assert recipe_content in ordinary_rendered, (
+                    f"{recipe_name} ({mode_name}): rendered ORDINARY_INLINE output "
+                    f"missing recipe content (only {len(ordinary_rendered)} bytes rendered)"
+                )
 
     max_bytes, max_recipe, max_mode = maximum
     assert not over_budget, (

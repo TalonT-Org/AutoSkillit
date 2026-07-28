@@ -40,6 +40,22 @@ def _identity(tmp_path: Path) -> PluginArtifactIdentity:
     )
 
 
+def test_raw_constructor_cannot_claim_an_unrelated_descriptor(tmp_path: Path) -> None:
+    read_fd, write_fd = os.pipe()
+    try:
+        with pytest.raises(TypeError, match="created by an acquire method"):
+            ArtifactLease(
+                path=tmp_path / "projection.lock",
+                fd=read_fd,
+                shared=True,
+            )
+
+        os.fstat(read_fd)
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)
+
+
 def test_independent_shared_readers_own_distinct_descriptors(tmp_path: Path) -> None:
     lock_path = tmp_path / "projection.lock"
 

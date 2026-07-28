@@ -16,6 +16,8 @@ except ImportError:  # pragma: no cover - exercised through the platform guard
 
 __all__ = ["ArtifactLease", "ArtifactLeaseContention"]
 
+_ARTIFACT_LEASE_CONSTRUCTION_TOKEN = object()
+
 
 class ArtifactLeaseContention(RuntimeError):
     """Raised when a nonblocking artifact lease cannot be acquired."""
@@ -25,7 +27,7 @@ class ArtifactLeaseContention(RuntimeError):
         super().__init__(f"Artifact lease is contended: {self.path}")
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, init=False)
 class ArtifactLease:
     """An inherited shared or exclusive lock released only by descriptor close."""
 
@@ -34,6 +36,24 @@ class ArtifactLease:
     shared: bool
 
     _CONTENTION_ERRNOS: ClassVar[frozenset[int]] = frozenset({errno.EACCES, errno.EAGAIN})
+
+    def __init__(
+        self,
+        *,
+        path: Path,
+        fd: int,
+        shared: bool,
+        _construction_token: object | None = None,
+    ) -> None:
+        if _construction_token is not _ARTIFACT_LEASE_CONSTRUCTION_TOKEN:
+            raise TypeError("ArtifactLease instances must be created by an acquire method")
+        if isinstance(fd, bool) or not isinstance(fd, int) or fd < 0:
+            raise ValueError("ArtifactLease fd must be a non-negative integer")
+        if type(shared) is not bool:
+            raise ValueError("ArtifactLease shared must be a boolean")
+        self.path = Path(path)
+        self.fd = fd
+        self.shared = shared
 
     @classmethod
     def acquire_shared(cls, lock_path: Path) -> ArtifactLease:
@@ -95,7 +115,12 @@ class ArtifactLease:
                 if not blocking and exc.errno in cls._CONTENTION_ERRNOS:
                     raise ArtifactLeaseContention(lock_path) from exc
                 raise
-            return cls(path=lock_path, fd=fd, shared=shared)
+            return cls(
+                path=lock_path,
+                fd=fd,
+                shared=shared,
+                _construction_token=_ARTIFACT_LEASE_CONSTRUCTION_TOKEN,
+            )
         except BaseException:
             if fd is not None:
                 os.close(fd)

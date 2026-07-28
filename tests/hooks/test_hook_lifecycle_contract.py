@@ -16,6 +16,7 @@ from autoskillit.hook_registry import (
     LifecycleContractDef,
     compute_registry_hash,
     generate_hooks_json,
+    hook_applies_to_backend,
     validate_lifecycle_contracts,
 )
 
@@ -72,6 +73,26 @@ def test_real_lifecycle_contract_passes_every_generator_boundary() -> None:
     validate_lifecycle_contracts(HOOK_REGISTRY, LIFECYCLE_CONTRACTS, backend="claude_code")
     assert generate_codex_hooks_config()
     assert generate_hooks_json()["hooks"]
+
+
+@pytest.mark.parametrize(
+    ("backend", "session_scope"),
+    (
+        ("unknown", "headless"),
+        ("codex", "unknown"),
+        ("claude_code", "unknown"),
+    ),
+)
+def test_hook_reachability_rejects_runtime_invalid_boundaries(
+    backend: str,
+    session_scope: str,
+) -> None:
+    with pytest.raises(ValueError, match="unsupported hook"):
+        hook_applies_to_backend(
+            HookDef(matcher="Bash"),
+            backend=backend,  # type: ignore[arg-type]
+            session_scope=session_scope,  # type: ignore[arg-type]
+        )
 
 
 def test_every_resource_producer_requires_a_contract() -> None:

@@ -11,7 +11,6 @@ import pytest
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import ContextAdmissionStoreAuthority, GitHubFetcher
-from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.context_admission_ledger import (
@@ -36,6 +35,11 @@ def _ledger(project_dir: Path) -> DefaultContextAdmissionLedger:
     )
 
 
+class _UnusedPluginAuthority:
+    def acquire_launch_binding(self, *, backend, load_mode):
+        raise AssertionError("this test must not acquire a plugin artifact")
+
+
 def test_tool_context_fields_accessible(tmp_path):
     """ToolContext exposes all expected fields."""
     ctx = ToolContext(
@@ -44,7 +48,7 @@ def test_tool_context_fields_accessible(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=_UnusedPluginAuthority(),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
@@ -52,8 +56,7 @@ def test_tool_context_fields_accessible(tmp_path):
         context_admission_ledger=_ledger(tmp_path),
     )
     assert ctx.gate.enabled is True
-    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
-    assert ctx.plugin_source.plugin_dir == tmp_path
+    assert isinstance(ctx.plugin_authority, _UnusedPluginAuthority)
 
 
 def test_tool_context_audit_isolation(tmp_path):
@@ -64,7 +67,7 @@ def test_tool_context_audit_isolation(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path / "a"),
+        plugin_authority=_UnusedPluginAuthority(),
         runner=None,
         temp_dir=tmp_path / "a" / ".autoskillit" / "temp",
         project_dir=tmp_path / "a",
@@ -77,7 +80,7 @@ def test_tool_context_audit_isolation(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path / "b"),
+        plugin_authority=_UnusedPluginAuthority(),
         runner=None,
         temp_dir=tmp_path / "b" / ".autoskillit" / "temp",
         project_dir=tmp_path / "b",
@@ -107,7 +110,7 @@ def test_gate_state_replacement(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=_UnusedPluginAuthority(),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
@@ -127,7 +130,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=_UnusedPluginAuthority(),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
@@ -246,7 +249,7 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=True),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=_UnusedPluginAuthority(),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
@@ -301,7 +304,7 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=_UnusedPluginAuthority(),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
@@ -384,7 +387,7 @@ def test_toolcontext_raises_typeerror_when_temp_dir_unset(tmp_path):
             token_log=DefaultTokenLog(),
             timing_log=DefaultTimingLog(),
             gate=DefaultGateState(),
-            plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+            plugin_authority=_UnusedPluginAuthority(),
             runner=None,
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
@@ -400,7 +403,7 @@ def test_toolcontext_raises_typeerror_when_project_dir_unset(tmp_path):
             token_log=DefaultTokenLog(),
             timing_log=DefaultTimingLog(),
             gate=DefaultGateState(),
-            plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+            plugin_authority=_UnusedPluginAuthority(),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
             skill_session_contract_store=FakeSkillSessionContractStore(),
@@ -416,7 +419,7 @@ def test_toolcontext_raises_typeerror_when_context_ledger_unset(tmp_path):
             token_log=DefaultTokenLog(),
             timing_log=DefaultTimingLog(),
             gate=DefaultGateState(),
-            plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+            plugin_authority=_UnusedPluginAuthority(),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,
@@ -431,7 +434,7 @@ def test_toolcontext_accepts_explicit_path_fields(tmp_path):
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=_UnusedPluginAuthority(),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,

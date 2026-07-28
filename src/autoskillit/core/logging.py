@@ -20,12 +20,34 @@ MCP server constraint:
 from __future__ import annotations
 
 import logging
+import os
 import sys
-from typing import Any
+from datetime import datetime
+from typing import Any, Protocol
 
 import structlog
 
 PACKAGE_LOGGER_NAME = "autoskillit"
+_PLUGIN_ARTIFACT_ACTIONS = frozenset(
+    {
+        "acquire",
+        "release",
+        "publish",
+        "repair",
+        "retire",
+        "cancel_retirement",
+        "reclaim",
+    }
+)
+_PLUGIN_ARTIFACT_OUTCOMES = frozenset(
+    {
+        "succeeded",
+        "deferred_contended",
+        "deferred_io_error",
+        "rejected_identity",
+        "failed_validation",
+    }
+)
 
 # Ensure all module-level get_logger() calls return lazy proxies rather than
 # fully-resolved loggers.  Without this, loggers created before
@@ -63,6 +85,96 @@ def get_logger(name: str | None = None) -> Any:
         # wrap_logger()'s first positional parameter, raising TypeError.
         logger._initial_values["logger"] = name
     return logger
+
+
+def log_plugin_artifact_lifecycle(
+    logger: Any,
+    *,
+    action: str,
+    outcome: str,
+    artifact_kind: str,
+    semantic_key: str,
+    incarnation: str,
+    not_before: datetime | None = None,
+    contention_detail: str | None = None,
+    child_pid: int | None = None,
+) -> None:
+    """Emit the single schema used for plugin artifact lifecycle events."""
+    if action not in _PLUGIN_ARTIFACT_ACTIONS:
+        raise ValueError(f"unsupported plugin artifact lifecycle action: {action}")
+    if outcome not in _PLUGIN_ARTIFACT_OUTCOMES:
+        raise ValueError(f"unsupported plugin artifact lifecycle outcome: {outcome}")
+    emit = logger.info if outcome == "succeeded" else logger.warning
+    emit(
+        "plugin_artifact_lifecycle",
+        action=action,
+        outcome=outcome,
+        actor_pid=os.getpid(),
+        child_pid=child_pid,
+        artifact_kind=artifact_kind,
+        semantic_key=semantic_key,
+        incarnation=incarnation,
+        not_before=not_before.isoformat() if not_before is not None else None,
+        contention_detail=contention_detail,
+    )
+
+
+class _LeaseOwner(Protocol):
+    @property
+    def inherited_fds(self) -> tuple[int, ...]: ...
+
+    @property
+    def closed(self) -> bool: ...
+
+    def close(self) -> None: ...
+
+
+class PluginArtifactLifecycleLease:
+    """Close-only lease wrapper that emits one release event."""
+
+    __slots__ = (
+        "_artifact_kind",
+        "_incarnation",
+        "_lease",
+        "_logger",
+        "_semantic_key",
+    )
+
+    def __init__(
+        self,
+        lease: _LeaseOwner,
+        *,
+        logger: Any,
+        artifact_kind: str,
+        semantic_key: str,
+        incarnation: str,
+    ) -> None:
+        self._lease = lease
+        self._logger = logger
+        self._artifact_kind = artifact_kind
+        self._semantic_key = semantic_key
+        self._incarnation = incarnation
+
+    @property
+    def closed(self) -> bool:
+        return bool(self._lease.closed)
+
+    @property
+    def inherited_fds(self) -> tuple[int, ...]:
+        return self._lease.inherited_fds
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self._lease.close()
+        log_plugin_artifact_lifecycle(
+            self._logger,
+            action="release",
+            outcome="succeeded",
+            artifact_kind=self._artifact_kind,
+            semantic_key=self._semantic_key,
+            incarnation=self._incarnation,
+        )
 
 
 def configure_logging(

@@ -26,7 +26,10 @@ else
     EXCLUDE_PATTERN='^(README\.md|artifacts\.tar\.gz)$'
 fi
 
-mapfile -t TAR_ITEMS < <(ls -1 "${RESEARCH_DIR}" | grep -vE "${EXCLUDE_PATTERN}")
+TAR_ITEMS=()
+while IFS= read -r item; do
+    TAR_ITEMS+=("${item}")
+done < <(ls -1 "${RESEARCH_DIR}" | grep -vE "${EXCLUDE_PATTERN}" || true)
 
 if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
     tar czf "${RESEARCH_DIR}/artifacts.tar.gz" -C "${RESEARCH_DIR}" "${TAR_ITEMS[@]}"

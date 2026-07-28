@@ -14,10 +14,10 @@ from autoskillit.core import (
     ClosureAuthoritySpec,
     CodingAgentBackend,
     HeadlessSkillDispatchContract,
-    PluginSource,
+    HeadlessSkillDispatchPreparation,
+    PluginArtifactAuthority,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
-    SkillSessionConfig,
     ValidatedAddDir,
     WriteBehaviorSpec,
     get_logger,
@@ -51,6 +51,13 @@ from autoskillit.execution.headless._headless_helpers import (
     assert_interactive_ordering,
     resolve_model_identity,
 )
+from autoskillit.execution.headless._headless_launch import (
+    _NUDGE_TIMEOUT,  # noqa: F401
+    _attempt_contract_nudge,  # noqa: F401
+    _food_truck_launch_spec_builder,
+    _headless_plugin_load_mode,
+    _skill_launch_spec_builder,
+)
 from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _BRANCH_NAME_PATTERN,
@@ -69,9 +76,7 @@ from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
 from autoskillit.execution.headless._headless_recovery import (
     _CHANNEL_B_RECOVERABLE_SUBTYPES,  # noqa: F401
     _ENUM_BINDING_RE,  # noqa: F401
-    _NUDGE_TIMEOUT,  # noqa: F401
     _TOKEN_NAME_RE,  # noqa: F401
-    _attempt_contract_nudge,  # noqa: F401
     _extract_missing_token_hints,  # noqa: F401
     _infer_enum_token_from_write_contract,  # noqa: F401
     _is_path_capture_pattern,  # noqa: F401
@@ -79,6 +84,7 @@ from autoskillit.execution.headless._headless_recovery import (
     _parse_single_enum_binding,  # noqa: F401
     _recover_block_from_assistant_messages,  # noqa: F401
     _recover_from_separate_marker,  # noqa: F401
+    _scan_jsonl_write_paths,  # noqa: F401
     _synthesize_from_write_artifacts,  # noqa: F401
 )
 from autoskillit.execution.headless._headless_result import (
@@ -86,7 +92,6 @@ from autoskillit.execution.headless._headless_result import (
     _parse_stdout,  # noqa: F401
     _resolve_skill_session_id,  # noqa: F401
 )
-from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths  # noqa: F401
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
 if TYPE_CHECKING:
@@ -192,29 +197,32 @@ async def run_headless_core(
                 ctx_backend=ctx.backend.name,
             )
         _cmd_backend = step_backend if step_backend is not None else ctx.backend
-        config = SkillSessionConfig(
+        plugin_load_mode = _headless_plugin_load_mode(
+            _cmd_backend,
+            add_dirs=add_dirs_tuple,
+        )
+        _build_spec = _skill_launch_spec_builder(
+            backend=_cmd_backend,
+            skill_command=skill_command,
+            cwd=cwd,
             completion_marker=effective_marker,
-            model=model_identity.configured_model or None,
-            plugin_source=ctx.plugin_source,
+            configured_model=model_identity.configured_model or None,
             output_format=cfg.output_format,
             add_dirs=add_dirs_tuple,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
             stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
-            scenario_step_name=step_name,
+            step_name=step_name,
             temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
             allowed_write_prefix=allowed_write_prefix,
             allowed_write_prefixes=allowed_write_prefixes,
-            provider_extras=provider_extras,
             profile_name=profile_name,
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
             resume_message=resume_message,
-            sandbox_mode="read-only"
-            if readonly_skill
-            else _cmd_backend.capabilities.default_skill_sandbox_mode,
+            readonly_skill=readonly_skill,
             network_access=network_access,
         )
-        spec = _cmd_backend.build_skill_session_cmd(skill_command, cwd, config)
+
         logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -225,12 +233,12 @@ async def run_headless_core(
             resolved_model=model_identity.configured_model,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
-            plugin_source=repr(ctx.plugin_source),
+            plugin_load_mode=plugin_load_mode.value,
             add_dirs=list(add_dirs) if add_dirs else None,
         )
         effective_provider = provider_name or profile_name
         return await _execute_claude_headless(
-            spec,
+            _build_spec,
             cwd,
             ctx,
             skill_command=original_skill_command,
@@ -254,6 +262,8 @@ async def run_headless_core(
             completion_required=completion_required,
             write_watch_dirs=write_watch_dirs,
             provider_name=effective_provider,
+            plugin_authority=ctx.plugin_authority,
+            plugin_load_mode=plugin_load_mode,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
             provider_extras=provider_extras,
@@ -378,7 +388,7 @@ class DefaultHeadlessExecutor:
         cwd: str,
         *,
         completion_marker: str,
-        plugin_source: PluginSource | None = None,
+        plugin_authority: PluginArtifactAuthority | None = None,
         prior_completion_markers: Sequence[str] | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
@@ -408,10 +418,10 @@ class DefaultHeadlessExecutor:
         resume_message: str | None = None,
         backend_override: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
-        capability_contract: HeadlessSkillDispatchContract | None = None,
+        capability_preparation: HeadlessSkillDispatchPreparation | None = None,
     ) -> SkillResult:
         cwd = validated_dispatch_cwd(
-            capability_contract,
+            None,
             resolved_command=orchestrator_prompt,
             cwd=cwd,
         )
@@ -462,26 +472,27 @@ class DefaultHeadlessExecutor:
                 "dispatch_backend must be resolved before dispatch_food_truck execution"
             )
         backend = dispatch_backend
-        cmd_spec = backend.build_food_truck_cmd(
+        plugin_load_mode = _headless_plugin_load_mode(backend)
+        _build_spec = _food_truck_launch_spec_builder(
+            backend=backend,
             orchestrator_prompt=orchestrator_prompt,
-            plugin_source=plugin_source,
             cwd=cwd,
+            capability_preparation=capability_preparation,
             completion_marker=completion_marker,
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
-            model=model_identity.configured_model or None,
-            env_extras=merged_extras or None,
+            configured_model=model_identity.configured_model or None,
             output_format=cfg.run_skill.output_format,
             exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
             stream_idle_timeout_ms=cfg.run_skill.stream_idle_timeout_ms,
-            scenario_step_name=step_name,
+            step_name=step_name,
             temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
             allowed_write_prefix=allowed_write_prefix,
             allowed_write_prefixes=allowed_write_prefixes,
             sentinel_contract=sentinel_contract,
             resume_message=resume_message,
         )
-        spec = cmd_spec
+
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
         effective_stale = (
             stale_threshold if stale_threshold is not None else cfg.run_skill.stale_threshold
@@ -501,7 +512,7 @@ class DefaultHeadlessExecutor:
             else None
         )
         return await _execute_claude_headless(
-            spec,
+            _build_spec,
             cwd,
             self._ctx,
             skill_command="",
@@ -521,6 +532,7 @@ class DefaultHeadlessExecutor:
             skip_clone_guard=True,
             pty_override=False,
             provider_name=provider_name,
+            provider_extras=merged_extras or None,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
             enable_deadline_extension=effective_deadline_ext,
@@ -530,4 +542,6 @@ class DefaultHeadlessExecutor:
             model_identity=model_identity,
             on_session_id_resolved=on_session_id_resolved,
             step_backend=dispatch_backend,
+            plugin_authority=plugin_authority or self._ctx.plugin_authority,
+            plugin_load_mode=plugin_load_mode,
         )

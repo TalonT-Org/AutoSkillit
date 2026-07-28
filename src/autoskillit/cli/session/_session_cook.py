@@ -10,7 +10,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import is_feature_enabled, resolve_project_dir
+from autoskillit.core import (
+    is_feature_enabled,
+    plugin_launch_binding_scope,
+    resolve_project_dir,
+)
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -54,7 +58,6 @@ def cook(
         DefaultSessionSkillManager,
         DefaultSkillResolver,
         SkillsDirectoryProvider,
-        project_default_plugin_source,
         resolve_ephemeral_root,
         resolve_persistent_session_root,
         validate_skill_tier_roles,
@@ -191,13 +194,14 @@ def cook(
         session_catalog,
         projection_context,
     ) as managed_home:
-        # Single resolution authority, shared with make_context: the running
-        # package, projected for this session's backend and skill catalog.
-        plugin_source = project_default_plugin_source(
-            cwd=project_dir,
+        from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+
+        artifact_authority, load_mode = interactive_plugin_authority(
             backend=backend,
             default_base_branch=config.branching.default_base_branch,
+            project_dir=project_dir,
             skill_catalog=session_catalog,
+            generated_home=managed_home.generated_home,
         )
 
         if isinstance(resume_spec, BareResume):
@@ -257,64 +261,76 @@ def cook(
         try:
             while True:
                 attempt += 1
-                built_spec = backend.build_interactive_cmd(
-                    plugin_source=plugin_source,
-                    add_dirs=[managed_home.skills_dir],
-                    generated_home=managed_home.generated_home,
-                    initial_prompt=current_initial_prompt,
-                    resume_spec=current_resume_spec,
-                    env_extras=cook_env_extras,
-                )
-                final_cmd = built_spec.cmd
-                final_origin = built_spec.origin
-                final_env = dict(built_spec.env)
-                spec = replace(
-                    built_spec,
-                    cmd=final_cmd,
-                    env=final_env,
-                    cwd=str(project_dir),
-                    origin=final_origin,
-                )
-                assert_interactive_ordering(spec=spec)
-                validation_errors = backend.validate_interactive_invocation(spec)
-                if validation_errors:
-                    raise RuntimeError(
-                        "Interactive invocation validation failed: " + "; ".join(validation_errors)
+                with plugin_launch_binding_scope(
+                    authority=artifact_authority,
+                    backend=backend,
+                    load_mode=load_mode,
+                ) as binding:
+                    built_spec = backend.build_interactive_cmd(
+                        plugin_binding=binding,
+                        add_dirs=[managed_home.skills_dir],
+                        generated_home=managed_home.generated_home,
+                        initial_prompt=current_initial_prompt,
+                        resume_spec=current_resume_spec,
+                        env_extras=cook_env_extras,
                     )
+                    final_cmd = built_spec.cmd
+                    final_origin = built_spec.origin
+                    final_env = dict(built_spec.env)
+                    spec = replace(
+                        built_spec,
+                        cmd=final_cmd,
+                        env=final_env,
+                        cwd=str(project_dir),
+                        origin=final_origin,
+                    )
+                    assert_interactive_ordering(spec=spec)
+                    validation_errors = backend.validate_interactive_invocation(spec)
+                    if validation_errors:
+                        raise RuntimeError(
+                            "Interactive invocation validation failed: "
+                            + "; ".join(validation_errors)
+                        )
 
-                with backend.cook_session_context(
-                    session_home=managed_home.generated_home,
-                    project_dir=project_dir,
-                    launch_id=launch_id,
-                    attempt=attempt,
-                    current_resume_spec=current_resume_spec,
-                ) as attempt_handle:
-                    trace.record_attempt_anchor(
+                    with backend.cook_session_context(
+                        session_home=managed_home.generated_home,
+                        project_dir=project_dir,
+                        launch_id=launch_id,
                         attempt=attempt,
-                        view_id=attempt_handle.view_id,
-                    )
-                    observer = _startup_observer(
-                        backend=backend,
-                        trace=trace,
-                        enabled=trace_enabled,
-                        sqlite_home=managed_home.generated_home,
-                        attempt=attempt,
-                        view_id=attempt_handle.view_id,
-                    )
-                    pass_fds = tuple(
-                        dict.fromkeys((*managed_home.pass_fds, *attempt_handle.pass_fds))
-                    )
-                    result = run_cook_attempt(
-                        spec,
-                        pass_fds=pass_fds,
-                        on_spawn=attempt_handle.record_spawn,
-                        on_reaped=attempt_handle.record_reaped,
-                        trace=trace,
-                        observer=observer,
-                    )
-                    reload_session_id = consume_reload_sentinel(project_dir)
-                    _require_observer_ready(observer)
-                    trace.require_startup_budgets()
+                        current_resume_spec=current_resume_spec,
+                    ) as attempt_handle:
+                        trace.record_attempt_anchor(
+                            attempt=attempt,
+                            view_id=attempt_handle.view_id,
+                        )
+                        observer = _startup_observer(
+                            backend=backend,
+                            trace=trace,
+                            enabled=trace_enabled,
+                            sqlite_home=managed_home.generated_home,
+                            attempt=attempt,
+                            view_id=attempt_handle.view_id,
+                        )
+                        pass_fds = tuple(
+                            dict.fromkeys(
+                                (
+                                    *spec.inherited_fds,
+                                    *managed_home.pass_fds,
+                                    *attempt_handle.pass_fds,
+                                )
+                            )
+                        )
+                        result = run_cook_attempt(
+                            spec,
+                            pass_fds=pass_fds,
+                            on_spawn=attempt_handle.record_spawn,
+                            on_reaped=attempt_handle.record_reaped,
+                            trace=trace,
+                            observer=observer,
+                        )
+                        reload_session_id = consume_reload_sentinel(project_dir)
+                        _require_observer_ready(observer)
+                        trace.require_startup_budgets()
 
                 if reload_session_id is None:
                     if result.returncode != 0:

@@ -17,7 +17,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import RETIRED_INSTALL_ARTIFACT_SHAPES, Severity
+from autoskillit.core import (
+    RETIRED_INSTALL_ARTIFACT_SHAPES,
+    PluginArtifactIdentity,
+    Severity,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -52,6 +56,29 @@ def _checks(home: Path) -> set[str]:
     return {f.check for f in verify_install_state()}
 
 
+def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
+    from datetime import UTC, datetime, timedelta
+
+    from autoskillit.cli._plugin_artifact import (
+        InstalledPluginArtifactRetirementOwner,
+        publish_installed_plugin_artifact,
+    )
+
+    live = home / "cache" / "1.0.0"
+    live.mkdir(parents=True)
+    (live / "plugin.json").write_text('{"name":"autoskillit"}')
+    _write_registry(home, live)
+    identity = publish_installed_plugin_artifact(
+        live,
+        semantic_key="autoskillit@autoskillit-local:1.0.0",
+    )
+    InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
+        identity,
+        datetime.now(UTC) + timedelta(hours=6),
+    )
+    return identity
+
+
 class TestVerifyInstallState:
     def test_clean_state_reports_nothing(self, home: Path) -> None:
         from autoskillit.workspace import verify_install_state
@@ -75,14 +102,111 @@ class TestVerifyInstallState:
         assert "retired_install_artifact_shape" in _checks(home)
 
     def test_retiring_entry_the_registry_still_references(self, home: Path) -> None:
-        from autoskillit.core import append_retiring_entry
+        _queue_registered_retirement(home)
+        assert "retiring_exact_identity_still_registered" in _checks(home)
 
-        live = home / "cache" / "1.0.0"
-        live.mkdir(parents=True)
-        _write_registry(home, live)
-        append_retiring_entry(version="1.0.0", path=str(live))
+    def test_launch_invalid_retiring_manifest_is_not_recognized(self, home: Path) -> None:
+        identity = _queue_registered_retirement(home)
+        raw = json.loads(identity.manifest_path.read_text(encoding="utf-8"))
+        raw["unexpected"] = True
+        identity.manifest_path.write_text(json.dumps(raw), encoding="utf-8")
 
-        assert "retiring_entry_still_registered" in _checks(home)
+        assert "retiring_exact_identity_still_registered" not in _checks(home)
+
+    def test_unreadable_registered_retirement_is_actionable(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
+        from autoskillit.workspace import verify_install_state
+
+        identity = _queue_registered_retirement(home)
+
+        def fail_digest(_path: Path) -> str:
+            raise PermissionError("injected diagnostic read failure")
+
+        monkeypatch.setattr(
+            plugin_artifact_identity,
+            "directory_tree_digest",
+            fail_digest,
+        )
+
+        finding = next(
+            item for item in verify_install_state() if item.check == "retiring_artifact_unreadable"
+        )
+
+        assert finding.severity is Severity.ERROR
+        assert str(identity.managed_path) in finding.message
+        assert "Restore filesystem access" in finding.message
+        assert "autoskillit doctor" in finding.message
+
+    def test_migrated_legacy_evidence_is_a_warning_not_deletion_authority(
+        self,
+        home: Path,
+    ) -> None:
+        from autoskillit.core import (
+            PluginArtifactKind,
+            Severity,
+            migrate_retiring_cache_v1,
+            write_versioned_json,
+        )
+        from autoskillit.workspace import verify_install_state
+
+        legacy_path = home / "cache" / "legacy"
+        write_versioned_json(
+            home / ".autoskillit" / "retiring_cache.json",
+            {
+                "retiring": [
+                    {
+                        "version": "legacy",
+                        "path": str(legacy_path),
+                        "retired_at": "2025-01-01T00:00:00+00:00",
+                    }
+                ]
+            },
+            schema_version=1,
+        )
+        migrate_retiring_cache_v1({PluginArtifactKind.INSTALLED_PLUGIN: home / "cache"})
+
+        finding = next(
+            item
+            for item in verify_install_state()
+            if item.check == "retiring_cache_legacy_evidence"
+        )
+        assert finding.severity is Severity.WARNING
+
+    def test_corrupt_retirement_cache_is_an_explicit_error(self, home: Path) -> None:
+        from autoskillit.workspace import verify_install_state
+
+        cache = home / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text("{not-json")
+
+        finding = next(
+            item for item in verify_install_state() if item.check == "retiring_cache_corrupt"
+        )
+
+        assert finding.severity is Severity.ERROR
+        assert "retiring_cache.json" in finding.message
+        assert "autoskillit install" in finding.message
+
+    def test_future_retirement_cache_schema_is_an_explicit_error(self, home: Path) -> None:
+        from autoskillit.workspace import verify_install_state
+
+        cache = home / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text(json.dumps({"schema_version": 99, "records": []}))
+
+        finding = next(
+            item
+            for item in verify_install_state()
+            if item.check == "retiring_cache_unsupported_future"
+        )
+
+        assert finding.severity is Severity.ERROR
+        assert "schema 99" in finding.message
+        assert "autoskillit install" in finding.message
 
     def test_version_drift_names_each_derived_file(self, home: Path) -> None:
         """Three files carry a version and all three are derived.

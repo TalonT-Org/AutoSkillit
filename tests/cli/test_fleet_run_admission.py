@@ -87,7 +87,10 @@ async def _run_execute_fleet_run(
     cfg = MagicMock()
     mock_ctx = _make_mock_ctx(tmp_path, dispatch_backend)
 
-    monkeypatch.setattr("autoskillit.server.make_context", lambda _cfg, project_dir=None: mock_ctx)
+    monkeypatch.setattr(
+        "autoskillit.server.make_context",
+        lambda _cfg, project_dir=None, plugin_retirement_coordinator=None: mock_ctx,
+    )
     monkeypatch.setattr("autoskillit.fleet.execute_dispatch", execute_dispatch_fn)
 
     from autoskillit.cli.fleet._fleet_run import _execute_fleet_run
@@ -298,7 +301,7 @@ class TestFleetRunCliAdmission:
         )
         monkeypatch.setattr(
             "autoskillit.server.make_context",
-            lambda _cfg, project_dir=None: ctx,
+            lambda _cfg, project_dir=None, plugin_retirement_coordinator=None: ctx,
         )
 
         from autoskillit.cli.fleet import fleet_run

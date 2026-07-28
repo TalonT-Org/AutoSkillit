@@ -29,6 +29,7 @@ from autoskillit.core import (
     TerminationAction,
     TerminationReason,
     get_logger,
+    normalize_inherited_fds,
     read_starttime_ticks,
 )
 from autoskillit.execution.process._process_io import (
@@ -123,6 +124,11 @@ def _resolve_session_id(
 ) -> str:
     """Merge session ID sources: stdout type=system wins; Channel B JSONL filename fallback."""
     return stdout_session_id or channel_b_session_id or ""
+
+
+def _normalize_pass_fds(pass_fds: tuple[int, ...]) -> tuple[int, ...]:
+    """Validate and de-duplicate inherited descriptors without reordering them."""
+    return normalize_inherited_fds(pass_fds)
 
 
 def decide_termination_action(
@@ -245,6 +251,7 @@ async def run_managed_async(
     timeout: float,
     input_data: str | None = None,
     env: Mapping[str, str] | None = None,
+    pass_fds: tuple[int, ...] = (),
     pty_mode: bool = False,
     completion_record_types: frozenset[str] = frozenset({"result"}),
     session_log_dir: Path | None = None,
@@ -286,6 +293,7 @@ async def run_managed_async(
     """
     # Capture workload basename before PTY wrapping rewrites cmd (#806)
     _workload_basename = Path(cmd[0]).name if cmd else ""
+    _inherited_fds = _normalize_pass_fds(pass_fds)
 
     if pty_mode:
         cmd = pty_wrap_command(cmd)
@@ -324,6 +332,7 @@ async def run_managed_async(
                 cwd=cwd,
                 env=_env,
                 start_new_session=True,
+                pass_fds=_inherited_fds,
             )
 
             # Resolve the workload TraceTarget — the PID that should be observed.
@@ -702,6 +711,7 @@ class DefaultSubprocessRunner:
         cwd: Path,
         timeout: float,
         env: Mapping[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -730,6 +740,7 @@ class DefaultSubprocessRunner:
             cwd=cwd,
             timeout=timeout,
             env=env,
+            pass_fds=pass_fds,
             stale_threshold=stale_threshold,
             completion_marker=completion_marker,
             session_log_dir=session_log_dir,

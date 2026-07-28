@@ -240,9 +240,13 @@ def test_write_versioned_json_preserves_existing_keys_atomically(tmp_path, monke
     calls: list[tuple[str, str]] = []
     real_atomic_write = io_mod.atomic_write
 
-    def spy(path, content):
+    def spy(path, content, *, strict_durability=False):
         calls.append((str(path), content))
-        return real_atomic_write(path, content)
+        return real_atomic_write(
+            path,
+            content,
+            strict_durability=strict_durability,
+        )
 
     monkeypatch.setattr(io_mod, "atomic_write", spy)
 
@@ -254,6 +258,55 @@ def test_write_versioned_json_preserves_existing_keys_atomically(tmp_path, monke
     assert calls[0][0] == str(target)
     decoded = json.loads(target.read_text(encoding="utf-8"))
     assert decoded == {"outer": {"inner": [1, 2, 3]}, "name": "demo", "schema_version": 7}
+
+
+def test_atomic_write_strict_parent_fsync_failure_is_observable(tmp_path, monkeypatch):
+    import os
+
+    from autoskillit.core.io import atomic_write
+
+    real_fsync = os.fsync
+    calls = 0
+
+    def fail_parent_fsync(fd):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("parent fsync failed")
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", fail_parent_fsync)
+
+    target = tmp_path / "strict.json"
+    with pytest.raises(OSError, match="parent fsync failed") as caught:
+        atomic_write(
+            target,
+            "{}",
+            strict_durability=True,
+        )
+    assert getattr(caught.value, "path", None) == target
+    assert target.read_text() == "{}"
+
+
+def test_write_versioned_json_forwards_strict_durability(tmp_path, monkeypatch):
+    from autoskillit.core import io as io_mod
+
+    observed: list[bool] = []
+
+    def spy(path, content, *, strict_durability=False):
+        del path, content
+        observed.append(strict_durability)
+
+    monkeypatch.setattr(io_mod, "atomic_write", spy)
+
+    write_versioned_json(
+        tmp_path / "strict.json",
+        {"value": 1},
+        schema_version=2,
+        strict_durability=True,
+    )
+
+    assert observed == [True]
 
 
 def test_write_versioned_json_rejects_non_dict_payload(tmp_path):
@@ -345,6 +398,21 @@ class TestReadVersionedJson:
 
         result = read_versioned_json(tmp_path / "nonexistent.json", expected_version=1)
         assert result is None
+
+    def test_read_versioned_json_can_raise_transient_io_errors(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        target = tmp_path / "unreadable.json"
+        target.write_text('{"schema_version": 1}', encoding="utf-8")
+
+        def fail_read_text(*_args, **_kwargs):
+            raise PermissionError("injected transient read failure")
+
+        monkeypatch.setattr(Path, "read_text", fail_read_text)
+        with pytest.raises(PermissionError, match="injected transient read failure"):
+            read_versioned_json(target, expected_version=1, raise_io_errors=True)
 
     def test_read_versioned_json_returns_none_on_corrupt_json(self, tmp_path: Path) -> None:
 

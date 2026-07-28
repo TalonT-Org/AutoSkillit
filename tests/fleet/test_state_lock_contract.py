@@ -38,6 +38,7 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
     {
         "core/_plugin_cache.py",
+        "core/runtime/artifact_lease.py",
         "cli/session/pty/_exec.py",
         "cli/session/pty/_observer.py",
         "execution/backends/_codex_config_lock.py",

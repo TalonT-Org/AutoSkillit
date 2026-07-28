@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.execution.recording import RecordingSubprocessRunner, ReplayingSubprocessRunner
 from tests.conftest import _make_result
-from tests.fakes import MockSubprocessRunner
+from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -63,21 +63,28 @@ async def test_run_headless_core_auto_derives_step_name_when_recording(tmp_path)
     inner.set_default(_make_result())
     recording_runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
 
-    ctx = make_context(
-        AutomationConfig(), runner=recording_runner, plugin_dir=str(tmp_path), project_dir=tmp_path
-    )
-    ctx.gate = DefaultGateState(enabled=True)
-    ctx.config.linux_tracing.log_dir = str(tmp_path / "logs")
+    authority = FakePluginArtifactAuthority(tmp_path)
+    try:
+        ctx = make_context(
+            AutomationConfig(),
+            runner=recording_runner,
+            plugin_authority=authority,
+            project_dir=tmp_path,
+        )
+        ctx.gate = DefaultGateState(enabled=True)
+        ctx.config.linux_tracing.log_dir = str(tmp_path / "logs")
 
-    # Call WITHOUT step_name — auto-derivation should kick in
-    await run_headless_core("/autoskillit:smoke-task", str(tmp_path), ctx)
+        # Call WITHOUT step_name — auto-derivation should kick in
+        await run_headless_core("/autoskillit:smoke-task", str(tmp_path), ctx)
 
-    # record_step must be called with the derived step name
-    mock_recorder.record_step.assert_called_once()
-    call_kwargs = mock_recorder.record_step.call_args.kwargs
-    assert call_kwargs["step_name"] == "smoke-task", (
-        f"Expected derived step_name 'smoke-task', got {call_kwargs['step_name']!r}"
-    )
+        # record_step must be called with the derived step name
+        mock_recorder.record_step.assert_called_once()
+        call_kwargs = mock_recorder.record_step.call_args.kwargs
+        assert call_kwargs["step_name"] == "smoke-task", (
+            f"Expected derived step_name 'smoke-task', got {call_kwargs['step_name']!r}"
+        )
+    finally:
+        authority.close()
 
 
 # --- T10: make_context wraps runner when RECORD_SCENARIO set ---

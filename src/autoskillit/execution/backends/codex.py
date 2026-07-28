@@ -59,7 +59,7 @@ from autoskillit.core import (
     NoResume,
     ObserverStatus,
     OutputFormat,
-    PluginSource,
+    PluginLaunchBinding,
     ResumeSpec,
     SessionCheckpoint,
     SessionLocator,
@@ -99,10 +99,12 @@ from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_tran
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
 
 
-def _codex_home_from_plugin_source(plugin_source: PluginSource | None) -> str | None:
-    if plugin_source is None:
+def _codex_home_from_plugin_binding(
+    plugin_binding: PluginLaunchBinding | None,
+) -> str | None:
+    if plugin_binding is None or plugin_binding.plugin_dir is None:
         return None
-    return str(plugin_source.plugin_dir)
+    return str(plugin_binding.plugin_dir)
 
 
 __all__ = [
@@ -1065,7 +1067,12 @@ class CodexBackend(BackendCmdBuilderBase):
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)
-        return CmdSpec(cmd=spec.cmd, env=spec.env, cwd=cwd)
+        return CmdSpec(
+            cmd=spec.cmd,
+            env=spec.env,
+            cwd=cwd,
+            inherited_fds=spec.inherited_fds,
+        )
 
     def stream_parser(self, completion_marker: str = "") -> CodexStreamParser:
         return CodexStreamParser(completion_marker=completion_marker)
@@ -1137,7 +1144,7 @@ class CodexBackend(BackendCmdBuilderBase):
         *,
         completion_marker: str = "",
         model: str | None = None,
-        plugin_source: PluginSource | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
         output_format: OutputFormat = OutputFormat.JSON,
         add_dirs: Sequence[ValidatedAddDir] = (),
         exit_after_stop_delay_ms: int = 0,
@@ -1158,7 +1165,7 @@ class CodexBackend(BackendCmdBuilderBase):
             cfg = self._apply_config(config)
             completion_marker = cfg["completion_marker"]
             model = cfg["model"]
-            plugin_source = cfg["plugin_source"]
+            plugin_binding = cfg["plugin_binding"]
             output_format = cfg["output_format"]
             add_dirs = cfg["add_dirs"]
             exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]
@@ -1174,7 +1181,7 @@ class CodexBackend(BackendCmdBuilderBase):
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]
             network_access = cfg.get("network_access", False)
-        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
+        projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.JSON:
             logger.warning("codex_output_format_coerced")
         _has_prefix = (
@@ -1282,13 +1289,14 @@ class CodexBackend(BackendCmdBuilderBase):
             cwd=cwd,
             is_resume=bool(resume_session_id),
             process_idle_timeout_ms=stream_idle_timeout_ms,
+            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
         )
 
     def build_food_truck_cmd(
         self,
         *,
         orchestrator_prompt: str,
-        plugin_source: PluginSource | None,
+        plugin_binding: PluginLaunchBinding | None,
         cwd: str,
         completion_marker: str,
         resume_session_id: str | None = None,
@@ -1305,7 +1313,7 @@ class CodexBackend(BackendCmdBuilderBase):
         sentinel_contract: str = "",
         resume_message: str | None = None,
     ) -> CmdSpec:
-        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
+        projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.STREAM_JSON:
             logger.warning("codex_output_format_coerced")
 
@@ -1394,6 +1402,7 @@ class CodexBackend(BackendCmdBuilderBase):
             cwd=cwd,
             is_resume=bool(resume_session_id),
             process_idle_timeout_ms=stream_idle_timeout_ms,
+            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
         )
 
     def build_interactive_cmd(
@@ -1401,7 +1410,7 @@ class CodexBackend(BackendCmdBuilderBase):
         *,
         initial_prompt: str | None = None,
         model: str | None = None,
-        plugin_source: PluginSource | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
         resume_spec: ResumeSpec = NoResume(),
@@ -1482,7 +1491,7 @@ class CodexBackend(BackendCmdBuilderBase):
             for reserved_key in CODEX_COOK_RESERVED_ENV_VARS:
                 merged_extras[reserved_key] = str(generated_home)
         else:
-            projected_codex_home = _codex_home_from_plugin_source(plugin_source)
+            projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
             if projected_codex_home is not None:
                 merged_extras.setdefault("CODEX_HOME", projected_codex_home)
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
@@ -1497,6 +1506,7 @@ class CodexBackend(BackendCmdBuilderBase):
             env=env,
             origin=partial.origin,
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
+            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
         )
 
     def build_resume_cmd(
@@ -1505,7 +1515,7 @@ class CodexBackend(BackendCmdBuilderBase):
         resume_session_id: str,
         prompt: str,
         output_format: OutputFormat = OutputFormat.JSON,
-        plugin_source: PluginSource | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
         env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec:
         if not resume_session_id.strip():
@@ -1520,7 +1530,7 @@ class CodexBackend(BackendCmdBuilderBase):
             session_type="", include_session_baseline=True, include_agent_backend_flat=True
         )
         _merge_caller_env_extras(resume_extras, env_extras)
-        projected_codex_home = _codex_home_from_plugin_source(plugin_source)
+        projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if projected_codex_home is not None:
             resume_extras["CODEX_HOME"] = projected_codex_home
         env = self.env_policy().build_env(
@@ -1528,7 +1538,12 @@ class CodexBackend(BackendCmdBuilderBase):
             extras=resume_extras,
             required=RESUME_SESSION_BASELINE_KEYS | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
-        return CmdSpec(cmd=tuple(cmd), env=env, is_resume=True)
+        return CmdSpec(
+            cmd=tuple(cmd),
+            env=env,
+            is_resume=True,
+            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+        )
 
     def validate_session_layout(
         self,

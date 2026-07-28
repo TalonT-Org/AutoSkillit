@@ -11,7 +11,7 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 | `io.py` | `atomic_write`, `ensure_project_temp`, YAML helpers |
 | `_cmd_runner.py` | `CmdRunner` protocol, `default_cmd_runner`, `run_git`, `run_gh` — sync subprocess for git/gh CLI |
 | `_json.py` | Fast JSON via orjson (with stdlib fallback) — `fast_loads`, `fast_dumps` |
-| `logging.py` | Logging configuration |
+| `logging.py` | Logging configuration plus canonical plugin-artifact lifecycle event and release wrapper |
 | `paths.py` | `pkg_root()`, `is_git_worktree()`, `is_git_main_checkout()`, `is_in_git_repo()` |
 | `_claude_env.py` | IDE-scrubbing canonical env builder for agent subprocesses |
 | `_delivery_bounds.py` | General-output limit accessor plus typed recipe-delivery decision resolver |
@@ -21,7 +21,8 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 | `claude_conventions.py` | Skill discovery directory layout constants |
 | `git_remote.py` | `resolve_clone_remote_name_sync`, `REMOTE_PRECEDENCE` — IL-0 canonical remote precedence |
 | `github_url.py` | `parse_github_repo` |
-| `_plugin_cache.py` | Plugin cache lifecycle: retiring cache, install locking, kitchen registry |
+| `_plugin_cache.py` | Plugin cache lifecycle: shared retirement engine, retiring cache, install locking, kitchen registry |
+| `_plugin_artifact_identity.py` | Installed-plugin manifest serialization and exact identity validation |
 | `_plugin_ids.py` | `DIRECT_PREFIX`, `MARKETPLACE_PREFIX`, `detect_autoskillit_mcp_prefix` (stdlib-only) |
 | `_install_detect.py` | `is_dev_install()` — editable-install detection for config resolution |
 | `_execution_marker.py` | `execution_marker` async context manager — unified write/heartbeat/cleanup for stale-detector suppression markers |

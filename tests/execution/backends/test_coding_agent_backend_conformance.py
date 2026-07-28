@@ -16,13 +16,13 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     EnvPolicy,
-    ProjectedPluginRoot,
     ResultParser,
     SessionLocator,
     SkillSessionConfig,
     StreamParser,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
+from tests.execution.backends._plugin_binding import plugin_binding
 
 from .test_backend_contract_base import BackendContractBase
 
@@ -297,16 +297,51 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert isinstance(result, CmdSpec)
         assert len(result.cmd) > 0
 
+    def test_resume_cmd_carries_plugin_binding_descriptors(self) -> None:
+        self._require_capability("session_resume_capable")
+        result = self.backend.build_resume_cmd(
+            resume_session_id="test-session-id",
+            prompt="test prompt",
+            plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3)),
+        )
+        assert result.inherited_fds == (9, 3)
+
     def test_build_food_truck_cmd_when_capable(self) -> None:
         """BackendCapabilities.food_truck_capable — build_food_truck_cmd returns valid CmdSpec."""
         self._require_capability("food_truck_capable")
         result = self.backend.build_food_truck_cmd(
             orchestrator_prompt="x",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp")),
+            plugin_binding=plugin_binding(Path("/tmp")),
             cwd="/tmp",
             completion_marker="%%X%%",
         )
         assert isinstance(result, CmdSpec)
+
+    def test_food_truck_cmd_carries_plugin_binding_descriptors(self) -> None:
+        self._require_capability("food_truck_capable")
+        result = self.backend.build_food_truck_cmd(
+            orchestrator_prompt="x",
+            plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3)),
+            cwd="/tmp",
+            completion_marker="%%X%%",
+        )
+        assert result.inherited_fds == (9, 3)
+
+    def test_skill_cmd_carries_plugin_binding_descriptors(self) -> None:
+        result = self.backend.build_skill_session_cmd(
+            "/test",
+            "/tmp",
+            config=SkillSessionConfig(
+                plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3))
+            ),
+        )
+        assert result.inherited_fds == (9, 3)
+
+    def test_interactive_cmd_carries_plugin_binding_descriptors(self) -> None:
+        result = self.backend.build_interactive_cmd(
+            plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3))
+        )
+        assert result.inherited_fds == (9, 3)
 
     def test_build_inspector_cmd_raises_when_not_capable(self) -> None:
         """BackendCapabilities.inspector_capable — raises when not capable."""

@@ -173,7 +173,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         EnvPolicy,
         NoResume,
         OutputFormat,
-        PluginSource,
+        PluginLaunchBinding,
         ResultParser,
         ResumeSpec,
         SessionLocator,
@@ -217,7 +217,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             resume_session_id: str,
             prompt: str,
             output_format: OutputFormat = OutputFormat.JSON,
-            plugin_source: PluginSource | None = None,
+            plugin_binding: PluginLaunchBinding | None = None,
             env_extras: Mapping[str, str] | None = None,
         ) -> CmdSpec: ...
 
@@ -232,7 +232,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             self,
             *,
             orchestrator_prompt: str,
-            plugin_source: PluginSource,
+            plugin_binding: PluginLaunchBinding | None,
             cwd: str,
             completion_marker: str,
         ) -> CmdSpec: ...
@@ -242,7 +242,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             *,
             initial_prompt: str | None = None,
             model: str | None = None,
-            plugin_source: PluginSource | None = None,
+            plugin_binding: PluginLaunchBinding | None = None,
             add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
             generated_home: Path | None = None,
             resume_spec: ResumeSpec = NoResume(),

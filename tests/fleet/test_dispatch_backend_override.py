@@ -74,7 +74,10 @@ class TestDispatchBackendOverrideThreadsToExecutor:
         await _run_with_backend(tool_ctx, dispatch_backend=mock_codex)
 
         assert len(tool_ctx.executor.dispatch_calls) == 1
-        assert tool_ctx.executor.dispatch_calls[0].backend_override == "codex"
+        dispatch_call = tool_ctx.executor.dispatch_calls[0]
+        assert dispatch_call.backend_override == "codex"
+        assert dispatch_call.plugin_authority is not None
+        assert dispatch_call.capability_preparation is not None
 
 
 class TestDispatchBackendOverrideOmittedUsesCtxBackend:

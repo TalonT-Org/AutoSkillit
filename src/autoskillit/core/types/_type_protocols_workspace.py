@@ -4,17 +4,29 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import BackendConventions
 from ._type_enums import SkillExecutionRole, SkillSource
+from ._type_plugin_source import (
+    PluginArtifactIdentity,
+    PluginLaunchBinding,
+    PluginLoadMode,
+    RetirementOutcome,
+    RetiringAppendResult,
+    RetiringArtifactRecord,
+)
 from ._type_protocols_backend import CodingAgentBackend
 from ._type_results import CleanupResult, CloneResult, ManagedSessionHome, ValidatedAddDir
 from ._type_skill_contract import SkillSourceIdentity, SkillSourceRef, SkillVisibilitySpec
 
 __all__ = [
     "WorkspaceManager",
+    "PluginArtifactAuthority",
+    "PluginArtifactRetirementOwner",
+    "PluginRetirementCoordinator",
     "CloneManager",
     "EffectiveSkillCatalogAuthority",
     "EffectiveSkillInvocationAuthority",
@@ -26,6 +38,50 @@ __all__ = [
     "SkillProjectionContextAuthority",
     "SkillResolver",
 ]
+
+
+@runtime_checkable
+class PluginArtifactAuthority(Protocol):
+    """Lazy authority that binds an exact plugin incarnation to one launch."""
+
+    def acquire_launch_binding(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        load_mode: PluginLoadMode,
+    ) -> PluginLaunchBinding: ...
+
+
+@runtime_checkable
+class PluginArtifactRetirementOwner(Protocol):
+    """Artifact-specific exact-identity retirement authority."""
+
+    @property
+    def managed_root(self) -> Path: ...
+
+    def enqueue_retirement(
+        self,
+        identity: PluginArtifactIdentity,
+        not_before: datetime,
+    ) -> RetiringAppendResult: ...
+
+    def cancel_obsolete_retirements(
+        self,
+        identity: PluginArtifactIdentity,
+    ) -> tuple[str, ...]: ...
+
+    def try_reclaim(
+        self,
+        record: RetiringArtifactRecord,
+        now: datetime,
+    ) -> RetirementOutcome: ...
+
+
+@runtime_checkable
+class PluginRetirementCoordinator(Protocol):
+    """Cross-kind dispatcher injected into server startup."""
+
+    def sweep_due(self, now: datetime) -> tuple[RetirementOutcome, ...]: ...
 
 
 @runtime_checkable

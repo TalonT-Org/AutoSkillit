@@ -11,10 +11,10 @@ from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     MCP_CLIENT_BACKEND_ENV_VAR,
     OutputFormat,
-    ProjectedPluginRoot,
 )
 from autoskillit.execution.backends.codex import _IMAGE_GENERATION_DISABLED, CodexBackend
 from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -29,18 +29,19 @@ def _build_skill_session():
         cwd="/work",
         completion_marker="%%DONE%%",
         model=None,
-        plugin_source=None,
+        plugin_binding=None,
         output_format=OutputFormat.JSON,
     )
 
 
 def _build_food_truck():
-    return CodexBackend().build_food_truck_cmd(
-        orchestrator_prompt="dispatch",
-        plugin_source=ProjectedPluginRoot(plugin_dir=Path("/pkg")),
-        cwd="/work",
-        completion_marker="%%DONE%%",
-    )
+    with plugin_binding(Path("/pkg")) as binding:
+        return CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="dispatch",
+            plugin_binding=binding,
+            cwd="/work",
+            completion_marker="%%DONE%%",
+        )
 
 
 def _build_resume():

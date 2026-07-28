@@ -43,7 +43,7 @@ class TestBuildSkillSessionCmdResume:
         cwd="/tmp/test",
         completion_marker="%%DONE%%",
         model=None,
-        plugin_source=None,
+        plugin_binding=None,
         output_format=OutputFormat.STREAM_JSON,
         resume_session_id="sess-123",
     )

@@ -763,14 +763,13 @@ async def _run_dispatch(
             FleetErrorCode.FLEET_MANIFEST_MISSING,
             "Executor not configured.",
         )
-    food_truck_plugin_source = food_truck_capability_contract = None
+    food_truck_plugin_authority = food_truck_capability_preparation = None
     if _effective_backend is not None:
-        food_truck_plugin_source, food_truck_capability_contract = (
+        food_truck_plugin_authority, food_truck_capability_preparation = (
             prepare_effective_skill_dispatch(
                 resolved_command=prompt,
                 project_root=tool_ctx.project_dir,
                 cwd=tool_ctx.project_dir,
-                backend=_effective_backend,
                 resolver=tool_ctx.skill_resolver or default_skill_resolver(),
                 visibility=tool_ctx.config.skill_visibility_spec(),
                 default_base_branch=tool_ctx.config.branching.default_base_branch,
@@ -872,8 +871,8 @@ async def _run_dispatch(
                     orchestrator_prompt=prompt,
                     cwd=str(tool_ctx.project_dir),
                     completion_marker=completion_marker,
-                    plugin_source=food_truck_plugin_source,
-                    capability_contract=food_truck_capability_contract,
+                    plugin_authority=food_truck_plugin_authority,
+                    capability_preparation=food_truck_capability_preparation,
                     prior_completion_markers=prior_completion_markers,
                     resume_session_id=resume_session_id,
                     resume_checkpoint=resume_checkpoint,

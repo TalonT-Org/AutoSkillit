@@ -34,7 +34,8 @@ from autoskillit.core import (
     MergeQueueWatcher,
     MigrationService,
     OutputPatternResolver,
-    PluginSource,
+    PluginArtifactAuthority,
+    PluginRetirementCoordinator,
     QuotaRefreshTask,
     ReadOnlyResolver,
     RecipeExecutionFactory,
@@ -84,10 +85,8 @@ class ToolContext:
     timing_log:           TimingLog — per-step wall-clock duration tracking
     response_log:         McpResponseLog — per-tool MCP response size tracking
     gate:                 GateState — enables/disables gated tools
-    plugin_source:        PluginSource — the sanitized ProjectedPluginRoot this
-                          session loads. Always derived from pkg_root(), never from
-                          installed_plugins.json.
-                          Encodes how autoskillit is loaded into Claude Code sessions.
+    plugin_authority:     PluginArtifactAuthority — lazy authority that acquires one
+                          exact artifact incarnation for each physical child launch.
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
                           MockSubprocessRunner in tests)
     backend:              CodingAgentBackend — the coding agent backend resolved from
@@ -162,10 +161,11 @@ class ToolContext:
     token_log: TokenLog
     timing_log: TimingLog
     gate: GateState
-    plugin_source: PluginSource
+    plugin_authority: PluginArtifactAuthority
     runner: SubprocessRunner | None
     temp_dir: Path = field(default=_MISSING)
     project_dir: Path = field(default=_MISSING)
+    plugin_retirement_coordinator: PluginRetirementCoordinator | None = None
     response_log: McpResponseLog = field(default_factory=DefaultMcpResponseLog)
     executor: HeadlessExecutor | None = field(default=None)
     tester: TestRunner | None = field(default=None)

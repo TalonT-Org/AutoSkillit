@@ -68,7 +68,7 @@ def run_cook_attempt(
                 )
             else:
                 master_fd, slave_fd = os.openpty()
-                launcher_fds = tuple(sorted({*inherited_fds, slave_fd}))
+                launcher_fds = _merge_launcher_fds(inherited_fds, slave_fd)
                 process = subprocess.Popen(
                     launcher_argv(
                         slave_fd,
@@ -163,13 +163,21 @@ def _canonical_cwd(value: str) -> str:
 
 
 def _normalize_pass_fds(pass_fds: tuple[int, ...]) -> tuple[int, ...]:
-    normalized: set[int] = set()
+    normalized: dict[int, None] = {}
     for descriptor in pass_fds:
         if isinstance(descriptor, bool) or not isinstance(descriptor, int) or descriptor < 0:
             raise ValueError("pass_fds must contain non-negative integer descriptors")
         os.fstat(descriptor)
-        normalized.add(descriptor)
-    return tuple(sorted(normalized))
+        normalized.setdefault(descriptor, None)
+    return tuple(normalized)
+
+
+def _merge_launcher_fds(
+    inherited_fds: tuple[int, ...],
+    slave_fd: int,
+) -> tuple[int, ...]:
+    """Preserve lease priority while including the PTY slave exactly once."""
+    return tuple(dict.fromkeys((*inherited_fds, slave_fd)))
 
 
 @contextlib.contextmanager
@@ -254,6 +262,8 @@ def _process_group_exists(pgid: int) -> bool:
         os.killpg(pgid, 0)
     except ProcessLookupError:
         return False
+    except PermissionError:
+        return True
     return True
 
 

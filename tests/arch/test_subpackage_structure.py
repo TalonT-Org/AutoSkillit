@@ -81,6 +81,7 @@ class TestCoreSubpackages:
 
     def test_core_runtime_has_expected_modules(self):
         expected = {
+            "artifact_lease",
             "kitchen_state",
             "readiness",
             "session_provenance",
@@ -118,11 +119,11 @@ class TestExecutionSubpackages:
             "_headless_execute",
             "_headless_git",
             "_headless_helpers",
+            "_headless_launch",
             "_headless_outcome",
             "_headless_path_tokens",
             "_headless_recovery",
             "_headless_result",
-            "_headless_scan",
         }
         actual = {p.stem for p in (SRC / "execution" / "headless").glob("_headless_*.py")}
         assert actual == expected

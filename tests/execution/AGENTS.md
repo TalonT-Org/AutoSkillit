@@ -144,6 +144,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 
 | File | Purpose |
 |------|---------|
+| `_plugin_binding.py` | Deterministic exact-identity launch binding helper for backend tests |
 | `_conformance_assertions.py` | Pytest-free live/deterministic conformance assertions, including output-boundary, sentinel, and spill-integrity checks |
 | `test_claude_backend.py` | Equivalence tests for retained shims; backend method tests, config adapter, resume preservation |
 | `test_claude_code_backend.py` | Structural tests for ClaudeCodeBackend |

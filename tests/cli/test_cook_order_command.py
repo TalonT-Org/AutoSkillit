@@ -195,6 +195,24 @@ class TestCLIOrderCommand:
             "autoskillit.core.detect_autoskillit_mcp_prefix",
             lambda _capabilities: MARKETPLACE_PREFIX,
         )
+        from autoskillit import __version__
+        from autoskillit.cli._plugin_artifact import (
+            current_installed_plugin_root,
+            installed_plugin_semantic_key,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
+
+        installed_root = current_installed_plugin_root()
+        installed_root.mkdir(parents=True)
+        (installed_root / "plugin.json").write_text("{}\n", encoding="utf-8")
+        publish_installed_plugin_artifact(
+            installed_root,
+            semantic_key=installed_plugin_semantic_key(
+                _AUTOSKILLIT_PLUGIN_KEY,
+                __version__,
+            ),
+        )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )

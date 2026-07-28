@@ -20,18 +20,30 @@ from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
 from ._json import fast_loads as fast_loads
-from ._plugin_cache import MAX_DEFER_HOURS as MAX_DEFER_HOURS
+from ._plugin_artifact_identity import (
+    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
+)
+from ._plugin_artifact_identity import (
+    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
+)
+from ._plugin_artifact_identity import (
+    installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
+)
+from ._plugin_artifact_identity import (
+    read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
+)
+from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
-from ._plugin_cache import _retire_old_versions as _retire_old_versions
 from ._plugin_cache import any_kitchen_open as any_kitchen_open
-from ._plugin_cache import append_retiring_entry as append_retiring_entry
+from ._plugin_cache import append_retiring_record as append_retiring_record
 from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
-from ._plugin_cache import drop_retiring_entries as drop_retiring_entries
+from ._plugin_cache import due_retiring_records as due_retiring_records
 from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
+from ._plugin_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
 from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry
+from ._plugin_cache import read_retiring_cache as read_retiring_cache
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
-from ._plugin_cache import retiring_cache_entries as retiring_cache_entries
-from ._plugin_cache import sweep_retiring_cache as sweep_retiring_cache
+from ._plugin_cache import remove_retiring_records as remove_retiring_records
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
@@ -106,6 +118,7 @@ from .io import YAMLError as YAMLError
 from .io import atomic_write as atomic_write
 from .io import compose_yaml as compose_yaml
 from .io import decode_versioned_json_bytes as decode_versioned_json_bytes
+from .io import directory_tree_digest as directory_tree_digest
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
 from .io import load_yaml as load_yaml
@@ -118,8 +131,10 @@ from .io import spill_output as spill_output
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_canonical_versioned_json as write_canonical_versioned_json
 from .io import write_versioned_json as write_versioned_json
+from .logging import PluginArtifactLifecycleLease as PluginArtifactLifecycleLease
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
+from .logging import log_plugin_artifact_lifecycle as log_plugin_artifact_lifecycle
 from .path_containment import ContainmentError as ContainmentError
 from .path_containment import check_metadata_stable as check_metadata_stable
 from .path_containment import read_stable_contained_bytes as read_stable_contained_bytes
@@ -140,6 +155,9 @@ from .paths import resolve_project_dir as resolve_project_dir
 from .runtime._linux_proc import is_session_alive as is_session_alive
 from .runtime._linux_proc import read_boot_id as read_boot_id
 from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
+from .runtime.artifact_lease import ArtifactLease as ArtifactLease
+from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
+from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
 from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir
@@ -520,6 +538,7 @@ from .types import GitHubFetcher as GitHubFetcher
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract
+from .types import HeadlessSkillDispatchPreparation as HeadlessSkillDispatchPreparation
 from .types import HookTrustPolicy as HookTrustPolicy
 from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect
 from .types import IdempotencyNamespace as IdempotencyNamespace
@@ -541,6 +560,7 @@ from .types import InvocationTemplate as InvocationTemplate
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
+from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
 from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
@@ -570,7 +590,17 @@ from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PlanDispositionReport as PlanDispositionReport
 from .types import PlanDispositionRow as PlanDispositionRow
-from .types import PluginSource as PluginSource
+from .types import PluginArtifactAuthority as PluginArtifactAuthority
+from .types import PluginArtifactContentionError as PluginArtifactContentionError
+from .types import PluginArtifactIdentity as PluginArtifactIdentity
+from .types import PluginArtifactKind as PluginArtifactKind
+from .types import PluginArtifactPublicationError as PluginArtifactPublicationError
+from .types import PluginArtifactRetirementOwner as PluginArtifactRetirementOwner
+from .types import PluginArtifactUnavailableError as PluginArtifactUnavailableError
+from .types import PluginArtifactValidationError as PluginArtifactValidationError
+from .types import PluginLaunchBinding as PluginLaunchBinding
+from .types import PluginLoadMode as PluginLoadMode
+from .types import PluginRetirementCoordinator as PluginRetirementCoordinator
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PrepareBatchEvent as PrepareBatchEvent
@@ -579,7 +609,6 @@ from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef
 from .types import ProducerInstanceId as ProducerInstanceId
 from .types import ProducerSurface as ProducerSurface
-from .types import ProjectedPluginRoot as ProjectedPluginRoot
 from .types import PromptContractError as PromptContractError
 from .types import ProposeOccurrenceEvent as ProposeOccurrenceEvent
 from .types import ProtectedPoolOwnerId as ProtectedPoolOwnerId
@@ -647,6 +676,11 @@ from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
 from .types import RetiredArtifactShape as RetiredArtifactShape
+from .types import RetirementOutcome as RetirementOutcome
+from .types import RetiringAppendResult as RetiringAppendResult
+from .types import RetiringArtifactRecord as RetiringArtifactRecord
+from .types import RetiringCacheReadResult as RetiringCacheReadResult
+from .types import RetiringCacheState as RetiringCacheState
 from .types import RetryReason as RetryReason
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
 from .types import RolloverEpochEvent as RolloverEpochEvent
@@ -668,6 +702,7 @@ from .types import SkillAuthority as SkillAuthority
 from .types import SkillCapabilityDef as SkillCapabilityDef
 from .types import SkillContractError as SkillContractError
 from .types import SkillContractResolver as SkillContractResolver
+from .types import SkillContractView as SkillContractView
 from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillFrontmatterAuthority as SkillFrontmatterAuthority
@@ -747,12 +782,20 @@ from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
+from .types import (
+    is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest,
+)
+from .types import (
+    is_canonical_plugin_artifact_incarnation_id as is_canonical_plugin_artifact_incarnation_id,
+)
 from .types import is_path_like_token as is_path_like_token
 from .types import is_valid_codex_model_id as is_valid_codex_model_id
 from .types import (
     make_stored_context_admission_envelope as make_stored_context_admission_envelope,
 )
 from .types import model_class as model_class
+from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
+from .types import normalize_inherited_fds as normalize_inherited_fds
 from .types import parse_plan_paths as parse_plan_paths
 from .types import recipe_section_digest as recipe_section_digest
 from .types import recipe_section_element_digest as recipe_section_element_digest

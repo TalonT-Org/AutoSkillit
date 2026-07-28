@@ -149,7 +149,7 @@ class BackendCmdBuilderBase(ABC):
         return {
             "completion_marker": config.completion_marker,
             "model": config.model,
-            "plugin_source": config.plugin_source,
+            "plugin_binding": config.plugin_binding,
             "output_format": config.output_format,
             "add_dirs": config.add_dirs,
             "exit_after_stop_delay_ms": config.exit_after_stop_delay_ms,

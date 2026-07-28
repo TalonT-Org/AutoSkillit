@@ -8,11 +8,8 @@ Provides three components:
 
 from __future__ import annotations
 
-import errno
-import fcntl
 import os
 import shutil
-import stat
 import tempfile
 import time
 from collections.abc import Iterator
@@ -23,6 +20,8 @@ from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
+    ArtifactLease,
+    ArtifactLeaseContention,
     ClaudeDirectoryConventions,
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
@@ -112,8 +111,15 @@ def resolve_persistent_session_root(
 class _SessionLease:
     """Workspace-owned external lease for a removable generated home."""
 
-    path: Path
-    fd: int | None
+    lease: ArtifactLease
+
+    @property
+    def path(self) -> Path:
+        return self.lease.path
+
+    @property
+    def fd(self) -> int | None:
+        return self.lease.fd
 
     @classmethod
     def acquire(
@@ -122,78 +128,24 @@ class _SessionLease:
         *,
         blocking: bool,
     ) -> _SessionLease | None:
-        if lock_path.suffix != ".lock":
-            raise ValueError(f"Lock path must use the .lock suffix: {lock_path}")
-        lock_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-        directory_fd = os.open(
-            lock_path.parent,
-            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-        )
-        fd: int | None = None
         try:
-            directory_stat = os.fstat(directory_fd)
-            if not stat.S_ISDIR(directory_stat.st_mode):
-                raise RuntimeError(f"Session lease root is not a directory: {lock_path.parent}")
-            os.fchmod(directory_fd, 0o700)
-            fd = os.open(
-                lock_path.name,
-                os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
-                0o600,
-                dir_fd=directory_fd,
+            lease = ArtifactLease.acquire_exclusive(
+                lock_path,
+                blocking=blocking,
             )
-            lease_stat = os.fstat(fd)
-            if not stat.S_ISREG(lease_stat.st_mode):
-                raise RuntimeError(f"Session lease is not a regular file: {lock_path}")
-            operation = fcntl.LOCK_EX
-            if not blocking:
-                operation |= fcntl.LOCK_NB
-            fcntl.flock(fd, operation)
-            return cls(path=lock_path, fd=fd)
-        except OSError as exc:
-            contended = not blocking and exc.errno in (errno.EACCES, errno.EAGAIN)
-            failures: list[BaseException] = []
-            if not contended:
-                failures.append(exc)
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except BaseException as close_exc:
-                    logger.error("session_lease_close_failed", exc_info=True)
-                    failures.append(close_exc)
-            if failures:
-                _raise_failures("Session lease acquisition failed", failures)
+        except ArtifactLeaseContention:
             return None
         except BaseException as exc:
             logger.error("session_lease_acquisition_failed", exc_info=True)
-            failures = [exc]
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except BaseException as close_exc:
-                    logger.error("session_lease_close_failed", exc_info=True)
-                    failures.append(close_exc)
-            _raise_failures("Session lease acquisition failed", failures)
-            raise AssertionError("unreachable")
-        finally:
-            os.close(directory_fd)
+            raise exc
+        return cls(lease=lease)
 
     def release(self) -> None:
-        fd = self.fd
-        if fd is None:
-            return
-        self.fd = None
-        failures: list[BaseException] = []
         try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        except BaseException as exc:
-            logger.error("session_lease_unlock_failed", exc_info=True)
-            failures.append(exc)
-        try:
-            os.close(fd)
-        except BaseException as exc:
+            self.lease.close()
+        except BaseException:
             logger.error("session_lease_close_failed", exc_info=True)
-            failures.append(exc)
-        _raise_failures("Session lease release failed", failures)
+            raise
 
 
 @dataclass(frozen=True, slots=True)

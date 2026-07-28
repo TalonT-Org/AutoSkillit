@@ -17,6 +17,7 @@ session/ (see session/AGENTS.md), ui/ (see ui/AGENTS.md), update/ (see update/AG
 | `_installed_plugins.py` | `InstalledPluginsFile` — canonical accessor for `installed_plugins.json` |
 | `_install_info.py` | `InstallInfo`, `InstallType`, `detect_install()`, `comparison_branch()`, `dismissal_window()`, `upgrade_command()` |
 | `_marketplace.py` | Plugin install/upgrade |
+| `_plugin_artifact.py` | Exact installed-plugin incarnation manifests and per-launch artifact authority |
 | `_mcp_names.py` | MCP prefix detection |
 | `_onboarding.py` | First-run detection + guided menu |
 | `_prompts.py` | Prompt builder re-export hub + shared helpers (`_MCP_RETRY_INSTRUCTION`, `_read_full_sous_chef`) |

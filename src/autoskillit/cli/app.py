@@ -145,7 +145,13 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             )
     else:
         _explicit_project_dir = None
-    ctx = make_context(cfg, project_dir=_explicit_project_dir)
+    from autoskillit.cli._plugin_artifact import default_plugin_retirement_coordinator
+
+    ctx = make_context(
+        cfg,
+        project_dir=_explicit_project_dir,
+        plugin_retirement_coordinator=default_plugin_retirement_coordinator(),
+    )
     _initialize(ctx)
 
     try:

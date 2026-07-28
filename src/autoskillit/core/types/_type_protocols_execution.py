@@ -8,7 +8,9 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
 from ._type_enums import SkillExecutionRole
-from ._type_plugin_source import PluginSource
+from ._type_plugin_source import PluginLaunchBinding
+from ._type_protocols_backend import CodingAgentBackend
+from ._type_protocols_workspace import PluginArtifactAuthority
 from ._type_results import (
     ClosureAuthoritySpec,
     InputSpec,
@@ -29,10 +31,37 @@ __all__ = [
     "TestRunner",
     "HeadlessExecutor",
     "HeadlessSkillDispatchContract",
+    "HeadlessSkillDispatchPreparation",
     "OutputPatternResolver",
+    "SkillContractView",
     "SkillSessionContractStore",
     "WriteExpectedResolver",
 ]
+
+
+class _SkillContractOutputView(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def type(self) -> str: ...
+
+    @property
+    def allowed_values(self) -> Sequence[str]: ...
+
+
+@runtime_checkable
+class SkillContractView(Protocol):
+    """Execution-safe shape consumed from a higher-layer skill contract."""
+
+    @property
+    def outputs(self) -> Sequence[_SkillContractOutputView]: ...
+
+    @property
+    def write_behavior(self) -> str | None: ...
+
+    @property
+    def write_expected_when(self) -> Sequence[str]: ...
 
 
 @runtime_checkable
@@ -89,6 +118,36 @@ class HeadlessSkillDispatchContract(Protocol):
 
     @property
     def artifact_paths(self) -> tuple[str, ...]: ...
+
+
+@runtime_checkable
+class HeadlessSkillDispatchPreparation(Protocol):
+    """Resolved launch inputs used to acquire a physical plugin binding."""
+
+    @property
+    def resolved_command(self) -> str: ...
+
+    @property
+    def cwd(self) -> Path: ...
+
+    @property
+    def project_root(self) -> Path | None: ...
+
+    @property
+    def catalog(self) -> object | None: ...
+
+    @property
+    def invocation(self) -> object | None: ...
+
+    @property
+    def default_base_branch(self) -> str: ...
+
+    def finalize(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        binding: PluginLaunchBinding,
+    ) -> HeadlessSkillDispatchContract: ...
 
 
 @runtime_checkable
@@ -182,7 +241,7 @@ class HeadlessExecutor(Protocol):
         cwd: str,
         *,
         completion_marker: str,
-        plugin_source: PluginSource | None = None,
+        plugin_authority: PluginArtifactAuthority | None = None,
         prior_completion_markers: Sequence[str] | None = None,
         resume_session_id: str | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
@@ -212,7 +271,7 @@ class HeadlessExecutor(Protocol):
         resume_message: str | None = None,
         backend_override: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
-        capability_contract: HeadlessSkillDispatchContract | None = None,
+        capability_preparation: HeadlessSkillDispatchPreparation | None = None,
     ) -> SkillResult: ...
 
 

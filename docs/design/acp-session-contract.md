@@ -22,8 +22,8 @@ Four sections cover:
    `BackendCapabilities` fields into ACP-mappable, autoskillit-local extension,
    and forward-declared buckets (validated against `_FORWARD_DECLARED` in
    `tests/arch/test_capability_consumption.py`).
-4. **Codex Shim Deviations** — the seven categories where the Codex backend
-   diverges from Claude Code semantics, including all eight discard sites.
+4. **Codex Shim Deviations** — the remaining backend-specific mappings after
+   plugin bindings, output modes, and idle-stop policy became explicit contracts.
 
 The normative contract preserved by this alignment is that the orchestrator
 selects an executor action (resume / load / new) based on the
@@ -49,10 +49,10 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `capabilities` | (capability declaration) | `CLAUDE_CODE_CAPABILITIES` constant | `CodexBackend.capabilities` property | Codex constructs the capabilities instance on every access (no module-level `CODEX_CAPABILITIES` constant). |
 | `conventions` | (backend conventions) | Returns `BackendConventions` | Returns `BackendConventions` | — |
 | `build_cmd` | `session/new` (headless one-shot) | Builds `CmdSpec` invoking the `claude` binary | Builds `CmdSpec` invoking the `codex` binary | — |
-| `build_skill_session_cmd` | `session/new` (skill session; optional resume via `config.resume_session_id`) | Builds `CmdSpec` for skill execution with optional resume | Builds `CmdSpec`; **discards `plugin_source`, `output_format`, `exit_after_stop_delay_ms`** (lines 698–701, `# noqa: F841`) | Codex has no `--plugin-dir`; `--json` is unconditional; `exit_after_stop_delay_ms` is Claude-only. |
+| `build_skill_session_cmd` | `session/new` (skill session; optional resume via `config.resume_session_id`) | Builds `CmdSpec` for skill execution with optional resume | Builds `CmdSpec`; a projected binding supplies `CODEX_HOME` and `inherited_fds`; output-mode coercion is logged and idle-stop policy becomes `AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT` | Codex consumes projection-as-home rather than `--plugin-dir`, but it does not discard artifact ownership. |
 | `build_resume_cmd` | `session/resume` | Uses `--resume <session_id>` flag | Uses positional `resume <session_id>` subcommand (`CodexFlags.RESUME_SUBCOMMAND = "resume"`, lines 978–979); validates non-empty `resume_session_id` (raises `ValueError`) | Positional subcommand vs. flag; input validation. |
 | `build_interactive_cmd` | `session/new` or `session/resume` (via `ResumeSpec`: `NoResume | BareResume | NamedResume`) | System prompt as `--append-system-prompt <value>` (only applied on `NoResume`) | System prompt as `-c developer_instructions=<value>` (line 931; same `NoResume` restriction); **`tools` arg silently discarded with `logger.warning("codex_tools_ignored")`** at lines 909–913 | `CodexFlags.CONFIG_OVERRIDE = "-c"`; `tools` arg discarded with warning rather than error. |
-| `build_food_truck_cmd` | `session/new` (orchestrator-level session, L2) | Builds `CmdSpec` for food-truck orchestrator | Builds `CmdSpec`; **discards `plugin_source`, `output_format`, `exit_after_stop_delay_ms`** (lines 821–823, `# noqa: F841`); sandbox is `read-only` (not `workspace-write`); no `--tools AskUserQuestion` | Same three discard reasons as `build_skill_session_cmd`; sandbox policy differs; no AskUserQuestion tool. |
+| `build_food_truck_cmd` | `session/new` (orchestrator-level session, L2) | Builds `CmdSpec` for food-truck orchestrator | Builds `CmdSpec`; projected-home path and inherited descriptors come from `PluginLaunchBinding`; sandbox is `read-only` and there is no `--tools AskUserQuestion` | Load-path syntax and sandbox policy differ; artifact lifetime does not. |
 | `build_inspector_cmd` | No ACP analogue (lightweight probe, not a session) | Raises `CapabilityNotSupportedError` (`inspector_capable=False` in `CLAUDE_CODE_CAPABILITIES`; unreachable `AssertionError` stub at line 875 is dead code) | Raises `CapabilityNotSupportedError` when `inspector_capable=False` | — (both backends gate via `inspector_capable=False`) |
 | `setup_session_dir` | ACP pre-session initialization | No-op | Substantial setup: copies `config.toml`, symlinks `auth.json` + `.env` + `sessions/`, generates agent TOMLs, materializes profile skills (lines 1021–1072) | Codex: rich setup with multiple failure-logged steps. |
 | `validate_session_layout` | ACP session validation (post-setup) | Validates session directory layout | Validates session directory layout (includes `required_session_files={"config.toml"}`) | — |
@@ -83,6 +83,27 @@ ownership:
 | `ManagedSessionHome` | One logical interactive launch: immutable `launch_id`, generated home, separately typed `skills_dir`, and inherited generated-home lease descriptors in `pass_fds`. Its context owns transactional setup, exactly-once verified cleanup, and unconditional lease release across all reload attempts. |
 | `CookSessionHandle` | One attempt view: store-derived `view_id`, inherited view/thread descriptors, and one-shot `record_spawn(pid, pgid)` / `record_reaped(pid, pgid)` callbacks. Reap proof is recorded only after the complete process group is empty and the direct child is reaped. |
 | `HookTrustPolicy` | `REVIEW_EACH_SESSION` emits no hook-trust bypass for interactive fresh, named-resume, bare-resume, or reload commands. Automated skill and food-truck builders retain their explicit bypass. |
+
+### Plugin load modes and descriptor ownership
+
+The selected backend and effective home determine `PluginLoadMode` before
+artifact acquisition:
+
+| Load mode | Consumer |
+|---|---|
+| `EXPLICIT_PLUGIN_DIR` | Claude receives the binding path as `--plugin-dir`. |
+| `PROJECTED_HOME` | Codex receives the binding path as `CODEX_HOME`. |
+| `IMPLICIT_INSTALLED` | Claude emits no path argument, but still inherits the exact installed-root reader descriptor. |
+| `GENERATED_HOME` | Codex consumes its generated home and session-storage leases; no unused projection binding is acquired. |
+| `NONE` | The physical launch consumes no plugin artifact. |
+
+Every physical launch acquires independently after backend override and provider
+environment selection. `PluginLaunchBinding` carries the exact incarnation and
+reader ownership into `CmdSpec.inherited_fds`. Generic runners forward that tuple
+unchanged; cook may only stable-merge it with generated-home and attempt-handle
+descriptors. Reload, resume, provider fallback, fleet dispatch, and contract nudge
+therefore create new bindings rather than reusing a path or integer tuple. The
+owning binding closes only after final child reap.
 
 Identifier scopes are intentionally disjoint: `launch_id` spans one `cook()`
 and its reload loop; `attempt` increments for each child launch; `view_id` is
@@ -295,8 +316,8 @@ future use and have no current production consumer outside the exemption set.
 
 The Codex backend (`src/autoskillit/execution/backends/codex.py`) implements
 the `CodingAgentBackend` protocol but deviates from Claude Code semantics in
-seven categories. Each category is documented below with the discard sites
-where Codex silently drops a parameter the protocol accepts.
+seven categories. Each category is documented below with the explicit mapping
+used where Claude and Codex represent the same contract differently.
 
 ### 4.1 Approval-Bypass Flags
 
@@ -365,33 +386,23 @@ Both backends gate via `inspector_capable=False` and raise `CapabilityNotSupport
 no implementation exists in either. An unreachable `AssertionError` at line 875 of
 `claude.py` is dead code preserved as a defensive guard for future implementation.
 
-### 4.7 noqa Discard Sites
+### 4.7 Explicit Divergence Mappings
 
-All discard sites in `codex.py` where a protocol parameter is silently
-dropped. Lines 698–701 (`build_skill_session_cmd`) and 821–823
-(`build_food_truck_cmd`) use `# noqa: F841` to suppress unused-variable
-warnings on local reassignments that document the no-op contract. Line 911
-(`build_interactive_cmd`) uses a runtime warning. Lines 1074–1075
-(`validate_skill_content`) are a structural discard (entire method body
-unconditional).
+Plugin source and lifetime are no longer discard sites. Builders accept
+`PluginLaunchBinding`, derive `CODEX_HOME` only for projection-as-home, and copy
+the binding's descriptor tuple into `CmdSpec.inherited_fds`.
 
-| Line | Method | Discarded Param | noqa Rule | Reason |
-|------|--------|-----------------|-----------|--------|
-| 698 | `build_skill_session_cmd` | `plugin_source` | F841 | Codex has no `--plugin-dir` equivalent |
-| 699 | `build_skill_session_cmd` | `output_format` | F841 | `--json` is unconditional for Codex |
-| 701 | `build_skill_session_cmd` | `exit_after_stop_delay_ms` | F841 | Claude-only feature |
-| 821 | `build_food_truck_cmd` | `plugin_source` | F841 | Codex has no `--plugin-dir` |
-| 822 | `build_food_truck_cmd` | `output_format` | F841 | `--json` is unconditional |
-| 823 | `build_food_truck_cmd` | `exit_after_stop_delay_ms` | F841 | Claude-only feature |
-| 911 | `build_interactive_cmd` | `tools` | (warning) | `logger.warning("codex_tools_ignored")` — `tools` arg silently dropped with structured-log warning |
-| 1074–1075 | `validate_skill_content` | (entire validation) | (structural) | Returns `[]` unconditionally; no frontmatter requirement |
+| Method | Input | Codex mapping |
+|---|---|---|
+| `build_skill_session_cmd` / `build_food_truck_cmd` | `plugin_binding` | Projection path becomes `CODEX_HOME`; inherited descriptors are preserved. |
+| `build_skill_session_cmd` / `build_food_truck_cmd` | `output_format` | Unsupported values are coerced to the route's JSON mode with `codex_output_format_coerced`. |
+| `build_skill_session_cmd` / `build_food_truck_cmd` | `exit_after_stop_delay_ms` | Converted to seconds in `AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT`. |
+| `build_interactive_cmd` | `tools` | Unsupported tool selection emits `codex_tools_ignored`. |
+| `validate_skill_content` | skill document | Returns `[]`; Codex does not impose Claude's frontmatter requirement. |
 
-The F841 sites are deliberately documented as no-ops so the protocol
-contract is preserved across both backends: callers can pass
-`plugin_source` / `output_format` / `exit_after_stop_delay_ms` and the
-Codex backend silently absorbs them. The `tools` arg in
-`build_interactive_cmd` (line 911) is the only site that emits a runtime
-warning (the others are static no-ops with no observable behavior).
+The obsolete `plugin_source` discard assignments and their F841 narrative are
+intentionally absent. A future builder cannot accept-and-drop an artifact path
+or descriptor without failing the plugin lifecycle ratchets.
 
 ---
 
@@ -409,4 +420,4 @@ warning (the others are static no-ops with no observable behavior).
 | §3 Capabilities | `BackendCapabilities` (47 fields) | `src/autoskillit/core/types/_type_backend.py` |
 | §3 Forward-declared | `_FORWARD_DECLARED` | `tests/arch/test_capability_consumption.py` |
 | §4 Codex flags | `CodexFlags` | `src/autoskillit/execution/backends/codex.py` lines 98–107 |
-| §4 Codex discard sites | `codex.py` F841 / warning sites | `src/autoskillit/execution/backends/codex.py` |
+| §4 Codex divergence mappings | Binding, output-mode, idle-stop, and warning sites | `src/autoskillit/execution/backends/codex.py` |

@@ -1,9 +1,9 @@
-"""There is one way to get a plugin source, and it never reads the registry.
+"""There is one authority for launch plugin artifacts, and it never reads the registry.
 
-Four call sites used to resolve a `PluginSource` independently. Two read
+Four call sites used to resolve a plugin path independently. Two read
 `installed_plugins.json` — a file Claude Code owns, versions, and garbage-collects
 — and those two were the two that broke when the path it named stopped existing.
-The other two already went through `project_default_plugin_source(pkg_root())`
+The other two already projected from ``pkg_root()``
 and were unaffected.
 
 F2 is the crash: `installPath` naming a deleted directory took down `cook` and
@@ -14,7 +14,7 @@ read, so no externally-owned path can be a projection source at all.
 from __future__ import annotations
 
 import json
-import typing
+import os
 from pathlib import Path
 
 import pytest
@@ -53,7 +53,8 @@ class TestDanglingInstallPathIsHarmless:
         self, tmp_path: Path, monkeypatch
     ) -> None:
         from autoskillit.config import AutomationConfig
-        from autoskillit.core import ProjectedPluginRoot, pkg_root
+        from autoskillit.core import PluginArtifactAuthority, PluginLoadMode, pkg_root
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.server._factory import make_context
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -61,29 +62,43 @@ class TestDanglingInstallPathIsHarmless:
 
         ctx = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
 
-        assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
-        assert ctx.plugin_source.plugin_dir.is_dir()
-        assert gone not in ctx.plugin_source.plugin_dir.parents
-        assert ctx.plugin_source.plugin_dir != pkg_root()
+        assert isinstance(ctx.plugin_authority, PluginArtifactAuthority)
+        with ctx.plugin_authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            assert binding.plugin_dir.is_dir()
+            assert gone not in binding.plugin_dir.parents
+            assert binding.plugin_dir != pkg_root()
+        assert binding.closed
 
     def test_cook_resolution_survives_a_dangling_install_path(
         self, tmp_path: Path, monkeypatch
     ) -> None:
         """`cook` shares make_context's authority; exercise it the way cook calls it."""
+        from autoskillit.core import (
+            PluginLoadMode,
+        )
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         _seed_dangling_registry(tmp_path)
 
-        projected = project_default_plugin_source(
+        authority = project_default_plugin_authority(
             cwd=tmp_path,
-            backend=ClaudeCodeBackend(),
-            default_base_branch="main",
-            skill_catalog=session_catalog(),
+            base_branch="main",
+            catalog=session_catalog(),
         )
-        assert projected.plugin_dir.is_dir()
+        with authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            assert binding.plugin_dir.is_dir()
+        assert binding.closed
 
     def test_mcp_prefix_detection_still_reads_key_presence(
         self, tmp_path: Path, monkeypatch
@@ -111,17 +126,14 @@ class TestDanglingInstallPathIsHarmless:
             _plugin_ids.detect_autoskillit_mcp_prefix.cache_clear()
 
 
-class TestPluginSourceHasOneVariant:
-    def test_plugin_source_is_not_a_union(self) -> None:
-        """F2 is unrepresentable, not merely guarded.
+class TestPluginArtifactAuthoritySurface:
+    def test_legacy_plugin_source_types_are_gone(self) -> None:
+        """Callers cannot persist a bare path and mistake it for launch authority."""
+        import autoskillit.core as core
 
-        `MarketplaceInstall` existed only to carry a path read out of the
-        registry. With it gone there is no type that can hold one.
-        """
-        from autoskillit.core import PluginSource, ProjectedPluginRoot
-
-        assert typing.get_args(PluginSource) == (), "PluginSource is a union again"
-        assert PluginSource is ProjectedPluginRoot
+        for name in ("PluginSource", "ProjectedPluginRoot"):
+            assert name not in core.__all__
+            assert not hasattr(core, name)
 
     def test_marketplace_install_is_gone_from_the_public_surface(self) -> None:
         import autoskillit.core as core
@@ -135,43 +147,69 @@ class TestPluginSourceHasOneVariant:
 
         assert not hasattr(core, "_get_autoskillit_install_path")
 
-    def test_projected_root_refuses_the_canonical_package_root(self) -> None:
-        from autoskillit.core import ProjectedPluginRoot, pkg_root
+    def test_binding_refuses_a_relative_path(self) -> None:
+        from autoskillit.core import (
+            PluginArtifactIdentity,
+            PluginLaunchBinding,
+            PluginLoadMode,
+        )
+        from tests.execution.backends._plugin_binding import _TestLease
 
-        with pytest.raises(ValueError, match="canonical package root"):
-            ProjectedPluginRoot(plugin_dir=pkg_root())
-
-    def test_projected_root_refuses_a_relative_path(self) -> None:
-        from autoskillit.core import ProjectedPluginRoot
-
+        absolute = Path("/plugin")
         with pytest.raises(ValueError, match="absolute"):
-            ProjectedPluginRoot(plugin_dir=Path("relative/plugin"))
+            PluginLaunchBinding(
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+                plugin_dir=Path("relative/plugin"),
+                identity=PluginArtifactIdentity(
+                    semantic_key="test",
+                    incarnation_id="00000000000040008000000000000001",
+                    manifest_schema_version=1,
+                    artifact_digest="a" * 64,
+                    managed_path=absolute,
+                    manifest_path=Path("/plugin.json"),
+                ),
+                inherited_fds=(),
+                _lease=_TestLease(),
+            )
 
 
 class TestAllEntrypointsAgree:
-    """Every resolution site returns a projection under plugin-projections/."""
+    """Every resolution site lazily acquires under plugin-projections/."""
 
     def test_make_context_and_catalog_dispatch_agree(self, tmp_path: Path, monkeypatch) -> None:
         from autoskillit.config import AutomationConfig
+        from autoskillit.core import PluginLoadMode
         from autoskillit.server._factory import make_context
         from autoskillit.workspace import prepare_catalog_skill_dispatch
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         ctx = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
-        dispatched, _contract = prepare_catalog_skill_dispatch(
+        dispatched_authority, _preparation = prepare_catalog_skill_dispatch(
             resolved_command="/investigate",
             cwd=tmp_path,
-            backend=ctx.backend,
             catalog=session_catalog(),
             default_base_branch=ctx.config.branching.default_base_branch,
         )
 
         projections = tmp_path / ".autoskillit" / "plugin-projections"
-        for source in (ctx.plugin_source, dispatched):
-            assert source.plugin_dir.is_relative_to(projections), (
-                f"{source.plugin_dir} is not a projection"
-            )
+        with (
+            ctx.plugin_authority.acquire_launch_binding(
+                backend=ctx.backend,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            ) as context_binding,
+            dispatched_authority.acquire_launch_binding(
+                backend=ctx.backend,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            ) as dispatch_binding,
+        ):
+            for binding in (context_binding, dispatch_binding):
+                assert binding.plugin_dir is not None
+                assert binding.plugin_dir.is_relative_to(projections), (
+                    f"{binding.plugin_dir} is not a projection"
+                )
+        assert context_binding.closed
+        assert dispatch_binding.closed
 
     def test_cook_and_make_context_derive_project_dir_identically(self) -> None:
         """Related Issue 11: the two used to disagree from a repo subdirectory."""
@@ -181,3 +219,224 @@ class TestAllEntrypointsAgree:
 
         assert cook_mod.resolve_project_dir is resolve_project_dir
         assert factory_mod.resolve_project_dir is resolve_project_dir
+
+
+class TestInstalledPluginArtifactAuthority:
+    def test_publication_does_not_wrap_control_flow_exceptions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli import _plugin_artifact
+
+        def interrupt(_root: Path) -> Path:
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(_plugin_artifact, "_canonical_installed_root", interrupt)
+
+        with pytest.raises(KeyboardInterrupt):
+            _plugin_artifact.publish_installed_plugin_artifact(
+                tmp_path,
+                semantic_key="autoskillit@autoskillit-local:1.2.3",
+            )
+
+    def test_binding_acquisition_does_not_wrap_control_flow_exceptions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.cli import _plugin_artifact
+        from autoskillit.core import PluginLoadMode
+
+        root = tmp_path.resolve()
+
+        def interrupt(*_args, **_kwargs):
+            raise SystemExit("stop")
+
+        monkeypatch.setattr(
+            _plugin_artifact.ArtifactLease,
+            "acquire_shared",
+            interrupt,
+        )
+
+        with pytest.raises(SystemExit, match="stop"):
+            _plugin_artifact.InstalledPluginArtifactAuthority(
+                root,
+                semantic_key="autoskillit@autoskillit-local:1.2.3",
+            ).acquire_launch_binding(
+                backend=object(),
+                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+            )
+
+    def test_publication_round_trips_exact_external_incarnation(self, tmp_path: Path) -> None:
+        from autoskillit.cli._plugin_artifact import (
+            InstalledPluginArtifactAuthority,
+            installed_artifact_manifest_path,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import (
+            INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
+            INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            PluginArtifactKind,
+            PluginLoadMode,
+        )
+
+        root = (tmp_path / "cache" / "autoskillit" / "1.2.3").resolve()
+        root.mkdir(parents=True)
+        (root / "plugin.json").write_text('{"name":"autoskillit"}')
+        semantic_key = "autoskillit@autoskillit-local:1.2.3"
+
+        published = publish_installed_plugin_artifact(root, semantic_key=semantic_key)
+        manifest_path = installed_artifact_manifest_path(root)
+        assert published.manifest_path == manifest_path
+        assert manifest_path.parent == root.parent
+        assert not manifest_path.is_relative_to(root)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert frozenset(manifest) == INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS
+        assert (
+            manifest["schema_version"]
+            == INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION
+            == published.manifest_schema_version
+        )
+        assert manifest["artifact_kind"] == PluginArtifactKind.INSTALLED_PLUGIN.value
+
+        binding = InstalledPluginArtifactAuthority(
+            root,
+            semantic_key=semantic_key,
+        ).acquire_launch_binding(
+            backend=object(),
+            load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+        )
+        try:
+            assert binding.plugin_dir is None
+            assert binding.identity == published
+            assert len(binding.inherited_fds) == 1
+            assert not binding.closed
+        finally:
+            binding.close()
+        assert binding.closed
+
+    def test_content_change_after_publication_fails_closed(self, tmp_path: Path) -> None:
+        from autoskillit.cli._plugin_artifact import (
+            InstalledPluginArtifactAuthority,
+            installed_artifact_lock_path,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import (
+            ArtifactLease,
+            PluginArtifactValidationError,
+            PluginLoadMode,
+        )
+
+        root = (tmp_path / "installed" / "1.2.3").resolve()
+        root.mkdir(parents=True)
+        content = root / "plugin.json"
+        content.write_text("before")
+        semantic_key = "autoskillit@autoskillit-local:1.2.3"
+        publish_installed_plugin_artifact(root, semantic_key=semantic_key)
+        content.write_text("after")
+
+        with pytest.raises(PluginArtifactValidationError, match="digest mismatch"):
+            InstalledPluginArtifactAuthority(
+                root,
+                semantic_key=semantic_key,
+            ).acquire_launch_binding(
+                backend=object(),
+                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+            )
+        with ArtifactLease.acquire_exclusive(
+            installed_artifact_lock_path(root),
+            blocking=False,
+        ):
+            pass
+
+    def test_publication_rejects_internal_symlink_without_touching_target(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from autoskillit.cli._plugin_artifact import (
+            installed_artifact_manifest_path,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import PluginArtifactPublicationError
+
+        root = (tmp_path / "installed" / "1.2.3").resolve()
+        root.mkdir(parents=True)
+        external = tmp_path / "external"
+        external.write_text("must survive")
+        internal_link = root / "linked-content"
+        internal_link.symlink_to(external)
+
+        with pytest.raises(PluginArtifactPublicationError, match="cannot be digested"):
+            publish_installed_plugin_artifact(root, semantic_key="plugin:1.2.3")
+
+        assert internal_link.is_symlink()
+        assert external.read_text() == "must survive"
+        assert not installed_artifact_manifest_path(root).exists()
+
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation requires POSIX")
+    def test_publication_rejects_internal_special_file(self, tmp_path: Path) -> None:
+        from autoskillit.cli._plugin_artifact import (
+            installed_artifact_manifest_path,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import PluginArtifactPublicationError
+
+        root = (tmp_path / "installed" / "1.2.3").resolve()
+        root.mkdir(parents=True)
+        special = root / "named-pipe"
+        os.mkfifo(special)
+
+        with pytest.raises(PluginArtifactPublicationError, match="cannot be digested"):
+            publish_installed_plugin_artifact(root, semantic_key="plugin:1.2.3")
+
+        assert special.exists()
+        assert not installed_artifact_manifest_path(root).exists()
+
+    def test_generated_home_codex_does_not_construct_projection_authority(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from types import SimpleNamespace
+
+        from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+        from autoskillit.core import PluginLoadMode
+
+        backend = SimpleNamespace(
+            name="codex",
+            capabilities=SimpleNamespace(
+                skill_injection_capable=True,
+                plugin_install_capable=False,
+            ),
+        )
+        monkeypatch.setattr(
+            "autoskillit.workspace.project_default_plugin_authority",
+            lambda **_kwargs: pytest.fail("generated-home Codex projected an unused plugin"),
+        )
+
+        authority, load_mode = interactive_plugin_authority(
+            backend=backend,
+            project_dir=tmp_path,
+            default_base_branch="main",
+            skill_catalog=None,
+            generated_home=tmp_path / "generated-home",
+        )
+
+        assert authority is None
+        assert load_mode is PluginLoadMode.GENERATED_HOME
+
+    def test_implicit_binding_rejects_wrong_transaction_identity(self, tmp_path: Path) -> None:
+        from autoskillit.cli._plugin_artifact import (
+            InstalledPluginArtifactAuthority,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
+
+        root = (tmp_path / "installed" / "1.2.3").resolve()
+        root.mkdir(parents=True)
+        (root / "plugin.json").write_text("content")
+        publish_installed_plugin_artifact(root, semantic_key="plugin:old")
+
+        with pytest.raises(PluginArtifactValidationError, match="semantic identity"):
+            InstalledPluginArtifactAuthority(
+                root,
+                semantic_key="plugin:new",
+            ).acquire_launch_binding(
+                backend=object(),
+                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+            )

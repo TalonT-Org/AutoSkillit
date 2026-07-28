@@ -79,13 +79,14 @@ class RecordingSubprocessRunner(SubprocessRunner):
 
     Dispatch paths (checked in order):
 
-    1. **PTY session** (``step_name`` + ``pty_mode=True``):
+    1. **Legacy PTY session** (``step_name`` + ``pty_mode=True`` + no inherited FDs):
        delegates to ``ScenarioRecorder.record_step()`` which spawns the real subprocess
        under PTY capture, then constructs a ``SubprocessResult`` from the cassette.
-    2. **Non-PTY Codex session** (``step_name`` + ``pty_mode=False`` +
-       ``capabilities.pty_required=False``): delegates to the inner runner, writes
-       ``codex_stdout.ndjson`` and ``step_meta.json`` cassette files, then records via
-       ``recorder.record_non_session_step(tool='run_skill')``.
+    2. **FD-aware managed session** (an inherited FD is present, or non-PTY Codex):
+       delegates the physical spawn to the inner runner, writes ``codex_stdout.ndjson``
+       and ``step_meta.json`` cassette files, then records via
+       ``recorder.record_non_session_step(tool='run_skill')``. The external PTY recorder
+       cannot accept inherited descriptors, so it is never used for leased launches.
     3. **Non-session command** (``step_name`` + ``pty_mode=False`` +
        ``capabilities.pty_required=True``):
        delegates to the inner runner, then records a summary via
@@ -123,6 +124,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         cwd: Path,
         timeout: float,
         env: Mapping[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -149,7 +151,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if step_name:
-            if pty_mode:
+            if pty_mode and not pass_fds:
                 return await self._record_session(
                     cmd=cmd,
                     step_name=step_name,
@@ -157,12 +159,13 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     session_log_dir=session_log_dir,
                 )
 
-            if not self._capabilities.pty_required:
+            if pty_mode or not self._capabilities.pty_required:
                 return await self._record_non_pty_session(
                     cmd=cmd,
                     cwd=cwd,
                     timeout=timeout,
                     env=env,
+                    pass_fds=pass_fds,
                     stale_threshold=stale_threshold,
                     completion_marker=completion_marker,
                     session_log_dir=session_log_dir,
@@ -192,6 +195,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 cwd=cwd,
                 timeout=timeout,
                 env=env,
+                pass_fds=pass_fds,
                 stale_threshold=stale_threshold,
                 completion_marker=completion_marker,
                 session_log_dir=session_log_dir,
@@ -230,6 +234,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             cwd=cwd,
             timeout=timeout,
             env=env,
+            pass_fds=pass_fds,
             stale_threshold=stale_threshold,
             completion_marker=completion_marker,
             session_log_dir=session_log_dir,
@@ -307,6 +312,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         cwd: Path,
         timeout: float,
         env: Mapping[str, str] | None,
+        pass_fds: tuple[int, ...],
         stale_threshold: float,
         completion_marker: str,
         session_log_dir: Path | None,
@@ -329,12 +335,13 @@ class RecordingSubprocessRunner(SubprocessRunner):
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
     ) -> SubprocessResult:
-        """Record a non-PTY (Codex) session step via cassette files."""
+        """Record an FD-aware inner-runner session via cassette files."""
         result = await self._inner(
             cmd,
             cwd=cwd,
             timeout=timeout,
             env=env,
+            pass_fds=pass_fds,
             stale_threshold=stale_threshold,
             completion_marker=completion_marker,
             session_log_dir=session_log_dir,
@@ -443,6 +450,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         cwd: Path,
         timeout: float,
         env: Mapping[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
         stale_threshold: float = 1200,
         completion_marker: str = "",
         session_log_dir: Path | None = None,
@@ -466,6 +474,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
     ) -> SubprocessResult:
+        del pass_fds
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if not step_name:

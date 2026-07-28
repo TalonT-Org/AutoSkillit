@@ -27,3 +27,4 @@ Documentation integrity, link validity, and naming convention tests.
 | `test_check_sub_claude_md_script.py` | Unit and integration tests for the check_sub_claude_md.py pre-commit hook script |
 | `test_context_admission_decision.py` | Ratchet ADR-0007 context-admission authority, evidence, traceability, and downstream ownership |
 | `test_codex_limit_findings_are_recorded.py` | Ratchet: every upstream-neutralized Codex limit finding must be disclosed in ADR-0004 and ADR-0005 |
+| `test_plugin_lifecycle_guidance.py` | Ratchet issue #4382 inline-projection troubleshooting, load-mode, binding, and inherited-FD guidance |

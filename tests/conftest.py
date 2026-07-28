@@ -367,7 +367,6 @@ def minimal_ctx(tmp_path):
     """
     from autoskillit.config import AutomationConfig
     from autoskillit.core import ContextAdmissionStoreAuthority
-    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.context_admission_ledger import (
@@ -376,15 +375,16 @@ def minimal_ctx(tmp_path):
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
-    from tests.fakes import FakeSkillSessionContractStore
+    from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
 
+    plugin_authority = FakePluginArtifactAuthority(tmp_path)
     ctx = ToolContext(
         config=AutomationConfig(features={"fleet": True}),
         audit=DefaultAuditLog(),
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=plugin_authority,
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
@@ -398,7 +398,10 @@ def minimal_ctx(tmp_path):
             )
         ),
     )
-    return ctx
+    try:
+        yield ctx
+    finally:
+        plugin_authority.close()
 
 
 @pytest.fixture
@@ -417,16 +420,16 @@ def tool_ctx(monkeypatch, tmp_path):
     migrations) are wired via make_context() so routing tests work correctly.
     """
     from autoskillit.config import AutomationConfig
-    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
-    from tests.fakes import MockSubprocessRunner
+    from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
 
     mock_runner = MockSubprocessRunner()
+    plugin_authority = FakePluginArtifactAuthority(tmp_path)
     ctx = make_context(
         AutomationConfig(features={"fleet": True}),
         runner=mock_runner,
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=plugin_authority,
         project_dir=tmp_path,
     )
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
@@ -453,7 +456,10 @@ def tool_ctx(monkeypatch, tmp_path):
         )
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
-    return ctx
+    try:
+        yield ctx
+    finally:
+        plugin_authority.close()
 
 
 @pytest.fixture

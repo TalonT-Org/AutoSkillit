@@ -40,8 +40,9 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
     )
     minimal_ctx.backend = backend
 
-    async def fake_execute(spec, cwd, ctx, **kwargs):
+    async def fake_execute(build_spec, cwd, ctx, **kwargs):
         execute_kwargs.update(kwargs)
+        build_spec(None, kwargs.get("provider_extras"))
         return _STUB_RESULT
 
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
@@ -74,7 +75,8 @@ async def test_run_headless_core_defaults_provider_extras_none(
     )
     minimal_ctx.backend = backend
 
-    async def fake_execute(spec, cwd, ctx, **kwargs):
+    async def fake_execute(build_spec, cwd, ctx, **kwargs):
+        build_spec(None, kwargs.get("provider_extras"))
         return _STUB_RESULT
 
     monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
@@ -289,7 +291,7 @@ async def test_no_fallback_env_returns_empty_provider_used(
     )
 
     result = await _execute_claude_headless(
-        _spec,
+        lambda _binding, _extras: _spec,
         str(tmp_path),
         minimal_ctx,
         timeout=30.0,
@@ -331,7 +333,7 @@ async def test_provider_name_stamps_provider_used_on_result(
     )
 
     result = await _execute_claude_headless(
-        _spec,
+        lambda _binding, _extras: _spec,
         str(tmp_path),
         minimal_ctx,
         timeout=30.0,
@@ -535,7 +537,7 @@ async def test_execute_forwards_readonly_skill_to_build_result(
 
     spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     await _execute_claude_headless(
-        spec,
+        lambda _binding, _extras: spec,
         str(tmp_path),
         minimal_ctx,
         timeout=10.0,
@@ -685,7 +687,7 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
     )
 
     await _execute_claude_headless(
-        spec,
+        lambda _binding, _extras: spec,
         str(tmp_path),
         minimal_ctx,
         timeout=60,
@@ -710,7 +712,7 @@ async def test_execute_claude_headless_pty_mode_from_backend(
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
-    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
+    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={}, inherited_fds=(7, 11))
     runner_kwargs: dict = {}
 
     async def fake_runner(cmd, **kwargs):
@@ -742,7 +744,7 @@ async def test_execute_claude_headless_pty_mode_from_backend(
     )
 
     await _execute_claude_headless(
-        spec,
+        lambda _binding, _extras: spec,
         str(tmp_path),
         minimal_ctx,
         timeout=60,
@@ -750,6 +752,7 @@ async def test_execute_claude_headless_pty_mode_from_backend(
     )
 
     assert runner_kwargs["pty_mode"] is False
+    assert runner_kwargs["pass_fds"] == spec.inherited_fds
 
 
 @pytest.mark.anyio
@@ -793,7 +796,7 @@ async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
     )
 
     await _execute_claude_headless(
-        spec,
+        lambda _binding, _extras: spec,
         str(tmp_path),
         minimal_ctx,
         timeout=60,
@@ -885,7 +888,11 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
     )
 
     await _execute_claude_headless(
-        spec, str(tmp_path), minimal_ctx, timeout=60, stale_threshold=30
+        lambda _binding, _extras: spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=60,
+        stale_threshold=30,
     )
 
     assert runner_kwargs["stream_parser"] is sentinel
@@ -926,7 +933,7 @@ async def test_execute_claude_headless_stream_parser_receives_completion_marker(
     )
 
     await _execute_claude_headless(
-        spec,
+        lambda _binding, _extras: spec,
         str(tmp_path),
         minimal_ctx,
         timeout=60,

@@ -279,7 +279,6 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
     # Build context with project_dir = different_dir, recipes = RealRecipeRepository
     from autoskillit.config.settings import AutomationConfig
     from autoskillit.core import ContextAdmissionStoreAuthority
-    from autoskillit.core.types import ProjectedPluginRoot
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.context_admission_ledger import (
@@ -289,7 +288,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
     from autoskillit.recipe.repository import DefaultRecipeRepository
-    from tests.fakes import FakeSkillSessionContractStore
+    from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
 
     real_repo = DefaultRecipeRepository()
 
@@ -299,7 +298,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=DefaultGateState(enabled=False),
-        plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+        plugin_authority=FakePluginArtifactAuthority(tmp_path),
         runner=None,
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=different_dir,

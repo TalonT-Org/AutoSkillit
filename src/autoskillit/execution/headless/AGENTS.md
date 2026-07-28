@@ -9,13 +9,13 @@ Headless Claude session orchestration — command prep, subprocess invocation, r
 | `__init__.py` | Facade: `run_headless_core()`, `DefaultHeadlessExecutor`, re-exports |
 | `_headless_helpers.py` | Session helpers: `_session_log_dir`, `_resolve_model`, `PostSessionMetrics` |
 | `_headless_execute.py` | Subprocess core: `_execute_claude_headless()` — shared skill/fleet path |
+| `_headless_launch.py` | Plugin-bound spec builders, per-attempt binding ownership, and resume nudge lifecycle |
 | `_headless_git.py` | Git LOC tracking: `_capture_git_head_sha()`, `_compute_loc_changed()` |
 | `_headless_path_tokens.py` | Path-token extraction and output-path validation from assistant messages |
-| `_headless_recovery.py` | Session recovery: `_recover_from_separate_marker`, `_synthesize_from_write_artifacts`, `_infer_enum_token_from_write_contract` (contract-aware enum-token inference) |
+| `_headless_recovery.py` | Session recovery and JSONL write-path scanning: `_recover_from_separate_marker`, `_synthesize_from_write_artifacts`, `_infer_enum_token_from_write_contract`, `_scan_jsonl_write_paths` |
 | `_headless_result.py` | `SkillResult` construction: `_build_skill_result` (evidence/telemetry moved to `_headless_evidence.py`) |
 | `_headless_evidence.py` | Evidence computation (`_compute_write_evidence`, `_adapt_agent_result`), audit recording (`_capture_failure`, `_apply_budget_guard`), telemetry builders (`_build_session_telemetry`, `_build_error_path_telemetry`) |
 | `_headless_outcome.py` | Dispatch authority validator, contract-field parser, and outcome invariant evaluator |
-| `_headless_scan.py` | `_scan_jsonl_write_paths()` — scans stdout JSONL for Write/Edit/Bash tool calls; uses `core/bash_write_targets` for precise write-target extraction |
 
 ## Architecture Notes
 

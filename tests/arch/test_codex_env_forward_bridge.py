@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.execution.backends._plugin_binding import plugin_binding
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
@@ -20,7 +22,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
     """Every var in CODEX_MCP_ENV_FORWARD_VARS must be injected by Codex cmd builders."""
-    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, OutputFormat, ProjectedPluginRoot
+    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, OutputFormat
     from autoskillit.execution.backends.codex import CodexBackend
 
     backend = CodexBackend()
@@ -29,15 +31,16 @@ def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
         cwd="/work",
         completion_marker="%%DONE%%",
         model=None,
-        plugin_source=None,
+        plugin_binding=None,
         output_format=OutputFormat.JSON,
     )
-    food_truck_spec = backend.build_food_truck_cmd(
-        orchestrator_prompt="dispatch",
-        plugin_source=ProjectedPluginRoot(plugin_dir=Path("/projected-plugin")),
-        cwd="/work",
-        completion_marker="%%DONE%%",
-    )
+    with plugin_binding(Path("/projected-plugin")) as binding:
+        food_truck_spec = backend.build_food_truck_cmd(
+            orchestrator_prompt="dispatch",
+            plugin_binding=binding,
+            cwd="/work",
+            completion_marker="%%DONE%%",
+        )
     for var in sorted(CODEX_MCP_ENV_FORWARD_VARS):
         assert var in skill_spec.env, (
             f"{var} in CODEX_MCP_ENV_FORWARD_VARS but missing from build_skill_session_cmd env"

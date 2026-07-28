@@ -9,6 +9,8 @@ import termios
 from collections.abc import Mapping, Sequence
 from typing import NoReturn
 
+from autoskillit.core import normalize_inherited_fds
+
 _MODULE_NAME = "autoskillit.cli.session.pty._exec"
 
 
@@ -27,7 +29,7 @@ def launcher_argv(
         "-m",
         _MODULE_NAME,
         str(slave_fd),
-        *(str(fd) for fd in sorted(normalized_leases)),
+        *(str(fd) for fd in normalized_leases),
         "--",
         *normalized,
     )
@@ -124,15 +126,15 @@ def _validate_lease_fds(
     lease_fds: Sequence[int],
     *,
     slave_fd: int,
-) -> frozenset[int]:
-    normalized: set[int] = set()
-    for fd in lease_fds:
-        if isinstance(fd, bool) or not isinstance(fd, int) or fd < 3:
+) -> tuple[int, ...]:
+    normalized: dict[int, None] = {}
+    for fd in normalize_inherited_fds(lease_fds):
+        if fd < 3:
             raise ValueError("lease descriptors must be integers greater than two")
         os.fstat(fd)
         if fd != slave_fd:
-            normalized.add(fd)
-    return frozenset(normalized)
+            normalized.setdefault(fd, None)
+    return tuple(normalized)
 
 
 if __name__ == "__main__":

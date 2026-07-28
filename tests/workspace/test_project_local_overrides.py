@@ -647,6 +647,7 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
     """L2 source selection is project-root-bound while execution stays cwd-bound."""
     from pathlib import Path
 
+    from autoskillit.core import PluginLoadMode
     from autoskillit.execution.backends import get_backend
     from autoskillit.workspace import prepare_effective_skill_dispatch
     from autoskillit.workspace.skills import DefaultSkillResolver
@@ -674,11 +675,11 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    plugin_source, contract = prepare_effective_skill_dispatch(
+    backend = get_backend("codex")
+    plugin_authority, preparation = prepare_effective_skill_dispatch(
         resolved_command="dispatch",
         project_root=project_root,
         cwd=cwd,
-        backend=get_backend("codex"),
         resolver=DefaultSkillResolver(),
         visibility=None,
         default_base_branch=None,
@@ -686,15 +687,22 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
         recipe_features=None,
     )
 
-    assert contract.project_root == str(project_root.resolve())
-    assert contract.cwd == str(cwd.resolve())
-    assert "winning project-root body" in contract.projected_artifacts["process-issues"]
-    assert "wrong execution-cwd body" not in contract.projected_artifacts["process-issues"]
-    assert "{{DEFAULT_BASE_BRANCH}}" not in contract.projected_artifacts["process-issues"]
-    assert "{{AUTOSKILLIT_TEMP}}" not in contract.projected_artifacts["process-issues"]
-    assert contract.projected_artifacts["process-issues"] == (
-        plugin_source.plugin_dir / "skills" / "process-issues" / "SKILL.md"
-    ).read_text(encoding="utf-8")
+    with plugin_authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as binding:
+        assert binding.plugin_dir is not None
+        contract = preparation.finalize(backend=backend, binding=binding)
+        assert contract.project_root == str(project_root.resolve())
+        assert contract.cwd == str(cwd.resolve())
+        assert "winning project-root body" in contract.projected_artifacts["process-issues"]
+        assert "wrong execution-cwd body" not in contract.projected_artifacts["process-issues"]
+        assert "{{DEFAULT_BASE_BRANCH}}" not in contract.projected_artifacts["process-issues"]
+        assert "{{AUTOSKILLIT_TEMP}}" not in contract.projected_artifacts["process-issues"]
+        assert contract.projected_artifacts["process-issues"] == (
+            binding.plugin_dir / "skills" / "process-issues" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+    assert binding.closed
 
 
 def test_winning_override_identity_policy_projection_and_digests_are_atomic(

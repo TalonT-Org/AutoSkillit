@@ -43,7 +43,7 @@ ALL_DIRS = [
 class TestTieredAlwaysRun:
     def test_pure_cli_change_skips_infra_dir_and_docs_dir(self, tmp_path: Path) -> None:
         """REQ-TIER-001/002/003: cli change → arch+contracts present; infra/docs NOT as dirs;
-        6 infra + 3 hooks unconditional files in result; test_doc_counts.py in result."""
+        10 infra + 3 hooks unconditional files in result; test_doc_counts.py in result."""
         tests_root = _make_tests_root(tmp_path, ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/cli/app.py"},
@@ -121,8 +121,8 @@ class TestTieredAlwaysRun:
             assert d in dir_names, f"fail-open: {d} must be present for empty changeset"
 
     def test_unconditional_files_constants_have_correct_counts(self) -> None:
-        """_INFRA_UNCONDITIONAL_FILES has 9 entries; _HOOKS_UNCONDITIONAL_FILES has 3 entries."""
-        assert len(_INFRA_UNCONDITIONAL_FILES) == 9
+        """_INFRA_UNCONDITIONAL_FILES has 10 entries; hooks has 3 entries."""
+        assert len(_INFRA_UNCONDITIONAL_FILES) == 10
         assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
 
     def test_infra_unconditional_files_resolve_under_infra_dir(self, tmp_path: Path) -> None:

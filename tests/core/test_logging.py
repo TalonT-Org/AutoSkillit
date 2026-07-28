@@ -241,3 +241,57 @@ class TestContextVarBinding:
             structlog.get_logger().info("after_clear")
         assert logs, "Expected at least one log record"
         assert "tool" not in logs[0]
+
+
+class TestPluginArtifactLifecycleLogging:
+    def test_schema_level_and_release_are_exact_and_idempotent(self) -> None:
+        from datetime import UTC, datetime
+
+        from autoskillit.core.logging import (
+            PluginArtifactLifecycleLease,
+            get_logger,
+            log_plugin_artifact_lifecycle,
+        )
+
+        class Lease:
+            closed = False
+            close_calls = 0
+
+            def close(self) -> None:
+                self.close_calls += 1
+                self.closed = True
+
+        lease = Lease()
+        logger = get_logger("autoskillit.plugin-test")
+        deadline = datetime(2026, 7, 27, tzinfo=UTC)
+
+        with structlog.testing.capture_logs() as logs:
+            log_plugin_artifact_lifecycle(
+                logger,
+                action="retire",
+                outcome="deferred_contended",
+                artifact_kind="projection",
+                semantic_key="semantic",
+                incarnation="incarnation",
+                not_before=deadline,
+                contention_detail="reader active",
+            )
+            owner = PluginArtifactLifecycleLease(
+                lease,
+                logger=logger,
+                artifact_kind="projection",
+                semantic_key="semantic",
+                incarnation="incarnation",
+            )
+            owner.close()
+            owner.close()
+
+        assert [entry["action"] for entry in logs] == ["retire", "release"]
+        assert logs[0]["log_level"] == "warning"
+        assert logs[1]["log_level"] == "info"
+        assert logs[0]["not_before"] == deadline.isoformat()
+        assert logs[0]["contention_detail"] == "reader active"
+        assert logs[0]["child_pid"] is None
+        assert isinstance(logs[0]["actor_pid"], int)
+        assert all(entry["event"] == "plugin_artifact_lifecycle" for entry in logs)
+        assert lease.close_calls == 1

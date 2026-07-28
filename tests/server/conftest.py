@@ -219,7 +219,6 @@ def build_ctx(tmp_path):
     """Factory: build_ctx(**overrides) → minimal ToolContext with overrides applied."""
     from autoskillit.config.settings import AutomationConfig
     from autoskillit.core import ContextAdmissionStoreAuthority
-    from autoskillit.core.types import ProjectedPluginRoot
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.context_admission_ledger import (
@@ -228,16 +227,23 @@ def build_ctx(tmp_path):
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
-    from tests.fakes import FakeSkillSessionContractStore
+    from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
+
+    owned_authorities = []
 
     def _factory(**overrides):
+        if "plugin_authority" in overrides:
+            plugin_authority = overrides.pop("plugin_authority")
+        else:
+            plugin_authority = FakePluginArtifactAuthority(tmp_path)
+            owned_authorities.append(plugin_authority)
         ctx = ToolContext(
             config=AutomationConfig(features={"fleet": True}),
             audit=DefaultAuditLog(),
             token_log=DefaultTokenLog(),
             timing_log=DefaultTimingLog(),
             gate=DefaultGateState(enabled=False),
-            plugin_source=ProjectedPluginRoot(plugin_dir=tmp_path),
+            plugin_authority=plugin_authority,
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,
@@ -255,7 +261,9 @@ def build_ctx(tmp_path):
             setattr(ctx, field_name, value)
         return ctx
 
-    return _factory
+    yield _factory
+    for plugin_authority in owned_authorities:
+        plugin_authority.close()
 
 
 @pytest.fixture

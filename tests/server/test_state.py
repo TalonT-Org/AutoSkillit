@@ -23,10 +23,10 @@ def _make_mock_ctx(tmp_path: Path) -> MagicMock:
         ContextAdmissionStorageHealthStatus,
         ContextAdmissionStoreHealth,
     )
-    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
+    from tests.fakes import FakePluginArtifactAuthority
 
     ctx = MagicMock()
-    ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+    ctx.plugin_authority = FakePluginArtifactAuthority(tmp_path)
     # Provide a minimal linux_tracing config stub
     tracing_cfg = MagicMock()
     tracing_cfg.tmpfs_path = str(tmp_path / "tmpfs")

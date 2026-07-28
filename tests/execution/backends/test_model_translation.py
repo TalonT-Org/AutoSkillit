@@ -8,6 +8,7 @@ from autoskillit.core import SkillSessionConfig
 from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -59,11 +60,9 @@ class TestCodexBuildCmdTranslatesModel:
         assert spec.cmd[model_idx + 1] == CODEX_MODEL_ALIASES["sonnet"]
 
     def test_build_food_truck_cmd(self) -> None:
-        from autoskillit.core import ProjectedPluginRoot
-
         spec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=ProjectedPluginRoot(plugin_dir="/tmp/plugin"),
+            plugin_binding=plugin_binding("/tmp/plugin"),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="sonnet",
@@ -102,11 +101,9 @@ class TestClaudeBuildCmdTranslatesModel:
     def test_build_food_truck_cmd_preserves_suffix(self) -> None:
         from pathlib import Path
 
-        from autoskillit.core import ProjectedPluginRoot
-
         spec = ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/tmp/plugin")),
+            plugin_binding=plugin_binding(Path("/tmp/plugin")),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="opus[1m]",
@@ -168,11 +165,9 @@ class TestCodexEffortInjectionInCmds:
         assert "model_reasoning_effort=high" in list(spec.cmd)
 
     def test_food_truck_cmd_has_effort(self) -> None:
-        from autoskillit.core import ProjectedPluginRoot
-
         spec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=ProjectedPluginRoot(plugin_dir="/tmp/plugin"),
+            plugin_binding=plugin_binding("/tmp/plugin"),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="sonnet",
@@ -180,11 +175,9 @@ class TestCodexEffortInjectionInCmds:
         assert "model_reasoning_effort=high" in list(spec.cmd)
 
     def test_food_truck_opus_suffix_uses_shared_model_with_xhigh_effort(self) -> None:
-        from autoskillit.core import ProjectedPluginRoot
-
         spec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
-            plugin_source=ProjectedPluginRoot(plugin_dir="/tmp/plugin"),
+            plugin_binding=plugin_binding("/tmp/plugin"),
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="opus[1m]",

@@ -25,6 +25,7 @@ def _run_guard(
     session_type: str | None = None,
     applicable_guards: str | None = None,
     agent_backend: str | None = None,
+    project_root: Path | None = None,
 ) -> str:
     """Run skill_load_guard.main(), return stdout."""
     from autoskillit.hooks.guards.skill_load_guard import main
@@ -62,10 +63,15 @@ def _run_guard(
     base_env = {k: v for k, v in os.environ.items() if k not in env_removals}
     base_env.update(env_updates)
 
+    isolated_project_root = project_root if project_root is not None else tmp_dir
+
     with (
         patch.dict(os.environ, base_env, clear=True),
         patch("sys.stdin", io.StringIO(stdin_content)),
-        patch("autoskillit.hooks.guards.skill_load_guard.Path.cwd", return_value=tmp_dir),
+        patch(
+            "autoskillit.hooks.guards.skill_load_guard.find_project_root",
+            return_value=isolated_project_root,
+        ),
     ):
         buf = io.StringIO()
         with redirect_stdout(buf):
@@ -277,6 +283,7 @@ def test_flag_found_via_ancestor_walk_when_cwd_is_subdirectory(tmp_path):
         headless=True,
         session_type="skill",
         applicable_guards="skill_load_guard",
+        project_root=project,
     )
     assert not out.strip()
 

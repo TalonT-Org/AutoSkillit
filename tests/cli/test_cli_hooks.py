@@ -363,6 +363,10 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     )
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
     monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.publish_installed_plugin_artifact",
+        lambda *args, **kwargs: None,
+    )
     monkeypatch.delenv("CLAUDECODE", raising=False)
 
     _app_mod = importlib.import_module("autoskillit.cli._marketplace")

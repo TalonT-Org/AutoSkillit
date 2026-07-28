@@ -76,7 +76,7 @@ class TestProviderFieldsReachFlush:
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -154,7 +154,7 @@ class TestProviderFieldsReachFlush:
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -198,7 +198,7 @@ class TestProviderFieldsReachFlush:
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -242,7 +242,7 @@ class TestProviderFieldsReachFlush:
 
         with pytest.raises(anyio.get_cancelled_exc_class()):
             await _execute_claude_headless(
-                ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+                lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
                 str(tmp_path),
                 minimal_ctx,
                 timeout=30.0,
@@ -272,7 +272,7 @@ class TestProviderFieldsReachFlush:
         minimal_ctx.backend = _mock_backend()
 
         await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,

@@ -456,41 +456,51 @@ def test_gh_cli_token_not_called_during_make_context(monkeypatch, tmp_path):
     assert gh_calls == [], f"_gh_cli_token() called during make_context: {gh_calls}"
 
 
-def test_make_context_plugin_source_derives_from_pkg_root_not_the_registry(
+def test_make_context_plugin_authority_derives_from_pkg_root_not_the_registry(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The default plugin source is a projection of the running package.
+    """The default authority lazily projects the running package.
 
     Even with installed_plugins.json naming a plugin cache directory, no part of
     resolution reads it: a registry-named path can be stale, relocated, or
     already garbage-collected. The projection must derive from pkg_root() and
     must never be the canonical root itself.
     """
-    from autoskillit.core import pkg_root
-    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
+    from autoskillit.core import PluginArtifactAuthority, PluginLoadMode, pkg_root
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
     fake_cache = tmp_path / "cache" / "autoskillit-local" / "autoskillit" / "1.0.0"
     fake_cache.mkdir(parents=True)
 
     ctx = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
-    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
-    assert ctx.plugin_source.plugin_dir != fake_cache
-    assert ctx.plugin_source.plugin_dir != pkg_root()
-    assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
+    assert isinstance(ctx.plugin_authority, PluginArtifactAuthority)
+    with ctx.plugin_authority.acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as binding:
+        assert binding.plugin_dir is not None
+        assert binding.plugin_dir != fake_cache
+        assert binding.plugin_dir != pkg_root()
+        assert (binding.plugin_dir / "skills").is_dir()
 
 
-def test_make_context_direct_install_yields_sanitized_direct_plugin_source(
+def test_make_context_direct_install_yields_lazy_sanitized_authority(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Direct installs are projected before entering ToolContext."""
-    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
+    """Direct installs are projected only when a launch binding is acquired."""
+    from autoskillit.core import PluginLoadMode
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
     ctx = make_context(
         AutomationConfig(), runner=None, plugin_dir=str(tmp_path), project_dir=tmp_path
     )
-    assert isinstance(ctx.plugin_source, ProjectedPluginRoot)
-    assert ctx.plugin_source.plugin_dir != tmp_path
-    assert (ctx.plugin_source.plugin_dir / "skills").is_dir()
+    with ctx.plugin_authority.acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as binding:
+        assert binding.plugin_dir is not None
+        assert binding.plugin_dir != tmp_path
+        assert (binding.plugin_dir / "skills").is_dir()
 
 
 def test_make_context_sets_token_factory(tmp_path):

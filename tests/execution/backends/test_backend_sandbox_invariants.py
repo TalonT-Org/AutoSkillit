@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CmdSpec, OutputFormat, ProjectedPluginRoot, SkillSessionConfig
+from autoskillit.core import CmdSpec, OutputFormat, SkillSessionConfig
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -32,7 +33,7 @@ class TestCodexSandboxInvariants:
     def test_build_food_truck_cmd_sandbox_read_only(self) -> None:
         spec: CmdSpec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="dispatch",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/pkg")),
+            plugin_binding=plugin_binding(Path("/pkg")),
             cwd="",
             completion_marker="%%DONE%%",
         )
@@ -48,7 +49,7 @@ class TestClaudeCodeSandboxAbsence:
             cwd="",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=OutputFormat.JSON,
         )
         assert "--sandbox" not in spec.cmd

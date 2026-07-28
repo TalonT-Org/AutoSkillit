@@ -88,9 +88,10 @@ def test_agents_md_has_il_disambiguation():
 @pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
 def test_process_issues_l2_run_skill_child_crosses_to_l1_session(backend_name: str) -> None:
     """Trace the real L2 contract through its child target and backend env boundary."""
-    from autoskillit.core import ProjectedPluginRoot, SkillExecutionRole
+    from autoskillit.core import SkillExecutionRole
     from autoskillit.execution import get_backend
     from autoskillit.workspace import DefaultSkillResolver
+    from tests.execution.backends._plugin_binding import plugin_binding
 
     resolver = DefaultSkillResolver()
     parent = resolver.resolve_invocation(
@@ -106,12 +107,13 @@ def test_process_issues_l2_run_skill_child_crosses_to_l1_session(backend_name: s
         SkillExecutionRole.SESSION,
     )
     backend = get_backend(backend_name)
-    parent_spec = backend.build_food_truck_cmd(
-        orchestrator_prompt=parent.root.canonical_content,
-        plugin_source=ProjectedPluginRoot(plugin_dir=Path("/projected-plugin")),
-        cwd=str(REPO_ROOT),
-        completion_marker="%%L2_DONE%%",
-    )
+    with plugin_binding(Path("/projected-plugin")) as binding:
+        parent_spec = backend.build_food_truck_cmd(
+            orchestrator_prompt=parent.root.canonical_content,
+            plugin_binding=binding,
+            cwd=str(REPO_ROOT),
+            completion_marker="%%L2_DONE%%",
+        )
     child_spec = backend.build_skill_session_cmd(
         match.group(1),
         str(REPO_ROOT),

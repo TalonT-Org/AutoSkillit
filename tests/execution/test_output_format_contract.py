@@ -19,7 +19,6 @@ import pytest
 from autoskillit.core.types import (
     ChannelConfirmation,
     OutputFormat,
-    ProjectedPluginRoot,
     SubprocessResult,
     TerminationReason,
 )
@@ -30,6 +29,7 @@ from autoskillit.execution.session import (
     _compute_success,
     parse_session_result,
 )
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -229,7 +229,7 @@ class TestOutputFormatCliRequirements:
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=fmt,
         )
         for flag in fmt.required_cli_flags:
@@ -246,7 +246,7 @@ class TestAllBuildersEnforceOutputFormatFlags:
             cwd="/tmp",
             completion_marker="%%DONE%%",
             model=None,
-            plugin_source=None,
+            plugin_binding=None,
             output_format=fmt,
         )
         for flag in fmt.required_cli_flags:
@@ -254,13 +254,14 @@ class TestAllBuildersEnforceOutputFormatFlags:
 
     @pytest.mark.parametrize("fmt", list(OutputFormat))
     def test_food_truck_builder_satisfies_format_requirements(self, fmt: OutputFormat):
-        spec = ClaudeCodeBackend().build_food_truck_cmd(
-            orchestrator_prompt="Orchestrator",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/p")),
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
-            output_format=fmt,
-        )
+        with plugin_binding(Path("/p")) as binding:
+            spec = ClaudeCodeBackend().build_food_truck_cmd(
+                orchestrator_prompt="Orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+                output_format=fmt,
+            )
         for flag in fmt.required_cli_flags:
             assert flag in spec.cmd
 

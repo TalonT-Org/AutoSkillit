@@ -1,4 +1,4 @@
-"""Tests for _plugin_cache: retiring cache, install locking, kitchen registry."""
+"""Tests for exact plugin retirement, install locking, and kitchen state."""
 
 from __future__ import annotations
 
@@ -7,529 +7,498 @@ import json
 import os
 import subprocess
 import threading
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+import structlog
+
+from autoskillit.core import (
+    ArtifactLease,
+    PluginArtifactKind,
+    RetirementOutcome,
+    RetiringArtifactRecord,
+    append_retiring_record,
+    read_retiring_cache,
+    remove_retiring_records,
+)
+from tests._helpers import _flush_structlog_proxy_caches
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
-# ---------------------------------------------------------------------------
-# Category A — Grace period on version change
-# ---------------------------------------------------------------------------
+def _installed_identity(tmp_path: Path, version: str = "1.0.0"):
+    from autoskillit.cli._plugin_artifact import publish_installed_plugin_artifact
+
+    root = (tmp_path / ".claude" / "plugins" / "cache" / "market" / version).absolute()
+    root.mkdir(parents=True)
+    (root / "plugin.json").write_text('{"name":"autoskillit"}', encoding="utf-8")
+    return publish_installed_plugin_artifact(
+        root,
+        semantic_key=f"autoskillit@market:{version}",
+    )
 
 
-def test_retire_old_versions_registers_different_version(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def _record(
+    tmp_path: Path,
+    *,
+    record_id: str,
+    incarnation_id: str,
+    not_before: datetime,
+) -> RetiringArtifactRecord:
+    return RetiringArtifactRecord(
+        record_id=record_id,
+        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+        semantic_key="autoskillit@market:1.0.0",
+        managed_path=(tmp_path / "cache" / incarnation_id).absolute(),
+        manifest_path=(tmp_path / "cache" / f".{incarnation_id}.json").absolute(),
+        incarnation_id=incarnation_id,
+        manifest_schema_version=1,
+        artifact_digest="a" * 64,
+        retired_at=not_before - timedelta(hours=1),
+        not_before=not_before,
+    )
+
+
+def test_exact_append_is_ordered_idempotent_and_removed_by_record_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import _retire_old_versions
+    deadline = datetime.now(UTC) + timedelta(hours=6)
+    first = _record(
+        tmp_path,
+        record_id="record-a",
+        incarnation_id="00000000000040008000000000000001",
+        not_before=deadline,
+    )
+    second = _record(
+        tmp_path,
+        record_id="record-b",
+        incarnation_id="00000000000040008000000000000002",
+        not_before=deadline,
+    )
 
-    cache_dir = tmp_path / "cache"
-    old_dir = cache_dir / "0.8.0"
-    old_dir.mkdir(parents=True)
+    assert append_retiring_record(first).created is True
+    assert append_retiring_record(second).created is True
+    duplicate = replace(second, record_id="different-id")
+    duplicate_result = append_retiring_record(duplicate)
 
-    _retire_old_versions(cache_dir, "0.9.0")
-
-    assert old_dir.exists(), "0.8.0/ must survive (grace period)"
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    data = json.loads(retiring_json.read_text())
-    entries = data["retiring"]
-    assert len(entries) == 1
-    assert entries[0]["version"] == "0.8.0"
-    assert isinstance(datetime.fromisoformat(entries[0]["retired_at"]), datetime)
+    assert duplicate_result.record_id == second.record_id
+    assert duplicate_result.created is False
+    assert read_retiring_cache().records == (first, second)
+    assert remove_retiring_records((first.record_id,)) == 1
+    assert read_retiring_cache().records == (second,)
 
 
-def test_retire_old_versions_multiple_old_dirs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_installed_reclaim_defers_until_final_reader_closes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from autoskillit.cli._plugin_artifact import (
+        InstalledPluginArtifactRetirementOwner,
+        installed_artifact_lock_path,
+    )
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import _retire_old_versions
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC) + timedelta(seconds=1)
+    append_result = owner.enqueue_retirement(identity, deadline)
+    record = next(
+        record
+        for record in read_retiring_cache().records
+        if record.record_id == append_result.record_id
+    )
+    reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(identity.managed_path))
+    try:
+        assert (
+            owner.try_reclaim(record, deadline + timedelta(seconds=1))
+            is RetirementOutcome.DEFERRED_CONTENDED
+        )
+        assert identity.managed_path.is_dir()
+        assert identity.manifest_path.is_file()
+    finally:
+        reader.close()
 
-    cache_dir = tmp_path / "cache"
-    (cache_dir / "0.7.0").mkdir(parents=True)
-    (cache_dir / "0.8.0").mkdir(parents=True)
-
-    _retire_old_versions(cache_dir, "0.9.0")
-
-    assert (cache_dir / "0.7.0").exists()
-    assert (cache_dir / "0.8.0").exists()
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    data = json.loads(retiring_json.read_text())
-    versions = {e["version"] for e in data["retiring"]}
-    assert versions == {"0.7.0", "0.8.0"}
+    assert (
+        owner.try_reclaim(record, deadline + timedelta(seconds=1)) is RetirementOutcome.RECLAIMED
+    )
+    assert not identity.managed_path.exists()
+    assert not identity.manifest_path.exists()
 
 
-# ---------------------------------------------------------------------------
-# Category B — Same-version reinstall
-# ---------------------------------------------------------------------------
-
-
-def test_retire_old_versions_deletes_same_version(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_installed_reclaim_io_failure_stays_queued_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import autoskillit.core._plugin_cache as plugin_cache
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import _retire_old_versions
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    append_result = owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
 
-    cache_dir = tmp_path / "cache"
-    same_dir = cache_dir / "0.9.0"
-    same_dir.mkdir(parents=True)
+    real_rmtree = plugin_cache.shutil.rmtree
 
-    _retire_old_versions(cache_dir, "0.9.0")
+    def fail_reclaim(path):
+        (path / "plugin.json").unlink()
+        raise PermissionError("injected installed reclaim failure")
 
-    assert not same_dir.exists(), "Same-version dir must be deleted immediately"
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    assert not retiring_json.exists(), (
-        "No retiring entries should be created for a same-version reinstall"
-    )
+    monkeypatch.setattr(plugin_cache.shutil, "rmtree", fail_reclaim)
+
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
+    assert not identity.managed_path.exists()
+    assert not identity.manifest_path.exists()
+    assert append_result.record_id in {
+        queued.record_id for queued in read_retiring_cache().records
+    }
+    monkeypatch.setattr(plugin_cache.shutil, "rmtree", real_rmtree)
+
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.RECLAIMED
+    assert append_result.record_id not in {
+        queued.record_id for queued in read_retiring_cache().records
+    }
 
 
-def test_retire_old_versions_noop_empty_cache_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("error", [PermissionError("denied"), RuntimeError("invalid sidecar")])
+def test_installed_reclaim_lease_failure_stays_queued_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
 ) -> None:
+    import autoskillit.core._plugin_cache as plugin_cache
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import _retire_old_versions
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    append_result = owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
 
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir(parents=True)
+    def fail_acquire(*_args, **_kwargs):
+        raise error
 
-    _retire_old_versions(cache_dir, "0.9.0")  # must not raise
+    monkeypatch.setattr(plugin_cache.ArtifactLease, "acquire_exclusive", fail_acquire)
 
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    assert not retiring_json.exists(), (
-        "No retiring entries should be created for an empty cache dir"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Category C — Sweep deletes expired
-# ---------------------------------------------------------------------------
-
-
-def test_sweep_deletes_expired_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import sweep_retiring_cache
-
-    old_dir = tmp_path / "cache" / "0.8.0"
-    old_dir.mkdir(parents=True)
-    retired_at = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    retiring_json.parent.mkdir(parents=True, exist_ok=True)
-    retiring_json.write_text(
-        json.dumps(
-            {
-                "retiring": [{"version": "0.8.0", "path": str(old_dir), "retired_at": retired_at}],
-                "schema_version": 1,
-            }
-        )
-    )
-
-    count = sweep_retiring_cache(grace_hours=24)
-
-    assert count == 1
-    assert not old_dir.exists()
-    data = json.loads(retiring_json.read_text())
-    assert data["retiring"] == []
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
+    assert identity.managed_path.is_dir()
+    assert append_result.record_id in {
+        queued.record_id for queued in read_retiring_cache().records
+    }
 
 
-def test_sweep_deletes_multiple_expired(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import sweep_retiring_cache
-
-    dir1 = tmp_path / "cache" / "0.7.0"
-    dir2 = tmp_path / "cache" / "0.8.0"
-    dir1.mkdir(parents=True)
-    dir2.mkdir(parents=True)
-    old_ts = (datetime.now(UTC) - timedelta(hours=30)).isoformat()
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    retiring_json.parent.mkdir(parents=True, exist_ok=True)
-    retiring_json.write_text(
-        json.dumps(
-            {
-                "retiring": [
-                    {"version": "0.7.0", "path": str(dir1), "retired_at": old_ts},
-                    {"version": "0.8.0", "path": str(dir2), "retired_at": old_ts},
-                ],
-                "schema_version": 1,
-            }
-        )
-    )
-
-    count = sweep_retiring_cache(grace_hours=24)
-
-    assert count == 2
-    assert not dir1.exists()
-    assert not dir2.exists()
-
-
-# ---------------------------------------------------------------------------
-# Category D — Sweep preserves fresh
-# ---------------------------------------------------------------------------
-
-
-def test_sweep_preserves_fresh_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import sweep_retiring_cache
-
-    fresh_dir = tmp_path / "cache" / "0.8.0"
-    fresh_dir.mkdir(parents=True)
-    retired_at = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    retiring_json.parent.mkdir(parents=True, exist_ok=True)
-    retiring_json.write_text(
-        json.dumps(
-            {
-                "retiring": [
-                    {"version": "0.8.0", "path": str(fresh_dir), "retired_at": retired_at}
-                ],
-                "schema_version": 1,
-            }
-        )
-    )
-
-    count = sweep_retiring_cache(grace_hours=24)
-
-    assert count == 0
-    assert fresh_dir.exists()
-    data = json.loads(retiring_json.read_text())
-    assert len(data["retiring"]) == 1
-
-
-def test_sweep_mixed_fresh_and_expired(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import sweep_retiring_cache
-
-    expired_dir = tmp_path / "cache" / "0.7.0"
-    fresh_dir = tmp_path / "cache" / "0.8.0"
-    expired_dir.mkdir(parents=True)
-    fresh_dir.mkdir(parents=True)
-    expired_ts = (datetime.now(UTC) - timedelta(hours=30)).isoformat()
-    fresh_ts = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    retiring_json.parent.mkdir(parents=True, exist_ok=True)
-    retiring_json.write_text(
-        json.dumps(
-            {
-                "retiring": [
-                    {"version": "0.7.0", "path": str(expired_dir), "retired_at": expired_ts},
-                    {"version": "0.8.0", "path": str(fresh_dir), "retired_at": fresh_ts},
-                ],
-                "schema_version": 1,
-            }
-        )
-    )
-
-    count = sweep_retiring_cache(grace_hours=24)
-
-    assert count == 1
-    assert not expired_dir.exists()
-    assert fresh_dir.exists()
-    data = json.loads(retiring_json.read_text())
-    assert len(data["retiring"]) == 1
-    assert data["retiring"][0]["version"] == "0.8.0"
-
-
-# ---------------------------------------------------------------------------
-# Category E — Sweep error handling
-# ---------------------------------------------------------------------------
-
-
-def test_sweep_handles_already_deleted_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_installed_reclaim_defers_when_cache_reread_is_unsafe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import sweep_retiring_cache
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
-    missing_dir = tmp_path / "cache" / "0.8.0"
-    # Deliberately do NOT create the directory
-    old_ts = (datetime.now(UTC) - timedelta(hours=30)).isoformat()
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    retiring_json.parent.mkdir(parents=True, exist_ok=True)
-    retiring_json.write_text(
-        json.dumps(
-            {
-                "retiring": [{"version": "0.8.0", "path": str(missing_dir), "retired_at": old_ts}],
-                "schema_version": 1,
-            }
-        )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
+    cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+    cache.write_text("{not-json")
+
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
+    assert identity.managed_path.is_dir()
+    assert identity.manifest_path.is_file()
+    assert cache.read_text() == "{not-json"
+
+
+def test_installed_reclaim_keeps_authority_on_identity_io_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC)
+    owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
+
+    def fail_digest(_path: Path) -> str:
+        raise PermissionError("injected transient digest failure")
+
+    monkeypatch.setattr(
+        plugin_artifact_identity,
+        "directory_tree_digest",
+        fail_digest,
     )
 
-    count = sweep_retiring_cache(grace_hours=24)  # must not raise
-
-    assert count == 1
-    data = json.loads(retiring_json.read_text())
-    assert data["retiring"] == []
-
-
-def test_sweep_noop_when_file_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import sweep_retiring_cache
-
-    count = sweep_retiring_cache()
-    assert count == 0
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
+    assert read_retiring_cache().records == (record,)
+    assert identity.managed_path.is_dir()
+    assert identity.manifest_path.is_file()
 
 
-def test_sweep_handles_malformed_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import sweep_retiring_cache
-
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    retiring_json.parent.mkdir(parents=True, exist_ok=True)
-    retiring_json.write_text("not valid json {{{")
-
-    count = sweep_retiring_cache()  # must not raise
-
-    assert count == 0
-
-
-def test_sweep_handles_missing_retired_at(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import sweep_retiring_cache
-
-    old_dir = tmp_path / "cache" / "0.8.0"
-    old_dir.mkdir(parents=True)
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    retiring_json.parent.mkdir(parents=True, exist_ok=True)
-    retiring_json.write_text(
-        json.dumps({"retiring": [{"version": "0.8.0", "path": str(old_dir)}], "schema_version": 1})
+def test_installed_lifecycle_events_use_the_shared_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli._plugin_artifact import (
+        InstalledPluginArtifactAuthority,
+        InstalledPluginArtifactRetirementOwner,
     )
+    from autoskillit.core import PluginLoadMode
 
-    sweep_retiring_cache()  # must not raise
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            identity = _installed_identity(tmp_path)
+            binding = InstalledPluginArtifactAuthority(
+                identity.managed_path,
+                semantic_key=identity.semantic_key,
+            ).acquire_launch_binding(
+                backend=object(),  # type: ignore[arg-type]
+                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+            )
+            binding.close()
+            InstalledPluginArtifactRetirementOwner(
+                identity.managed_path.parent
+            ).enqueue_retirement(
+                identity,
+                datetime.now(UTC) + timedelta(hours=6),
+            )
+    finally:
+        _flush_structlog_proxy_caches()
 
-    data = json.loads(retiring_json.read_text())
-    assert len(data["retiring"]) == 1, (
-        "Entry with missing retired_at must be preserved in survivors"
+    lifecycle = [entry for entry in logs if entry.get("event") == "plugin_artifact_lifecycle"]
+    assert [entry["action"] for entry in lifecycle] == [
+        "publish",
+        "acquire",
+        "release",
+        "retire",
+    ]
+    assert all(entry["artifact_kind"] == "installed_plugin" for entry in lifecycle)
+    assert all(entry["semantic_key"] == identity.semantic_key for entry in lifecycle)
+    assert all(entry["incarnation"] == identity.incarnation_id for entry in lifecycle)
+    assert all("actor_pid" in entry and "child_pid" in entry for entry in lifecycle)
+
+
+def test_identity_mismatch_removes_record_without_deleting_current_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactRetirementOwner
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    identity = _installed_identity(tmp_path)
+    owner = InstalledPluginArtifactRetirementOwner(identity.managed_path.parent)
+    deadline = datetime.now(UTC) + timedelta(seconds=1)
+    append_result = owner.enqueue_retirement(identity, deadline)
+    record = read_retiring_cache().records[0]
+    raw = json.loads(identity.manifest_path.read_text(encoding="utf-8"))
+    raw["incarnation_id"] = "0" * 32
+    mutated_manifest = json.dumps(raw).encode()
+    identity.manifest_path.write_bytes(mutated_manifest)
+
+    assert (
+        owner.try_reclaim(record, deadline + timedelta(seconds=1))
+        is RetirementOutcome.REJECTED_IDENTITY
     )
-    assert data["retiring"][0]["version"] == "0.8.0"
+    assert identity.managed_path.is_dir()
+    assert identity.manifest_path.read_bytes() == mutated_manifest
+    assert append_result.record_id not in {
+        queued.record_id for queued in read_retiring_cache().records
+    }
 
 
-# ---------------------------------------------------------------------------
-# Category F — Install locking
-# ---------------------------------------------------------------------------
-
-
-def test_install_lock_creates_lock_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_install_lock_creates_lock_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import _InstallLock
 
     lock_path = tmp_path / ".autoskillit" / "install.lock"
     with _InstallLock():
         assert lock_path.exists()
-    # File still exists after release (fcntl lock is released, not deleted)
     assert lock_path.exists()
 
 
 def test_install_lock_blocks_concurrent_access(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import _install_lock_path
 
     lock_file_path = _install_lock_path()
     lock_file_path.parent.mkdir(parents=True, exist_ok=True)
-
     acquired = threading.Event()
     release = threading.Event()
 
     def hold_lock() -> None:
-        with open(lock_file_path, "w") as fh:
-            fcntl.flock(fh, fcntl.LOCK_EX)
+        with open(lock_file_path, "w") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
             acquired.set()
             release.wait(timeout=5)
 
-    t = threading.Thread(target=hold_lock, daemon=True)
-    t.start()
-    assert acquired.wait(timeout=2), "background lock thread did not acquire within 2s"
-
-    # Try non-blocking acquire — must fail while first holder has it
-    with open(lock_file_path, "w") as fh2:
-        try:
-            fcntl.flock(fh2, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            blocked = False
-            fcntl.flock(fh2, fcntl.LOCK_UN)
-        except OSError:
-            blocked = True
-
+    thread = threading.Thread(target=hold_lock, daemon=True)
+    thread.start()
+    assert acquired.wait(timeout=2)
+    with open(lock_file_path, "w") as second:
+        with pytest.raises(OSError):
+            fcntl.flock(second, fcntl.LOCK_EX | fcntl.LOCK_NB)
     release.set()
-    t.join(timeout=2)
-    assert not t.is_alive(), "lock-holding thread did not exit within 2s after release"
-
-    assert blocked, "Second acquire must be blocked while first holder has the lock"
+    thread.join(timeout=2)
+    assert not thread.is_alive()
 
 
-# ---------------------------------------------------------------------------
-# Category G — Retiring registry integrity
-# ---------------------------------------------------------------------------
-
-
-def test_append_preserves_existing_entries(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_register_creates_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import append_retiring_entry
-
-    append_retiring_entry("0.7.0", "/some/path/0.7.0")
-    append_retiring_entry("0.8.0", "/some/path/0.8.0")
-
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    data = json.loads(retiring_json.read_text())
-    versions = [e["version"] for e in data["retiring"]]
-    assert "0.7.0" in versions
-    assert "0.8.0" in versions
-
-
-def test_registry_path_is_absolute(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import append_retiring_entry
-
-    abs_path = str(tmp_path / "cache" / "0.8.0")
-    append_retiring_entry("0.8.0", abs_path)
-
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    data = json.loads(retiring_json.read_text())
-    assert len(data["retiring"]) == 1
-    assert Path(data["retiring"][0]["path"]).is_absolute()
-
-
-# ---------------------------------------------------------------------------
-# Category K — Kitchen registry
-# ---------------------------------------------------------------------------
-
-
-def test_register_creates_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.core._plugin_cache import register_active_kitchen
 
-    kitchen_id = "test-kitchen-001"
-    pid = os.getpid()
-    project_path = str(tmp_path)
+    register_active_kitchen("test-kitchen-001", os.getpid(), str(tmp_path))
 
-    register_active_kitchen(kitchen_id, pid, project_path)
-
-    akp = tmp_path / ".autoskillit" / "active_kitchens.json"
-    data = json.loads(akp.read_text())
-    kitchens = data["kitchens"]
+    kitchens = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())[
+        "kitchens"
+    ]
     assert len(kitchens) == 1
-    assert kitchens[0]["kitchen_id"] == kitchen_id
-    assert kitchens[0]["pid"] == pid
-    assert kitchens[0]["project_path"] == project_path
+    assert kitchens[0]["kitchen_id"] == "test-kitchen-001"
+    assert kitchens[0]["pid"] == os.getpid()
+    assert kitchens[0]["project_path"] == str(tmp_path)
     assert kitchens[0]["create_time"] is not None
 
 
-def test_unregister_removes_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unregister_removes_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import register_active_kitchen, unregister_active_kitchen
+    from autoskillit.core._plugin_cache import (
+        register_active_kitchen,
+        unregister_active_kitchen,
+    )
 
-    kitchen_id = "test-kitchen-002"
-    register_active_kitchen(kitchen_id, os.getpid(), str(tmp_path))
-    unregister_active_kitchen(kitchen_id)
+    register_active_kitchen("test-kitchen-002", os.getpid(), str(tmp_path))
+    unregister_active_kitchen("test-kitchen-002")
 
-    akp = tmp_path / ".autoskillit" / "active_kitchens.json"
-    data = json.loads(akp.read_text())
+    data = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())
     assert data["kitchens"] == []
 
 
 def test_any_kitchen_open_false_when_pid_dead(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
+    from autoskillit.core._plugin_cache import (
+        any_kitchen_open,
+        register_active_kitchen,
+    )
 
-    proc = subprocess.Popen(["true"])
-    proc.wait()
-    dead_pid = proc.pid
-    register_active_kitchen("test-kitchen-003", dead_pid, str(tmp_path))
+    process = subprocess.Popen(["true"])
+    process.wait()
+    register_active_kitchen("test-kitchen-003", process.pid, str(tmp_path))
 
-    result = any_kitchen_open()
-    assert result is False
+    assert any_kitchen_open() is False
 
 
-def test_any_kitchen_open_sweeps_stale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_any_kitchen_open_sweeps_stale(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
+    from autoskillit.core._plugin_cache import (
+        any_kitchen_open,
+        register_active_kitchen,
+    )
 
-    proc = subprocess.Popen(["true"])
-    proc.wait()
-    dead_pid = proc.pid
-    register_active_kitchen("test-kitchen-004", dead_pid, str(tmp_path))
-
+    process = subprocess.Popen(["true"])
+    process.wait()
+    register_active_kitchen("test-kitchen-004", process.pid, str(tmp_path))
     any_kitchen_open()
 
-    akp = tmp_path / ".autoskillit" / "active_kitchens.json"
-    data = json.loads(akp.read_text())
+    data = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())
     assert data["kitchens"] == []
 
 
-def test_clear_kitchens_for_pid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_clear_kitchens_for_pid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import clear_kitchens_for_pid, register_active_kitchen
+    from autoskillit.core._plugin_cache import (
+        clear_kitchens_for_pid,
+        register_active_kitchen,
+    )
 
-    pid = os.getpid()
-    register_active_kitchen("test-kitchen-005a", pid, str(tmp_path))
-    register_active_kitchen("test-kitchen-005b", pid, str(tmp_path))
+    register_active_kitchen("test-kitchen-005a", os.getpid(), str(tmp_path))
+    register_active_kitchen("test-kitchen-005b", os.getpid(), str(tmp_path))
+    clear_kitchens_for_pid(os.getpid())
 
-    clear_kitchens_for_pid(pid)
-
-    akp = tmp_path / ".autoskillit" / "active_kitchens.json"
-    data = json.loads(akp.read_text())
+    data = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())
     assert data["kitchens"] == []
 
 
 def test_any_kitchen_open_true_for_live_pid(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
+    from autoskillit.core._plugin_cache import (
+        any_kitchen_open,
+        register_active_kitchen,
+    )
 
     register_active_kitchen("test-kitchen-006", os.getpid(), str(tmp_path))
 
-    result = any_kitchen_open()
-    assert result is True
+    assert any_kitchen_open() is True
 
 
 def test_any_kitchen_open_scoped_excludes_other_project(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
+    from autoskillit.core._plugin_cache import (
+        any_kitchen_open,
+        register_active_kitchen,
+    )
 
-    project_a = "/project_A"
-    project_b = "/project_B"
-    register_active_kitchen("test-kitchen-007", os.getpid(), project_a)
+    register_active_kitchen("test-kitchen-007", os.getpid(), "/project_A")
 
-    assert any_kitchen_open(project_path=project_b) is False
-    assert any_kitchen_open(project_path=project_a) is True
+    assert any_kitchen_open(project_path="/project_B") is False
+    assert any_kitchen_open(project_path="/project_A") is True
 
 
 def test_any_kitchen_open_no_project_path_returns_global(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from autoskillit.core._plugin_cache import any_kitchen_open, register_active_kitchen
+    from autoskillit.core._plugin_cache import (
+        any_kitchen_open,
+        register_active_kitchen,
+    )
 
     register_active_kitchen("test-kitchen-008", os.getpid(), "/project_A")
 
     assert any_kitchen_open() is True
 
 
-# ---------------------------------------------------------------------------
-# Category G — Plugin cache integrity validation
-# ---------------------------------------------------------------------------
-
-
 def test_stale_cache_after_reorg_detected(tmp_path: Path) -> None:
-    """validate_plugin_cache_hooks must detect flat-path commands after directory reorganization.
-
-    Reproduces issue #1740: hooks.json frozen with pre-reorg flat paths while scripts
-    have moved to subdirectories.
-    """
     from autoskillit.hook_registry import validate_plugin_cache_hooks
 
-    fake_cache = tmp_path / "cache"
-    version_dir = fake_cache / "0.9.347"
+    version_dir = tmp_path / "cache" / "0.9.347"
     version_dir.mkdir(parents=True)
-
     stale_hooks_json = {
         "hooks": {
             "PreToolUse": [
@@ -551,8 +520,8 @@ def test_stale_cache_after_reorg_detected(tmp_path: Path) -> None:
     }
     (version_dir / "hooks.json").write_text(json.dumps(stale_hooks_json))
 
-    broken = validate_plugin_cache_hooks(cache_dir=fake_cache)
+    broken = validate_plugin_cache_hooks(cache_dir=tmp_path / "cache")
 
     assert len(broken) == 2
-    assert any("quota_guard.py" in cmd for cmd in broken)
-    assert any("pretty_output_hook.py" in cmd for cmd in broken)
+    assert any("quota_guard.py" in command for command in broken)
+    assert any("pretty_output_hook.py" in command for command in broken)

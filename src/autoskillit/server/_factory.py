@@ -21,7 +21,8 @@ from autoskillit.core import (
     DirectInstall,
     FleetLock,
     InstalledRecipeExecution,
-    PluginSource,
+    PluginArtifactAuthority,
+    PluginRetirementCoordinator,
     RecipeExecutionSnapshot,
     SkillExecutionRole,
     SubprocessRunner,
@@ -79,8 +80,8 @@ from autoskillit.workspace import (
     DefaultSessionSkillManager,
     DefaultWorkspaceManager,
     SkillsDirectoryProvider,
-    project_default_plugin_source,
-    project_direct_install,
+    project_default_plugin_authority,
+    project_direct_install_authority,
     resolve_ephemeral_root,
     resolve_persistent_session_root,
     validate_skill_tier_roles,
@@ -164,7 +165,8 @@ def make_context(
     *,
     runner: SubprocessRunner | None = _UNSET,
     plugin_dir: str | None = _UNSET,
-    plugin_source: PluginSource = _UNSET,
+    plugin_authority: PluginArtifactAuthority = _UNSET,
+    plugin_retirement_coordinator: PluginRetirementCoordinator | None = None,
     fleet_lock: FleetLock | None = None,
     project_dir: Path | None = None,
 ) -> ToolContext:
@@ -182,12 +184,10 @@ def make_context(
         runner: Subprocess runner implementation. Defaults to DefaultSubprocessRunner()
                 for production use. Pass runner=None explicitly to disable the
                 tester (useful in tests that don't need real subprocess execution).
-        plugin_dir: Test-injection override for the projection *source* — project
-                    from this root instead of pkg_root(). Still projected, never
-                    handed to a session raw. When plugin_source is also provided,
-                    plugin_source wins.
-        plugin_source: Test-injection override for the fully-resolved PluginSource.
-                       When supplied, used verbatim with no projection.
+        plugin_dir: Test-injection override for the projection *source* — acquire
+                    artifacts from this root instead of pkg_root(). When
+                    plugin_authority is also provided, plugin_authority wins.
+        plugin_authority: Test-injection override for the lazy artifact authority.
         fleet_lock: FleetLock implementation to inject. Defaults to
                         FleetSemaphore(max_concurrent_dispatches) when None. Pass a
                         custom implementation in tests to substitute without monkey-patching.
@@ -301,27 +301,24 @@ def make_context(
         SkillExecutionRole.SESSION,
         visibility=skill_visibility,
     )
-    # Single resolution authority, shared with `autoskillit cook`: the plugin
-    # source is the projected running package. The two overrides exist only for
-    # test injection — nothing in production supplies them, and neither can name
-    # a path read out of installed_plugins.json.
-    resolved_plugin_source: PluginSource
-    if plugin_source is not _UNSET:
-        resolved_plugin_source = plugin_source  # type: ignore[assignment]
+    # Single lazy authority, shared with `autoskillit cook`. No projection is
+    # materialized until a physical child launch has resolved its backend and
+    # load mode.
+    resolved_plugin_authority: PluginArtifactAuthority
+    if plugin_authority is not _UNSET:
+        resolved_plugin_authority = plugin_authority  # type: ignore[assignment]
     elif plugin_dir is not _UNSET and isinstance(plugin_dir, (str, Path)):
-        resolved_plugin_source = project_direct_install(
+        resolved_plugin_authority = project_direct_install_authority(
             DirectInstall(plugin_dir=Path(plugin_dir)),
             cwd=project_dir,
-            backend=backend,
-            default_base_branch=config.branching.default_base_branch,
-            skill_catalog=session_catalog,
+            base_branch=config.branching.default_base_branch,
+            catalog=session_catalog,
         )
     else:
-        resolved_plugin_source = project_default_plugin_source(
+        resolved_plugin_authority = project_default_plugin_authority(
             cwd=project_dir,
-            backend=backend,
-            default_base_branch=config.branching.default_base_branch,
-            skill_catalog=session_catalog,
+            base_branch=config.branching.default_base_branch,
+            catalog=session_catalog,
         )
     ephemeral_root = resolve_ephemeral_root()
     persistent_root = resolve_persistent_session_root(temp_dir, backend)
@@ -346,11 +343,12 @@ def make_context(
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=gate,
-        plugin_source=resolved_plugin_source,
+        plugin_authority=resolved_plugin_authority,
         runner=runner,
         backend=backend,
         temp_dir=temp_dir,
         project_dir=project_dir,
+        plugin_retirement_coordinator=plugin_retirement_coordinator,
         tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,
         recipes=DefaultRecipeRepository(),
         db_reader=DefaultDatabaseReader(),

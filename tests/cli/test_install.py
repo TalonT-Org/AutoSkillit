@@ -17,6 +17,36 @@ from autoskillit import cli
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
+def _seed_current_installed_plugin(home: Path) -> Path:
+    """Materialize the cache root a successful mocked Claude install creates."""
+    from autoskillit import __version__
+
+    root = (
+        home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / __version__
+    )
+    plugin_dir = root / ".claude-plugin"
+    hooks_dir = root / "hooks"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps({"name": "autoskillit", "version": __version__})
+    )
+    (hooks_dir / "hooks.json").write_text(json.dumps({"hooks": {}}))
+    return root
+
+
+def _successful_claude_run(home: Path):
+    """Return a subprocess double that publishes cache bytes before success."""
+
+    def run(cmd, *_args, **_kwargs):
+        normalized = tuple(str(part) for part in cmd)
+        if normalized[:3] == ("claude", "plugin", "install"):
+            _seed_current_installed_plugin(home)
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    return run
+
+
 class TestCLIInstall:
     def test_install_validates_scope(self, capsys: pytest.CaptureFixture) -> None:
         """install rejects invalid scope values."""
@@ -195,9 +225,7 @@ class TestCLIInstall:
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
         install(scope="user")
@@ -211,6 +239,20 @@ class TestCLIInstall:
         assert "autoskillit@autoskillit-local" in install_call[0][0]
         assert "--scope" in install_call[0][0]
         assert "user" in install_call[0][0]
+        from autoskillit.cli._plugin_artifact import (
+            current_installed_plugin_root,
+            installed_artifact_manifest_path,
+        )
+
+        installed_root = current_installed_plugin_root()
+        artifact_manifest = json.loads(
+            installed_artifact_manifest_path(installed_root).read_text()
+        )
+        assert artifact_manifest["artifact_kind"] == "installed_plugin"
+        assert artifact_manifest["managed_path"] == str(installed_root)
+        assert artifact_manifest["manifest_path"] == str(
+            installed_artifact_manifest_path(installed_root)
+        )
 
     @patch("autoskillit.cli._marketplace.subprocess.run")
     def test_install_passes_scope_to_claude(
@@ -225,9 +267,7 @@ class TestCLIInstall:
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
         install(scope="project")
@@ -249,9 +289,7 @@ class TestCLIInstall:
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
         install()
@@ -307,10 +345,7 @@ class TestCLIInstall:
         called = []
         monkeypatch.setattr(
             "subprocess.run",
-            lambda *a, **kw: (
-                called.append(a),
-                subprocess.CompletedProcess(args=[], returncode=0, stdout="ok", stderr=""),
-            )[1],
+            lambda *a, **kw: (called.append(a), _successful_claude_run(tmp_path)(*a, **kw))[1],
         )
         monkeypatch.setattr(_app_mod, "evict_direct_mcp_entry", lambda _: False)
         monkeypatch.setattr(
@@ -318,7 +353,6 @@ class TestCLIInstall:
         )
         monkeypatch.setattr(_app_mod, "generate_hooks_json", lambda: {})
         monkeypatch.setattr(_app_mod, "atomic_write", lambda *a, **kw: None)
-
         from autoskillit.cli._marketplace import install
 
         result = install(scope="user")
@@ -371,9 +405,7 @@ class TestCLIInstall:
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
         install(scope="user")
@@ -711,6 +743,8 @@ def test_clear_plugin_cache_drops_plugins_entry(
     Old version directories still survive under the grace period.
     """
     from autoskillit.cli._marketplace import _clear_plugin_cache
+    from autoskillit.cli._plugin_artifact import publish_installed_plugin_artifact
+    from autoskillit.core import PluginArtifactKind, read_retiring_cache
 
     plugins_dir = tmp_path / ".claude" / "plugins"
     plugins_dir.mkdir(parents=True)
@@ -727,12 +761,17 @@ def test_clear_plugin_cache_drops_plugins_entry(
     cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
     old_version_dir = cache_dir / "0.9.0"
     old_version_dir.mkdir(parents=True)
+    (old_version_dir / "plugin.json").write_text('{"name":"autoskillit"}')
     # Ensure the running __version__ differs from "0.9.0" so retirement applies
     import autoskillit as _pkg
 
     monkeypatch.setattr(_pkg, "__version__", "0.9.99-test")
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    old_identity = publish_installed_plugin_artifact(
+        old_version_dir,
+        semantic_key="autoskillit@autoskillit-local:0.9.0",
+    )
     _clear_plugin_cache()
 
     data = json.loads(installed_json.read_text())
@@ -741,10 +780,10 @@ def test_clear_plugin_cache_drops_plugins_entry(
     # Old version dir survives under grace period
     assert old_version_dir.exists(), "Old version dir must survive under grace period"
     # Retiring registry must record the old version
-    retiring_json = tmp_path / ".autoskillit" / "retiring_cache.json"
-    assert retiring_json.exists(), "retiring_cache.json must be created"
-    retiring_data = json.loads(retiring_json.read_text())
-    assert any(e["version"] == "0.9.0" for e in retiring_data["retiring"])
+    retiring = read_retiring_cache()
+    assert len(retiring.records) == 1
+    assert retiring.records[0].artifact_kind is PluginArtifactKind.INSTALLED_PLUGIN
+    assert retiring.records[0].identity == old_identity
 
 
 def test_clear_plugin_cache_noop_when_entry_absent(
@@ -864,13 +903,12 @@ def test_install_creates_autoskillit_gitignore(
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
     monkeypatch.setattr(
         "subprocess.run",
-        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+        _successful_claude_run(tmp_path),
     )
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
-
     (tmp_path / ".autoskillit").mkdir()
     _install(scope="user")
 
@@ -895,13 +933,12 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
     monkeypatch.setattr(
         "subprocess.run",
-        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+        _successful_claude_run(tmp_path),
     )
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
-
     scripts_dir = tmp_path / ".autoskillit" / "scripts"
     scripts_dir.mkdir(parents=True)
 

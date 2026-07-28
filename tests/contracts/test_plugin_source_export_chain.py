@@ -18,18 +18,55 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 #: Symbols this change removed. Both halves must hold: gone from `__all__` and
 #: gone from `getattr`.
-REMOVED = ("MarketplaceInstall", "_get_autoskillit_install_path")
+REMOVED = (
+    "MarketplaceInstall",
+    "PluginSource",
+    "ProjectedPluginRoot",
+    "_get_autoskillit_install_path",
+    "_retire_old_versions",
+    "append_retiring_entry",
+    "drop_retiring_entries",
+    "retiring_cache_entries",
+    "sweep_retiring_cache",
+    "MAX_DEFER_HOURS",
+)
 
 #: Symbols this change added. Each must be importable from the gateway.
 ADDED = (
-    "ProjectedPluginRoot",
+    "ArtifactLease",
+    "ArtifactLeaseContention",
+    "PluginArtifactAuthority",
+    "PluginArtifactContentionError",
+    "PluginArtifactKind",
+    "PluginArtifactIdentity",
+    "PluginArtifactPublicationError",
+    "PluginArtifactRetirementEngine",
+    "PluginArtifactRetirementOwner",
+    "PluginArtifactValidationError",
+    "PluginLaunchBinding",
+    "PluginLoadMode",
+    "PluginRetirementCoordinator",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
+    "RetiringAppendResult",
+    "RetiringArtifactRecord",
+    "RetiringCacheReadResult",
+    "RetiringCacheState",
+    "RetirementOutcome",
     "RetiredArtifactShape",
+    "append_retiring_record",
     "destination_location",
+    "directory_tree_digest",
+    "due_retiring_records",
+    "is_canonical_plugin_artifact_digest",
+    "is_canonical_plugin_artifact_incarnation_id",
+    "migrate_retiring_cache_v1",
+    "new_plugin_artifact_incarnation_id",
+    "normalize_inherited_fds",
+    "read_installed_plugin_artifact_identity",
+    "read_retiring_cache",
     "registered_install_paths",
+    "remove_retiring_records",
     "resolve_project_dir",
-    "retiring_cache_entries",
-    "drop_retiring_entries",
 )
 
 

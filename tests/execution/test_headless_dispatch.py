@@ -5,10 +5,46 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
+from autoskillit.core import PluginArtifactIdentity, PluginLaunchBinding
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+class _Lease:
+    def __init__(self) -> None:
+        self.closed = False
+
+    @property
+    def inherited_fds(self) -> tuple[int, ...]:
+        return ()
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _StaticPluginAuthority:
+    def __init__(self, plugin_dir: Path) -> None:
+        self.plugin_dir = plugin_dir.resolve()
+        self.leases: list[_Lease] = []
+
+    def acquire_launch_binding(self, *, backend, load_mode):
+        lease = _Lease()
+        self.leases.append(lease)
+        return PluginLaunchBinding(
+            load_mode=load_mode,
+            plugin_dir=self.plugin_dir,
+            identity=PluginArtifactIdentity(
+                semantic_key="test-plugin",
+                incarnation_id="00000000000040008000000000000001",
+                manifest_schema_version=1,
+                artifact_digest="a" * 64,
+                managed_path=self.plugin_dir,
+                manifest_path=self.plugin_dir.parent / "test-plugin.manifest.json",
+            ),
+            inherited_fds=(),
+            _lease=lease,
+        )
 
 
 def _make_success_stdout(marker: str = "%%FT_DONE%%") -> str:
@@ -20,6 +56,66 @@ def _make_success_stdout(marker: str = "%%FT_DONE%%") -> str:
             "session_id": "ft-session",
             "is_error": False,
         }
+    )
+
+
+def test_plugin_binding_cleanup_does_not_replace_primary_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    import autoskillit.execution.headless._headless_launch as headless_launch
+    from autoskillit.core import PluginLoadMode
+
+    primary = RuntimeError("primary launch failure")
+    cleanup = OSError("cleanup failure")
+
+    class FailingLease:
+        closed = False
+
+        @property
+        def inherited_fds(self) -> tuple[int, ...]:
+            return ()
+
+        def close(self) -> None:
+            self.closed = True
+            raise cleanup
+
+    lease = FailingLease()
+    binding = PluginLaunchBinding(
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        plugin_dir=tmp_path,
+        identity=PluginArtifactIdentity(
+            semantic_key="test-plugin",
+            incarnation_id="00000000000040008000000000000001",
+            manifest_schema_version=1,
+            artifact_digest="a" * 64,
+            managed_path=tmp_path,
+            manifest_path=tmp_path.parent / "test-plugin.manifest.json",
+        ),
+        inherited_fds=(),
+        _lease=lease,
+    )
+    authority = Mock()
+    authority.acquire_launch_binding.return_value = binding
+    logger = Mock()
+    monkeypatch.setattr(headless_launch, "logger", logger)
+
+    with pytest.raises(RuntimeError) as caught:
+        with headless_launch._plugin_launch_binding(
+            authority=authority,
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ):
+            raise primary
+
+    assert caught.value is primary
+    assert lease.closed
+    logger.warning.assert_called_once_with(
+        "plugin_launch_binding_close_failed",
+        primary_error=repr(primary),
+        exc_info=True,
     )
 
 
@@ -43,7 +139,8 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        authority = _StaticPluginAuthority(tmp_path)
+        minimal_ctx.plugin_authority = authority
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -51,7 +148,7 @@ class TestDispatchFoodTruck:
             "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
-            plugin_source=minimal_ctx.plugin_source,
+            plugin_authority=minimal_ctx.plugin_authority,
         )
 
         assert runner.call_args_list, "runner was never called"
@@ -65,6 +162,8 @@ class TestDispatchFoodTruck:
         assert runner.last_pty_mode is False
         assert "--tools" in cmd
         assert "AskUserQuestion" in cmd
+        assert len(authority.leases) == 1
+        assert authority.leases[0].closed is True
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_returns_skill_result(self, minimal_ctx, tmp_path: Path):
@@ -83,7 +182,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -113,7 +212,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         spawned_pids: list[int] = []
@@ -145,7 +244,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -188,7 +287,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=projected)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(projected)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -196,11 +295,66 @@ class TestDispatchFoodTruck:
             "You are an L3 orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
-            plugin_source=minimal_ctx.plugin_source,
+            plugin_authority=minimal_ctx.plugin_authority,
         )
         cmd, _cwd, _timeout, _kwargs = runner.call_args_list[0]
         assert "--plugin-dir" in cmd
         assert str(projected) in cmd
+
+    @pytest.mark.anyio
+    async def test_dispatch_finalizes_semantics_while_binding_is_live(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        from autoskillit.core.types import SubprocessResult, TerminationReason
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.fakes import MockSubprocessRunner
+
+        finalized_bindings: list[PluginLaunchBinding] = []
+
+        class LifetimeRunner(MockSubprocessRunner):
+            observed_live_binding = False
+
+            async def __call__(self, *args, **kwargs):
+                assert finalized_bindings
+                assert finalized_bindings[0].closed is False
+                self.observed_live_binding = True
+                return await super().__call__(*args, **kwargs)
+
+        runner = LifetimeRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout=_make_success_stdout(),
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=55555,
+            )
+        )
+        authority = _StaticPluginAuthority(tmp_path)
+
+        class Preparation:
+            def finalize(self, *, backend, binding):
+                assert backend.name == "claude-code"
+                assert binding.closed is False
+                finalized_bindings.append(binding)
+                return None
+
+        minimal_ctx.runner = runner
+        minimal_ctx.backend = ClaudeCodeBackend()
+        minimal_ctx.plugin_authority = authority
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        await executor.dispatch_food_truck(
+            "You are an L3 orchestrator",
+            str(tmp_path),
+            completion_marker="%%FT_DONE%%",
+            plugin_authority=authority,
+            capability_preparation=Preparation(),
+        )
+
+        assert len(finalized_bindings) == 1
+        assert runner.observed_live_binding
+        assert finalized_bindings[0].closed is True
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_passes_resume_session_id_to_cmd_builder(
@@ -235,7 +389,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -271,7 +425,7 @@ class TestDispatchFoodTruckPackInjection:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -306,7 +460,7 @@ class TestDispatchFoodTruckPackInjection:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
@@ -331,10 +485,9 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_l3_tool_tags_conflict_raises(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
 
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         with pytest.raises(ValueError, match="AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"):
@@ -353,7 +506,6 @@ class TestDispatchFoodTruckGuards:
         from unittest.mock import AsyncMock
 
         from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.fakes import MockSubprocessRunner
 
@@ -374,7 +526,7 @@ class TestDispatchFoodTruckGuards:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.backend = ClaudeCodeBackend()
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
@@ -390,12 +542,11 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_raises_for_non_claude_code_backend(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
 
         minimal_ctx.backend = _mock_backend(food_truck_capable=False)
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         with pytest.raises(RuntimeError, match="food_truck_capable"):
@@ -409,11 +560,10 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_raises_for_none_backend(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
 
         minimal_ctx.backend = None
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         with pytest.raises(RuntimeError, match="dispatch_backend must be resolved"):
@@ -428,7 +578,6 @@ class TestDispatchFoodTruckGuards:
         self, minimal_ctx, tmp_path: Path
     ) -> None:
         from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
@@ -444,7 +593,7 @@ class TestDispatchFoodTruckGuards:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.backend = _mock_backend(
             food_truck_capable=True, pty_required=True, channel_b_capable=True
         )
@@ -462,12 +611,11 @@ class TestDispatchFoodTruckGuards:
     async def test_dispatch_food_truck_raises_when_food_truck_capable_false(
         self, minimal_ctx, tmp_path: Path
     ) -> None:
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
 
         minimal_ctx.backend = _mock_backend(food_truck_capable=False)
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
         with pytest.raises(RuntimeError, match="food_truck_capable"):
@@ -482,7 +630,6 @@ class TestDispatchFoodTruckGuards:
         self, minimal_ctx, tmp_path: Path
     ) -> None:
         from autoskillit.core.types import SubprocessResult, TerminationReason
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
@@ -498,7 +645,7 @@ class TestDispatchFoodTruckGuards:
             )
         )
         minimal_ctx.runner = runner
-        minimal_ctx.plugin_source = ProjectedPluginRoot(plugin_dir=tmp_path)
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.backend = _mock_backend(food_truck_capable=True)
 
         executor = DefaultHeadlessExecutor(minimal_ctx)

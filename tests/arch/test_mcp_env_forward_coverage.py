@@ -33,19 +33,20 @@ def test_mcp_env_forward_vars_in_skill_session_cmd() -> None:
 
 def test_mcp_env_forward_vars_in_food_truck_cmd() -> None:
     """mcp_env_forward_vars must appear in build_food_truck_cmd env."""
-    from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
     from autoskillit.execution.backends import BACKEND_REGISTRY
+    from tests.execution.backends._plugin_binding import plugin_binding
 
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
         if not backend.capabilities.mcp_env_forward_vars:
             continue
-        spec = backend.build_food_truck_cmd(
-            orchestrator_prompt="test prompt",
-            plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-            cwd="/repo",
-            completion_marker="DONE",
-        )
+        with plugin_binding(Path("/plugins")) as binding:
+            spec = backend.build_food_truck_cmd(
+                orchestrator_prompt="test prompt",
+                plugin_binding=binding,
+                cwd="/repo",
+                completion_marker="DONE",
+            )
         for var in backend.capabilities.mcp_env_forward_vars:
             assert var in spec.env, f"{name}: {var} missing from build_food_truck_cmd env"
 

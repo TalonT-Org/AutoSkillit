@@ -469,8 +469,8 @@ class TestDispatchFoodTruckSemanticValidation:
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_projected_plugin_source_succeeds(tool_ctx, monkeypatch):
-    """dispatch_food_truck succeeds with the projected plugin source in ToolContext."""
+async def test_dispatch_food_truck_plugin_authority_succeeds(tool_ctx, monkeypatch):
+    """dispatch_food_truck succeeds with lazy plugin authority in ToolContext."""
     from autoskillit.fleet._api import execute_dispatch
     from autoskillit.fleet.result_parser import L3ParseResult
 

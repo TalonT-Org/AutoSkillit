@@ -3,30 +3,34 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Mapping, Sequence
+import json
+import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 import regex as re
 
-from autoskillit.core import CliSubtype, OutputFormat, RetryReason, SkillResult, get_logger
-from autoskillit.execution.headless._headless_helpers import _resolve_pty_mode, assert_headless_cmd
-from autoskillit.execution.headless._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
+from autoskillit.core import (
+    CliSubtype,
+    SkillContractView,
+    extract_bash_write_targets,
+    get_logger,
+)
+from autoskillit.execution.headless._headless_path_tokens import (
+    _RECOVERABLE_PATH_TOKENS,
+    _is_path_outside_cwd,
+)
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     _check_expected_patterns,
 )
 from autoskillit.execution.session._session_content import _normalize_model_output
+from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
 if TYPE_CHECKING:
-    from autoskillit.core import (
-        CodingAgentBackend,
-        ResultParser,
-        SubprocessResult,
-        SubprocessRunner,
-    )
-    from autoskillit.recipe._contracts_types import SkillContract
+    from autoskillit.core import ResultParser
 
 logger = get_logger(__name__)
 
@@ -41,8 +45,6 @@ _TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 # whose value segment is a bare literal — no alternation/character-class, i.e. not
 # "(a|b)". This is the structural soundness gate for deterministic enum inference.
 _ENUM_BINDING_RE: re.Pattern[str] = re.compile(r"^(\w+)(?:\[[^\]]*\]\*)?=(?:\[[^\]]*\]\*)?(\w+)$")
-
-_NUDGE_TIMEOUT: float = 60.0
 
 _CANONICAL_TO_LEGACY: dict[str, str | None] = {
     "input_tokens": None,
@@ -82,6 +84,60 @@ def _is_path_capture_pattern(pattern: str) -> str | None:
     if "=" not in pattern[m.end() :]:
         return None
     return token_name
+
+
+def _scan_jsonl_write_paths(
+    stdout: str,
+    cwd: str,
+    *,
+    write_tool_names: frozenset[str] = frozenset({"Write", "Edit"}),
+    bash_tool_name: str = "Bash",
+) -> list[str]:
+    """Scan raw JSONL stdout for Write/Edit/Bash tool calls outside cwd."""
+    if not stdout.strip() or not cwd or not os.path.isabs(cwd):
+        return []
+
+    warnings: list[str] = []
+    for raw_line in stdout.strip().splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict) or not _is_parent_assistant_record(obj):
+            continue
+        msg = obj.get("message")
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
+                continue
+            tool_name = block.get("name", "")
+            inputs = block.get("input") or {}
+            if not isinstance(inputs, dict):
+                continue
+            if tool_name == bash_tool_name:
+                command = inputs.get("command", "")
+                if isinstance(command, str):
+                    for path in extract_bash_write_targets(command, cwd):
+                        if _is_path_outside_cwd(path, cwd):
+                            normalized = os.path.normpath(path)
+                            warnings.append(
+                                f"Bash command contained write target '{normalized}'"
+                                f" outside session cwd '{cwd}'"
+                            )
+            elif tool_name in write_tool_names:
+                file_path = inputs.get("file_path", "")
+                if isinstance(file_path, str) and _is_path_outside_cwd(file_path, cwd):
+                    warnings.append(
+                        f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
+                    )
+    return warnings
 
 
 def _recover_from_separate_marker(
@@ -186,7 +242,7 @@ def _synthesize_from_write_artifacts(
 
 
 def _parse_single_enum_binding(
-    skill_contract: SkillContract | None,
+    skill_contract: SkillContractView | None,
 ) -> tuple[str, str] | None:
     """Return (token_name, literal_value) iff write_expected_when soundly binds one enum value.
 
@@ -221,7 +277,7 @@ def _parse_single_enum_binding(
 def _infer_enum_token_from_write_contract(
     session: ClaudeSessionResult,
     expected_output_patterns: Sequence[str],
-    skill_contract: SkillContract | None,
+    skill_contract: SkillContractView | None,
     write_call_count: int,
     file_changes: Sequence[str] = (),
 ) -> ClaudeSessionResult | None:
@@ -296,7 +352,7 @@ def _extract_missing_token_hints(
     expected_output_patterns: Sequence[str],
     result_parser: ResultParser,
     write_tool_names: frozenset[str],
-    skill_contract: SkillContract | None = None,
+    skill_contract: SkillContractView | None = None,
 ) -> list[_PathHint | _EnumHint]:
     """Extract missing-token hints for patterns missing from the result.
 
@@ -350,162 +406,6 @@ def _extract_missing_token_hints(
         hints.append(_EnumHint(enum_token, tuple(output.allowed_values)))
 
     return hints
-
-
-async def _attempt_contract_nudge(
-    skill_result: SkillResult,
-    subprocess_result: SubprocessResult,
-    expected_output_patterns: Sequence[str],
-    completion_marker: str,
-    cwd: str,
-    runner: SubprocessRunner,
-    *,
-    backend: CodingAgentBackend | None = None,
-    result_parser: ResultParser | None = None,
-    provider_extras: Mapping[str, str] | None = None,
-    retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
-    pty_override: bool | None = None,
-    skill_contract: SkillContract | None = None,
-) -> SkillResult | None:
-    """Attempt a lightweight resume nudge to recover missing structured output tokens.
-
-    When ``_build_skill_result`` returns CONTRACT_RECOVERY, the model wrote the artifact
-    but omitted the structured output token. Instead of a full retry, resume the same
-    session with a short feedback prompt asking the model to emit the missing token.
-
-    When retry_reason is EARLY_STOP, the model produced substantive output but omitted
-    the completion marker. A simpler nudge prompt is used that bypasses the hints guard.
-
-    Returns a patched SkillResult(success=True) on success, or None to indicate the
-    nudge failed and the caller should fall through to the original path.
-    """
-    if backend is None or not backend.capabilities.session_resume_capable:
-        return None
-    if result_parser is None:
-        return None
-
-    if retry_reason == RetryReason.EARLY_STOP:
-        prompt = (
-            "Your response was complete but you omitted the required completion marker. "
-            f"Please emit ONLY the following text (nothing else):\n"
-            f"{completion_marker}"
-        )
-        patterns_to_check: Sequence[str] = list(expected_output_patterns)
-    else:
-        _write_tool_names = backend.write_tool_names()
-        hints = _extract_missing_token_hints(
-            subprocess_result.stdout,
-            expected_output_patterns,
-            result_parser,
-            _write_tool_names,
-            skill_contract=skill_contract,
-        )
-        if not hints:
-            logger.debug("nudge_skip_no_hints")
-            return None
-        hint_lines: list[str] = []
-        for hint in hints:
-            if isinstance(hint, _EnumHint):
-                logger.info(
-                    "nudge_enum_hint",
-                    field_name=hint.token,
-                    allowed_values=list(hint.allowed_values),
-                )
-                hint_lines.append(
-                    f"Emit `{hint.token} = <value>` where <value> is one of: "
-                    f"{' | '.join(hint.allowed_values)} — choose the value matching "
-                    "what you actually did."
-                )
-            else:
-                hint_lines.append(f"{hint.token} = {hint.path}")
-        token_lines = "\n".join(hint_lines)
-        prompt = (
-            "You completed your task and wrote the output file, but you omitted the "
-            "required structured output token in your final text response.\n\n"
-            f"Please emit ONLY the following (no other text):\n"
-            f"{token_lines}\n"
-            f"{completion_marker}"
-        )
-        patterns_to_check = list(expected_output_patterns)
-
-    spec = backend.build_resume_cmd(
-        resume_session_id=skill_result.session_id,
-        prompt=prompt,
-        output_format=OutputFormat.JSON,
-        env_extras=dict(provider_extras) if provider_extras else None,
-    )
-    assert_headless_cmd(spec)
-
-    try:
-        nudge_result = await runner(
-            list(spec.cmd),
-            cwd=Path(cwd),
-            timeout=_NUDGE_TIMEOUT,
-            env=spec.env,
-            pty_mode=(pty_override if pty_override is not None else _resolve_pty_mode(backend)),
-        )
-    except OSError:
-        logger.debug("nudge_runner_failed", exc_info=True)
-        return None
-    except Exception:
-        logger.warning("nudge_runner_failed_unexpected", exc_info=True)
-        return None
-
-    try:
-        nudge_session = result_parser.parse_stdout(nudge_result.stdout)
-    except Exception:
-        logger.warning("nudge_parse_stdout_failed", exc_info=True)
-        return None
-    combined_result = skill_result.result + "\n" + nudge_session.output
-    _nudge_usage = nudge_session.raw.get("token_usage")
-
-    if retry_reason == RetryReason.EARLY_STOP:
-        if completion_marker in nudge_session.output:
-            if patterns_to_check and not _check_expected_patterns(
-                combined_result, patterns_to_check
-            ):
-                logger.debug("nudge_early_stop_patterns_not_in_combined")
-                return None
-            logger.info(
-                "nudge_recovery_success",
-                session_id=skill_result.session_id,
-                nudge_output_count=_nudge_usage.get("output_tokens", 0) if _nudge_usage else 0,
-            )
-            return dataclasses.replace(
-                skill_result,
-                success=True,
-                result=combined_result,
-                subtype="success",
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                token_usage=_merge_token_usage(skill_result.token_usage, _nudge_usage),
-            )
-        logger.debug(
-            "nudge_early_stop_marker_not_found", nudge_result_len=len(nudge_session.output)
-        )
-        return None
-
-    if not _check_expected_patterns(combined_result, patterns_to_check):
-        logger.debug(
-            "nudge_patterns_not_found",
-            nudge_result_len=len(nudge_session.output),
-        )
-        return None
-
-    logger.info(
-        "nudge_recovery_success",
-        session_id=skill_result.session_id,
-        nudge_output_count=_nudge_usage.get("output_tokens", 0) if _nudge_usage else 0,
-    )
-    return dataclasses.replace(
-        skill_result,
-        success=True,
-        result=combined_result,
-        subtype="success",
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        token_usage=_merge_token_usage(skill_result.token_usage, _nudge_usage),
-    )
 
 
 # Group B migration target: token aggregation to backend-agnostic layer.

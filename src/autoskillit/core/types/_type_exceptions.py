@@ -4,6 +4,10 @@ from __future__ import annotations
 
 __all__ = [
     "CapabilityNotSupportedError",
+    "PluginArtifactContentionError",
+    "PluginArtifactPublicationError",
+    "PluginArtifactUnavailableError",
+    "PluginArtifactValidationError",
     "SkillContractError",
     "RecipeLoadError",
     "ProcessStaleError",
@@ -34,3 +38,19 @@ class CapabilityNotSupportedError(Exception):
 
 class SkillContractError(ValueError):
     """A skill machine contract is malformed or exceeds its execution role."""
+
+
+class PluginArtifactContentionError(RuntimeError):
+    """A plugin artifact cannot be read or mutated while another owner holds it."""
+
+
+class PluginArtifactPublicationError(RuntimeError):
+    """A complete plugin artifact incarnation could not be published."""
+
+
+class PluginArtifactUnavailableError(RuntimeError):
+    """A plugin artifact could not be read because of a retryable filesystem error."""
+
+
+class PluginArtifactValidationError(RuntimeError):
+    """A plugin artifact failed exact identity or content validation."""

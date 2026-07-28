@@ -10,6 +10,7 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
+import os
 import sys
 import textwrap
 import time
@@ -21,12 +22,50 @@ import pytest
 
 from autoskillit.core.types import TerminationReason
 from autoskillit.execution.process import (
+    _normalize_pass_fds,
     read_temp_output,
     run_managed_async,
     run_managed_sync,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def test_pass_fds_normalization_preserves_first_seen_order() -> None:
+    assert _normalize_pass_fds((9, 3, 9, 4, 3)) == (9, 3, 4)
+
+
+@pytest.mark.parametrize("pass_fds", [(-1,), (True,), ("3",)])
+def test_pass_fds_normalization_rejects_invalid_descriptors(pass_fds: tuple[object, ...]) -> None:
+    with pytest.raises(ValueError, match="non-negative integer"):
+        _normalize_pass_fds(pass_fds)  # type: ignore[arg-type]
+
+
+@pytest.mark.anyio
+async def test_run_managed_async_inherits_requested_descriptor(tmp_path: Path) -> None:
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, b"lease-alive")
+        os.close(write_fd)
+        write_fd = -1
+        result = await run_managed_async(
+            [
+                sys.executable,
+                "-c",
+                "import os,sys; print(os.read(int(sys.argv[1]), 64).decode())",
+                str(read_fd),
+            ],
+            cwd=tmp_path,
+            timeout=10,
+            pass_fds=(read_fd, read_fd),
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "lease-alive"
+    finally:
+        os.close(read_fd)
+        if write_fd >= 0:
+            os.close(write_fd)
+
 
 # ---------------------------------------------------------------------------
 # Helper scripts — small Python programs that reproduce specific scenarios
@@ -284,6 +323,18 @@ class TestSubprocessResultAndRunnerTypes:
             f"pty_mode default must be False to prevent silent stderr loss in git commands. "
             f"Current default: {default!r}. Only callers that need PTY (Claude CLI) "
             f"should pass pty_mode=True explicitly."
+        )
+
+    def test_runner_pass_fds_defaults_match_protocol(self):
+        import inspect
+
+        from autoskillit.core import SubprocessRunner
+        from autoskillit.execution.process import DefaultSubprocessRunner
+
+        assert inspect.signature(SubprocessRunner.__call__).parameters["pass_fds"].default == ()
+        assert (
+            inspect.signature(DefaultSubprocessRunner.__call__).parameters["pass_fds"].default
+            == ()
         )
 
 

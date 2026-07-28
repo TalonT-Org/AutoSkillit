@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 import autoskillit
-from autoskillit.core import ProjectedPluginRoot, pkg_root
+from autoskillit.core import pkg_root
 from autoskillit.workspace import (
     iter_public_plugin_asset_files,
     public_plugin_asset_digest,
@@ -38,9 +38,8 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _assert_projection_is_live(projected: ProjectedPluginRoot) -> None:
+def _assert_projection_is_live(root: Path) -> None:
     """Every projected asset must byte-match the running package."""
-    root = projected.plugin_dir
     assert root.is_dir()
 
     plugin_json = root / ".claude-plugin" / "plugin.json"
@@ -78,57 +77,91 @@ def isolated_home(tmp_path: Path, monkeypatch) -> Path:
 class TestProjectionFreshness:
     """Every entrypoint must project the live package, never a snapshot."""
 
-    def test_project_default_plugin_source_matches_live_package(self, isolated_home: Path) -> None:
+    def test_project_default_plugin_authority_matches_live_package(
+        self, isolated_home: Path
+    ) -> None:
+        from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
 
         plant_stale_snapshot(isolated_home)
-        projected = project_default_plugin_source(
+        authority = project_default_plugin_authority(
             cwd=isolated_home,
-            backend=ClaudeCodeBackend(),
-            default_base_branch="main",
-            skill_catalog=session_catalog(),
+            base_branch="main",
+            catalog=session_catalog(),
         )
-        _assert_projection_is_live(projected)
+        with authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            _assert_projection_is_live(binding.plugin_dir)
+        assert binding.closed
 
     def test_prepare_catalog_skill_dispatch_matches_live_package(
         self, isolated_home: Path
     ) -> None:
+        from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import prepare_catalog_skill_dispatch
 
         plant_stale_snapshot(isolated_home)
-        projected, _contract = prepare_catalog_skill_dispatch(
+        authority, preparation = prepare_catalog_skill_dispatch(
             resolved_command="/investigate",
             cwd=isolated_home,
-            backend=ClaudeCodeBackend(),
             catalog=session_catalog(),
             default_base_branch="main",
         )
-        _assert_projection_is_live(projected)
+        backend = ClaudeCodeBackend()
+        with authority.acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            _assert_projection_is_live(binding.plugin_dir)
+            contract = preparation.finalize(
+                backend=backend,
+                binding=binding,
+            )
+            assert contract.artifact_paths == ()
+        assert binding.closed
 
     def test_make_context_matches_live_package(self, isolated_home: Path) -> None:
         from autoskillit.config import AutomationConfig
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.server._factory import make_context
 
         plant_stale_snapshot(isolated_home)
         ctx = make_context(AutomationConfig(), runner=None, project_dir=isolated_home)
-        _assert_projection_is_live(ctx.plugin_source)
+        with ctx.plugin_authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            _assert_projection_is_live(binding.plugin_dir)
+        assert binding.closed
 
     def test_projection_never_exposes_the_canonical_root(self, isolated_home: Path) -> None:
+        from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
 
-        projected = project_default_plugin_source(
+        authority = project_default_plugin_authority(
             cwd=isolated_home,
+            base_branch="main",
+            catalog=session_catalog(),
+        )
+        with authority.acquire_launch_binding(
             backend=ClaudeCodeBackend(),
-            default_base_branch="main",
-            skill_catalog=session_catalog(),
-        )
-        assert projected.plugin_dir != pkg_root()
-        assert projected.plugin_dir.is_relative_to(
-            isolated_home / ".autoskillit" / "plugin-projections"
-        )
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            assert binding.plugin_dir != pkg_root()
+            assert binding.plugin_dir.is_relative_to(
+                isolated_home / ".autoskillit" / "plugin-projections"
+            )
+        assert binding.closed
 
 
 class TestAssetDigestMirrorsTheCopier:
@@ -139,31 +172,37 @@ class TestAssetDigestMirrorsTheCopier:
     """
 
     def test_digest_walk_covers_exactly_the_copied_files(self, isolated_home: Path) -> None:
+        from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
 
-        projected = project_default_plugin_source(
+        authority = project_default_plugin_authority(
             cwd=isolated_home,
-            backend=ClaudeCodeBackend(),
-            default_base_branch="main",
-            skill_catalog=session_catalog(),
+            base_branch="main",
+            catalog=session_catalog(),
         )
         walked = {
             str(p.relative_to(pkg_root())) for p in iter_public_plugin_asset_files(pkg_root())
         }
-        root = projected.plugin_dir
-        copied = {
-            str(p.relative_to(root))
-            for p in root.rglob("*")
-            if p.is_file() and not str(p.relative_to(root)).startswith("skills/")
-        }
-        # hooks/hooks.json is regenerated post-projection by install(), and the
-        # skills/ tree is projected from contracts rather than copied.
-        assert walked == copied, (
-            "the cache-key digest walk and the projection copier disagree:\n"
-            f"  only walked: {sorted(walked - copied)[:10]}\n"
-            f"  only copied: {sorted(copied - walked)[:10]}"
-        )
+        with authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            root = binding.plugin_dir
+            copied = {
+                str(p.relative_to(root))
+                for p in root.rglob("*")
+                if p.is_file() and not str(p.relative_to(root)).startswith("skills/")
+            }
+            # hooks/hooks.json is regenerated post-projection by install(), and the
+            # skills/ tree is projected from contracts rather than copied.
+            assert walked == copied, (
+                "the cache-key digest walk and the projection copier disagree:\n"
+                f"  only walked: {sorted(walked - copied)[:10]}\n"
+                f"  only copied: {sorted(copied - walked)[:10]}"
+            )
+        assert binding.closed
 
     def test_digest_changes_when_an_asset_changes(self, tmp_path: Path) -> None:
         source = tmp_path / "src"

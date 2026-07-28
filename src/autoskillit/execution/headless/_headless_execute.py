@@ -21,6 +21,9 @@ from autoskillit.core import (
     CodingAgentBackend,
     KillReason,
     ModelIdentity,
+    PluginArtifactAuthority,
+    PluginLaunchBinding,
+    PluginLoadMode,
     ProviderOutcome,
     RecipeIdentity,
     RetryReason,
@@ -55,12 +58,12 @@ from autoskillit.execution.headless._headless_git import (
 )
 from autoskillit.execution.headless._headless_helpers import (
     _compute_post_session_metrics,
-    _resolve_pty_mode,
-    _resolve_session_log_dir,
     _stat_snapshot,
-    assert_headless_cmd,
 )
-from autoskillit.execution.headless._headless_recovery import _attempt_contract_nudge
+from autoskillit.execution.headless._headless_launch import (
+    _attempt_contract_nudge,
+    _run_headless_attempt,
+)
 from autoskillit.execution.headless._headless_result import _build_skill_result
 
 if TYPE_CHECKING:
@@ -72,7 +75,10 @@ logger = get_logger(__name__)
 
 
 async def _execute_claude_headless(
-    spec: CmdSpec,
+    build_spec: Callable[
+        [PluginLaunchBinding | None, Mapping[str, str] | None],
+        CmdSpec,
+    ],
     cwd: str,
     ctx: ToolContext,
     *,
@@ -102,6 +108,8 @@ async def _execute_claude_headless(
     completion_required: bool = False,
     write_watch_dirs: Sequence[Path] = (),
     provider_name: str = "",
+    plugin_authority: PluginArtifactAuthority | None = None,
+    plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
     provider_fallback_env: dict[str, str] | None = None,
     provider_fallback_name: str = "",
     provider_extras: Mapping[str, str] | None = None,
@@ -121,9 +129,9 @@ async def _execute_claude_headless(
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
-    Accepts an already-built CmdSpec and handles runner invocation,
-    exception handling, _build_skill_result, and session log flushing.
-    Used by both leaf and food-truck execution paths.
+    Acquires and retains one exact plugin binding for each physical provider
+    attempt, builds that attempt's CmdSpec, and holds ownership until the
+    subprocess has been reaped.
     """
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
@@ -145,13 +153,10 @@ async def _execute_claude_headless(
                 _raw_idle = float(cfg.idle_output_timeout)
         else:
             _raw_idle = float(cfg.idle_output_timeout)
-    effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
-    if spec.process_idle_timeout_ms > 0:
-        _spec_idle = spec.process_idle_timeout_ms / 1000.0
-        if effective_idle is None or _spec_idle < effective_idle:
-            effective_idle = _spec_idle
+    base_effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
 
     current_provider_name: str = provider_name
+    current_provider_extras: dict[str, str] = dict(provider_extras or {})
     fallback_activated: bool = False
     remaining_attempts = ctx.config.providers.provider_retry_limit if provider_fallback_env else 0
 
@@ -162,20 +167,6 @@ async def _execute_claude_headless(
     _step_backend: CodingAgentBackend = (
         step_backend if step_backend is not None else cast(CodingAgentBackend, ctx.backend)
     )
-
-    if spec.cmd:
-        _binary = Path(spec.cmd[0]).stem
-        _expected = _step_backend.capabilities.process_name
-        if isinstance(_expected, str) and _expected and _binary != _expected:
-            from autoskillit.execution.backends import BACKEND_REGISTRY  # noqa: PLC0415
-
-            _known = {b().capabilities.process_name for b in BACKEND_REGISTRY.values()}
-            if _binary in _known:
-                raise RuntimeError(
-                    f"Backend coherence violation: expected process_name="
-                    f"{_expected!r} but binary is {_binary!r}"
-                )
-    assert_headless_cmd(spec)
 
     linux_tracing_cfg = ctx.config.linux_tracing
     _start_ts = datetime.now(UTC).isoformat()
@@ -252,35 +243,33 @@ async def _execute_claude_headless(
     result: SubprocessResult
     skill_result: SkillResult
     _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
+    spec: CmdSpec
     while True:
         try:
-            _result = await runner(
-                list(spec.cmd),
-                cwd=Path(cwd),
+            _result, spec = await _run_headless_attempt(
+                build_spec,
+                cwd=cwd,
+                runner=runner,
+                backend=_step_backend,
+                plugin_authority=plugin_authority,
+                plugin_load_mode=plugin_load_mode,
+                provider_extras=current_provider_extras or None,
                 timeout=timeout,
-                env=spec.env,
-                pty_mode=(
-                    pty_override if pty_override is not None else _resolve_pty_mode(_step_backend)
-                ),
-                session_log_dir=_resolve_session_log_dir(cwd, _step_backend),
+                pty_override=pty_override,
                 completion_marker=completion_marker,
                 stale_threshold=stale_threshold,
                 completion_drain_timeout=cfg.completion_drain_timeout,
                 linux_tracing_config=linux_tracing_cfg,
-                idle_output_timeout=effective_idle,
+                idle_output_timeout=base_effective_idle,
                 max_suppression_seconds=cfg.max_suppression_seconds,
                 child_deferral_ceiling=cfg.completion_child_deferral_ceiling_seconds,
-                on_pid_resolved=on_spawn,
+                on_spawn=on_spawn,
                 enable_deadline_extension=enable_deadline_extension,
                 max_extension_seconds=max_extension_seconds,
                 marker_dir=marker_dir,
                 session_id=session_id,
                 on_session_id_resolved=on_session_id_resolved,
                 stream_parser=_stream_parser,
-                completion_record_types=_step_backend.capabilities.completion_record_types,
-                session_record_types=_step_backend.capabilities.session_record_types,
-                inspector_callback=None,
-                workload_basenames=_step_backend.capabilities.process_name_aliases or None,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
@@ -463,10 +452,13 @@ async def _execute_claude_headless(
                 runner,
                 backend=_step_backend,
                 result_parser=_step_backend.result_parser(),
-                provider_extras=provider_extras,
+                provider_extras=current_provider_extras,
                 retry_reason=skill_result.retry_reason,
                 pty_override=pty_override,
                 skill_contract=skill_contract,
+                plugin_authority=plugin_authority,
+                plugin_load_mode=plugin_load_mode,
+                session_env=spec.env,
             )
             if nudge_success is not None:
                 skill_result = nudge_success
@@ -496,7 +488,7 @@ async def _execute_claude_headless(
             and is_feature_enabled("providers", ctx.config.features)
         ):
             if not fallback_activated:
-                spec = dataclasses.replace(spec, env={**spec.env, **provider_fallback_env})
+                current_provider_extras.update(provider_fallback_env)
                 if provider_fallback_name:
                     current_provider_name = provider_fallback_name
             fallback_activated = True

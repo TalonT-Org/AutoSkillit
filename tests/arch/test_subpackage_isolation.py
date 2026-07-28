@@ -800,8 +800,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
             etc.) that cannot be merged without re-introducing the coupling they isolate.
             recording.py adds the RecordingSubprocessRunner decorator as a separate module
             to keep scenario recording concerns isolated from the core process lifecycle.
-            _headless_scan.py extracts write-path JSONL scanning from headless.py to keep
-            that module within its REQ-CNST-010-E2 line budget.
+            _headless_recovery.py owns both result recovery and write-path JSONL scanning.
             _headless_recovery.py, _headless_path_tokens.py, and _headless_result.py
             split the remaining headless.py concern groups into private sub-modules
             following the _process_*.py precedent (P8-F1), bringing the count to 29.
@@ -835,6 +834,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _plugin_cache.py adds the plugin cache lifecycle: retiring cache sweep,
             install locking, and kitchen registry (accessible from server/ without
             cli/ import).
+            _plugin_artifact_identity.py isolates exact installed-artifact manifest
+            validation from retirement-cache orchestration so both IL-0 authorities
+            remain below the source-module line limit.
             feature_flags.py adds the IL-0 is_feature_enabled() primitive — must live
             in core/ to be importable by all layers without cross-layer violations.
             session_registry.py adds the stdlib-only session registry mapping
@@ -937,9 +939,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 19,
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 28,  # +context admission +audit-cycle verifier/tool registry
+        "core": 29,  # +plugin artifact identity authority
         "core/types": 41,  # +context persistence, audit, binding, execution, intake types
-        "cli": 21,
+        "cli": 22,  # +_plugin_artifact exact installed-incarnation authority (#4382)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 14,  # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
@@ -1407,7 +1409,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types.py.
 
     Exempt fields:
-    - plugin_source: PluginSource discriminated union (value type, not a service interface)
+    - plugin_authority: PluginArtifactAuthority (lifetime-owning authority)
     - config: AutomationConfig dataclass (configuration container, not a service interface)
     - recipe_initialization_state: lifecycle value union, not a service interface
     """
@@ -1447,7 +1449,6 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_tree = ast.parse(context_path.read_text())
 
     EXEMPT = {
-        "plugin_source",
         "config",
         "active_recipe_packs",
         "active_recipe_features",

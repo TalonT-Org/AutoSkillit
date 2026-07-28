@@ -19,6 +19,7 @@ hence this test.
 from __future__ import annotations
 
 import dataclasses
+import json
 from pathlib import Path
 
 import pytest
@@ -130,51 +131,68 @@ class TestAssetChangesForceReprojection:
         Fails both before the fix and after a source-change-without-digest — which
         is precisely why it is the gate.
         """
+        from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         backend = ClaudeCodeBackend()
         catalog = session_catalog()
 
-        first = project_default_plugin_source(
+        first_authority = project_default_plugin_authority(
             cwd=tmp_path,
+            base_branch="main",
+            catalog=catalog,
+        )
+        first = first_authority.acquire_launch_binding(
             backend=backend,
-            default_base_branch="main",
-            skill_catalog=catalog,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
-        marker = first.plugin_dir / "recipes" / "_cache_key_probe.yaml"
-        marker.write_text("probe: 1\n")
+        try:
+            assert first.plugin_dir is not None
+            marker = first.plugin_dir / "recipes" / "_cache_key_probe.yaml"
+            marker.write_text("probe: 1\n")
 
-        from autoskillit.core import pkg_root
+            from autoskillit.core import pkg_root
 
-        real_digest = public_plugin_asset_digest(pkg_root())
-        monkeypatch.setattr(
-            "autoskillit.workspace.skill_projection.public_plugin_asset_digest",
-            lambda _root: real_digest[:-1] + ("0" if real_digest[-1] != "0" else "1"),
-        )
+            real_digest = public_plugin_asset_digest(pkg_root())
+            monkeypatch.setattr(
+                "autoskillit.workspace._projected_artifact.authority.public_plugin_asset_digest",
+                lambda _root: real_digest[:-1] + ("0" if real_digest[-1] != "0" else "1"),
+            )
 
-        second = project_default_plugin_source(
-            cwd=tmp_path,
-            backend=backend,
-            default_base_branch="main",
-            skill_catalog=catalog,
-        )
-
-        assert second.plugin_dir != first.plugin_dir, (
-            "an asset-digest change did not change the cache key — a release that "
-            "touches recipes/, agents/ or hooks/ without touching a skill would reuse "
-            "the previous release's projection"
-        )
-        assert not (second.plugin_dir / "recipes" / "_cache_key_probe.yaml").exists(), (
-            "the new projection was not re-materialised from source"
-        )
+            second_authority = project_default_plugin_authority(
+                cwd=tmp_path,
+                base_branch="main",
+                catalog=catalog,
+            )
+            second = second_authority.acquire_launch_binding(
+                backend=backend,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            )
+            try:
+                assert second.plugin_dir is not None
+                assert second.plugin_dir != first.plugin_dir, (
+                    "an asset-digest change did not change the cache key — a release that "
+                    "touches recipes/, agents/ or hooks/ without touching a skill would reuse "
+                    "the previous release's projection"
+                )
+                assert not (second.plugin_dir / "recipes" / "_cache_key_probe.yaml").exists(), (
+                    "the new projection was not re-materialised from source"
+                )
+            finally:
+                second.close()
+            assert second.closed
+        finally:
+            first.close()
+        assert first.closed
 
     def test_identical_inputs_reuse_the_same_projection(self, tmp_path: Path, monkeypatch) -> None:
         """The key must still be stable — invalidation, not churn."""
+        from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -182,53 +200,263 @@ class TestAssetChangesForceReprojection:
         catalog = session_catalog()
         kwargs = {
             "cwd": tmp_path,
-            "backend": backend,
-            "default_base_branch": "main",
-            "skill_catalog": catalog,
+            "base_branch": "main",
+            "catalog": catalog,
         }
-        assert (
-            project_default_plugin_source(**kwargs).plugin_dir
-            == project_default_plugin_source(**kwargs).plugin_dir
+        first = project_default_plugin_authority(**kwargs).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
+        try:
+            second = project_default_plugin_authority(**kwargs).acquire_launch_binding(
+                backend=backend,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            )
+            try:
+                assert second.plugin_dir == first.plugin_dir
+            finally:
+                second.close()
+            assert second.closed
+        finally:
+            first.close()
+        assert first.closed
 
 
-class TestOrphanedProjectionsArePruned:
-    """`plugin-projections/` had no cleanup anywhere.
-
-    Pre-existing, but this change orphans every user's current projection at
-    once (new source, new key composition), so it is the right moment. Pruning
-    reuses the retiring-cache grace/lock machinery rather than inventing a
-    second deletion mechanism — a projection a running session is still reading
-    survives the grace window.
-    """
-
-    def test_orphan_is_retired_and_the_active_projection_is_not(
-        self, tmp_path: Path, monkeypatch
+class TestOrphanedProjectionRetirementIsLeaseGated:
+    @pytest.mark.parametrize("malformed_version", [True, 1.0])
+    def test_projection_identity_rejects_non_integer_version_aliases(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        malformed_version: object,
     ) -> None:
-        import json
-
+        from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import project_default_plugin_source
+        from autoskillit.workspace import project_default_plugin_authority
+        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        projections = tmp_path / ".autoskillit" / "plugin-projections"
-        projections.mkdir(parents=True)
-        orphan = projections / "deadbeefdeadbeefdeadbeef"
-        orphan.mkdir()
-        (projections / f".{orphan.name}.autoskillit-projection.json").write_text("{}")
-
-        active = project_default_plugin_source(
+        binding = project_default_plugin_authority(
             cwd=tmp_path,
+            base_branch="main",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
             backend=ClaudeCodeBackend(),
-            default_base_branch="main",
-            skill_catalog=session_catalog(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
+        try:
+            binding.close()
+            manifest = json.loads(binding.identity.manifest_path.read_text(encoding="utf-8"))
+            manifest["projection_version"] = malformed_version
+            binding.identity.manifest_path.write_text(
+                json.dumps(manifest),
+                encoding="utf-8",
+            )
 
-        retiring = json.loads((tmp_path / ".autoskillit" / "retiring_cache.json").read_text())
-        queued = {e["path"] for e in retiring["retiring"]}
-        assert str(orphan) in queued, "the orphaned projection was not queued for retirement"
-        assert str(active.plugin_dir) not in queued, "the live projection was queued for deletion"
-        assert active.plugin_dir.is_dir()
-        assert orphan.is_dir(), "an orphan must survive the grace window, not vanish immediately"
-        assert not (projections / f".{orphan.name}.autoskillit-projection.json").exists()
+            with pytest.raises(PluginArtifactValidationError, match="version mismatch"):
+                read_projected_plugin_identity(
+                    binding.identity.managed_path,
+                    manifest_path=binding.identity.manifest_path,
+                    expected_semantic_key=binding.identity.semantic_key,
+                    expected_projection_version=1,
+                )
+        finally:
+            binding.close()
+
+    @pytest.mark.parametrize(
+        ("field", "value", "message"),
+        [
+            ("unexpected", True, "unexpected fields"),
+            ("artifact_kind", "installed_plugin", "artifact kind"),
+        ],
+    )
+    def test_projection_identity_requires_exact_manifest_contract(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        field: str,
+        value: object,
+        message: str,
+    ) -> None:
+        from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        binding = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="main",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        binding.close()
+        manifest_path = binding.identity.manifest_path
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest[field] = value
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        with pytest.raises(PluginArtifactValidationError, match=message):
+            read_projected_plugin_identity(
+                binding.identity.managed_path,
+                manifest_path=manifest_path,
+                expected_semantic_key=binding.identity.semantic_key,
+            )
+
+    def test_projection_identity_requires_canonical_paths_and_current_digest(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        binding = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="main",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        binding.close()
+        identity = binding.identity
+        alias = identity.managed_path.parent / "projection-alias"
+        alias.symlink_to(identity.managed_path, target_is_directory=True)
+
+        with pytest.raises(PluginArtifactValidationError, match="canonical directory"):
+            read_projected_plugin_identity(
+                alias,
+                manifest_path=identity.manifest_path,
+                expected_semantic_key=identity.semantic_key,
+            )
+        with pytest.raises(PluginArtifactValidationError, match="manifest path"):
+            read_projected_plugin_identity(
+                identity.managed_path,
+                manifest_path=identity.manifest_path.with_name("other-manifest.json"),
+                expected_semantic_key=identity.semantic_key,
+            )
+
+        (identity.managed_path / "tampered-after-publication").write_text(
+            "changed",
+            encoding="utf-8",
+        )
+        with pytest.raises(PluginArtifactValidationError, match="digest mismatch"):
+            read_projected_plugin_identity(
+                identity.managed_path,
+                manifest_path=identity.manifest_path,
+                expected_semantic_key=identity.semantic_key,
+            )
+
+    def test_pruning_queues_only_after_reader_release(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.core import PluginLoadMode, read_retiring_cache
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import (
+            project_default_plugin_authority,
+            prune_stale_projections,
+        )
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        backend = ClaudeCodeBackend()
+        orphan = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="old",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        active = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="new",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        try:
+            assert read_retiring_cache().records == ()
+            orphan.close()
+            assert (
+                prune_stale_projections(
+                    tmp_path / ".autoskillit" / "plugin-projections",
+                    active_key=active.identity.semantic_key,
+                )
+                == 1
+            )
+            assert read_retiring_cache().records[0].identity == orphan.identity
+            assert orphan.identity.managed_path.is_dir()
+            assert orphan.identity.manifest_path.is_file()
+        finally:
+            orphan.close()
+            active.close()
+
+    def test_pruning_logs_invalid_projection_identity(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from unittest.mock import Mock
+
+        import autoskillit.workspace._projection_cache as projection_cache
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import (
+            project_default_plugin_authority,
+            prune_stale_projections,
+        )
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        backend = ClaudeCodeBackend()
+        orphan = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="old",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        active = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="new",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        logger = Mock()
+        monkeypatch.setattr(projection_cache, "logger", logger)
+        try:
+            orphan.close()
+            orphan.identity.manifest_path.write_text("{not-json", encoding="utf-8")
+
+            assert (
+                prune_stale_projections(
+                    tmp_path / ".autoskillit" / "plugin-projections",
+                    active_key=active.identity.semantic_key,
+                )
+                == 0
+            )
+            logger.warning.assert_called_once()
+            assert logger.warning.call_args.args == ("projected_plugin_prune_validation_failed",)
+            assert logger.warning.call_args.kwargs["projection_path"] == str(
+                orphan.identity.managed_path
+            )
+            assert logger.warning.call_args.kwargs["error"]
+        finally:
+            orphan.close()
+            active.close()

@@ -73,8 +73,9 @@ class TestBoundaryPtyDispatch:
             pty_mode=True,
         )
 
-        assert result.returncode in {143, -signal.SIGTERM}, (
-            f"Expected SIGTERM exit (143 or -{signal.SIGTERM}), got {result.returncode}"
+        assert result.returncode in {signal.SIGTERM, 143, -signal.SIGTERM}, (
+            "Expected raw, shell-normalized, or subprocess-normalized SIGTERM exit "
+            f"({signal.SIGTERM}, 143, or -{signal.SIGTERM}), got {result.returncode}"
         )
         assert result.termination in {
             TerminationReason.NATURAL_EXIT,
@@ -104,7 +105,7 @@ class TestBoundaryPtyDispatch:
         spec = CmdSpec(cmd=(sys.executable, str(shim)), env={})
 
         result = await _execute_claude_headless(
-            spec,
+            lambda _binding, _extras: spec,
             cwd=str(tmp_path),
             ctx=tool_ctx,
             timeout=10.0,

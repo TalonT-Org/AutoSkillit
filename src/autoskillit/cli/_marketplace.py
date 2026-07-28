@@ -7,6 +7,9 @@ import os
 import shutil
 import subprocess
 import sys
+import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import regex as re
@@ -51,36 +54,70 @@ def _plugin_cache_dir() -> Path:
     )
 
 
-def _clear_plugin_cache() -> None:
-    """Remove the cached plugin snapshot **and** its installed_plugins.json entry.
+def _installed_plugin_root() -> Path:
+    from autoskillit.cli._plugin_artifact import current_installed_plugin_root
 
-    Claude Code caches a snapshot of the plugin at install time, keyed by
-    version. When the version changes, it orphans the old cache but does not
-    automatically create the new one until a second install is run. Clearing
-    the cache beforehand ensures a single ``autoskillit install`` is always
-    sufficient.
+    return current_installed_plugin_root()
 
-    Dropping the registry entry is the other half, and it is not optional:
-    retiring a cache directory while leaving ``installed_plugins.json`` naming
-    it is exactly how a dangling pointer is manufactured. ``claude plugin
-    install`` rewrites the entry moments later, and ``install()`` restores the
-    previous file verbatim if that step fails — so the pair is atomic from the
-    caller's point of view.
-    """
+
+def _clear_plugin_cache(
+    *,
+    on_retirement_created: Callable[[str], None] | None = None,
+) -> tuple[str, ...]:
+    """Queue exact old versions and remove their installed_plugins.json reference."""
+    from autoskillit import __version__
     from autoskillit.cli._installed_plugins import InstalledPluginsFile
-    from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
+    from autoskillit.cli._plugin_artifact import (
+        InstalledPluginArtifactRetirementOwner,
+        _read_installed_plugin_identity,
+        default_plugin_retirement_coordinator,
+        installed_artifact_lock_path,
+    )
+    from autoskillit.core import (
+        _AUTOSKILLIT_PLUGIN_KEY,
+        ArtifactLease,
+        PluginArtifactValidationError,
+        _InstallLock,
+    )
 
-    _d = _plugin_cache_dir()
-    if _d.is_dir():
-        from autoskillit import __version__ as _new_version
-        from autoskillit.core import _retire_old_versions
+    cache_dir = _plugin_cache_dir()
+    owner = InstalledPluginArtifactRetirementOwner(cache_dir)
+    with _InstallLock():
+        default_plugin_retirement_coordinator().migrate_legacy_cache()
+        candidates = (
+            tuple(
+                path
+                for path in sorted(cache_dir.iterdir(), key=lambda item: item.name)
+                if path.name != __version__
+                and not path.name.startswith(".")
+                and path.is_dir()
+                and not path.is_symlink()
+            )
+            if cache_dir.is_dir()
+            else ()
+        )
 
-        _retire_old_versions(_d, _new_version)
-    else:
-        from autoskillit.core import sweep_retiring_cache
+    created_ids: list[str] = []
+    deadline = datetime.now(UTC) + timedelta(hours=6)
+    for candidate in candidates:
+        reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(candidate))
+        with reader:
+            with _InstallLock():
+                try:
+                    identity = _read_installed_plugin_identity(candidate)
+                except PluginArtifactValidationError:
+                    continue
+                result = owner.enqueue_retirement(
+                    identity,
+                    deadline,
+                    on_persisted=on_retirement_created,
+                )
+                if result.created:
+                    created_ids.append(result.record_id)
 
-        sweep_retiring_cache()
-    InstalledPluginsFile().remove(_AUTOSKILLIT_PLUGIN_KEY)
+    with _InstallLock():
+        InstalledPluginsFile().remove(_AUTOSKILLIT_PLUGIN_KEY)
+    return tuple(created_ids)
 
 
 def _assert_not_worktree() -> None:
@@ -195,11 +232,16 @@ class _InstallSnapshot:
     """
 
     def __init__(self) -> None:
-        from autoskillit.core import retiring_cache_entries
+        from autoskillit.cli._plugin_artifact import installed_artifact_manifest_path
 
         self._marketplace_manifest = self._read(_marketplace_manifest_path())
         self._installed_plugins = self._read(_installed_plugins_json_path())
-        self._retiring_before = {e.get("path", "") for e in retiring_cache_entries()}
+        self._target_root = _installed_plugin_root()
+        self._artifact_manifest_path = installed_artifact_manifest_path(self._target_root)
+        self._artifact_manifest = self._read(self._artifact_manifest_path)
+        self._target_backup: Path | None = None
+        self._target_mutation_owned = False
+        self._created_retiring_record_ids: set[str] = set()
 
     @staticmethod
     def _read(path: Path) -> str | None:
@@ -216,19 +258,56 @@ class _InstallSnapshot:
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(path, content)
 
+    def stage_target_root(self) -> None:
+        """Move the unleased target aside while its exclusive lease is held."""
+        if not self._target_root.exists():
+            self._target_mutation_owned = True
+            return
+        backup = self._target_root.parent / (
+            f".{self._target_root.name}.autoskillit-install-backup-{uuid.uuid4().hex}"
+        )
+        os.replace(self._target_root, backup)
+        self._target_backup = backup
+        self._target_mutation_owned = True
+        if self._artifact_manifest_path.is_file() or self._artifact_manifest_path.is_symlink():
+            self._artifact_manifest_path.unlink()
+
+    def track_retirement(self, record_id: str) -> None:
+        self._created_retiring_record_ids.add(record_id)
+
     def rollback(self) -> None:
         """Restore the manifest, the registry, and the retiring queue."""
-        from autoskillit.core import drop_retiring_entries, retiring_cache_entries
+        from autoskillit.core import remove_retiring_records
+
+        if self._target_mutation_owned:
+            if self._target_root.is_dir():
+                shutil.rmtree(self._target_root)
+            elif self._target_root.exists() or self._target_root.is_symlink():
+                self._target_root.unlink()
+            if self._target_backup is not None and self._target_backup.exists():
+                os.replace(self._target_backup, self._target_root)
+                self._target_backup = None
+            self._target_mutation_owned = False
 
         self._restore(_marketplace_manifest_path(), self._marketplace_manifest)
         self._restore(_installed_plugins_json_path(), self._installed_plugins)
-        added = [
-            e.get("path", "")
-            for e in retiring_cache_entries()
-            if e.get("path", "") not in self._retiring_before
-        ]
-        if added:
-            drop_retiring_entries(added)
+        self._restore(self._artifact_manifest_path, self._artifact_manifest)
+        remove_retiring_records(self._created_retiring_record_ids)
+
+    def commit(self) -> None:
+        """Discard the rollback copy after the new incarnation is published."""
+        backup = self._target_backup
+        self._target_backup = None
+        self._target_mutation_owned = False
+        if backup is not None and backup.is_dir():
+            try:
+                shutil.rmtree(backup)
+            except OSError:
+                logger.warning(
+                    "installed_plugin_backup_cleanup_failed",
+                    backup_path=str(backup),
+                    exc_info=True,
+                )
 
 
 def _marketplace_manifest_path() -> Path:
@@ -307,10 +386,34 @@ def install(*, scope: str = "user") -> bool:
     for repaired in reconcile_install_artifacts():
         print(f"Repaired legacy install artifact: ~/{repaired}")
 
+    from autoskillit.cli._plugin_artifact import _validate_installed_plugin_destination
+    from autoskillit.core import PluginArtifactValidationError
+
+    target_root = _installed_plugin_root()
+    try:
+        _validate_installed_plugin_destination(target_root)
+    except PluginArtifactValidationError as exc:
+        print(f"Unsafe installed plugin target: {exc}")
+        raise SystemExit(1) from exc
+
     snapshot = _InstallSnapshot()
 
-    from autoskillit.core import _InstallLock
+    from autoskillit.cli._plugin_artifact import installed_artifact_lock_path
+    from autoskillit.core import (
+        ArtifactLease,
+        ArtifactLeaseContention,
+        PluginArtifactPublicationError,
+        _InstallLock,
+    )
 
+    try:
+        target_writer = ArtifactLease.acquire_exclusive(
+            installed_artifact_lock_path(_installed_plugin_root()),
+            blocking=False,
+        )
+    except ArtifactLeaseContention as exc:
+        print("Installed plugin is in use by an active session; retry after it exits.")
+        raise SystemExit(1) from exc
     try:
         marketplace_dir = _ensure_marketplace()
         print(f"Marketplace prepared: {marketplace_dir}")
@@ -318,30 +421,52 @@ def install(*, scope: str = "user") -> bool:
         _ensure_workspace_ready()
 
         with _InstallLock():
-            _clear_plugin_cache()
+            snapshot.stage_target_root()
+        _clear_plugin_cache(on_retirement_created=snapshot.track_retirement)
 
-            # Register the marketplace (idempotent)
-            result = subprocess.run(
-                ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=30,
-            )
-            if result.returncode != 0:
-                raise _InstallFailed(f"Failed to register marketplace: {result.stderr.strip()}")
-            print("Marketplace registered.")
+        # Register the marketplace (idempotent)
+        result = subprocess.run(
+            ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=30,
+            pass_fds=(),
+        )
+        if result.returncode != 0:
+            raise _InstallFailed(f"Failed to register marketplace: {result.stderr.strip()}")
+        print("Marketplace registered.")
 
-            # Install the plugin
-            result = subprocess.run(
-                ["claude", "plugin", "install", plugin_ref, "--scope", scope],
-                capture_output=True,
-                text=True,
-                stdin=subprocess.DEVNULL,
-                timeout=30,
-            )
-            if result.returncode != 0:
-                raise _InstallFailed(f"Failed to install plugin: {result.stderr.strip()}")
+        # Install the plugin
+        result = subprocess.run(
+            ["claude", "plugin", "install", plugin_ref, "--scope", scope],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=30,
+            pass_fds=(),
+        )
+        if result.returncode != 0:
+            raise _InstallFailed(f"Failed to install plugin: {result.stderr.strip()}")
+        from autoskillit import __version__
+        from autoskillit.cli._plugin_artifact import (
+            installed_plugin_semantic_key,
+            publish_installed_plugin_artifact,
+        )
+
+        try:
+            with _InstallLock():
+                publish_installed_plugin_artifact(
+                    _installed_plugin_root(),
+                    semantic_key=installed_plugin_semantic_key(
+                        plugin_ref,
+                        __version__,
+                    ),
+                    _owned_exclusive_lease=target_writer,
+                )
+        except PluginArtifactPublicationError as exc:
+            raise _InstallFailed(f"Failed to publish installed plugin identity: {exc}") from exc
+        snapshot.commit()
     except _InstallFailed as exc:
         snapshot.rollback()
         print(str(exc))
@@ -349,6 +474,8 @@ def install(*, scope: str = "user") -> bool:
     except BaseException:
         snapshot.rollback()
         raise
+    finally:
+        target_writer.close()
 
     print(f"Plugin installed: {plugin_ref} (scope: {scope})")
 

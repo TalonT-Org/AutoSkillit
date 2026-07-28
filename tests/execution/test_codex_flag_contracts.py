@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BareResume, NamedResume, NoResume, OutputFormat, ProjectedPluginRoot
+from autoskillit.core import BareResume, NamedResume, NoResume, OutputFormat
+from autoskillit.core.types import CmdSpec
 from autoskillit.execution.backends.codex import (
     CODEX_EXEC_FLAGS,
     CODEX_TOP_LEVEL_ONLY_FLAGS,
@@ -12,6 +13,7 @@ from autoskillit.execution.backends.codex import (
     CodexFlags,
 )
 from autoskillit.execution.headless._headless_helpers import _CODEX_VALUE_BEARING_FLAGS
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -25,16 +27,20 @@ SKILL_BASE: dict[str, object] = {
     "cwd": "/work",
     "completion_marker": "%%DONE%%",
     "model": None,
-    "plugin_source": None,
+    "plugin_binding": None,
     "output_format": OutputFormat.JSON,
 }
 
-FOOD_TRUCK_BASE: dict[str, object] = {
-    "orchestrator_prompt": "dispatch the work",
-    "plugin_source": ProjectedPluginRoot(plugin_dir=Path("/pkg")),
-    "cwd": "/work",
-    "completion_marker": "%%DONE%%",
-}
+
+def _build_food_truck(*, resume_session_id: str = "") -> CmdSpec:
+    with plugin_binding(Path("/pkg")) as binding:
+        return CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="dispatch the work",
+            plugin_binding=binding,
+            cwd="/work",
+            completion_marker="%%DONE%%",
+            resume_session_id=resume_session_id,
+        )
 
 
 class TestCodexExecFlagValues:
@@ -79,10 +85,8 @@ class TestCodexFlagRegistryAudit:
             lambda: CodexBackend().build_skill_session_cmd(
                 **{**SKILL_BASE, "resume_session_id": "sess-test"},
             ),
-            lambda: CodexBackend().build_food_truck_cmd(**FOOD_TRUCK_BASE),
-            lambda: CodexBackend().build_food_truck_cmd(
-                **{**FOOD_TRUCK_BASE, "resume_session_id": "sess-test"},
-            ),
+            _build_food_truck,
+            lambda: _build_food_truck(resume_session_id="sess-test"),
             lambda: CodexBackend().build_headless_cmd("do stuff"),
             lambda: CodexBackend().build_resume_cmd(
                 resume_session_id="sess-test", prompt="continue"
@@ -151,10 +155,8 @@ class TestNoApprovalFlagInExecBuilders:
             lambda: CodexBackend().build_skill_session_cmd(
                 **{**SKILL_BASE, "resume_session_id": "sess-test"},
             ),
-            lambda: CodexBackend().build_food_truck_cmd(**FOOD_TRUCK_BASE),
-            lambda: CodexBackend().build_food_truck_cmd(
-                **{**FOOD_TRUCK_BASE, "resume_session_id": "sess-test"},
-            ),
+            _build_food_truck,
+            lambda: _build_food_truck(resume_session_id="sess-test"),
             lambda: CodexBackend().build_headless_cmd("do stuff"),
             lambda: CodexBackend().build_resume_cmd(
                 resume_session_id="sess-test", prompt="continue"

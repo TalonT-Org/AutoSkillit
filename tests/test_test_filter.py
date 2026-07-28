@@ -220,7 +220,7 @@ class TestBuildTestScope:
         assert "arch" in dir_names, "arch always-run missing"
         assert "contracts" in dir_names, "contracts always-run missing"
         # infra and docs are not directories for a non-triggering change;
-        # 6 infra + 3 hooks unconditional files appear in result via direct_test_files
+        # 10 infra + 3 hooks unconditional files appear in result via direct_test_files
         result_names = {p.name for p in result}
         from tests._test_filter import _HOOKS_UNCONDITIONAL_FILES, _INFRA_UNCONDITIONAL_FILES
 

@@ -12,7 +12,6 @@ import pytest
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, BackendCapabilities
 from autoskillit.core.types import (
     OutputFormat,
-    ProjectedPluginRoot,
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
@@ -26,6 +25,7 @@ from autoskillit.execution.recording import (
     _extract_model,
 )
 from tests.conftest import _make_result
+from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fakes import MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -199,7 +199,7 @@ _BASE_CMD_ARGS = dict(
     cwd="/tmp",
     completion_marker="DONE",
     model=None,
-    plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
+    plugin_binding=plugin_binding(Path("/plugins")),
     output_format=OutputFormat.STREAM_JSON,
 )
 
@@ -646,6 +646,67 @@ async def test_recording_runner_forwards_marker_dir_and_session_id(tmp_path):
     kwargs = inner.call_args_list[0][3]
     assert kwargs["marker_dir"] == marker
     assert kwargs["session_id"] == "sess-abc"
+
+
+@pytest.mark.anyio
+async def test_recording_runner_forwards_pass_fds_to_physical_inner(tmp_path):
+    mock_recorder = Mock()
+    inner = MockSubprocessRunner()
+    inner.set_default(_make_result(returncode=0))
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+
+    await runner(
+        ["echo", "ok"],
+        cwd=tmp_path,
+        timeout=30,
+        pass_fds=(9, 3, 9),
+    )
+
+    kwargs = inner.call_args_list[0][3]
+    assert kwargs["pass_fds"] == (9, 3, 9)
+
+
+@pytest.mark.anyio
+async def test_recording_pty_with_pass_fds_uses_fd_aware_inner(tmp_path):
+    mock_recorder = Mock()
+    inner = MockSubprocessRunner()
+    inner.set_default(_make_result(returncode=0, stdout='{"type":"result"}\n'))
+    runner = RecordingSubprocessRunner(
+        recorder=mock_recorder,
+        inner=inner,
+        scenario_dir=tmp_path,
+    )
+
+    await runner(
+        ["claude", "--print", "go"],
+        cwd=tmp_path,
+        timeout=30,
+        env={"SCENARIO_STEP_NAME": "leased"},
+        pty_mode=True,
+        pass_fds=(9,),
+    )
+
+    assert inner.call_args_list[0][3]["pass_fds"] == (9,)
+    mock_recorder.record_step.assert_not_called()
+    mock_recorder.record_non_session_step.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_replay_runner_ignores_pass_fds_without_acquiring_them(tmp_path):
+    runner = ReplayingSubprocessRunner(
+        {},
+        {"step": {"exit_code": 0, "stdout_head": "replayed"}},
+    )
+
+    result = await runner(
+        ["unused"],
+        cwd=tmp_path,
+        timeout=30,
+        env={"SCENARIO_STEP_NAME": "step"},
+        pass_fds=(999_999,),
+    )
+
+    assert result.stdout == "replayed"
 
 
 # --- T-MARKER-SESSION-BRANCH: session branch does not forward marker_dir/session_id ---

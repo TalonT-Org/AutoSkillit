@@ -517,6 +517,7 @@ def test_darwin_filesystem_classification_uses_diskutil(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+    mount_root = tmp_path / "volume-root"
     result = storage.subprocess.CompletedProcess(
         args=(),
         returncode=0,
@@ -530,14 +531,58 @@ def test_darwin_filesystem_classification_uses_diskutil(
 
     monkeypatch.setattr(storage.sys, "platform", "darwin")
     monkeypatch.setattr(storage.subprocess, "run", run)
+    monkeypatch.setattr(storage, "_filesystem_mount_root", lambda _path: mount_root)
 
     assert storage._filesystem_type(tmp_path) == "apfs"
     assert calls == [
         (
-            ("/usr/sbin/diskutil", "info", "-plist", str(tmp_path.resolve())),
+            ("/usr/sbin/diskutil", "info", "-plist", str(mount_root)),
             {"capture_output": True, "check": False, "timeout": 5},
         )
     ]
+
+
+def test_filesystem_mount_root_resolves_and_stops_at_device_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    volume_root = tmp_path / "volume-root"
+    nested = volume_root / "one" / "two"
+    nested.mkdir(parents=True)
+    alias = tmp_path / "volume-alias"
+    alias.symlink_to(nested, target_is_directory=True)
+    resolved_nested = nested.resolve()
+    devices = {
+        resolved_nested: 17,
+        resolved_nested.parent: 17,
+        volume_root.resolve(): 17,
+        tmp_path.resolve(): 23,
+    }
+    original_stat = Path.stat
+
+    class DeviceStat:
+        def __init__(self, device: int) -> None:
+            self.st_dev = device
+
+    def controlled_stat(path: Path, *args: object, **kwargs: object):
+        if path in devices:
+            return DeviceStat(devices[path])
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", controlled_stat)
+
+    assert storage._filesystem_mount_root(alias) == volume_root.resolve()
+
+
+def test_filesystem_mount_root_terminates_at_filesystem_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = Path("/")
+    monkeypatch.setattr(Path, "resolve", lambda _path, *, strict: root)
+    monkeypatch.setattr(Path, "stat", lambda _path: type("Stat", (), {"st_dev": 17})())
+
+    assert storage._filesystem_mount_root(tmp_path) == root
 
 
 def test_cross_device_layout_fails_before_view_mutation(

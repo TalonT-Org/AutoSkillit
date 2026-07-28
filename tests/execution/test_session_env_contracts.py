@@ -10,10 +10,10 @@ from autoskillit.core import (
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     SKILL_SESSION_REQUIRED_ENV,
     OutputFormat,
-    ProjectedPluginRoot,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -30,7 +30,7 @@ def test_skill_session_env_contains_required_vars(backend_factory) -> None:
         cwd="/tmp",
         completion_marker="%%DONE%%",
         model=None,
-        plugin_source=None,
+        plugin_binding=None,
         output_format=OutputFormat.STREAM_JSON,
     )
     missing = SKILL_SESSION_REQUIRED_ENV - spec.env.keys()
@@ -44,11 +44,12 @@ def test_skill_session_env_contains_required_vars(backend_factory) -> None:
 )
 def test_food_truck_env_contains_required_vars(backend_factory) -> None:
     """Every backend's build_food_truck_cmd must inject all ORCHESTRATOR_SESSION_REQUIRED_ENV."""
-    spec = backend_factory().build_food_truck_cmd(
-        orchestrator_prompt="run the pipeline",
-        plugin_source=ProjectedPluginRoot(plugin_dir=Path("/plugins")),
-        cwd="/tmp",
-        completion_marker="%%DONE%%",
-    )
+    with plugin_binding(Path("/plugins")) as binding:
+        spec = backend_factory().build_food_truck_cmd(
+            orchestrator_prompt="run the pipeline",
+            plugin_binding=binding,
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        )
     missing = ORCHESTRATOR_SESSION_REQUIRED_ENV - spec.env.keys()
     assert not missing, f"Missing required food truck env vars: {missing}"

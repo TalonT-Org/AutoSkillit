@@ -183,10 +183,10 @@ async def test_set_commit_status_infers_repo_from_cwd(
 
 
 @pytest.mark.anyio
-async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(
+async def test_set_commit_status_falls_back_to_project_dir_when_no_cwd(
     tool_ctx_kitchen_open, monkeypatch
 ):
-    """When neither repo nor cwd is provided, tool falls back to plugin_source for inference."""
+    """When neither repo nor cwd is provided, infer from the project root."""
     infer_calls: list[str] = []
 
     async def fake_infer(cwd: str, hint: object = None) -> str:
@@ -200,12 +200,12 @@ async def test_set_commit_status_falls_back_to_plugin_dir_when_no_cwd(
         sha="abc003",
         state="pending",
         context="autoskillit/ai-review",
-        # neither repo nor cwd — falls back to tool_ctx_kitchen_open.plugin_source
+        # neither repo nor cwd — falls back to tool_ctx_kitchen_open.project_dir
     )
     result = json.loads(raw)
 
     assert result["success"] is True
-    assert infer_calls, "resolve_repo_from_remote was not called for fallback"
+    assert infer_calls == [str(tool_ctx_kitchen_open.project_dir)]
     # POST must reference the fallback repo
     post_cmd, *_ = tool_ctx_kitchen_open.runner.call_args_list[0]
     assert "fallback/repo" in " ".join(post_cmd)

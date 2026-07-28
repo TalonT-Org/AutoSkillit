@@ -100,6 +100,7 @@ _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_release_sanity.py",
         "test_background_exec_guard.py",
         "test_adr_runtime_guard_coverage.py",
+        "test_plugin_source_ratchets.py",
     }
 )
 
@@ -170,6 +171,7 @@ _CORE_UNIVERSAL_EXCLUSIONS: dict[str, frozenset[str]] = {
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
+    "artifact_lease": frozenset({"core", "workspace"}),
     "feature_flags": frozenset(
         {"core", "cli", "config", "execution", "recipe", "server", "workspace"}
     ),
@@ -178,6 +180,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     # registered_install_paths() (IL-005 forbids reaching for cli.InstalledPluginsFile).
     "_plugin_ids": frozenset({"core", "cli", "hook_registry", "server", "workspace"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
+    "_plugin_artifact_identity": frozenset({"core", "cli", "server", "workspace"}),
     "_plugin_cache": frozenset({"core", "cli", "server", "workspace"}),
     "git_remote": frozenset({"core", "execution"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server"}),
@@ -203,7 +206,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "claude_conventions": frozenset({"core", "execution", "server", "workspace"}),
     "_type_resume": frozenset({"core", "cli", "execution", "fleet"}),
     "_type_helpers": frozenset({"core", "execution", "fleet", "pipeline", "recipe", "server"}),
-    "_type_protocols_workspace": frozenset({"core", "pipeline", "recipe", "server", "workspace"}),
+    "_type_protocols_workspace": frozenset(
+        {"cli", "core", "execution", "pipeline", "recipe", "server", "workspace"}
+    ),
     "_type_protocols_backend": frozenset(
         {"_llm_triage", "cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
     ),
@@ -1960,7 +1965,7 @@ def build_test_scope(
         else:
             direct_test_files.add(str(tests_root / "docs" / "test_doc_counts.py"))
 
-        # REQ-TIER-003: 9 infra + 3 hooks structural files always; full infra dir only on trigger
+        # REQ-TIER-003: 10 infra + 3 hooks structural files always; full infra dir only on trigger
         for fname in _INFRA_UNCONDITIONAL_FILES:
             direct_test_files.add(str(tests_root / "infra" / fname))
         for fname in _HOOKS_UNCONDITIONAL_FILES:

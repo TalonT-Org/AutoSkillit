@@ -19,7 +19,7 @@ from ._type_backend import (
 )
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import ObserverStatus, OutputFormat
-from ._type_plugin_source import PluginSource
+from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
 
@@ -147,7 +147,7 @@ class CodingAgentBackend(Protocol):
         resume_session_id: str,
         prompt: str,
         output_format: OutputFormat = OutputFormat.JSON,
-        plugin_source: PluginSource | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
         env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec: ...
 
@@ -162,7 +162,7 @@ class CodingAgentBackend(Protocol):
         self,
         *,
         orchestrator_prompt: str,
-        plugin_source: PluginSource | None,
+        plugin_binding: PluginLaunchBinding | None,
         cwd: str,
         completion_marker: str,
         resume_session_id: str | None = None,
@@ -185,7 +185,7 @@ class CodingAgentBackend(Protocol):
         *,
         initial_prompt: str | None = None,
         model: str | None = None,
-        plugin_source: PluginSource | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
         resume_spec: ResumeSpec = NoResume(),

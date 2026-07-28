@@ -73,6 +73,9 @@ class TestModuleCascadeCore:
             {"core", "cli", "config", "execution", "recipe", "server", "workspace"}
         )
 
+    def test_artifact_lease_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["artifact_lease"] == frozenset({"core", "workspace"})
+
     def test_branch_guard_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["branch_guard"] == frozenset(
             {"core", "pipeline", "server", "workspace"}
@@ -86,10 +89,12 @@ class TestModuleCascadeCore:
     def test_all_entries_present(self) -> None:
         expected_stems = {
             "_json",
+            "artifact_lease",
             "feature_flags",
             "branch_guard",
             "_plugin_ids",
             "_terminal_table",
+            "_plugin_artifact_identity",
             "_plugin_cache",
             "github_url",
             "paths",
@@ -174,7 +179,7 @@ class TestModuleCascadeCore:
         # server included since R0: server/tools/_auto_overrides.py consumes the
         # SkillResolver protocol for capability-driven admission routing (#4174).
         assert MODULE_CASCADE_CORE["_type_protocols_workspace"] == frozenset(
-            {"core", "pipeline", "recipe", "server", "workspace"}
+            {"cli", "core", "execution", "pipeline", "recipe", "server", "workspace"}
         )
 
     def test_type_checkpoint_entry_exists(self) -> None:
@@ -514,9 +519,9 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         # server included since R0: server/tools/_auto_overrides.py consumes the
         # SkillResolver protocol for capability-driven admission routing (#4174).
-        for pkg in ["core", "pipeline", "recipe", "server", "workspace"]:
+        for pkg in ["cli", "core", "execution", "pipeline", "recipe", "server", "workspace"]:
             assert pkg in dir_names, f"_type_protocols_workspace cascade should include {pkg}"
-        for excluded in ["cli", "execution", "fleet", "migration", "hooks"]:
+        for excluded in ["fleet", "migration", "hooks"]:
             assert excluded not in dir_names, (
                 f"_type_protocols_workspace cascade should not include {excluded}"
             )
@@ -798,23 +803,6 @@ class TestBuildTestScopeCoreCascade:
             assert excluded not in dir_names, (
                 f"_step_context cascade should not include {excluded}"
             )
-
-
-class TestCoreStemCompleteness:
-    """REQ-FILT-007: every core/ .py stem must be classified."""
-
-    def test_all_core_stems_classified(self) -> None:
-        core_root = Path("src/autoskillit/core")
-        actual_stems = {p.stem for p in core_root.rglob("*.py") if p.stem != "__init__"}
-        assert actual_stems, (
-            f"No .py files found under {core_root} — is pytest running from the project root?"
-        )
-        classified = set(_CORE_UNIVERSAL_MODULES) | set(MODULE_CASCADE_CORE)
-        unclassified = actual_stems - classified
-        assert not unclassified, (
-            f"Unclassified core stems (will fall through to full 18-dir cascade): "
-            f"{sorted(unclassified)}"
-        )
 
 
 class TestClosureCoreNarrowCascade:

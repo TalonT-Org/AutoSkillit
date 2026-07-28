@@ -10,7 +10,8 @@ from collections import deque
 
 import pytest
 
-from autoskillit.core.types import RetryReason, SkillResult
+from autoskillit.core.types import PluginLoadMode, RetryReason, SkillResult
+from autoskillit.execution.commands import ClaudeHeadlessCmd
 from tests.execution.conftest import _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -63,6 +64,35 @@ def _make_queued_build_result(*results: SkillResult):
     return _build
 
 
+def _build_echo_spec(_binding, provider_extras):
+    return ClaudeHeadlessCmd(
+        cmd=("echo", "test"),
+        env=dict(provider_extras or {}),
+    )
+
+
+class _Binding:
+    inherited_fds = (77,)
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _Authority:
+    def __init__(self) -> None:
+        self.bindings: list[_Binding] = []
+        self.requests: list[tuple[object, PluginLoadMode]] = []
+
+    def acquire_launch_binding(self, *, backend, load_mode):
+        self.requests.append((backend, load_mode))
+        binding = _Binding()
+        self.bindings.append(binding)
+        return binding
+
+
 class TestProviderFallbackLoop:
     def _patch_common(self, monkeypatch, tmp_path, build_result_fn, ctx=None):
         import autoskillit.execution.session_log as _sl_mod
@@ -71,9 +101,13 @@ class TestProviderFallbackLoop:
 
         _sub_result = _sr()
         call_count: list[int] = [0]
+        runner_envs: list[dict[str, str]] = []
+        runner_pass_fds: list[tuple[int, ...]] = []
 
         async def fake_runner(cmd, **kwargs):  # noqa: ARG001
             call_count[0] += 1
+            runner_envs.append(dict(kwargs["env"]))
+            runner_pass_fds.append(kwargs["pass_fds"])
             return _sub_result
 
         if ctx is not None:
@@ -103,14 +137,13 @@ class TestProviderFallbackLoop:
         )
         monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: None)  # noqa: ARG005
 
-        return fake_runner, call_count
+        return fake_runner, call_count, runner_envs, runner_pass_fds
 
     @pytest.mark.anyio
     async def test_stale_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
-        fake_runner, call_count = self._patch_common(
+        fake_runner, call_count, runner_envs, runner_pass_fds = self._patch_common(
             monkeypatch,
             tmp_path,
             _make_queued_build_result(_STALE_RESULT, _SUCCESS_RESULT),
@@ -118,9 +151,19 @@ class TestProviderFallbackLoop:
         )
         minimal_ctx.runner = fake_runner
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
+        authority = _Authority()
+
+        def build_spec(binding, provider_extras):
+            assert binding is not None
+            assert binding.closed is False
+            return ClaudeHeadlessCmd(
+                cmd=("echo", "test"),
+                env=dict(provider_extras or {}),
+                inherited_fds=binding.inherited_fds,
+            )
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            build_spec,
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -128,18 +171,28 @@ class TestProviderFallbackLoop:
             provider_name="minimax",
             provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
             provider_fallback_name="anthropic",
+            plugin_authority=authority,
+            plugin_load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
 
         assert call_count[0] == 2
+        assert runner_envs == [{}, {"ANTHROPIC_API_KEY": "sk-test"}]
+        assert runner_pass_fds == [(77,), (77,)]
+        assert len(authority.bindings) == 2
+        assert authority.bindings[0] is not authority.bindings[1]
+        assert all(binding.closed for binding in authority.bindings)
+        assert [mode for _, mode in authority.requests] == [
+            PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ]
         assert result.provider.fallback_activated is True
         assert result.provider.provider_used == "anthropic"
 
     @pytest.mark.anyio
     async def test_budget_exhausted_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
-        fake_runner, call_count = self._patch_common(
+        fake_runner, call_count, _runner_envs, _runner_pass_fds = self._patch_common(
             monkeypatch,
             tmp_path,
             _make_queued_build_result(_BUDGET_EXHAUSTED_RESULT, _SUCCESS_RESULT),
@@ -149,7 +202,7 @@ class TestProviderFallbackLoop:
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            _build_echo_spec,
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -165,10 +218,9 @@ class TestProviderFallbackLoop:
 
     @pytest.mark.anyio
     async def test_no_fallback_env_suppresses_retry(self, minimal_ctx, tmp_path, monkeypatch):
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
-        fake_runner, call_count = self._patch_common(
+        fake_runner, call_count, _runner_envs, _runner_pass_fds = self._patch_common(
             monkeypatch,
             tmp_path,
             _make_queued_build_result(_STALE_RESULT),
@@ -177,7 +229,7 @@ class TestProviderFallbackLoop:
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            _build_echo_spec,
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,
@@ -190,10 +242,9 @@ class TestProviderFallbackLoop:
 
     @pytest.mark.anyio
     async def test_anthropic_provider_never_falls_back(self, minimal_ctx, tmp_path, monkeypatch):
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
-        fake_runner, call_count = self._patch_common(
+        fake_runner, call_count, _runner_envs, _runner_pass_fds = self._patch_common(
             monkeypatch,
             tmp_path,
             _make_queued_build_result(_STALE_RESULT),
@@ -203,7 +254,7 @@ class TestProviderFallbackLoop:
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            _build_echo_spec,
             str(tmp_path),
             minimal_ctx,
             timeout=30.0,

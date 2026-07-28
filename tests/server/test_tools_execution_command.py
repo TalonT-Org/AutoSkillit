@@ -25,8 +25,24 @@ class TestRunSkillPluginDir:
     """T2: run_skill passes --plugin-dir to the claude command."""
 
     @pytest.mark.anyio
-    async def test_run_skill_passes_plugin_dir(self, tool_ctx_kitchen_open):
+    async def test_run_skill_passes_plugin_dir(self, tool_ctx_kitchen_open, monkeypatch):
         """T2: run_skill passes --plugin-dir to the claude command."""
+        from tests.fakes import FakePluginArtifactAuthority
+
+        authority = tool_ctx_kitchen_open.plugin_authority
+        assert isinstance(authority, FakePluginArtifactAuthority)
+        runner = tool_ctx_kitchen_open.runner
+        original_call = type(runner).__call__
+        observed_live_binding = False
+
+        async def assert_live_binding(self, *args, **kwargs):
+            nonlocal observed_live_binding
+            if self is runner and authority.bindings:
+                assert authority.bindings[-1].closed is False
+                observed_live_binding = True
+            return await original_call(self, *args, **kwargs)
+
+        monkeypatch.setattr(type(runner), "__call__", assert_live_binding)
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(
             _make_result(
@@ -41,14 +57,18 @@ class TestRunSkillPluginDir:
         cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
         assert "--plugin-dir" in cmd
         plugin_dir_idx = cmd.index("--plugin-dir")
-        from autoskillit.core.types._type_plugin_source import ProjectedPluginRoot
-
-        assert isinstance(tool_ctx_kitchen_open.plugin_source, ProjectedPluginRoot)
-        assert cmd[plugin_dir_idx + 1] == str(tool_ctx_kitchen_open.plugin_source.plugin_dir)
+        assert authority.bindings
+        binding = authority.bindings[-1]
+        assert binding.plugin_dir is not None
+        assert cmd[plugin_dir_idx + 1] == str(binding.plugin_dir)
+        assert observed_live_binding
+        assert binding.closed
         assert "--output-format" in cmd
         assert cmd[cmd.index("--output-format") + 1] == "stream-json"
         actual_cwd = tool_ctx_kitchen_open.runner.call_args_list[-1][1]
-        assert actual_cwd == Path("/tmp"), f"Subprocess cwd mismatch: {actual_cwd} != /tmp"
+        assert actual_cwd == Path("/tmp").resolve(), (
+            f"Subprocess cwd mismatch: {actual_cwd} != {Path('/tmp').resolve()}"
+        )
 
 
 class TestRunSkillTimeoutFromConfig:
@@ -183,7 +203,7 @@ class TestRunSkillPassesSessionLogDir:
         log_dir = tmp_path / "logs" / "some-project"
         log_dir.mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute._resolve_session_log_dir",
+            "autoskillit.execution.headless._headless_launch._resolve_session_log_dir",
             lambda cwd, backend: log_dir,
         )
 

@@ -757,6 +757,8 @@ class CaptureLifecycleStore:
                 record.artifact_identity,
                 valid_name=_PUBLIC_NAME_RE,
             )
+            if record.artifact_identity is None and (staging is not None or public is not None):
+                raise _Tampered
             lease_target = public or staging
             if lease_target is None:
                 return replace(record, state=CaptureState.DELETED), None

@@ -350,10 +350,6 @@ def prune_stale_projections(
     active_key: str,
 ) -> int:
     """Queue exact stale incarnations without mutating reader-held artifacts."""
-    from autoskillit.core import (
-        PluginArtifactValidationError,
-    )
-
     root = Path(projections_root).expanduser().resolve(strict=False)
     owner = ProjectedPluginRetirementOwner(root)
     with _InstallLock():
@@ -382,7 +378,12 @@ def prune_stale_projections(
             with _InstallLock():
                 try:
                     identity = owner.identity_for_path(candidate)
-                except PluginArtifactValidationError:
+                except PluginArtifactValidationError as exc:
+                    logger.warning(
+                        "projected_plugin_prune_validation_failed",
+                        projection_path=str(candidate),
+                        error=str(exc),
+                    )
                     continue
                 created += int(owner.enqueue_retirement(identity, not_before).created)
         finally:

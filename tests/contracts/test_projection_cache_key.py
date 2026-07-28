@@ -269,3 +269,60 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
         finally:
             orphan.close()
             active.close()
+
+    def test_pruning_logs_invalid_projection_identity(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from unittest.mock import Mock
+
+        import autoskillit.workspace._projection_cache as projection_cache
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import (
+            project_default_plugin_authority,
+            prune_stale_projections,
+        )
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        backend = ClaudeCodeBackend()
+        orphan = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="old",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        active = project_default_plugin_authority(
+            cwd=tmp_path,
+            base_branch="new",
+            catalog=session_catalog(),
+        ).acquire_launch_binding(
+            backend=backend,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        )
+        logger = Mock()
+        monkeypatch.setattr(projection_cache, "logger", logger)
+        try:
+            orphan.close()
+            orphan.identity.manifest_path.write_text("{not-json", encoding="utf-8")
+
+            assert (
+                prune_stale_projections(
+                    tmp_path / ".autoskillit" / "plugin-projections",
+                    active_key=active.identity.semantic_key,
+                )
+                == 0
+            )
+            logger.warning.assert_called_once()
+            assert logger.warning.call_args.args == ("projected_plugin_prune_validation_failed",)
+            assert logger.warning.call_args.kwargs["projection_path"] == str(
+                orphan.identity.managed_path
+            )
+            assert logger.warning.call_args.kwargs["error"]
+        finally:
+            orphan.close()
+            active.close()

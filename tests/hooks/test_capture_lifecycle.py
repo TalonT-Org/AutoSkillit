@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import stat
@@ -584,6 +585,46 @@ def test_observe_closes_descriptor_when_fstat_fails(
     finally:
         artifact.close_artifact_fd()
         artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_observe_open_operational_failure_is_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    real_open = os.open
+
+    def fail_artifact_open(
+        name: str,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        if name == artifact.name:
+            raise OSError(errno.EMFILE, "descriptor limit")
+        return real_open(name, flags, mode, dir_fd=dir_fd)
+
+    try:
+        clock.advance(3601)
+        monkeypatch.setattr(capture_lifecycle.os, "open", fail_artifact_open)
+
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+
+        record = store.get_record(_CAPTURE_ID)
+        assert outcome.errors == 1
+        assert outcome.tampered == 0
+        assert record is not None
+        assert record.state is CaptureState.FINALIZED
+        assert record.retry_count == 1
+        assert (_capture_dir(project) / artifact.name).exists()
+    finally:
         root.close()
         anchor.close()
 

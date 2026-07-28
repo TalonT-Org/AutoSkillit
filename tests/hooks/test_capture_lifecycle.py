@@ -948,6 +948,46 @@ def test_sweep_is_bounded_and_repeated_calls_make_progress(tmp_path: Path) -> No
         anchor.close()
 
 
+def test_sweep_continues_after_failed_due_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    failed_id = f"{1:016x}"
+    completed_id = f"{2:016x}"
+    real_delete = store._quarantine_delete
+
+    def fail_first(record: CaptureLifecycleRecord) -> int:
+        if record.capture_id == failed_id:
+            raise OSError("injected first-row failure")
+        return real_delete(record)
+
+    try:
+        artifact_names = _seed_finalized_captures(root, store, count=2)
+        clock.advance(3601)
+        monkeypatch.setattr(store, "_quarantine_delete", fail_first)
+
+        outcome = store.sweep(max_items=2, max_duration_seconds=1)
+
+        failed = store.get_record(failed_id)
+        completed = store.get_record(completed_id)
+        assert outcome.examined == 2
+        assert outcome.errors == outcome.retry_count == 1
+        assert outcome.deleted == 1
+        assert failed is not None
+        assert failed.state is CaptureState.DELETING
+        assert failed.retry_count == 1
+        assert completed is not None
+        assert completed.state is CaptureState.DELETED
+        assert (_capture_dir(project) / artifact_names[0]).exists()
+        assert not (_capture_dir(project) / artifact_names[1]).exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_sweep_is_bounded_by_elapsed_duration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

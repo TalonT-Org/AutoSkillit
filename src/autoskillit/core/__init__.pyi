@@ -775,6 +775,7 @@ from .types import (
 )
 from .types import derive_backend_requirements as derive_backend_requirements
 from .types import describe_capability_mismatches as describe_capability_mismatches
+from .types import detect_body_marker as detect_body_marker
 from .types import (
     encode_stored_context_admission_envelope as encode_stored_context_admission_envelope,
 )
@@ -809,6 +810,7 @@ from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
 from .types import session_type_for_skill_execution_role as session_type_for_skill_execution_role
 from .types import strip_context_window_suffix as strip_context_window_suffix
+from .types import strip_markdown_code_regions as strip_markdown_code_regions
 from .types import truncate_text as truncate_text
 from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import (

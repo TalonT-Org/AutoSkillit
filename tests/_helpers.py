@@ -5,19 +5,9 @@ from __future__ import annotations
 import re
 import sys
 
-_CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
-_INLINE_CODE_RE = re.compile(r"`[^`]*`")
-
-
-def strip_markdown_code_regions(text: str) -> str:
-    """Remove fenced code blocks and inline code spans from markdown text.
-
-    Use before applying content-scanning rules that should only match
-    prose, not code examples.
-    """
-    text = _CODE_BLOCK_RE.sub("", text)
-    text = _INLINE_CODE_RE.sub("", text)
-    return text
+from autoskillit.core import (
+    strip_markdown_code_regions as strip_markdown_code_regions,
+)
 
 
 def _collect_structlog_proxies() -> list[object]:

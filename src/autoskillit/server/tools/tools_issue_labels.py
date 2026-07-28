@@ -11,6 +11,7 @@ from autoskillit.core import (
     INVESTIGATION_COMPLETE_MARKER,
     REVIEW_APPROACH_MARKER,
     _parse_issue_ref,
+    detect_body_marker,
     get_logger,
 )
 from autoskillit.server import mcp
@@ -89,8 +90,9 @@ async def claim_issue(
             if not result.get("success"):
                 return json.dumps({"success": False, "error": result.get("error", "fetch failed")})
 
-            review_approach_recommended = REVIEW_APPROACH_MARKER in (result.get("body") or "")
-            investigation_complete = INVESTIGATION_COMPLETE_MARKER in (result.get("body") or "")
+            _body = result.get("body") or ""
+            review_approach_recommended = detect_body_marker(_body, REVIEW_APPROACH_MARKER)
+            investigation_complete = detect_body_marker(_body, INVESTIGATION_COMPLETE_MARKER)
             issue_state = result.get("state", "open").lower()
             if issue_state == "closed":
                 return json.dumps(

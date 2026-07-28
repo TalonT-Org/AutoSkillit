@@ -7,7 +7,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -143,6 +143,11 @@ def _make_mock_ctx() -> MagicMock:
     ctx.recipe_execution_lock = RLock()
     ctx.recipe_initialization_state = NoActiveRecipe()
     ctx.recipe_execution_factory = make_recipe_execution
+    # Issue #4399: open_kitchen's `_use_global_enable` branch (formerly
+    # `_skip_notify`) now sends `await ctx.send_notification(...)` after global
+    # re-enables. A bare MagicMock is not awaitable, so provide a default
+    # AsyncMock for any caller that exercises that branch.
+    ctx.send_notification = AsyncMock()
     return ctx
 
 

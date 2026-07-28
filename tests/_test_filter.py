@@ -951,6 +951,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",
             "server/test_tools_kitchen_gate_hook_config.py",
+            # file-level: formatter-renders-real-content test imports pretty_output_hook
+            # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4
+            "server/test_tools_kitchen_envelope.py",
             "execution/test_quota_sleep.py",
             "execution/test_session_log_fields.py",
             # file-level: Codex output-budget config and generated agent contracts

@@ -284,6 +284,54 @@ async def test_open_kitchen_no_name_returns_json_envelope_with_success_true(tmp_
 
 
 @pytest.mark.anyio
+async def test_open_kitchen_exempt_surface_renders_real_content():
+    """Issue #4399 criterion 4: the open_kitchen formatter must render real recipe content
+    for an exempt surface, not just `## open_kitchen ✓ v`.
+
+    When a payload contains substantive fields (`content`, `summary`, `diagram`,
+    `ingredients_table`, `orchestration_rules`), `_fmt_open_kitchen` must emit
+    sections for each. The `--- STEP FLOW ---` marker is the regression assertion:
+    it is only emitted when the payload's `summary` is non-empty. Without the fix,
+    `summary` arrives empty and the formatter degrades to a degenerate
+    `## open_kitchen ✓ v` stub.
+
+    This is a formatter-level regression test: it verifies `_fmt_open_kitchen`'s
+    own contract — given a well-formed payload with real content fields, it renders
+    that content rather than a degenerate stub. A payload dict handed directly to
+    `_format_response` bypasses the upstream delivery-decision routing in
+    `_recipe_delivery.py` (`finalize_recipe_delivery`/`exemption_overrides_envelope`),
+    which is a separate layer with its own existing test coverage.
+    """
+    from autoskillit.hooks.formatters.pretty_output_hook import _format_response
+
+    payload = {
+        "valid": True,
+        "suggestions": [],
+        "content": "name: my-recipe\nsteps:\n  do:\n    tool: run_cmd\n",
+        "summary": "Run a quick smoke check on the project.",
+        "diagram": "step do --> done\n",
+        "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
+        "orchestration_rules": "Run as orchestrator.",
+        "kitchen": "open",
+        "version": "1.2.3",
+    }
+
+    formatted = _format_response("open_kitchen", json.dumps(payload), pipeline=False)
+    assert formatted is not None
+    assert "## open_kitchen" in formatted
+    assert "v1.2.3" in formatted
+    # Real content must be present, not just the header.
+    assert "--- STEP FLOW ---" in formatted, (
+        "Formatter must emit --- STEP FLOW --- marker when payload summary is "
+        "non-empty. If missing, the formatter degrades to a degenerate "
+        "`## open_kitchen ✓ v` stub — see #4399 criterion 4."
+    )
+    assert "Run a quick smoke check" in formatted
+    assert "--- RECIPE ---" in formatted
+    assert "--- INGREDIENTS TABLE ---" in formatted
+
+
+@pytest.mark.anyio
 async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingredients_table(
     tmp_path, monkeypatch
 ):

@@ -834,6 +834,36 @@ def test_quarantine_retry_reuses_committed_phase(
         anchor.close()
 
 
+def test_cleanup_outcome_counts_retries_per_sweep(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    clock.advance(3601)
+
+    def fail_delete(_record: CaptureLifecycleRecord) -> int:
+        raise OSError("injected deletion failure")
+
+    try:
+        monkeypatch.setattr(store, "_quarantine_delete", fail_delete)
+        first = store.sweep(max_items=8, max_duration_seconds=1)
+        clock.advance(3)
+        second = store.sweep(max_items=8, max_duration_seconds=1)
+
+        record = store.get_record(_CAPTURE_ID)
+        assert first.errors == first.retry_count == 1
+        assert second.errors == second.retry_count == 1
+        assert record is not None
+        assert record.retry_count == 2
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_sweep_is_bounded_and_repeated_calls_make_progress(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

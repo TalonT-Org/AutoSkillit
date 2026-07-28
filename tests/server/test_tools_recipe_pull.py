@@ -931,6 +931,7 @@ async def test_initialization_pull_rejections_preserve_progress(
     continuation = None
     if case == "stale_initialization_id":
         initialization_id = "stale-initialization"
+        page_plan_sha256 = None
     elif case == "altered_page_plan":
         page_plan_sha256 = "sha256:" + ("0" * 64)
     else:

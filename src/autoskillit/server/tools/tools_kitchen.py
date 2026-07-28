@@ -1774,7 +1774,7 @@ def _register_active_recipe_kitchen(
     project_path: str,
 ) -> None:
     """Publish one kitchen to both process and recipe-generation lifecycles."""
-    from autoskillit.server._recipe_generation import activate_kitchen
+    from autoskillit.server._recipe_generation import activate_kitchen  # circular-break
 
     register_active_kitchen(kitchen_id, pid, project_path)
     activate_kitchen(kitchen_id)

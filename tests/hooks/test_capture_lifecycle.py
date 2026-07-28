@@ -206,6 +206,46 @@ def test_finalized_capture_ttl_begins_at_terminal_commit(tmp_path: Path) -> None
         anchor.close()
 
 
+@pytest.mark.parametrize(
+    ("size", "sha256", "failed"),
+    [
+        (-1, _DIGEST, False),
+        (True, _DIGEST, False),
+        (1.5, _DIGEST, False),
+        (0, "", False),
+        (0, "0" * 63, False),
+        (0, "G" * 64, False),
+        (0, "invalid", True),
+    ],
+)
+def test_finalize_rejects_invalid_integrity_metadata(
+    tmp_path: Path,
+    size: int,
+    sha256: str,
+    *,
+    failed: bool,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        store.reserve_capture(_CAPTURE_ID)
+        with pytest.raises(
+            capture_lifecycle.CaptureLifecycleError,
+            match="invalid terminal capture",
+        ):
+            store.finalize_capture(
+                _CAPTURE_ID,
+                size=size,
+                sha256=sha256,
+                failed=failed,
+            )
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_unlocked_abandoned_writer_is_recovered_and_deleted(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

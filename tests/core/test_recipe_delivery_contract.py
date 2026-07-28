@@ -413,7 +413,7 @@ def _artifact_generation(**changes: object) -> RecipeArtifactGeneration:
         ({"payload_sha256": "not-a-digest"}, "payload_sha256"),
         ({"artifact_blob_size_bytes": 0}, "artifact_blob_size_bytes"),
         ({"body_size_bytes": 101}, "body_size_bytes"),
-        ({"flow_size_bytes": 101}, "flow_size_bytes"),
+        ({"flow_size_bytes": 0}, "flow_size_bytes"),
         ({"flow_record_count": 0}, "flow_record_count"),
     ],
 )

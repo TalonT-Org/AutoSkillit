@@ -149,12 +149,21 @@ def test_hook_registry_hash_is_deterministic() -> None:
 def test_compute_registry_hash_is_stable_across_invocations() -> None:
     from autoskillit.hook_registry import (
         HOOK_REGISTRY,
+        LIFECYCLE_CONTRACTS,
         RETIRED_SCRIPT_BASENAMES,
         compute_registry_hash,
     )
 
-    a = compute_registry_hash(HOOK_REGISTRY, RETIRED_SCRIPT_BASENAMES)
-    b = compute_registry_hash(list(HOOK_REGISTRY), frozenset(RETIRED_SCRIPT_BASENAMES))
+    a = compute_registry_hash(
+        HOOK_REGISTRY,
+        RETIRED_SCRIPT_BASENAMES,
+        LIFECYCLE_CONTRACTS,
+    )
+    b = compute_registry_hash(
+        list(HOOK_REGISTRY),
+        frozenset(RETIRED_SCRIPT_BASENAMES),
+        tuple(LIFECYCLE_CONTRACTS),
+    )
     assert a == b
 
 
@@ -162,6 +171,7 @@ def test_hook_registry_hash_changes_on_registry_mutation() -> None:
     from autoskillit.hook_registry import (
         HOOK_REGISTRY,
         HOOK_REGISTRY_HASH,
+        LIFECYCLE_CONTRACTS,
         RETIRED_SCRIPT_BASENAMES,
         HookDef,
         compute_registry_hash,
@@ -170,19 +180,26 @@ def test_hook_registry_hash_changes_on_registry_mutation() -> None:
     mutated = list(HOOK_REGISTRY) + [
         HookDef(event_type="PreToolUse", matcher="X", scripts=["x.py"])
     ]
-    assert compute_registry_hash(mutated, RETIRED_SCRIPT_BASENAMES) != HOOK_REGISTRY_HASH
+    assert (
+        compute_registry_hash(mutated, RETIRED_SCRIPT_BASENAMES, LIFECYCLE_CONTRACTS)
+        != HOOK_REGISTRY_HASH
+    )
 
 
 def test_hook_registry_hash_changes_on_retired_mutation() -> None:
     from autoskillit.hook_registry import (
         HOOK_REGISTRY,
         HOOK_REGISTRY_HASH,
+        LIFECYCLE_CONTRACTS,
         RETIRED_SCRIPT_BASENAMES,
         compute_registry_hash,
     )
 
     mutated_retired = frozenset(RETIRED_SCRIPT_BASENAMES | {"extra_retired.py"})
-    assert compute_registry_hash(HOOK_REGISTRY, mutated_retired) != HOOK_REGISTRY_HASH
+    assert (
+        compute_registry_hash(HOOK_REGISTRY, mutated_retired, LIFECYCLE_CONTRACTS)
+        != HOOK_REGISTRY_HASH
+    )
 
 
 # T4-1

@@ -7,6 +7,7 @@ execution/backends (IL-1) without layer violations.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from pathlib import Path
 
 from autoskillit.core import atomic_write
@@ -17,12 +18,15 @@ from autoskillit.execution.backends._codex_config import (
 )
 from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 from autoskillit.hook_registry import (
+    HOOK_REGISTRY,
     HOOKS_DIR,
+    LIFECYCLE_CONTRACTS,
+    HookDef,
+    LifecycleContractDef,
     _build_hook_entry,
+    hook_applies_to_backend,
+    validate_lifecycle_contracts,
 )
-from autoskillit.hooks import HOOK_REGISTRY
-
-_SKIP_CODEX_STATUSES = frozenset({"fix-required", "not-applicable"})
 
 
 def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:
@@ -42,17 +46,27 @@ def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int
 
 def generate_codex_hooks_config(
     hook_config_format: str = "",
+    *,
+    registry: Sequence[HookDef] = HOOK_REGISTRY,
+    lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,
 ) -> dict[str, list[dict]]:
     """Generate Codex config.toml hooks entries from HOOK_REGISTRY.
 
     Skips interactive_only and codex fix-required/not-applicable hooks.
     Returns dict keyed by event type for [[hooks.<EventType>]] TOML format.
     """
+    validate_lifecycle_contracts(
+        registry,
+        lifecycle_contracts,
+        backend="codex",
+    )
     groups: dict[str, dict[tuple[str, str], dict]] = {}
-    for hook_def in HOOK_REGISTRY:
-        if hook_def.session_scope == "interactive_only":
-            continue
-        if hook_def.codex_status in _SKIP_CODEX_STATUSES:
+    for hook_def in registry:
+        if not hook_applies_to_backend(
+            hook_def,
+            backend="codex",
+            session_scope="headless",
+        ):
             continue
         event = hook_def.event_type
         key = (event, hook_def.matcher)

@@ -27,6 +27,7 @@ Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS
 | `_policy_event.py` | Typed policy-event formatter for hook provenance messages (stdlib-only) |
 | `_capture_artifacts.py` | Stdlib-only descriptor-anchored shell-capture authority, runner, and lifecycle context factory |
 | `_capture_lifecycle.py` | Stdlib-only root-bound capture lifecycle ledger, writer leases, crash recovery, and quarantine deletion |
+| `capture_lifecycle_hook.py` | Cleanup-only `SessionStart`: bounded lifecycle sweep for interactive and headless sessions |
 | `shell_capture_hook.py` | `PreToolUse`: input-rewrite hook for Codex shell capture — wraps commands in a lossless capture harness (#4286 / ADR-0006) |
 
 ## Architecture Notes

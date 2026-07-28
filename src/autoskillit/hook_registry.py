@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, NamedTuple
@@ -30,14 +30,42 @@ class HookDef:
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"] = (
         "works-as-is"
     )
-    mechanism: Literal["deny", "additionalContext", "output-rewrite", "input-rewrite"] = "deny"
+    mechanism: Literal[
+        "deny",
+        "additionalContext",
+        "output-rewrite",
+        "input-rewrite",
+        "side-effect",
+    ] = "deny"
     enforcement_strength: dict[str, str] = field(default_factory=dict)
+    produces_resources: frozenset[str] = field(default_factory=frozenset)
+    reclaims_resources: frozenset[str] = field(default_factory=frozenset)
+    self_reclaims_resources: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if self.event_type != "SessionStart" and not self.matcher:
             raise ValueError(
                 f"HookDef with event_type={self.event_type!r} requires a non-empty matcher"
             )
+
+
+@dataclass(frozen=True, slots=True)
+class LifecycleContractDef:
+    """Static ownership contract for a hook-produced persistent resource."""
+
+    resource: str
+    producer_script: str
+    backend: Literal["claude_code", "codex"]
+    session_scope: Literal["any", "headless_only", "interactive_only"]
+    required_owner_roles: frozenset[Literal["same_runner", "session_start"]]
+
+    def __post_init__(self) -> None:
+        if not self.resource:
+            raise ValueError("LifecycleContractDef.resource must be non-empty")
+        if not self.producer_script:
+            raise ValueError("LifecycleContractDef.producer_script must be non-empty")
+        if not self.required_owner_roles:
+            raise ValueError("LifecycleContractDef.required_owner_roles must be non-empty")
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +113,7 @@ class HookDef:
 # skill_load_guard                       | works-as-is
 # review_loop_gate                       | works-as-is
 # reset_resume_gate                      | works-as-is
+# capture_lifecycle_hook                 | works-as-is
 # session_start_hook                     | works-as-is
 # ---------------------------------------------------------------------------
 
@@ -211,6 +240,9 @@ HOOK_REGISTRY: list[HookDef] = [
         # In-script Codex gate (#4286 / ADR-0006): exits 0 on non-Codex sessions.
         # Matcher excludes mcp__.*run_cmd — that channel is lossless server-side.
         enforcement_strength={"claude_code": "not-applicable", "codex": "works-as-is"},
+        produces_resources=frozenset({"shell-captures"}),
+        reclaims_resources=frozenset({"shell-captures"}),
+        self_reclaims_resources=frozenset({"shell-captures"}),
     ),
     HookDef(
         matcher=r"Write|Edit",
@@ -365,12 +397,32 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         event_type="SessionStart",
+        scripts=["capture_lifecycle_hook.py"],
+        timeout_seconds=2,
+        session_scope="any",
+        codex_status="works-as-is",
+        mechanism="side-effect",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        reclaims_resources=frozenset({"shell-captures"}),
+    ),
+    HookDef(
+        event_type="SessionStart",
         scripts=["session_start_hook.py"],
         session_scope="interactive_only",
         mechanism="additionalContext",
         enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
 ]
+
+LIFECYCLE_CONTRACTS: tuple[LifecycleContractDef, ...] = (
+    LifecycleContractDef(
+        resource="shell-captures",
+        producer_script="shell_capture_hook.py",
+        backend="codex",
+        session_scope="any",
+        required_owner_roles=frozenset({"same_runner", "session_start"}),
+    ),
+)
 
 HOOKS_DIR: Path = pkg_root() / "hooks"
 
@@ -465,9 +517,122 @@ RISKY_GIT_OPERATIONS: frozenset[tuple[str, ...]] = frozenset(
 )
 
 
+def hook_applies_to_backend(
+    hook_def: HookDef,
+    *,
+    backend: Literal["claude_code", "codex"],
+    session_scope: Literal["headless", "interactive"],
+) -> bool:
+    """Return whether a hook is reachable for one deployed backend/session scope."""
+    match backend:
+        case "codex":
+            return hook_def.session_scope != "interactive_only" and hook_def.codex_status not in {
+                "fix-required",
+                "not-applicable",
+            }
+        case "claude_code":
+            if hook_def.enforcement_strength.get("claude_code") == "not-applicable":
+                return False
+            return hook_def.session_scope == "any" or (
+                session_scope == "headless"
+                and hook_def.session_scope == "headless_only"
+                or session_scope == "interactive"
+                and hook_def.session_scope == "interactive_only"
+            )
+
+
+def _contract_session_scopes(
+    contract: LifecycleContractDef,
+) -> tuple[Literal["headless", "interactive"], ...]:
+    if contract.session_scope == "headless_only":
+        return ("headless",)
+    if contract.session_scope == "interactive_only":
+        return ("interactive",)
+    return ("headless", "interactive")
+
+
+def validate_lifecycle_contracts(
+    registry: Sequence[HookDef],
+    lifecycle_contracts: Sequence[LifecycleContractDef],
+    *,
+    backend: Literal["claude_code", "codex"],
+) -> None:
+    """Fail closed when a deployed producer loses a required cleanup owner."""
+    contract_keys = {
+        (contract.resource, contract.producer_script) for contract in lifecycle_contracts
+    }
+    for hook_def in registry:
+        for resource in hook_def.produces_resources:
+            if not any(
+                resource == contract_resource and producer_script in hook_def.scripts
+                for contract_resource, producer_script in contract_keys
+            ):
+                raise ValueError(f"persistent resource {resource!r} has no lifecycle contract")
+
+    applicable_contracts = [
+        contract for contract in lifecycle_contracts if contract.backend == backend
+    ]
+    for contract in applicable_contracts:
+        producers = [
+            hook_def
+            for hook_def in registry
+            if contract.producer_script in hook_def.scripts
+            and contract.resource in hook_def.produces_resources
+        ]
+        if len(producers) != 1:
+            raise ValueError(
+                f"lifecycle producer {contract.producer_script!r} for "
+                f"{contract.resource!r} must resolve exactly once"
+            )
+        producer = producers[0]
+        if producer.session_scope != contract.session_scope:
+            raise ValueError(
+                f"lifecycle producer {contract.producer_script!r} scope "
+                f"{producer.session_scope!r} does not match contract "
+                f"{contract.session_scope!r}"
+            )
+
+        for session_scope in _contract_session_scopes(contract):
+            if not hook_applies_to_backend(
+                producer,
+                backend=backend,
+                session_scope=session_scope,
+            ):
+                raise ValueError(
+                    f"lifecycle producer {contract.producer_script!r} is not applicable "
+                    f"to {backend}/{session_scope}"
+                )
+            if "same_runner" in contract.required_owner_roles and not (
+                contract.resource in producer.reclaims_resources
+                and contract.resource in producer.self_reclaims_resources
+            ):
+                raise ValueError(
+                    f"lifecycle resource {contract.resource!r} has no same-runner owner "
+                    f"for {backend}/{session_scope}"
+                )
+            if "session_start" in contract.required_owner_roles:
+                session_start_owners = [
+                    hook_def
+                    for hook_def in registry
+                    if hook_def.event_type == "SessionStart"
+                    and contract.resource in hook_def.reclaims_resources
+                    and hook_applies_to_backend(
+                        hook_def,
+                        backend=backend,
+                        session_scope=session_scope,
+                    )
+                ]
+                if not session_start_owners:
+                    raise ValueError(
+                        f"lifecycle resource {contract.resource!r} has no SessionStart "
+                        f"owner for {backend}/{session_scope}"
+                    )
+
+
 def _canonical_registry_payload(
-    registry: list[HookDef],
+    registry: Sequence[HookDef],
     retired: frozenset[str],
+    lifecycle_contracts: Sequence[LifecycleContractDef],
 ) -> str:
     registry_rows = sorted(
         [
@@ -479,7 +644,10 @@ def _canonical_registry_payload(
                 "exempt_skills": sorted(h.exempt_skills),
                 "matcher": h.matcher,
                 "mechanism": h.mechanism,
+                "produces_resources": sorted(h.produces_resources),
+                "reclaims_resources": sorted(h.reclaims_resources),
                 "scripts": list(h.scripts),
+                "self_reclaims_resources": sorted(h.self_reclaims_resources),
                 "session_scope": h.session_scope,
                 "timeout_seconds": h.timeout_seconds,
             }
@@ -487,20 +655,51 @@ def _canonical_registry_payload(
         ],
         key=lambda row: (row["event_type"], row["matcher"], tuple(row["scripts"])),  # type: ignore[arg-type]
     )
+    lifecycle_rows = sorted(
+        [
+            {
+                "backend": contract.backend,
+                "producer_script": contract.producer_script,
+                "required_owner_roles": sorted(contract.required_owner_roles),
+                "resource": contract.resource,
+                "session_scope": contract.session_scope,
+            }
+            for contract in lifecycle_contracts
+        ],
+        key=lambda row: (
+            row["resource"],
+            row["producer_script"],
+            row["backend"],
+            row["session_scope"],
+        ),
+    )
     return json.dumps(
-        {"format_version": 3, "registry": registry_rows, "retired": sorted(retired)},
+        {
+            "format_version": 4,
+            "lifecycle_contracts": lifecycle_rows,
+            "registry": registry_rows,
+            "retired": sorted(retired),
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
 
 
-def compute_registry_hash(registry: list[HookDef], retired: frozenset[str]) -> str:
-    """Compute a stable sha256 over HOOK_REGISTRY + RETIRED_SCRIPT_BASENAMES."""
-    payload = _canonical_registry_payload(registry, retired)
+def compute_registry_hash(
+    registry: Sequence[HookDef],
+    retired: frozenset[str],
+    lifecycle_contracts: Sequence[LifecycleContractDef],
+) -> str:
+    """Compute a stable sha256 over the hook and lifecycle registries."""
+    payload = _canonical_registry_payload(registry, retired, lifecycle_contracts)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-HOOK_REGISTRY_HASH: str = compute_registry_hash(HOOK_REGISTRY, RETIRED_SCRIPT_BASENAMES)
+HOOK_REGISTRY_HASH: str = compute_registry_hash(
+    HOOK_REGISTRY,
+    RETIRED_SCRIPT_BASENAMES,
+    LIFECYCLE_CONTRACTS,
+)
 
 
 def load_hooks_json_hash(path: Path) -> str | None:
@@ -537,15 +736,23 @@ def _build_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | Non
     return cmd
 
 
-def generate_hooks_json() -> dict:
+def generate_hooks_json(
+    registry: Sequence[HookDef] = HOOK_REGISTRY,
+    lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,
+) -> dict:
     """Generate the hooks.json structure from HOOK_REGISTRY using the stable dispatcher.
 
     Multiple HookDef entries with the same (event_type, matcher) are consolidated
     into a single settings.json entry so Claude Code sees no duplicate matchers.
     """
+    validate_lifecycle_contracts(
+        registry,
+        lifecycle_contracts,
+        backend="claude_code",
+    )
     # Preserve insertion order; merge scripts from same (event_type, matcher) key.
     groups: dict[tuple[str, str], dict] = {}
-    for hook_def in HOOK_REGISTRY:
+    for hook_def in registry:
         key = (hook_def.event_type, hook_def.matcher)
         hook_commands = [
             _build_hook_command(HOOKS_DIR, script, hook_def.timeout_seconds)
@@ -559,7 +766,12 @@ def generate_hooks_json() -> dict:
     by_event: dict[str, list] = {}
     for (event_type, _), entry in groups.items():
         by_event.setdefault(event_type, []).append(entry)
-    return {"hooks": by_event, "_autoskillit_registry_hash": HOOK_REGISTRY_HASH}
+    registry_hash = compute_registry_hash(
+        registry,
+        RETIRED_SCRIPT_BASENAMES,
+        lifecycle_contracts,
+    )
+    return {"hooks": by_event, "_autoskillit_registry_hash": registry_hash}
 
 
 # ---------------------------------------------------------------------------

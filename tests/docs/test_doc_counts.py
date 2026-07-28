@@ -359,7 +359,7 @@ def test_safety_hook_counts_match_registry() -> None:
     assert f"AutoSkillit registers {sum(counts.values())} Claude Code hook scripts" in text
     assert f"## PreToolUse hooks ({counts['PreToolUse']})" in text
     assert f"## PostToolUse hooks ({counts['PostToolUse']})" in text
-    assert f"## SessionStart hook ({counts['SessionStart']})" in text
+    assert f"## SessionStart hooks ({counts['SessionStart']})" in text
 
 
 def test_configuration_states_quota_thresholds() -> None:

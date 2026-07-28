@@ -20,6 +20,13 @@ from autoskillit.hook_registry import (
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
+def test_capture_cleanup_hook_declares_side_effect_mechanism() -> None:
+    hook = next(hook for hook in HOOK_REGISTRY if "capture_lifecycle_hook.py" in hook.scripts)
+    assert hook.event_type == "SessionStart"
+    assert hook.session_scope == "any"
+    assert hook.mechanism == "side-effect"
+
+
 # HR-FILTER-1: command with "autoskillit" substring -> True
 def test_is_own_hook_autoskillit_substring() -> None:
     assert _is_own_hook("python3 /path/to/autoskillit/hooks/quota_guard.py") is True

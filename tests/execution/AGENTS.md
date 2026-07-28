@@ -162,6 +162,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_result_parser.py` | Tests for CodexResultParser |
 | `test_codex_config.py` | Tests for TOML read/write primitives, _is_autoskillit_registered, and ensure_codex_mcp_registered |
 | `test_codex_config_validation.py` | Tests for locked Codex source-config composition, snapshots, and exact native-validation context |
+| `test_codex_capture_lifecycle_integration.py` | Generated-home Codex hook snapshot execution against a separate physical project root |
 | `test_codex_recipe_delivery.py` | Protected Codex recipe-delivery attestation and durable receipt-ledger tests |
 | `test_codex_recipe_delivery_fixtures.py` | Protected and diagnostic Codex recipe-delivery fixture ratchets |
 | `test_codex_recipe_delivery_conformance.py` | Dedicated recipe-delivery conformance matrix plus credentialed Code Mode envelope/pull retention probe |

@@ -103,6 +103,31 @@ def test_hooks_py_covers_full_registry(tmp_path):
     )
 
 
+def test_sync_validates_lifecycle_before_plugin_installed_early_return(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.cli._hooks as hooks_module
+
+    class ExpectedValidationFailure(RuntimeError):
+        pass
+
+    def fail_validation(*args: object, **kwargs: object) -> None:
+        raise ExpectedValidationFailure
+
+    def plugin_check_must_not_run(**kwargs: object) -> bool:
+        pytest.fail("plugin-installed early return ran before lifecycle validation")
+
+    monkeypatch.setattr(hooks_module, "validate_lifecycle_contracts", fail_validation)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers._is_plugin_installed",
+        plugin_check_must_not_run,
+    )
+
+    with pytest.raises(ExpectedValidationFailure):
+        hooks_module.sync_hooks_to_settings(tmp_path / "settings.json")
+
+
 # HK13
 def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
     """install() must remove all legacy autoskillit hook formats before writing fresh ones."""

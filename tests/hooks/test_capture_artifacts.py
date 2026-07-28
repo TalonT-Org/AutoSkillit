@@ -736,7 +736,7 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
     monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
 
     def fail_open(_requested_cwd, *, create):
-        raise capture_artifacts.CaptureLifecycleError("fault injection")
+        raise capture_artifacts.CaptureLifecycleError("🔥" * 512)
 
     monkeypatch.setattr(capture_artifacts, "open_capture_lifecycle", fail_open)
 
@@ -744,6 +744,7 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
     captured = capfd.readouterr()
     assert captured.out == ""
     assert "shell capture cleanup failed" in captured.err
+    assert len(captured.err.encode("utf-8")) <= 512
 
 
 def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(

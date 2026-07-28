@@ -613,12 +613,18 @@ class TestSessionLogMonitorDirMissing:
 class TestResumeBoundary:
     """Phase 2 must not fire on completion markers that existed before monitoring began."""
 
+    @pytest.mark.parametrize("caller_session_id", [None, "session-abc"])
     @pytest.mark.anyio
-    async def test_monitor_skips_preexisting_completion_marker(self, tmp_path):
+    async def test_monitor_skips_preexisting_completion_marker(
+        self,
+        tmp_path,
+        caller_session_id: str | None,
+    ):
         """Phase 2 must NOT fire on a completion marker that existed before monitoring began.
 
         Reproduces the resume-boundary false-fire: on `claude --resume`, the JSONL
-        file already contains the completion marker from the prior session.
+        file already contains the completion marker from the prior session. The
+        no-caller path must retain the same new-bytes-only boundary.
         """
 
         log_dir = tmp_path / "session_logs"
@@ -673,7 +679,7 @@ class TestResumeBoundary:
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
                     _on_poll=count_polls,
-                    caller_session_id="session-abc",
+                    caller_session_id=caller_session_id,
                 )
             )
 

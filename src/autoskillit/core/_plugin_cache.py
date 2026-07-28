@@ -468,6 +468,9 @@ class PluginArtifactRetirementEngine:
                 f"{self.artifact_kind.value} artifact manifest path is not canonical: "
                 f"{identity.manifest_path}"
             )
+        retired_at = datetime.now(UTC)
+        if not_before.tzinfo is not None and not_before.utcoffset() is not None:
+            retired_at = min(retired_at, not_before.astimezone(UTC))
         result = append_retiring_record(
             RetiringArtifactRecord(
                 record_id=uuid.uuid4().hex,
@@ -478,7 +481,7 @@ class PluginArtifactRetirementEngine:
                 incarnation_id=identity.incarnation_id,
                 manifest_schema_version=identity.manifest_schema_version,
                 artifact_digest=identity.artifact_digest,
-                retired_at=datetime.now(UTC),
+                retired_at=retired_at,
                 not_before=not_before,
             )
         )

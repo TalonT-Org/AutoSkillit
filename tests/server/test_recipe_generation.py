@@ -232,27 +232,42 @@ def test_entry_lru_eviction_removes_every_artifact_alias() -> None:
     store = RecipeGenerationStore(max_entries=2)
     first = store.put(_record(compile_key="first"))
     second = store.put(_record(compile_key="second"))
-    first_artifact = _generation("first")
-    second_artifact = _generation("second")
-    store.bind_surface(
-        first.kitchen_id,
-        first.normalized_compile_key,
-        "open_kitchen",
-        first_artifact,
-    )
-    store.bind_surface(
-        second.kitchen_id,
-        second.normalized_compile_key,
-        "open_kitchen",
-        second_artifact,
-    )
-    assert store.lookup_artifact(first.kitchen_id, first_artifact) is not None
+    first_artifacts = (_generation("first-open"), _generation("first-load"))
+    second_artifacts = (_generation("second-open"), _generation("second-load"))
+    for surface, artifact in zip(
+        ("open_kitchen", "load_recipe"),
+        first_artifacts,
+        strict=True,
+    ):
+        store.bind_surface(
+            first.kitchen_id,
+            first.normalized_compile_key,
+            surface,
+            artifact,
+        )
+    for surface, artifact in zip(
+        ("open_kitchen", "load_recipe"),
+        second_artifacts,
+        strict=True,
+    ):
+        store.bind_surface(
+            second.kitchen_id,
+            second.normalized_compile_key,
+            surface,
+            artifact,
+        )
+    for artifact in first_artifacts:
+        assert store.lookup_artifact(first.kitchen_id, artifact) is not None
 
     store.put(_record(compile_key="third"))
 
     assert store.lookup_compile(second.kitchen_id, second.normalized_compile_key) is None
-    assert store.lookup_artifact(second.kitchen_id, second_artifact) is None
-    assert store.lookup_compile(first.kitchen_id, first.normalized_compile_key) is not None
+    for artifact in second_artifacts:
+        assert store.lookup_artifact(second.kitchen_id, artifact) is None
+    retained = store.lookup_compile(first.kitchen_id, first.normalized_compile_key)
+    assert retained is not None
+    for artifact in first_artifacts:
+        assert store.lookup_artifact(first.kitchen_id, artifact) == retained
 
 
 def test_canonical_weight_drives_byte_admission_and_lru_eviction() -> None:

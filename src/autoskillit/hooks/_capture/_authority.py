@@ -7,6 +7,7 @@ subprocess dependencies so cleanup-only hooks remain independently loadable.
 
 from __future__ import annotations
 
+import importlib
 import os
 import stat
 import sys
@@ -23,7 +24,12 @@ if _HOOKS_DIR not in sys.path:
 if TYPE_CHECKING:
     from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
 else:
-    from _capture_lifecycle import CaptureLifecycleStore
+    _capture_lifecycle = importlib.import_module(
+        f"{__package__.rpartition('.')[0]}._capture_lifecycle"
+        if __package__.startswith("autoskillit.")
+        else "_capture_lifecycle"
+    )
+    CaptureLifecycleStore = _capture_lifecycle.CaptureLifecycleStore
 
 __all__ = [
     "CAPTURE_PATH_COMPONENTS",

@@ -13,6 +13,7 @@ manifest, the registry, and the retiring queue).
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -143,6 +144,42 @@ class TestRollbackOnFailure:
         assert new_marker.read_text() == "new"
         assert snapshot._target_backup is None
         assert snapshot._target_mutation_owned is False
+
+    def test_persisted_retirement_is_tracked_when_parent_fsync_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.cli import _marketplace, _plugin_artifact
+        from autoskillit.core import read_retiring_cache
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        old_cache = _seed_installed_state(tmp_path, "0.0.1-old")
+        _plugin_artifact.publish_installed_plugin_artifact(
+            old_cache,
+            semantic_key="autoskillit@autoskillit-local:0.0.1-old",
+        )
+        snapshot = _marketplace._InstallSnapshot()
+        real_fsync = os.fsync
+        calls = 0
+
+        def fail_retiring_parent_fsync(fd: int) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("injected retirement parent fsync failure")
+            real_fsync(fd)
+
+        monkeypatch.setattr(os, "fsync", fail_retiring_parent_fsync)
+
+        with pytest.raises(OSError, match="parent fsync failure"):
+            _marketplace._clear_plugin_cache(
+                on_retirement_created=snapshot.track_retirement,
+            )
+
+        assert len(read_retiring_cache().records) == 1
+        snapshot.rollback()
+        assert read_retiring_cache().records == ()
 
     def test_target_lease_contention_does_not_mutate_the_live_root(
         self,

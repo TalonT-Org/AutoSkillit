@@ -16,7 +16,12 @@ from typing import IO, Any
 
 import psutil
 
-from .io import directory_tree_digest, read_versioned_json, write_versioned_json
+from .io import (
+    _AtomicWriteDurabilityError,
+    directory_tree_digest,
+    read_versioned_json,
+    write_versioned_json,
+)
 from .logging import get_logger, log_plugin_artifact_lifecycle
 from .paths import destination_location
 from .runtime.artifact_lease import ArtifactLease, ArtifactLeaseContention
@@ -492,7 +497,11 @@ def _retirement_intent(record: RetiringArtifactRecord) -> tuple[object, ...]:
     )
 
 
-def append_retiring_record(record: RetiringArtifactRecord) -> RetiringAppendResult:
+def append_retiring_record(
+    record: RetiringArtifactRecord,
+    *,
+    on_persisted: Callable[[str], None] | None = None,
+) -> RetiringAppendResult:
     """Append one exact v2 record, preserving first-seen order and intent identity."""
     fh = _open_lock(_retiring_cache_lock())
     try:
@@ -513,7 +522,14 @@ def append_retiring_record(record: RetiringArtifactRecord) -> RetiringAppendResu
                 )
             if _retirement_intent(existing) == intent:
                 return RetiringAppendResult(record_id=existing.record_id, created=False)
-        _write_retiring_cache_unlocked((*records, record), evidence)
+        try:
+            _write_retiring_cache_unlocked((*records, record), evidence)
+        except _AtomicWriteDurabilityError:
+            if on_persisted is not None:
+                on_persisted(record.record_id)
+            raise
+        if on_persisted is not None:
+            on_persisted(record.record_id)
         return RetiringAppendResult(record_id=record.record_id, created=True)
     finally:
         fh.close()
@@ -604,6 +620,8 @@ class PluginArtifactRetirementEngine:
         self,
         identity: PluginArtifactIdentity,
         not_before: datetime,
+        *,
+        on_persisted: Callable[[str], None] | None = None,
     ) -> RetiringAppendResult:
         """Queue one exact incarnation after validating owner-specific paths."""
         if not self.contains(identity.managed_path):
@@ -631,7 +649,8 @@ class PluginArtifactRetirementEngine:
                 artifact_digest=identity.artifact_digest,
                 retired_at=retired_at,
                 not_before=not_before,
-            )
+            ),
+            on_persisted=on_persisted,
         )
         log_plugin_artifact_lifecycle(
             self._logger,

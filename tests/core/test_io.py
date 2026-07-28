@@ -277,12 +277,15 @@ def test_atomic_write_strict_parent_fsync_failure_is_observable(tmp_path, monkey
 
     monkeypatch.setattr(os, "fsync", fail_parent_fsync)
 
-    with pytest.raises(OSError, match="parent fsync failed"):
+    target = tmp_path / "strict.json"
+    with pytest.raises(OSError, match="parent fsync failed") as caught:
         atomic_write(
-            tmp_path / "strict.json",
+            target,
             "{}",
             strict_durability=True,
         )
+    assert getattr(caught.value, "path", None) == target
+    assert target.read_text() == "{}"
 
 
 def test_write_versioned_json_forwards_strict_durability(tmp_path, monkeypatch):

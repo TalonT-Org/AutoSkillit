@@ -105,11 +105,13 @@ def _clear_plugin_cache(
                     identity = _read_installed_plugin_identity(candidate)
                 except PluginArtifactValidationError:
                     continue
-                result = owner.enqueue_retirement(identity, deadline)
+                result = owner.enqueue_retirement(
+                    identity,
+                    deadline,
+                    on_persisted=on_retirement_created,
+                )
                 if result.created:
                     created_ids.append(result.record_id)
-                    if on_retirement_created is not None:
-                        on_retirement_created(result.record_id)
         finally:
             reader.close()
 

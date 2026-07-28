@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import stat
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -338,8 +339,14 @@ class InstalledPluginArtifactRetirementOwner:
         self,
         identity: PluginArtifactIdentity,
         not_before: datetime,
+        *,
+        on_persisted: Callable[[str], None] | None = None,
     ) -> RetiringAppendResult:
-        return self._retirement.enqueue_retirement(identity, not_before)
+        return self._retirement.enqueue_retirement(
+            identity,
+            not_before,
+            on_persisted=on_persisted,
+        )
 
     def cancel_obsolete_retirements(
         self,

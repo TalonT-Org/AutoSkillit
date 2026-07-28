@@ -77,6 +77,17 @@ try:
 except ImportError:
     from yaml import Dumper as _Dumper  # type: ignore[misc,assignment]
 
+
+class _AtomicWriteDurabilityError(OSError):
+    """The target was replaced, but its parent directory was not made durable."""
+
+    def __init__(self, path: Path, cause: OSError) -> None:
+        self.path = Path(path)
+        super().__init__(
+            f"atomic write committed but parent durability failed for {self.path}: {cause}"
+        )
+
+
 __all__ = [
     "ReadResult",
     "YAMLError",
@@ -220,9 +231,9 @@ def atomic_write(
                 os.fsync(dir_fd)
             finally:
                 os.close(dir_fd)
-        except OSError:
+        except OSError as exc:
             if strict_durability:
-                raise
+                raise _AtomicWriteDurabilityError(path, exc) from exc
 
 
 def directory_tree_digest(root: Path) -> str:

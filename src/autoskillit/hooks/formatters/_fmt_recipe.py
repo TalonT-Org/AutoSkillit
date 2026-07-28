@@ -47,8 +47,9 @@ _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
         "ingredients_table",
         "orchestration_rules",
         "warnings",
+        *_RECIPE_INITIALIZATION_FIELDS,
     }
-).union(_RECIPE_INITIALIZATION_FIELDS)
+)
 _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
     {
         "greeting",  # delivered via positional CLI arg, not MCP response
@@ -196,8 +197,9 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
         "orchestration_rules",
         "version",
         "warnings",
+        *_RECIPE_INITIALIZATION_FIELDS,
     }
-).union(_RECIPE_INITIALIZATION_FIELDS)
+)
 _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
     {
         "success",  # metadata — model infers success from formatted output

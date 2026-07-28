@@ -33,7 +33,10 @@ def _stub_detect_mcp_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
     from autoskillit.core._plugin_ids import DIRECT_PREFIX
 
-    monkeypatch.setattr("autoskillit.core.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX)
+    monkeypatch.setattr(
+        "autoskillit.core.detect_autoskillit_mcp_prefix",
+        lambda _capabilities: DIRECT_PREFIX,
+    )
 
 
 _SCRIPT_YAML = """\

@@ -11,6 +11,7 @@ import pytest
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.server._recipe_execution import get_recipe_execution
+from tests.server._helpers import _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -42,7 +43,7 @@ def _compiled_recipe_payload() -> dict:
             )
         },
     )
-    return {
+    result = {
         "content": "name: test-recipe\n",
         "valid": True,
         "errors": [],
@@ -54,8 +55,8 @@ def _compiled_recipe_payload() -> dict:
         "suggestions": [],
         "post_prune_step_names": ["verify"],
         "dispatch_feasible": True,
-        "_compiled_bindings": bind_recipe(recipe),
     }
+    return _with_finalized_projection(result, binding_projection=bind_recipe(recipe))
 
 
 @pytest.mark.anyio
@@ -68,6 +69,7 @@ async def test_recipe_open_atomically_installs_compiled_execution(
 
     tool_ctx.gate.enable()
     tool_ctx.gate_infrastructure_ready = True
+    tool_ctx.kitchen_id = f"test-open-{deferred_recall}"
     tool_ctx.recipe_name = "test-recipe" if deferred_recall else ""
     recipes = MagicMock()
     recipes.find.return_value = None
@@ -136,6 +138,9 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
         "suggestions": [],
         "post_prune_step_names": ["build", "test"],
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")
     mock_ctx.recipes.find.return_value = mock_recipe_info
@@ -172,6 +177,9 @@ async def test_deferred_recall_sets_active_recipe_steps_none_when_find_raises():
         "recipe_version": "1.0",
         "suggestions": [],
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_ctx.recipes.find.side_effect = RuntimeError("disk error")
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -199,6 +207,9 @@ async def test_deferred_recall_sets_active_recipe_steps_none_when_find_returns_n
         "recipe_version": "1.0",
         "suggestions": [],
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_ctx.recipes.find.return_value = None
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -313,6 +324,9 @@ def _make_pre_revealed_ctx(name: str) -> MagicMock:
         "suggestions": [],
         "post_prune_step_names": ["build", "test"],
     }
+    ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        ctx.recipes.load_and_validate.return_value
+    )
     return ctx
 
 
@@ -518,6 +532,9 @@ async def test_deferred_recall_preserves_active_locks(tmp_path):
         "recipe_version": "1.0",
         "post_prune_step_names": ["investigate"],
     }
+    ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        ctx.recipes.load_and_validate.return_value
+    )
 
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")

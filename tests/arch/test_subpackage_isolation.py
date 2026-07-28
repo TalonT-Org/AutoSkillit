@@ -921,7 +921,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             Exempt at 32 files.
           pipeline/ — REQ-CNST-003-E7: pipeline/ added github_api_log.py for session-scoped
             GitHub API request tracking (DefaultGitHubApiLog accumulator + GitHubApiEntry).
-            Exempt at 12 files.
+            context_admission_ledger.py adds crash-safe shadow accounting, and
+            recipe_initialization.py adds the pure named-recipe lifecycle reducer.
+            Exempt at 14 files.
           fleet/ — REQ-CNST-003-E8: fleet/ added _semaphore.py for FleetSemaphore, the
             configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
             Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
@@ -931,7 +933,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             logic on DispatchRecord.from_dict. Exempt at 15 files.
     """
     EXEMPTIONS: dict[str, int] = {
-        "server": 17,  # +_recipe_section_pagination planner +_recipe_execution attestation
+        # +generation-bound replay store and post-enforcement initialization commits.
+        "server": 19,
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 28,  # +context admission +audit-cycle verifier/tool registry
@@ -942,7 +945,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         "hooks": 18,  # +recipe_confirmed_post_hook, +quota_guard_state_post_hook, +_policy_event, +shell_capture_hook (#4286), +_capture_artifacts.py  # noqa: E501
-        "pipeline": 13,  # +context_admission_ledger crash-safe shadow accounting
+        "pipeline": 14,  # +context admission ledger +recipe initialization reducer
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 55,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery  # noqa: E501
         "server/tools": 32,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
@@ -1048,17 +1051,19 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "server/_recipe_delivery.py": (
-        1150,
+        1450,
         "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
         "selection, receipt reservation, and compiled-execution publication form one "
         "transactional authority boundary; the snapshot carrier keeps installation before "
-        "durable delivery commit without introducing a second finalization path. "
-        "Bumped to 1150 for #4399: exemption-aware ENVELOPE→ORDINARY_INLINE override "
-        "(scope-check + byte budget + decision.replace; +18 net lines) and success=True "
-        "injection on candidate_payload before serialization (+8 net lines).",
+        "durable delivery commit without introducing a second finalization path; "
+        "generation-bound flow records, bounded recovery manifests, exact-replay "
+        "provenance, and activating/non-activating lifecycle staging remain in that same "
+        "finalizer transaction so no second wire authority can drift; #4399's exemption-aware "
+        "ordinary-inline override and success-shaped surface payload preserve complete bodies "
+        "for registered non-protected surfaces.",
     ),
     "tools_kitchen.py": (
-        1700,
+        1800,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -1104,7 +1109,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; compiled recipe binding publication and execution-lifecycle cleanup across "
         "recipe load, kitchen open, and kitchen close (+13 net lines)"
         "; #4399 close→open visibility restore: mcp.enable() refresh in open_kitchen's "
-        "_skip_notify branch to override prior global mcp.disable() from close_kitchen (+2 lines)",
+        "_skip_notify branch to override prior global mcp.disable() from close_kitchen (+2 lines)"
+        "; finalized projection/flow generation and explicit activating-surface delivery "
+        "are threaded through normal, deferred, and resource paths while named-open "
+        "replacement clears stale readiness before every early return",
     ),
     "tools_execution.py": (
         1800,
@@ -1396,6 +1404,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     Exempt fields:
     - plugin_source: PluginSource discriminated union (value type, not a service interface)
     - config: AutomationConfig dataclass (configuration container, not a service interface)
+    - recipe_initialization_state: lifecycle value union, not a service interface
     """
     AUTOSKILLIT_ROOT = SRC_ROOT
 
@@ -1439,7 +1448,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "active_recipe_features",
         "active_recipe_steps",
         "active_recipe_ingredients",
-        "active_recipe_execution",
+        "recipe_initialization_state",
         "temp_dir",
         "project_dir",
         "ephemeral_root",

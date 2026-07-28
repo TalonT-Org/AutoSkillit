@@ -202,6 +202,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "record_pipeline_step",  # structured init/status result
         "reset_dispatch",  # JSON cleanup report, generic renders correctly
         "get_recipe_section",  # bounded section content with continuation
+        "complete_recipe_initialization",  # simple completion receipt
     }
 )
 

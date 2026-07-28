@@ -8,7 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.server._helpers import _PATCHED_DEFAULTS, _SERVER_ONLY_KEYS
+from tests.server._helpers import (
+    _PATCHED_DEFAULTS,
+    _SERVER_ONLY_KEYS,
+    _with_finalized_projection,
+)
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -41,6 +45,9 @@ async def test_named_delivery_preserves_finalized_bytes_across_anonymous_guidanc
         "diagram": None,
         "ingredients_table": "",
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
     finalized = FinalizedRecipeResponse(
@@ -189,13 +196,9 @@ async def test_build_hook_diagnostic_warning_skips_missing_when_plugin_active(
         lambda scope: settings_dir / "settings.json",
     )
     monkeypatch.setattr("autoskillit.server._misc.validate_plugin_cache_hooks", lambda **_: [])
-    monkeypatch.setattr(
-        "autoskillit.server._misc.detect_autoskillit_mcp_prefix", lambda: MARKETPLACE_PREFIX
-    )
-
     from autoskillit.server._misc import _build_hook_diagnostic_warning
 
-    result = _build_hook_diagnostic_warning()
+    result = _build_hook_diagnostic_warning(MARKETPLACE_PREFIX)
     assert result is None
 
 
@@ -222,13 +225,9 @@ async def test_build_hook_diagnostic_warning_orphaned_still_fires_when_plugin_ac
     )
     monkeypatch.setattr("autoskillit.server._misc.find_broken_hook_scripts", lambda _: [])
     monkeypatch.setattr("autoskillit.server._misc.validate_plugin_cache_hooks", lambda **_: [])
-    monkeypatch.setattr(
-        "autoskillit.server._misc.detect_autoskillit_mcp_prefix", lambda: MARKETPLACE_PREFIX
-    )
-
     from autoskillit.server._misc import _build_hook_diagnostic_warning
 
-    result = _build_hook_diagnostic_warning()
+    result = _build_hook_diagnostic_warning(MARKETPLACE_PREFIX)
     assert result is not None
     assert "orphan" in result.lower()
     assert "1" in result
@@ -278,7 +277,7 @@ async def test_open_kitchen_no_name_returns_json_envelope_with_success_true(tmp_
                     result = await open_kitchen(ctx=mock_ctx)
 
     parsed = json.loads(result)
-    assert parsed["success"] is True
+    assert parsed["success"] is True, parsed
     assert parsed["kitchen"] == "open"
     assert "Kitchen is open" in parsed["content"]
     assert parsed["ingredients_table"] is None
@@ -300,6 +299,9 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
         "diagram": None,
         "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
 
@@ -313,8 +315,11 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
 
                     result_str = await open_kitchen(name="demo", ctx=mock_ctx)
 
+    assert isinstance(result_str, str), (
+        f"open_kitchen returned {type(result_str).__name__}: {result_str!r}"
+    )
     parsed = json.loads(result_str)
-    assert parsed["success"] is True
+    assert parsed["success"] is True, parsed
     assert parsed["kitchen"] == "open"
     assert "version" in parsed
     assert "--- INGREDIENTS TABLE ---" in result_str
@@ -465,7 +470,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
                         result_str = await open_kitchen(name="smoke-test", ctx=mock_ctx)
 
     parsed = json.loads(result_str)
-    assert parsed["success"] is True
+    assert parsed["success"] is True, parsed
     ing_table = parsed.get("ingredients_table") or ""
     assert ing_table, "ingredients_table must be present and non-empty"
     assert "develop" in ing_table
@@ -546,6 +551,9 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
         "diagram": None,
         "ingredients_table": "--- TABLE ---",
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/recipe.yaml")
     mock_ctx.recipes.find.return_value = mock_recipe_info
@@ -637,7 +645,7 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
                         )
 
     parsed = json.loads(result_str)
-    assert parsed["success"] is True
+    assert parsed["success"] is True, parsed
     ing_table = parsed.get("ingredients_table") or ""
     assert ing_table, "ingredients_table must be present and non-empty"
     base_branch_rows = [line for line in ing_table.splitlines() if "base_branch" in line]

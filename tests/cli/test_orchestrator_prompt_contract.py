@@ -16,80 +16,50 @@ def _get_prompt() -> str:
     return _build_orchestrator_prompt("demo", "mcp__autoskillit__")
 
 
-class TestOpenKitchenFailurePredicate:
-    """Guards for the FAILURE PREDICATE — open_kitchen block in the orchestrator prompt."""
+class TestOrderedRecipeStartupContract:
+    """Startup distinguishes dispatch, transport, recovery, and application errors."""
 
-    def test_prompt_contains_open_kitchen_failure_predicate(self):
+    @pytest.mark.parametrize(
+        ("case_number", "required_phrases"),
+        [
+            (1, ("pre-dispatch", "runtime tool discovery", "bad symbol")),
+            (2, ("transport", "isError:true", "silent retry")),
+            (3, ("isError:false", "structured application result", "success:false")),
+            (4, ("recovery manifest", "flow_records", "entrypoint", "continuation")),
+            (5, ("nonrecoverable application error", "user_visible_message")),
+        ],
+    )
+    def test_cases_are_present_and_ordered(
+        self, case_number: int, required_phrases: tuple[str, ...]
+    ) -> None:
         prompt = _get_prompt()
-        assert "FAILURE PREDICATE — open_kitchen" in prompt
-
-    def test_prompt_open_kitchen_predicate_mentions_success_false_substring(self):
-        prompt = _get_prompt()
-        # Find the open_kitchen predicate section
-        idx = prompt.index("FAILURE PREDICATE — open_kitchen")
-        section = prompt[idx : idx + 500]
-        assert '"success": false' in section
-
-    def test_prompt_open_kitchen_predicate_mentions_user_visible_message(self):
-        prompt = _get_prompt()
-        idx = prompt.index("FAILURE PREDICATE — open_kitchen")
-        section = prompt[idx : idx + 500]
-        assert "user_visible_message" in section
-
-    def test_prompt_open_kitchen_predicate_forbids_askuserquestion(self):
-        prompt = _get_prompt()
-        idx = prompt.index("FAILURE PREDICATE — open_kitchen")
-        section = prompt[idx : idx + 500]
-        assert "DO NOT call AskUserQuestion" in section
-
-    def test_open_kitchen_predicate_uses_json_field_not_substring(self):
-        """The predicate block must use JSON-field check, not substring marker."""
-        prompt = _get_prompt()
-        idx = prompt.index("FAILURE PREDICATE — open_kitchen")
-        section = prompt[idx : idx + 500]
-        assert "--- INGREDIENTS TABLE ---" not in section
-        assert "ingredients_table" in section
-
-
-class TestDegradedToolResponsePredicate:
-    """Guards for the FAILURE PREDICATE — DEGRADED TOOL RESPONSE block."""
-
-    def _get_section(self) -> str:
-        prompt = _get_prompt()
-        start = prompt.index("FAILURE PREDICATE — DEGRADED TOOL RESPONSE")
-        end = prompt.index("CONTEXT LIMIT ROUTING", start)
-        return prompt[start:end]
-
-    def test_prompt_contains_degraded_tool_response_section(self):
-        prompt = _get_prompt()
-        ok_idx = prompt.index("FAILURE PREDICATE — open_kitchen")
-        deg_idx = prompt.index("FAILURE PREDICATE — DEGRADED TOOL RESPONSE")
-        ctx_idx = prompt.index("CONTEXT LIMIT ROUTING")
-        assert ok_idx < deg_idx < ctx_idx, (
-            "Degraded predicate must appear after open_kitchen and before CONTEXT LIMIT ROUTING"
+        start = prompt.index("RECIPE STARTUP RESULT ORDER")
+        end = prompt.index("During pipeline execution", start)
+        section = prompt[start:end]
+        case_positions = [section.index(f"{number}.") for number in range(1, 6)]
+        assert case_positions == sorted(case_positions)
+        case_start = section.index(f"{case_number}.")
+        case_end = (
+            section.index(f"{case_number + 1}.", case_start) if case_number < 5 else len(section)
         )
+        case_text = section[case_start:case_end]
+        assert all(phrase in case_text for phrase in required_phrases)
 
-    def test_degraded_predicate_covers_success_false_empty_content(self):
-        section = self._get_section()
-        assert "success" in section
-        assert "false" in section
-        assert any(word in section for word in ("absent", "null", "empty")), (
-            "Section must reference absent, null, or empty content"
+    def test_recovery_precedes_generic_success_false_rules(self) -> None:
+        prompt = _get_prompt()
+        start = prompt.index("RECIPE STARTUP RESULT ORDER")
+        end = prompt.index("During pipeline execution", start)
+        section = prompt[start:end]
+        assert section.index("recovery manifest") < section.index(
+            "nonrecoverable application error"
         )
+        assert "complete_recipe_initialization(initialization_id)" in section
+        assert "before the first execution or mutation tool" in section
 
-    def test_degraded_predicate_prohibits_improvisation(self):
-        section = self._get_section()
-        lower = section.lower()
-        assert any(
-            phrase in lower
-            for phrase in (
-                "do not improvise",
-                "do not retry",
-                "do not attempt",
-                "never",
-                "halt",
-            )
-        ), "Section must prohibit improvisation or retry"
+    def test_old_conflicting_termination_blocks_are_removed(self) -> None:
+        prompt = _get_prompt()
+        assert "FAILURE PREDICATE — open_kitchen" not in prompt
+        assert "FAILURE PREDICATE — DEGRADED TOOL RESPONSE" not in prompt
 
 
 class TestStep0ToolPredicateCoverage:
@@ -114,9 +84,11 @@ class TestStep0ToolPredicateCoverage:
 
         # Each tool must appear in a FAILURE PREDICATE section
         for tool in tool_names:
-            assert f"FAILURE PREDICATE — {tool}" in prompt or f"- {tool}:" in prompt, (
-                f"Tool '{tool}' in STEP 0 has no failure predicate or shared rule"
-            )
+            assert (
+                f"FAILURE PREDICATE — {tool}" in prompt
+                or f"- {tool}:" in prompt
+                or (tool == "open_kitchen" and "RECIPE STARTUP RESULT ORDER" in prompt)
+            ), f"Tool '{tool}' in STEP 0 has no failure predicate or shared rule"
 
 
 class TestFirstActionAskUserQuestionProhibition:

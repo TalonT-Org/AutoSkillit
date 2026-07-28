@@ -12,7 +12,12 @@ from types import MappingProxyType
 
 from .closure_hashing import compute_canonical_hash
 from .types._type_constants_registries import HEADLESS_TOOLS
-from .types._type_recipe_binding import ToolDef, ToolParamDef, ToolWireType
+from .types._type_recipe_binding import (
+    ToolDef,
+    ToolInitializationOperation,
+    ToolParamDef,
+    ToolWireType,
+)
 
 __all__ = [
     "TOOL_REGISTRY",
@@ -23,6 +28,85 @@ __all__ = [
 ]
 
 _TOOL_CONTRACT_IDENTITY_DOMAIN = "autoskillit:tool-contract:v1:sha256"
+
+_INSPECTION_TOOLS = frozenset(
+    {
+        "analyze_tool_sequences",
+        "check_pr_mergeable",
+        "check_repo_merge_state",
+        "fetch_github_issue",
+        "get_ci_status",
+        "get_issue_title",
+        "get_pipeline_report",
+        "get_pr_reviews",
+        "get_quota_events",
+        "get_timing_summary",
+        "get_token_summary",
+        "kitchen_status",
+        "list_recipes",
+        "load_recipe",
+        "read_db",
+        "validate_recipe",
+    }
+)
+_LIFECYCLE_CONTROL_TOOLS = frozenset({"close_kitchen", "open_kitchen"})
+_RECOVERY_TOOLS = frozenset({"complete_recipe_initialization", "get_recipe_section"})
+_EXECUTION_TOOLS = frozenset({"run_cmd", "run_python", "run_skill", "test_check"})
+_MUTATION_TOOLS = frozenset(
+    {
+        "batch_cleanup_clones",
+        "bootstrap_clone",
+        "bulk_close_issues",
+        "claim_and_resolve_issue",
+        "claim_issue",
+        "classify_fix",
+        "clone_repo",
+        "commit_files",
+        "configure_fleet",
+        "configure_order",
+        "create_and_publish_branch",
+        "create_unique_branch",
+        "disable_quota_guard",
+        "dispatch_food_truck",
+        "enqueue_pr",
+        "enrich_issues",
+        "lock_ingredients",
+        "merge_worktree",
+        "migrate_recipe",
+        "prepare_issue",
+        "push_to_remote",
+        "record_gate_dispatch",
+        "record_pipeline_step",
+        "register_clone_status",
+        "release_issue",
+        "reload_session",
+        "remove_clone",
+        "report_bug",
+        "reset_dispatch",
+        "reset_test_dir",
+        "reset_workspace",
+        "set_commit_status",
+        "toggle_auto_merge",
+        "unlock_agent_pack",
+        "wait_for_ci",
+        "wait_for_merge_queue",
+        "write_telemetry_files",
+    }
+)
+
+
+def _initialization_operation(name: str) -> ToolInitializationOperation:
+    if name in _RECOVERY_TOOLS:
+        return ToolInitializationOperation.RECOVERY
+    if name in _INSPECTION_TOOLS:
+        return ToolInitializationOperation.INSPECTION
+    if name in _LIFECYCLE_CONTROL_TOOLS:
+        return ToolInitializationOperation.LIFECYCLE_CONTROL
+    if name in _EXECUTION_TOOLS:
+        return ToolInitializationOperation.EXECUTION
+    if name in _MUTATION_TOOLS:
+        return ToolInitializationOperation.MUTATION
+    raise ValueError(f"Tool {name!r} has no initialization-time operation class")
 
 
 def _tool(
@@ -44,6 +128,7 @@ def _tool(
             )
             for param in params
         ),
+        initialization_operation=_initialization_operation(name),
     )
 
 
@@ -93,7 +178,11 @@ def _run_skill() -> ToolDef:
             handler_parameter=True,
         )
     )
-    return ToolDef(name="run_skill", params=tuple(params))
+    return ToolDef(
+        name="run_skill",
+        params=tuple(params),
+        initialization_operation=_initialization_operation("run_skill"),
+    )
 
 
 _TOOL_DEFS = (
@@ -377,7 +466,14 @@ _TOOL_DEFS = (
             "artifact_blob_size_bytes",
             "body_sha256",
             "body_size_bytes",
+            "flow_schema_version",
+            "flow_sha256",
+            "flow_size_bytes",
+            "flow_record_count",
             "part",
+            "initialization_id",
+            "page_plan_sha256",
+            "continuation",
         ),
         required=(
             "section",
@@ -390,7 +486,17 @@ _TOOL_DEFS = (
             "artifact_blob_size_bytes",
             "body_sha256",
             "body_size_bytes",
+            "flow_schema_version",
+            "flow_sha256",
+            "flow_size_bytes",
+            "flow_record_count",
         ),
+    ),
+    _tool(
+        "complete_recipe_initialization",
+        ("initialization_id",),
+        required=("initialization_id",),
+        wire_types={"initialization_id": ToolWireType.STRING},
     ),
     _tool("validate_recipe", ("script_path",), required=("script_path",)),
     _tool("migrate_recipe", ("name",), required=("name",)),
@@ -439,6 +545,7 @@ def compute_tool_contract_identity(tool_def: ToolDef) -> str:
     return compute_canonical_hash(
         {
             "name": tool_def.name,
+            "initialization_operation": tool_def.initialization_operation.value,
             "params": [
                 {
                     "handler_parameter": param.handler_parameter,

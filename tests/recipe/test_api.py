@@ -192,6 +192,11 @@ steps:
       cmd: "echo test"
     on_success: step_b
     on_failure: step_c
+    on_result:
+      field: status
+      routes:
+        ok: step_b
+        retry: step_c
   step_b:
     action: stop
     message: B
@@ -214,6 +219,55 @@ def test_load_recipe_result_has_post_prune_routing_edges(tmp_path):
         "post_prune_routing_edges must be in LoadRecipeResult"
     )
     assert set(result["post_prune_routing_edges"]) == {"step_b", "step_c"}
+
+
+def test_finalized_projection_preserves_ordered_steps_entrypoint_and_routes(tmp_path):
+    """The internal carrier is one exact projection of the finalized recipe."""
+    from autoskillit.core import FinalizedRecipeProjection
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(tmp_path, "test-recipe-routing", _RECIPE_WITH_ROUTING_EDGES)
+    result = load_and_validate(
+        name="test-recipe-routing",
+        project_dir=tmp_path,
+        include_finalized_projection=True,
+    )
+
+    projection = result["_finalized_projection"]
+    assert isinstance(projection, FinalizedRecipeProjection)
+    assert projection.ordered_step_names == ("step_a", "step_b", "step_c")
+    assert projection.entrypoint == "step_a"
+    assert tuple(
+        (
+            edge.source,
+            edge.edge_type,
+            edge.target,
+            edge.condition,
+            edge.result_field,
+        )
+        for edge in projection.ordered_flow_edges
+    ) == (
+        ("step_a", "success", "step_b", None, None),
+        ("step_a", "failure", "step_c", None, None),
+        ("step_a", "exhausted", "escalate", None, None),
+        ("step_a", "result_condition", "step_b", "ok", "status"),
+        ("step_a", "result_condition", "step_c", "retry", "status"),
+        ("step_b", "exhausted", "escalate", None, None),
+        ("step_c", "exhausted", "escalate", None, None),
+    )
+    assert tuple(projection.binding_projection.invocations) == ("step_a",)
+
+
+def test_finalized_projection_rejects_an_empty_entrypoint() -> None:
+    from autoskillit.core import FinalizedRecipeProjection, RecipeBindingProjection
+
+    with pytest.raises(ValueError, match="entrypoint must be a non-empty string"):
+        FinalizedRecipeProjection(
+            binding_projection=RecipeBindingProjection(invocations={}),
+            ordered_step_names=("step",),
+            entrypoint="",
+            ordered_flow_edges=(),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +319,7 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     assert len(calls) == 1  # validate_recipe called only once across two loads
 
 
-def test_default_cache_excludes_server_only_compiled_bindings(tmp_path, monkeypatch):
+def test_default_cache_excludes_server_only_finalized_projection(tmp_path, monkeypatch):
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
@@ -277,18 +331,18 @@ def test_default_cache_excludes_server_only_compiled_bindings(tmp_path, monkeypa
 
     default_result = api_mod.load_and_validate("myrecipe", tmp_path)
 
-    assert "_compiled_bindings" not in default_result
+    assert "_finalized_projection" not in default_result
     assert len(cache._store) == 1
     default_entry = next(iter(cache._store.values()))
-    assert "_compiled_bindings" not in default_entry.result
+    assert "_finalized_projection" not in default_entry.result
 
     server_result = api_mod.load_and_validate(
         "myrecipe",
         tmp_path,
-        include_compiled_bindings=True,
+        include_finalized_projection=True,
     )
 
-    assert "_compiled_bindings" in server_result
+    assert "_finalized_projection" in server_result
     assert len(cache._store) == 2
 
 
@@ -427,7 +481,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         "backend_name": 10,
         "effective_backend_map": 11,
         "backend_capabilities_map": 12,
-        "include_compiled_bindings": 13,
+        "include_finalized_projection": 13,
     }
 
     missing_params: list[str] = []
@@ -548,7 +602,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         backend_name=None,
         effective_backend_map=None,
         backend_origin_map=None,
-        include_compiled_bindings=False,
+        include_finalized_projection=False,
     ):
         captured["recipe_info"] = recipe_info
         captured["backend_capabilities_map"] = locals().get("backend_capabilities_map")
@@ -568,7 +622,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             effective_backend_map=effective_backend_map,
             backend_capabilities_map=backend_capabilities_map,
             backend_origin_map=backend_origin_map,
-            include_compiled_bindings=include_compiled_bindings,
+            include_finalized_projection=include_finalized_projection,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)

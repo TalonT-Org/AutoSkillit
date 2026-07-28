@@ -18,6 +18,9 @@ from typing import Any, Literal, TypeVar, cast, overload
 import anyio
 
 from autoskillit.core import FleetErrorCode, fleet_error, get_logger
+from autoskillit.server._recipe_initialization import (
+    admit_registered_tool_during_initialization,
+)
 
 logger = get_logger(__name__)
 
@@ -84,6 +87,8 @@ def _cancellation_shield(
     def decorator(fn: F) -> F:
         @wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if (denial := admit_registered_tool_during_initialization(fn.__name__)) is not None:
+                return denial
             if typed_mode:
                 typed_state_factory = cast(Callable[[], Any], state_factory)
                 typed_context_var = cast(ContextVar[Any], state_context_var)

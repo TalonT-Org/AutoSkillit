@@ -17,6 +17,7 @@ _FIXED_SECTION_NAMES = {
     "orchestration_rules",
     "stop_step_semantics",
     "errors",
+    "flow_records",
     "warnings",
 }
 
@@ -132,6 +133,15 @@ def test_recipe_section_definition_rejects_contradictory_construction(
             "json-array-page",
             "json-element-fragment",
         ),
+        (
+            "flow_records",
+            "array",
+            "string",
+            "array",
+            "elements",
+            "json-array-page",
+            "json-element-fragment",
+        ),
     ],
 )
 def test_recipe_section_strategy_and_format_combinations_are_pinned(
@@ -167,6 +177,7 @@ def test_recipe_section_presence_and_default_semantics_are_explicit() -> None:
         "orchestration_rules": ("absent", "invalid", False, None),
         "stop_step_semantics": ("absent", "invalid", False, None),
         "errors": ("default", "invalid", True, ()),
+        "flow_records": ("invalid", "invalid", False, None),
         "warnings": ("default", "invalid", True, ()),
         "$dynamic": ("absent", "invalid", False, None),
     }
@@ -189,14 +200,14 @@ def test_recipe_section_registry_identity_is_stable_and_qualified() -> None:
         RECIPE_SECTION_REGISTRY_DIGEST,
     )
 
-    assert RECIPE_SECTION_PAGINATION_VERSION == 1
+    assert RECIPE_SECTION_PAGINATION_VERSION == 2
     assert (
         RECIPE_SECTION_REGISTRY_DIGEST
-        == "sha256:d2b8a9f404b264dc3963850712f7d69b0fdfcea5433331b0c4b6ea9400e1e4a1"
+        == "sha256:f0cee935bfda7cf138a9a2ac8cdbe290eb95afe13c2e014766b4663d6a90ee79"
     )
     assert (
         RECIPE_SECTION_PAGINATION_POLICY_DIGEST
-        == "sha256:c65ec6cec7cd4af15aa8247d67cf7fe7540bc7ee0df727e3e8a9da46dcd96c92"
+        == "sha256:cd7105407037f155c3156ab5c4e550e0690a01c12084cc2f65ccc1bef8a9a173"
     )
     for digest in (
         RECIPE_SECTION_REGISTRY_DIGEST,
@@ -224,6 +235,7 @@ def test_pullable_sections_match_public_result_schemas() -> None:
         assert hints["stop_step_semantics"] is str
         assert hints["errors"] == list[str]
         assert hints["warnings"] == list[str]
+        assert hints["flow_records"] == list[str]
         assert hints["post_prune_step_names"] == list[str]
 
     assert set(RECIPE_SECTION_REGISTRY) == _FIXED_SECTION_NAMES

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.server._helpers import _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -376,13 +377,19 @@ class TestAuthorityFeedbackConsistency:
         mock_ctx = _make_mock_ctx()
         mock_ctx.enable_components = AsyncMock()
         mock_ctx.recipes = MagicMock()
-        mock_ctx.recipes.load_and_validate.return_value = {
-            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
-            "valid": True,
-            "suggestions": [],
-            "diagram": None,
-            "ingredients_table": "--- TABLE ---",
-        }
+        recipe_result = _with_finalized_projection(
+            {
+                "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+                "valid": True,
+                "suggestions": [],
+                "diagram": None,
+                "ingredients_table": "--- TABLE ---",
+                "post_prune_step_names": ["do"],
+            }
+        )
+        mock_ctx.recipes.load_and_validate.side_effect = lambda *_args, **_kwargs: dict(
+            recipe_result
+        )
         mock_recipe_info = MagicMock()
         mock_recipe_info.path = Path("/fake/recipe.yaml")
         mock_ctx.recipes.find.return_value = mock_recipe_info
@@ -421,7 +428,8 @@ class TestAuthorityFeedbackConsistency:
                                     matching = [w for w in warnings if key in w]
                                     assert matching, (
                                         f"open_kitchen must emit a warning mentioning {key!r} "
-                                        f"when overridden; got warnings={warnings}"
+                                        f"when overridden; got warnings={warnings}; "
+                                        f"response={parsed}"
                                     )
 
         # --- lock_ingredients: structured rejection must mention each key ---

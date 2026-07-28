@@ -471,6 +471,7 @@ def tool_ctx_kitchen_open(tool_ctx):
     from autoskillit.pipeline.gate import DefaultGateState
 
     tool_ctx.gate = DefaultGateState(enabled=True)
+    tool_ctx.kitchen_id = "test-kitchen"
     return tool_ctx
 
 

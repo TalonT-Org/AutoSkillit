@@ -379,6 +379,7 @@ def test_fleet_reload_relaunches_without_resume(
         project_dir=None,
         initial_message=None,
         required_env=None,
+        backend=None,
     ):
         call_count[0] += 1
         captured_resume_specs.append(resume_spec)
@@ -390,7 +391,10 @@ def test_fleet_reload_relaunches_without_resume(
         "autoskillit.cli.session._session_launch._run_interactive_session",
         fake_run_interactive_session,
     )
-    monkeypatch.setattr("autoskillit.cli.detect_autoskillit_mcp_prefix", lambda: "autoskillit")
+    monkeypatch.setattr(
+        "autoskillit.cli.detect_autoskillit_mcp_prefix",
+        lambda _capabilities: "autoskillit",
+    )
     monkeypatch.setattr(
         "autoskillit.cli._prompts._build_fleet_dispatch_prompt",
         lambda mcp_prefix, **kw: "test-prompt",

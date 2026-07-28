@@ -164,25 +164,6 @@ FAILURE PREDICATES — when to follow on_failure:
 - run_skill: "success: False" in output
 - classify_fix: "error:" line present in output
 
-FAILURE PREDICATE — open_kitchen:
-  If the open_kitchen response contains `"success": false` OR `"ingredients_table"`: null
-  (field absent or null in the JSON response):
-    1. Extract and print the value of "user_visible_message" from the
-       JSON response verbatim (fall back to the raw response text if
-       parsing fails).
-    2. DO NOT call AskUserQuestion.
-    3. End the session with a final text response.
-
-FAILURE PREDICATE — DEGRADED TOOL RESPONSE:
-  If ANY tool response contains `"success": false` AND the `content` field is
-  absent, null, or an empty string — this is a degraded state.
-    1. Extract and print the value of "user_visible_message" from the
-       response (fall back to the raw response text if the field is missing).
-    2. DO NOT call AskUserQuestion.
-    3. Do not improvise a recovery path. Do not route to on_failure.
-       Do not retry the tool without explicit instructions from the recipe step.
-    4. End the session with a final text response.
-
 CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
 - When run_skill returns "success: False" AND "needs_retry: true" AND "retry_reason: resume":
   - Check "subtype" to discriminate the termination cause:

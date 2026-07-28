@@ -69,6 +69,16 @@ def _mock_rejected_result():
     )
 
 
+def _mock_backend() -> MagicMock:
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.conventions = None
+    backend.capabilities.claude_marketplace_tool_prefix_capable = False
+    backend.capabilities.has_unguarded_filesystem_access = False
+    backend.capabilities.anthropic_provider_capable = False
+    return backend
+
+
 class TestFleetRunGates:
     def test_fleet_run_blocks_in_leaf_session(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -379,7 +389,7 @@ class TestFleetRunDispatch:
         )
 
         fake_ctx = MagicMock()
-        fake_ctx.backend = None
+        fake_ctx.backend = _mock_backend()
         fake_ctx.config = MagicMock()
         monkeypatch.setattr(
             "autoskillit.server.make_context",
@@ -445,7 +455,7 @@ class TestFleetRunDispatch:
         )
         make_context_calls: list[object] = []
         fake_ctx = MagicMock()
-        fake_ctx.backend = None
+        fake_ctx.backend = _mock_backend()
         fake_ctx.config = MagicMock()
         fake_ctx.fleet_lock = MagicMock()
 

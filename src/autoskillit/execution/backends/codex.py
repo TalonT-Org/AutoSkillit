@@ -1029,6 +1029,7 @@ class CodexBackend(BackendCmdBuilderBase):
             record_capable=False,
             anthropic_provider_capable=False,
             plugin_install_capable=False,
+            claude_marketplace_tool_prefix_capable=False,
             inspector_capable=False,
             supports_context_window_suffix=False,
             has_unguarded_filesystem_access=True,

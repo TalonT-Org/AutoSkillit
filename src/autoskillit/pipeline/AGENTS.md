@@ -15,6 +15,7 @@ IL-1 pipeline state — per-tool-call state containers, gate logic, audit log, t
 | `gate.py` | `DefaultGateState`, `gate_error_result` |
 | `github_api_log.py` | `DefaultGitHubApiLog` — session-scoped GitHub API request accumulator |
 | `mcp_response.py` | Per-tool response size tracking |
+| `recipe_initialization.py` | Pure typed reducer for named-recipe INITIALIZING/READY lifecycle state |
 | `telemetry_fmt.py` | Canonical token/timing display |
 | `timings.py` | `DefaultTimingLog` |
 | `tokens.py` | `DefaultTokenLog` |

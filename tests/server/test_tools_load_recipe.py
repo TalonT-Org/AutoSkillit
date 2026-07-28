@@ -13,7 +13,11 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_recipe import load_recipe
-from tests.server._helpers import _MINIMAL_SCRIPT_YAML, _resolve_recipe_section
+from tests.server._helpers import (
+    _MINIMAL_SCRIPT_YAML,
+    _resolve_recipe_section,
+    _with_finalized_projection,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -577,13 +581,15 @@ class TestLoadRecipeAuthorityClobber:
         mock_recipe_obj.steps = {"do": MagicMock()}
         mock_recipe_obj.ingredients = {"base_branch": MagicMock()}
         mock_ctx.recipes.load.return_value = mock_recipe_obj
-        mock_ctx.recipes.load_and_validate.return_value = {
-            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
-            "valid": True,
-            "suggestions": [],
-            "diagram": None,
-            "ingredients_table": "--- TABLE ---",
-        }
+        mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+            {
+                "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+                "valid": True,
+                "suggestions": [],
+                "diagram": None,
+                "ingredients_table": "--- TABLE ---",
+            }
+        )
         mock_ctx.recipes.find.return_value = None
         mock_ctx.config.migration.suppressed = []
         mock_ctx.kitchen_id = "test-kitchen"
@@ -710,6 +716,30 @@ class TestLoadRecipeFailClosed:
         parsed = json.loads(raw)
         assert parsed["success"] is False
         assert "content" in parsed["error"]
+
+    @pytest.mark.anyio
+    async def test_load_recipe_fail_closed_missing_finalized_projection(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        monkeypatch.chdir(tmp_path)
+        test_result = {
+            "valid": True,
+            "content": "name: test-recipe\n",
+            "dispatch_feasible": True,
+        }
+        monkeypatch.setattr(self.ctx.recipes, "load_and_validate", lambda *a, **kw: test_result)
+        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: None)
+        with patch(
+            "autoskillit.server.tools.tools_recipe._apply_triage_gate",
+            new=AsyncMock(return_value=test_result),
+        ):
+            raw = await load_recipe(name="test-recipe")
+
+        parsed = json.loads(raw)
+        assert parsed["success"] is False
+        assert "finalized projection" in parsed["error"]
 
     @pytest.mark.anyio
     async def test_load_recipe_blocks_on_dispatch_infeasible(self, monkeypatch, tmp_path):

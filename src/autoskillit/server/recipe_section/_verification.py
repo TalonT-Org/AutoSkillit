@@ -5,8 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from autoskillit.core import recipe_section_element_digest
-from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
+from autoskillit.core import RecipeArtifactGeneration, recipe_section_element_digest
 from autoskillit.server.recipe_section._contracts import (
     RECIPE_SECTION_PAGE_RANGE_FIELDS,
     PlannedRecipeSectionPage,
@@ -255,6 +254,7 @@ def verify_finalized_recipe_section_plan(
     page_plan_sha256: str,
     bound_bytes: int,
     pagination_version: int,
+    pagination_policy_sha256: str,
     section_registry_sha256: str,
     section_sha256: str,
 ) -> None:
@@ -287,12 +287,25 @@ def verify_finalized_recipe_section_plan(
         _require(
             response.get("success") is True
             and response.get("pagination_version") == pagination_version
+            and response.get("pagination_policy_sha256") == pagination_policy_sha256
             and response.get("section_registry_sha256") == section_registry_sha256
             and response.get("section") == selected.section
             and response.get("section_sha256") == section_sha256
             and response.get("page_plan_sha256") == page_plan_sha256
+            and response.get("producer_tool") == generation.producer_tool
+            and response.get("recipe_name") == generation.recipe_name
+            and response.get("descriptor_version") == generation.descriptor_version
+            and response.get("schema_version") == generation.schema_version
             and response.get("payload_sha256") == generation.payload_sha256
+            and response.get("artifact_blob_sha256") == generation.artifact_blob_sha256
+            and response.get("artifact_blob_size_bytes") == generation.artifact_blob_size_bytes
             and response.get("body_sha256") == generation.body_sha256
+            and response.get("body_size_bytes") == generation.body_size_bytes
+            and response.get("flow_schema_version") == generation.flow_schema_version
+            and response.get("flow_sha256") == generation.flow_sha256
+            and response.get("flow_size_bytes") == generation.flow_size_bytes
+            and response.get("flow_record_count") == generation.flow_record_count
+            and response.get("initialization_id") == selected.initialization_id
             and response.get("part") == part
             and response.get("total_parts") == len(pages)
             and response.get("has_more") is not terminal
@@ -306,8 +319,12 @@ def verify_finalized_recipe_section_plan(
             "recipe section page content digest changed",
         )
         _require(
-            (response.get("next_part") == part + 1)
+            (
+                response.get("next_part") == part + 1
+                and isinstance(response.get("continuation"), str)
+                and response["continuation"].startswith("sha256:")
+            )
             if not terminal
-            else "next_part" not in response,
+            else "next_part" not in response and "continuation" not in response,
             "recipe section continuation metadata is inconsistent",
         )

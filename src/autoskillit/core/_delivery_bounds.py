@@ -48,6 +48,11 @@ def resolve_general_output_token_limit(caps: BackendCapabilities) -> int:
     return caps.unnegotiated_tool_result_token_limit
 
 
+def resolve_recipe_envelope_byte_limit(capabilities: BackendCapabilities) -> int:
+    """Return the conservative UTF-8 byte ceiling for an ordinary recipe envelope."""
+    return resolve_general_output_token_limit(capabilities)
+
+
 def resolve_recipe_delivery_decision(
     *,
     capabilities: BackendCapabilities,

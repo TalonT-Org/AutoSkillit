@@ -7,6 +7,7 @@ import json
 import pytest
 
 from autoskillit.server.tools.tools_pipeline_tracker import record_pipeline_step
+from tests.server._helpers import _with_finalized_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -172,18 +173,20 @@ def _configure_open_kitchen_mock(ctx, steps, tmp_path):
     from unittest.mock import MagicMock
 
     ctx.project_dir = tmp_path
-    ctx.recipes.load_and_validate.return_value = {
-        "content": "name: remediation\nsteps: {}\n",
-        "valid": True,
-        "errors": [],
-        "requires_packs": [],
-        "requires_features": [],
-        "content_hash": "abc",
-        "composite_hash": "def",
-        "recipe_version": "1.0",
-        "suggestions": [],
-        "post_prune_step_names": list(steps.keys()),
-    }
+    ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        {
+            "content": "name: remediation\nsteps: {}\n",
+            "valid": True,
+            "errors": [],
+            "requires_packs": [],
+            "requires_features": [],
+            "content_hash": "abc",
+            "composite_hash": "def",
+            "recipe_version": "1.0",
+            "suggestions": [],
+            "post_prune_step_names": list(steps.keys()),
+        }
+    )
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = tmp_path / "remediation.yaml"
     ctx.recipes.find.return_value = mock_recipe_info

@@ -16,17 +16,18 @@ from typing import Any
 import pytest
 
 from autoskillit.core import (
+    RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
+    RECIPE_ARTIFACT_SCHEMA_VERSION,
+    RECIPE_FLOW_SCHEMA_VERSION,
     RECIPE_SECTION_MANDATORY_FAILURE_CODES,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+    RecipeArtifactGeneration,
     recipe_section_digest,
     recipe_section_element_digest,
     recipe_section_plan_digest,
 )
 from autoskillit.server import _recipe_section_pagination as pagination
-from autoskillit.server._recipe_delivery import (
-    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
-    RecipeArtifactGeneration,
-)
 from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
     RecipeSectionPageDescriptor,
@@ -77,6 +78,7 @@ _RANGE_FIELDS_BY_FORMAT = {
         "fragment_byte_total",
     },
 }
+_PAGE_TEST_BOUND = 2_000
 
 
 @pytest.fixture(autouse=True)
@@ -88,13 +90,17 @@ def _generation(**changes: object) -> RecipeArtifactGeneration:
     base: dict[str, object] = {
         "producer_tool": "open_kitchen",
         "recipe_name": "remediation",
-        "descriptor_version": 1,
-        "schema_version": 1,
+        "descriptor_version": RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+        "schema_version": RECIPE_ARTIFACT_SCHEMA_VERSION,
         "payload_sha256": f"sha256:{'1' * 64}",
         "artifact_blob_sha256": f"sha256:{'2' * 64}",
         "artifact_blob_size_bytes": 4096,
         "body_sha256": f"sha256:{'3' * 64}",
         "body_size_bytes": 2048,
+        "flow_schema_version": RECIPE_FLOW_SCHEMA_VERSION,
+        "flow_sha256": f"sha256:{'4' * 64}",
+        "flow_size_bytes": 512,
+        "flow_record_count": 2,
     }
     base.update(changes)
     return RecipeArtifactGeneration(**base)  # type: ignore[arg-type]
@@ -219,7 +225,7 @@ def test_scalar_planning_never_serializes_the_whole_oversized_remainder(
         return original(value)
 
     monkeypatch.setattr(pagination, "canonical_recipe_section_json", _record_bounded_string)
-    bound = 1_000
+    bound = _PAGE_TEST_BOUND
     plan = _build(
         _payload(ingredients_table="x" * 10_000),
         "ingredients_table",
@@ -475,7 +481,7 @@ def _reconstruct(pages: list[dict[str, Any]]) -> object:
     ],
 )
 def test_raw_pages_preserve_text_and_exact_utf8_bounds(value: str) -> None:
-    bound = 1_000
+    bound = _PAGE_TEST_BOUND
     plan = _build(_payload(content=value), "content", bound=bound)
     pages = _decoded_pages(plan, bound=bound)
 
@@ -494,7 +500,7 @@ def test_raw_pages_preserve_text_and_exact_utf8_bounds(value: str) -> None:
 def test_json_scalar_pages_are_independently_valid_and_reconstruct_markdown(
     value: str,
 ) -> None:
-    bound = 1_000
+    bound = _PAGE_TEST_BOUND
     plan = _build(_payload(ingredients_table=value), "ingredients_table", bound=bound)
     pages = _decoded_pages(plan, bound=bound)
 
@@ -505,7 +511,7 @@ def test_json_scalar_pages_are_independently_valid_and_reconstruct_markdown(
 
 def test_ordered_array_pages_are_complete_json_documents() -> None:
     values = [f"warning-{index:03d}-☃" * 4 for index in range(80)]
-    bound = 1_000
+    bound = _PAGE_TEST_BOUND
     plan = _build(_payload(warnings=values), "warnings", bound=bound)
     pages = _decoded_pages(plan, bound=bound)
 
@@ -520,7 +526,7 @@ def test_oversized_array_elements_fragment_in_first_middle_and_final_positions(
 ) -> None:
     values = ["before", "middle", "after"]
     values[oversized_index] = 'oversized-"quoted"-\\\\-☃-' * 600
-    bound = 1_000
+    bound = _PAGE_TEST_BOUND
     plan = _build(_payload(warnings=values), "warnings", bound=bound)
     pages = _decoded_pages(plan, bound=bound)
 
@@ -541,7 +547,7 @@ def test_array_plan_can_interleave_ordinary_and_fragment_pages() -> None:
         "y" * 12_000,
         "ordinary-final",
     ]
-    bound = 1_000
+    bound = _PAGE_TEST_BOUND
     plan = _build(_payload(errors=values), "errors", bound=bound)
     pages = _decoded_pages(plan, bound=bound)
 
@@ -554,7 +560,7 @@ def test_array_plan_can_interleave_ordinary_and_fragment_pages() -> None:
 def test_raw_recipe_and_named_step_yaml_use_unchanged_raw_reconstruction() -> None:
     recipe = "name: demo\nsteps:\n  first:\n    run: echo unchanged\n"
     named_step = "first:\n  run: echo unchanged\n"
-    bound = 1_000
+    bound = _PAGE_TEST_BOUND
 
     recipe_plan = _build(_payload(content=recipe), "content", bound=bound)
     step_plan = _build(
@@ -628,7 +634,7 @@ def test_candidate_sizing_uses_binary_search_scale_oracle_calls(
 
     monkeypatch.setattr(pagination, "_fits", _counted_fits)
 
-    plan = _build(payload, section, bound=1_000)
+    plan = _build(payload, section, bound=_PAGE_TEST_BOUND)
 
     binary_search_scale = math.ceil(math.log2(search_space + 1))
     assert oracle_calls <= 6 * plan.total_parts * (binary_search_scale + 2)
@@ -674,7 +680,7 @@ def test_final_digest_injection_revalidates_descriptor_boundaries(
         RecipeSectionPaginationError,
         match="changed plan identity or boundaries",
     ):
-        _build(_payload(content="boundary-check-" * 500), "content", bound=1_000)
+        _build(_payload(content="boundary-check-" * 500), "content", bound=_PAGE_TEST_BOUND)
 
 
 @pytest.mark.parametrize(
@@ -734,13 +740,13 @@ def test_final_verifier_rejects_fragment_descriptor_and_content_corruption(
     )
 
     with pytest.raises(RecipeSectionPaginationError, match=message):
-        _build(_payload(warnings=["\\" * 5_000]), "warnings", bound=1_000)
+        _build(_payload(warnings=["\\" * 5_000]), "warnings", bound=_PAGE_TEST_BOUND)
 
 
 def test_page_and_fragment_indices_cross_two_digit_boundaries() -> None:
-    raw_plan = _build(_payload(content="r" * 120_000), "content", bound=1_000)
+    raw_plan = _build(_payload(content="r" * 120_000), "content", bound=_PAGE_TEST_BOUND)
     assert raw_plan.total_parts > 100
-    raw_pages = _decoded_pages(raw_plan, bound=1_000)
+    raw_pages = _decoded_pages(raw_plan, bound=_PAGE_TEST_BOUND)
     assert [raw_pages[index]["part"] for index in (8, 9, 10, 98, 99, 100)] == [
         8,
         9,
@@ -753,9 +759,9 @@ def test_page_and_fragment_indices_cross_two_digit_boundaries() -> None:
     fragment_plan = _build(
         _payload(warnings=["\\" * 120_000]),
         "warnings",
-        bound=1_000,
+        bound=_PAGE_TEST_BOUND,
     )
-    fragment_pages = _decoded_pages(fragment_plan, bound=1_000)
+    fragment_pages = _decoded_pages(fragment_plan, bound=_PAGE_TEST_BOUND)
     assert len(fragment_pages) > 100
     assert [fragment_pages[index]["fragment_index"] for index in (8, 9, 10, 98, 99, 100)] == [
         8,
@@ -769,7 +775,7 @@ def test_page_and_fragment_indices_cross_two_digit_boundaries() -> None:
 
 
 def test_plan_manifest_is_complete_and_plan_digest_is_non_self_referential() -> None:
-    bound = 1_000
+    bound = _PAGE_TEST_BOUND
     generation = _generation()
     plan = _build(
         _payload(warnings=["a", "b", "c"] * 20),
@@ -781,6 +787,7 @@ def test_plan_manifest_is_complete_and_plan_digest_is_non_self_referential() -> 
     manifest = dataclasses.asdict(plan.manifest)
 
     assert set(manifest) == {
+        "initialization_id",
         "pagination_version",
         "section_registry_sha256",
         "pagination_policy_sha256",
@@ -808,21 +815,21 @@ def test_string_scalar_strategy_rejects_non_string_values() -> None:
             kitchen_id="kitchen-test",
             generation=_generation(),
             selected=selected,
-            recipe_section_bound_bytes=1_000,
+            recipe_section_bound_bytes=_PAGE_TEST_BOUND,
         )
 
 
 def test_repeat_builds_and_fresh_cache_are_deterministic() -> None:
     payload = _payload(warnings=[f"value-{index}" for index in range(50)])
-    first = _build(payload, "warnings", bound=1_000)
-    second = _build(payload, "warnings", bound=1_000)
+    first = _build(payload, "warnings", bound=_PAGE_TEST_BOUND)
+    second = _build(payload, "warnings", bound=_PAGE_TEST_BOUND)
 
     assert first == second
     assert _rendered_pages(first) == _rendered_pages(second)
     assert first.page_plan_sha256 == second.page_plan_sha256
 
     _clear_page_plan_cache()
-    third = _build(payload, "warnings", bound=1_000)
+    third = _build(payload, "warnings", bound=_PAGE_TEST_BOUND)
     assert third == first
 
 
@@ -834,7 +841,7 @@ def test_cached_plans_are_reused_and_cache_clear_forces_a_rebuild(
         "kitchen_id": "kitchen-test",
         "generation": _generation(),
         "selected": selected,
-        "recipe_section_bound_bytes": 1_000,
+        "recipe_section_bound_bytes": _PAGE_TEST_BOUND,
     }
     calls = 0
     real_builder = pagination.build_recipe_section_page_plan
@@ -866,7 +873,7 @@ def test_concurrent_same_key_requests_share_one_page_plan_build(
         "kitchen_id": "kitchen-single-flight",
         "generation": _generation(),
         "selected": selected,
-        "recipe_section_bound_bytes": 1_000,
+        "recipe_section_bound_bytes": _PAGE_TEST_BOUND,
     }
     start = Barrier(3)
     build_started = Event()
@@ -905,7 +912,7 @@ def test_retirement_during_build_prevents_stale_cache_admission(
         "kitchen_id": "kitchen-retirement-race",
         "generation": generation,
         "selected": selected,
-        "recipe_section_bound_bytes": 1_000,
+        "recipe_section_bound_bytes": _PAGE_TEST_BOUND,
     }
     key = pagination._cache_key(**kwargs)
     cache = pagination._page_plan_cache()
@@ -960,7 +967,7 @@ def test_every_cache_key_dimension_prevents_aliasing(
         "kitchen_id": "kitchen-a",
         "generation": _generation(),
         "selected": baseline_selected,
-        "recipe_section_bound_bytes": 1_000,
+        "recipe_section_bound_bytes": _PAGE_TEST_BOUND,
     }
     baseline = get_or_build_recipe_section_page_plan(**kwargs)
 
@@ -976,7 +983,7 @@ def test_every_cache_key_dimension_prevents_aliasing(
     elif dimension == "section_digest":
         kwargs["selected"] = select_recipe_section(_payload(content="changed"), "content")
     elif dimension == "bound":
-        kwargs["recipe_section_bound_bytes"] = 1_001
+        kwargs["recipe_section_bound_bytes"] = _PAGE_TEST_BOUND + 1
     elif dimension == "registry_digest":
         monkeypatch.setattr(
             pagination,
@@ -1008,21 +1015,21 @@ def test_cache_entry_limit_evicts_oldest_plan() -> None:
         kitchen_id="kitchen-0",
         generation=generation,
         selected=selected,
-        recipe_section_bound_bytes=1_000,
+        recipe_section_bound_bytes=_PAGE_TEST_BOUND,
     )
     for index in range(1, pagination.PAGE_PLAN_CACHE_MAX_ENTRIES + 1):
         get_or_build_recipe_section_page_plan(
             kitchen_id=f"kitchen-{index}",
             generation=generation,
             selected=selected,
-            recipe_section_bound_bytes=1_000,
+            recipe_section_bound_bytes=_PAGE_TEST_BOUND,
         )
 
     rebuilt = get_or_build_recipe_section_page_plan(
         kitchen_id="kitchen-0",
         generation=generation,
         selected=selected,
-        recipe_section_bound_bytes=1_000,
+        recipe_section_bound_bytes=_PAGE_TEST_BOUND,
     )
     assert rebuilt == first
     assert rebuilt is not first
@@ -1031,12 +1038,12 @@ def test_cache_entry_limit_evicts_oldest_plan() -> None:
 def test_cache_rejects_a_single_plan_over_its_byte_limit() -> None:
     selected = select_recipe_section(_payload(content="overweight"), "content")
     generation = _generation()
-    plan = _build(_payload(content="overweight"), "content", bound=1_000)
+    plan = _build(_payload(content="overweight"), "content", bound=_PAGE_TEST_BOUND)
     key = pagination._cache_key(
         kitchen_id="kitchen-overweight",
         generation=generation,
         selected=selected,
-        recipe_section_bound_bytes=1_000,
+        recipe_section_bound_bytes=_PAGE_TEST_BOUND,
     )
     cache = PagePlanCache(max_bytes=plan.cache_weight_bytes - 1)
 
@@ -1050,7 +1057,7 @@ def test_cache_byte_limit_evicts_oldest_plan() -> None:
     selected = select_recipe_section(_payload(content="byte eviction"), "content")
     generation = _generation()
     plan = dataclasses.replace(
-        _build(_payload(content="byte eviction"), "content", bound=1_000),
+        _build(_payload(content="byte eviction"), "content", bound=_PAGE_TEST_BOUND),
         cache_weight_bytes=10,
     )
     keys = [
@@ -1058,7 +1065,7 @@ def test_cache_byte_limit_evicts_oldest_plan() -> None:
             kitchen_id=f"kitchen-{index}",
             generation=generation,
             selected=selected,
-            recipe_section_bound_bytes=1_000,
+            recipe_section_bound_bytes=_PAGE_TEST_BOUND,
         )
         for index in range(3)
     ]
@@ -1076,7 +1083,7 @@ def test_cache_byte_limit_evicts_oldest_plan() -> None:
 def test_cache_replacement_subtracts_the_previous_plan_weight() -> None:
     selected = select_recipe_section(_payload(content="replacement"), "content")
     generation = _generation()
-    base_plan = _build(_payload(content="replacement"), "content", bound=1_000)
+    base_plan = _build(_payload(content="replacement"), "content", bound=_PAGE_TEST_BOUND)
     first = dataclasses.replace(base_plan, cache_weight_bytes=7)
     replacement = dataclasses.replace(base_plan, cache_weight_bytes=3)
     other = dataclasses.replace(base_plan, cache_weight_bytes=7)
@@ -1084,13 +1091,13 @@ def test_cache_replacement_subtracts_the_previous_plan_weight() -> None:
         kitchen_id="kitchen-replacement",
         generation=generation,
         selected=selected,
-        recipe_section_bound_bytes=1_000,
+        recipe_section_bound_bytes=_PAGE_TEST_BOUND,
     )
     other_key = pagination._cache_key(
         kitchen_id="kitchen-other",
         generation=generation,
         selected=selected,
-        recipe_section_bound_bytes=1_000,
+        recipe_section_bound_bytes=_PAGE_TEST_BOUND,
     )
     cache = PagePlanCache(max_entries=10, max_bytes=10)
 
@@ -1107,7 +1114,7 @@ def test_cache_kitchen_eviction_subtracts_every_matching_plan_weight() -> None:
     selected = select_recipe_section(_payload(content="kitchen eviction"), "content")
     generation = _generation()
     plan = dataclasses.replace(
-        _build(_payload(content="kitchen eviction"), "content", bound=1_000),
+        _build(_payload(content="kitchen eviction"), "content", bound=_PAGE_TEST_BOUND),
         cache_weight_bytes=5,
     )
     retired_keys = [
@@ -1117,13 +1124,13 @@ def test_cache_kitchen_eviction_subtracts_every_matching_plan_weight() -> None:
             selected=selected,
             recipe_section_bound_bytes=bound,
         )
-        for bound in (1_000, 1_001)
+        for bound in (_PAGE_TEST_BOUND, _PAGE_TEST_BOUND + 1)
     ]
     retained_key = pagination._cache_key(
         kitchen_id="retained-kitchen",
         generation=generation,
         selected=selected,
-        recipe_section_bound_bytes=1_000,
+        recipe_section_bound_bytes=_PAGE_TEST_BOUND,
     )
     cache = PagePlanCache(max_entries=10, max_bytes=20)
     for key in (*retired_keys, retained_key):
@@ -1138,13 +1145,18 @@ def test_cache_kitchen_eviction_subtracts_every_matching_plan_weight() -> None:
 
 def test_cross_process_plan_and_rendering_are_deterministic() -> None:
     payload = _payload(warnings=["alpha", "snowman-☃", 'quote-"', "slash-\\"] * 20)
-    local = _build(payload, "warnings", bound=1_000)
+    local = _build(payload, "warnings", bound=_PAGE_TEST_BOUND)
     local_render_sha = hashlib.sha256(
         "\0".join(_rendered_pages(local)).encode("utf-8")
     ).hexdigest()
     script = f"""
 import hashlib
-from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
+from autoskillit.core import (
+    RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+    RECIPE_ARTIFACT_SCHEMA_VERSION,
+    RECIPE_FLOW_SCHEMA_VERSION,
+    RecipeArtifactGeneration,
+)
 from autoskillit.server._recipe_section_pagination import (
     build_recipe_section_page_plan,
     render_recipe_section_page,
@@ -1154,19 +1166,23 @@ payload = {payload!r}
 generation = RecipeArtifactGeneration(
     producer_tool="open_kitchen",
     recipe_name="remediation",
-    descriptor_version=1,
-    schema_version=1,
+    descriptor_version=RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+    schema_version=RECIPE_ARTIFACT_SCHEMA_VERSION,
     payload_sha256="sha256:" + "1" * 64,
     artifact_blob_sha256="sha256:" + "2" * 64,
     artifact_blob_size_bytes=4096,
     body_sha256="sha256:" + "3" * 64,
     body_size_bytes=2048,
+    flow_schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+    flow_sha256="sha256:" + "4" * 64,
+    flow_size_bytes=512,
+    flow_record_count=2,
 )
 plan = build_recipe_section_page_plan(
     kitchen_id="kitchen-test",
     generation=generation,
     selected=select_recipe_section(payload, "warnings"),
-    recipe_section_bound_bytes=1000,
+    recipe_section_bound_bytes=2000,
 )
 rendered = [render_recipe_section_page(plan, part) for part in range(plan.total_parts)]
 print(plan.page_plan_sha256)

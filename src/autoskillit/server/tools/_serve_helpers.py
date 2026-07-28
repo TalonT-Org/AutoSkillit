@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
-    RecipeBindingProjection,
+    FinalizedRecipeProjection,
     SkillExecutionRole,
 )
 from autoskillit.server._misc import SkillProjectionContext, project_agent_skill_document
@@ -110,16 +110,20 @@ def response_backstop_tool_meta(
 def render_served_response(payload: dict[str, Any]) -> str:
     """Render the authoritative pre-backstop response used by recipe serve tools."""
     public_payload = dict(payload)
-    public_payload.pop("_compiled_bindings", None)
+    public_payload.pop("_finalized_projection", None)
     return json.dumps(public_payload, ensure_ascii=False, separators=(",", ":"))
 
 
-def pop_compiled_bindings(
+def pop_finalized_recipe_projection(
     payload: dict[str, Any],
-) -> RecipeBindingProjection | None:
-    """Remove and return the internal post-prune carrier before serialization."""
-    candidate = payload.pop("_compiled_bindings", None)
-    return candidate if isinstance(candidate, RecipeBindingProjection) else None
+) -> FinalizedRecipeProjection | None:
+    """Remove the finalized projection for a later fail-closed finalization gate."""
+    candidate = payload.pop("_finalized_projection", None)
+    if candidate is None:
+        return None
+    if not isinstance(candidate, FinalizedRecipeProjection):
+        raise RuntimeError("served recipe response has an invalid _finalized_projection carrier")
+    return candidate
 
 
 def build_open_kitchen_recipe_payload(result: dict[str, Any], *, version: str) -> dict[str, Any]:
@@ -238,6 +242,6 @@ def serve_recipe(
     return ctx.recipes.load_and_validate(
         name,
         ctx.project_dir,
-        include_compiled_bindings=True,
+        include_finalized_projection=True,
         **kwargs,
     )

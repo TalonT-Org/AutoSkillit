@@ -52,8 +52,6 @@ def _launch_fleet_session(
         _run_interactive_session,
     )
 
-    mcp_prefix = detect_autoskillit_mcp_prefix()
-
     project_dir = Path.cwd()
 
     from autoskillit.config import load_config  # noqa: PLC0415
@@ -62,7 +60,9 @@ def _launch_fleet_session(
 
     from autoskillit.execution import get_backend  # noqa: PLC0415
 
-    _backend_caps = get_backend(cfg.agent_backend.backend).capabilities
+    _backend = get_backend(cfg.agent_backend.backend)
+    _backend_caps = _backend.capabilities
+    mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
 
     if campaign_recipe is None:
         # Ad-hoc mode: no campaign, no state, bare kitchen open
@@ -93,6 +93,7 @@ def _launch_fleet_session(
                 resume_spec=current_resume_spec,
                 project_dir=project_dir,
                 required_env=FLEET_SESSION_REQUIRED_ENV,
+                backend=_backend,
             )
             if session_signal is None:
                 break
@@ -202,6 +203,7 @@ def _launch_fleet_session(
                 resume_spec=current_resume_spec,
                 project_dir=project_dir,
                 required_env=FLEET_SESSION_REQUIRED_ENV,
+                backend=_backend,
             )
             if session_signal is None:
                 break

@@ -16,7 +16,9 @@ from autoskillit.core import (
     BACKEND_CAPABILITY_INGREDIENTS,
     CAPABILITY_GATE_CALLABLES,
     BackendCapabilities,
+    FinalizedRecipeProjection,
     ProcessStaleError,
+    RecipeFlowEdge,
     RecipeNotFoundError,
     RecipeSource,
     SkillLister,
@@ -205,7 +207,7 @@ def load_and_validate(
     effective_backend_map: dict[str, str] | None = None,
     backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     backend_origin_map: dict[str, str] | None = None,
-    include_compiled_bindings: bool = False,
+    include_finalized_projection: bool = False,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -274,7 +276,7 @@ def load_and_validate(
         backend_name,
         tuple(sorted(effective_backend_map.items())) if effective_backend_map else (),
         tuple(sorted(backend_capabilities_map.items())) if backend_capabilities_map else (),
-        include_compiled_bindings,
+        include_finalized_projection,
         _manifest_mtime,
         _manifest_size,
         _budgets_mtime,
@@ -335,6 +337,7 @@ def load_and_validate(
     _skip_resolutions: dict[str, bool | None] = {}
     _pre_prune_steps: dict[str, Any] = {}
     _post_prune_bindings = None
+    _finalized_projection = None
     _dispatch_feasible = True
     _infeasible_steps: list[str] = []
 
@@ -481,6 +484,30 @@ def load_and_validate(
                 active_recipe,
                 ingredient_values=ingredient_overrides,
             )
+            if include_finalized_projection:
+                _ordered_step_names = tuple(active_recipe.steps)
+                _finalized_projection = FinalizedRecipeProjection(
+                    binding_projection=_post_prune_bindings,
+                    ordered_step_names=_ordered_step_names,
+                    entrypoint=next(iter(_ordered_step_names), ""),
+                    ordered_flow_edges=tuple(
+                        RecipeFlowEdge(
+                            source=step_name,
+                            edge_type=edge.edge_type,
+                            target=edge.target,
+                            condition=edge.condition,
+                            result_field=(
+                                step.on_result.field
+                                if edge.edge_type == "result_condition"
+                                and step.on_result is not None
+                                and step.on_result.field
+                                else None
+                            ),
+                        )
+                        for step_name, step in active_recipe.steps.items()
+                        for edge in _extract_routing_edges(step)
+                    ),
+                )
             val_ctx = make_validation_context(
                 active_recipe,
                 available_recipes=known,
@@ -691,8 +718,8 @@ def load_and_validate(
     if _deferred_guard_list:
         result["deferred_guards"] = _deferred_guard_list
     if active_recipe is not None:
-        if include_compiled_bindings and _post_prune_bindings is not None:
-            result["_compiled_bindings"] = _post_prune_bindings
+        if include_finalized_projection and _finalized_projection is not None:
+            result["_finalized_projection"] = _finalized_projection
         result["post_prune_step_names"] = list(active_recipe.steps.keys())
         _step_names_set = set(active_recipe.steps)
         result["post_prune_routing_edges"] = sorted(

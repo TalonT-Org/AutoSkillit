@@ -37,6 +37,19 @@ from autoskillit.pipeline.pr_gates import (
     is_review_passing,
     partition_prs,
 )
+from autoskillit.pipeline.recipe_initialization import (
+    InitializingRecipe,
+    NoActiveRecipe,
+    ReadyRecipe,
+    RecipeInitializationProgress,
+    RecipeInitializationRequirement,
+    RecipeInitializationState,
+    initialization_is_complete,
+    record_initialization_page,
+    replace_ready_execution,
+    start_recipe_initialization,
+    transition_recipe_ready,
+)
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry, canonical_step_name
@@ -81,4 +94,16 @@ __all__ = [
     "is_ci_passing",
     "is_review_passing",
     "partition_prs",
+    # recipe initialization
+    "InitializingRecipe",
+    "NoActiveRecipe",
+    "ReadyRecipe",
+    "RecipeInitializationProgress",
+    "RecipeInitializationRequirement",
+    "RecipeInitializationState",
+    "initialization_is_complete",
+    "record_initialization_page",
+    "replace_ready_execution",
+    "start_recipe_initialization",
+    "transition_recipe_ready",
 ]

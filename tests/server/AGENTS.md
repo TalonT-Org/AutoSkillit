@@ -37,6 +37,8 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_notify_module.py` | Contract tests: server._notify module |
 | `test_response_backstop.py` | Universal response-budget spill, exact projection, exemption, fail-closed, and telemetry contracts |
 | `test_recipe_section_pagination.py` | Pure schema-driven recipe-section pagination, rendering, digest, and cache contracts |
+| `test_recipe_generation.py` | Bounded kitchen-scoped compile-generation store, replay, eviction, retirement, and concurrency contracts |
+| `test_recipe_initialization.py` | Server-owned completion receipt and post-enforcement INITIALIZING-to-READY transaction contracts |
 | `test_perform_merge_editable_guard.py` | Integration tests verifying perform_merge() aborts before cleanup on poisoned installs |
 | `test_profile_to_env.py` | Tests for _profile_to_env — ProviderProfileDef to env dict conversion in _guards.py |
 | `test_quota_refresh_loop.py` | Tests for _quota_refresh_loop in server/_misc.py |

@@ -70,7 +70,7 @@ class RecipeRepository(Protocol):
         effective_backend_map: dict[str, str] | None = None,
         backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
         backend_origin_map: dict[str, str] | None = None,
-        include_compiled_bindings: bool = False,
+        include_finalized_projection: bool = False,
     ) -> dict[str, Any]:
         """Load and validate a recipe.
 

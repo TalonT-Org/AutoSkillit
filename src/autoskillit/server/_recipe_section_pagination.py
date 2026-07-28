@@ -12,20 +12,18 @@ from threading import Event, Lock, RLock
 
 from autoskillit.core import (
     DYNAMIC_RECIPE_SECTION_DEF,
+    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
     RECIPE_SECTION_PAGINATION_VERSION,
     RECIPE_SECTION_REGISTRY,
     RECIPE_SECTION_REGISTRY_DIGEST,
+    RecipeArtifactGeneration,
     RecipeSectionDef,
     canonical_recipe_section_json,
     get_logger,
     recipe_section_digest,
     recipe_section_element_digest,
     recipe_section_plan_digest,
-)
-from autoskillit.server._recipe_delivery import (
-    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
-    RecipeArtifactGeneration,
 )
 from autoskillit.server.recipe_section._contracts import (
     PlannedRecipeSectionPage,
@@ -76,6 +74,7 @@ __all__ = [
     "get_or_build_recipe_section_page_plan",
     "render_recipe_section_failure",
     "render_recipe_section_page",
+    "recipe_section_continuation_binding",
     "resolve_recipe_section_definition",
     "resolve_recipe_section_bound_bytes",
     "select_recipe_section",
@@ -86,6 +85,7 @@ __all__ = [
 class _PagePlanCacheKey:
     kitchen_id: str
     generation: RecipeArtifactGeneration
+    initialization_id: str | None
     section: str
     section_sha256: str
     recipe_section_bound_bytes: int
@@ -344,28 +344,68 @@ def _render_candidate(
     terminal: bool,
 ) -> str:
     body: dict[str, object] = {
-        "body_sha256": generation.body_sha256,
         "content": page.content,
         "content_format": page.descriptor.content_format,
         "has_more": not terminal,
         "page_plan_sha256": page_plan_sha256,
+        "pagination_policy_sha256": RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
         "pagination_version": RECIPE_SECTION_PAGINATION_VERSION,
         "part": part,
-        "payload_sha256": generation.payload_sha256,
         "section": selected.section,
         "section_registry_sha256": RECIPE_SECTION_REGISTRY_DIGEST,
         "section_sha256": section_sha256,
         "success": True,
         "total_parts": total_parts,
     }
+    body.update(generation.pull_identity())
+    body.pop("pull_tool")
+    if selected.initialization_id is not None:
+        body["initialization_id"] = selected.initialization_id
     if not terminal:
         body["next_part"] = part + 1
+        body["continuation"] = recipe_section_continuation_binding(
+            generation=generation,
+            initialization_id=selected.initialization_id,
+            section=selected.section,
+            section_sha256=section_sha256,
+            page_plan_sha256=page_plan_sha256,
+            next_part=part + 1,
+        )
     body.update(page.descriptor.wire_ranges())
     return json.dumps(
         body,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
+    )
+
+
+def recipe_section_continuation_binding(
+    *,
+    generation: RecipeArtifactGeneration,
+    initialization_id: str | None,
+    section: str,
+    section_sha256: str,
+    page_plan_sha256: str,
+    next_part: int,
+) -> str:
+    """Bind the next part to the complete immutable request without a cursor."""
+    material = json.dumps(
+        {
+            "generation": generation.pull_identity(),
+            "initialization_id": initialization_id,
+            "next_part": next_part,
+            "page_plan_sha256": page_plan_sha256,
+            "section": section,
+            "section_sha256": section_sha256,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return (
+        "sha256:"
+        + hashlib.sha256(b"autoskillit.recipe-section-continuation.v1\0" + material).hexdigest()
     )
 
 
@@ -863,6 +903,7 @@ def build_recipe_section_page_plan(
         section_registry_sha256=RECIPE_SECTION_REGISTRY_DIGEST,
         pagination_policy_sha256=RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
         generation=generation,
+        initialization_id=selected.initialization_id,
         section=selected.section,
         section_strategy=selected.definition.section_strategy,
         section_sha256=section_sha256,
@@ -891,6 +932,7 @@ def build_recipe_section_page_plan(
         page_plan_sha256=page_plan_sha256,
         bound_bytes=recipe_section_bound_bytes,
         pagination_version=RECIPE_SECTION_PAGINATION_VERSION,
+        pagination_policy_sha256=RECIPE_SECTION_PAGINATION_POLICY_DIGEST,
         section_registry_sha256=RECIPE_SECTION_REGISTRY_DIGEST,
         section_sha256=section_sha256,
     )
@@ -915,6 +957,7 @@ def _cache_key(
     return _PagePlanCacheKey(
         kitchen_id=kitchen_id,
         generation=generation,
+        initialization_id=selected.initialization_id,
         section=selected.section,
         section_sha256=_selected_section_sha256(selected),
         recipe_section_bound_bytes=recipe_section_bound_bytes,

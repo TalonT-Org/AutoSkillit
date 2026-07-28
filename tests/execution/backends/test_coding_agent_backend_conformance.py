@@ -44,6 +44,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "applicable_guards": "REQUIRED",
     "anthropic_provider_capable": "OPTIONAL",
     "channel_b_capable": "OPTIONAL",
+    "claude_marketplace_tool_prefix_capable": "REQUIRED",
     "completion_record_types": "REQUIRED",
     "default_skill_sandbox_mode": "REQUIRED",
     "unnegotiated_tool_result_token_limit": "REQUIRED",
@@ -113,6 +114,13 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """BackendCapabilities.process_name — backend name from identity field."""
         assert isinstance(self.backend.name, str)
         assert len(self.backend.name) > 0
+
+    def test_marketplace_tool_prefix_capability_is_bool(self) -> None:
+        """BackendCapabilities.claude_marketplace_tool_prefix_capable is boolean."""
+        assert isinstance(
+            self.backend.capabilities.claude_marketplace_tool_prefix_capable,
+            bool,
+        )
 
     def test_capabilities_returns_backend_capabilities(self) -> None:
         """BackendCapabilities contract — exercises multiple fields.

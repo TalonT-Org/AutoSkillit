@@ -240,7 +240,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
     "_type_backend": frozenset({"core", "execution", "cli", "recipe", "server", "workspace"}),
-    "_type_recipe_delivery": frozenset({"core", "execution", "server"}),
+    "_type_recipe_delivery": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_recipe_sections": frozenset({"core", "execution", "server"}),
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
     "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),

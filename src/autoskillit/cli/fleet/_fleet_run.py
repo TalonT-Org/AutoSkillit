@@ -94,11 +94,9 @@ async def _execute_fleet_run(
     )
 
     effective_backend = dispatch_backend or ctx.backend
-    has_ufa = (
-        effective_backend.capabilities.has_unguarded_filesystem_access
-        if effective_backend
-        else False
-    )
+    if effective_backend is None:
+        raise RuntimeError("Fleet dispatch requires a configured backend.")
+    has_ufa = effective_backend.capabilities.has_unguarded_filesystem_access
     sous_chef = None
     if ctx.skill_resolver is not None:
         orchestrator_catalog = ctx.skill_resolver.list_effective(
@@ -116,9 +114,7 @@ async def _execute_fleet_run(
                 cwd=ctx.project_dir.resolve(),
                 catalog=orchestrator_catalog,
                 backend=effective_backend,
-                conventions=(
-                    effective_backend.conventions if effective_backend is not None else None
-                ),
+                conventions=effective_backend.conventions,
                 gating=False,
             ),
         ).content
@@ -127,7 +123,7 @@ async def _execute_fleet_run(
     )
     prompt_builder = functools.partial(
         _build_food_truck_prompt,
-        mcp_prefix=detect_autoskillit_mcp_prefix(),
+        mcp_prefix=detect_autoskillit_mcp_prefix(effective_backend.capabilities),
         has_unguarded_filesystem_access=has_ufa,
         projected_sous_chef=projected_sous_chef,
     )
@@ -139,11 +135,7 @@ async def _execute_fleet_run(
     else:
         from autoskillit.execution import check_and_sleep_if_needed
 
-        _supports_quota = (
-            effective_backend.capabilities.anthropic_provider_capable
-            if effective_backend
-            else True
-        )
+        _supports_quota = effective_backend.capabilities.anthropic_provider_capable
 
         async def quota_checker(_cfg: object) -> dict[str, object]:
             return await check_and_sleep_if_needed(

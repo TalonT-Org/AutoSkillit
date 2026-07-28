@@ -36,6 +36,13 @@ from autoskillit.core import (
     get_logger,
     get_tool_def,
 )
+from autoskillit.pipeline import (
+    InitializingRecipe,
+    NoActiveRecipe,
+    ReadyRecipe,
+    replace_ready_execution,
+    transition_recipe_ready,
+)
 from autoskillit.recipe import (
     RecipeStep,
     RuntimeBindingError,
@@ -353,7 +360,8 @@ def build_recipe_execution_snapshot(
 
 def get_recipe_execution(tool_ctx: ToolContext) -> InstalledRecipeExecution | None:
     with tool_ctx.recipe_execution_lock:
-        return tool_ctx.active_recipe_execution
+        state = tool_ctx.recipe_initialization_state
+        return state.installed_execution if isinstance(state, ReadyRecipe) else None
 
 
 def prepare_recipe_execution(
@@ -376,6 +384,7 @@ def install_recipe_execution(
     *,
     snapshot: RecipeExecutionSnapshot | None = None,
     prepared_execution: InstalledRecipeExecution | None = None,
+    completion_receipt: str | None = None,
 ) -> InstalledRecipeExecution:
     """Atomically install a snapshot, empty runtime map, and empty head ledger."""
     if (snapshot is None) == (prepared_execution is None):
@@ -386,8 +395,21 @@ def install_recipe_execution(
         assert snapshot is not None
         installed = prepare_recipe_execution(tool_ctx, snapshot=snapshot)
     with tool_ctx.recipe_execution_lock:
-        previous = tool_ctx.active_recipe_execution
-        tool_ctx.active_recipe_execution = installed
+        state = tool_ctx.recipe_initialization_state
+        previous = state.installed_execution if isinstance(state, ReadyRecipe) else None
+        if isinstance(state, InitializingRecipe):
+            tool_ctx.recipe_initialization_state = transition_recipe_ready(
+                state,
+                installed_execution=installed,
+                completion_receipt=completion_receipt or state.completion_receipt or "",
+            )
+        elif isinstance(state, ReadyRecipe):
+            tool_ctx.recipe_initialization_state = replace_ready_execution(state, installed)
+        else:
+            raise RecipeExecutionAdmissionError(
+                "recipe_initialization_not_active",
+                "recipe execution cannot install before initialization is staged",
+            )
     if previous is not None and previous is not installed:
         try:
             previous.audit_cycle_heads.clear_generation(previous.snapshot.execution_id)
@@ -402,8 +424,9 @@ def install_recipe_execution(
 def clear_recipe_execution(tool_ctx: ToolContext) -> None:
     """Clear the complete active attestation generation in one locked transition."""
     with tool_ctx.recipe_execution_lock:
-        previous = tool_ctx.active_recipe_execution
-        tool_ctx.active_recipe_execution = None
+        state = tool_ctx.recipe_initialization_state
+        previous = state.installed_execution if isinstance(state, ReadyRecipe) else None
+        tool_ctx.recipe_initialization_state = NoActiveRecipe()
     if previous is not None:
         previous.audit_cycle_heads.clear_generation(previous.snapshot.execution_id)
 
@@ -416,17 +439,24 @@ def record_runtime_binding_digest(
     digest: str,
 ) -> None:
     with tool_ctx.recipe_execution_lock:
-        installed = tool_ctx.active_recipe_execution
-        if installed is None or installed.snapshot.execution_id != execution_id:
+        state = tool_ctx.recipe_initialization_state
+        if (
+            not isinstance(state, ReadyRecipe)
+            or state.installed_execution.snapshot.execution_id != execution_id
+        ):
             raise RecipeExecutionAdmissionError(
                 "recipe_execution_replaced",
                 "active recipe execution changed before runtime binding was recorded",
             )
+        installed = state.installed_execution
         updated = dict(installed.runtime_binding_digests)
         updated[step_name] = digest
-        tool_ctx.active_recipe_execution = replace(
-            installed,
-            runtime_binding_digests=MappingProxyType(updated),
+        tool_ctx.recipe_initialization_state = replace_ready_execution(
+            state,
+            replace(
+                installed,
+                runtime_binding_digests=MappingProxyType(updated),
+            ),
         )
 
 
@@ -628,7 +658,8 @@ def _publish_loaded_audit_cycle(
         verifier.verify_artifact_ref(authority.remediation_ref)
     manifest = load_bundled_manifest()
     with tool_ctx.recipe_execution_lock:
-        if tool_ctx.active_recipe_execution is not installed:
+        state = tool_ctx.recipe_initialization_state
+        if not isinstance(state, ReadyRecipe) or state.installed_execution is not installed:
             raise AuditCycleHeadConflict(
                 "active recipe execution changed while publishing audit authority"
             )
@@ -651,9 +682,12 @@ def _publish_loaded_audit_cycle(
                 and contract.input_preflight == PreflightKind.AUDIT_CYCLE_INVENTORY.value
             ):
                 preflight_identities[step_name] = expected_identity
-        tool_ctx.active_recipe_execution = replace(
-            installed,
-            preflight_identities=preflight_identities,
+        tool_ctx.recipe_initialization_state = replace_ready_execution(
+            state,
+            replace(
+                installed,
+                preflight_identities=preflight_identities,
+            ),
         )
     return head
 

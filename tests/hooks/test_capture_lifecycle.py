@@ -480,6 +480,142 @@ def test_live_writer_sweep_closes_observation_descriptor(
         anchor.close()
 
 
+def test_observe_closes_descriptor_when_fstat_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    real_open = os.open
+    real_fstat = os.fstat
+    observed_fd = -1
+
+    def record_open(
+        name: str,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal observed_fd
+        fd = real_open(name, flags, mode, dir_fd=dir_fd)
+        if name == artifact.name:
+            observed_fd = fd
+        return fd
+
+    def fail_observed_fstat(fd: int) -> os.stat_result:
+        if fd == observed_fd:
+            raise OSError("injected observation failure")
+        return real_fstat(fd)
+
+    try:
+        monkeypatch.setattr(capture_lifecycle.os, "open", record_open)
+        monkeypatch.setattr(capture_lifecycle.os, "fstat", fail_observed_fstat)
+        with pytest.raises(OSError, match="observation failure"):
+            store._observe(
+                artifact.name,
+                (artifact.identity.device, artifact.identity.inode),
+                valid_name=capture_lifecycle._PUBLIC_NAME_RE,
+            )
+
+        assert observed_fd >= 0
+        with pytest.raises(OSError):
+            real_fstat(observed_fd)
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_normalize_closes_first_observation_when_second_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    record = store.reserve_capture(_CAPTURE_ID)
+    staging = _capture_dir(project) / record.staging_name
+    staging.write_bytes(b"staged")
+    identity = staging.stat()
+    store.mark_staged(_CAPTURE_ID, (identity.st_dev, identity.st_ino))
+    staged = store.get_record(_CAPTURE_ID)
+    assert staged is not None
+    real_observe = store._observe
+    first_fd = -1
+    calls = 0
+
+    def fail_second_observation(*args, **kwargs):
+        nonlocal calls, first_fd
+        calls += 1
+        if calls == 2:
+            raise capture_lifecycle.CaptureLifecycleError("injected second observation failure")
+        observed = real_observe(*args, **kwargs)
+        assert observed is not None
+        first_fd = observed.fd
+        return observed
+
+    try:
+        monkeypatch.setattr(store, "_observe", fail_second_observation)
+        with pytest.raises(
+            capture_lifecycle.CaptureLifecycleError,
+            match="second observation failure",
+        ):
+            store._normalize_abandoned(staged)
+
+        assert first_fd >= 0
+        with pytest.raises(OSError):
+            os.fstat(first_fd)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_quarantine_closes_first_observation_when_second_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    record = store.get_record(_CAPTURE_ID)
+    assert record is not None
+    deleting = store._deleting_record(record)
+    real_observe = store._observe
+    first_fd = -1
+    calls = 0
+
+    def fail_second_observation(*args, **kwargs):
+        nonlocal calls, first_fd
+        calls += 1
+        if calls == 2:
+            raise capture_lifecycle.CaptureLifecycleError("injected second observation failure")
+        observed = real_observe(*args, **kwargs)
+        assert observed is not None
+        first_fd = observed.fd
+        return observed
+
+    try:
+        monkeypatch.setattr(store, "_observe", fail_second_observation)
+        with pytest.raises(
+            capture_lifecycle.CaptureLifecycleError,
+            match="second observation failure",
+        ):
+            store._quarantine_delete(deleting)
+
+        assert first_fd >= 0
+        with pytest.raises(OSError):
+            os.fstat(first_fd)
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_writer_lease_is_visible_to_an_independent_process(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

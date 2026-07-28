@@ -95,6 +95,40 @@ def test_hook_reachability_rejects_runtime_invalid_boundaries(
         )
 
 
+@pytest.mark.parametrize(
+    ("hook_scope", "session_scope", "expected"),
+    (
+        ("any", "headless", True),
+        ("any", "interactive", True),
+        ("headless_only", "headless", True),
+        ("headless_only", "interactive", False),
+        ("interactive_only", "headless", False),
+        ("interactive_only", "interactive", True),
+    ),
+)
+def test_codex_hook_reachability_honors_session_scope(
+    hook_scope: str,
+    session_scope: str,
+    *,
+    expected: bool,
+) -> None:
+    hook_def = HookDef(
+        matcher="Bash",
+        session_scope=hook_scope,  # type: ignore[arg-type]
+        codex_status="works-as-is",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+    )
+
+    assert (
+        hook_applies_to_backend(
+            hook_def,
+            backend="codex",
+            session_scope=session_scope,  # type: ignore[arg-type]
+        )
+        is expected
+    )
+
+
 def test_every_resource_producer_requires_a_contract() -> None:
     registry = [
         *HOOK_REGISTRY,

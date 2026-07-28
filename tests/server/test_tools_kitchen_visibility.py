@@ -48,7 +48,15 @@ async def test_open_kitchen_calls_enable_components_for_notification_backend(
 async def test_open_kitchen_skips_enable_components_for_pre_revealed_backend(
     tmp_path, monkeypatch
 ):
-    """open_kitchen must NOT call ctx.enable_components when backend was pre-revealed."""
+    """open_kitchen must NOT call ctx.enable_components when backend was pre-revealed.
+
+    This is the ``_use_global_enable`` branch (formerly named ``_skip_notify``): when
+    the backend was pre-revealed at boot, open_kitchen re-enables via the global
+    ``mcp.enable(tags=...)`` provider rather than the session-scoped
+    ``ctx.enable_components``. Emitting the tools/list_changed notification on that
+    branch is a separate concern, covered by T-VISIBILITY-3 and the close->open
+    roundtrip test.
+    """
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()

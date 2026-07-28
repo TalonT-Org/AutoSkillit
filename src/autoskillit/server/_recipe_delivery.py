@@ -56,7 +56,6 @@ from autoskillit.execution import (
 )
 from autoskillit.pipeline import InitializingRecipe, RecipeInitializationRequirement
 from autoskillit.server._recipe_execution import (
-    clear_recipe_execution,
     install_recipe_execution,
     prepare_recipe_execution,
 )
@@ -1171,6 +1170,7 @@ def complete_finalized_recipe_response(
     ledger = finalized.receipt_ledger
     parsed: dict[str, Any] | None = None
     prepared_execution: Any = None
+    previous_initialization_state: Any = None
     if enforced == finalized.rendered and finalized.initialization_activating:
         required_values = (
             finalized.tool_ctx,
@@ -1223,30 +1223,19 @@ def complete_finalized_recipe_response(
                             },
                             separators=(",", ":"),
                         )
-    if enforced == finalized.rendered:
-        if handle is not None and (
-            ledger is None
-            or not ledger.commit(
-                handle,
-                now_unix=int(time.time()) if now_unix is None else now_unix,
-            )
-        ):
-            enforced = json.dumps(
-                {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
-                separators=(",", ":"),
-            )
-        elif handle is not None:
-            handle = None
-        if enforced == finalized.rendered and finalized.initialization_activating:
-            assert finalized.tool_ctx is not None
-            assert finalized.recipe_name is not None
-            assert finalized.artifact_generation is not None
-            assert finalized.flow_generation is not None
-            assert finalized.execution_snapshot is not None
-            assert finalized.normalized_compile_key is not None
-            assert finalized.initialization_id is not None
-            assert parsed is not None
-            staged = stage_recipe_initialization(
+    if enforced == finalized.rendered and finalized.initialization_activating:
+        assert finalized.tool_ctx is not None
+        assert finalized.recipe_name is not None
+        assert finalized.artifact_generation is not None
+        assert finalized.flow_generation is not None
+        assert finalized.execution_snapshot is not None
+        assert finalized.normalized_compile_key is not None
+        assert finalized.initialization_id is not None
+        assert parsed is not None
+        with finalized.tool_ctx.recipe_execution_lock:
+            previous_initialization_state = finalized.tool_ctx.recipe_initialization_state
+        try:
+            stage_recipe_initialization(
                 finalized.tool_ctx,
                 recipe_name=finalized.recipe_name,
                 artifact_generation=finalized.artifact_generation,
@@ -1261,34 +1250,57 @@ def complete_finalized_recipe_response(
                 generation_store_key=finalized.normalized_compile_key,
             )
             if parsed.get("delivery_bound_spill") is not True:
-                try:
-                    assert prepared_execution is not None
-                    install_recipe_execution(
-                        finalized.tool_ctx,
-                        prepared_execution=prepared_execution,
-                        completion_receipt=_qualified_sha256(
-                            (
-                                finalized.initialization_id
-                                + finalized.artifact_generation.payload_sha256
-                            ).encode("utf-8")
-                        ),
-                    )
-                except Exception:
-                    clear_recipe_execution(finalized.tool_ctx)
-                    get_logger(__name__).error(
-                        "recipe execution snapshot installation failed",
-                        initialization_id=staged.initialization_id,
-                        exc_info=True,
-                    )
-                    enforced = json.dumps(
-                        {
-                            "success": False,
-                            "error": "recipe_execution_install_failed",
-                        },
-                        separators=(",", ":"),
-                    )
-        if enforced == finalized.rendered:
-            return enforced
+                assert prepared_execution is not None
+                install_recipe_execution(
+                    finalized.tool_ctx,
+                    prepared_execution=prepared_execution,
+                    completion_receipt=_qualified_sha256(
+                        (
+                            finalized.initialization_id
+                            + finalized.artifact_generation.payload_sha256
+                        ).encode("utf-8")
+                    ),
+                )
+        except Exception:
+            with finalized.tool_ctx.recipe_execution_lock:
+                finalized.tool_ctx.recipe_initialization_state = previous_initialization_state
+            get_logger(__name__).error(
+                "recipe execution snapshot installation failed",
+                initialization_id=finalized.initialization_id,
+                exc_info=True,
+            )
+            enforced = json.dumps(
+                {
+                    "success": False,
+                    "error": "recipe_execution_install_failed",
+                },
+                separators=(",", ":"),
+            )
+    if enforced == finalized.rendered and handle is not None:
+        try:
+            receipt_committed = ledger is not None and ledger.commit(
+                handle,
+                now_unix=int(time.time()) if now_unix is None else now_unix,
+            )
+        except Exception:
+            receipt_committed = False
+            get_logger(__name__).error(
+                "recipe delivery receipt commit failed",
+                exc_info=True,
+            )
+        if not receipt_committed:
+            if finalized.initialization_activating:
+                assert finalized.tool_ctx is not None
+                with finalized.tool_ctx.recipe_execution_lock:
+                    finalized.tool_ctx.recipe_initialization_state = previous_initialization_state
+            enforced = json.dumps(
+                {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
+                separators=(",", ":"),
+            )
+        else:
+            handle = None
+    if enforced == finalized.rendered:
+        return enforced
     if handle is not None and (ledger is None or not ledger.abort(handle)):
         return json.dumps(
             {"success": False, "error": "recipe_delivery_receipt_abort_failed"},

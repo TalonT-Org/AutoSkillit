@@ -11,6 +11,7 @@ import pytest
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
+    from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
 
 from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
@@ -1115,7 +1116,11 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     ``remediation.yaml`` legitimately grew the rendered payload)."""
     from autoskillit.core import resolve_general_output_token_limit
     from autoskillit.execution.backends import BACKEND_REGISTRY
-    from autoskillit.hooks.formatters.pretty_output_hook import _fmt_open_kitchen
+    from autoskillit.hooks.formatters import _fmt_recipe_compact
+    from autoskillit.hooks.formatters.pretty_output_hook import (
+        _fmt_open_kitchen,
+        _strip_yaml_ingredients_block,
+    )
     from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.server._recipe_delivery import build_recipe_envelope, persist_recipe_artifact
@@ -1170,6 +1175,42 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
             maximum = max(maximum, (byte_len, recipe_name, mode_name))
             if byte_len > ceiling:
                 over_budget.append(f"{recipe_name} ({mode_name}): {byte_len} bytes > {ceiling}")
+
+            # Issue #4399 content gate: when the ordinary-rendered payload fits within
+            # the exemption ceiling, the formatter must receive the raw ORDINARY_INLINE
+            # payload (containing `content`, `summary`, `diagram`) — not the stripped
+            # envelope — so the rendered output retains the recipe body. The envelope
+            # path strips `content`/`summary`/`diagram`, producing a degenerate
+            # `## open_kitchen ✓ v{version}` with no recipe body. This assertion
+            # fails before the fix because the test currently feeds the envelope
+            # to `_fmt_open_kitchen` regardless of size.
+            ordinary_payload_bytes = len(
+                json.dumps(dict(result), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            )
+            if ordinary_payload_bytes <= ceiling:
+                ordinary_rendered = _fmt_open_kitchen(
+                    cast("OpenKitchenResult", dict(result)), pipeline=False
+                )
+                # Recipe YAML content must survive rendering for the exempt ORDINARY path.
+                # _fmt_recipe_body applies compact_recipe_display (strips top-level
+                # name/description/summary/recipe_version, step descriptions, then halves
+                # structural indentation) — and additionally strips the YAML
+                # ``ingredients:`` block when ``ingredients_table`` is present so the
+                # INGREDIENTS TABLE block doesn't duplicate it. Mirror that projection
+                # before substring-checking rather than comparing against raw bytes.
+                raw_recipe_content = result.get("content") or ""
+                assert raw_recipe_content, (
+                    f"{recipe_name} ({mode_name}): recipe payload missing 'content' field"
+                )
+                display_content = raw_recipe_content
+                if result.get("ingredients_table"):
+                    display_content = _strip_yaml_ingredients_block(display_content)
+                compacted_content = _fmt_recipe_compact.compact_recipe_display(display_content)
+                assert compacted_content in ordinary_rendered, (
+                    f"{recipe_name} ({mode_name}): rendered ORDINARY_INLINE output "
+                    f"missing compacted recipe content "
+                    f"(only {len(ordinary_rendered)} bytes rendered)"
+                )
 
     max_bytes, max_recipe, max_mode = maximum
     assert not over_budget, (

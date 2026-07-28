@@ -22,6 +22,7 @@ from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     RECIPE_DELIVERY_SURFACE_REGISTRY,
+    RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
     RecipeDeliveryAttestation,
     RecipeDeliveryDecision,
@@ -765,6 +766,14 @@ def finalize_recipe_delivery(
     """Persist, decide, shape, and transactionally reserve one recipe response."""
     execution_snapshot = None
     candidate_payload = dict(payload)
+    # ORDINARY_INLINE rendered output is the authoritative recipe payload serialized
+    # to JSON. Some callers (e.g. load_recipe) pass a payload without a `success`
+    # field; tests and downstream consumers require success=True on the wire shape.
+    # Open_kitchen callers already inject success=True via build_open_kitchen_recipe_payload
+    # so this is a no-op for that surface. Inject once here so ORDINARY_INLINE always
+    # carries the success indicator.
+    if "success" not in candidate_payload:
+        candidate_payload["success"] = True
     if compiled_bindings is not None:
         from autoskillit.server._recipe_execution import (  # circular-break
             build_recipe_execution_snapshot,
@@ -943,6 +952,40 @@ def finalize_recipe_delivery(
             else:
                 receipt_handle = reservation.handle
                 decision = replace(decision, receipt_status="pending")
+
+    # Issue #4399 exemption override: when an exempt surface's ordinary-rendered
+    # payload fits within the registered exemption ceiling, upgrade ENVELOPE back
+    # to ORDINARY_INLINE so the full recipe body survives. Placed after ALL
+    # ENVELOPE-producing branches (initial resolve, response-budget downgrade,
+    # receipt-store-missing downgrade, reservation-failure downgrade) so the
+    # override catches every path. Without this, exempt surfaces like
+    # open_kitchen on Claude Code (protected_recipe_delivery_capable=False) get
+    # ENVELOPE for any payload exceeding the 46.5K ordinary_limit, producing a
+    # degenerate formatter output with no recipe body.
+    #
+    # Scoped to non-protected backends (those without a recipe_delivery_budget,
+    # i.e. Claude Code). Codex has its own recipe_delivery_budget and bounded
+    # envelope semantics — applying the override to Codex would regress
+    # `test_codex_without_supported_host_evidence_uses_bounded_envelope`.
+    if (
+        decision.mode is RecipeDeliveryMode.ENVELOPE
+        and surface_definition.response_exemption_tool is not None
+        and capabilities.recipe_delivery_budget is None
+    ):
+        _exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(
+            surface_definition.response_exemption_tool
+        )
+        if (
+            _exemption is not None
+            and len(ordinary_rendered.encode("utf-8")) <= _exemption.max_utf8_bytes
+        ):
+            decision = replace(
+                decision,
+                mode=RecipeDeliveryMode.ORDINARY_INLINE,
+                selected_result_token_limit=_exemption.max_utf8_bytes // 4,
+                reason="exemption_overrides_envelope",
+                receipt_status="not_required",
+            )
 
     if decision.mode is RecipeDeliveryMode.ORDINARY_INLINE:
         rendered = ordinary_rendered

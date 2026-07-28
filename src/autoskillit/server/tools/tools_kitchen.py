@@ -880,7 +880,14 @@ async def open_kitchen(
                 and not _kctx_pre.backend.capabilities.supports_tool_list_changed
             )
             if _skip_notify:
-                logger.debug("open_kitchen_skip_enable", reason="pre-revealed at startup")
+                # Issue #4399: when the backend can't process tool/list_changed
+                # notifications, ctx.enable_components() is skipped. close_kitchen()
+                # appends global mcp.disable() for these tags, so without a
+                # refresh here, the tags would never re-enable. Append global
+                # enables to override the prior disables via FastMCP's last-match-wins.
+                mcp.enable(tags={"kitchen"})
+                mcp.enable(tags={"plan-review"})
+                logger.debug("open_kitchen_skip_enable", reason="global_enables_refreshed")
             else:
                 try:
                     await ctx.enable_components(tags={"kitchen"})

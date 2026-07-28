@@ -113,6 +113,78 @@ async def test_close_kitchen_hides_pre_revealed_tools(tmp_path, monkeypatch):
     )
 
 
+# T-VISIBILITY-3: close_kitchen→open_kitchen roundtrip — pre-revealed kitchen tools restored
+@pytest.mark.anyio
+async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, monkeypatch):
+    """Issue #4399: after close_kitchen() hides pre-revealed kitchen tools, a subsequent
+    open_kitchen() with `_skip_notify=True` (Claude Code backend, no tool/list_changed
+    notification) must re-enable the kitchen and plan-review tags so the tools return
+    to list_tools(). Without the fix, the `_skip_notify` branch only logs a debug
+    message and never calls `mcp.enable()`, leaving tools invisible.
+    """
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
+    from autoskillit.server import mcp
+    from autoskillit.server.tools.tools_kitchen import close_kitchen
+
+    # Simulate _pre_reveal_kitchen() at startup: enable both tags globally.
+    mcp.enable(tags={"kitchen"})
+    mcp.enable(tags={"plan-review"})
+    tools_before = {t.name for t in await mcp.list_tools()}
+    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+    assert kitchen_gated.issubset(tools_before), (
+        "kitchen tools should be visible after pre-reveal enable"
+    )
+
+    # First lifecycle: gate_infrastructure_ready=True (prior successful open_kitchen).
+    # close_kitchen sets it back to False (line 603), so the next open_kitchen
+    # correctly enters the `if not _skip_handler:` block at line 876.
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.gate_infrastructure_ready = True
+    mock_ctx.reset_visibility = AsyncMock()
+
+    # close_kitchen uses real _close_kitchen_handler so gate_infrastructure_ready
+    # transition (True → False) is authentic. Patch _get_ctx so _close_kitchen_handler
+    # operates on mock_ctx (the function reads from _get_ctx, not the ctx parameter).
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        await close_kitchen(ctx=mock_ctx)
+    assert mock_ctx.gate_infrastructure_ready is False
+
+    tools_after_close = {t.name for t in await mcp.list_tools()}
+    assert not kitchen_gated.intersection(tools_after_close), (
+        "kitchen tools should be hidden after close_kitchen"
+    )
+
+    # Second lifecycle: open_kitchen with Claude Code backend (no tool_list_changed).
+    # _skip_handler = False (gate_infrastructure_ready was reset by close_kitchen),
+    # so we enter the `if not _skip_handler:` block at line 876. Inside it,
+    # _skip_notify = (backend is not None and not supports_tool_list_changed) = True,
+    # so the buggy branch at line 882 is executed. Without the fix, the tools
+    # remain hidden. With the fix, global mcp.enable() restores visibility.
+    mock_ctx.backend.capabilities.supports_tool_list_changed = False
+    mock_ctx.enable_components = AsyncMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch(
+                    "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+                    new=AsyncMock(return_value=None),
+                ):
+                    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                        await open_kitchen(ctx=mock_ctx)
+
+    # Pre-revealed tools must be visible again — this is the assertion that fails before the fix.
+    tools_after_reopen = {t.name for t in await mcp.list_tools()}
+    assert kitchen_gated.issubset(tools_after_reopen), (
+        "kitchen tools should be visible after open_kitchen restores pre-revealed tags"
+    )
+
+
 @pytest.mark.anyio
 async def test_open_kitchen_does_not_write_gate_file(tmp_path, monkeypatch):
     """_open_kitchen_handler must never write a gate file."""

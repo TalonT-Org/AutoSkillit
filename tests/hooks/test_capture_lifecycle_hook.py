@@ -160,6 +160,21 @@ def test_cleanup_hook_does_not_create_absent_store(tmp_path: Path) -> None:
     assert not (project / ".autoskillit").exists()
 
 
+def test_cleanup_hook_reports_unsafe_capture_store(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    unsafe_component = project / ".autoskillit"
+    unsafe_component.write_text("not a directory", encoding="utf-8")
+
+    completed = _run_hook(project, {"cwd": str(project)}, headless=True)
+
+    assert completed.returncode == 0
+    assert completed.stdout == ""
+    assert "capture lifecycle cleanup failed" in completed.stderr
+    assert len(completed.stderr.encode("utf-8")) <= 512
+    assert unsafe_component.read_text(encoding="utf-8") == "not a directory"
+
+
 def test_cleanup_hook_fails_open_with_bounded_stderr(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

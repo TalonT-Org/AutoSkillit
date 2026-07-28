@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import Protocol, cast
 
 from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
@@ -21,6 +21,7 @@ from autoskillit.core import (
     EffectiveSkillCatalogAuthority,
     PluginArtifactContentionError,
     PluginArtifactIdentity,
+    PluginArtifactKind,
     PluginArtifactLifecycleLease,
     PluginArtifactPublicationError,
     PluginArtifactValidationError,
@@ -36,6 +37,17 @@ from autoskillit.core import (
     new_plugin_artifact_incarnation_id,
     pkg_root,
     write_versioned_json,
+)
+from autoskillit.workspace._projected_artifact.materialization import (
+    SkillProjectionContext,
+    _copy_non_skill_plugin_assets,
+    _default_base_branch,
+    _direct_install_projection_context,
+    _projection_skills_manifest,
+    _replace_directory,
+    _skill_sequence,
+    materialize_agent_skill_tree,
+    validate_sanitized_plugin_artifact,
 )
 from autoskillit.workspace._projection_cache import (
     PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
@@ -54,11 +66,7 @@ from autoskillit.workspace.skills import (
     _skill_info_from_frontmatter,
 )
 
-if TYPE_CHECKING:
-    from autoskillit.workspace.skill_projection import SkillProjectionContext
-
 logger = get_logger(__name__)
-_PLUGIN_ARTIFACT_KIND = "projection"
 
 __all__ = [
     "ProjectedPluginArtifactAuthority",
@@ -120,13 +128,6 @@ def _stage_projected_plugin_artifact(
     plan: _ProjectedArtifactPlan,
 ) -> _StagedProjectedArtifact:
     """Build one complete, unpublished artifact incarnation."""
-    from autoskillit.workspace.skill_projection import (
-        _copy_non_skill_plugin_assets,
-        _projection_skills_manifest,
-        _skill_sequence,
-        materialize_agent_skill_tree,
-    )
-
     staging_root = Path(
         tempfile.mkdtemp(
             prefix=f".{plan.destination.name}.plugin-",
@@ -157,7 +158,7 @@ def _stage_projected_plugin_artifact(
             staging_manifest,
             {
                 "schema_version": identity.manifest_schema_version,
-                "artifact_kind": _PLUGIN_ARTIFACT_KIND,
+                "artifact_kind": PluginArtifactKind.PROJECTION.value,
                 "projection_version": plan.context.projection_version,
                 "semantic_key": identity.semantic_key,
                 "incarnation_id": identity.incarnation_id,
@@ -183,8 +184,6 @@ def _publish_projected_plugin_root(
     destination: Path,
 ) -> None:
     """Atomically publish staged public bytes at their stable semantic path."""
-    from autoskillit.workspace.skill_projection import _replace_directory
-
     _replace_directory(staged.root, destination)
 
 
@@ -215,10 +214,6 @@ def _validate_published_plugin_artifact(
     expected_identity: PluginArtifactIdentity | None = None,
 ) -> PluginArtifactIdentity:
     """Validate both semantic content and exact physical incarnation."""
-    from autoskillit.workspace.skill_projection import (
-        validate_sanitized_plugin_artifact,
-    )
-
     identity = _manifest_identity(plan)
     errors = validate_sanitized_plugin_artifact(
         plan.source_root,
@@ -284,11 +279,6 @@ class ProjectedPluginArtifactAuthority:
             object.__setattr__(self, "cwd", Path(self.cwd))
 
     def _plan(self, backend: CodingAgentBackend) -> _ProjectedArtifactPlan:
-        from autoskillit.workspace.skill_projection import (
-            _default_base_branch,
-            _direct_install_projection_context,
-        )
-
         source_root = self.direct_install.plugin_dir.resolve()
         bundled_root = source_root / "skills"
         if not source_root.is_dir():
@@ -431,7 +421,7 @@ class ProjectedPluginArtifactAuthority:
                 logger,
                 action=mutation_action,
                 outcome="deferred_contended",
-                artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                artifact_kind=PluginArtifactKind.PROJECTION.value,
                 semantic_key=plan.semantic_key,
                 incarnation="unknown",
                 contention_detail=str(exc),
@@ -457,7 +447,7 @@ class ProjectedPluginArtifactAuthority:
                             logger,
                             action=mutation_action,
                             outcome="failed_validation",
-                            artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                            artifact_kind=PluginArtifactKind.PROJECTION.value,
                             semantic_key=plan.semantic_key,
                             incarnation=(
                                 staged.identity.incarnation_id if staged is not None else "unknown"
@@ -469,7 +459,7 @@ class ProjectedPluginArtifactAuthority:
                             logger,
                             action=mutation_action,
                             outcome="failed_validation",
-                            artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                            artifact_kind=PluginArtifactKind.PROJECTION.value,
                             semantic_key=plan.semantic_key,
                             incarnation=(
                                 staged.identity.incarnation_id if staged is not None else "unknown"
@@ -493,7 +483,7 @@ class ProjectedPluginArtifactAuthority:
                             logger,
                             action=mutation_action,
                             outcome="failed_validation",
-                            artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                            artifact_kind=PluginArtifactKind.PROJECTION.value,
                             semantic_key=plan.semantic_key,
                             incarnation=staged.identity.incarnation_id,
                         )
@@ -502,7 +492,7 @@ class ProjectedPluginArtifactAuthority:
                         logger,
                         action=mutation_action,
                         outcome="succeeded",
-                        artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                        artifact_kind=PluginArtifactKind.PROJECTION.value,
                         semantic_key=identity.semantic_key,
                         incarnation=identity.incarnation_id,
                     )
@@ -528,7 +518,7 @@ class ProjectedPluginArtifactAuthority:
                 logger,
                 action="acquire",
                 outcome="failed_validation",
-                artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                artifact_kind=PluginArtifactKind.PROJECTION.value,
                 semantic_key=plan.semantic_key,
                 incarnation=identity.incarnation_id,
             )
@@ -560,7 +550,7 @@ class ProjectedPluginArtifactAuthority:
             logger,
             action="acquire",
             outcome="succeeded",
-            artifact_kind=_PLUGIN_ARTIFACT_KIND,
+            artifact_kind=PluginArtifactKind.PROJECTION.value,
             semantic_key=identity.semantic_key,
             incarnation=identity.incarnation_id,
         )
@@ -574,7 +564,7 @@ class ProjectedPluginArtifactAuthority:
             _lease=PluginArtifactLifecycleLease(
                 reader,
                 logger=logger,
-                artifact_kind=_PLUGIN_ARTIFACT_KIND,
+                artifact_kind=PluginArtifactKind.PROJECTION.value,
                 semantic_key=identity.semantic_key,
                 incarnation=identity.incarnation_id,
             ),

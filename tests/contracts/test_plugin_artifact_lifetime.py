@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,6 +48,26 @@ def test_authority_creation_is_lazy(tmp_path: Path, monkeypatch) -> None:
 
     assert authority.catalog is not None
     assert not (tmp_path / ".autoskillit").exists()
+
+
+def test_projected_artifact_boundary_is_one_way_and_canonical() -> None:
+    import autoskillit.workspace._projected_artifact as projected_artifact
+    import autoskillit.workspace._projected_artifact.authority as authority
+    import autoskillit.workspace.skill_projection as skill_projection
+
+    assert "autoskillit.workspace.skill_projection" not in inspect.getsource(authority)
+    assert (
+        skill_projection.ProjectedPluginArtifactAuthority
+        is projected_artifact.ProjectedPluginArtifactAuthority
+    )
+    assert (
+        skill_projection.ProjectedPluginRetirementOwner
+        is projected_artifact.ProjectedPluginRetirementOwner
+    )
+    assert (
+        skill_projection.materialize_agent_skill_tree
+        is projected_artifact.materialize_agent_skill_tree
+    )
 
 
 @pytest.mark.parametrize("invalid", [True, 1.5, 0])

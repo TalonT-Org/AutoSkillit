@@ -153,12 +153,16 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Post-publication cleanup removes the private staging root, never the public root.",
     ),
-    ("workspace/skill_projection.py", "materialize_agent_skill_tree", "shutil.rmtree"): (
+    (
+        "workspace/_projected_artifact/materialization.py",
+        "materialize_agent_skill_tree",
+        "shutil.rmtree",
+    ): (
         1,
         "Non-plugin session-tree staging cleanup is outside the managed projection root.",
     ),
     (
-        "workspace/skill_projection.py",
+        "workspace/_projected_artifact/materialization.py",
         "materialize_sanitized_plugin_root",
         "shutil.rmtree",
     ): (

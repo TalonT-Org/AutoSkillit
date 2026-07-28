@@ -21,14 +21,13 @@ from autoskillit.workspace._install_state import (
     verify_install_state,
 )
 from autoskillit.workspace._projected_artifact import (
-    ProjectedPluginArtifactAuthority,
-    project_default_plugin_authority,
-    project_direct_install_authority,
-)
-from autoskillit.workspace._projection_cache import (
     PROJECTION_CACHE_KEY_EXCLUSIONS,
+    ProjectedPluginArtifactAuthority,
+    ProjectedPluginRetirementOwner,
     ProjectionCacheKey,
     iter_public_plugin_asset_files,
+    project_default_plugin_authority,
+    project_direct_install_authority,
     prune_stale_projections,
     public_plugin_asset_digest,
 )
@@ -83,7 +82,6 @@ from autoskillit.workspace.skill_projection import (
     AgentSkillDocument,
     EffectiveSkillDispatchContract,
     EffectiveSkillDispatchPreparation,
-    ProjectedPluginRetirementOwner,
     SkillProjectionContext,
     build_effective_skill_dispatch_contract,
     finalize_effective_skill_dispatch,

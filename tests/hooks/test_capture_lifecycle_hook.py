@@ -178,7 +178,7 @@ def test_cleanup_hook_reports_unsafe_capture_store(tmp_path: Path) -> None:
 def test_cleanup_hook_fails_open_with_bounded_stderr(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
-    _seed_due_capture(project)
+    artifact = _seed_due_capture(project)
     ledger = project.joinpath(*CAPTURE_PATH_COMPONENTS, LEDGER_NAME)
     payload = bytearray(ledger.read_bytes())
     payload[-1] ^= 0x01
@@ -190,6 +190,7 @@ def test_cleanup_hook_fails_open_with_bounded_stderr(tmp_path: Path) -> None:
     assert completed.stdout == ""
     assert "capture lifecycle cleanup failed" in completed.stderr
     assert len(completed.stderr.encode()) <= 512
+    assert artifact.read_bytes() == b"due"
 
 
 def test_cleanup_hook_bounds_multibyte_diagnostic_bytes(

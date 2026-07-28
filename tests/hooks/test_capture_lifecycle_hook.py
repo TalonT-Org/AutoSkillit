@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shlex
@@ -167,6 +168,35 @@ def test_cleanup_hook_bounds_multibyte_diagnostic_bytes(
     captured = capsys.readouterr()
     assert captured.err
     assert len(captured.err.encode("utf-8")) <= 512
+
+
+def test_cleanup_hook_reports_sweep_outcome_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class Store:
+        def sweep(self, **_kwargs):
+            return type("Outcome", (), {"errors": 2})()
+
+    class OpenLifecycle:
+        def __enter__(self):
+            return Store()
+
+        def __exit__(self, *_args):
+            return None
+
+    payload = json.dumps({"cwd": "/abs/project"}).encode("utf-8")
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(payload)))
+    monkeypatch.setattr(
+        capture_lifecycle_hook,
+        "open_capture_lifecycle",
+        lambda requested_cwd, *, create: OpenLifecycle(),
+    )
+
+    assert capture_lifecycle_hook.main() == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cleanup deferred after 2 errors" in captured.err
 
 
 def test_generated_codex_session_start_executes_cleanup_dispatcher(tmp_path: Path) -> None:

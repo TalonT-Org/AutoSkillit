@@ -53,7 +53,12 @@ def main() -> int:
             return 0
         try:
             with open_capture_lifecycle(payload_cwd, create=False) as lifecycle:
-                lifecycle.sweep(max_items=32, max_duration_seconds=0.05)
+                outcome = lifecycle.sweep(max_items=32, max_duration_seconds=0.05)
+                if outcome.errors:
+                    _bounded_stderr(
+                        "[AutoSkillit capture lifecycle cleanup deferred after "
+                        f"{outcome.errors} errors]\n"
+                    )
         except CaptureSetupError:
             return 0
         except (CaptureLifecycleError, OSError) as exc:

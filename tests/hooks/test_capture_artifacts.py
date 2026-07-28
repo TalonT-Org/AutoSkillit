@@ -675,8 +675,9 @@ def test_valid_reject_runs_one_runner_tail_sweep(
     events: list[str] = []
 
     class Store:
-        def sweep(self) -> None:
+        def sweep(self) -> SimpleNamespace:
             events.append("sweep")
+            return SimpleNamespace(errors=0)
 
     class OpenLifecycle:
         def __enter__(self):
@@ -703,8 +704,9 @@ def test_runner_tail_preserves_dispatch_result_and_order(
     events: list[str] = []
 
     class Store:
-        def sweep(self) -> None:
+        def sweep(self) -> SimpleNamespace:
             events.append("sweep")
+            return SimpleNamespace(errors=0)
 
     class OpenLifecycle:
         def __enter__(self):
@@ -747,6 +749,34 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
     assert len(captured.err.encode("utf-8")) <= 512
 
 
+def test_runner_tail_reports_sweep_outcome_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    class Store:
+        def sweep(self) -> SimpleNamespace:
+            return SimpleNamespace(errors=2)
+
+    class OpenLifecycle:
+        def __enter__(self):
+            return Store()
+
+        def __exit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
+    monkeypatch.setattr(
+        capture_artifacts,
+        "open_capture_lifecycle",
+        lambda requested_cwd, *, create: OpenLifecycle(),
+    )
+
+    assert capture_artifacts._main(["run", "encoded", "/abs/project", _CAPTURE_ID]) == 23
+    captured = capfd.readouterr()
+    assert captured.out == ""
+    assert "cleanup deferred after 2 errors" in captured.err
+
+
 def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
@@ -754,8 +784,9 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
     swept: list[bool] = []
 
     class Store:
-        def sweep(self) -> None:
+        def sweep(self) -> SimpleNamespace:
             swept.append(True)
+            return SimpleNamespace(errors=0)
 
     class OpenLifecycle:
         def __enter__(self):

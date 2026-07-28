@@ -41,6 +41,7 @@ from autoskillit.execution import (
     RecipeDeliveryReceiptLedger,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from autoskillit.pipeline import RecipeInitializationRequirement
 from autoskillit.recipe import load_and_validate
 from autoskillit.server import _recipe_delivery as recipe_delivery
 from autoskillit.server import _recipe_section_pagination as pagination
@@ -452,6 +453,42 @@ def _build_envelope(
         bound_bytes=bound_bytes,
     )
     return envelope, generation
+
+
+def test_recovery_order_is_derived_from_initialization_requirements(
+    tmp_path: Path,
+) -> None:
+    payload = _payload()
+    generation = _persist(tmp_path, payload)
+    flow_generation = _test_flow_generation(payload)
+    requirements = (
+        RecipeInitializationRequirement(
+            section="first",
+            page_plan_sha256="sha256:first-plan",
+            total_parts=2,
+        ),
+        RecipeInitializationRequirement(
+            section="flow_records",
+            page_plan_sha256="sha256:flow-plan",
+            total_parts=1,
+        ),
+    )
+
+    envelope = build_recipe_envelope(
+        payload,
+        recipe_name="remediation",
+        generation=generation,
+        flow_generation=flow_generation,
+        entrypoint="first",
+        bound_bytes=90_000,
+        initialization_requirements=requirements,
+    )
+
+    assert [item["section"] for item in envelope["required_sections"]] == [
+        "first",
+        "flow_records",
+    ]
+    assert envelope["recovery"]["ordered_sections"] == ["first", "flow_records"]
 
 
 def test_same_payload_is_idempotent_and_changed_payload_is_immutable(tmp_path: Path) -> None:

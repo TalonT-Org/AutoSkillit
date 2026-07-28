@@ -703,7 +703,9 @@ def build_recipe_envelope(
         ],
         "recovery": {
             "completion_required": completion_required,
-            "ordered_sections": ["flow_records", entrypoint],
+            "ordered_sections": [
+                requirement.section for requirement in initialization_requirements
+            ],
             "pagination_version": RECIPE_SECTION_PAGINATION_VERSION,
             "section_registry_sha256": RECIPE_SECTION_REGISTRY_DIGEST,
             "pull_tool": "get_recipe_section",

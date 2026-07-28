@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -204,7 +205,17 @@ def _plugin_launch_binding(
         yield binding
     finally:
         if binding is not None:
-            binding.close()
+            primary_error = sys.exc_info()[1]
+            try:
+                binding.close()
+            except BaseException:
+                if primary_error is None:
+                    raise
+                logger.warning(
+                    "plugin_launch_binding_close_failed",
+                    primary_error=repr(primary_error),
+                    exc_info=True,
+                )
 
 
 async def _run_headless_attempt(

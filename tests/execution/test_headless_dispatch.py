@@ -55,6 +55,62 @@ def _make_success_stdout(marker: str = "%%FT_DONE%%") -> str:
     )
 
 
+def test_plugin_binding_cleanup_does_not_replace_primary_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    import autoskillit.execution.headless._headless_launch as headless_launch
+    from autoskillit.core import PluginLoadMode
+
+    primary = RuntimeError("primary launch failure")
+    cleanup = OSError("cleanup failure")
+
+    class FailingLease:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+            raise cleanup
+
+    lease = FailingLease()
+    binding = PluginLaunchBinding(
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        plugin_dir=tmp_path,
+        identity=PluginArtifactIdentity(
+            semantic_key="test-plugin",
+            incarnation_id="test-incarnation",
+            manifest_schema_version=1,
+            artifact_digest="test-digest",
+            managed_path=tmp_path,
+            manifest_path=tmp_path.parent / "test-plugin.manifest.json",
+        ),
+        inherited_fds=(),
+        _lease=lease,
+    )
+    authority = Mock()
+    authority.acquire_launch_binding.return_value = binding
+    logger = Mock()
+    monkeypatch.setattr(headless_launch, "logger", logger)
+
+    with pytest.raises(RuntimeError) as caught:
+        with headless_launch._plugin_launch_binding(
+            authority=authority,
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ):
+            raise primary
+
+    assert caught.value is primary
+    assert lease.closed
+    logger.warning.assert_called_once_with(
+        "plugin_launch_binding_close_failed",
+        primary_error=repr(primary),
+        exc_info=True,
+    )
+
+
 class TestDispatchFoodTruck:
     """Tests for DefaultHeadlessExecutor.dispatch_food_truck."""
 

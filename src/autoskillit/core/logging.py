@@ -121,6 +121,9 @@ def log_plugin_artifact_lifecycle(
 
 class _LeaseOwner(Protocol):
     @property
+    def inherited_fds(self) -> tuple[int, ...]: ...
+
+    @property
     def closed(self) -> bool: ...
 
     def close(self) -> None: ...
@@ -155,6 +158,10 @@ class PluginArtifactLifecycleLease:
     @property
     def closed(self) -> bool:
         return bool(self._lease.closed)
+
+    @property
+    def inherited_fds(self) -> tuple[int, ...]:
+        return self._lease.inherited_fds
 
     def close(self) -> None:
         if self.closed:

@@ -70,6 +70,10 @@ class _FakePluginLease:
 
     closed: bool = False
 
+    @property
+    def inherited_fds(self) -> tuple[int, ...]:
+        return ()
+
     def close(self) -> None:
         self.closed = True
 

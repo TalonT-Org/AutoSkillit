@@ -34,6 +34,9 @@ __all__ = [
 
 class _LeaseOwner(Protocol):
     @property
+    def inherited_fds(self) -> tuple[int, ...]: ...
+
+    @property
     def closed(self) -> bool: ...
 
     def close(self) -> None: ...
@@ -294,11 +297,10 @@ class PluginLaunchBinding:
                 )
         if self.load_mode is not PluginLoadMode.IMPLICIT_INSTALLED and self.plugin_dir is None:
             raise ValueError(f"{self.load_mode.value} requires a plugin path")
-        object.__setattr__(
-            self,
-            "inherited_fds",
-            normalize_inherited_fds(self.inherited_fds),
-        )
+        inherited_fds = normalize_inherited_fds(self.inherited_fds)
+        if inherited_fds != normalize_inherited_fds(self._lease.inherited_fds):
+            raise ValueError("inherited descriptors must be owned by the launch lease")
+        object.__setattr__(self, "inherited_fds", inherited_fds)
 
     @property
     def closed(self) -> bool:

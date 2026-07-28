@@ -15,6 +15,10 @@ class _Lease:
     def __init__(self) -> None:
         self.closed = False
 
+    @property
+    def inherited_fds(self) -> tuple[int, ...]:
+        return ()
+
     def close(self) -> None:
         self.closed = True
 
@@ -69,6 +73,10 @@ def test_plugin_binding_cleanup_does_not_replace_primary_error(
 
     class FailingLease:
         closed = False
+
+        @property
+        def inherited_fds(self) -> tuple[int, ...]:
+            return ()
 
         def close(self) -> None:
             self.closed = True

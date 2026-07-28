@@ -728,6 +728,7 @@ class CaptureLifecycleStore:
         lease_target = public or staging
         if lease_target is None:
             return replace(record, state=CaptureState.DELETED), None
+        lease_transferred = False
         try:
             self._try_artifact_lease(lease_target)
             identity = lease_target.identity
@@ -759,7 +760,7 @@ class CaptureLifecycleStore:
                 os.close(linked.fd)
                 os.unlink(record.staging_name, dir_fd=self._root_fd)
                 os.fsync(self._root_fd)
-            return (
+            result = (
                 replace(
                     record,
                     state=CaptureState.ABANDONED,
@@ -770,9 +771,13 @@ class CaptureLifecycleStore:
                 ),
                 lease_target,
             )
+            lease_transferred = True
+            return result
         finally:
             for observed in (staging, public):
-                if observed is not None and observed is not lease_target:
+                if observed is not None and (
+                    observed is not lease_target or not lease_transferred
+                ):
                     os.close(observed.fd)
 
     def _deleting_record(self, record: CaptureLifecycleRecord) -> CaptureLifecycleRecord:

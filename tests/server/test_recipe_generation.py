@@ -83,6 +83,18 @@ def _snapshot(recipe_name: str, execution_id: str) -> RecipeExecutionSnapshot:
     )
 
 
+def _flow_generation(*, entrypoint: str = "step") -> RecipeFlowGeneration:
+    record = json.dumps(
+        {"kind": "entrypoint", "name": entrypoint},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return RecipeFlowGeneration(
+        schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        records=(record,),
+    )
+
+
 def _record(
     *,
     kitchen_id: str = "kitchen-a",
@@ -91,20 +103,12 @@ def _record(
     payload_marker: str = "a",
 ) -> RecipeGenerationRecord:
     execution_id = f"execution-{compile_key}"
-    record = json.dumps(
-        {"kind": "entrypoint", "name": "step"},
-        separators=(",", ":"),
-        sort_keys=True,
-    )
     return RecipeGenerationRecord(
         kitchen_id=kitchen_id,
         normalized_compile_key=compile_key,
         recipe_name=recipe_name,
         finalized_projection=_projection(),
-        flow_generation=RecipeFlowGeneration(
-            schema_version=RECIPE_FLOW_SCHEMA_VERSION,
-            records=(record,),
-        ),
+        flow_generation=_flow_generation(),
         artifact_payload={
             "marker": payload_marker,
             "nested": {"items": [1, True, None]},
@@ -119,7 +123,9 @@ def _generation(
     marker: str,
     *,
     recipe_name: str = "recipe",
+    flow_generation: RecipeFlowGeneration | None = None,
 ) -> RecipeArtifactGeneration:
+    flow = flow_generation or _flow_generation()
     return RecipeArtifactGeneration(
         producer_tool=f"producer-{marker}",
         recipe_name=recipe_name,
@@ -130,16 +136,33 @@ def _generation(
         artifact_blob_size_bytes=100,
         body_sha256=_hash(f"{marker}:body"),
         body_size_bytes=40,
-        flow_schema_version=RECIPE_FLOW_SCHEMA_VERSION,
-        flow_sha256=_hash(f"{marker}:flow"),
-        flow_size_bytes=20,
-        flow_record_count=1,
+        flow_schema_version=flow.schema_version,
+        flow_sha256=flow.flow_sha256,
+        flow_size_bytes=flow.flow_size_bytes,
+        flow_record_count=flow.record_count,
     )
 
 
 def test_record_rejects_empty_kitchen_id() -> None:
     with pytest.raises(ValueError, match="kitchen_id must be a non-empty string"):
         _record(kitchen_id="")
+
+
+def test_surface_binding_rejects_a_different_flow_generation() -> None:
+    record = _record()
+    store = RecipeGenerationStore()
+    store.put(record)
+
+    with pytest.raises(ValueError, match="must match the record flow generation"):
+        store.bind_surface(
+            record.kitchen_id,
+            record.normalized_compile_key,
+            "open_kitchen",
+            _generation(
+                "different-flow",
+                flow_generation=_flow_generation(entrypoint="other-step"),
+            ),
+        )
 
 
 def test_record_owns_canonical_immutable_primitive_copies() -> None:

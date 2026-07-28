@@ -185,6 +185,14 @@ class RecipeGenerationRecord:
                 raise TypeError("surface bindings must contain RecipeArtifactGeneration values")
             if generation.recipe_name != self.recipe_name:
                 raise ValueError("surface artifact generation must match the record recipe_name")
+            artifact_identity = generation.pull_identity()
+            if any(
+                artifact_identity[field_name] != expected
+                for field_name, expected in self.flow_generation.identity().items()
+            ):
+                raise ValueError(
+                    "surface artifact generation must match the record flow generation"
+                )
             bindings[surface] = generation
 
         object.__setattr__(self, "artifact_payload", artifact_payload)

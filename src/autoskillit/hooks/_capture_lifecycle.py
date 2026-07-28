@@ -905,6 +905,11 @@ class CaptureLifecycleStore:
             ):
                 return ("not_due", 0, 0)
             try:
+                if (
+                    record.project_identity != self._project_identity
+                    or record.root_identity != self._root_identity
+                ):
+                    raise _Tampered
                 if record.state in {
                     CaptureState.RESERVED,
                     CaptureState.STAGED,

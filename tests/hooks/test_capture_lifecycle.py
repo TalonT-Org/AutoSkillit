@@ -8,7 +8,7 @@ import os
 import stat
 import subprocess
 import sys
-from dataclasses import FrozenInstanceError, asdict
+from dataclasses import FrozenInstanceError, asdict, replace
 from pathlib import Path
 
 import pytest
@@ -481,6 +481,35 @@ def test_unsafe_public_substitutes_survive_as_tampered(
             assert external.read_bytes() == b"external"
         else:
             assert public.read_bytes() == b"replacement"
+    finally:
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize("binding", ("project_identity", "root_identity"))
+def test_foreign_ledger_authority_preserves_artifact_as_tampered(
+    tmp_path: Path,
+    binding: str,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    record = store.get_record(_CAPTURE_ID)
+    assert record is not None
+    foreign = replace(record, **{binding: (record.root_identity[0] + 1, 1)})
+    store._commit(foreign)
+
+    try:
+        clock.advance(3601)
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+
+        current = store.get_record(_CAPTURE_ID)
+        assert outcome.tampered == 1
+        assert current is not None
+        assert current.state is CaptureState.TAMPERED
+        assert (_capture_dir(project) / artifact.name).read_bytes() == b"captured"
     finally:
         root.close()
         anchor.close()

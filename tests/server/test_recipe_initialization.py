@@ -157,6 +157,40 @@ def test_completion_rejects_stale_or_altered_initialization_id(
     }
 
 
+def test_completion_normalizes_unexpected_execution_preparation_failures(
+    minimal_ctx,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    with minimal_ctx.recipe_execution_lock:
+        minimal_ctx.recipe_initialization_state = record_initialization_page(
+            state,
+            initialization_id="initialization",
+            section="flow_records",
+            page_plan_sha256=_hash("flow-plan"),
+            part=0,
+        )
+    finalized = build_completion_response(minimal_ctx, "initialization")
+    assert isinstance(finalized, FinalizedRecipeInitializationResponse)
+
+    def _raise_prepare(*_args, **_kwargs):
+        raise RuntimeError("resolver unavailable")
+
+    monkeypatch.setattr(
+        "autoskillit.server._recipe_initialization.prepare_recipe_execution",
+        _raise_prepare,
+    )
+
+    response = complete_initialization_response(finalized, finalized.rendered)
+
+    assert json.loads(response) == {
+        "success": False,
+        "error": "recipe_execution_install_failed",
+    }
+    assert isinstance(minimal_ctx.recipe_initialization_state, InitializingRecipe)
+
+
 def test_common_admission_allows_only_recovery_inspection_and_lifecycle_control(
     minimal_ctx,
     tmp_path,

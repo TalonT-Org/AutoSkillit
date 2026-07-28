@@ -12,6 +12,7 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
     ToolInitializationOperation,
+    get_logger,
     get_tool_def,
 )
 from autoskillit.pipeline import (
@@ -31,6 +32,8 @@ from autoskillit.server._state import _get_ctx_or_none
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
+
+logger = get_logger(__name__)
 
 __all__ = [
     "FinalizedRecipeInitializationResponse",
@@ -216,7 +219,8 @@ def complete_initialization_response(
             tool_ctx,
             snapshot=finalized.staged_snapshot,
         )
-    except RecipeExecutionAdmissionError:
+    except Exception:
+        logger.error("recipe execution preparation failed", exc_info=True)
         return json.dumps(
             {"success": False, "error": "recipe_execution_install_failed"},
             separators=(",", ":"),

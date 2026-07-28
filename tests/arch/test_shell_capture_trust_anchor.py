@@ -215,6 +215,7 @@ def test_capture_deletion_is_confined_to_lifecycle_transactions() -> None:
         "_normalize_abandoned",
         "_quarantine_delete",
         "create_artifact",
+        "unlink_quarantine",
     }
 
     quarantine = next(

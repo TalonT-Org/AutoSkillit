@@ -9,19 +9,29 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.core.types._type_recipe_delivery as recipe_delivery_types
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
+    RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_DELIVERY_SURFACE_REGISTRY,
+    RECIPE_FLOW_SCHEMA_VERSION,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    FinalizedRecipeProjection,
+    RecipeArtifactGeneration,
+    RecipeBindingProjection,
     RecipeDeliveryAttestation,
     RecipeDeliveryEvidenceDef,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
+    RecipeFlowGeneration,
     load_yaml,
     recipe_delivery_request_digest,
 )
@@ -35,12 +45,10 @@ from autoskillit.recipe import load_and_validate
 from autoskillit.server import _recipe_delivery as recipe_delivery
 from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server._recipe_delivery import (
-    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_BODY_END,
     RECIPE_BODY_START,
     RECIPE_COMPLETION_SENTINEL,
     RecipeArtifactError,
-    RecipeArtifactGeneration,
     RecipeArtifactSchemaError,
     _canonical_payload,
     _generation_dir,
@@ -50,6 +58,7 @@ from autoskillit.server._recipe_delivery import (
     finalize_recipe_delivery,
     load_recipe_artifact,
     persist_recipe_artifact,
+    prepare_recipe_delivery_generation,
     recipe_pull_producers,
     recipe_recreation_producers,
     retire_recipe_artifacts,
@@ -71,13 +80,64 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 _NOW = 1_800_000_000
 
 
+def _test_flow_generation(payload: dict[str, object]) -> RecipeFlowGeneration:
+    existing = payload.get("flow_records")
+    records = (
+        tuple(record for record in existing if isinstance(record, str))
+        if isinstance(existing, list)
+        else ()
+    )
+    if not records:
+        names = [
+            name for name in payload.get("post_prune_step_names") or [] if isinstance(name, str)
+        ]
+        name = names[0] if names else "first"
+        records = (
+            json.dumps(
+                {"kind": "entrypoint", "name": name},
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            json.dumps(
+                {"index": 0, "kind": "step", "name": name},
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
+    return RecipeFlowGeneration(
+        schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        records=records,
+    )
+
+
+def _test_projection() -> FinalizedRecipeProjection:
+    return FinalizedRecipeProjection(
+        binding_projection=RecipeBindingProjection({}),
+        ordered_step_names=("first",),
+        entrypoint="first",
+        ordered_flow_edges=(),
+    )
+
+
+def _with_flow(payload: dict[str, object]) -> tuple[dict[str, object], RecipeFlowGeneration]:
+    result = dict(payload)
+    flow_generation = _test_flow_generation(result)
+    result.setdefault("flow_records", list(flow_generation.records))
+    result.setdefault("recipe_flow", flow_generation.identity())
+    return result, flow_generation
+
+
 def _payload(
     content: str = "name: remediation\nsteps:\n  first:\n    action: stop\n",
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "success": True,
         "valid": True,
         "content": content,
+        "content_hash": "sha256:" + ("a" * 64),
+        "composite_hash": "sha256:" + ("b" * 64),
         "post_prune_step_names": ["first"],
         "orchestration_rules": "follow the graph",
         "stop_step_semantics": "stop means stop",
@@ -85,6 +145,53 @@ def _payload(
         "errors": [],
         "warnings": [],
     }
+    return _with_flow(payload)[0]
+
+
+def _finalize_recipe_delivery(
+    payload: dict[str, object],
+    *,
+    surface: str,
+    recipe_name: str,
+    tool_ctx: Any,
+    finalized_projection: FinalizedRecipeProjection,
+    **kwargs: Any,
+):
+    prepared = prepare_recipe_delivery_generation(
+        payload,
+        recipe_name=recipe_name,
+        tool_ctx=tool_ctx,
+        finalized_projection=finalized_projection,
+    )
+    return finalize_recipe_delivery(
+        payload,
+        surface=surface,
+        recipe_name=recipe_name,
+        tool_ctx=tool_ctx,
+        finalized_projection=finalized_projection,
+        flow_generation=prepared.flow_generation,
+        canonical_artifact_payload=prepared.canonical_artifact_payload,
+        execution_snapshot=prepared.execution_snapshot,
+        normalized_compile_key=prepared.normalized_compile_key,
+        **kwargs,
+    )
+
+
+def _persist_finalized_generation(
+    tool_ctx: Any,
+    payload: dict[str, object] | None = None,
+):
+    source = dict(payload or _payload())
+    finalized = _finalize_recipe_delivery(
+        source,
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+    )
+    assert finalized.artifact_generation is not None
+    assert finalized.execution_snapshot is not None
+    return finalized.artifact_generation, finalized
 
 
 def _persist(
@@ -94,12 +201,14 @@ def _persist(
     producer: str = "open_kitchen",
     kitchen_id: str = "kitchen-test",
 ) -> RecipeArtifactGeneration:
+    persisted_payload, flow_generation = _with_flow(dict(payload or _payload()))
     return persist_recipe_artifact(
         tmp_path,
         kitchen_id=kitchen_id,
         producer_tool=producer,
         recipe_name="remediation",
-        payload=dict(payload or _payload()),
+        payload=persisted_payload,
+        flow_generation=flow_generation,
     )
 
 
@@ -112,11 +221,13 @@ def _write_malformed_generation(
 ) -> RecipeArtifactGeneration:
     """Write a digest-consistent artifact while bypassing producer validation."""
     blob = _canonical_payload(payload)
+    flow_generation = _test_flow_generation(payload)
     generation = _generation_from_payload(
         producer_tool=producer,
         recipe_name="remediation",
         blob=blob,
         payload=payload,
+        flow_generation=flow_generation,
     )
     directory = _generation_dir(
         tmp_path,
@@ -298,14 +409,13 @@ def _build_envelope(
     tmp_path: Path, payload: dict[str, object], *, bound_bytes: int
 ) -> tuple[dict[str, object], RecipeArtifactGeneration]:
     generation = _persist(tmp_path, payload)
-    skeleton_source = MagicMock()
-    skeleton_source.recipe_name = "remediation"
-    skeleton_source.active_recipe_steps = {}
+    flow_generation = _test_flow_generation(payload)
     envelope = build_recipe_envelope(
         payload,
         recipe_name="remediation",
         generation=generation,
-        skeleton_source=skeleton_source,
+        flow_generation=flow_generation,
+        entrypoint="first",
         bound_bytes=bound_bytes,
     )
     return envelope, generation
@@ -332,13 +442,19 @@ def test_generation_path_includes_version_domain(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version_name: str
 ) -> None:
     first = _persist(tmp_path)
-    monkeypatch.setattr(f"autoskillit.server._recipe_delivery.{version_name}", 2)
+    current_version = getattr(recipe_delivery, version_name)
+    monkeypatch.setattr(
+        f"autoskillit.server._recipe_delivery.{version_name}",
+        current_version + 1,
+    )
+    monkeypatch.setattr(recipe_delivery_types, version_name, current_version + 1)
 
     second = _persist(tmp_path)
 
     assert second.payload_sha256 == first.payload_sha256
     assert second.pull_identity() != first.pull_identity()
-    assert load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=first) == _payload()
+    with pytest.raises(RecipeArtifactError, match="invalid recipe artifact identity bounds"):
+        load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=first)
     assert load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=second) == _payload()
 
 
@@ -416,16 +532,21 @@ def test_non_utf8_payload_is_normalized_to_recipe_artifact_error(tmp_path: Path)
     qualified_blob_sha = f"sha256:{hashlib.sha256(blob).hexdigest()}"
     payload_sha = "sha256:" + hashlib.sha256(b"autoskillit.recipe-payload.v1\0" + blob).hexdigest()
     empty_body_sha = f"sha256:{hashlib.sha256(b'').hexdigest()}"
+    flow_generation = _test_flow_generation(_payload())
     generation = RecipeArtifactGeneration(
         producer_tool="open_kitchen",
         recipe_name="remediation",
-        descriptor_version=1,
-        schema_version=1,
+        descriptor_version=RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+        schema_version=RECIPE_ARTIFACT_SCHEMA_VERSION,
         payload_sha256=payload_sha,
         artifact_blob_sha256=qualified_blob_sha,
         artifact_blob_size_bytes=len(blob),
         body_sha256=empty_body_sha,
         body_size_bytes=0,
+        flow_schema_version=flow_generation.schema_version,
+        flow_sha256=flow_generation.flow_sha256,
+        flow_size_bytes=flow_generation.flow_size_bytes,
+        flow_record_count=flow_generation.record_count,
     )
     directory = _generation_dir(
         tmp_path,
@@ -459,6 +580,10 @@ def test_generation_descriptor_has_no_caller_selected_path(tmp_path: Path) -> No
         "artifact_blob_size_bytes",
         "body_sha256",
         "body_size_bytes",
+        "flow_schema_version",
+        "flow_sha256",
+        "flow_size_bytes",
+        "flow_record_count",
         "pull_tool",
     }
     assert not {"artifact_path", "path", "sha256"} & set(pull)
@@ -524,7 +649,7 @@ def test_kitchen_retirement_evicts_only_matching_page_plans(
     common = {
         "generation": generation,
         "selected": selected,
-        "recipe_section_bound_bytes": 1_000,
+        "recipe_section_bound_bytes": 10_000,
     }
     retired = get_or_build_recipe_section_page_plan(
         kitchen_id="kitchen-test",
@@ -615,13 +740,18 @@ def test_kitchen_retirement_rejects_dot_path_components(tmp_path: Path, kitchen_
 def test_codex_without_supported_host_evidence_uses_bounded_envelope(tool_ctx) -> None:
     tool_ctx.backend = CodexBackend()
     tool_ctx.kitchen_id = "codex-envelope"
-    payload = _payload("x" * 50_000)
+    payload = _payload(
+        "name: remediation\nsteps:\n  first:\n    action: stop\n    message: "
+        + ("x" * 50_000)
+        + "\n"
+    )
 
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         payload,
         surface="open_kitchen",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
@@ -635,11 +765,12 @@ def test_token_dense_payload_does_not_use_four_byte_ordinary_estimate(tool_ctx) 
     tool_ctx.backend = CodexBackend()
     tool_ctx.kitchen_id = "codex-token-dense"
 
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         _payload("!" * 20_000),
         surface="open_kitchen",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ENVELOPE
@@ -648,7 +779,7 @@ def test_token_dense_payload_does_not_use_four_byte_ordinary_estimate(tool_ctx) 
     )
 
 
-def test_envelope_priority_fields_share_multibyte_budget_safely(tmp_path: Path) -> None:
+def test_envelope_manifest_ignores_ambient_multibyte_fields(tmp_path: Path) -> None:
     payload = _payload()
     payload["orchestration_rules"] = "雪" * 1_000
     payload["stop_step_semantics"] = "界" * 1_000
@@ -658,12 +789,10 @@ def test_envelope_priority_fields_share_multibyte_budget_safely(tmp_path: Path) 
     rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
 
     assert len(rendered.encode("utf-8")) <= bound_bytes
-    for key in ("orchestration_rules", "stop_step_semantics"):
-        projected = envelope[key]
-        assert isinstance(projected, str)
-        assert projected
-        assert len(projected.encode("utf-8")) < len(str(payload[key]).encode("utf-8"))
-        assert projected.encode("utf-8").decode("utf-8") == projected
+    assert envelope["success"] is True
+    assert envelope["recipe_flow"] == _test_flow_generation(payload).identity()
+    assert "orchestration_rules" not in envelope
+    assert "stop_step_semantics" not in envelope
 
 
 def test_envelope_fallbacks_follow_tight_and_extreme_bounds(tmp_path: Path) -> None:
@@ -704,11 +833,12 @@ def test_finalizer_uses_backend_selected_recipe_budget(tool_ctx) -> None:
     tool_ctx.backend = backend
     tool_ctx.kitchen_id = "selected-budget"
 
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         _payload(),
         surface="open_kitchen",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
     )
 
     assert finalized.decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
@@ -872,11 +1002,12 @@ def test_attested_finalization_commits_only_after_exact_enforcement(
     tool_ctx.backend = _protected_codex_backend()
     tool_ctx.kitchen_id = "codex-attested"
     ledger = _ledger(tmp_path)
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         _payload("x" * 50_000),
         surface="open_kitchen",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
         delivery_request=_request(),
         attestation=_attestation(),
         supported_evidence=_evidence(),
@@ -909,11 +1040,12 @@ def test_transformed_attested_response_aborts_pending_receipt(tmp_path: Path, to
     tool_ctx.backend = _protected_codex_backend()
     tool_ctx.kitchen_id = "codex-abort"
     ledger = _ledger(tmp_path)
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         _payload("x" * 50_000),
         surface="load_recipe",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
         delivery_request=_request(),
         attestation=_attestation("thread-abort"),
         supported_evidence=_evidence(),
@@ -932,11 +1064,12 @@ def test_failed_receipt_abort_is_reported(
     tool_ctx.backend = _protected_codex_backend()
     tool_ctx.kitchen_id = "codex-abort-failure"
     ledger = _ledger(tmp_path)
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         _payload("x" * 50_000),
         surface="load_recipe",
         recipe_name="remediation",
         tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
         delivery_request=_request(),
         attestation=_attestation("thread-abort-failure"),
         supported_evidence=_evidence(),
@@ -973,8 +1106,16 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     chunks: list[str] = []
     expected_byte_start = 0
     part = 0
+    page_plan_sha256: str | None = None
+    continuation: str | None = None
     while True:
-        rendered = await get_recipe_section(section="content", part=part, **kwargs)
+        rendered = await get_recipe_section(
+            section="content",
+            part=part,
+            page_plan_sha256=page_plan_sha256,
+            continuation=continuation,
+            **kwargs,
+        )
         assert len(rendered.encode("utf-8")) <= (
             CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
         )
@@ -993,6 +1134,8 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
             assert "next_part" not in response
             break
         assert response["next_part"] == part + 1
+        page_plan_sha256 = response["page_plan_sha256"]
+        continuation = response["continuation"]
         part = response["next_part"]
 
     assert part > 0
@@ -1149,21 +1292,10 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-write"
-    generation = _persist(
-        tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-    )
+    generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-    )
-    malformed = _payload()
-    malformed["warnings"] = ["valid", 1]
-    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: malformed)
-    monkeypatch.setattr(
-        tools_recipe,
-        "build_open_kitchen_recipe_payload",
-        lambda data, *, version: data,
     )
     monkeypatch.setattr(
         tools_recipe,
@@ -1193,13 +1325,7 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-reload"
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
-    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: _payload())
-    monkeypatch.setattr(
-        tools_recipe,
-        "build_open_kitchen_recipe_payload",
-        lambda data, *, version: data,
-    )
+    generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     monkeypatch.setattr(
         tools_recipe,
         "persist_recipe_artifact",
@@ -1238,13 +1364,7 @@ async def test_post_recreation_reload_artifact_failure_logs_exception_context(
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-artifact-reload"
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
-    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: _payload())
-    monkeypatch.setattr(
-        tools_recipe,
-        "build_open_kitchen_recipe_payload",
-        lambda data, *, version: data,
-    )
+    generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     monkeypatch.setattr(
         tools_recipe,
         "persist_recipe_artifact",
@@ -1424,9 +1544,17 @@ async def test_oversized_named_step_round_trips_through_continuation(
     kwargs.pop("pull_tool")
     chunks: list[str] = []
     part = 0
+    page_plan_sha256: str | None = None
+    continuation: str | None = None
 
     while True:
-        rendered = await get_recipe_section(section="giant_step", part=part, **kwargs)
+        rendered = await get_recipe_section(
+            section="giant_step",
+            part=part,
+            page_plan_sha256=page_plan_sha256,
+            continuation=continuation,
+            **kwargs,
+        )
         assert len(rendered.encode("utf-8")) <= (
             CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
         )
@@ -1435,6 +1563,8 @@ async def test_oversized_named_step_round_trips_through_continuation(
         chunks.append(response["content"])
         if response["has_more"] is False:
             break
+        page_plan_sha256 = response["page_plan_sha256"]
+        continuation = response["continuation"]
         part = response["next_part"]
 
     assert part > 0
@@ -1486,21 +1616,15 @@ async def test_pull_tool_recreates_missing_exact_generation(
     import autoskillit.server.tools.tools_recipe as tools_recipe
 
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate"
-    generation = persist_recipe_artifact(
-        tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-        producer_tool="open_kitchen",
-        recipe_name="remediation",
-        payload=_payload(),
-    )
+    generation, finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
     )
-    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: _payload())
+    recompile = MagicMock(side_effect=AssertionError("recreation must not recompile"))
     monkeypatch.setattr(
         tools_recipe,
-        "build_open_kitchen_recipe_payload",
-        lambda data, *, version: data,
+        "serve_recipe",
+        recompile,
     )
 
     kwargs = generation.pull_identity()
@@ -1509,50 +1633,41 @@ async def test_pull_tool_recreates_missing_exact_generation(
 
     assert response["success"] is True
     assert response["content"] == _payload()["content"]
-    assert (
-        load_recipe_artifact(
-            tool_ctx_kitchen_open.temp_dir,
-            kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-            identity=generation,
-        )
-        == _payload()
+    recreated = load_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        identity=generation,
     )
+    assert recreated["content"] == _payload()["content"]
+    assert recreated["recipe_execution"]["execution_id"] == (
+        finalized.execution_snapshot.execution_id
+    )
+    recompile.assert_not_called()
 
 
-async def test_recreation_does_not_attach_snapshot_for_different_recipe_hashes(
+async def test_recreation_reuses_original_snapshot_without_snapshot_factory(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
+    import autoskillit.server._recipe_execution as recipe_execution
 
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-stale-snapshot"
     payload = _payload()
     payload["content_hash"] = "sha256:" + ("a" * 64)
     payload["composite_hash"] = "sha256:" + ("b" * 64)
-    generation = persist_recipe_artifact(
-        tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-        producer_tool="open_kitchen",
-        recipe_name="remediation",
-        payload=payload,
+    generation, finalized = _persist_finalized_generation(
+        tool_ctx_kitchen_open,
+        payload,
     )
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
     )
-    snapshot = MagicMock(
-        recipe_name="remediation",
-        content_hash="sha256:" + ("c" * 64),
-        composite_hash="sha256:" + ("d" * 64),
-    )
-    monkeypatch.setattr(tools_recipe, "serve_recipe", lambda *_args, **_kwargs: dict(payload))
-    monkeypatch.setattr(
-        tools_recipe,
-        "build_open_kitchen_recipe_payload",
-        lambda data, *, version: data,
+    snapshot_factory = MagicMock(
+        side_effect=AssertionError("recreation must reuse the original snapshot")
     )
     monkeypatch.setattr(
-        tools_recipe,
-        "get_recipe_execution",
-        lambda _tool_ctx: MagicMock(snapshot=snapshot),
+        recipe_execution,
+        "build_recipe_execution_snapshot",
+        snapshot_factory,
     )
 
     kwargs = generation.pull_identity()
@@ -1565,14 +1680,15 @@ async def test_recreation_does_not_attach_snapshot_for_different_recipe_hashes(
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
         identity=generation,
     )
-    assert "recipe_execution" not in recreated
+    assert recreated["recipe_execution"]["execution_id"] == (
+        finalized.execution_snapshot.execution_id
+    )
+    snapshot_factory.assert_not_called()
 
 
 async def test_pull_tool_reports_invalid_missing_generation_recreation(
-    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+    tool_ctx_kitchen_open,
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
-
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-invalid"
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
@@ -1584,52 +1700,26 @@ async def test_pull_tool_reports_invalid_missing_generation_recreation(
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
     )
-    monkeypatch.setattr(
-        tools_recipe,
-        "serve_recipe",
-        lambda *_args, **_kwargs: {"valid": False, "content": "invalid"},
-    )
 
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
     response = json.loads(await get_recipe_section(section="content", **kwargs))
 
-    assert response == {
-        "success": False,
-        "error": "recipe_artifact_unavailable",
-        "detail": "recreation returned invalid recipe",
-    }
+    assert response == {"success": False, "error": "invalid_recipe_artifact_identity"}
 
 
 async def test_pull_tool_rejects_changed_recreated_generation(
-    tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+    tool_ctx_kitchen_open,
 ) -> None:
-    import autoskillit.server.tools.tools_recipe as tools_recipe
-
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-changed"
-    generation = persist_recipe_artifact(
-        tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
-        producer_tool="open_kitchen",
-        recipe_name="remediation",
-        payload=_payload(),
-    )
+    generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
-    )
-    monkeypatch.setattr(
-        tools_recipe,
-        "serve_recipe",
-        lambda *_args, **_kwargs: _payload("name: remediation\nsteps: {}\n"),
-    )
-    monkeypatch.setattr(
-        tools_recipe,
-        "build_open_kitchen_recipe_payload",
-        lambda data, *, version: data,
     )
 
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
+    kwargs["flow_sha256"] = "sha256:" + ("0" * 64)
     response = json.loads(await get_recipe_section(section="content", **kwargs))
 
     assert response == {"success": False, "error": "invalid_recipe_artifact_identity"}

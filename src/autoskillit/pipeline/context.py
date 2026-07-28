@@ -30,7 +30,6 @@ from autoskillit.core import (
     GitHubFetcher,
     HeadlessExecutor,
     InputContractResolver,
-    InstalledRecipeExecution,
     McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
@@ -58,6 +57,10 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
+from autoskillit.pipeline.recipe_initialization import (
+    NoActiveRecipe,
+    RecipeInitializationState,
+)
 
 __all__ = ["ToolContext", "current_step_name", "current_order_id"]
 
@@ -138,8 +141,8 @@ class ToolContext:
     active_recipe_ingredients: frozenset[str] | None — ingredient keys declared by the loaded
                           recipe (frozenset() when kitchen open but no recipe loaded; None when
                           closed)
-    active_recipe_execution: atomically installed compiled execution snapshot, runtime
-                          binding digests, trusted audit heads, and verified input resolver.
+    recipe_initialization_state: sole INITIALIZING/READY authority for the active
+                          generation, its staged snapshot, progress, and installed execution.
     recipe_execution_lock: RecipeExecutionLock — serializes installation, lookup, and
                           cleanup of the active compiled execution state.
     temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
@@ -205,7 +208,7 @@ class ToolContext:
     fleet_lock: FleetLock | None = field(default=None)
     build_protected_campaign_ids: CampaignProtector | None = field(default=None)
     ephemeral_root: Path | None = field(default_factory=lambda: None)
-    active_recipe_execution: InstalledRecipeExecution | None = field(default_factory=lambda: None)
+    recipe_initialization_state: RecipeInitializationState = field(default_factory=NoActiveRecipe)
     recipe_execution_lock: RecipeExecutionLock = field(
         default_factory=threading.RLock,
         repr=False,

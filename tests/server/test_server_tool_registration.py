@@ -109,6 +109,7 @@ class TestToolRegistration:
             "lock_ingredients",
             "reset_dispatch",
             "get_recipe_section",
+            "complete_recipe_initialization",
         }
         assert expected == tool_names
 

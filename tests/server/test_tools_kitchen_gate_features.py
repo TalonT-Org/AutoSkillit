@@ -9,6 +9,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.server._helpers import _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -138,6 +139,8 @@ async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatc
     }
     mock_ctx.recipes.find.return_value = MagicMock()
     mock_ctx.config.migration.suppressed = []
+    prior_initialization_state = mock_ctx.recipe_initialization_state
+    mock_ctx.recipe_name = "already-active"
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -162,6 +165,8 @@ async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatc
     assert "orchestration_rules" not in result
     assert "sous_chef_discipline" not in result
     assert "stop_step_semantics" not in result
+    assert mock_ctx.recipe_initialization_state is prior_initialization_state
+    assert mock_ctx.recipe_name == "already-active"
 
 
 @pytest.mark.anyio
@@ -405,6 +410,9 @@ def test_recipe_resource_returns_composed_content():
         "content": "name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n",
         "valid": True,
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_ctx.backend = None
     mock_ctx.session_serve_overrides = None
 
@@ -432,7 +440,7 @@ def test_recipe_resource_returns_composed_content():
     mock_ctx.recipes.load_and_validate.assert_called_once_with(
         "test-recipe",
         mock_ctx.project_dir,
-        include_compiled_bindings=True,
+        include_finalized_projection=True,
         ingredient_overrides={
             "kitchen_id": ANY,
             "diagnostics_log_dir": ANY,

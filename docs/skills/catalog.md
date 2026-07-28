@@ -8,7 +8,7 @@ you need an exhaustive listing; this catalog groups by purpose.
 
 Plugin-scanned at `src/autoskillit/skills/`:
 
-- `open-kitchen` — reveals the 41 kitchen MCP tools
+- `open-kitchen` — reveals the 42 kitchen MCP tools
 - `close-kitchen` — re-hides them
 
 ## Tier 2 — interactive cook + headless (106 configured)

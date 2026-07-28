@@ -193,7 +193,7 @@ class TestCLIOrderCommand:
 
         monkeypatch.setattr(
             "autoskillit.core.detect_autoskillit_mcp_prefix",
-            lambda: MARKETPLACE_PREFIX,
+            lambda _capabilities: MARKETPLACE_PREFIX,
         )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
@@ -223,7 +223,8 @@ class TestCLIOrderCommand:
         from autoskillit.core._plugin_ids import DIRECT_PREFIX
 
         monkeypatch.setattr(
-            "autoskillit.core.detect_autoskillit_mcp_prefix", lambda: DIRECT_PREFIX
+            "autoskillit.core.detect_autoskillit_mcp_prefix",
+            lambda _capabilities: DIRECT_PREFIX,
         )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""

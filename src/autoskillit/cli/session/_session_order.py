@@ -183,8 +183,6 @@ def order(
         )
         return
 
-    mcp_prefix = detect_autoskillit_mcp_prefix()
-
     from autoskillit.cli.ui._timed_input import timed_prompt
 
     if recipe is None:
@@ -218,6 +216,7 @@ def order(
             _cfg_early = _load_config_early(Path.cwd())
             _backend_early = _get_backend_early(_cfg_early.agent_backend.backend)
             _caps_early = _backend_early.capabilities
+            mcp_prefix = detect_autoskillit_mcp_prefix(_caps_early)
             _launch_cook_session(
                 _build_open_kitchen_prompt(
                     mcp_prefix=mcp_prefix,
@@ -231,6 +230,7 @@ def order(
                 project_dir=Path.cwd(),
                 extra_env=_write_order_entry(Path.cwd(), None),
                 required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+                backend=_backend_early,
                 skill_catalog=skill_catalog,
             )
             return
@@ -351,6 +351,7 @@ def order(
 
     _backend = get_backend(_cfg.agent_backend.backend)
     _backend_caps = _backend.capabilities
+    mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
     _launch_cook_session(
         _build_orchestrator_prompt(
             recipe,
@@ -366,5 +367,6 @@ def order(
         resume_spec=resume_spec,
         project_dir=Path.cwd(),
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+        backend=_backend,
         skill_catalog=skill_catalog,
     )

@@ -7,11 +7,13 @@ import hashlib
 import json
 import shutil
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from autoskillit._recipe_delivery_framing import (
     RECIPE_BODY_END,
@@ -21,17 +23,31 @@ from autoskillit._recipe_delivery_framing import (
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
+    RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+    RECIPE_ARTIFACT_MAX_BLOB_BYTES,
+    RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES,
+    RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_DELIVERY_SURFACE_REGISTRY,
+    RECIPE_FLOW_SCHEMA_VERSION,
+    RECIPE_SECTION_PAGINATION_VERSION,
+    RECIPE_SECTION_REGISTRY_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
+    FinalizedRecipeProjection,
+    RecipeArtifactGeneration,
     RecipeDeliveryAttestation,
     RecipeDeliveryDecision,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
+    RecipeExecutionSnapshot,
+    RecipeFlowGeneration,
     atomic_write,
+    fast_dumps,
     get_logger,
+    load_yaml,
     resolve_general_output_token_limit,
     resolve_recipe_delivery_decision,
+    resolve_recipe_envelope_byte_limit,
     validate_recipe_artifact_sections,
 )
 from autoskillit.execution import (
@@ -39,23 +55,31 @@ from autoskillit.execution import (
     RecipeReceiptHandle,
     codex_recipe_delivery_calling_contract,
 )
-from autoskillit.recipe import _extract_routing_edges, step_byte_ranges_from_yaml
+from autoskillit.pipeline import InitializingRecipe, RecipeInitializationRequirement
+from autoskillit.server._recipe_execution import (
+    clear_recipe_execution,
+    install_recipe_execution,
+    prepare_recipe_execution,
+)
+from autoskillit.server._recipe_generation import (
+    RecipeGenerationError,
+    RecipeGenerationRecord,
+    get_recipe_generation_store,
+)
+from autoskillit.server._recipe_initialization import stage_recipe_initialization
+from autoskillit.server._recipe_section_pagination import (
+    get_or_build_recipe_section_page_plan,
+    select_recipe_section,
+)
 from autoskillit.server._response_budget import enforce_response_budget
 from autoskillit.server.recipe_section._lifecycle import notify_kitchen_retired
 
 if TYPE_CHECKING:
     from autoskillit.core import (
-        RecipeBindingProjection,
         RecipeDeliveryBudgetDef,
         RecipeDeliveryEvidenceDef,
-        RecipeExecutionSnapshot,
     )
     from autoskillit.pipeline import ToolContext
-
-RECIPE_ARTIFACT_DESCRIPTOR_VERSION = 1
-RECIPE_ARTIFACT_SCHEMA_VERSION = 1
-RECIPE_ARTIFACT_MAX_BLOB_BYTES = 1_000_000
-RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES = 16_384
 
 
 def document_recipe_delivery_contract(function: Any) -> Any:
@@ -74,44 +98,6 @@ class RecipeArtifactSchemaError(RecipeArtifactError):
 
 
 @dataclass(frozen=True, slots=True)
-class RecipeArtifactGeneration:
-    """Exact identities for one immutable canonical recipe payload."""
-
-    producer_tool: str
-    recipe_name: str
-    descriptor_version: int
-    schema_version: int
-    payload_sha256: str
-    artifact_blob_sha256: str
-    artifact_blob_size_bytes: int
-    body_sha256: str
-    body_size_bytes: int
-
-    def has_valid_read_bounds(self) -> bool:
-        """Return whether caller-provided sizes stay within server ceilings."""
-        return (
-            self.descriptor_version > 0
-            and self.schema_version > 0
-            and 0 < self.artifact_blob_size_bytes <= RECIPE_ARTIFACT_MAX_BLOB_BYTES
-            and 0 <= self.body_size_bytes <= self.artifact_blob_size_bytes
-        )
-
-    def pull_identity(self) -> dict[str, str | int]:
-        return {
-            "producer_tool": self.producer_tool,
-            "recipe_name": self.recipe_name,
-            "descriptor_version": self.descriptor_version,
-            "schema_version": self.schema_version,
-            "payload_sha256": self.payload_sha256,
-            "artifact_blob_sha256": self.artifact_blob_sha256,
-            "artifact_blob_size_bytes": self.artifact_blob_size_bytes,
-            "body_sha256": self.body_sha256,
-            "body_size_bytes": self.body_size_bytes,
-            "pull_tool": "get_recipe_section",
-        }
-
-
-@dataclass(frozen=True, slots=True)
 class FinalizedRecipeResponse:
     """Internal carrier consumed before FastMCP result conversion."""
 
@@ -120,8 +106,27 @@ class FinalizedRecipeResponse:
     receipt_handle: RecipeReceiptHandle | None = None
     receipt_ledger: RecipeDeliveryReceiptLedger | None = None
     artifact_generation: RecipeArtifactGeneration | None = None
+    finalized_projection: FinalizedRecipeProjection | None = None
+    flow_generation: RecipeFlowGeneration | None = None
     execution_snapshot: RecipeExecutionSnapshot | None = None
+    normalized_compile_key: str | None = None
     tool_ctx: ToolContext | None = None
+    recipe_name: str | None = None
+    initialization_activating: bool = False
+    initialization_id: str | None = None
+    initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedRecipeGeneration:
+    """Canonical compile outputs shared by every delivery surface."""
+
+    finalized_projection: FinalizedRecipeProjection
+    flow_generation: RecipeFlowGeneration
+    canonical_artifact_payload: dict[str, Any]
+    execution_snapshot: RecipeExecutionSnapshot
+    normalized_compile_key: str
+    compile_inputs: dict[str, Any]
 
 
 def _qualified_sha256(data: bytes) -> str:
@@ -139,6 +144,283 @@ def _canonical_payload(payload: dict[str, Any]) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def _canonical_flow_record(record: dict[str, Any]) -> str:
+    return json.dumps(
+        record,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _generation_json_primitive(value: object) -> object:
+    """Convert immutable compile values to a deterministic JSON primitive tree."""
+    if isinstance(value, Enum):
+        return _generation_json_primitive(value.value)
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise TypeError("recipe generation mappings require string keys")
+        return {key: _generation_json_primitive(value[key]) for key in sorted(value)}
+    if isinstance(value, (list, tuple)):
+        return [_generation_json_primitive(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        converted = [_generation_json_primitive(item) for item in value]
+        return sorted(
+            converted,
+            key=lambda item: json.dumps(
+                item,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            item.name: _generation_json_primitive(getattr(value, item.name))
+            for item in fields(value)
+        }
+    raise TypeError(f"recipe generation contains unsupported value {type(value).__name__}")
+
+
+def _finalized_projection_payload(
+    projection: FinalizedRecipeProjection,
+) -> dict[str, Any]:
+    primitive = _generation_json_primitive(projection)
+    if not isinstance(primitive, dict):
+        raise TypeError("finalized recipe projection did not serialize to a mapping")
+    return primitive
+
+
+def build_recipe_flow_generation(
+    projection: FinalizedRecipeProjection,
+) -> RecipeFlowGeneration:
+    """Build the immutable record stream from one finalized recipe projection."""
+    records = [
+        _canonical_flow_record(
+            {
+                "kind": "entrypoint",
+                "name": projection.entrypoint,
+            }
+        )
+    ]
+    records.extend(
+        _canonical_flow_record(
+            {
+                "index": index,
+                "kind": "step",
+                "name": name,
+            }
+        )
+        for index, name in enumerate(projection.ordered_step_names)
+    )
+    records.extend(
+        _canonical_flow_record(
+            {
+                "condition": edge.condition,
+                "edge_type": edge.edge_type,
+                "index": index,
+                "kind": "edge",
+                "result_field": edge.result_field,
+                "source": edge.source,
+                "target": edge.target,
+            }
+        )
+        for index, edge in enumerate(projection.ordered_flow_edges)
+    )
+    return RecipeFlowGeneration(
+        schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        records=tuple(records),
+    )
+
+
+def build_canonical_recipe_artifact_payload(
+    payload: dict[str, Any],
+    *,
+    finalized_projection: FinalizedRecipeProjection,
+    flow_generation: RecipeFlowGeneration,
+    execution_snapshot: RecipeExecutionSnapshot,
+) -> dict[str, Any]:
+    """Return the primitive, generation-bound canonical artifact payload."""
+    candidate_payload = {
+        key: value
+        for key, value in payload.items()
+        if key
+        not in {
+            "_finalized_projection",
+            "delivery_bound_spill",
+            "hook_warning",
+            "initialization_id",
+            "kitchen",
+            "recipe_pull",
+            "recovery",
+            "required_sections",
+            "success",
+            "version",
+            "warnings",
+        }
+    }
+    candidate_payload["finalized_recipe_projection"] = _finalized_projection_payload(
+        finalized_projection
+    )
+    candidate_payload["flow_records"] = list(flow_generation.records)
+    candidate_payload["recipe_flow"] = flow_generation.identity()
+    candidate_payload["recipe_execution"] = {
+        "execution_id": execution_snapshot.execution_id,
+        "invocation_template_digests": dict(execution_snapshot.template_digests),
+        "snapshot_digest": execution_snapshot.snapshot_digest,
+    }
+    return candidate_payload
+
+
+def prepare_recipe_delivery_generation(
+    payload: dict[str, Any],
+    *,
+    recipe_name: str,
+    tool_ctx: ToolContext,
+    finalized_projection: FinalizedRecipeProjection,
+) -> PreparedRecipeGeneration:
+    """Build or reuse one server-owned canonical compile generation."""
+    from autoskillit.server._recipe_execution import (  # circular-break
+        build_recipe_execution_snapshot,
+    )
+
+    flow_generation = build_recipe_flow_generation(finalized_projection)
+    source_payload = {
+        key: value
+        for key, value in payload.items()
+        if key
+        not in {
+            "_finalized_projection",
+            "delivery_bound_spill",
+            "hook_warning",
+            "initialization_id",
+            "kitchen",
+            "recipe_pull",
+            "recovery",
+            "required_sections",
+            "success",
+            "version",
+            "warnings",
+        }
+    }
+    compile_inputs = {
+        "recipe_name": recipe_name,
+        "content_hash": source_payload.get("content_hash"),
+        "composite_hash": source_payload.get("composite_hash"),
+        "source_payload": _generation_json_primitive(source_payload),
+        "finalized_projection": _finalized_projection_payload(finalized_projection),
+        "flow_generation": flow_generation.identity(),
+    }
+    normalized_compile_key = _domain_sha256(
+        "autoskillit.recipe-compile-generation.v1",
+        _canonical_payload(compile_inputs),
+    )
+    store = get_recipe_generation_store()
+    existing = store.lookup_compile(tool_ctx.kitchen_id, normalized_compile_key)
+    if existing is not None:
+        if (
+            existing.recipe_name != recipe_name
+            or existing.finalized_projection != finalized_projection
+            or existing.flow_generation != flow_generation
+        ):
+            raise RecipeGenerationError(
+                "normalized compile generation resolved to different canonical outputs"
+            )
+        artifact_payload = _generation_json_primitive(existing.artifact_payload)
+        compile_inputs_copy = _generation_json_primitive(existing.compile_inputs)
+        if not isinstance(artifact_payload, dict) or not isinstance(compile_inputs_copy, dict):
+            raise RecipeGenerationError("stored recipe generation did not reconstruct to mappings")
+        expected_payload = build_canonical_recipe_artifact_payload(
+            payload,
+            finalized_projection=finalized_projection,
+            flow_generation=flow_generation,
+            execution_snapshot=existing.execution_snapshot,
+        )
+        if artifact_payload != expected_payload:
+            raise RecipeGenerationError(
+                "normalized compile replay changed the canonical artifact payload"
+            )
+        return PreparedRecipeGeneration(
+            finalized_projection=existing.finalized_projection,
+            flow_generation=existing.flow_generation,
+            canonical_artifact_payload=artifact_payload,
+            execution_snapshot=existing.execution_snapshot,
+            normalized_compile_key=existing.normalized_compile_key,
+            compile_inputs=compile_inputs_copy,
+        )
+
+    try:
+        execution_snapshot = build_recipe_execution_snapshot(
+            recipe_name=recipe_name,
+            content_hash=str(source_payload.get("content_hash", "")),
+            composite_hash=str(source_payload.get("composite_hash", "")),
+            projection=finalized_projection.binding_projection,
+        )
+    except (TypeError, ValueError) as exc:
+        get_logger(__name__).warning(
+            "recipe_execution_compilation_failed",
+            recipe_name=recipe_name,
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
+        raise RecipeGenerationError("recipe execution snapshot compilation failed") from exc
+    artifact_payload = build_canonical_recipe_artifact_payload(
+        payload,
+        finalized_projection=finalized_projection,
+        flow_generation=flow_generation,
+        execution_snapshot=execution_snapshot,
+    )
+    admitted = store.put(
+        RecipeGenerationRecord(
+            kitchen_id=tool_ctx.kitchen_id,
+            normalized_compile_key=normalized_compile_key,
+            recipe_name=recipe_name,
+            finalized_projection=finalized_projection,
+            flow_generation=flow_generation,
+            artifact_payload=artifact_payload,
+            execution_snapshot=execution_snapshot,
+            execution_id=execution_snapshot.execution_id,
+            compile_inputs=compile_inputs,
+        )
+    )
+    admitted_payload = _generation_json_primitive(admitted.artifact_payload)
+    admitted_inputs = _generation_json_primitive(admitted.compile_inputs)
+    if not isinstance(admitted_payload, dict) or not isinstance(admitted_inputs, dict):
+        raise RecipeGenerationError("admitted recipe generation is not reconstructable")
+    return PreparedRecipeGeneration(
+        finalized_projection=admitted.finalized_projection,
+        flow_generation=admitted.flow_generation,
+        canonical_artifact_payload=admitted_payload,
+        execution_snapshot=admitted.execution_snapshot,
+        normalized_compile_key=admitted.normalized_compile_key,
+        compile_inputs=admitted_inputs,
+    )
+
+
+def _flow_generation_from_payload(payload: dict[str, Any]) -> RecipeFlowGeneration:
+    records = payload.get("flow_records")
+    identity = payload.get("recipe_flow")
+    if (
+        not isinstance(records, list)
+        or not records
+        or any(not isinstance(record, str) for record in records)
+        or not isinstance(identity, dict)
+    ):
+        raise RecipeArtifactSchemaError("recipe flow generation is unavailable")
+    try:
+        return RecipeFlowGeneration(
+            schema_version=int(identity["flow_schema_version"]),
+            records=tuple(records),
+            flow_sha256=str(identity["flow_sha256"]),
+            flow_size_bytes=int(identity["flow_size_bytes"]),
+            record_count=int(identity["flow_record_count"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RecipeArtifactSchemaError("recipe flow generation is invalid") from exc
 
 
 def _validate_recipe_artifact_schema(payload: dict[str, Any]) -> None:
@@ -223,6 +505,7 @@ def _generation_from_payload(
     recipe_name: str,
     blob: bytes,
     payload: dict[str, Any],
+    flow_generation: RecipeFlowGeneration,
     descriptor_version: int | None = None,
     schema_version: int | None = None,
 ) -> RecipeArtifactGeneration:
@@ -244,6 +527,10 @@ def _generation_from_payload(
         artifact_blob_size_bytes=len(blob),
         body_sha256=_qualified_sha256(body_bytes),
         body_size_bytes=len(body_bytes),
+        flow_schema_version=flow_generation.schema_version,
+        flow_sha256=flow_generation.flow_sha256,
+        flow_size_bytes=flow_generation.flow_size_bytes,
+        flow_record_count=flow_generation.record_count,
     )
 
 
@@ -254,9 +541,14 @@ def persist_recipe_artifact(
     producer_tool: str,
     recipe_name: str,
     payload: dict[str, Any],
+    flow_generation: RecipeFlowGeneration | None = None,
 ) -> RecipeArtifactGeneration:
     """Publish an immutable canonical payload and its generation descriptor."""
     _validate_recipe_artifact_schema(payload)
+    canonical_flow_generation = _flow_generation_from_payload(payload)
+    if flow_generation is not None and canonical_flow_generation != flow_generation:
+        raise RecipeArtifactSchemaError("recipe flow generation does not match payload")
+    flow_generation = canonical_flow_generation
     blob = _canonical_payload(payload)
     if len(blob) > RECIPE_ARTIFACT_MAX_BLOB_BYTES:
         raise RecipeArtifactError("recipe artifact blob exceeds persistence limit")
@@ -265,6 +557,7 @@ def persist_recipe_artifact(
         recipe_name=recipe_name,
         blob=blob,
         payload=payload,
+        flow_generation=flow_generation,
     )
     directory = _generation_dir(
         temp_dir,
@@ -357,6 +650,7 @@ def load_recipe_artifact(
         recipe_name=identity.recipe_name,
         blob=blob,
         payload=payload,
+        flow_generation=_flow_generation_from_payload(payload),
         descriptor_version=identity.descriptor_version,
         schema_version=identity.schema_version,
     )
@@ -420,262 +714,50 @@ def recipe_recreation_producers() -> frozenset[str]:
     )
 
 
-def _step_one_line_summary(step: Any) -> str:
-    """Return a compact single-line summary for one recipe step."""
-    description = getattr(step, "description", "") or ""
-    if description.strip():
-        return description.strip().splitlines()[0][:160]
-    message = getattr(step, "message", None)
-    if isinstance(message, str) and message.strip():
-        return message.strip().splitlines()[0][:160]
-    tool = getattr(step, "tool", None)
-    action = getattr(step, "action", None)
-    if tool:
-        return f"tool={tool}"
-    if action:
-        return f"action={action}"
-    return ""
-
-
-def _compute_step_byte_ranges(content: str) -> dict[str, tuple[int, int]]:
-    """Return UTF-8 step-body offsets from the canonical YAML helper."""
-    return step_byte_ranges_from_yaml(content)
-
-
-def extract_step_skeleton(
-    post_prune_step_names: list[str],
-    routing_edges_by_step: dict[str, list[tuple[str, str]]],
-    step_summaries: dict[str, str] | None = None,
-    byte_ranges: dict[str, tuple[int, int]] | None = None,
-) -> dict[str, Any]:
-    """Build the compact routing and byte-range index carried by an envelope."""
-    skeleton: list[dict[str, Any]] = []
-    for name in post_prune_step_names:
-        entry: dict[str, Any] = {
-            "name": name,
-            "edges": [
-                {"type": edge_type, "target": target}
-                for edge_type, target in routing_edges_by_step.get(name) or []
-                if target
-            ],
-        }
-        summary = (step_summaries or {}).get(name) or ""
-        if summary:
-            entry["summary"] = summary
-        span = (byte_ranges or {}).get(name)
-        if span is not None:
-            entry["byte_range"] = list(span)
-        skeleton.append(entry)
-    return {"step_count": len(skeleton), "steps": skeleton}
-
-
-def _safe_utf8_truncate(data: bytes) -> str:
-    """Decode a byte prefix without retaining a partial UTF-8 codepoint."""
-    while data:
-        try:
-            return data.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            data = data[: exc.start]
-    return ""
-
-
-def build_step_summaries(active_recipe_steps: Any) -> dict[str, str]:
-    """Build step-name to one-line-summary metadata from parsed recipe steps."""
-    if not isinstance(active_recipe_steps, dict) or not active_recipe_steps:
-        return {}
-    return {
-        name: _step_one_line_summary(step)
-        for name, step in active_recipe_steps.items()
-        if isinstance(name, str) and name
-    }
-
-
-def build_routing_edges_by_step(
-    active_recipe_steps: Any,
-    *,
-    edge_extractor: Any = _extract_routing_edges,
-) -> dict[str, list[tuple[str, str]]]:
-    """Build outgoing routing-edge metadata from parsed recipe steps."""
-    if not isinstance(active_recipe_steps, dict) or not active_recipe_steps:
-        return {}
-    edges_by_step: dict[str, list[tuple[str, str]]] = {}
-    for name, step in active_recipe_steps.items():
-        if not isinstance(name, str) or not name:
-            continue
-        extracted = edge_extractor(step) if edge_extractor is not None else []
-        edges_by_step[name] = [
-            (edge.edge_type, edge.target)
-            for edge in (extracted or [])
-            if getattr(edge, "target", None)
-        ]
-    return edges_by_step
-
-
 def build_recipe_envelope(
     payload: dict[str, Any],
     *,
     recipe_name: str,
     generation: RecipeArtifactGeneration,
-    skeleton_source: ToolContext,
+    flow_generation: RecipeFlowGeneration,
+    entrypoint: str,
     bound_bytes: int,
+    initialization_id: str | None = None,
+    initialization_requirements: tuple[RecipeInitializationRequirement, ...] = (),
+    completion_required: bool = False,
 ) -> dict[str, Any]:
     """Build the bounded pull envelope used by every recipe delivery surface."""
-    post_prune_raw = payload.get("post_prune_step_names") or []
-    if not isinstance(post_prune_raw, list):
-        post_prune_raw = []
-    post_prune_names = [name for name in post_prune_raw if isinstance(name, str)]
-    active_recipe_steps: dict[str, Any] | None = None
-    if getattr(skeleton_source, "recipe_name", "") == recipe_name:
-        active_recipe_steps = skeleton_source.active_recipe_steps
-    summaries = build_step_summaries(active_recipe_steps)
-    edges = build_routing_edges_by_step(active_recipe_steps)
-    byte_ranges = _compute_step_byte_ranges(payload.get("content") or "")
-    skeleton = extract_step_skeleton(
-        post_prune_names,
-        edges,
-        summaries,
-        byte_ranges=byte_ranges,
-    )
-    pull_identity = generation.pull_identity()
-
-    def _pullable_skeleton_size(candidate: dict[str, Any]) -> int:
-        pullable = {
-            "success": payload.get("success", True),
-            "step_flow_skeleton": candidate,
-            "recipe_pull": pull_identity,
-            "delivery_bound_spill": True,
-        }
-        return len(json.dumps(pullable, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-
-    if _pullable_skeleton_size(skeleton) > bound_bytes:
-        for summary_limit in (120, 80, 64, 48, 32, 24, 16, 8, 0):
-            bounded_summaries = (
-                {name: summary[:summary_limit] for name, summary in summaries.items()}
-                if summary_limit
-                else {}
-            )
-            skeleton = extract_step_skeleton(
-                post_prune_names,
-                edges,
-                bounded_summaries,
-                byte_ranges=byte_ranges,
-            )
-            if _pullable_skeleton_size(skeleton) <= bound_bytes:
-                break
-
-    envelope: dict[str, Any] = {"success": payload.get("success", True)}
-    envelope_bytes = len(json.dumps(envelope["success"]).encode("utf-8"))
-    for key in (
-        "kitchen",
-        "version",
-        "valid",
-        "dispatch_feasible",
-        "errors",
-        "warnings",
-        "hooks",
-        "post_prune_step_names",
-        "post_prune_routing_edges",
-        "requires_packs",
-        "requires_features",
-    ):
-        if key in payload and payload[key] is not None:
-            envelope[key] = payload[key]
-            envelope_bytes += len(
-                json.dumps({key: payload[key]}, ensure_ascii=False).encode("utf-8")
-            )
-
-    skeleton_overhead = len(
-        json.dumps({"step_flow_skeleton": skeleton}, ensure_ascii=False).encode("utf-8")
-    )
-    pull_overhead = len(
-        json.dumps(
-            {"recipe_pull": pull_identity, "delivery_bound_spill": True},
-            ensure_ascii=False,
-        ).encode("utf-8")
-    )
-    remaining = max(
-        0,
-        bound_bytes - skeleton_overhead - pull_overhead - envelope_bytes - 64,
-    )
-
-    def _project_priority_strings(keys: tuple[str, ...]) -> None:
-        nonlocal remaining
-        candidates = [
-            key for key in keys if isinstance(payload.get(key), str) and payload.get(key)
-        ]
-        overhead = {
-            key: len(json.dumps({key: ""}, ensure_ascii=False).encode("utf-8"))
-            for key in candidates
-        }
-        present: list[str] = []
-        budget = remaining
-        for key in candidates:
-            if overhead[key] < budget:
-                present.append(key)
-                budget -= overhead[key]
-        if not present:
-            return
-
-        lengths = {key: len(payload[key].encode("utf-8")) for key in present}
-        allocation: dict[str, int] = dict.fromkeys(present, 0)
-        active = list(present)
-        pool = remaining - sum(overhead[key] for key in present)
-        while active and pool > 0:
-            share, extra = divmod(pool, len(active))
-            still_active: list[str] = []
-            for index, key in enumerate(active):
-                give = share + (1 if index < extra else 0)
-                take = min(give, lengths[key] - allocation[key], pool)
-                allocation[key] += take
-                pool -= take
-                if allocation[key] < lengths[key]:
-                    still_active.append(key)
-            active = still_active
-
-        for key in present:
-            take = allocation[key]
-            if take <= 0:
-                continue
-            value_bytes = payload[key].encode("utf-8")
-            if len(value_bytes) <= take:
-                envelope[key] = payload[key]
-                remaining -= len(value_bytes) + overhead[key]
-            else:
-                envelope[key] = _safe_utf8_truncate(value_bytes[:take])
-                remaining -= take + overhead[key]
-                get_logger(__name__).warning(
-                    "recipe_envelope_priority_field_truncated",
-                    recipe_name=recipe_name,
-                    field=key,
-                    alloc_bytes=take,
-                )
-
-    _project_priority_strings(("orchestration_rules", "stop_step_semantics"))
-    for key in ("ingredients_table", "suggestions"):
-        value = payload.get(key)
-        if value is None:
-            continue
-        serialized_value = json.dumps(value, ensure_ascii=False).encode("utf-8")
-        if len(serialized_value) + 32 <= remaining:
-            envelope[key] = value
-            remaining -= len(serialized_value) + 32
-
-    envelope["step_flow_skeleton"] = skeleton
-    envelope["recipe_pull"] = pull_identity
-    envelope["delivery_bound_spill"] = True
+    manifest = {
+        "success": True,
+        "delivery_bound_spill": True,
+        "recipe_pull": generation.pull_identity(),
+        "recipe_flow": flow_generation.identity(),
+        "required_sections": [
+            {
+                "page_plan_sha256": requirement.page_plan_sha256,
+                "section": requirement.section,
+                "total_parts": requirement.total_parts,
+            }
+            for requirement in initialization_requirements
+        ],
+        "recovery": {
+            "completion_required": completion_required,
+            "ordered_sections": ["flow_records", entrypoint],
+            "pagination_version": RECIPE_SECTION_PAGINATION_VERSION,
+            "section_registry_sha256": RECIPE_SECTION_REGISTRY_DIGEST,
+            "pull_tool": "get_recipe_section",
+        },
+    }
+    if initialization_id is not None:
+        manifest["initialization_id"] = initialization_id
     if (
-        len(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        len(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
         <= bound_bytes
     ):
-        return envelope
+        return manifest
+    pull_identity = generation.pull_identity()
 
     fallback_candidates: tuple[dict[str, Any], ...] = (
-        {
-            "success": payload.get("success", True),
-            "step_flow_skeleton": skeleton,
-            "recipe_pull": pull_identity,
-            "delivery_bound_spill": True,
-        },
         {
             "success": False,
             "error": "recipe_envelope_exceeds_delivery_bound",
@@ -691,6 +773,54 @@ def build_recipe_envelope(
         ):
             return fallback
     raise ValueError("delivery bound is too small for a JSON object")
+
+
+def _initialization_requirements(
+    *,
+    tool_ctx: ToolContext,
+    generation: RecipeArtifactGeneration,
+    payload: dict[str, Any],
+    entrypoint: str,
+    bound_bytes: int,
+    initialization_id: str | None,
+) -> tuple[RecipeInitializationRequirement, ...]:
+    """Build the exact flow and entrypoint page plans advertised by a manifest."""
+
+    def _entrypoint_content(step_name: str) -> str:
+        content = payload.get("content")
+        parsed = load_yaml(content) if isinstance(content, str) else None
+        steps = parsed.get("steps") if isinstance(parsed, dict) else None
+        step = steps.get(step_name) if isinstance(steps, dict) else None
+        if not isinstance(step, dict):
+            raise RecipeArtifactSchemaError("recipe entrypoint definition is unavailable")
+        return fast_dumps({step_name: step})
+
+    requirements: list[RecipeInitializationRequirement] = []
+    for section in ("flow_records", entrypoint):
+        selected = select_recipe_section(
+            payload,
+            section,
+            dynamic_content_loader=_entrypoint_content,
+        )
+        selected = replace(selected, initialization_id=initialization_id)
+        if not selected.present:
+            raise RecipeArtifactSchemaError(
+                f"required recipe initialization section is absent: {section}"
+            )
+        page_plan = get_or_build_recipe_section_page_plan(
+            kitchen_id=tool_ctx.kitchen_id,
+            generation=generation,
+            selected=selected,
+            recipe_section_bound_bytes=bound_bytes,
+        )
+        requirements.append(
+            RecipeInitializationRequirement(
+                section=section,
+                page_plan_sha256=page_plan.page_plan_sha256,
+                total_parts=page_plan.total_parts,
+            )
+        )
+    return tuple(requirements)
 
 
 def _conservative_token_upper_bound(rendered: str) -> int:
@@ -756,66 +886,18 @@ def finalize_recipe_delivery(
     surface: str,
     recipe_name: str,
     tool_ctx: ToolContext,
+    finalized_projection: FinalizedRecipeProjection,
+    flow_generation: RecipeFlowGeneration,
+    canonical_artifact_payload: dict[str, Any],
+    execution_snapshot: RecipeExecutionSnapshot,
+    normalized_compile_key: str,
     delivery_request: RecipeDeliveryRequest | None = None,
     attestation: RecipeDeliveryAttestation | None = None,
     supported_evidence: RecipeDeliveryEvidenceDef | None = None,
     receipt_ledger: RecipeDeliveryReceiptLedger | None = None,
     now_unix: int | None = None,
-    compiled_bindings: RecipeBindingProjection | None = None,
 ) -> FinalizedRecipeResponse:
     """Persist, decide, shape, and transactionally reserve one recipe response."""
-    execution_snapshot = None
-    candidate_payload = dict(payload)
-    # ORDINARY_INLINE rendered output is the authoritative recipe payload serialized
-    # to JSON. Some callers (e.g. load_recipe) pass a payload without a `success`
-    # field; tests and downstream consumers require success=True on the wire shape.
-    # Open_kitchen callers already inject success=True via build_open_kitchen_recipe_payload
-    # so this is a no-op for that surface. Inject once here so ORDINARY_INLINE always
-    # carries the success indicator.
-    if "success" not in candidate_payload:
-        candidate_payload["success"] = True
-    if compiled_bindings is not None:
-        from autoskillit.server._recipe_execution import (  # circular-break
-            build_recipe_execution_snapshot,
-        )
-
-        try:
-            execution_snapshot = build_recipe_execution_snapshot(
-                recipe_name=recipe_name,
-                content_hash=str(candidate_payload.get("content_hash", "")),
-                composite_hash=str(candidate_payload.get("composite_hash", "")),
-                projection=compiled_bindings,
-            )
-        except (TypeError, ValueError) as exc:
-            get_logger(__name__).warning(
-                "recipe_execution_compilation_failed",
-                recipe_name=recipe_name,
-                surface=surface,
-                error_type=type(exc).__name__,
-                exc_info=True,
-            )
-            decision = _failure_decision(
-                producer=RECIPE_DELIVERY_SURFACE_REGISTRY[surface].producer_tool,
-                reason="recipe_execution_compilation_failed",
-                selected_limit=resolve_general_output_token_limit(
-                    tool_ctx.backend.capabilities
-                    if tool_ctx.backend is not None
-                    else CLAUDE_CODE_CAPABILITIES
-                ),
-                contract_digest="",
-            )
-            return FinalizedRecipeResponse(
-                rendered=json.dumps(
-                    {"success": False, "error": "recipe_execution_unavailable"},
-                    separators=(",", ":"),
-                ),
-                decision=decision,
-            )
-        candidate_payload["recipe_execution"] = {
-            "execution_id": execution_snapshot.execution_id,
-            "invocation_template_digests": dict(execution_snapshot.template_digests),
-            "snapshot_digest": execution_snapshot.snapshot_digest,
-        }
     surface_definition = RECIPE_DELIVERY_SURFACE_REGISTRY[surface]
     candidate_capabilities = (
         getattr(tool_ctx.backend, "capabilities", None) if tool_ctx.backend is not None else None
@@ -834,6 +916,32 @@ def finalize_recipe_delivery(
     )
     delivery_budget = capabilities.recipe_delivery_budget
     ordinary_limit = resolve_general_output_token_limit(capabilities)
+    envelope_byte_limit = resolve_recipe_envelope_byte_limit(capabilities)
+    if (
+        not isinstance(finalized_projection, FinalizedRecipeProjection)
+        or not isinstance(flow_generation, RecipeFlowGeneration)
+        or not isinstance(execution_snapshot, RecipeExecutionSnapshot)
+        or not isinstance(normalized_compile_key, str)
+        or not normalized_compile_key
+    ):
+        raise TypeError("finalize_recipe_delivery requires a complete prepared generation")
+    candidate_payload = dict(canonical_artifact_payload)
+    if (
+        candidate_payload.get("flow_records") != list(flow_generation.records)
+        or candidate_payload.get("recipe_flow") != flow_generation.identity()
+    ):
+        raise ValueError("canonical artifact payload does not match prepared flow generation")
+    surface_payload = dict(payload)
+    if "success" not in surface_payload:
+        surface_payload["success"] = True
+    for generation_field in (
+        "finalized_recipe_projection",
+        "flow_records",
+        "recipe_execution",
+        "recipe_flow",
+    ):
+        surface_payload[generation_field] = candidate_payload[generation_field]
+    initialization_id = uuid4().hex if surface_definition.initialization_activating else None
     try:
         generation = persist_recipe_artifact(
             tool_ctx.temp_dir,
@@ -841,8 +949,21 @@ def finalize_recipe_delivery(
             producer_tool=surface_definition.producer_tool,
             recipe_name=recipe_name,
             payload=candidate_payload,
+            flow_generation=flow_generation,
         )
-    except (OSError, RecipeArtifactError, TypeError, ValueError):
+        get_recipe_generation_store().bind_surface(
+            tool_ctx.kitchen_id,
+            normalized_compile_key,
+            surface,
+            generation,
+        )
+    except (
+        OSError,
+        RecipeArtifactError,
+        RecipeGenerationError,
+        TypeError,
+        ValueError,
+    ):
         decision = _failure_decision(
             producer=surface_definition.producer_tool,
             reason="recipe_artifact_persistence_failed",
@@ -857,8 +978,24 @@ def finalize_recipe_delivery(
             decision=decision,
         )
 
+    surface_payload["recipe_pull"] = generation.pull_identity()
+    if initialization_id is None:
+        with tool_ctx.recipe_execution_lock:
+            current_initialization = tool_ctx.recipe_initialization_state
+        if (
+            isinstance(current_initialization, InitializingRecipe)
+            and current_initialization.recipe_name == recipe_name
+            and current_initialization.artifact_generation.payload_sha256
+            == generation.payload_sha256
+            and current_initialization.artifact_generation.artifact_blob_sha256
+            == generation.artifact_blob_sha256
+            and current_initialization.flow_generation == flow_generation
+        ):
+            initialization_id = current_initialization.initialization_id
+    if initialization_id is not None:
+        surface_payload["initialization_id"] = initialization_id
     ordinary_rendered = json.dumps(
-        candidate_payload,
+        surface_payload,
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -867,7 +1004,7 @@ def finalize_recipe_delivery(
     candidate_request = delivery_request if surface_definition.negotiation_eligible else None
     high_rendered = (
         _attested_render(
-            candidate_payload,
+            surface_payload,
             generation,
             budget=delivery_budget,
             evidence_identity=(
@@ -987,36 +1124,67 @@ def finalize_recipe_delivery(
                 receipt_status="not_required",
             )
 
+    initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
     if decision.mode is RecipeDeliveryMode.ORDINARY_INLINE:
         rendered = ordinary_rendered
     elif decision.mode is RecipeDeliveryMode.ATTESTED_INLINE:
         rendered = high_rendered
     else:
-        envelope_bound_bytes = ordinary_limit
+        envelope_bound_bytes = envelope_byte_limit
         if (
             surface_definition.response_exemption_tool is None
             and response_ceiling_bytes is not None
         ):
             envelope_bound_bytes = min(envelope_bound_bytes, response_ceiling_bytes)
-        rendered = json.dumps(
-            build_recipe_envelope(
-                candidate_payload,
-                recipe_name=recipe_name,
+        try:
+            initialization_requirements = _initialization_requirements(
+                tool_ctx=tool_ctx,
                 generation=generation,
-                skeleton_source=tool_ctx,
+                payload=candidate_payload,
+                entrypoint=finalized_projection.entrypoint,
                 bound_bytes=envelope_bound_bytes,
-            ),
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+                initialization_id=initialization_id,
+            )
+            rendered = json.dumps(
+                build_recipe_envelope(
+                    candidate_payload,
+                    recipe_name=recipe_name,
+                    generation=generation,
+                    flow_generation=flow_generation,
+                    entrypoint=finalized_projection.entrypoint,
+                    bound_bytes=envelope_bound_bytes,
+                    initialization_id=initialization_id,
+                    initialization_requirements=initialization_requirements,
+                    completion_required=(surface_definition.initialization_activating),
+                ),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        except Exception:
+            get_logger(__name__).error(
+                "recipe initialization manifest planning failed",
+                recipe_name=recipe_name,
+                exc_info=True,
+            )
+            rendered = json.dumps(
+                {"success": False, "error": "recipe_initialization_plan_failed"},
+                separators=(",", ":"),
+            )
     return FinalizedRecipeResponse(
         rendered=rendered,
         decision=decision,
         receipt_handle=receipt_handle,
         receipt_ledger=receipt_ledger if receipt_handle is not None else None,
         artifact_generation=generation,
+        finalized_projection=finalized_projection,
+        flow_generation=flow_generation,
         execution_snapshot=execution_snapshot,
+        normalized_compile_key=normalized_compile_key,
         tool_ctx=tool_ctx if execution_snapshot is not None else None,
+        recipe_name=recipe_name,
+        initialization_activating=surface_definition.initialization_activating,
+        initialization_id=initialization_id,
+        initialization_requirements=initialization_requirements,
     )
 
 
@@ -1026,52 +1194,128 @@ def complete_finalized_recipe_response(
     *,
     now_unix: int | None = None,
 ) -> Any:
-    """Commit and install an exact enforced response; otherwise preserve prior state."""
+    """Commit receipt and lifecycle state only for exact enforced response bytes."""
     handle = finalized.receipt_handle
     ledger = finalized.receipt_ledger
-    prepared_execution = None
-    if enforced == finalized.rendered:
-        if finalized.execution_snapshot is not None and finalized.tool_ctx is not None:
+    parsed: dict[str, Any] | None = None
+    prepared_execution: Any = None
+    if enforced == finalized.rendered and finalized.initialization_activating:
+        required_values = (
+            finalized.tool_ctx,
+            finalized.recipe_name,
+            finalized.artifact_generation,
+            finalized.flow_generation,
+            finalized.execution_snapshot,
+            finalized.normalized_compile_key,
+            finalized.initialization_id,
+        )
+        if any(value is None or value == "" for value in required_values):
+            enforced = json.dumps(
+                {"success": False, "error": "recipe_initialization_identity_missing"},
+                separators=(",", ":"),
+            )
+        else:
+            assert finalized.tool_ctx is not None
+            assert finalized.execution_snapshot is not None
             try:
-                from autoskillit.server._recipe_execution import (  # circular-break
-                    prepare_recipe_execution,
+                candidate = (
+                    json.loads(finalized.rendered)
+                    if finalized.decision.mode is not RecipeDeliveryMode.ATTESTED_INLINE
+                    else {"success": True}
                 )
-
-                prepared_execution = prepare_recipe_execution(
-                    finalized.tool_ctx,
-                    snapshot=finalized.execution_snapshot,
-                )
-            except Exception:
-                get_logger(__name__).error(
-                    "recipe execution snapshot installation failed",
-                    exc_info=True,
-                )
+            except json.JSONDecodeError:
+                candidate = {"success": False}
+            if not isinstance(candidate, dict) or candidate.get("success") is False:
                 enforced = json.dumps(
-                    {"success": False, "error": "recipe_execution_install_failed"},
+                    {"success": False, "error": "recipe_initialization_failed"},
                     separators=(",", ":"),
                 )
+            else:
+                parsed = candidate
+                if parsed.get("delivery_bound_spill") is not True:
+                    try:
+                        prepared_execution = prepare_recipe_execution(
+                            finalized.tool_ctx,
+                            snapshot=finalized.execution_snapshot,
+                        )
+                    except Exception:
+                        get_logger(__name__).error(
+                            "recipe execution snapshot installation failed",
+                            initialization_id=finalized.initialization_id,
+                            exc_info=True,
+                        )
+                        enforced = json.dumps(
+                            {
+                                "success": False,
+                                "error": "recipe_execution_install_failed",
+                            },
+                            separators=(",", ":"),
+                        )
+    if enforced == finalized.rendered:
+        if handle is not None and (
+            ledger is None
+            or not ledger.commit(
+                handle,
+                now_unix=int(time.time()) if now_unix is None else now_unix,
+            )
+        ):
+            enforced = json.dumps(
+                {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
+                separators=(",", ":"),
+            )
+        elif handle is not None:
+            handle = None
+        if enforced == finalized.rendered and finalized.initialization_activating:
+            assert finalized.tool_ctx is not None
+            assert finalized.recipe_name is not None
+            assert finalized.artifact_generation is not None
+            assert finalized.flow_generation is not None
+            assert finalized.execution_snapshot is not None
+            assert finalized.normalized_compile_key is not None
+            assert finalized.initialization_id is not None
+            assert parsed is not None
+            staged = stage_recipe_initialization(
+                finalized.tool_ctx,
+                recipe_name=finalized.recipe_name,
+                artifact_generation=finalized.artifact_generation,
+                flow_generation=finalized.flow_generation,
+                initialization_id=finalized.initialization_id,
+                staged_snapshot=finalized.execution_snapshot,
+                requirements=(
+                    finalized.initialization_requirements
+                    if parsed.get("delivery_bound_spill") is True
+                    else ()
+                ),
+                generation_store_key=finalized.normalized_compile_key,
+            )
+            if parsed.get("delivery_bound_spill") is not True:
+                try:
+                    assert prepared_execution is not None
+                    install_recipe_execution(
+                        finalized.tool_ctx,
+                        prepared_execution=prepared_execution,
+                        completion_receipt=_qualified_sha256(
+                            (
+                                finalized.initialization_id
+                                + finalized.artifact_generation.payload_sha256
+                            ).encode("utf-8")
+                        ),
+                    )
+                except Exception:
+                    clear_recipe_execution(finalized.tool_ctx)
+                    get_logger(__name__).error(
+                        "recipe execution snapshot installation failed",
+                        initialization_id=staged.initialization_id,
+                        exc_info=True,
+                    )
+                    enforced = json.dumps(
+                        {
+                            "success": False,
+                            "error": "recipe_execution_install_failed",
+                        },
+                        separators=(",", ":"),
+                    )
         if enforced == finalized.rendered:
-            if handle is not None and (
-                ledger is None
-                or not ledger.commit(
-                    handle,
-                    now_unix=int(time.time()) if now_unix is None else now_unix,
-                )
-            ):
-                enforced = json.dumps(
-                    {"success": False, "error": "recipe_delivery_receipt_commit_failed"},
-                    separators=(",", ":"),
-                )
-        if enforced == finalized.rendered:
-            if prepared_execution is not None and finalized.tool_ctx is not None:
-                from autoskillit.server._recipe_execution import (  # circular-break
-                    install_recipe_execution,
-                )
-
-                install_recipe_execution(
-                    finalized.tool_ctx,
-                    prepared_execution=prepared_execution,
-                )
             return enforced
     if handle is not None and (ledger is None or not ledger.abort(handle)):
         return json.dumps(
@@ -1111,6 +1355,7 @@ def enforce_recipe_resource_response(
 
 __all__ = [
     "FinalizedRecipeResponse",
+    "PreparedRecipeGeneration",
     "RECIPE_ARTIFACT_DESCRIPTOR_VERSION",
     "RECIPE_ARTIFACT_SCHEMA_VERSION",
     "RECIPE_BODY_END",
@@ -1124,6 +1369,7 @@ __all__ = [
     "finalize_recipe_delivery",
     "load_recipe_artifact",
     "persist_recipe_artifact",
+    "prepare_recipe_delivery_generation",
     "recipe_pull_producers",
     "retire_recipe_artifacts",
 ]

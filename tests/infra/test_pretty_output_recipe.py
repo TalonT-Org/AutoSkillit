@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -14,8 +14,10 @@ if TYPE_CHECKING:
     from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
 
 from autoskillit.core import (
+    RECIPE_FLOW_SCHEMA_VERSION,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    RecipeFlowGeneration,
 )
 from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.hooks.formatters.pretty_output_hook import _format_response
@@ -27,6 +29,27 @@ from tests.infra._pretty_output_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
+
+def _simple_flow_generation(name: str) -> RecipeFlowGeneration:
+    records = (
+        json.dumps(
+            {"kind": "entrypoint", "name": name},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
+        json.dumps(
+            {"index": 0, "kind": "step", "name": name},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
+    )
+    return RecipeFlowGeneration(
+        schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        records=records,
+    )
 
 
 def test_response_backstop_tool_metadata_comes_from_registry() -> None:
@@ -466,12 +489,16 @@ def test_attested_recipe_delivery_region_is_preserved_byte_for_byte(
         "errors": [],
         "warnings": [],
     }
+    flow_generation = _simple_flow_generation("impl")
+    payload["flow_records"] = list(flow_generation.records)
+    payload["recipe_flow"] = flow_generation.identity()
     generation = persist_recipe_artifact(
         tmp_path,
         kitchen_id="formatter-contract",
         producer_tool=tool_name,
         recipe_name="remediation",
         payload=payload,
+        flow_generation=flow_generation,
     )
     protected = _attested_render(
         payload,
@@ -947,6 +974,8 @@ _COMPACT_TEST_OVERRIDES = {
     "default": {
         "task": "test task",
         "issue_url": "https://github.com/test/test/issues/1",
+        "max_issues_per_l2": "6",
+        "model_context_window": "200000",
     },
     "all_truthy": {
         "task": "test task",
@@ -954,6 +983,8 @@ _COMPACT_TEST_OVERRIDES = {
         "is_fleet_dispatch": "true",
         "adversarial_review_level": "true",
         "local_review_rounds": "true",
+        "max_issues_per_l2": "6",
+        "model_context_window": "200000",
         "base_branch": "true",
         "pipeline_health": "true",
     },
@@ -968,10 +999,12 @@ def _served_content(
     from autoskillit.recipe._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+    resolved = dict(overrides, source_dir=str(project_root))
     result = load_and_validate(
         recipe_name,
         project_dir=project_root,
-        ingredient_overrides=dict(overrides, source_dir=str(project_root)),
+        ingredient_overrides=resolved,
+        resolved_defaults=resolved,
         temp_dir=tmp_path,
     )
     return result.get("content")
@@ -1014,10 +1047,9 @@ def test_compact_recipe_display_preserves_execution_semantics(tmp_path, monkeypa
 
 def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, monkeypatch):
     """Measure the same pre-backstop string in characters and UTF-8 bytes."""
-    from types import SimpleNamespace
 
     from autoskillit import __version__
-    from autoskillit.recipe import _api_cache, all_validated_recipe_names
+    from autoskillit.recipe import _api_cache, all_validated_recipe_names, load_and_validate
     from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.recipe.io import _SCRIPTS_PLACEHOLDER, builtin_scripts_dir
     from autoskillit.recipe.repository import DefaultRecipeRepository
@@ -1045,13 +1077,25 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
                 session_serve_overrides=None,
                 session_serve_defer_unresolved=False,
             )
+            resolved = dict(overrides, source_dir=str(project_root))
+            preview = load_and_validate(
+                recipe_name,
+                project_dir=project_root,
+                ingredient_overrides=resolved,
+                resolved_defaults=resolved,
+                temp_dir=tmp_path,
+            )
+            if not preview.get("post_prune_step_names"):
+                continue
+            monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
             result = serve_recipe(
                 tool_ctx,
                 recipe_name,
-                caller_overrides=dict(overrides, source_dir=str(project_root)),
-                config_default={},
-                session_overrides={},
-                config_layer={},
+                caller_overrides=resolved,
+                config_default=resolved,
+                session_overrides=resolved,
+                config_layer=resolved,
+                resolved_defaults=resolved,
                 temp_dir=tmp_path,
             )
 
@@ -1092,8 +1136,8 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
         for ingredients_only in (False, True)
     }
     assert maxima == {
-        "load_recipe": (168_348, "remediation", "all_truthy"),
-        "open_kitchen": (168_401, "remediation", "all_truthy"),
+        "load_recipe": (168_523, "remediation", "all_truthy"),
+        "open_kitchen": (168_576, "remediation", "all_truthy"),
     }
 
 
@@ -1114,7 +1158,11 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     Ceiling accommodates growth from issue #4274 Part B (the new
     ``inter_part_push_pre_remediation`` / ``verify_ref_push_exhaustion`` steps in
     ``remediation.yaml`` legitimately grew the rendered payload)."""
-    from autoskillit.core import resolve_general_output_token_limit
+    from autoskillit.core import (
+        RECIPE_FLOW_SCHEMA_VERSION,
+        RecipeFlowGeneration,
+        resolve_recipe_envelope_byte_limit,
+    )
     from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.hooks.formatters import _fmt_recipe_compact
     from autoskillit.hooks.formatters.pretty_output_hook import (
@@ -1129,45 +1177,77 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
     # Smallest backend's effective delivery bound across the registry — the
     # conservative ceiling a payload of arbitrary size must fit. Mirrors
-    # `_smallest_bound_tokens()` in tests/server/test_tools_recipe_pull.py and
+    # The recipe envelope uses the strictest registered backend byte ceiling.
+    # This mirrors the production resolver and
     # `test_capability_default_uses_conservative_bound` in this directory's
     # sibling test file. Computed inline because this test lives in tests/infra/
     # and does not have a full `ToolContext` fixture available; replicates the
     # fits/build-envelope decision directly rather than depending on
-    # `maybe_envelope_recipe_response`, which receives its bound as a
-    # caller-supplied parameter (selected_result_token_limit) derived from
-    # the single active session's backend, not computed via `min()`.
+    # `maybe_envelope_recipe_response`, which receives a single active session's
+    # bound instead of computing the registry minimum.
     backend_caps = {name: cls().capabilities for name, cls in BACKEND_REGISTRY.items()}
-    smallest_bound_tokens = min(
-        resolve_general_output_token_limit(caps) for caps in backend_caps.values()
+    smallest_bound_bytes = min(
+        resolve_recipe_envelope_byte_limit(caps) for caps in backend_caps.values()
     )
-    smallest_bound_bytes = smallest_bound_tokens * 4
     over_budget: list[str] = []
     maximum: tuple[int, str, str] = (0, "", "")
 
     for recipe_name in all_validated_recipe_names(project_root):
         for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
             monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+            resolved = dict(overrides, source_dir=str(project_root))
             result = load_and_validate(
                 recipe_name,
                 project_dir=project_root,
-                ingredient_overrides=dict(overrides, source_dir=str(project_root)),
+                ingredient_overrides=resolved,
+                resolved_defaults=resolved,
                 temp_dir=tmp_path,
             )
+            payload = dict(result)
+            step_names = [
+                name
+                for name in payload.get("post_prune_step_names") or []
+                if isinstance(name, str)
+            ]
+            if not step_names:
+                continue
+            flow_records = [
+                json.dumps(
+                    {"kind": "entrypoint", "name": step_names[0]},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                *[
+                    json.dumps(
+                        {"index": index, "kind": "step", "name": name},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    for index, name in enumerate(step_names)
+                ],
+            ]
+            flow_generation = RecipeFlowGeneration(
+                schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+                records=tuple(flow_records),
+            )
+            payload["flow_records"] = list(flow_generation.records)
+            payload["recipe_flow"] = flow_generation.identity()
             generation = persist_recipe_artifact(
                 tmp_path,
                 kitchen_id="pretty-output",
                 producer_tool="open_kitchen",
                 recipe_name=recipe_name,
-                payload=dict(result),
+                payload=payload,
+                flow_generation=flow_generation,
             )
             envelope = build_recipe_envelope(
-                dict(result),
+                payload,
                 recipe_name=recipe_name,
                 generation=generation,
-                skeleton_source=cast(
-                    "ToolContext", SimpleNamespace(recipe_name="", active_recipe_steps=None)
-                ),
+                flow_generation=flow_generation,
+                entrypoint=step_names[0],
                 bound_bytes=smallest_bound_bytes,
             )
             rendered = _fmt_open_kitchen(envelope, pipeline=False)

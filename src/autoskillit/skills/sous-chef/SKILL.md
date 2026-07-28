@@ -971,19 +971,30 @@ resolved state. The `load_recipe` tool is the ONLY authoritative source of recip
 it runs the full composition pipeline (sub-recipe merging, skip-guard resolution, hidden
 ingredient interpolation) before serving content to you.
 
-When `load_recipe`/`open_kitchen` return a bounded envelope (large recipes exceeding
-the backend's delivery bound), the envelope omits full step bodies. Call
-`get_recipe_section(section=<step_name>)` to pull the body of a specific step on
-demand — this is still the authoritative channel (backed by the same persisted
-artifact `load_recipe` wrote), not a raw-file read. For sections spanning multiple
-pages, require one known `pagination_version` and stable `section_registry_sha256`,
-`section_sha256`, and `page_plan_sha256`; reject an unknown pagination_version or
-unknown content_format and do not guess. Reconstruct `raw-text` by concatenating
-contiguous byte ranges. For `json-array-page`, call `json.loads` on every page and
-extend in order. For `json-scalar-page`, call `json.loads` and concatenate decoded
-strings. For `json-element-fragment`, call `json.loads` on each string fragment,
-concatenate and verify the canonical element, then parse it once. Follow
-`has_more`/`next_part`; a terminal page must omit `next_part`.
+When `load_recipe`/`open_kitchen` return a bounded recovery manifest, process it
+before any generic `success:false` rule. Preserve `recipe_pull`, `recipe_flow`,
+`initialization_id`, `required_sections`, page-plan identity, and pagination-policy
+identity. Retrieve every `flow_records` part first, then every part of the
+entrypoint named-step descriptor. Forward all advertised producer, recipe, descriptor,
+artifact, flow, section-registry, pagination, digest, size, record-count,
+`initialization_id`, `page_plan_sha256`, `part`, and `continuation` fields unchanged.
+This includes `descriptor_version`, `schema_version`, `flow_schema_version`,
+`section_registry_sha256`, `pagination_version`, `pagination_policy_sha256`,
+`section_sha256`, `content_format`, `has_more`, and `next_part`.
+Part zero has no continuation; each later request uses the prior response's binding.
+Reject an unknown pagination_version or unknown content_format, changed request fields,
+mismatched identities,
+skips, out-of-order parts, conflicting duplicates, or cross-generation pages.
+
+Reconstruct `raw-text` from contiguous ranges. For `json-array-page`, use `json.loads`
+to decode every page and extend in order. For `json-scalar-page`, decode and concatenate
+strings. For `json-element-fragment`, decode each string fragment, concatenate and
+verify the canonical element, then parse it once. Verify the complete flow digest, byte size,
+and record count plus the entrypoint section digest. Then call
+`complete_recipe_initialization(initialization_id=<server-issued ID>)` without
+caller-supplied generation selectors and require its completion receipt before the
+first execution or mutation tool. Random-access pulls without the matching
+initialization ID never establish readiness.
 
 Similarly, NEVER read SKILL.md files directly from the filesystem. Use the Skill tool
 to load skill instructions — it applies runtime transformations (namespace rewriting,

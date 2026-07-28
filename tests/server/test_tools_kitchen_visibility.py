@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
+from tests.server._helpers import _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -275,6 +276,9 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
         "suggestions": [],
         "diagram": None,
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
 
@@ -490,6 +494,9 @@ async def test_sous_chef_discipline_not_in_open_kitchen_result(tmp_path, monkeyp
         "suggestions": [],
         "diagram": None,
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
 
@@ -527,6 +534,9 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
         "suggestions": [],
         "diagram": None,
     }
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        mock_ctx.recipes.load_and_validate.return_value
+    )
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
 

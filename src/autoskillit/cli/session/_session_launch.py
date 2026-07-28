@@ -100,7 +100,7 @@ def _run_interactive_session(
     _project_dir = project_dir if project_dir is not None else Path.cwd()
     plugin_source: PluginSource | None
     if backend.capabilities.skill_injection_capable:
-        if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX:
+        if detect_autoskillit_mcp_prefix(backend.capabilities) == MARKETPLACE_PREFIX:
             plugin_source = None
         else:
             from autoskillit.workspace import project_default_plugin_source

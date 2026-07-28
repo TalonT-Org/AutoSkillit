@@ -16,6 +16,7 @@ import pytest
 
 from autoskillit.core import BACKEND_CAPABILITY_INGREDIENTS, CAPABILITY_GATE_CALLABLES
 from autoskillit.recipe._api import load_and_validate
+from tests.server._helpers import _with_finalized_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -195,19 +196,21 @@ def _make_feasible_load_result(
     post_prune_step_names: list[str] | None = None,
 ) -> dict[str, Any]:
     """Return a load_and_validate result dict for a feasible dispatch."""
-    return {
-        "content": "name: implementation\nsteps:\n  implement:\n    tool: run_skill\n",
-        "valid": True,
-        "errors": [],
-        "requires_packs": [],
-        "requires_features": [],
-        "content_hash": "abc123",
-        "composite_hash": "def456",
-        "recipe_version": "1.0",
-        "suggestions": [],
-        "post_prune_step_names": post_prune_step_names or ["implement", "retry_worktree"],
-        "dispatch_feasible": True,
-    }
+    return _with_finalized_projection(
+        {
+            "content": "name: implementation\nsteps:\n  implement:\n    tool: run_skill\n",
+            "valid": True,
+            "errors": [],
+            "requires_packs": [],
+            "requires_features": [],
+            "content_hash": "abc123",
+            "composite_hash": "def456",
+            "recipe_version": "1.0",
+            "suggestions": [],
+            "post_prune_step_names": post_prune_step_names or ["implement", "retry_worktree"],
+            "dispatch_feasible": True,
+        }
+    )
 
 
 def _setup_provider_override_ctx(tool_ctx: MagicMock) -> MagicMock:

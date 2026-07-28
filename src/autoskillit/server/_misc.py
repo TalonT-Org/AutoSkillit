@@ -15,7 +15,6 @@ from autoskillit._llm_triage import triage_staleness
 from autoskillit.core import (
     DIRECT_INSTALL_CACHE_SUBDIR,
     MARKETPLACE_PREFIX,
-    detect_autoskillit_mcp_prefix,
     ensure_project_temp,
     get_logger,
 )
@@ -176,7 +175,9 @@ def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
     return []
 
 
-def _build_hook_diagnostic_warning() -> str | None:
+def _build_hook_diagnostic_warning(
+    mcp_prefix: str,
+) -> str | None:
     """Run hook health and drift checks. Return a warning string if issues are found."""
 
     issues: list[str] = []
@@ -192,7 +193,7 @@ def _build_hook_diagnostic_warning() -> str | None:
                 f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "
                 f"HOOK_REGISTRY — every matching tool call will be denied with ENOENT."
             )
-        if drift.missing > 0 and detect_autoskillit_mcp_prefix() != MARKETPLACE_PREFIX:
+        if drift.missing > 0 and mcp_prefix != MARKETPLACE_PREFIX:
             issues.append(
                 f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
             )

@@ -2,21 +2,35 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import NamedTuple
 
 __all__ = [
     "RECIPE_DELIVERY_ATTESTATION_AUDIENCE",
+    "RECIPE_ARTIFACT_DESCRIPTOR_VERSION",
+    "RECIPE_ARTIFACT_MAX_BLOB_BYTES",
+    "RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES",
+    "RECIPE_ARTIFACT_SCHEMA_VERSION",
+    "RECIPE_FLOW_SCHEMA_VERSION",
+    "RecipeArtifactGeneration",
     "RecipeDeliveryAttestation",
     "RecipeDeliveryBudgetDef",
     "RecipeDeliveryDecision",
     "RecipeDeliveryEvidenceDef",
     "RecipeDeliveryMode",
     "RecipeDeliveryRequest",
+    "RecipeFlowGeneration",
 ]
 
 RECIPE_DELIVERY_ATTESTATION_AUDIENCE = "autoskillit.recipe-delivery"
+RECIPE_ARTIFACT_DESCRIPTOR_VERSION = 2
+RECIPE_ARTIFACT_SCHEMA_VERSION = 2
+RECIPE_ARTIFACT_MAX_BLOB_BYTES = 1_000_000
+RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES = 16_384
+RECIPE_FLOW_SCHEMA_VERSION = 1
 
 
 class RecipeDeliveryMode(StrEnum):
@@ -25,6 +39,122 @@ class RecipeDeliveryMode(StrEnum):
     ORDINARY_INLINE = "ordinary_inline"
     ATTESTED_INLINE = "attested_inline"
     ENVELOPE = "envelope"
+
+
+def _qualified_sha256(data: bytes) -> str:
+    return f"sha256:{hashlib.sha256(data).hexdigest()}"
+
+
+def _flow_generation_bytes(records: tuple[str, ...]) -> bytes:
+    generated = bytearray()
+    for record in records:
+        encoded = record.encode("utf-8")
+        generated.extend(len(encoded).to_bytes(8, "big"))
+        generated.extend(encoded)
+    return bytes(generated)
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeFlowGeneration:
+    """Canonical, ordered recipe-flow records with derived immutable identity."""
+
+    schema_version: int
+    records: tuple[str, ...]
+    flow_sha256: str = ""
+    flow_size_bytes: int = 0
+    record_count: int = 0
+
+    def __post_init__(self) -> None:
+        if self.schema_version != RECIPE_FLOW_SCHEMA_VERSION:
+            raise ValueError("unsupported recipe flow schema version")
+        if not self.records:
+            raise ValueError("recipe flow generation must contain records")
+        for record in self.records:
+            if not isinstance(record, str):
+                raise TypeError("recipe flow records must be strings")
+            try:
+                parsed = json.loads(record)
+            except json.JSONDecodeError as exc:
+                raise ValueError("recipe flow record is not valid JSON") from exc
+            canonical = json.dumps(
+                parsed,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            if not isinstance(parsed, dict) or canonical != record:
+                raise ValueError("recipe flow record is not canonical")
+        generated = _flow_generation_bytes(self.records)
+        expected_digest = _qualified_sha256(b"autoskillit.recipe-flow.v1\0" + generated)
+        expected_size = len(generated)
+        expected_count = len(self.records)
+        for supplied, expected, label in (
+            (self.flow_sha256, expected_digest, "flow digest"),
+            (self.flow_size_bytes, expected_size, "flow size"),
+            (self.record_count, expected_count, "flow record count"),
+        ):
+            if supplied not in ("", 0) and supplied != expected:
+                raise ValueError(f"{label} mismatch")
+        object.__setattr__(self, "flow_sha256", expected_digest)
+        object.__setattr__(self, "flow_size_bytes", expected_size)
+        object.__setattr__(self, "record_count", expected_count)
+
+    def identity(self) -> dict[str, str | int]:
+        return {
+            "flow_schema_version": self.schema_version,
+            "flow_sha256": self.flow_sha256,
+            "flow_size_bytes": self.flow_size_bytes,
+            "flow_record_count": self.record_count,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeArtifactGeneration:
+    """Exact identities for one immutable canonical recipe payload."""
+
+    producer_tool: str
+    recipe_name: str
+    descriptor_version: int
+    schema_version: int
+    payload_sha256: str
+    artifact_blob_sha256: str
+    artifact_blob_size_bytes: int
+    body_sha256: str
+    body_size_bytes: int
+    flow_schema_version: int
+    flow_sha256: str
+    flow_size_bytes: int
+    flow_record_count: int
+
+    def has_valid_read_bounds(self) -> bool:
+        """Return whether caller-provided sizes stay within server ceilings."""
+        return (
+            self.descriptor_version == RECIPE_ARTIFACT_DESCRIPTOR_VERSION
+            and self.schema_version == RECIPE_ARTIFACT_SCHEMA_VERSION
+            and self.flow_schema_version == RECIPE_FLOW_SCHEMA_VERSION
+            and 0 < self.artifact_blob_size_bytes <= RECIPE_ARTIFACT_MAX_BLOB_BYTES
+            and 0 <= self.body_size_bytes <= self.artifact_blob_size_bytes
+            and self.flow_size_bytes > 0
+            and self.flow_record_count > 0
+        )
+
+    def pull_identity(self) -> dict[str, str | int]:
+        return {
+            "producer_tool": self.producer_tool,
+            "recipe_name": self.recipe_name,
+            "descriptor_version": self.descriptor_version,
+            "schema_version": self.schema_version,
+            "payload_sha256": self.payload_sha256,
+            "artifact_blob_sha256": self.artifact_blob_sha256,
+            "artifact_blob_size_bytes": self.artifact_blob_size_bytes,
+            "body_sha256": self.body_sha256,
+            "body_size_bytes": self.body_size_bytes,
+            "flow_schema_version": self.flow_schema_version,
+            "flow_sha256": self.flow_sha256,
+            "flow_size_bytes": self.flow_size_bytes,
+            "flow_record_count": self.flow_record_count,
+            "pull_tool": "get_recipe_section",
+        }
 
 
 class RecipeDeliveryBudgetDef(NamedTuple):

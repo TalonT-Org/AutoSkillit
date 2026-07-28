@@ -1,12 +1,8 @@
-"""Recipe-tool formatters for the pretty_output split.
-
-Hosts the per-tool formatters for ``load_recipe``, ``open_kitchen``, and
-``list_recipes`` along with their field-coverage contracts. Stdlib-only at
-runtime.
-"""
+"""Recipe-tool formatters and field-coverage contracts."""
 
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
@@ -29,7 +25,6 @@ else:
     from _recipe_delivery_framing import is_attested_recipe_delivery
 
 
-# Field coverage contract for _fmt_load_recipe ↔ LoadRecipeResult
 _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
     {
         "valid",
@@ -39,6 +34,15 @@ _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
         "diagram",
         "ingredients_table",
         "orchestration_rules",
+        "finalized_recipe_projection",
+        "flow_records",
+        "recipe_execution",
+        "recipe_flow",
+        "recipe_pull",
+        "delivery_bound_spill",
+        "initialization_id",
+        "recovery",
+        "required_sections",
         "warnings",
     }
 )
@@ -58,34 +62,18 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "post_prune_routing_edges",  # internal preflight field; not displayed to agent
         "dispatch_feasible",  # internal admission control signal; surfaced via refusal envelopes
         "infeasible_steps",  # internal admission control detail; surfaced via refusal envelopes
-        "_compiled_bindings",  # internal host-attested invocation carrier
+        "_finalized_projection",  # internal host-attested finalized recipe carrier
     }
 )
 
-# Maps derived-display field name → source field name in LoadRecipeResult.
-# When a derived field is present in a response, the formatter strips its
-# corresponding source block from the source field to prevent duplicate display.
-# All entries must map to "content" — only content-derived fields require
-# ingredients-block stripping. Non-content source fields are not supported here.
-#
-# HOW TO USE: When adding a new field to _FMT_LOAD_RECIPE_RENDERED, ask:
-#   "Is this field a re-rendering of content already in another RENDERED field?"
-# If yes, add an entry here: {new_derived_field: "content"}.
-# The augmented field coverage test will enforce this declaration.
+# Derived displays strip their source block to avoid duplicate rendering.
 _LOAD_RECIPE_CONTENT_DERIVED_FROM: dict[str, str] = {
     "ingredients_table": "content",  # GFM table derived from the ingredients: block in content
 }
 
 
 def _strip_yaml_ingredients_block(yaml_text: str) -> str:
-    """Remove the top-level `ingredients:` block from YAML text.
-
-    Called by _fmt_recipe_body() when ingredients_table is present, so the
-    RECIPE block does not repeat the TABLE block. Operates line-by-line:
-    drops the `ingredients:` key and all its indented children until a
-    non-indented line signals the next top-level key. Preserves all other
-    top-level keys (steps, kitchen_rules, description, etc.) unchanged.
-    """
+    """Remove the top-level ``ingredients`` block from YAML text."""
     lines = yaml_text.splitlines(keepends=True)
     result: list[str] = []
     in_ingredients = False
@@ -95,23 +83,15 @@ def _strip_yaml_ingredients_block(yaml_text: str) -> str:
             continue
         if in_ingredients:
             if line and not line[0].isspace():
-                # First non-indented non-empty line = next top-level key
                 in_ingredients = False
                 result.append(line)
-            # else: still inside the ingredients block — skip
         else:
             result.append(line)
     return "".join(result)
 
 
 def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
-    """Shared recipe content rendering for load_recipe and open_kitchen+recipe.
-
-    Renders STEP FLOW (structured summary) before FLOW DIAGRAM before RECIPE
-    so the step-ordering chain survives even if only the first ~2KB of the
-    response is delivered (see issue #4253). load_recipe and named-recipe
-    open_kitchen intentionally share this same head ordering.
-    """
+    """Render flow before content so bounded heads preserve step ordering."""
     lines: list[str] = []
     summary = data.get("summary")
     if summary:
@@ -125,8 +105,6 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
         lines.append("--- END DIAGRAM ---")
     content = data.get("content")
     if content:
-        # When a derived field is present, strip its source block from content
-        # to prevent duplicate display. The derivation map drives this automatically.
         display_content = content
         for derived_field in _LOAD_RECIPE_CONTENT_DERIVED_FROM:
             if data.get(derived_field):
@@ -135,6 +113,29 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
         lines.append("\n--- RECIPE ---")
         lines.append(display_content)
         lines.append("--- END RECIPE ---")
+    initialization_fields = (
+        "finalized_recipe_projection",
+        "flow_records",
+        "recipe_execution",
+        "recipe_flow",
+        "recipe_pull",
+        "delivery_bound_spill",
+        "initialization_id",
+        "recovery",
+        "required_sections",
+    )
+    initialization = {key: data[key] for key in initialization_fields if data.get(key) is not None}
+    if initialization:
+        lines.append("\n--- RECIPE INITIALIZATION ---")
+        lines.append(
+            json.dumps(
+                initialization,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+        lines.append("--- END RECIPE INITIALIZATION ---")
     ing_table = data.get("ingredients_table")
     if ing_table:
         lines.append("\n--- INGREDIENTS TABLE (display this verbatim to the user) ---")
@@ -171,7 +172,6 @@ def _fmt_load_recipe(data: LoadRecipeResult, pipeline: bool) -> str:
     return "\n".join(lines)
 
 
-# Field coverage contract for _fmt_list_recipes ↔ ListRecipesResult
 _FMT_LIST_RECIPES_RENDERED: frozenset[str] = frozenset(
     {
         "recipes",
@@ -181,7 +181,6 @@ _FMT_LIST_RECIPES_RENDERED: frozenset[str] = frozenset(
 )
 _FMT_LIST_RECIPES_SUPPRESSED: frozenset[str] = frozenset()
 
-# Field coverage contract for per-item recipe entries ↔ RecipeListItem
 _FMT_RECIPE_LIST_ITEM_RENDERED: frozenset[str] = frozenset(
     {
         "name",
@@ -192,7 +191,6 @@ _FMT_RECIPE_LIST_ITEM_RENDERED: frozenset[str] = frozenset(
 )
 _FMT_RECIPE_LIST_ITEM_SUPPRESSED: frozenset[str] = frozenset()
 
-# Field coverage contract for _fmt_open_kitchen ↔ OpenKitchenResult
 _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
     {
         "valid",
@@ -202,6 +200,15 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
         "diagram",
         "ingredients_table",
         "orchestration_rules",
+        "finalized_recipe_projection",
+        "flow_records",
+        "recipe_execution",
+        "recipe_flow",
+        "recipe_pull",
+        "delivery_bound_spill",
+        "initialization_id",
+        "recovery",
+        "required_sections",
         "version",
         "warnings",
     }

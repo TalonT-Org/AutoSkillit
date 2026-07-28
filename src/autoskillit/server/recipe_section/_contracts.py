@@ -8,9 +8,9 @@ from typing import Literal
 from autoskillit.core import (
     RECIPE_SECTION_CONTENT_FORMAT_REGISTRY,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+    RecipeArtifactGeneration,
     RecipeSectionDef,
 )
-from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
 
 RecipeSectionContentFormat = Literal[
     "raw-text",
@@ -87,6 +87,7 @@ class SelectedRecipeSection:
     definition: RecipeSectionDef
     value: object
     present: bool
+    initialization_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +194,7 @@ class RecipeSectionPlanManifest:
     section_registry_sha256: str
     pagination_policy_sha256: str
     generation: RecipeArtifactGeneration
+    initialization_id: str | None
     section: str
     section_strategy: str
     section_sha256: str

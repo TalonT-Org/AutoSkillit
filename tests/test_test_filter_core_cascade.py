@@ -209,7 +209,7 @@ class TestModuleCascadeCore:
 
     def test_type_recipe_delivery_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_recipe_delivery"] == frozenset(
-            {"core", "execution", "server"}
+            {"core", "execution", "pipeline", "server"}
         )
 
     def test_context_admission_persistence_cascade(self) -> None:

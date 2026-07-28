@@ -23,8 +23,11 @@ __all__ = [
     "BoundValue",
     "BoundValueOrigin",
     "BoundValueState",
+    "FinalizedRecipeProjection",
     "RecipeBindingProjection",
+    "RecipeFlowEdge",
     "ToolDef",
+    "ToolInitializationOperation",
     "ToolParamDef",
     "ToolWireType",
 ]
@@ -45,6 +48,16 @@ class ToolWireType(StrEnum):
     ARRAY = "array"
 
 
+class ToolInitializationOperation(StrEnum):
+    """Operation class used by the recipe-initialization admission boundary."""
+
+    RECOVERY = "recovery"
+    INSPECTION = "inspection"
+    LIFECYCLE_CONTROL = "lifecycle_control"
+    EXECUTION = "execution"
+    MUTATION = "mutation"
+
+
 @dataclass(frozen=True, slots=True)
 class ToolParamDef:
     """Static definition of one public MCP handler parameter."""
@@ -62,8 +75,14 @@ class ToolDef:
 
     name: str
     params: tuple[ToolParamDef, ...]
+    initialization_operation: ToolInitializationOperation
 
     def __post_init__(self) -> None:
+        if not isinstance(self.initialization_operation, ToolInitializationOperation):
+            raise TypeError(
+                f"ToolDef {self.name!r} initialization_operation must be "
+                "a ToolInitializationOperation"
+            )
         params = tuple(self.params)
         for index, param in enumerate(params):
             if not isinstance(param, ToolParamDef):
@@ -278,3 +297,68 @@ class RecipeBindingProjection:
         return tuple(
             failure for invocation in self.invocations.values() for failure in invocation.failures
         )
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeFlowEdge:
+    """One ordered route in a finalized recipe graph."""
+
+    source: str
+    edge_type: str
+    target: str
+    condition: str | None
+    result_field: str | None
+
+    def __post_init__(self) -> None:
+        for field_name in ("source", "edge_type", "target"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"RecipeFlowEdge.{field_name} must be a non-empty string")
+        for field_name in ("condition", "result_field"):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, str):
+                raise TypeError(f"RecipeFlowEdge.{field_name} must be a string or None")
+
+
+@dataclass(frozen=True, slots=True)
+class FinalizedRecipeProjection:
+    """Immutable execution projection of one fully finalized recipe."""
+
+    binding_projection: RecipeBindingProjection
+    ordered_step_names: tuple[str, ...]
+    entrypoint: str
+    ordered_flow_edges: tuple[RecipeFlowEdge, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.binding_projection, RecipeBindingProjection):
+            raise TypeError(
+                "FinalizedRecipeProjection.binding_projection must be a RecipeBindingProjection"
+            )
+
+        ordered_step_names = tuple(self.ordered_step_names)
+        if not ordered_step_names:
+            raise ValueError("FinalizedRecipeProjection requires at least one ordered step")
+        if any(not isinstance(name, str) or not name for name in ordered_step_names):
+            raise ValueError(
+                "FinalizedRecipeProjection.ordered_step_names must contain non-empty strings"
+            )
+        if len(ordered_step_names) != len(set(ordered_step_names)):
+            raise ValueError("FinalizedRecipeProjection.ordered_step_names contains duplicates")
+        if not isinstance(self.entrypoint, str) or not self.entrypoint:
+            raise ValueError("FinalizedRecipeProjection.entrypoint must be a non-empty string")
+        if self.entrypoint != ordered_step_names[0]:
+            raise ValueError("FinalizedRecipeProjection.entrypoint must be the first ordered step")
+
+        ordered_flow_edges = tuple(self.ordered_flow_edges)
+        if any(not isinstance(edge, RecipeFlowEdge) for edge in ordered_flow_edges):
+            raise TypeError(
+                "FinalizedRecipeProjection.ordered_flow_edges must contain RecipeFlowEdge entries"
+            )
+        step_names = frozenset(ordered_step_names)
+        if any(edge.source not in step_names for edge in ordered_flow_edges):
+            raise ValueError(
+                "FinalizedRecipeProjection flow-edge sources must be finalized step names"
+            )
+
+        object.__setattr__(self, "ordered_step_names", ordered_step_names)
+        object.__setattr__(self, "ordered_flow_edges", ordered_flow_edges)

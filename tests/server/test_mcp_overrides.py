@@ -8,12 +8,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.server._helpers import _with_finalized_projection
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _make_mock_recipes(load_result: dict) -> MagicMock:
     """Create a mock recipe repository that returns the given load result."""
     mock = MagicMock()
+    if load_result.get("valid") is True:
+        load_result = _with_finalized_projection(load_result)
     mock.load_and_validate.return_value = load_result
     mock.find.return_value = None
     mock.list_all.return_value = {"recipes": [], "count": 0}
@@ -21,12 +25,22 @@ def _make_mock_recipes(load_result: dict) -> MagicMock:
 
 
 def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
+    from threading import RLock
+
+    from autoskillit.config import OutputBudgetConfig
+    from autoskillit.pipeline import NoActiveRecipe
+    from autoskillit.server._factory import make_recipe_execution
+
     mock_ctx = MagicMock()
     mock_ctx.recipes = recipes
     mock_ctx.temp_dir = temp_dir
     mock_ctx.kitchen_id = "test-mcp-overrides"
     mock_ctx.config.migration.suppressed = []
+    mock_ctx.config.output_budget = OutputBudgetConfig()
     mock_ctx.gate.is_enabled.return_value = True
+    mock_ctx.recipe_execution_lock = RLock()
+    mock_ctx.recipe_initialization_state = NoActiveRecipe()
+    mock_ctx.recipe_execution_factory = make_recipe_execution
     return mock_ctx
 
 

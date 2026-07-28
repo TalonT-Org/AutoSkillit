@@ -88,6 +88,35 @@ def _typed_decorator(
     )
 
 
+@pytest.mark.anyio
+async def test_initialization_admission_precedes_typed_state_and_handler_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.server.tools._cancellation_shield as shield_module
+
+    events: list[str] = []
+    denial = json.dumps({"success": False, "error": "recipe_initialization_incomplete"})
+    monkeypatch.setattr(
+        shield_module,
+        "admit_registered_tool_during_initialization",
+        lambda tool_name: events.append(f"admit:{tool_name}") or denial,
+    )
+
+    state_var: ContextVar[_State] = ContextVar("admission-order")
+
+    @_typed_decorator(
+        lambda: events.append("state_factory") or _State("request", True, 512),
+        state_var,
+        lambda state, exc: "{}",
+    )
+    async def run_skill() -> str:
+        events.append("handler")
+        return "{}"
+
+    assert await run_skill() == denial
+    assert events == ["admit:run_skill"]
+
+
 @pytest.mark.parametrize(
     "typed_kwargs",
     [

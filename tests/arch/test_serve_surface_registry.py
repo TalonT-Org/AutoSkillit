@@ -104,3 +104,17 @@ def test_recipe_recreation_policy_is_registry_owned() -> None:
     }
 
     assert eligible == {"open_kitchen", "open_kitchen_deferred_recall", "get_recipe"}
+
+
+def test_recipe_initialization_activation_is_registry_owned() -> None:
+    from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
+
+    assert {
+        surface
+        for surface, definition in RECIPE_DELIVERY_SURFACE_REGISTRY.items()
+        if definition.initialization_activating
+    } == {"open_kitchen", "open_kitchen_deferred_recall"}
+    assert all(
+        type(definition.initialization_activating) is bool
+        for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
+    )

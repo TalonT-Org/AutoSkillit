@@ -829,7 +829,7 @@ def test_no_is_plugin_installed_in_session_launch() -> None:
 
     _is_plugin_installed runs 'claude plugin list' as a subprocess (up to 10s).
     This pre-launch delay widens the MCP first-call race window.
-    Replacement: detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX (µs filesystem read).
+    Replacement: backend-aware prefix detection against MARKETPLACE_PREFIX.
     """
     source = Path("src/autoskillit/cli/session/_session_launch.py").read_text()
     tree = ast.parse(source)
@@ -840,7 +840,7 @@ def test_no_is_plugin_installed_in_session_launch() -> None:
     ]
     assert "_is_plugin_installed" not in calls, (
         "_session_launch.py calls _is_plugin_installed — replace with "
-        "detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX"
+        "detect_autoskillit_mcp_prefix(backend.capabilities) == MARKETPLACE_PREFIX"
     )
 
 
@@ -858,7 +858,7 @@ def test_no_is_plugin_installed_in_cook() -> None:
     ]
     assert "_is_plugin_installed" not in calls, (
         "_session_cook.py calls _is_plugin_installed — replace with "
-        "detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX"
+        "detect_autoskillit_mcp_prefix(backend.capabilities) == MARKETPLACE_PREFIX"
     )
 
 

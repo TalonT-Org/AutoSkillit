@@ -138,6 +138,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "record_pipeline_step",
         "reset_dispatch",
         "get_recipe_section",
+        "complete_recipe_initialization",
     }
 )
 
@@ -204,6 +205,7 @@ class RecipeDeliverySurfaceDef(NamedTuple):
     negotiation_eligible: bool
     pull_eligible: bool
     recreation_eligible: bool
+    initialization_activating: bool
     response_exemption_tool: str | None
     response_exemption: ResponseBackstopExemptionDef | None
 
@@ -218,6 +220,7 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             negotiation_eligible=True,
             pull_eligible=True,
             recreation_eligible=True,
+            initialization_activating=True,
             response_exemption_tool="open_kitchen",
             response_exemption=ResponseBackstopExemptionDef(
                 max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
@@ -231,6 +234,7 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             negotiation_eligible=True,
             pull_eligible=True,
             recreation_eligible=True,
+            initialization_activating=True,
             response_exemption_tool="open_kitchen",
             response_exemption=None,
         ),
@@ -240,6 +244,7 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             negotiation_eligible=True,
             pull_eligible=True,
             recreation_eligible=False,
+            initialization_activating=False,
             response_exemption_tool="load_recipe",
             response_exemption=ResponseBackstopExemptionDef(
                 max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
@@ -253,6 +258,7 @@ RECIPE_DELIVERY_SURFACE_REGISTRY: Mapping[str, RecipeDeliverySurfaceDef] = Mappi
             negotiation_eligible=False,
             pull_eligible=True,
             recreation_eligible=True,
+            initialization_activating=False,
             response_exemption_tool=None,
             response_exemption=None,
         ),
@@ -409,6 +415,17 @@ RECIPE_SECTION_REGISTRY: Mapping[str, RecipeSectionDef] = _validated_recipe_sect
             has_default=True,
             default_value=(),
         ),
+        "flow_records": RecipeSectionDef(
+            name="flow_records",
+            value_kind="array",
+            element_kind="string",
+            missing_behavior="invalid",
+            none_behavior="invalid",
+            section_strategy="array",
+            range_unit="elements",
+            ordinary_content_format="json-array-page",
+            oversized_content_format="json-element-fragment",
+        ),
         "warnings": RecipeSectionDef(
             name="warnings",
             value_kind="array",
@@ -437,7 +454,7 @@ DYNAMIC_RECIPE_SECTION_DEF = RecipeSectionDef(
     oversized_content_format=None,
 )
 
-RECIPE_SECTION_PAGINATION_VERSION = 1
+RECIPE_SECTION_PAGINATION_VERSION = 2
 _RECIPE_SECTION_CANONICAL_JSON_ENSURE_ASCII = False
 _RECIPE_SECTION_CANONICAL_JSON_SEPARATORS = (",", ":")
 _RECIPE_SECTION_CANONICAL_JSON_SORT_KEYS = True
@@ -570,6 +587,9 @@ RECIPE_SECTION_PAGINATION_POLICY_DIGEST = _qualified_registry_digest(
 
 RECIPE_SECTION_MANDATORY_FAILURE_CODES: tuple[str, ...] = (
     "invalid_recipe_artifact_identity",
+    "invalid_recipe_initialization_identity",
+    "invalid_recipe_page_plan_identity",
+    "invalid_recipe_section_continuation",
     "invalid_recipe_section_part",
     "recipe_artifact_identity_required",
     "recipe_artifact_parse_failed",
@@ -737,6 +757,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "unlock_agent_pack": frozenset({"kitchen-core"}),
     "record_pipeline_step": frozenset({"kitchen-core"}),
     "get_recipe_section": frozenset({"kitchen-core"}),
+    "complete_recipe_initialization": frozenset({"kitchen-core"}),
 }
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(

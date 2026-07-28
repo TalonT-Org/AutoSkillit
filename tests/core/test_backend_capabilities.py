@@ -107,6 +107,7 @@ def test_backend_capabilities_field_count():
         "supports_model_invocation_gating",
         "github_api_callable",
         "protected_recipe_delivery_capable",
+        "claude_marketplace_tool_prefix_capable",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -184,6 +185,7 @@ def test_backend_capabilities_field_names_locked():
         "github_api_callable",
         "unnegotiated_tool_result_token_limit",
         "protected_recipe_delivery_capable",
+        "claude_marketplace_tool_prefix_capable",
         "recipe_delivery_budget",
         "hook_trust_policy",
     }
@@ -203,6 +205,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.supports_claude_format_stdout is True
     assert CLAUDE_CODE_CAPABILITIES.exit_code_is_terminal is False
     assert CLAUDE_CODE_CAPABILITIES.mcp_config_capable is False
+    assert CLAUDE_CODE_CAPABILITIES.claude_marketplace_tool_prefix_capable is True
     assert CLAUDE_CODE_CAPABILITIES.food_truck_capable is True
     assert CLAUDE_CODE_CAPABILITIES.completion_record_types == frozenset({"result"})
     assert CLAUDE_CODE_CAPABILITIES.session_record_types == frozenset({"assistant"})

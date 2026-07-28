@@ -101,7 +101,12 @@ class TestDanglingInstallPathIsHarmless:
         _seed_dangling_registry(tmp_path)
         _plugin_ids.detect_autoskillit_mcp_prefix.cache_clear()
         try:
-            assert _plugin_ids.detect_autoskillit_mcp_prefix() == _plugin_ids.MARKETPLACE_PREFIX
+            from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+
+            assert (
+                _plugin_ids.detect_autoskillit_mcp_prefix(CLAUDE_CODE_CAPABILITIES)
+                == _plugin_ids.MARKETPLACE_PREFIX
+            )
         finally:
             _plugin_ids.detect_autoskillit_mcp_prefix.cache_clear()
 

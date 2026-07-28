@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, NotRequired, TypedDict
 
 from autoskillit.core import (
-    RecipeBindingProjection,
+    FinalizedRecipeProjection,
     TerminalColumn,
     _render_gfm_table,
 )
@@ -132,10 +132,19 @@ class LoadRecipeResult(TypedDict, total=False):
     post_prune_routing_edges: list[str]
     dispatch_feasible: bool
     infeasible_steps: list[str]
+    finalized_recipe_projection: dict[str, Any]
+    flow_records: list[str]
+    recipe_flow: dict[str, str | int]
+    recipe_execution: dict[str, Any]
+    recipe_pull: dict[str, str | int]
+    initialization_id: str
+    delivery_bound_spill: bool
+    required_sections: list[dict[str, Any]]
+    recovery: dict[str, Any]
     warnings: NotRequired[list[str]]
     # Internal-only. Recipe API callers receive this only when they explicitly
     # request the attested server-delivery carrier.
-    _compiled_bindings: RecipeBindingProjection
+    _finalized_projection: FinalizedRecipeProjection
 
 
 class OpenKitchenResult(TypedDict, total=False):
@@ -144,7 +153,7 @@ class OpenKitchenResult(TypedDict, total=False):
     Extends LoadRecipeResult with four post-return keys injected by the handler.
     """
 
-    # Inherited from LoadRecipeResult (20 keys)
+    # Inherited from LoadRecipeResult
     content: str
     errors: list[str]
     diagram: str | None
@@ -166,6 +175,15 @@ class OpenKitchenResult(TypedDict, total=False):
     post_prune_routing_edges: list[str]
     dispatch_feasible: bool
     infeasible_steps: list[str]
+    finalized_recipe_projection: dict[str, Any]
+    flow_records: list[str]
+    recipe_flow: dict[str, str | int]
+    recipe_execution: dict[str, Any]
+    recipe_pull: dict[str, str | int]
+    initialization_id: str
+    delivery_bound_spill: bool
+    required_sections: list[dict[str, Any]]
+    recovery: dict[str, Any]
     warnings: NotRequired[list[str]]
     # Post-return keys injected by open_kitchen handler (4 keys)
     success: bool

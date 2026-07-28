@@ -84,7 +84,7 @@ Custom tags behave like built-in categories for filtering purposes: disabling
 ## FastMCP Mechanics: Why `open_kitchen` Re-Disables Subsets
 
 FastMCP session rules override server rules. When `open_kitchen` calls
-`ctx.enable_components(tags={"kitchen"})` to reveal the 41 kitchen-tagged tools, this
+`ctx.enable_components(tags={"kitchen"})` to reveal the 42 kitchen-tagged tools, this
 operation overwrites the server-level `mcp.disable(tags={"github"})` mark applied at
 startup. As a result, `open_kitchen` must immediately re-call
 `ctx.disable_components(tags={subset})` for each configured disabled subset to restore

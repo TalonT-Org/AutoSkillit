@@ -11,6 +11,10 @@ from __future__ import annotations
 import functools
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .types import BackendCapabilities
 
 # The key written to installed_plugins.json by `autoskillit install`
 _AUTOSKILLIT_PLUGIN_KEY = "autoskillit@autoskillit-local"
@@ -65,17 +69,19 @@ def registered_install_paths() -> tuple[Path, ...]:
     return tuple(paths)
 
 
-@functools.lru_cache(maxsize=1)
-def detect_autoskillit_mcp_prefix() -> str:
+@functools.lru_cache(maxsize=2)
+def detect_autoskillit_mcp_prefix(capabilities: BackendCapabilities) -> str:
     """Return the MCP prefix that autoskillit tools will use in a spawned session.
 
-    Reads ~/.claude/plugins/installed_plugins.json to determine whether
-    autoskillit is marketplace-installed. When it is, the marketplace
-    prefix takes precedence even when --plugin-dir is also passed.
+    Backends that cannot consume Claude marketplace tool names always use the
+    direct/runtime prefix without reading Claude registry state. Capable backends
+    read ``installed_plugins.json`` and prefer the marketplace prefix when present.
 
     Falls back to DIRECT_PREFIX if the file is absent, unreadable, or
     does not contain the autoskillit key.
     """
+    if not capabilities.claude_marketplace_tool_prefix_capable:
+        return DIRECT_PREFIX
     try:
         data = json.loads(_installed_plugins_path().read_text())
         if _AUTOSKILLIT_PLUGIN_KEY in data.get("plugins", {}):

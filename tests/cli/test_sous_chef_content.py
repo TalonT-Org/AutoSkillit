@@ -27,10 +27,23 @@ def test_sous_chef_documents_exhaustive_recipe_section_reconstruction() -> None:
     content = _read_full_sous_chef()
 
     for required in (
+        "recipe_pull",
+        "recipe_flow",
+        "initialization_id",
+        "required_sections",
+        "flow_records",
+        "entrypoint",
+        "complete_recipe_initialization",
+        "completion receipt",
+        "descriptor_version",
+        "schema_version",
+        "flow_schema_version",
         "pagination_version",
         "section_registry_sha256",
+        "pagination_policy_sha256",
         "section_sha256",
         "page_plan_sha256",
+        "continuation",
         "raw-text",
         "json-array-page",
         "json-scalar-page",
@@ -41,5 +54,5 @@ def test_sous_chef_documents_exhaustive_recipe_section_reconstruction() -> None:
         assert required in content
     assert "unknown pagination_version" in content
     assert "unknown content_format" in content
-    assert "do not guess" in content.lower()
-    assert "terminal" in content.lower() and "omit" in content.lower()
+    assert content.index("flow_records") < content.index("entrypoint named-step")
+    assert content.index("entrypoint named-step") < content.index("complete_recipe_initialization")

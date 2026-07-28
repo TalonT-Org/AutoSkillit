@@ -13,7 +13,10 @@ import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
+from autoskillit.core import (
+    RECIPE_DELIVERY_SURFACE_REGISTRY,
+    RecipeArtifactGeneration,
+)
 from autoskillit.pipeline.context import ToolContext
 from tests.server._helpers import _resolve_recipe_section
 
@@ -354,6 +357,102 @@ async def test_serve_surfaces_parametric_content_identity(
         f"Routing divergence on surface={surface!r}: "
         "re-serve content differs from open_kitchen content"
     )
+
+
+async def test_all_surfaces_share_canonical_flow_artifact_and_execution_identity(
+    tool_ctx_kitchen_open: ToolContext,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: object,
+) -> None:
+    """Surface presentation may differ, but canonical compile outputs may not."""
+    monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
+    from autoskillit.recipe import _api_cache
+    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.server._recipe_generation import (
+        get_recipe_generation_store,
+        thaw_recipe_generation_mapping,
+    )
+    from autoskillit.server.tools.tools_kitchen import get_recipe
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+    overrides = {"issue_url": _ISSUE_URL, "task_description": _TASK_DESC}
+    responses = [
+        await _open_kitchen_patched(_RECIPE, overrides, monkeypatch),
+        json.loads(await load_recipe(name=_RECIPE)),
+        json.loads(get_recipe(_RECIPE)),
+        await _open_kitchen_patched(_RECIPE, None, monkeypatch),
+    ]
+    assert all(response.get("success") is not False for response in responses)
+
+    canonical_fields = (
+        "payload_sha256",
+        "artifact_blob_sha256",
+        "artifact_blob_size_bytes",
+        "body_sha256",
+        "body_size_bytes",
+        "flow_schema_version",
+        "flow_sha256",
+        "flow_size_bytes",
+        "flow_record_count",
+    )
+    canonical_identities = [
+        tuple(response["recipe_pull"][field] for field in canonical_fields)
+        for response in responses
+    ]
+    records = []
+    for response in responses:
+        pull_identity = dict(response["recipe_pull"])
+        pull_identity.pop("pull_tool")
+        record = get_recipe_generation_store().lookup_artifact(
+            tool_ctx_kitchen_open.kitchen_id,
+            RecipeArtifactGeneration(**pull_identity),
+        )
+        assert record is not None
+        records.append(record)
+    for index, identity in enumerate(canonical_identities[1:], start=1):
+        first_payload = thaw_recipe_generation_mapping(records[0].artifact_payload)
+        current_payload = thaw_recipe_generation_mapping(records[index].artifact_payload)
+        assert identity == canonical_identities[0], (
+            index,
+            responses[index]["recipe_pull"]["producer_tool"],
+            responses[index]["recipe_pull"]["payload_sha256"],
+            responses[index]["recipe_pull"]["artifact_blob_size_bytes"],
+            records[index].execution_id,
+            [
+                key
+                for key in sorted(first_payload.keys() | current_payload.keys())
+                if first_payload.get(key) != current_payload.get(key)
+            ],
+        )
+    assert len({record.flow_generation.records for record in records}) == 1
+    assert (
+        len(
+            {
+                json.dumps(
+                    {
+                        "entrypoint": record.finalized_projection.entrypoint,
+                        "steps": record.finalized_projection.ordered_step_names,
+                        "edges": [
+                            (
+                                edge.source,
+                                edge.edge_type,
+                                edge.target,
+                                edge.condition,
+                                edge.result_field,
+                            )
+                            for edge in record.finalized_projection.ordered_flow_edges
+                        ],
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                for record in records
+            }
+        )
+        == 1
+    )
+    assert len({record.execution_id for record in records}) == 1
 
 
 async def test_get_recipe_snapshot_lifecycle(

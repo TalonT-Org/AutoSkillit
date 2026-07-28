@@ -8,6 +8,8 @@ from typing import Any
 from autoskillit.core import (
     RECIPE_SECTION_PAGINATION_VERSION,
     RECIPE_SECTION_REGISTRY_DIGEST,
+    FinalizedRecipeProjection,
+    RecipeBindingProjection,
     SkillResult,
     recipe_section_digest,
     recipe_section_element_digest,
@@ -16,6 +18,30 @@ from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
+
+
+def _with_finalized_projection(
+    result: dict[str, Any],
+    *,
+    binding_projection: RecipeBindingProjection | None = None,
+) -> dict[str, Any]:
+    """Attach the server-only projection required by a successful serve fixture."""
+    for key, fill in (("content_hash", "a"), ("composite_hash", "b")):
+        digest = result.get(key)
+        if not isinstance(digest, str) or not digest.startswith("sha256:") or len(digest) != 71:
+            result[key] = "sha256:" + (fill * 64)
+    names = tuple(
+        name for name in result.get("post_prune_step_names", ()) if isinstance(name, str) and name
+    )
+    if not names:
+        names = ("fixture-entrypoint",)
+    result["_finalized_projection"] = FinalizedRecipeProjection(
+        binding_projection=binding_projection or RecipeBindingProjection(invocations={}),
+        ordered_step_names=names,
+        entrypoint=names[0],
+        ordered_flow_edges=(),
+    )
+    return result
 
 
 async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "content") -> Any:
@@ -45,8 +71,18 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
     expected_total_parts: int | None = None
     expected_section_total: int | None = None
     part = 0
+    page_plan_sha256: str | None = None
+    continuation: str | None = None
     while True:
-        response = json.loads(await get_recipe_section(section=section, part=part, **identity))
+        response = json.loads(
+            await get_recipe_section(
+                section=section,
+                part=part,
+                page_plan_sha256=page_plan_sha256,
+                continuation=continuation,
+                **identity,
+            )
+        )
         assert response.get("success") is True, f"get_recipe_section returned error: {response}"
         assert response["pagination_version"] == RECIPE_SECTION_PAGINATION_VERSION
         assert response["section_registry_sha256"] == RECIPE_SECTION_REGISTRY_DIGEST
@@ -72,6 +108,7 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
         if shared_identity is None:
             shared_identity = page_identity
             expected_total_parts = response["total_parts"]
+            page_plan_sha256 = response["page_plan_sha256"]
         else:
             assert page_identity == shared_identity
             assert response["total_parts"] == expected_total_parts
@@ -252,6 +289,7 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
             assert response["next_part"] == part + 1
             assert part + 1 < response["total_parts"]
             part = response["next_part"]
+            continuation = response["continuation"]
             continue
 
         assert "next_part" not in response

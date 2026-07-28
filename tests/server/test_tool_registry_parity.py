@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.core import (
     TOOL_REGISTRY,
+    ToolInitializationOperation,
     ToolParamDef,
     ToolWireType,
     compute_tool_contract_identity,
@@ -138,6 +139,39 @@ def test_tool_contract_identity_tracks_registry_parameter_shape() -> None:
     changed = replace(
         run_skill,
         params=(*run_skill.params, ToolParamDef("future_parameter")),
+    )
+
+    assert compute_tool_contract_identity(changed) != compute_tool_contract_identity(run_skill)
+
+
+def test_every_tool_has_an_explicit_initialization_operation() -> None:
+    assert all(
+        isinstance(definition.initialization_operation, ToolInitializationOperation)
+        for definition in TOOL_REGISTRY.values()
+    )
+    assert (
+        TOOL_REGISTRY["complete_recipe_initialization"].initialization_operation
+        is ToolInitializationOperation.RECOVERY
+    )
+    assert (
+        TOOL_REGISTRY["get_recipe_section"].initialization_operation
+        is ToolInitializationOperation.RECOVERY
+    )
+    assert (
+        TOOL_REGISTRY["open_kitchen"].initialization_operation
+        is ToolInitializationOperation.LIFECYCLE_CONTROL
+    )
+    assert (
+        TOOL_REGISTRY["run_skill"].initialization_operation
+        is ToolInitializationOperation.EXECUTION
+    )
+
+
+def test_tool_contract_identity_tracks_initialization_operation() -> None:
+    run_skill = TOOL_REGISTRY["run_skill"]
+    changed = replace(
+        run_skill,
+        initialization_operation=ToolInitializationOperation.RECOVERY,
     )
 
     assert compute_tool_contract_identity(changed) != compute_tool_contract_identity(run_skill)

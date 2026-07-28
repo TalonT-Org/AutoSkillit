@@ -16,28 +16,31 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import Any, cast
 
 import pytest
-
-if TYPE_CHECKING:
-    from autoskillit.pipeline import ToolContext
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
+    FinalizedRecipeProjection,
     resolve_general_output_token_limit,
+    resolve_recipe_envelope_byte_limit,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 from autoskillit.recipe import (
+    NON_INTERACTIVE_KINDS,
     all_validated_recipe_names,
-    find_recipe_by_name,
+    list_recipes,
     load_and_validate,
-    load_recipe,
 )
-from autoskillit.server._recipe_delivery import build_recipe_envelope, persist_recipe_artifact
+from autoskillit.server._recipe_delivery import (
+    finalize_recipe_delivery,
+    prepare_recipe_delivery_generation,
+)
+from autoskillit.server._recipe_generation import RecipeGenerationStore
 from autoskillit.server._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     enforce_response_budget,
@@ -56,12 +59,21 @@ def _recipe_names() -> list[str]:
     return sorted(all_validated_recipe_names(_PROJECT_ROOT))
 
 
+def _delivery_recipe_names() -> list[str]:
+    result = list_recipes(
+        _PROJECT_ROOT,
+        exclude_kinds=NON_INTERACTIVE_KINDS,
+        exclude_dispatch_only=True,
+    )
+    return sorted(recipe.name for recipe in result.items)
+
+
 def _backend_capabilities():
     return {name: cls().capabilities for name, cls in BACKEND_REGISTRY.items()}
 
 
-def _effective_bound_bytes(bound_tokens: int) -> int:
-    """Convert effective delivery token bound to UTF-8 byte ceiling (4 bytes/token)."""
+def _generic_backstop_bound_bytes(bound_tokens: int) -> int:
+    """Convert a generic response backstop token limit to its UTF-8 byte ceiling."""
     return bound_tokens * 4
 
 
@@ -102,7 +114,26 @@ def _full_open_kitchen_payload(recipe_name: str) -> dict[str, object]:
     return build_open_kitchen_recipe_payload(dict(result), version="0.0.0")
 
 
-@pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
+def _full_open_kitchen_generation(
+    recipe_name: str,
+) -> tuple[dict[str, object], FinalizedRecipeProjection]:
+    """Build one production payload together with its hidden finalized projection."""
+    result = load_and_validate(
+        recipe_name,
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={
+            "task": "test task",
+            "issue_url": "https://github.com/test/test/issues/1",
+            "source_dir": str(_PROJECT_ROOT),
+        },
+        include_finalized_projection=True,
+    )
+    projection = result.pop("_finalized_projection", None)
+    assert isinstance(projection, FinalizedRecipeProjection)
+    return build_open_kitchen_recipe_payload(dict(result), version="0.0.0"), projection
+
+
+@pytest.mark.parametrize("recipe_name", _delivery_recipe_names(), ids=lambda n: n)
 @pytest.mark.parametrize("backend_name", sorted(_backend_capabilities().keys()), ids=lambda n: n)
 def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     recipe_name: str,
@@ -111,60 +142,65 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """System-level fitness contract (issue #4304 Part B REQ-B-T7): the bounded
-    envelope built unconditionally for every bundled recipe via
-    ``build_recipe_envelope`` must fit every registered backend's effective
-    delivery bound by construction — independent of whether the raw
-    ``open_kitchen`` payload itself happens to fit today.
-
-    This test mirrors the unit-level invariant already exercised by
-    ``test_envelope_fits_every_backend_by_construction`` in
-    ``tests/server/test_tools_recipe_pull.py`` at the contracts layer: the
-    two layers overlap in scope by design (test-pyramid convention) and the
-    envelope-fit-by-construction guarantee is the post-#4304-Part-B invariant
-    that this file exists to defend.
+    response produced through the real generation preparation and finalizer path
+    must fit every registered backend's effective delivery bound. Each response
+    contains either complete inline flow or a successful bounded recovery manifest.
     """
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-    payload = _full_open_kitchen_payload(recipe_name)
-    generation = persist_recipe_artifact(
-        tmp_path,
-        kitchen_id="fitness-kitchen",
-        producer_tool="open_kitchen",
+    from autoskillit.server import _recipe_generation
+
+    monkeypatch.setattr(
+        _recipe_generation,
+        "_RECIPE_GENERATION_STORE",
+        RecipeGenerationStore(),
+    )
+    payload, projection = _full_open_kitchen_generation(recipe_name)
+    tool_ctx = cast(
+        Any,
+        SimpleNamespace(
+            backend=BACKEND_REGISTRY[backend_name](),
+            kitchen_id=f"fitness-{backend_name}-{recipe_name}",
+            temp_dir=tmp_path,
+        ),
+    )
+    prepared = prepare_recipe_delivery_generation(
+        payload,
         recipe_name=recipe_name,
-        payload=payload,
+        tool_ctx=tool_ctx,
+        finalized_projection=projection,
+    )
+    finalized = finalize_recipe_delivery(
+        payload,
+        surface="open_kitchen",
+        recipe_name=recipe_name,
+        tool_ctx=tool_ctx,
+        finalized_projection=projection,
+        flow_generation=prepared.flow_generation,
+        canonical_artifact_payload=prepared.canonical_artifact_payload,
+        execution_snapshot=prepared.execution_snapshot,
+        normalized_compile_key=prepared.normalized_compile_key,
     )
 
     caps = _backend_capabilities()[backend_name]
-    bound_tokens = resolve_general_output_token_limit(caps)
-    bound_bytes = _effective_bound_bytes(bound_tokens)
-    recipe_info = find_recipe_by_name(recipe_name, _PROJECT_ROOT)
-    assert recipe_info is not None
-    recipe = load_recipe(recipe_info.path)
-    envelope = build_recipe_envelope(
-        payload,
-        recipe_name=recipe_name,
-        generation=generation,
-        skeleton_source=cast(
-            "ToolContext",
-            SimpleNamespace(recipe_name=recipe_name, active_recipe_steps=recipe.steps),
-        ),
-        bound_bytes=bound_bytes,
-    )
-    serialized = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
-    assert len(serialized.encode("utf-8")) <= bound_bytes, (
+    bound_bytes = resolve_recipe_envelope_byte_limit(caps)
+    envelope = json.loads(finalized.rendered)
+    assert len(finalized.rendered.encode("utf-8")) <= bound_bytes, (
         f"{backend_name}: envelope for {recipe_name} exceeds "
         f"{bound_bytes} bytes (effective delivery bound)"
     )
     assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
-    skeleton_steps = envelope["step_flow_skeleton"]["steps"]
-    expected_step_names = set(payload.get("post_prune_step_names") or [])
-    assert {step["name"] for step in skeleton_steps} == expected_step_names
-    if expected_step_names:
-        assert any(step.get("summary") or step["edges"] for step in skeleton_steps)
+    assert envelope["success"] is True
+    assert envelope["recipe_flow"] == prepared.flow_generation.identity()
+    if envelope.get("delivery_bound_spill") is True:
+        assert [item["section"] for item in envelope["required_sections"]] == [
+            "flow_records",
+            projection.entrypoint,
+        ]
     else:
-        assert not recipe.steps, "step-bearing recipes must expose production skeleton metadata"
+        assert envelope["flow_records"] == list(prepared.flow_generation.records)
 
 
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)
@@ -190,7 +226,7 @@ def test_bundled_recipe_open_kitchen_raw_spill_projection_fits_per_backend(
     serialized_bytes = len(serialized.encode("utf-8"))
     for backend_name, caps in _backend_capabilities().items():
         bound_tokens = resolve_general_output_token_limit(caps)
-        bound_bytes = _effective_bound_bytes(bound_tokens)
+        bound_bytes = _generic_backstop_bound_bytes(bound_tokens)
         if serialized_bytes <= bound_bytes:
             continue
         result = enforce_response_budget(
@@ -222,7 +258,7 @@ def test_non_exempted_oversized_payload_spills_within_delivery_bound(tmp_path) -
     config = OutputBudgetConfig()
     for backend_name, caps in _backend_capabilities().items():
         bound_tokens = resolve_general_output_token_limit(caps)
-        bound_bytes = _effective_bound_bytes(bound_tokens)
+        bound_bytes = _generic_backstop_bound_bytes(bound_tokens)
         assert len(serialized.encode("utf-8")) > bound_bytes, (
             f"{backend_name}: payload does not exceed bound ({bound_bytes} bytes)"
         )
@@ -283,7 +319,7 @@ def test_delivery_bound_summary_carries_all_step_names(
     ]
     for backend_name, caps in _backend_capabilities().items():
         bound_tokens = resolve_general_output_token_limit(caps)
-        bound_bytes = _effective_bound_bytes(bound_tokens)
+        bound_bytes = _generic_backstop_bound_bytes(bound_tokens)
         if serialized_bytes <= bound_bytes:
             continue
         result = enforce_response_budget(

@@ -135,7 +135,15 @@ def codex_recipe_delivery_calling_contract(*, mcp_prefix: str = "") -> str:
                 "If protected host values are unavailable, omit delivery_request and use "
                 "the bounded recipe_pull path."
             ),
-            ("- ingredients_only calls and recipe resources are not eligible for the exception."),
+            (
+                "- isError:false: keep recipe_pull, recipe_flow, initialization_id; "
+                "validate flow_records then entrypoint."
+            ),
+            (
+                "- Require complete_recipe_initialization(initialization_id) before "
+                "execution/mutation."
+            ),
+            "- No ingredients_only/resource exception.",
         )
     )
 

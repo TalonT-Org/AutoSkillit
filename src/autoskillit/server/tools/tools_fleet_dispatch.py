@@ -151,12 +151,13 @@ def _write_dispatch_to_campaign_state(
 
 
 def _get_food_truck_prompt_builder(
+    backend: CodingAgentBackend,
     has_unguarded_filesystem_access: bool = False,
     projected_sous_chef: str = "",
 ) -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
 
-    mcp_prefix = detect_autoskillit_mcp_prefix()
+    mcp_prefix = detect_autoskillit_mcp_prefix(backend.capabilities)
     return functools.partial(
         _build_food_truck_prompt,
         mcp_prefix=mcp_prefix,
@@ -495,6 +496,12 @@ async def dispatch_food_truck(
             _override_backend is not None
             and _override_backend.capabilities.anthropic_provider_capable
         )
+        effective_dispatch_backend = _override_backend or tool_ctx.backend
+        if effective_dispatch_backend is None:
+            return fleet_error(
+                FleetErrorCode.FLEET_INVALID_BACKEND,
+                "Fleet dispatch requires a configured backend.",
+            )
         try:
             with anyio.fail_after(tool_ctx.config.run_skill.mcp_tool_timeout_sec):
                 result = await execute_dispatch(
@@ -505,14 +512,13 @@ async def dispatch_food_truck(
                     dispatch_name=dispatch_name,
                     timeout_sec=timeout_sec,
                     prompt_builder=_get_food_truck_prompt_builder(
+                        effective_dispatch_backend,
                         has_unguarded_filesystem_access=(
-                            _override_backend.capabilities.has_unguarded_filesystem_access
-                            if _override_backend
-                            else False
+                            effective_dispatch_backend.capabilities.has_unguarded_filesystem_access
                         ),
                         projected_sous_chef=_project_food_truck_sous_chef(
                             tool_ctx,
-                            _override_backend,
+                            effective_dispatch_backend,
                         ),
                     ),
                     quota_checker=lambda cfg: check_and_sleep_if_needed(

@@ -22,6 +22,12 @@ from autoskillit.server._recipe_delivery import (
     FinalizedRecipeResponse,
     complete_finalized_recipe_response,
 )
+from autoskillit.server._recipe_initialization import (
+    FinalizedRecipeInitializationResponse,
+    FinalizedRecipeSectionResponse,
+    complete_initialization_response,
+    complete_section_response,
+)
 from autoskillit.server._response_budget import (
     bounded_response_budget_failure,
     enforce_response_budget,
@@ -113,7 +119,25 @@ def track_response_size(
                 )
                 logger.exception("track_response_size_handler_failed", tool_name=tool_name)
             finalized = result if isinstance(result, FinalizedRecipeResponse) else None
-            response_value = finalized.rendered if finalized is not None else result
+            finalized_section = (
+                result if isinstance(result, FinalizedRecipeSectionResponse) else None
+            )
+            finalized_initialization = (
+                result if isinstance(result, FinalizedRecipeInitializationResponse) else None
+            )
+            response_value = (
+                finalized.rendered
+                if finalized is not None
+                else (
+                    finalized_section.rendered
+                    if finalized_section is not None
+                    else (
+                        finalized_initialization.rendered
+                        if finalized_initialization is not None
+                        else result
+                    )
+                )
+            )
             ctx = _get_ctx_or_none()
             try:
                 response_str = (
@@ -206,6 +230,10 @@ def track_response_size(
                     )
             if finalized is not None:
                 result = complete_finalized_recipe_response(finalized, result)
+            elif finalized_section is not None:
+                result = complete_section_response(finalized_section, result)
+            elif finalized_initialization is not None:
+                result = complete_initialization_response(finalized_initialization, result)
             return result
 
         return wrapper

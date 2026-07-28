@@ -6,6 +6,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,6 +24,9 @@ import autoskillit.recipe._binding as binding_module
 import autoskillit.server._recipe_delivery as recipe_delivery_module
 import autoskillit.server._recipe_execution as recipe_execution_module
 from autoskillit.core import (
+    RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+    RECIPE_ARTIFACT_SCHEMA_VERSION,
+    RECIPE_FLOW_SCHEMA_VERSION,
     AdmissionReason,
     AdmissionStatus,
     ArtifactRef,
@@ -38,6 +42,7 @@ from autoskillit.core import (
     BoundValue,
     BoundValueOrigin,
     BoundValueState,
+    FinalizedRecipeProjection,
     InputPreflightResolver,
     InventoryAdmissionDecision,
     InventoryAdmissionEvaluator,
@@ -45,8 +50,10 @@ from autoskillit.core import (
     PlanDispositionReport,
     PlanDispositionRow,
     PreflightEvidence,
+    RecipeArtifactGeneration,
     RecipeBindingProjection,
     RecipeExecutionSnapshot,
+    RecipeFlowGeneration,
     RetryReason,
     SkillResult,
     VerifiedInputPreflightRequest,
@@ -59,6 +66,7 @@ from autoskillit.server._recipe_delivery import (
     complete_finalized_recipe_response,
     finalize_recipe_delivery,
     load_recipe_artifact,
+    prepare_recipe_delivery_generation,
 )
 from autoskillit.server._recipe_execution import (
     AuditCycleHeadConflict,
@@ -75,6 +83,8 @@ from autoskillit.server._recipe_execution import (
     publish_verified_audit_cycle,
     record_runtime_binding_digest,
 )
+from autoskillit.server._recipe_generation import RecipeGenerationError
+from autoskillit.server._recipe_initialization import stage_recipe_initialization
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
 
@@ -131,6 +141,44 @@ def _projection() -> RecipeBindingProjection:
     return RecipeBindingProjection({"dry": invocation})
 
 
+def _finalized_projection() -> FinalizedRecipeProjection:
+    return FinalizedRecipeProjection(
+        binding_projection=_projection(),
+        ordered_step_names=("dry",),
+        entrypoint="dry",
+        ordered_flow_edges=(),
+    )
+
+
+def _finalize_recipe_delivery(
+    payload: dict[str, Any],
+    *,
+    surface: str,
+    recipe_name: str,
+    tool_ctx: Any,
+    finalized_projection: FinalizedRecipeProjection,
+):
+    if not tool_ctx.kitchen_id:
+        tool_ctx.kitchen_id = "audit-cycle-delivery-test"
+    prepared = prepare_recipe_delivery_generation(
+        payload,
+        recipe_name=recipe_name,
+        tool_ctx=tool_ctx,
+        finalized_projection=finalized_projection,
+    )
+    return finalize_recipe_delivery(
+        payload,
+        surface=surface,
+        recipe_name=recipe_name,
+        tool_ctx=tool_ctx,
+        finalized_projection=finalized_projection,
+        flow_generation=prepared.flow_generation,
+        canonical_artifact_payload=prepared.canonical_artifact_payload,
+        execution_snapshot=prepared.execution_snapshot,
+        normalized_compile_key=prepared.normalized_compile_key,
+    )
+
+
 def _preflight_projection() -> RecipeBindingProjection:
     invocation = _projection().invocations["dry"]
     return RecipeBindingProjection(
@@ -164,6 +212,61 @@ def _wire_recipe_execution_factory(tool_ctx) -> None:
         )
 
     tool_ctx.recipe_execution_factory = _factory
+
+
+def _install_test_recipe_execution(
+    tool_ctx: Any,
+    *,
+    snapshot: RecipeExecutionSnapshot,
+):
+    """Stage the immutable test generation before installing READY authority."""
+    if not tool_ctx.kitchen_id:
+        tool_ctx.kitchen_id = "audit-cycle-execution-test"
+    flow_generation = RecipeFlowGeneration(
+        schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        records=(
+            json.dumps(
+                {"kind": "entrypoint", "name": snapshot.recipe_name},
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        ),
+    )
+    artifact_generation = RecipeArtifactGeneration(
+        producer_tool="open_kitchen",
+        recipe_name=snapshot.recipe_name,
+        descriptor_version=RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+        schema_version=RECIPE_ARTIFACT_SCHEMA_VERSION,
+        payload_sha256=_HASH_A,
+        artifact_blob_sha256=_HASH_B,
+        artifact_blob_size_bytes=1,
+        body_sha256=_HASH_A,
+        body_size_bytes=1,
+        flow_schema_version=flow_generation.schema_version,
+        flow_sha256=flow_generation.flow_sha256,
+        flow_size_bytes=flow_generation.flow_size_bytes,
+        flow_record_count=flow_generation.record_count,
+    )
+    stage_recipe_initialization(
+        tool_ctx,
+        recipe_name=snapshot.recipe_name,
+        artifact_generation=artifact_generation,
+        flow_generation=flow_generation,
+        initialization_id=f"init-{snapshot.execution_id}",
+        staged_snapshot=snapshot,
+        requirements=(),
+        generation_store_key=f"test:{snapshot.execution_id}",
+    )
+    return install_recipe_execution(
+        tool_ctx,
+        snapshot=snapshot,
+        completion_receipt="sha256:" + ("c" * 64),
+    )
+
+
+def _replace_test_recipe_execution(tool_ctx: Any, installed: Any):
+    """Replace only READY runtime metadata while retaining generation identity."""
+    return install_recipe_execution(tool_ctx, prepared_execution=installed)
 
 
 def _artifact(path: Path, digest: str, *, byte_size: int = 1) -> ArtifactRef:
@@ -279,17 +382,17 @@ def test_delivery_persists_and_installs_matching_execution(
     minimal_ctx,
 ) -> None:
     _wire_recipe_execution_factory(minimal_ctx)
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         {
             "content": "name: demo\n",
             "content_hash": _HASH_A,
             "composite_hash": _HASH_B,
             "valid": True,
         },
-        surface="load_recipe",
+        surface="open_kitchen",
         recipe_name="demo",
         tool_ctx=minimal_ctx,
-        compiled_bindings=_projection(),
+        finalized_projection=_finalized_projection(),
     )
     assert finalized.artifact_generation is not None
     assert finalized.execution_snapshot is not None
@@ -326,17 +429,17 @@ def test_failed_execution_preparation_aborts_receipt_before_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _wire_recipe_execution_factory(minimal_ctx)
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         {
             "content": "name: demo\n",
             "content_hash": _HASH_A,
             "composite_hash": _HASH_B,
             "valid": True,
         },
-        surface="load_recipe",
+        surface="open_kitchen",
         recipe_name="demo",
         tool_ctx=minimal_ctx,
-        compiled_bindings=_projection(),
+        finalized_projection=_finalized_projection(),
     )
     handle = MagicMock()
     ledger = MagicMock()
@@ -348,7 +451,7 @@ def test_failed_execution_preparation_aborts_receipt_before_commit(
         receipt_ledger=ledger,
     )
     monkeypatch.setattr(
-        recipe_execution_module,
+        recipe_delivery_module,
         "prepare_recipe_execution",
         MagicMock(side_effect=RuntimeError("install failed")),
     )
@@ -374,11 +477,11 @@ def test_receipt_commit_failure_preserves_previous_execution(
         projection=_projection(),
         execution_id="previous-execution",
     )
-    previous = install_recipe_execution(
+    previous = _install_test_recipe_execution(
         tool_ctx_kitchen_open,
         snapshot=previous_snapshot,
     )
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         {
             "content": "name: replacement\n",
             "content_hash": _HASH_A,
@@ -388,7 +491,7 @@ def test_receipt_commit_failure_preserves_previous_execution(
         surface="load_recipe",
         recipe_name="replacement",
         tool_ctx=tool_ctx_kitchen_open,
-        compiled_bindings=_projection(),
+        finalized_projection=_finalized_projection(),
     )
     handle = MagicMock()
     ledger = MagicMock()
@@ -420,11 +523,11 @@ def test_transformed_delivery_preserves_previous_execution(
         projection=_projection(),
         execution_id="previous-execution",
     )
-    previous = install_recipe_execution(
+    previous = _install_test_recipe_execution(
         tool_ctx_kitchen_open,
         snapshot=previous_snapshot,
     )
-    finalized = finalize_recipe_delivery(
+    finalized = _finalize_recipe_delivery(
         {
             "content": "name: demo\n",
             "content_hash": _HASH_A,
@@ -434,7 +537,7 @@ def test_transformed_delivery_preserves_previous_execution(
         surface="load_recipe",
         recipe_name="demo",
         tool_ctx=tool_ctx_kitchen_open,
-        compiled_bindings=_projection(),
+        finalized_projection=_finalized_projection(),
     )
     assert complete_finalized_recipe_response(finalized, "bounded replacement") == (
         "bounded replacement"
@@ -446,8 +549,17 @@ def test_recipe_execution_compilation_failure_logs_exception_context(
     minimal_ctx,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    previous = MagicMock()
-    minimal_ctx.active_recipe_execution = previous
+    _wire_recipe_execution_factory(minimal_ctx)
+    previous = _install_test_recipe_execution(
+        minimal_ctx,
+        snapshot=build_recipe_execution_snapshot(
+            recipe_name="previous",
+            content_hash=_HASH_A,
+            composite_hash=_HASH_B,
+            projection=_projection(),
+            execution_id="previous-execution",
+        ),
+    )
     mock_logger = MagicMock()
     monkeypatch.setattr(recipe_delivery_module, "get_logger", lambda _name: mock_logger)
     monkeypatch.setattr(
@@ -456,27 +568,26 @@ def test_recipe_execution_compilation_failure_logs_exception_context(
         MagicMock(side_effect=ValueError("invalid template")),
     )
 
-    finalized = finalize_recipe_delivery(
-        {
-            "content": "name: demo\n",
-            "content_hash": _HASH_A,
-            "composite_hash": _HASH_B,
-            "valid": True,
-        },
-        surface="load_recipe",
-        recipe_name="demo",
-        tool_ctx=minimal_ctx,
-        compiled_bindings=_projection(),
-    )
+    with pytest.raises(
+        RecipeGenerationError,
+        match="recipe execution snapshot compilation failed",
+    ):
+        _finalize_recipe_delivery(
+            {
+                "content": "name: demo\n",
+                "content_hash": _HASH_A,
+                "composite_hash": _HASH_B,
+                "valid": True,
+            },
+            surface="load_recipe",
+            recipe_name="demo",
+            tool_ctx=minimal_ctx,
+            finalized_projection=_finalized_projection(),
+        )
 
-    assert json.loads(finalized.rendered) == {
-        "success": False,
-        "error": "recipe_execution_unavailable",
-    }
     mock_logger.warning.assert_called_once_with(
         "recipe_execution_compilation_failed",
         recipe_name="demo",
-        surface="load_recipe",
         error_type="ValueError",
         exc_info=True,
     )
@@ -702,7 +813,7 @@ def test_published_audit_head_binds_preflight_template_identity(
         projection=_projection(),
         execution_id="execution-1",
     )
-    install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
     authority = _authority(
         Path(tool_ctx_kitchen_open.temp_dir),
         generation="execution-1",
@@ -742,7 +853,7 @@ def test_audit_publication_does_not_mutate_replaced_execution(
         projection=_projection(),
         execution_id="execution-1",
     )
-    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    installed = _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
     replacement = replace(
         installed,
         runtime_binding_digests={"replacement": _HASH_B},
@@ -767,7 +878,7 @@ def test_audit_publication_does_not_mutate_replaced_execution(
     ) -> bytes:
         nonlocal replaced
         if not replaced:
-            tool_ctx_kitchen_open.active_recipe_execution = replacement
+            _replace_test_recipe_execution(tool_ctx_kitchen_open, replacement)
             replaced = True
         return original_verify(verifier, artifact_ref)
 
@@ -785,7 +896,7 @@ def test_audit_publication_does_not_mutate_replaced_execution(
             expected_round=0,
         )
 
-    assert tool_ctx_kitchen_open.active_recipe_execution is replacement
+    assert get_recipe_execution(tool_ctx_kitchen_open) is replacement
     assert dict(replacement.runtime_binding_digests) == {"replacement": _HASH_B}
     assert (
         replacement.audit_cycle_heads.get(
@@ -808,7 +919,7 @@ def test_audit_publication_rejects_tampered_referenced_artifact(
         projection=_projection(),
         execution_id="execution-1",
     )
-    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    installed = _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
     root = Path(tool_ctx_kitchen_open.temp_dir)
     authority = _authority(
         root,
@@ -852,7 +963,7 @@ def test_successful_audit_result_publishes_protected_successor_identity(
         projection=_projection(),
         execution_id="execution-1",
     )
-    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    installed = _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
     authority = _authority(
         Path(tool_ctx_kitchen_open.temp_dir),
         generation="execution-1",
@@ -931,7 +1042,7 @@ def test_reported_audit_cycle_cannot_replace_attested_prior_lineage(
         projection=_projection(),
         execution_id="execution-1",
     )
-    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    installed = _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
     root = Path(tool_ctx_kitchen_open.temp_dir)
     prior = _authority(
         root,
@@ -1765,7 +1876,7 @@ def test_runtime_binding_digest_rejects_replaced_execution(
         projection=_projection(),
         execution_id="execution-1",
     )
-    install_recipe_execution(tool_ctx_kitchen_open, snapshot=first)
+    _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=first)
     replacement = build_recipe_execution_snapshot(
         recipe_name="demo",
         content_hash=_HASH_A,
@@ -1773,7 +1884,7 @@ def test_runtime_binding_digest_rejects_replaced_execution(
         projection=_projection(),
         execution_id="execution-2",
     )
-    active = install_recipe_execution(tool_ctx_kitchen_open, snapshot=replacement)
+    active = _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=replacement)
 
     with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
         record_runtime_binding_digest(
@@ -1800,7 +1911,7 @@ async def test_runtime_attestation_rejects_before_executor(
         projection=_projection(),
         execution_id="execution-1",
     )
-    install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
     calls_before = len(tool_ctx_kitchen_open.runner.call_args_list)
     result = json.loads(
         await run_skill(
@@ -1858,7 +1969,7 @@ async def test_dynamic_recipe_skill_step_executes_without_template_attestation(
         projection=projection,
         execution_id="execution-1",
     )
-    install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
     assert snapshot.templates == {}
     assert snapshot.dynamic_skill_step_names == frozenset({"fanout"})
     tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
@@ -1914,7 +2025,7 @@ async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
         projection=_preflight_projection(),
         execution_id="execution-1",
     )
-    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    installed = _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
 
     class RecordingResolver:
         def __init__(self, wrapped: InputPreflightResolver) -> None:
@@ -1933,7 +2044,7 @@ async def test_runtime_attestation_executes_bound_prompt_and_records_digest(
         installed,
         input_preflight_resolver=recording_resolver,
     )
-    tool_ctx_kitchen_open.active_recipe_execution = installed
+    _replace_test_recipe_execution(tool_ctx_kitchen_open, installed)
     tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
     tool_ctx_kitchen_open.runner.push(
         _make_result(
@@ -2027,10 +2138,9 @@ async def test_preflight_rejects_before_executor(
         projection=_preflight_projection(),
         execution_id="execution-1",
     )
-    installed = install_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
-    monkeypatch.setattr(
+    installed = _install_test_recipe_execution(tool_ctx_kitchen_open, snapshot=snapshot)
+    _replace_test_recipe_execution(
         tool_ctx_kitchen_open,
-        "active_recipe_execution",
         replace(
             installed,
             input_preflight_resolver=RejectingResolver(),

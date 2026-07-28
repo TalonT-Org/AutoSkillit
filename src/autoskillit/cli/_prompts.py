@@ -27,12 +27,27 @@ from autoskillit.workspace import (
 # ── Shared helpers (used by sibling _prompts_*.py modules) ──────────────
 
 _MCP_RETRY_INSTRUCTION: str = (
-    "If calling open_kitchen produces ANY error — including"
-    ' "No such tool available", a tool_use_error, or any is_error response —'
-    " retry the call once immediately. Do not explain the error or suggest"
-    " troubleshooting steps to the user. Just retry silently.\n"
-    'If the retry also fails, output "AutoSkillit MCP server did not start — ending session."'
-    " and end."
+    "RECIPE STARTUP RESULT ORDER — evaluate these cases in order:\n"
+    "1. A pre-dispatch symbol-resolution error (for example, No such tool or an "
+    "AutoSkillit-generated bad symbol) requires runtime tool discovery, then one "
+    "dispatch using the discovered symbol.\n"
+    "2. A discovery, transport, unavailable, tool_use_error, or isError:true "
+    "failure requires one silent retry. Only if that retry also fails at transport "
+    'may you output "AutoSkillit MCP server did not start — ending session." and end.\n'
+    "3. An isError:false MCP response is a structured application result, including "
+    "when its JSON contains success:false. Parse it before applying failure rules.\n"
+    "4. If the application result contains a recovery manifest, process it before "
+    "any generic success:false branch: preserve recipe_pull, recipe_flow, "
+    "initialization_id, required_sections, page-plan and pagination identities; "
+    "pull every flow_records page in order, then the entrypoint named-step pages. "
+    "Forward every advertised immutable identity plus initialization_id, "
+    "page_plan_sha256, part, and continuation; reject mismatched versions, digests, "
+    "sizes, records, skipped parts, or changed bindings. After exact reconstruction, "
+    "call complete_recipe_initialization(initialization_id) and require its receipt "
+    "before the first execution or mutation tool.\n"
+    "5. Only a structured, nonrecoverable application error is terminal. Print its "
+    "user_visible_message verbatim (or the raw application result if absent), do "
+    "not call AskUserQuestion, and do not diagnose it as MCP startup failure."
 )
 
 

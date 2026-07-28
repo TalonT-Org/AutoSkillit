@@ -33,6 +33,7 @@ from autoskillit.core import (
     _collect_disabled_feature_tags,
     atomic_write,
     clear_kitchens_for_pid,
+    detect_autoskillit_mcp_prefix,
     fast_dumps,
     find_latest_session_id,
     get_logger,
@@ -71,9 +72,13 @@ from autoskillit.server._recipe_delivery import (
     document_recipe_delivery_contract,
     enforce_recipe_resource_response,
     finalize_recipe_delivery,
+    prepare_recipe_delivery_generation,
     retire_recipe_artifacts,
 )
 from autoskillit.server._recipe_execution import clear_recipe_execution
+from autoskillit.server._recipe_generation import (
+    retire_kitchen as retire_recipe_generation,
+)
 from autoskillit.server.tools._authority_feedback import (
     build_authority_clobber_warnings,
     build_authority_rejection_envelope,
@@ -92,7 +97,7 @@ from autoskillit.server.tools._preflight import (
 from autoskillit.server.tools._serve_helpers import (
     build_backend_capabilities_map,
     build_open_kitchen_recipe_payload,
-    pop_compiled_bindings,
+    pop_finalized_recipe_projection,
     project_orchestrator_guidance,
     render_served_response,
     response_backstop_tool_meta,
@@ -456,7 +461,7 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> None:
         logger.warning("pipeline_tracker_auto_init_write_failed", exc_info=True)
 
 
-async def _open_kitchen_handler() -> str | None:
+async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str | None:
     """Set the tools-enabled flag. Extracted for testability.
 
     Returns ``None`` on success, or a JSON failure envelope string on error.
@@ -466,11 +471,12 @@ async def _open_kitchen_handler() -> str | None:
     ctx = _get_ctx()
     ctx.gate.enable()
     ctx.kitchen_id = resolve_kitchen_id()
-    ctx.active_recipe_packs = frozenset()
-    ctx.active_recipe_features = frozenset()
-    ctx.active_recipe_steps = {}
-    ctx.active_recipe_ingredients = frozenset()
-    clear_recipe_execution(ctx)
+    if not preserve_active_recipe:
+        ctx.active_recipe_packs = frozenset()
+        ctx.active_recipe_features = frozenset()
+        ctx.active_recipe_steps = {}
+        ctx.active_recipe_ingredients = frozenset()
+        clear_recipe_execution(ctx)
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _supports_quota = _backend_supports_quota(ctx)
 
@@ -582,13 +588,16 @@ def _close_kitchen_handler() -> None:
         unregister_active_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("close_kitchen_registry_failed", exc_info=True)
-    if (
-        isinstance(ctx.temp_dir, Path)
-        and isinstance(ctx.kitchen_id, str)
-        and ctx.kitchen_id
-        and not retire_recipe_artifacts(ctx.temp_dir, kitchen_id=ctx.kitchen_id)
-    ):
-        logger.warning("close_kitchen_recipe_artifact_retirement_failed")
+    if isinstance(ctx.kitchen_id, str) and ctx.kitchen_id:
+        if isinstance(ctx.temp_dir, Path) and not retire_recipe_artifacts(
+            ctx.temp_dir,
+            kitchen_id=ctx.kitchen_id,
+        ):
+            logger.warning("close_kitchen_recipe_artifact_retirement_failed")
+        try:
+            retire_recipe_generation(ctx.kitchen_id)
+        except Exception:
+            logger.warning("close_kitchen_recipe_generation_retirement_failed", exc_info=True)
     ctx.active_recipe_packs = None
     ctx.active_recipe_features = None
     ctx.active_recipe_steps = None
@@ -724,7 +733,9 @@ def get_recipe(name: str) -> str:
             backend_capabilities_map=_backend_capabilities_map,
             backend_origin_map=_backend_origin_map,
         )
-        _resource_compiled_bindings = pop_compiled_bindings(result)
+        _resource_finalized_projection = (
+            pop_finalized_recipe_projection(result) if result.get("valid", False) else None
+        )
     except ProcessStaleError:
         logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
         return json.dumps({"error": f"Recipe '{name}' composition failed — process stale."})
@@ -740,6 +751,8 @@ def get_recipe(name: str) -> str:
                 "suggestions": result.get("suggestions", []),
             }
         )
+    if _resource_finalized_projection is None:
+        return json.dumps({"error": f"Recipe '{name}' has no finalized projection."})
     if not result.get("dispatch_feasible", True):
         return json.dumps(
             {
@@ -748,12 +761,22 @@ def get_recipe(name: str) -> str:
                 "infeasible_steps": result.get("infeasible_steps", []),
             }
         )
+    prepared_generation = prepare_recipe_delivery_generation(
+        result,
+        recipe_name=name,
+        tool_ctx=ctx,
+        finalized_projection=_resource_finalized_projection,
+    )
     finalized = finalize_recipe_delivery(
         result,
         surface="get_recipe",
         recipe_name=name,
         tool_ctx=ctx,
-        compiled_bindings=_resource_compiled_bindings,
+        finalized_projection=_resource_finalized_projection,
+        flow_generation=prepared_generation.flow_generation,
+        canonical_artifact_payload=prepared_generation.canonical_artifact_payload,
+        execution_snapshot=prepared_generation.execution_snapshot,
+        normalized_compile_key=prepared_generation.normalized_compile_key,
     )
     return enforce_recipe_resource_response(finalized, tool_ctx=ctx)
 
@@ -853,7 +876,9 @@ async def open_kitchen(
         tool_ctx = _get_ctx()
 
         if not _skip_handler:
-            handler_err = await _open_kitchen_handler()
+            handler_err = await _open_kitchen_handler(
+                preserve_active_recipe=ingredients_only,
+            )
             if handler_err is not None:
                 return handler_err
         else:
@@ -1004,7 +1029,11 @@ async def open_kitchen(
                         backend_capabilities_map=_backend_capabilities_map,
                         backend_origin_map=_backend_origin_map,
                     )
-                    _deferred_compiled_bindings = pop_compiled_bindings(result)
+                    _deferred_finalized_projection = (
+                        pop_finalized_recipe_projection(result)
+                        if result.get("valid", False)
+                        else None
+                    )
                 except ProcessStaleError as exc:
                     logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
                     return _kitchen_failure_envelope(exc, stage="process_stale")
@@ -1013,6 +1042,19 @@ async def open_kitchen(
                         "open_kitchen_failure", stage="load_and_validate", exc_info=True
                     )
                     return _kitchen_failure_envelope(exc, stage="load_and_validate")
+                if ingredients_only:
+                    inspection = build_open_kitchen_recipe_payload(result, version=__version__)
+                    inspection = strip_ingredients_only_keys(inspection)
+                    if _raw_recipe is not None:
+                        warnings = _check_override_keys(
+                            overrides,
+                            frozenset(_raw_recipe.ingredients.keys()),
+                            set(_session_overrides.keys()),
+                            _config_layer,
+                        )
+                        if warnings:
+                            inspection["warnings"] = warnings
+                    return render_served_response(inspection)
                 tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
                 tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
                 tool_ctx.recipe_content_hash = result.get("content_hash", "")
@@ -1103,6 +1145,14 @@ async def open_kitchen(
                     tool_ctx.session_serve_overrides = dict(overrides)
                     tool_ctx.session_serve_defer_unresolved = not bool(overrides)
                 if not ingredients_only:
+                    if _deferred_finalized_projection is None:
+                        return _recipe_validation_error_response(name, result)
+                    _prepared_generation = prepare_recipe_delivery_generation(
+                        result,
+                        recipe_name=name,
+                        tool_ctx=tool_ctx,
+                        finalized_projection=_deferred_finalized_projection,
+                    )
                     return cast(
                         str,
                         finalize_recipe_delivery(
@@ -1110,8 +1160,14 @@ async def open_kitchen(
                             surface="open_kitchen_deferred_recall",
                             recipe_name=name,
                             tool_ctx=tool_ctx,
+                            finalized_projection=_deferred_finalized_projection,
+                            flow_generation=_prepared_generation.flow_generation,
+                            canonical_artifact_payload=(
+                                _prepared_generation.canonical_artifact_payload
+                            ),
+                            execution_snapshot=(_prepared_generation.execution_snapshot),
+                            normalized_compile_key=(_prepared_generation.normalized_compile_key),
                             delivery_request=delivery_request,
-                            compiled_bindings=_deferred_compiled_bindings,
                         ),
                     )
                 return render_served_response(result)
@@ -1130,13 +1186,28 @@ async def open_kitchen(
                     backend_capabilities_map=_backend_capabilities_map,
                     backend_origin_map=_backend_origin_map,
                 )
-                _normal_compiled_bindings = pop_compiled_bindings(result)
+                _normal_finalized_projection = (
+                    pop_finalized_recipe_projection(result) if result.get("valid", False) else None
+                )
             except ProcessStaleError as exc:
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="process_stale")
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
+            if ingredients_only:
+                inspection = build_open_kitchen_recipe_payload(result, version=__version__)
+                inspection = strip_ingredients_only_keys(inspection)
+                if _raw_recipe is not None:
+                    warnings = _check_override_keys(
+                        overrides,
+                        frozenset(_raw_recipe.ingredients.keys()),
+                        set(_session_overrides.keys()),
+                        _config_layer,
+                    )
+                    if warnings:
+                        inspection["warnings"] = warnings
+                return render_served_response(inspection)
 
             tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
             tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
@@ -1247,7 +1318,13 @@ async def open_kitchen(
                     result["warnings"] = _override_warnings
 
             try:
-                warning = _build_hook_diagnostic_warning()
+                warning = (
+                    _build_hook_diagnostic_warning(
+                        detect_autoskillit_mcp_prefix(tool_ctx.backend.capabilities)
+                    )
+                    if tool_ctx.backend is not None
+                    else None
+                )
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
@@ -1269,6 +1346,14 @@ async def open_kitchen(
                 return _validation_err
 
             if not ingredients_only:
+                if _normal_finalized_projection is None:
+                    return _recipe_validation_error_response(name, result)
+                _prepared_generation = prepare_recipe_delivery_generation(
+                    result,
+                    recipe_name=name,
+                    tool_ctx=tool_ctx,
+                    finalized_projection=_normal_finalized_projection,
+                )
                 return cast(
                     str,
                     finalize_recipe_delivery(
@@ -1276,8 +1361,14 @@ async def open_kitchen(
                         surface="open_kitchen",
                         recipe_name=name,
                         tool_ctx=tool_ctx,
+                        finalized_projection=_normal_finalized_projection,
+                        flow_generation=_prepared_generation.flow_generation,
+                        canonical_artifact_payload=(
+                            _prepared_generation.canonical_artifact_payload
+                        ),
+                        execution_snapshot=_prepared_generation.execution_snapshot,
+                        normalized_compile_key=(_prepared_generation.normalized_compile_key),
                         delivery_request=delivery_request,
-                        compiled_bindings=_normal_compiled_bindings,
                     ),
                 )
 
@@ -1316,7 +1407,13 @@ async def open_kitchen(
             )
 
         try:
-            warning = _build_hook_diagnostic_warning()
+            warning = (
+                _build_hook_diagnostic_warning(
+                    detect_autoskillit_mcp_prefix(tool_ctx.backend.capabilities)
+                )
+                if tool_ctx.backend is not None
+                else None
+            )
         except Exception as exc:
             logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="hook_diagnostic")

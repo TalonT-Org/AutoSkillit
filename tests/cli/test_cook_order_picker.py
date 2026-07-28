@@ -520,6 +520,7 @@ class TestOrderResumeParsing:
             project_dir=None,
             required_env=None,
             skill_catalog=None,
+            backend=None,
         ):
             captured["resume_spec"] = resume_spec
 
@@ -564,6 +565,7 @@ class TestOrderResumeParsing:
             resume_spec=NoResume(),
             required_env=None,
             skill_catalog=None,
+            backend=None,
         ):
             captured["resume_spec"] = resume_spec
 
@@ -598,6 +600,7 @@ class TestOrderResumeParsing:
             resume_spec=NoResume(),
             required_env=None,
             skill_catalog=None,
+            backend=None,
         ):
             captured["resume_spec"] = resume_spec
 

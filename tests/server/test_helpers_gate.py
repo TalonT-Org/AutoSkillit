@@ -11,7 +11,12 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _valid_recipe_section_pages(format_family: str) -> list[dict[str, object]]:
-    from autoskillit.server._recipe_delivery import RecipeArtifactGeneration
+    from autoskillit.core import (
+        RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+        RECIPE_ARTIFACT_SCHEMA_VERSION,
+        RECIPE_FLOW_SCHEMA_VERSION,
+        RecipeArtifactGeneration,
+    )
     from autoskillit.server._recipe_section_pagination import (
         build_recipe_section_page_plan,
         render_recipe_section_page,
@@ -34,19 +39,23 @@ def _valid_recipe_section_pages(format_family: str) -> list[dict[str, object]]:
     generation = RecipeArtifactGeneration(
         producer_tool="open_kitchen",
         recipe_name="remediation",
-        descriptor_version=1,
-        schema_version=1,
+        descriptor_version=RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+        schema_version=RECIPE_ARTIFACT_SCHEMA_VERSION,
         payload_sha256="sha256:" + ("1" * 64),
         artifact_blob_sha256="sha256:" + ("2" * 64),
         artifact_blob_size_bytes=10_000,
         body_sha256="sha256:" + ("3" * 64),
         body_size_bytes=9_000,
+        flow_schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        flow_sha256="sha256:" + ("4" * 64),
+        flow_size_bytes=512,
+        flow_record_count=2,
     )
     plan = build_recipe_section_page_plan(
         kitchen_id="consumer-sequence",
         generation=generation,
         selected=select_recipe_section(payload, section),
-        recipe_section_bound_bytes=1_000,
+        recipe_section_bound_bytes=2_000,
     )
     pages = [
         json.loads(render_recipe_section_page(plan, part)) for part in range(plan.total_parts)

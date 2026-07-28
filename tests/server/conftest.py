@@ -31,12 +31,15 @@ def _reset_server_state():
     because the previous value may itself be leaked state from an earlier test.
     """
     from autoskillit.server import _state
+    from autoskillit.server._recipe_generation import get_recipe_generation_store
 
     _state._ctx = None
     _state._startup_ready = None
+    get_recipe_generation_store().clear()
     yield
     _state._ctx = None
     _state._startup_ready = None
+    get_recipe_generation_store().clear()
 
 
 @pytest.fixture(autouse=True)
@@ -117,7 +120,11 @@ def assert_no_timing(timing_log: DefaultTimingLog) -> None:
 
 def _make_mock_ctx() -> MagicMock:
     """Return a minimal mock ToolContext with a gate."""
-    from autoskillit.config import OutputBudgetConfig
+    from threading import RLock
+
+    from autoskillit.config import OutputBudgetConfig, QuotaGuardConfig
+    from autoskillit.pipeline import NoActiveRecipe
+    from autoskillit.server._factory import make_recipe_execution
 
     gate = MagicMock()
     gate.enabled = False
@@ -129,9 +136,13 @@ def _make_mock_ctx() -> MagicMock:
     )
     ctx.kitchen_id = f"test-{uuid4().hex}"
     ctx.config.output_budget = OutputBudgetConfig()
+    ctx.config.quota_guard = QuotaGuardConfig()
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
     ctx.active_recipe_ingredients = None
     ctx.gate_infrastructure_ready = False
+    ctx.recipe_execution_lock = RLock()
+    ctx.recipe_initialization_state = NoActiveRecipe()
+    ctx.recipe_execution_factory = make_recipe_execution
     return ctx
 
 

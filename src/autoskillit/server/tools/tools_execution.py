@@ -852,7 +852,19 @@ async def run_skill(
         # is disjoint from the clone's temp tree in clone-based pipelines).
         # See #4387 — this must be defined BEFORE the if/elif chain so the
         # publish call site (later in the function) can reach it regardless
-        # of which branch was taken above.
+        # of which branch was taken above. An empty cwd is only rejected here
+        # (rather than by the earlier boundary guards) because it is only
+        # security-relevant once a recipe execution is active and this anchor
+        # is actually consumed as a containment root — ad-hoc skill calls with
+        # no active recipe execution never read _clone_allowed_root.
+        if _installed_execution is not None and not cwd:
+            return json.dumps(
+                deny_envelope(
+                    "run_skill: cwd must not be empty when a recipe execution is active.",
+                    stage="preflight:cwd",
+                    retriable=False,
+                )
+            )
         _clone_allowed_root = resolve_temp_dir(Path(cwd), tool_ctx.config.workspace.temp_dir)
         if _dynamic_recipe_call:
             if _claims_recipe_execution:

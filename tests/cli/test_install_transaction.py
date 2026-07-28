@@ -421,6 +421,59 @@ class TestInstallTargetSafety:
 
 
 class TestRecordOwnedRetirementDeadline:
+    @pytest.mark.parametrize(
+        "cache_bytes",
+        [
+            b"{not-json",
+            b'{"schema_version":999,"records":[]}',
+        ],
+        ids=["corrupt", "unsupported-future"],
+    )
+    def test_coordinator_preserves_unsafe_cache_without_dispatch(
+        self,
+        cache_bytes: bytes,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from datetime import UTC, datetime
+
+        from autoskillit.cli._plugin_artifact import DefaultPluginRetirementCoordinator
+        from autoskillit.core import PluginArtifactKind
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_bytes(cache_bytes)
+
+        class NoDispatchOwner:
+            def __init__(
+                self,
+                *,
+                artifact_kind: PluginArtifactKind,
+                managed_root: Path,
+            ) -> None:
+                self.artifact_kind = artifact_kind
+                self.managed_root = managed_root
+
+            def try_reclaim(self, _record, _sweep_now):
+                pytest.fail("unsafe retirement cache must not dispatch an owner")
+
+        coordinator = DefaultPluginRetirementCoordinator(
+            projection_owner=NoDispatchOwner(
+                artifact_kind=PluginArtifactKind.PROJECTION,
+                managed_root=tmp_path / "projections",
+            ),
+            installed_owner=NoDispatchOwner(
+                artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+                managed_root=tmp_path / "cache",
+            ),
+            projection_root=tmp_path / "projections",
+        )
+
+        with pytest.warns(RuntimeWarning, match="sweep skipped unsafe state"):
+            assert coordinator.sweep_due(datetime.now(UTC)) == ()
+        assert cache.read_bytes() == cache_bytes
+
     def test_coordinator_dispatches_only_due_exact_records(
         self,
         tmp_path: Path,

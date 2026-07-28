@@ -479,3 +479,31 @@ class TestClearPluginCacheKeepsItsPromise:
         assert _PLUGIN_KEY not in _read_json(registry)["plugins"], (
             "_clear_plugin_cache still does not do what its docstring says"
         )
+
+    def test_active_reader_is_still_queued_before_registry_removal(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.cli._marketplace import _clear_plugin_cache
+        from autoskillit.cli._plugin_artifact import (
+            installed_artifact_lock_path,
+            publish_installed_plugin_artifact,
+        )
+        from autoskillit.core import ArtifactLease, read_retiring_cache
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        root = _seed_installed_state(tmp_path, "0.0.1-old")
+        identity = publish_installed_plugin_artifact(
+            root,
+            semantic_key="autoskillit@autoskillit-local:0.0.1-old",
+        )
+        registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
+        reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(root))
+        try:
+            _clear_plugin_cache()
+        finally:
+            reader.close()
+
+        assert _PLUGIN_KEY not in _read_json(registry)["plugins"]
+        assert [record.identity for record in read_retiring_cache().records] == [identity]

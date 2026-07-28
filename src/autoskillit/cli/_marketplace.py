@@ -75,7 +75,6 @@ def _clear_plugin_cache(
     from autoskillit.core import (
         _AUTOSKILLIT_PLUGIN_KEY,
         ArtifactLease,
-        ArtifactLeaseContention,
         PluginArtifactValidationError,
         _InstallLock,
     )
@@ -99,13 +98,7 @@ def _clear_plugin_cache(
     created_ids: list[str] = []
     deadline = datetime.now(UTC) + timedelta(hours=6)
     for candidate in candidates:
-        try:
-            writer = ArtifactLease.acquire_exclusive(
-                installed_artifact_lock_path(candidate),
-                blocking=False,
-            )
-        except ArtifactLeaseContention:
-            continue
+        reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(candidate))
         try:
             with _InstallLock():
                 try:
@@ -118,7 +111,7 @@ def _clear_plugin_cache(
                     if on_retirement_created is not None:
                         on_retirement_created(result.record_id)
         finally:
-            writer.close()
+            reader.close()
 
     with _InstallLock():
         InstalledPluginsFile().remove(_AUTOSKILLIT_PLUGIN_KEY)

@@ -174,9 +174,14 @@ def _install_harness(
         captured["spec"] = spec
         captured["run_kwargs"] = kwargs
         events.append(("run",))
+        assertion = captured.get("run_attempt_assertion")
+        if callable(assertion):
+            assertion()
         kwargs["on_spawn"](101, 101)  # type: ignore[operator]
         kwargs["trace"].record_spawn()  # type: ignore[union-attr]
         kwargs["on_reaped"](101, 101)  # type: ignore[operator]
+        if callable(assertion):
+            assertion()
         return SimpleNamespace(pid=101, pgid=101, returncode=returncode)
 
     monkeypatch.chdir(tmp_path)
@@ -239,6 +244,11 @@ def test_cook_uses_managed_home_for_final_child_context(
     captured = _install_harness(monkeypatch, tmp_path)
     binding = _CookBinding(tmp_path / "projected-plugin")
     binding.inherited_fds = (13, 7)
+
+    def assert_binding_open() -> None:
+        assert not binding.closed
+
+    captured["run_attempt_assertion"] = assert_binding_open
     authority = _CookAuthority(binding.plugin_dir)
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
     monkeypatch.setattr(

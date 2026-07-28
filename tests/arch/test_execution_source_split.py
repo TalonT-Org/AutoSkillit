@@ -9,6 +9,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 SRC_EXECUTION = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "execution"
 
 NEW_HEADLESS_MODULES = [
+    "_headless_launch.py",
     "_headless_recovery.py",
     "_headless_path_tokens.py",
     "_headless_result.py",
@@ -17,10 +18,11 @@ NEW_HEADLESS_MODULES = [
     "_headless_evidence.py",
 ]
 HEADLESS_SIZE_BUDGETS = {
-    "headless/__init__.py": 600,
+    "headless/__init__.py": 550,
     "headless/_headless_helpers.py": 220,
-    "headless/_headless_execute.py": 700,
-    "headless/_headless_recovery.py": 600,
+    "headless/_headless_execute.py": 635,
+    "headless/_headless_launch.py": 500,
+    "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,
     "headless/_headless_result.py": 945,
     "headless/_headless_evidence.py": 310,
@@ -52,9 +54,18 @@ def test_headless_facade_does_not_define_recovery_functions():
         "_recover_block_from_assistant_messages",
         "_synthesize_from_write_artifacts",
         "_extract_missing_token_hints",
-        "_attempt_contract_nudge",
     ):
         assert f"def {fn}" not in src, f"{fn} must live in _headless_recovery.py"
+
+
+def test_plugin_bound_launch_lifecycle_is_centralized():
+    launch = (SRC_EXECUTION / "headless" / "_headless_launch.py").read_text()
+    for fn in (
+        "_plugin_launch_binding",
+        "_run_headless_attempt",
+        "_attempt_contract_nudge",
+    ):
+        assert f"def {fn}" in launch, f"{fn} must live in _headless_launch.py"
 
 
 def test_headless_facade_does_not_define_path_token_functions():

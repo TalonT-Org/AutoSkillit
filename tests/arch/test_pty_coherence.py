@@ -56,9 +56,7 @@ class TestDispatchFoodTruckPtyOverrideGuard:
 class TestAttemptContractNudgePtyOverrideGuard:
     def test_attempt_contract_nudge_accepts_pty_override(self) -> None:
         """_attempt_contract_nudge must have pty_override in its parameter list."""
-        src = (
-            Path(__file__).parents[2] / "src/autoskillit/execution/headless/_headless_recovery.py"
-        )
+        src = Path(__file__).parents[2] / "src/autoskillit/execution/headless/_headless_launch.py"
         tree = ast.parse(src.read_text())
 
         func = _find_function(tree, "_attempt_contract_nudge")

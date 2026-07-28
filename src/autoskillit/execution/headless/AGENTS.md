@@ -9,6 +9,7 @@ Headless Claude session orchestration — command prep, subprocess invocation, r
 | `__init__.py` | Facade: `run_headless_core()`, `DefaultHeadlessExecutor`, re-exports |
 | `_headless_helpers.py` | Session helpers: `_session_log_dir`, `_resolve_model`, `PostSessionMetrics` |
 | `_headless_execute.py` | Subprocess core: `_execute_claude_headless()` — shared skill/fleet path |
+| `_headless_launch.py` | Plugin-bound spec builders, per-attempt binding ownership, and resume nudge lifecycle |
 | `_headless_git.py` | Git LOC tracking: `_capture_git_head_sha()`, `_compute_loc_changed()` |
 | `_headless_path_tokens.py` | Path-token extraction and output-path validation from assistant messages |
 | `_headless_recovery.py` | Session recovery: `_recover_from_separate_marker`, `_synthesize_from_write_artifacts`, `_infer_enum_token_from_write_contract` (contract-aware enum-token inference) |

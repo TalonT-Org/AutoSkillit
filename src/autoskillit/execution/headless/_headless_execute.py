@@ -58,12 +58,12 @@ from autoskillit.execution.headless._headless_git import (
 )
 from autoskillit.execution.headless._headless_helpers import (
     _compute_post_session_metrics,
-    _resolve_pty_mode,
-    _resolve_session_log_dir,
     _stat_snapshot,
-    assert_headless_cmd,
 )
-from autoskillit.execution.headless._headless_recovery import _attempt_contract_nudge
+from autoskillit.execution.headless._headless_launch import (
+    _attempt_contract_nudge,
+    _run_headless_attempt,
+)
 from autoskillit.execution.headless._headless_result import _build_skill_result
 
 if TYPE_CHECKING:
@@ -245,76 +245,33 @@ async def _execute_claude_headless(
     _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
     spec: CmdSpec
     while True:
-        binding: PluginLaunchBinding | None = None
         try:
-            if plugin_load_mode.consumes_artifact:
-                if plugin_authority is None:
-                    raise RuntimeError(
-                        f"{plugin_load_mode.value} launch requires plugin artifact authority"
-                    )
-                binding = plugin_authority.acquire_launch_binding(
-                    backend=_step_backend,
-                    load_mode=plugin_load_mode,
-                )
-            spec = build_spec(binding, current_provider_extras or None)
-            if spec.cmd:
-                _binary = Path(spec.cmd[0]).stem
-                _expected = _step_backend.capabilities.process_name
-                if isinstance(_expected, str) and _expected and _binary != _expected:
-                    from autoskillit.execution.backends import BACKEND_REGISTRY  # noqa: PLC0415
-
-                    _known = {b().capabilities.process_name for b in BACKEND_REGISTRY.values()}
-                    if _binary in _known:
-                        raise RuntimeError(
-                            f"Backend coherence violation: expected process_name="
-                            f"{_expected!r} but binary is {_binary!r}"
-                        )
-            assert_headless_cmd(spec)
-            effective_idle = base_effective_idle
-            if spec.process_idle_timeout_ms > 0:
-                _spec_idle = spec.process_idle_timeout_ms / 1000.0
-                if effective_idle is None or _spec_idle < effective_idle:
-                    effective_idle = _spec_idle
-            try:
-                _result = await runner(
-                    list(spec.cmd),
-                    cwd=Path(cwd),
-                    timeout=timeout,
-                    env=spec.env,
-                    pty_mode=(
-                        pty_override
-                        if pty_override is not None
-                        else _resolve_pty_mode(_step_backend)
-                    ),
-                    session_log_dir=_resolve_session_log_dir(cwd, _step_backend),
-                    completion_marker=completion_marker,
-                    stale_threshold=stale_threshold,
-                    completion_drain_timeout=cfg.completion_drain_timeout,
-                    linux_tracing_config=linux_tracing_cfg,
-                    idle_output_timeout=effective_idle,
-                    max_suppression_seconds=cfg.max_suppression_seconds,
-                    child_deferral_ceiling=cfg.completion_child_deferral_ceiling_seconds,
-                    on_pid_resolved=on_spawn,
-                    enable_deadline_extension=enable_deadline_extension,
-                    max_extension_seconds=max_extension_seconds,
-                    marker_dir=marker_dir,
-                    session_id=session_id,
-                    on_session_id_resolved=on_session_id_resolved,
-                    stream_parser=_stream_parser,
-                    completion_record_types=_step_backend.capabilities.completion_record_types,
-                    session_record_types=_step_backend.capabilities.session_record_types,
-                    inspector_callback=None,
-                    workload_basenames=_step_backend.capabilities.process_name_aliases or None,
-                    pass_fds=spec.inherited_fds,
-                )
-            finally:
-                if binding is not None:
-                    binding.close()
-                    binding = None
+            _result, spec = await _run_headless_attempt(
+                build_spec,
+                cwd=cwd,
+                runner=runner,
+                backend=_step_backend,
+                plugin_authority=plugin_authority,
+                plugin_load_mode=plugin_load_mode,
+                provider_extras=current_provider_extras or None,
+                timeout=timeout,
+                pty_override=pty_override,
+                completion_marker=completion_marker,
+                stale_threshold=stale_threshold,
+                completion_drain_timeout=cfg.completion_drain_timeout,
+                linux_tracing_config=linux_tracing_cfg,
+                idle_output_timeout=base_effective_idle,
+                max_suppression_seconds=cfg.max_suppression_seconds,
+                child_deferral_ceiling=cfg.completion_child_deferral_ceiling_seconds,
+                on_spawn=on_spawn,
+                enable_deadline_extension=enable_deadline_extension,
+                max_extension_seconds=max_extension_seconds,
+                marker_dir=marker_dir,
+                session_id=session_id,
+                on_session_id_resolved=on_session_id_resolved,
+                stream_parser=_stream_parser,
+            )
         except Exception as exc:
-            if binding is not None:
-                binding.close()
-                binding = None
             logger.error("headless_runner_crashed", exc_info=True)
             _exc_text = traceback.format_exc()
             _log_dir = ctx.config.linux_tracing.log_dir
@@ -379,9 +336,6 @@ async def _execute_claude_headless(
                 ),
             )
         except BaseException:
-            if binding is not None:
-                binding.close()
-                binding = None
             logger.warning("headless_runner_cancelled", exc_info=True)
             _exc_text = traceback.format_exc()
             _log_dir = ctx.config.linux_tracing.log_dir

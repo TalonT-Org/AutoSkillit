@@ -12,16 +12,12 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
     ClosureAuthoritySpec,
-    CmdSpec,
     CodingAgentBackend,
     HeadlessSkillDispatchContract,
     HeadlessSkillDispatchPreparation,
     PluginArtifactAuthority,
-    PluginLaunchBinding,
-    PluginLoadMode,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
-    SkillSessionConfig,
     ValidatedAddDir,
     WriteBehaviorSpec,
     get_logger,
@@ -55,6 +51,13 @@ from autoskillit.execution.headless._headless_helpers import (
     assert_interactive_ordering,
     resolve_model_identity,
 )
+from autoskillit.execution.headless._headless_launch import (
+    _NUDGE_TIMEOUT,  # noqa: F401
+    _attempt_contract_nudge,  # noqa: F401
+    _food_truck_launch_spec_builder,
+    _headless_plugin_load_mode,
+    _skill_launch_spec_builder,
+)
 from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _BRANCH_NAME_PATTERN,
@@ -73,9 +76,7 @@ from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
 from autoskillit.execution.headless._headless_recovery import (
     _CHANNEL_B_RECOVERABLE_SUBTYPES,  # noqa: F401
     _ENUM_BINDING_RE,  # noqa: F401
-    _NUDGE_TIMEOUT,  # noqa: F401
     _TOKEN_NAME_RE,  # noqa: F401
-    _attempt_contract_nudge,  # noqa: F401
     _extract_missing_token_hints,  # noqa: F401
     _infer_enum_token_from_write_contract,  # noqa: F401
     _is_path_capture_pattern,  # noqa: F401
@@ -105,24 +106,6 @@ __all__ = [
 ]
 
 logger = get_logger(__name__)
-
-
-def _headless_plugin_load_mode(
-    backend: CodingAgentBackend,
-    *,
-    add_dirs: Sequence[ValidatedAddDir] = (),
-) -> PluginLoadMode:
-    """Resolve how this concrete backend launch obtains its skill tree."""
-    capabilities = backend.capabilities
-    if not capabilities.skill_injection_capable:
-        return PluginLoadMode.NONE
-    if capabilities.plugin_install_capable:
-        return PluginLoadMode.EXPLICIT_PLUGIN_DIR
-    # Generated-home backends with add-dirs consume the prepared home rather
-    # than a separate plugin projection.
-    if add_dirs:
-        return PluginLoadMode.GENERATED_HOME
-    return PluginLoadMode.PROJECTED_HOME
 
 
 async def run_headless_core(
@@ -214,34 +197,31 @@ async def run_headless_core(
                 ctx_backend=ctx.backend.name,
             )
         _cmd_backend = step_backend if step_backend is not None else ctx.backend
-
-        def _build_spec(
-            plugin_binding: PluginLaunchBinding | None,
-            attempt_provider_extras: Mapping[str, str] | None,
-        ) -> CmdSpec:
-            config = SkillSessionConfig(
-                completion_marker=effective_marker,
-                model=model_identity.configured_model or None,
-                plugin_binding=plugin_binding,
-                output_format=cfg.output_format,
-                add_dirs=add_dirs_tuple,
-                exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
-                stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
-                scenario_step_name=step_name,
-                temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
-                allowed_write_prefix=allowed_write_prefix,
-                allowed_write_prefixes=allowed_write_prefixes,
-                provider_extras=attempt_provider_extras,
-                profile_name=profile_name,
-                resume_session_id=resume_session_id,
-                resume_checkpoint=resume_checkpoint,
-                resume_message=resume_message,
-                sandbox_mode="read-only"
-                if readonly_skill
-                else _cmd_backend.capabilities.default_skill_sandbox_mode,
-                network_access=network_access,
-            )
-            return _cmd_backend.build_skill_session_cmd(skill_command, cwd, config)
+        plugin_load_mode = _headless_plugin_load_mode(
+            _cmd_backend,
+            add_dirs=add_dirs_tuple,
+        )
+        _build_spec = _skill_launch_spec_builder(
+            backend=_cmd_backend,
+            skill_command=skill_command,
+            cwd=cwd,
+            completion_marker=effective_marker,
+            configured_model=model_identity.configured_model or None,
+            output_format=cfg.output_format,
+            add_dirs=add_dirs_tuple,
+            exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
+            stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
+            step_name=step_name,
+            temp_dir_relpath=temp_dir_display_str(ctx.config.workspace.temp_dir),
+            allowed_write_prefix=allowed_write_prefix,
+            allowed_write_prefixes=allowed_write_prefixes,
+            profile_name=profile_name,
+            resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
+            resume_message=resume_message,
+            readonly_skill=readonly_skill,
+            network_access=network_access,
+        )
 
         logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)
 
@@ -253,10 +233,7 @@ async def run_headless_core(
             resolved_model=model_identity.configured_model,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
-            plugin_load_mode=_headless_plugin_load_mode(
-                _cmd_backend,
-                add_dirs=add_dirs_tuple,
-            ).value,
+            plugin_load_mode=plugin_load_mode.value,
             add_dirs=list(add_dirs) if add_dirs else None,
         )
         effective_provider = provider_name or profile_name
@@ -286,10 +263,7 @@ async def run_headless_core(
             write_watch_dirs=write_watch_dirs,
             provider_name=effective_provider,
             plugin_authority=ctx.plugin_authority,
-            plugin_load_mode=_headless_plugin_load_mode(
-                _cmd_backend,
-                add_dirs=add_dirs_tuple,
-            ),
+            plugin_load_mode=plugin_load_mode,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
             provider_extras=provider_extras,
@@ -498,45 +472,26 @@ class DefaultHeadlessExecutor:
                 "dispatch_backend must be resolved before dispatch_food_truck execution"
             )
         backend = dispatch_backend
-
-        def _build_spec(
-            plugin_binding: PluginLaunchBinding | None,
-            attempt_provider_extras: Mapping[str, str] | None,
-        ) -> CmdSpec:
-            attempt_cwd = cwd
-            if capability_preparation is not None:
-                if plugin_binding is None:
-                    raise RuntimeError(
-                        "semantic food-truck dispatch requires a plugin launch binding"
-                    )
-                capability_contract = capability_preparation.finalize(
-                    backend=backend,
-                    binding=plugin_binding,
-                )
-                attempt_cwd = validated_dispatch_cwd(
-                    capability_contract,
-                    resolved_command=orchestrator_prompt,
-                    cwd=cwd,
-                )
-            return backend.build_food_truck_cmd(
-                orchestrator_prompt=orchestrator_prompt,
-                plugin_binding=plugin_binding,
-                cwd=attempt_cwd,
-                completion_marker=completion_marker,
-                resume_session_id=resume_session_id,
-                resume_checkpoint=resume_checkpoint,
-                model=model_identity.configured_model or None,
-                env_extras=attempt_provider_extras,
-                output_format=cfg.run_skill.output_format,
-                exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
-                stream_idle_timeout_ms=cfg.run_skill.stream_idle_timeout_ms,
-                scenario_step_name=step_name,
-                temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
-                allowed_write_prefix=allowed_write_prefix,
-                allowed_write_prefixes=allowed_write_prefixes,
-                sentinel_contract=sentinel_contract,
-                resume_message=resume_message,
-            )
+        plugin_load_mode = _headless_plugin_load_mode(backend)
+        _build_spec = _food_truck_launch_spec_builder(
+            backend=backend,
+            orchestrator_prompt=orchestrator_prompt,
+            cwd=cwd,
+            capability_preparation=capability_preparation,
+            completion_marker=completion_marker,
+            resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
+            configured_model=model_identity.configured_model or None,
+            output_format=cfg.run_skill.output_format,
+            exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
+            stream_idle_timeout_ms=cfg.run_skill.stream_idle_timeout_ms,
+            step_name=step_name,
+            temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
+            allowed_write_prefix=allowed_write_prefix,
+            allowed_write_prefixes=allowed_write_prefixes,
+            sentinel_contract=sentinel_contract,
+            resume_message=resume_message,
+        )
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
         effective_stale = (
@@ -588,5 +543,5 @@ class DefaultHeadlessExecutor:
             on_session_id_resolved=on_session_id_resolved,
             step_backend=dispatch_backend,
             plugin_authority=plugin_authority or self._ctx.plugin_authority,
-            plugin_load_mode=_headless_plugin_load_mode(backend),
+            plugin_load_mode=plugin_load_mode,
         )

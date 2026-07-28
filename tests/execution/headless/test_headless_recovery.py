@@ -1,4 +1,4 @@
-"""Tests for _headless_recovery._attempt_contract_nudge pty_mode propagation."""
+"""Tests for _headless_launch._attempt_contract_nudge pty_mode propagation."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ class TestNudgePtyMode:
     @pytest.mark.anyio
     async def test_nudge_passes_pty_mode_for_claude_backend(self, tmp_path: Path) -> None:
         """_attempt_contract_nudge passes pty_mode=True to runner for ClaudeCode backend."""
-        from autoskillit.execution.headless._headless_recovery import _attempt_contract_nudge
+        from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
 
@@ -89,7 +89,7 @@ class TestNudgePtyMode:
     @pytest.mark.anyio
     async def test_nudge_respects_pty_override_false(self, tmp_path: Path) -> None:
         """_attempt_contract_nudge with pty_override=False uses pty_mode=False."""
-        from autoskillit.execution.headless._headless_recovery import _attempt_contract_nudge
+        from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
 
@@ -158,7 +158,7 @@ class TestNudgePtyMode:
     async def test_nudge_acquires_an_independent_full_lifetime_binding(
         self, tmp_path: Path
     ) -> None:
-        from autoskillit.execution.headless._headless_recovery import _attempt_contract_nudge
+        from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
 
@@ -263,10 +263,8 @@ async def test_nudge_skips_for_block_delimiter_patterns(tmp_path: Path) -> None:
     short-circuits to None when hints=[]) cannot recover block-delimited skills — the
     caller always falls through to the failure path.
     """
-    from autoskillit.execution.headless._headless_recovery import (
-        _attempt_contract_nudge,
-        _extract_missing_token_hints,
-    )
+    from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
+    from autoskillit.execution.headless._headless_recovery import _extract_missing_token_hints
     from tests.execution.conftest import _mock_backend
     from tests.fakes import MockSubprocessRunner
 

@@ -195,7 +195,7 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Each provider attempt forwards its freshly built command descriptor tuple.",
     ),
     (
-        "execution/headless/_headless_recovery.py",
+        "execution/headless/_headless_launch.py",
         "_attempt_contract_nudge",
         "spec.inherited_fds",
     ): (

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -11,15 +11,8 @@ import regex as re
 
 from autoskillit.core import (
     CliSubtype,
-    OutputFormat,
-    PluginArtifactAuthority,
-    PluginLaunchBinding,
-    PluginLoadMode,
-    RetryReason,
-    SkillResult,
     get_logger,
 )
-from autoskillit.execution.headless._headless_helpers import _resolve_pty_mode, assert_headless_cmd
 from autoskillit.execution.headless._headless_path_tokens import _RECOVERABLE_PATH_TOKENS
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
@@ -29,12 +22,7 @@ from autoskillit.execution.session import (
 from autoskillit.execution.session._session_content import _normalize_model_output
 
 if TYPE_CHECKING:
-    from autoskillit.core import (
-        CodingAgentBackend,
-        ResultParser,
-        SubprocessResult,
-        SubprocessRunner,
-    )
+    from autoskillit.core import ResultParser
     from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
@@ -50,8 +38,6 @@ _TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 # whose value segment is a bare literal — no alternation/character-class, i.e. not
 # "(a|b)". This is the structural soundness gate for deterministic enum inference.
 _ENUM_BINDING_RE: re.Pattern[str] = re.compile(r"^(\w+)(?:\[[^\]]*\]\*)?=(?:\[[^\]]*\]\*)?(\w+)$")
-
-_NUDGE_TIMEOUT: float = 60.0
 
 _CANONICAL_TO_LEGACY: dict[str, str | None] = {
     "input_tokens": None,
@@ -359,192 +345,6 @@ def _extract_missing_token_hints(
         hints.append(_EnumHint(enum_token, tuple(output.allowed_values)))
 
     return hints
-
-
-async def _attempt_contract_nudge(
-    skill_result: SkillResult,
-    subprocess_result: SubprocessResult,
-    expected_output_patterns: Sequence[str],
-    completion_marker: str,
-    cwd: str,
-    runner: SubprocessRunner,
-    *,
-    backend: CodingAgentBackend | None = None,
-    result_parser: ResultParser | None = None,
-    provider_extras: Mapping[str, str] | None = None,
-    retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
-    pty_override: bool | None = None,
-    skill_contract: SkillContract | None = None,
-    plugin_authority: PluginArtifactAuthority | None = None,
-    plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
-    session_env: Mapping[str, str] | None = None,
-) -> SkillResult | None:
-    """Attempt a lightweight resume nudge to recover missing structured output tokens.
-
-    When ``_build_skill_result`` returns CONTRACT_RECOVERY, the model wrote the artifact
-    but omitted the structured output token. Instead of a full retry, resume the same
-    session with a short feedback prompt asking the model to emit the missing token.
-
-    When retry_reason is EARLY_STOP, the model produced substantive output but omitted
-    the completion marker. A simpler nudge prompt is used that bypasses the hints guard.
-
-    Returns a patched SkillResult(success=True) on success, or None to indicate the
-    nudge failed and the caller should fall through to the original path.
-    """
-    if backend is None or not backend.capabilities.session_resume_capable:
-        return None
-    if result_parser is None:
-        return None
-
-    if retry_reason == RetryReason.EARLY_STOP:
-        prompt = (
-            "Your response was complete but you omitted the required completion marker. "
-            f"Please emit ONLY the following text (nothing else):\n"
-            f"{completion_marker}"
-        )
-        patterns_to_check: Sequence[str] = list(expected_output_patterns)
-    else:
-        _write_tool_names = backend.write_tool_names()
-        hints = _extract_missing_token_hints(
-            subprocess_result.stdout,
-            expected_output_patterns,
-            result_parser,
-            _write_tool_names,
-            skill_contract=skill_contract,
-        )
-        if not hints:
-            logger.debug("nudge_skip_no_hints")
-            return None
-        hint_lines: list[str] = []
-        for hint in hints:
-            if isinstance(hint, _EnumHint):
-                logger.info(
-                    "nudge_enum_hint",
-                    field_name=hint.token,
-                    allowed_values=list(hint.allowed_values),
-                )
-                hint_lines.append(
-                    f"Emit `{hint.token} = <value>` where <value> is one of: "
-                    f"{' | '.join(hint.allowed_values)} — choose the value matching "
-                    "what you actually did."
-                )
-            else:
-                hint_lines.append(f"{hint.token} = {hint.path}")
-        token_lines = "\n".join(hint_lines)
-        prompt = (
-            "You completed your task and wrote the output file, but you omitted the "
-            "required structured output token in your final text response.\n\n"
-            f"Please emit ONLY the following (no other text):\n"
-            f"{token_lines}\n"
-            f"{completion_marker}"
-        )
-        patterns_to_check = list(expected_output_patterns)
-
-    effective_extras = dict(provider_extras or {})
-    if (
-        plugin_load_mode is PluginLoadMode.GENERATED_HOME
-        and session_env is not None
-        and (generated_home := session_env.get("CODEX_HOME"))
-    ):
-        effective_extras["CODEX_HOME"] = generated_home
-    binding: PluginLaunchBinding | None = None
-    try:
-        if plugin_load_mode.consumes_artifact:
-            if plugin_authority is None:
-                logger.warning("nudge_skip_missing_plugin_authority")
-                return None
-            binding = plugin_authority.acquire_launch_binding(
-                backend=backend,
-                load_mode=plugin_load_mode,
-            )
-        spec = backend.build_resume_cmd(
-            resume_session_id=skill_result.session_id,
-            prompt=prompt,
-            output_format=OutputFormat.JSON,
-            plugin_binding=binding,
-            env_extras=effective_extras or None,
-        )
-        assert_headless_cmd(spec)
-        try:
-            nudge_result = await runner(
-                list(spec.cmd),
-                cwd=Path(cwd),
-                timeout=_NUDGE_TIMEOUT,
-                env=spec.env,
-                pty_mode=(
-                    pty_override if pty_override is not None else _resolve_pty_mode(backend)
-                ),
-                pass_fds=spec.inherited_fds,
-            )
-        finally:
-            if binding is not None:
-                binding.close()
-                binding = None
-    except OSError:
-        logger.debug("nudge_runner_failed", exc_info=True)
-        return None
-    except Exception:
-        logger.warning("nudge_runner_failed_unexpected", exc_info=True)
-        return None
-    finally:
-        if binding is not None:
-            binding.close()
-
-    try:
-        nudge_session = result_parser.parse_stdout(nudge_result.stdout)
-    except Exception:
-        logger.warning("nudge_parse_stdout_failed", exc_info=True)
-        return None
-    combined_result = skill_result.result + "\n" + nudge_session.output
-    _nudge_usage = nudge_session.raw.get("token_usage")
-
-    if retry_reason == RetryReason.EARLY_STOP:
-        if completion_marker in nudge_session.output:
-            if patterns_to_check and not _check_expected_patterns(
-                combined_result, patterns_to_check
-            ):
-                logger.debug("nudge_early_stop_patterns_not_in_combined")
-                return None
-            logger.info(
-                "nudge_recovery_success",
-                session_id=skill_result.session_id,
-                nudge_output_count=_nudge_usage.get("output_tokens", 0) if _nudge_usage else 0,
-            )
-            return dataclasses.replace(
-                skill_result,
-                success=True,
-                result=combined_result,
-                subtype="success",
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                token_usage=_merge_token_usage(skill_result.token_usage, _nudge_usage),
-            )
-        logger.debug(
-            "nudge_early_stop_marker_not_found", nudge_result_len=len(nudge_session.output)
-        )
-        return None
-
-    if not _check_expected_patterns(combined_result, patterns_to_check):
-        logger.debug(
-            "nudge_patterns_not_found",
-            nudge_result_len=len(nudge_session.output),
-        )
-        return None
-
-    logger.info(
-        "nudge_recovery_success",
-        session_id=skill_result.session_id,
-        nudge_output_count=_nudge_usage.get("output_tokens", 0) if _nudge_usage else 0,
-    )
-    return dataclasses.replace(
-        skill_result,
-        success=True,
-        result=combined_result,
-        subtype="success",
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        token_usage=_merge_token_usage(skill_result.token_usage, _nudge_usage),
-    )
 
 
 # Group B migration target: token aggregation to backend-agnostic layer.

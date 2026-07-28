@@ -23,7 +23,7 @@ import logging
 import os
 import sys
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 import structlog
 
@@ -119,6 +119,13 @@ def log_plugin_artifact_lifecycle(
     )
 
 
+class _LeaseOwner(Protocol):
+    @property
+    def closed(self) -> bool: ...
+
+    def close(self) -> None: ...
+
+
 class PluginArtifactLifecycleLease:
     """Close-only lease wrapper that emits one release event."""
 
@@ -132,7 +139,7 @@ class PluginArtifactLifecycleLease:
 
     def __init__(
         self,
-        lease: Any,
+        lease: _LeaseOwner,
         *,
         logger: Any,
         artifact_kind: str,

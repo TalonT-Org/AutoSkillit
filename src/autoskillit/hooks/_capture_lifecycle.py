@@ -719,24 +719,27 @@ class CaptureLifecycleStore:
             fd = os.open(name, _OBSERVE_FLAGS, dir_fd=self._root_fd)
         except OSError as exc:
             raise _Tampered from exc
-        value = os.fstat(fd)
-        identity = _identity(value)
-        if (
-            identity != _identity(observed)
-            or (expected is not None and identity != expected)
-            or not stat.S_ISREG(value.st_mode)
-            or value.st_uid != os.geteuid()
-            or value.st_mode & _UNTRUSTED_WRITE_BITS
-            or value.st_nlink not in (1, 2)
-        ):
+        try:
+            value = os.fstat(fd)
+            identity = _identity(value)
+            if (
+                identity != _identity(observed)
+                or (expected is not None and identity != expected)
+                or not stat.S_ISREG(value.st_mode)
+                or value.st_uid != os.geteuid()
+                or value.st_mode & _UNTRUSTED_WRITE_BITS
+                or value.st_nlink not in (1, 2)
+            ):
+                raise _Tampered
+            return _ObservedArtifact(
+                fd=fd,
+                identity=identity,
+                nlink=value.st_nlink,
+                size=value.st_size,
+            )
+        except BaseException:
             os.close(fd)
-            raise _Tampered
-        return _ObservedArtifact(
-            fd=fd,
-            identity=identity,
-            nlink=value.st_nlink,
-            size=value.st_size,
-        )
+            raise
 
     @staticmethod
     def _try_artifact_lease(observed: _ObservedArtifact) -> None:
@@ -751,21 +754,24 @@ class CaptureLifecycleStore:
         self,
         record: CaptureLifecycleRecord,
     ) -> tuple[CaptureLifecycleRecord, _ObservedArtifact | None]:
-        staging = self._observe(
-            record.staging_name,
-            record.artifact_identity,
-            valid_name=_STAGING_NAME_RE,
-        )
-        public = self._observe(
-            record.public_name,
-            record.artifact_identity,
-            valid_name=_PUBLIC_NAME_RE,
-        )
-        lease_target = public or staging
-        if lease_target is None:
-            return replace(record, state=CaptureState.DELETED), None
+        staging: _ObservedArtifact | None = None
+        public: _ObservedArtifact | None = None
+        lease_target: _ObservedArtifact | None = None
         lease_transferred = False
         try:
+            staging = self._observe(
+                record.staging_name,
+                record.artifact_identity,
+                valid_name=_STAGING_NAME_RE,
+            )
+            public = self._observe(
+                record.public_name,
+                record.artifact_identity,
+                valid_name=_PUBLIC_NAME_RE,
+            )
+            lease_target = public or staging
+            if lease_target is None:
+                return replace(record, state=CaptureState.DELETED), None
             self._try_artifact_lease(lease_target)
             identity = lease_target.identity
             if staging is not None and public is not None:
@@ -829,13 +835,15 @@ class CaptureLifecycleStore:
 
     def _quarantine_delete(self, record: CaptureLifecycleRecord) -> int:
         expected = record.artifact_identity
-        public = self._observe(record.public_name, expected, valid_name=_PUBLIC_NAME_RE)
-        quarantine = self._observe(
-            record.quarantine_name,
-            expected,
-            valid_name=_QUARANTINE_NAME_RE,
-        )
+        public: _ObservedArtifact | None = None
+        quarantine: _ObservedArtifact | None = None
         try:
+            public = self._observe(record.public_name, expected, valid_name=_PUBLIC_NAME_RE)
+            quarantine = self._observe(
+                record.quarantine_name,
+                expected,
+                valid_name=_QUARANTINE_NAME_RE,
+            )
             if public is None and quarantine is None:
                 return record.size
             lease_target = public or quarantine

@@ -38,6 +38,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     DIRECT_INSTALL_CACHE_SUBDIR,
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactKind,
+    PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     RetiringArtifactRecord,
     RetiringCacheState,
@@ -169,11 +170,24 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
                 )
             )
         for record in retirement.records:
-            if (
-                record.artifact_kind is PluginArtifactKind.INSTALLED_PLUGIN
-                and record.managed_path in registered
-                and _record_matches_current_installed_artifact(record)
-            ):
+            if record.artifact_kind is not PluginArtifactKind.INSTALLED_PLUGIN:
+                continue
+            if record.managed_path not in registered:
+                continue
+            try:
+                matches_current = _record_matches_current_installed_artifact(record)
+            except PluginArtifactUnavailableError as exc:
+                findings.append(
+                    InstallStateFinding(
+                        Severity.ERROR,
+                        "retiring_artifact_unreadable",
+                        f"{record.managed_path} is queued and still registered, but its exact "
+                        f"identity is temporarily unreadable: {exc}. Restore filesystem "
+                        "access, then rerun `autoskillit doctor` before installation.",
+                    )
+                )
+                continue
+            if matches_current:
                 findings.append(
                     InstallStateFinding(
                         Severity.ERROR,

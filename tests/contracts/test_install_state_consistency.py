@@ -113,6 +113,30 @@ class TestVerifyInstallState:
 
         assert "retiring_exact_identity_still_registered" not in _checks(home)
 
+    def test_unreadable_registered_retirement_is_actionable(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.core._plugin_cache as plugin_cache
+        from autoskillit.workspace import verify_install_state
+
+        identity = _queue_registered_retirement(home)
+
+        def fail_digest(_path: Path) -> str:
+            raise PermissionError("injected diagnostic read failure")
+
+        monkeypatch.setattr(plugin_cache, "directory_tree_digest", fail_digest)
+
+        finding = next(
+            item for item in verify_install_state() if item.check == "retiring_artifact_unreadable"
+        )
+
+        assert finding.severity is Severity.ERROR
+        assert str(identity.managed_path) in finding.message
+        assert "Restore filesystem access" in finding.message
+        assert "autoskillit doctor" in finding.message
+
     def test_migrated_legacy_evidence_is_a_warning_not_deletion_authority(
         self,
         home: Path,

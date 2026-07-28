@@ -305,6 +305,26 @@ def test_retirement_callback_removes_kitchen_and_permanently_rejects_writes(
         store.put(record)
 
 
+def test_lifecycle_authority_bounds_retirement_history_without_stale_reactivation() -> None:
+    store = RecipeGenerationStore(max_retired_kitchens=1)
+    first = _record(kitchen_id="first-kitchen", compile_key="first")
+    second = _record(kitchen_id="second-kitchen", compile_key="second")
+
+    store.activate_kitchen(first.kitchen_id)
+    store.put(first)
+    store.retire_kitchen(first.kitchen_id)
+    store.activate_kitchen(second.kitchen_id)
+    store.put(second)
+    store.retire_kitchen(second.kitchen_id)
+
+    assert store.retired_kitchen_count == 1
+    with pytest.raises(RecipeGenerationRetiredError):
+        store.put(first)
+
+    store.activate_kitchen(first.kitchen_id)
+    assert store.put(first).kitchen_id == first.kitchen_id
+
+
 def test_concurrent_conflicting_surface_bind_has_one_winner() -> None:
     store = RecipeGenerationStore()
     record = store.put(_record())

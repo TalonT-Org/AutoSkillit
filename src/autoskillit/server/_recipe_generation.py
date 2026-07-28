@@ -24,16 +24,19 @@ from autoskillit.server.recipe_section._lifecycle import (
 
 RECIPE_GENERATION_STORE_MAX_ENTRIES = 8
 RECIPE_GENERATION_STORE_MAX_BYTES = 32 * 1024 * 1024
+RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS = 1_024
 
 __all__ = [
     "RECIPE_GENERATION_STORE_MAX_BYTES",
     "RECIPE_GENERATION_STORE_MAX_ENTRIES",
+    "RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS",
     "RecipeGenerationCapacityError",
     "RecipeGenerationConflictError",
     "RecipeGenerationError",
     "RecipeGenerationRecord",
     "RecipeGenerationRetiredError",
     "RecipeGenerationStore",
+    "activate_kitchen",
     "generation_json_primitive",
     "get_recipe_generation_store",
     "recipe_generation_weight_bytes",
@@ -245,17 +248,23 @@ class RecipeGenerationStore:
         *,
         max_entries: int = RECIPE_GENERATION_STORE_MAX_ENTRIES,
         max_bytes: int = RECIPE_GENERATION_STORE_MAX_BYTES,
+        max_retired_kitchens: int = RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS,
     ) -> None:
         if max_entries < 0:
             raise ValueError("generation store max_entries must not be negative")
         if max_bytes < 0:
             raise ValueError("generation store max_bytes must not be negative")
+        if max_retired_kitchens < 0:
+            raise ValueError("generation store max_retired_kitchens must not be negative")
         self._max_entries = max_entries
         self._max_bytes = max_bytes
+        self._max_retired_kitchens = max_retired_kitchens
         self._compile_index: OrderedDict[_CompileIndexKey, RecipeGenerationRecord] = OrderedDict()
         self._artifact_index: dict[_ArtifactIndexKey, _CompileIndexKey] = {}
         self._weight_bytes = 0
-        self._retired_kitchens: set[str] = set()
+        self._retired_kitchens: OrderedDict[str, None] = OrderedDict()
+        self._active_kitchens: set[str] = set()
+        self._lifecycle_authoritative = False
         self._lock = RLock()
 
     @property
@@ -268,8 +277,24 @@ class RecipeGenerationStore:
         with self._lock:
             return self._weight_bytes
 
+    @property
+    def retired_kitchen_count(self) -> int:
+        with self._lock:
+            return len(self._retired_kitchens)
+
+    def activate_kitchen(self, kitchen_id: str) -> None:
+        """Mark one current lifecycle identity active without retaining history."""
+        if not isinstance(kitchen_id, str) or not kitchen_id:
+            raise ValueError("kitchen_id must be a non-empty string")
+        with self._lock:
+            self._lifecycle_authoritative = True
+            self._active_kitchens.add(kitchen_id)
+            self._retired_kitchens.pop(kitchen_id, None)
+
     def _require_active_locked(self, kitchen_id: str) -> None:
-        if kitchen_id in self._retired_kitchens:
+        if (self._lifecycle_authoritative and kitchen_id not in self._active_kitchens) or (
+            not self._lifecycle_authoritative and kitchen_id in self._retired_kitchens
+        ):
             raise RecipeGenerationRetiredError(
                 f"recipe generation kitchen is retired: {kitchen_id}"
             )
@@ -439,7 +464,12 @@ class RecipeGenerationStore:
         if not isinstance(kitchen_id, str) or not kitchen_id:
             raise ValueError("kitchen_id must be a non-empty string")
         with self._lock:
-            self._retired_kitchens.add(kitchen_id)
+            self._active_kitchens.discard(kitchen_id)
+            if self._max_retired_kitchens > 0:
+                self._retired_kitchens[kitchen_id] = None
+                self._retired_kitchens.move_to_end(kitchen_id)
+                while len(self._retired_kitchens) > self._max_retired_kitchens:
+                    self._retired_kitchens.popitem(last=False)
             keys = [key for key in self._compile_index if key[0] == kitchen_id]
             for key in keys:
                 self._remove_locked(key)
@@ -451,6 +481,8 @@ class RecipeGenerationStore:
             self._artifact_index.clear()
             self._weight_bytes = 0
             self._retired_kitchens.clear()
+            self._active_kitchens.clear()
+            self._lifecycle_authoritative = False
 
 
 _RECIPE_GENERATION_STORE: RecipeGenerationStore | None = None
@@ -464,6 +496,11 @@ def get_recipe_generation_store() -> RecipeGenerationStore:
         if _RECIPE_GENERATION_STORE is None:
             _RECIPE_GENERATION_STORE = RecipeGenerationStore()
         return _RECIPE_GENERATION_STORE
+
+
+def activate_kitchen(kitchen_id: str) -> None:
+    """Activate generation state for one current kitchen lifecycle."""
+    get_recipe_generation_store().activate_kitchen(kitchen_id)
 
 
 def retire_kitchen(kitchen_id: str) -> None:

@@ -61,6 +61,9 @@ from autoskillit.hook_registry import (
 )
 from autoskillit.pipeline import create_background_task
 from autoskillit.server._guards import _backend_supports_quota
+from autoskillit.server._recipe_generation import (
+    activate_kitchen as activate_recipe_generation,
+)
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 from autoskillit.workspace import verify_install_state
 
@@ -321,6 +324,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
+    activate_recipe_generation(ctx.kitchen_id)
 
     _campaign_state_paths: list[Path] = []
     try:
@@ -372,6 +376,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):
         _mcp.disable(tags={tag})
     register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+    activate_recipe_generation(ctx.kitchen_id)
     _write_hook_config()
     _supports_quota = _backend_supports_quota(ctx)
     await _prime_quota_cache(supports_quota_check=_supports_quota)
@@ -456,6 +461,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
+    activate_recipe_generation(ctx.kitchen_id)
 
     try:
         _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
@@ -557,6 +563,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)
+    activate_recipe_generation(ctx.kitchen_id)
 
 
 _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | None] = {

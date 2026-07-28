@@ -77,6 +77,9 @@ from autoskillit.server._recipe_delivery import (
 )
 from autoskillit.server._recipe_execution import clear_recipe_execution
 from autoskillit.server._recipe_generation import (
+    activate_kitchen as activate_recipe_generation,
+)
+from autoskillit.server._recipe_generation import (
     retire_kitchen as retire_recipe_generation,
 )
 from autoskillit.server.tools._authority_feedback import (
@@ -518,6 +521,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("open_kitchen_registry_failed", exc_info=True)
+    activate_recipe_generation(ctx.kitchen_id)
 
     try:
         prune_stale_kitchen_state(ctx.project_dir, ctx.kitchen_id)

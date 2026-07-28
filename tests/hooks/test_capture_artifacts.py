@@ -641,10 +641,132 @@ def test_reject_mode_validates_capture_id(
     capture_id: str,
     capfd: pytest.CaptureFixture[str],
 ) -> None:
-    assert capture_artifacts._main(["reject", capture_id]) == 1
+    assert capture_artifacts._main(["reject", "", "/abs/project", capture_id]) == 1
     captured = capfd.readouterr()
     assert "invalid capture id" in captured.err
     assert "capture request rejected before command execution" not in captured.err
+
+
+def test_valid_reject_runs_one_runner_tail_sweep(
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    events: list[str] = []
+
+    class Store:
+        def sweep(self) -> None:
+            events.append("sweep")
+
+    class OpenLifecycle:
+        def __enter__(self):
+            events.append("open")
+            return Store()
+
+        def __exit__(self, *_args):
+            events.append("close")
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "open_capture_lifecycle",
+        lambda requested_cwd, *, create: OpenLifecycle(),
+    )
+
+    assert capture_artifacts._main(["reject", "", "/abs/project", _CAPTURE_ID]) == 1
+    assert events == ["open", "sweep", "close"]
+    assert "capture request rejected before command execution" in capfd.readouterr().err
+
+
+def test_runner_tail_preserves_dispatch_result_and_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+
+    class Store:
+        def sweep(self) -> None:
+            events.append("sweep")
+
+    class OpenLifecycle:
+        def __enter__(self):
+            events.append("open")
+            return Store()
+
+        def __exit__(self, *_args):
+            events.append("close")
+
+    def dispatch(*_args) -> int:
+        events.append("dispatch")
+        return 37
+
+    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", dispatch)
+    monkeypatch.setattr(
+        capture_artifacts,
+        "open_capture_lifecycle",
+        lambda requested_cwd, *, create: OpenLifecycle(),
+    )
+
+    assert capture_artifacts._main(["run", "encoded", "/abs/project", _CAPTURE_ID]) == 37
+    assert events == ["dispatch", "open", "sweep", "close"]
+
+
+def test_runner_tail_cleanup_failure_does_not_replace_user_result(
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
+
+    def fail_open(_requested_cwd, *, create):
+        raise capture_artifacts.CaptureLifecycleError("fault injection")
+
+    monkeypatch.setattr(capture_artifacts, "open_capture_lifecycle", fail_open)
+
+    assert capture_artifacts._main(["run", "encoded", "/abs/project", _CAPTURE_ID]) == 23
+    captured = capfd.readouterr()
+    assert captured.out == ""
+    assert "shell capture cleanup failed" in captured.err
+
+
+def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    swept: list[bool] = []
+
+    class Store:
+        def sweep(self) -> None:
+            swept.append(True)
+
+    class OpenLifecycle:
+        def __enter__(self):
+            return Store()
+
+        def __exit__(self, *_args):
+            return None
+
+    def fail_dispatch(*_args):
+        raise RuntimeError("fault injection")
+
+    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", fail_dispatch)
+    monkeypatch.setattr(
+        capture_artifacts,
+        "open_capture_lifecycle",
+        lambda requested_cwd, *, create: OpenLifecycle(),
+    )
+
+    assert capture_artifacts._main(["run", "encoded", "/abs/project", _CAPTURE_ID]) == 1
+    assert swept == [True]
+    assert "capture runner failed" in capfd.readouterr().err
+
+
+def test_malformed_runner_invocation_does_not_trigger_sweep(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_open(*_args, **_kwargs):
+        raise AssertionError("malformed invocation must not trigger cleanup")
+
+    monkeypatch.setattr(capture_artifacts, "open_capture_lifecycle", unexpected_open)
+
+    assert capture_artifacts._main(["reject", "nonempty", "/abs/project", _CAPTURE_ID]) == 1
+    assert capture_artifacts._main(["run", "encoded", "relative", _CAPTURE_ID]) == 1
 
 
 def test_verified_disabled_policy_runs_without_capture(
@@ -696,7 +818,7 @@ def test_spawn_failure_closes_created_artifact_fd(
     assert "CAPTURE_FAILED" in captured.err
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
     assert not (project / "command_ran").exists()
-    assert len(observed_fds) == 5
+    assert len(observed_fds) == 9
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)
@@ -737,7 +859,7 @@ def test_post_duplication_failure_closes_all_fds_and_prevents_command(
     assert "SHELL_OUTPUT_CAPTURED" not in captured.out + captured.err
     assert not (project / "command_ran").exists()
     assert artifact_path.read_bytes() == b""
-    assert len(observed_fds) == 5
+    assert len(observed_fds) == 9
     assert len(duplicated_fds) == 2
     for fd in [*observed_fds, *duplicated_fds]:
         with pytest.raises(OSError):

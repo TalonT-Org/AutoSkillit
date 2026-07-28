@@ -172,7 +172,7 @@ def test_invalid_command_transport_builds_nonexecuting_rejection(command):
     harness = _build_harness(command, "/abs/project", "0123456789abcdef")
     argv = _runner_argv(harness)
 
-    assert argv[3] == "reject"
+    assert argv[3:] == ["reject", "", "/abs/project", "0123456789abcdef"]
     assert command not in harness
 
 
@@ -244,7 +244,7 @@ def test_arg_max_exhaustion_builds_nonexecuting_rejection(
     )
     argv = _runner_argv(harness)
 
-    assert argv[3] == "reject"
+    assert argv[3:] == ["reject", "", cwd, capture_id]
     assert command not in harness
 
 

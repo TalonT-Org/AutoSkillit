@@ -84,7 +84,15 @@ def _build_harness(command: str, cwd: str, capture_id: str) -> str:
     except UnicodeEncodeError:
         command_bytes = b""
     if "\x00" in command or not command_bytes or len(command_bytes) > _MAX_COMMAND_BYTES:
-        argv = [sys.executable, "-I", str(_runner_path()), "reject", capture_id]
+        argv = [
+            sys.executable,
+            "-I",
+            str(_runner_path()),
+            "reject",
+            "",
+            cwd,
+            capture_id,
+        ]
         harness = _render_harness(argv)
     else:
         encoded = base64.b64encode(command_bytes).decode("ascii")
@@ -100,7 +108,15 @@ def _build_harness(command: str, cwd: str, capture_id: str) -> str:
         harness = _render_harness(argv, policy_command=command)
         outer_argv = ["bash", "-c", harness]
         if not _fits_arg_max(argv) or not _fits_arg_max(outer_argv):
-            argv = [sys.executable, "-I", str(_runner_path()), "reject", capture_id]
+            argv = [
+                sys.executable,
+                "-I",
+                str(_runner_path()),
+                "reject",
+                "",
+                cwd,
+                capture_id,
+            ]
             harness = _render_harness(argv)
     return harness
 

@@ -99,7 +99,7 @@ def _clear_plugin_cache(
     deadline = datetime.now(UTC) + timedelta(hours=6)
     for candidate in candidates:
         reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(candidate))
-        try:
+        with reader:
             with _InstallLock():
                 try:
                     identity = _read_installed_plugin_identity(candidate)
@@ -112,8 +112,6 @@ def _clear_plugin_cache(
                 )
                 if result.created:
                     created_ids.append(result.record_id)
-        finally:
-            reader.close()
 
     with _InstallLock():
         InstalledPluginsFile().remove(_AUTOSKILLIT_PLUGIN_KEY)

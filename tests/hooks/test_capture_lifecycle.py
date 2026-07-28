@@ -115,6 +115,41 @@ def test_quiet_live_writer_survives_past_abandonment_deadline(tmp_path: Path) ->
         anchor.close()
 
 
+def test_live_writer_sweep_closes_observation_descriptor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    observed_fd = -1
+
+    def writer_live(observed: capture_lifecycle._ObservedArtifact) -> None:
+        nonlocal observed_fd
+        observed_fd = observed.fd
+        raise capture_lifecycle._WriterLive
+
+    try:
+        clock.advance(7200)
+        monkeypatch.setattr(
+            CaptureLifecycleStore,
+            "_try_artifact_lease",
+            staticmethod(writer_live),
+        )
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+
+        assert outcome.writer_live == 1
+        assert observed_fd >= 0
+        with pytest.raises(OSError):
+            os.fstat(observed_fd)
+    finally:
+        artifact.close()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
 def test_writer_lease_is_visible_to_an_independent_process(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

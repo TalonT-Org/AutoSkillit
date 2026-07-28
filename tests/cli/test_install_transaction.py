@@ -111,6 +111,39 @@ class TestRollbackOnFailure:
         assert _retiring_paths(tmp_path) == retiring_before
         assert old_cache.is_dir(), "the live cache was destroyed by a failed install"
 
+    def test_partial_backup_cleanup_cannot_rearm_root_rollback(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.cli import _marketplace
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        target = _marketplace._installed_plugin_root()
+        target.mkdir(parents=True)
+        (target / "old").write_text("old")
+        snapshot = _marketplace._InstallSnapshot()
+        snapshot.stage_target_root()
+        backup = snapshot._target_backup
+        assert backup is not None
+        target.mkdir()
+        new_marker = target / "new"
+        new_marker.write_text("new")
+
+        def partially_remove_then_fail(path: Path) -> None:
+            assert path == backup
+            (path / "old").unlink()
+            raise PermissionError("injected partial backup cleanup")
+
+        monkeypatch.setattr(_marketplace.shutil, "rmtree", partially_remove_then_fail)
+
+        snapshot.commit()
+        snapshot.rollback()
+
+        assert new_marker.read_text() == "new"
+        assert snapshot._target_backup is None
+        assert snapshot._target_mutation_owned is False
+
     def test_target_lease_contention_does_not_mutate_the_live_root(
         self,
         tmp_path: Path,

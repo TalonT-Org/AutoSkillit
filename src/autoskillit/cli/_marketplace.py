@@ -294,10 +294,18 @@ class _InstallSnapshot:
 
     def commit(self) -> None:
         """Discard the rollback copy after the new incarnation is published."""
-        if self._target_backup is not None and self._target_backup.is_dir():
-            shutil.rmtree(self._target_backup)
+        backup = self._target_backup
         self._target_backup = None
         self._target_mutation_owned = False
+        if backup is not None and backup.is_dir():
+            try:
+                shutil.rmtree(backup)
+            except OSError:
+                logger.warning(
+                    "installed_plugin_backup_cleanup_failed",
+                    backup_path=str(backup),
+                    exc_info=True,
+                )
 
 
 def _marketplace_manifest_path() -> Path:

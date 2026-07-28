@@ -141,6 +141,7 @@ async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatc
     mock_ctx.config.migration.suppressed = []
     prior_initialization_state = mock_ctx.recipe_initialization_state
     mock_ctx.recipe_name = "already-active"
+    mock_ctx.gate.enabled = True
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -187,6 +188,11 @@ async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkey
     }
     mock_ctx.recipes.find.return_value = MagicMock()
     mock_ctx.config.migration.suppressed = []
+    mock_ctx.gate.enabled = False
+    mock_ctx.active_recipe_packs = None
+    mock_ctx.active_recipe_features = None
+    mock_ctx.active_recipe_steps = None
+    mock_ctx.active_recipe_ingredients = None
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -210,6 +216,10 @@ async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkey
     assert "version" in result
     assert result["valid"] is True
     assert result["suggestions"] == []
+    assert mock_ctx.active_recipe_packs == frozenset()
+    assert mock_ctx.active_recipe_features == frozenset()
+    assert mock_ctx.active_recipe_steps == {}
+    assert mock_ctx.active_recipe_ingredients == frozenset()
 
 
 @pytest.mark.anyio

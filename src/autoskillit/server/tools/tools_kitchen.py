@@ -877,7 +877,7 @@ async def open_kitchen(
 
         if not _skip_handler:
             handler_err = await _open_kitchen_handler(
-                preserve_active_recipe=ingredients_only,
+                preserve_active_recipe=ingredients_only and _ctx_pre.gate.enabled,
             )
             if handler_err is not None:
                 return handler_err

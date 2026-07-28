@@ -343,10 +343,17 @@ def _read_retiring_cache_unlocked() -> RetiringCacheReadResult:
         legacy_raw = raw["legacy_evidence"]
         if not isinstance(records_raw, list) or not isinstance(legacy_raw, list):
             raise ValueError("v2 retirement arrays are malformed")
+        records = tuple(_record_from_json(item) for item in records_raw)
+        legacy_evidence = tuple(_legacy_from_json(item) for item in legacy_raw)
+        record_ids = tuple(record.record_id for record in records) + tuple(
+            item.record_id for item in legacy_evidence
+        )
+        if len(frozenset(record_ids)) != len(record_ids):
+            raise ValueError("v2 retirement record IDs must be unique")
         return RetiringCacheReadResult(
             state=RetiringCacheState.EXACT_V2,
-            records=tuple(_record_from_json(item) for item in records_raw),
-            legacy_evidence=tuple(_legacy_from_json(item) for item in legacy_raw),
+            records=records,
+            legacy_evidence=legacy_evidence,
             schema_version=_RETIRING_CACHE_SCHEMA_VERSION,
         )
     except (

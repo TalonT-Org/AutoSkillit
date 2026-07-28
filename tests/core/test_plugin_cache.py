@@ -225,6 +225,25 @@ class TestRetiringCacheSchemaValidation:
         assert result.state is RetiringCacheState.CORRUPT
         assert result.records == ()
 
+    def test_v2_cache_rejects_duplicate_record_ids(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        append_retiring_record(_retiring_record(tmp_path))
+        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
+        payload = json.loads(cache.read_text())
+        payload["records"].append(dict(payload["records"][0]))
+        cache.write_text(json.dumps(payload))
+        before = cache.read_bytes()
+
+        result = read_retiring_cache()
+
+        assert result.state is RetiringCacheState.CORRUPT
+        assert result.records == ()
+        assert cache.read_bytes() == before
+
     @pytest.mark.parametrize(
         "content",
         [

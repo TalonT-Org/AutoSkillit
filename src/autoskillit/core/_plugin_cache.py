@@ -497,6 +497,13 @@ def _retirement_intent(record: RetiringArtifactRecord) -> tuple[object, ...]:
     )
 
 
+def _retirement_staging_path(record: RetiringArtifactRecord) -> Path:
+    record_digest = hashlib.sha256(record.record_id.encode()).hexdigest()[:16]
+    return record.managed_path.parent / (
+        f".{record.managed_path.name}.autoskillit-retiring-{record_digest}"
+    )
+
+
 def append_retiring_record(
     record: RetiringArtifactRecord,
     *,
@@ -747,28 +754,54 @@ class PluginArtifactRetirementEngine:
                     )
                 if now < queued.not_before:
                     return RetirementOutcome.DEFERRED_NOT_DUE
-                if not record.managed_path.exists() and not record.manifest_path.exists():
+                staging_path = _retirement_staging_path(record)
+                managed_exists = record.managed_path.exists() or record.managed_path.is_symlink()
+                manifest_exists = (
+                    record.manifest_path.exists() or record.manifest_path.is_symlink()
+                )
+                staging_exists = staging_path.exists() or staging_path.is_symlink()
+                if not managed_exists and not manifest_exists and not staging_exists:
                     remove_retiring_records((record.record_id,))
                     return RetirementOutcome.RECORD_REMOVED
+                if staging_exists:
+                    if managed_exists or staging_path.is_symlink() or not staging_path.is_dir():
+                        return self._log_reclaim(
+                            record,
+                            RetirementOutcome.DEFERRED_IO_ERROR,
+                            detail=f"retirement staging path is ambiguous: {staging_path}",
+                        )
+                else:
+                    try:
+                        current = self._current_identity(record)
+                    except PluginArtifactValidationError:
+                        remove_retiring_records((record.record_id,))
+                        return self._log_reclaim(
+                            record,
+                            RetirementOutcome.REJECTED_IDENTITY,
+                            failed_validation=True,
+                        )
+                    if current != record.identity:
+                        remove_retiring_records((record.record_id,))
+                        return self._log_reclaim(
+                            record,
+                            RetirementOutcome.REJECTED_IDENTITY,
+                        )
+                    try:
+                        os.rename(record.managed_path, staging_path)
+                    except OSError as exc:
+                        return self._log_reclaim(
+                            record,
+                            RetirementOutcome.DEFERRED_IO_ERROR,
+                            detail=str(exc),
+                        )
                 try:
-                    current = self._current_identity(record)
-                except PluginArtifactValidationError:
-                    remove_retiring_records((record.record_id,))
-                    return self._log_reclaim(
-                        record,
-                        RetirementOutcome.REJECTED_IDENTITY,
-                        failed_validation=True,
-                    )
-                if current != record.identity:
-                    remove_retiring_records((record.record_id,))
-                    return self._log_reclaim(
-                        record,
-                        RetirementOutcome.REJECTED_IDENTITY,
-                    )
-                try:
-                    shutil.rmtree(record.managed_path)
                     if record.manifest_path.is_file() or record.manifest_path.is_symlink():
                         record.manifest_path.unlink()
+                    elif record.manifest_path.exists():
+                        raise OSError(
+                            f"retirement manifest is not removable: {record.manifest_path}"
+                        )
+                    shutil.rmtree(staging_path)
                     remove_retiring_records((record.record_id,))
                 except OSError as exc:
                     return self._log_reclaim(

@@ -64,6 +64,25 @@ def _retiring_record(tmp_path: Path) -> RetiringArtifactRecord:
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("record_id", True),
+        ("artifact_kind", "installed_plugin"),
+        ("semantic_key", True),
+        ("manifest_schema_version", True),
+        ("manifest_schema_version", 1.5),
+    ],
+)
+def test_retiring_record_requires_exact_authority_types(
+    tmp_path: Path,
+    field: str,
+    invalid: object,
+) -> None:
+    with pytest.raises(ValueError):
+        replace(_retiring_record(tmp_path), **{field: invalid})
+
+
 def test_retirement_deduplication_ignores_regenerated_deadline(
     monkeypatch,
     tmp_path: Path,

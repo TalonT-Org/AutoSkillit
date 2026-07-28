@@ -177,6 +177,16 @@ class RetiringArtifactRecord:
     schema_version: int = 2
 
     def __post_init__(self) -> None:
+        if type(self.record_id) is not str or not self.record_id:
+            raise ValueError("retiring artifact record_id must be a non-empty string")
+        if type(self.artifact_kind) is not PluginArtifactKind:
+            raise ValueError("retiring artifact kind must be a PluginArtifactKind")
+        if type(self.semantic_key) is not str or not self.semantic_key:
+            raise ValueError("retiring artifact semantic_key must be a non-empty string")
+        if type(self.manifest_schema_version) is not int or self.manifest_schema_version < 1:
+            raise ValueError(
+                "retiring artifact manifest schema version must be a positive integer"
+            )
         object.__setattr__(self, "managed_path", Path(self.managed_path))
         object.__setattr__(self, "manifest_path", Path(self.manifest_path))
         object.__setattr__(
@@ -189,9 +199,7 @@ class RetiringArtifactRecord:
             "not_before",
             _normalized_utc(self.not_before, field_name="not_before"),
         )
-        if not self.record_id:
-            raise ValueError("retiring artifact record_id must not be empty")
-        if not self.semantic_key or not self.incarnation_id or not self.artifact_digest:
+        if not self.incarnation_id or not self.artifact_digest:
             raise ValueError("retiring artifact identity fields must not be empty")
         if not is_canonical_plugin_artifact_incarnation_id(self.incarnation_id):
             raise ValueError("retiring artifact incarnation_id must be canonical uuid4 hex")
@@ -199,8 +207,6 @@ class RetiringArtifactRecord:
             raise ValueError("retiring artifact digest must be lowercase SHA-256 hex")
         if not self.managed_path.is_absolute() or not self.manifest_path.is_absolute():
             raise ValueError("retiring artifact paths must be absolute")
-        if self.manifest_schema_version < 1:
-            raise ValueError("retiring artifact manifest schema version must be positive")
         if self.schema_version != 2:
             raise ValueError("retiring artifact record schema_version must be 2")
         if self.not_before < self.retired_at:

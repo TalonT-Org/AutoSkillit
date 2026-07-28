@@ -272,8 +272,8 @@ class ProjectedPluginArtifactAuthority:
     cwd: Path | None = None
 
     def __post_init__(self) -> None:
-        if self.projection_version < 1:
-            raise ValueError("projection_version must be positive")
+        if type(self.projection_version) is not int or self.projection_version < 1:
+            raise ValueError("projection_version must be a positive integer")
         if self.namespace_sources is not None:
             object.__setattr__(
                 self,

@@ -49,6 +49,14 @@ def test_authority_creation_is_lazy(tmp_path: Path, monkeypatch) -> None:
     assert not (tmp_path / ".autoskillit").exists()
 
 
+@pytest.mark.parametrize("invalid", [True, 1.5, 0])
+def test_authority_requires_exact_positive_projection_version(
+    invalid: object,
+) -> None:
+    with pytest.raises(ValueError, match="positive integer"):
+        project_default_plugin_authority(projection_version=invalid)  # type: ignore[arg-type]
+
+
 def test_projection_publication_preserves_control_flow_exceptions(
     tmp_path: Path,
     monkeypatch,

@@ -255,8 +255,10 @@ class TestPluginArtifactLifecycleLogging:
 
         class Lease:
             closed = False
+            close_calls = 0
 
             def close(self) -> None:
+                self.close_calls += 1
                 self.closed = True
 
         lease = Lease()
@@ -292,3 +294,4 @@ class TestPluginArtifactLifecycleLogging:
         assert logs[0]["child_pid"] is None
         assert isinstance(logs[0]["actor_pid"], int)
         assert all(entry["event"] == "plugin_artifact_lifecycle" for entry in logs)
+        assert lease.close_calls == 1

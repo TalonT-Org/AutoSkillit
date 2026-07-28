@@ -1449,7 +1449,6 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     context_tree = ast.parse(context_path.read_text())
 
     EXEMPT = {
-        "plugin_authority",
         "config",
         "active_recipe_packs",
         "active_recipe_features",

@@ -252,6 +252,8 @@ def test_projection_reclaim_preserves_outcome_when_writer_close_fails(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    from autoskillit.workspace._projection_cache import projected_artifact_lease_path
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     binding = _authority(tmp_path).acquire_launch_binding(
         backend=ClaudeCodeBackend(),
@@ -267,31 +269,54 @@ def test_projection_reclaim_preserves_outcome_when_writer_close_fails(
     owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
     real_close = ArtifactLease.close
+    close_calls = 0
 
     def fail_after_close(lease: ArtifactLease) -> None:
+        nonlocal close_calls
+        close_calls += 1
         real_close(lease)
         raise OSError("injected retirement writer close failure")
 
     monkeypatch.setattr(ArtifactLease, "close", fail_after_close)
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.RECLAIMED
+    assert close_calls == 1
+    monkeypatch.setattr(ArtifactLease, "close", real_close)
+    with ArtifactLease.acquire_exclusive(
+        projected_artifact_lease_path(identity.managed_path),
+        blocking=False,
+    ):
+        pass
 
 
 def test_projection_prune_preserves_validation_skip_when_writer_close_fails(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    from autoskillit.workspace._projection_cache import projected_artifact_lease_path
+
     projections_root = tmp_path / "projections"
-    (projections_root / "invalid-stale-projection").mkdir(parents=True)
+    stale = projections_root / "invalid-stale-projection"
+    stale.mkdir(parents=True)
     real_close = ArtifactLease.close
+    close_calls = 0
 
     def fail_after_close(lease: ArtifactLease) -> None:
+        nonlocal close_calls
+        close_calls += 1
         real_close(lease)
         raise OSError("injected prune writer close failure")
 
     monkeypatch.setattr(ArtifactLease, "close", fail_after_close)
 
     assert prune_stale_projections(projections_root, active_key="active") == 0
+    assert close_calls == 1
+    monkeypatch.setattr(ArtifactLease, "close", real_close)
+    with ArtifactLease.acquire_exclusive(
+        projected_artifact_lease_path(stale),
+        blocking=False,
+    ):
+        pass
 
 
 def test_corrupt_live_incarnation_is_not_replaced_until_reader_closes(

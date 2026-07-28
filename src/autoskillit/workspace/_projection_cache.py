@@ -30,11 +30,11 @@ from autoskillit.core import (
     RetiringAppendResult,
     RetiringArtifactRecord,
     _InstallLock,
-    decode_versioned_json_bytes,
     directory_tree_digest,
     get_logger,
     is_canonical_plugin_artifact_digest,
     is_canonical_plugin_artifact_incarnation_id,
+    read_versioned_json,
 )
 
 logger = get_logger(__name__)
@@ -161,19 +161,15 @@ def read_projected_plugin_identity(
             f"projected plugin identity manifest is not a regular file: {selected_manifest}"
         )
     try:
-        manifest_bytes = selected_manifest.read_bytes()
-    except FileNotFoundError as exc:
-        raise PluginArtifactValidationError(
-            f"projected plugin identity manifest is missing: {selected_manifest}"
-        ) from exc
+        manifest = read_versioned_json(
+            selected_manifest,
+            PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            raise_io_errors=True,
+        )
     except OSError as exc:
         raise PluginArtifactUnavailableError(
             f"projected plugin identity manifest cannot be read: {selected_manifest}"
         ) from exc
-    manifest = decode_versioned_json_bytes(
-        manifest_bytes,
-        PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-    )
     if manifest is None:
         raise PluginArtifactValidationError(
             f"projected plugin identity manifest is unreadable: {selected_manifest}"

@@ -429,11 +429,14 @@ def read_versioned_json(
     expected_version: int,
     *,
     logger: _WarningLogger | None = None,
+    raise_io_errors: bool = False,
 ) -> dict[str, Any] | None:
     """Read a versioned JSON artifact and validate its schema_version.
 
-    Returns the parsed dict on version match, None on any failure
-    (missing file, corrupt JSON, non-dict, missing/mismatched schema_version).
+    Returns the parsed dict on version match, None on a missing file, corrupt
+    JSON, non-dict, or missing/mismatched schema_version. When
+    ``raise_io_errors`` is true, non-missing filesystem errors are re-raised so
+    artifact authorities can distinguish transient unreadability from absence.
     Logs a deduped drift warning on version mismatch.
     """
     import json as _json
@@ -441,7 +444,13 @@ def read_versioned_json(
 
     try:
         raw = _json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, _json.JSONDecodeError, OSError):
+    except FileNotFoundError:
+        return None
+    except OSError:
+        if raise_io_errors:
+            raise
+        return None
+    except _json.JSONDecodeError:
         return None
     if not isinstance(raw, dict):
         return None

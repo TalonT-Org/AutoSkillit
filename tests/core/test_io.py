@@ -399,6 +399,21 @@ class TestReadVersionedJson:
         result = read_versioned_json(tmp_path / "nonexistent.json", expected_version=1)
         assert result is None
 
+    def test_read_versioned_json_can_raise_transient_io_errors(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        target = tmp_path / "unreadable.json"
+        target.write_text('{"schema_version": 1}', encoding="utf-8")
+
+        def fail_read_text(*_args, **_kwargs):
+            raise PermissionError("injected transient read failure")
+
+        monkeypatch.setattr(Path, "read_text", fail_read_text)
+        with pytest.raises(PermissionError, match="injected transient read failure"):
+            read_versioned_json(target, expected_version=1, raise_io_errors=True)
+
     def test_read_versioned_json_returns_none_on_corrupt_json(self, tmp_path: Path) -> None:
 
         target = tmp_path / "bad.json"

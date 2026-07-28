@@ -20,11 +20,17 @@ from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
 from ._json import fast_loads as fast_loads
-from ._plugin_cache import (
+from ._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
 )
-from ._plugin_cache import (
+from ._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
+)
+from ._plugin_artifact_identity import (
+    installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
+)
+from ._plugin_artifact_identity import (
+    read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
 )
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
@@ -32,15 +38,9 @@ from ._plugin_cache import any_kitchen_open as any_kitchen_open
 from ._plugin_cache import append_retiring_record as append_retiring_record
 from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
 from ._plugin_cache import due_retiring_records as due_retiring_records
-from ._plugin_cache import (
-    installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
-)
 from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
 from ._plugin_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
 from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens_registry
-from ._plugin_cache import (
-    read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
-)
 from ._plugin_cache import read_retiring_cache as read_retiring_cache
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
 from ._plugin_cache import remove_retiring_records as remove_retiring_records

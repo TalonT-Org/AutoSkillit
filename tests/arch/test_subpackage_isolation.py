@@ -834,6 +834,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _plugin_cache.py adds the plugin cache lifecycle: retiring cache sweep,
             install locking, and kitchen registry (accessible from server/ without
             cli/ import).
+            _plugin_artifact_identity.py isolates exact installed-artifact manifest
+            validation from retirement-cache orchestration so both IL-0 authorities
+            remain below the source-module line limit.
             feature_flags.py adds the IL-0 is_feature_enabled() primitive — must live
             in core/ to be importable by all layers without cross-layer violations.
             session_registry.py adds the stdlib-only session registry mapping
@@ -936,7 +939,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 19,
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 28,  # +context admission +audit-cycle verifier/tool registry
+        "core": 29,  # +plugin artifact identity authority
         "core/types": 41,  # +context persistence, audit, binding, execution, intake types
         "cli": 22,  # +_plugin_artifact exact installed-incarnation authority (#4382)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks

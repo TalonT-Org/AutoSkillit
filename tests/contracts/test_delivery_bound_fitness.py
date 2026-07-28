@@ -185,7 +185,11 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     )
 
     caps = _backend_capabilities()[backend_name]
-    bound_bytes = resolve_recipe_envelope_byte_limit(caps)
+    if finalized.decision.reason == "exemption_overrides_envelope":
+        assert caps.recipe_delivery_budget is None
+        bound_bytes = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
+    else:
+        bound_bytes = resolve_recipe_envelope_byte_limit(caps)
     envelope = json.loads(finalized.rendered)
     assert len(finalized.rendered.encode("utf-8")) <= bound_bytes, (
         f"{backend_name}: envelope for {recipe_name} exceeds "

@@ -740,6 +740,9 @@ def test_finalized_capture_ttl_begins_at_terminal_commit(tmp_path: Path) -> None
         (0, "0" * 63, False),
         (0, "G" * 64, False),
         (0, "invalid", True),
+        (0, _DIGEST, False),
+        (0, _DIGEST, 1),
+        (0, "", 0),
     ],
 )
 def test_finalize_rejects_invalid_integrity_metadata(
@@ -747,7 +750,7 @@ def test_finalize_rejects_invalid_integrity_metadata(
     size: int,
     sha256: str,
     *,
-    failed: bool,
+    failed: object,
 ) -> None:
     project = tmp_path / "project"
     clock = _Clock()
@@ -762,7 +765,7 @@ def test_finalize_rejects_invalid_integrity_metadata(
                 _CAPTURE_ID,
                 size=size,
                 sha256=sha256,
-                failed=failed,
+                failed=failed,  # type: ignore[arg-type]
             )
         assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
     finally:

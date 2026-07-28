@@ -10,6 +10,7 @@ import errno
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -169,6 +170,15 @@ def _pair(value: object, field: str) -> tuple[int, int]:
     return (value[0], value[1])
 
 
+def _is_finite_timestamp(value: object) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return False
+
+
 def _record_from_dict(value: object) -> CaptureLifecycleRecord:
     if not isinstance(value, dict):
         raise CaptureLedgerError("record is not an object")
@@ -194,14 +204,9 @@ def _record_from_dict(value: object) -> CaptureLifecycleRecord:
         or not _STAGING_NAME_RE.fullmatch(staging_name)
         or not isinstance(public_name, str)
         or not _PUBLIC_NAME_RE.fullmatch(public_name)
-        or not isinstance(created_at, (int, float))
-        or isinstance(created_at, bool)
-        or not isinstance(next_attempt_at, (int, float))
-        or isinstance(next_attempt_at, bool)
-        or (
-            retention_at is not None
-            and (not isinstance(retention_at, (int, float)) or isinstance(retention_at, bool))
-        )
+        or not _is_finite_timestamp(created_at)
+        or not _is_finite_timestamp(next_attempt_at)
+        or (retention_at is not None and not _is_finite_timestamp(retention_at))
         or not isinstance(size, int)
         or isinstance(size, bool)
         or size < 0

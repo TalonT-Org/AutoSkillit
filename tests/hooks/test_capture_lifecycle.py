@@ -21,6 +21,7 @@ from autoskillit.hooks._capture_artifacts import (
 )
 from autoskillit.hooks._capture_lifecycle import (
     CaptureLedgerError,
+    CaptureLifecycleRecord,
     CaptureLifecycleStore,
     CaptureState,
 )
@@ -43,6 +44,26 @@ class _Clock:
 
     def advance(self, seconds: float) -> None:
         self.value += seconds
+
+
+@pytest.mark.parametrize("field_name", ("created_at", "next_attempt_at", "retention_at"))
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
+def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> None:
+    record = CaptureLifecycleRecord(
+        capture_id=_CAPTURE_ID,
+        state=CaptureState.RESERVED,
+        staging_name=f".capture-staging-{_CAPTURE_ID}-0000000000000000",
+        public_name=f"shell_{_CAPTURE_ID}.log",
+        project_identity=(1, 2),
+        root_identity=(3, 4),
+        created_at=1.0,
+        next_attempt_at=2.0,
+    )
+    serialized = capture_lifecycle._record_to_dict(record)
+    serialized[field_name] = value
+
+    with pytest.raises(CaptureLedgerError, match="invalid lifecycle record fields"):
+        capture_lifecycle._record_from_dict(serialized)
 
 
 def _open_store(project: Path, clock: _Clock):

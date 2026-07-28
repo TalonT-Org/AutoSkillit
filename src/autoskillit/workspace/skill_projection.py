@@ -787,6 +787,19 @@ class _StagedProjectedArtifact:
     identity: PluginArtifactIdentity
 
 
+def _discard_staging_manifest(manifest: Path) -> None:
+    """Best-effort cleanup that never replaces the active publication error."""
+    try:
+        if manifest.is_symlink() or manifest.is_file():
+            manifest.unlink()
+    except OSError as exc:
+        logger.warning(
+            "projected_plugin_staging_cleanup_failed",
+            manifest_path=str(manifest),
+            error=str(exc),
+        )
+
+
 def _stage_projected_plugin_artifact(
     plan: _ProjectedArtifactPlan,
 ) -> _StagedProjectedArtifact:
@@ -837,8 +850,7 @@ def _stage_projected_plugin_artifact(
         )
     except BaseException:
         shutil.rmtree(staging_root, ignore_errors=True)
-        if staging_manifest.is_symlink() or staging_manifest.is_file():
-            staging_manifest.unlink()
+        _discard_staging_manifest(staging_manifest)
         raise
 
 
@@ -1134,8 +1146,7 @@ class ProjectedPluginArtifactAuthority:
                     finally:
                         if staged is not None:
                             shutil.rmtree(staged.root, ignore_errors=True)
-                            if staged.manifest.is_symlink() or staged.manifest.is_file():
-                                staged.manifest.unlink()
+                            _discard_staging_manifest(staged.manifest)
                     assert staged is not None
                     try:
                         identity = _validate_published_plugin_artifact(

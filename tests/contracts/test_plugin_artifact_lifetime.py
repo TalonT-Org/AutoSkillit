@@ -72,6 +72,43 @@ def test_projection_publication_preserves_control_flow_exceptions(
         )
 
 
+def test_projection_staging_cleanup_preserves_primary_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from unittest.mock import Mock
+
+    import autoskillit.workspace.skill_projection as projection
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    plan = _authority(tmp_path)._plan(ClaudeCodeBackend())
+    plan.destination.parent.mkdir(parents=True)
+    logger = Mock()
+    monkeypatch.setattr(projection, "logger", logger)
+
+    def fail_after_manifest_write(path: Path, *_args, **_kwargs) -> None:
+        path.write_text("staged")
+        raise RuntimeError("primary staging failure")
+
+    original_unlink = Path.unlink
+
+    def fail_staging_manifest_unlink(path: Path, *args, **kwargs) -> None:
+        if ".manifest-" in path.name:
+            raise OSError("cleanup unlink failure")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(projection, "write_versioned_json", fail_after_manifest_write)
+    monkeypatch.setattr(Path, "unlink", fail_staging_manifest_unlink)
+
+    with pytest.raises(RuntimeError, match="primary staging failure"):
+        projection._stage_projected_plugin_artifact(plan)
+
+    logger.warning.assert_called_once()
+    assert logger.warning.call_args.args == ("projected_plugin_staging_cleanup_failed",)
+    assert logger.warning.call_args.kwargs["error"] == "cleanup unlink failure"
+    assert ".manifest-" in Path(logger.warning.call_args.kwargs["manifest_path"]).name
+
+
 def test_binding_owns_exact_v2_incarnation_and_stable_sidecar(
     tmp_path: Path,
     monkeypatch,

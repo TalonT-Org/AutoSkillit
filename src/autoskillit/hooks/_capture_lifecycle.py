@@ -1,8 +1,4 @@
-"""Descriptor-relative durable lifecycle for retained shell captures.
-
-The module is a stdlib-only dependency leaf.  Callers provide an already-open
-capture-root descriptor; pathname authority never enters this layer.
-"""
+"""Descriptor-relative durable lifecycle for retained shell captures."""
 
 from __future__ import annotations
 
@@ -21,12 +17,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _ledger as _capture_ledger
+    from autoskillit.hooks._capture import _resolver as _capture_resolver
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
     from autoskillit.hooks._capture import _sweep as _capture_sweep
     from autoskillit.hooks._capture import _types as _capture_types
 else:
     _CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
     _capture_ledger = importlib.import_module(f"{_CAPTURE_PACKAGE}._ledger")
+    _capture_resolver = importlib.import_module(f"{_CAPTURE_PACKAGE}._resolver")
     _capture_snapshot = importlib.import_module(f"{_CAPTURE_PACKAGE}._snapshot")
     _capture_sweep = importlib.import_module(f"{_CAPTURE_PACKAGE}._sweep")
     _capture_types = importlib.import_module(f"{_CAPTURE_PACKAGE}._types")
@@ -35,7 +33,7 @@ CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 _ObservedArtifact = _capture_types.ObservedArtifact
 _LockContended = _capture_types.LockContended
 _Tampered = _capture_types.Tampered
-_WriterLive = _capture_types.WriterLive
+_CarrierLeaseLive = _capture_types.CarrierLeaseLive
 
 CaptureAuthorityError = _capture_snapshot.CaptureAuthorityError
 CaptureFailureEvidence = _capture_snapshot.CaptureFailureEvidence
@@ -103,10 +101,6 @@ CaptureLifecycleRecord = _capture_ledger.CaptureLifecycleRecord
 
 def _identity(value: os.stat_result) -> tuple[int, int]:
     return (value.st_dev, value.st_ino)
-
-
-def _plain_int(value: object, *, minimum: int = 0) -> bool:
-    return _capture_ledger._plain_int(value, minimum=minimum)
 
 
 def _record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:
@@ -618,7 +612,7 @@ class CaptureLifecycleStore:
     ) -> CaptureLifecycleRecord:
         if type(evidence) is not CaptureFailureEvidence:
             raise CaptureLifecycleError("failure transition requires typed evidence")
-        if not _plain_int(observed_size):
+        if not _capture_ledger._plain_int(observed_size):
             raise CaptureLifecycleError("invalid observed capture size")
         now = self._wall_clock()
         return self._transition(
@@ -755,20 +749,32 @@ class CaptureLifecycleStore:
             records, _compaction_epoch, _size = self._load_locked()
             return records.get(capture_id)
 
+    def open_verified_capture(self, token: str) -> _capture_snapshot.VerifiedCaptureReader:
+        """Resolve #4325's opaque retrieval seam under a retained shared lease."""
+        return _capture_resolver.open_verified_capture(
+            self,
+            token,
+            lifecycle_error=CaptureLifecycleError,
+        )
+
+    def _adopt_verified_capture(
+        self,
+        finalized: FinalizedCapture,
+        fd: int,
+    ) -> _capture_snapshot.VerifiedCaptureReader:
+        return _capture_resolver.adopt_verified_capture(
+            self,
+            finalized,
+            fd,
+            lifecycle_error=CaptureLifecycleError,
+        )
+
     @staticmethod
     def acquire_writer_lease(artifact_fd: int) -> int:
-        try:
-            lease_fd = os.dup(artifact_fd)
-        except OSError as exc:
-            raise CaptureLifecycleError("cannot duplicate writer lease descriptor") from exc
-        try:
-            fcntl.flock(lease_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return lease_fd
-        except OSError as exc:
-            os.close(lease_fd)
-            if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                raise CaptureLifecycleError("writer lease unexpectedly contended") from exc
-            raise CaptureLifecycleError("writer lease capability unavailable") from exc
+        return _capture_resolver.acquire_writer_lease(
+            artifact_fd,
+            lifecycle_error=CaptureLifecycleError,
+        )
 
     def _observe(
         self,
@@ -793,7 +799,7 @@ class CaptureLifecycleStore:
             fcntl.flock(observed.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
             if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                raise _WriterLive from exc
+                raise _CarrierLeaseLive from exc
             raise CaptureLifecycleError("artifact lease capability failure") from exc
 
     def _normalize_abandoned(
@@ -819,12 +825,17 @@ class CaptureLifecycleStore:
             nonce=secrets.token_hex(8),
         )
 
-    def _quarantine_delete(self, record: CaptureLifecycleRecord) -> int:
+    def _quarantine_delete(
+        self,
+        record: CaptureLifecycleRecord,
+        authorize_delete: Callable[[], None] | None = None,
+    ) -> int:
         return _capture_sweep.quarantine_delete(
             record,
             root_fd=self._root_fd,
             observe=self._observe,
             try_lease=self._try_artifact_lease,
+            authorize_delete=authorize_delete,
             public_name_pattern=_PUBLIC_NAME_RE,
             quarantine_name_pattern=_QUARANTINE_NAME_RE,
         )
@@ -892,16 +903,23 @@ class CaptureLifecycleStore:
                     records, compaction_epoch, size = self._load_locked()
                     record = records[capture_id]
                 deleting = self._deleting_record(record)
-                if deleting is not record:
-                    self._append_locked(
-                        deleting,
-                        records,
-                        compaction_epoch,
-                        size,
-                    )
-                    records, compaction_epoch, size = self._load_locked()
-                    record = records[capture_id]
-                deleted_bytes = self._quarantine_delete(record)
+
+                def authorize_delete() -> None:
+                    nonlocal record, records, compaction_epoch, size
+                    if deleting is not record:
+                        self._append_locked(
+                            deleting,
+                            records,
+                            compaction_epoch,
+                            size,
+                        )
+                        records, compaction_epoch, size = self._load_locked()
+                        record = records[capture_id]
+
+                deleted_bytes = self._quarantine_delete(
+                    deleting,
+                    authorize_delete,
+                )
                 deleted = replace(
                     record,
                     state=CaptureState.DELETED,
@@ -916,7 +934,7 @@ class CaptureLifecycleStore:
                     size,
                 )
                 return ("deleted", deleted_bytes, 0)
-            except _WriterLive:
+            except _CarrierLeaseLive:
                 live = replace(
                     record,
                     next_attempt_at=now + 30.0,
@@ -928,7 +946,7 @@ class CaptureLifecycleStore:
                     compaction_epoch,
                     size,
                 )
-                return ("writer_live", 0, 0)
+                return ("carrier_lease_live", 0, 0)
             except _Tampered:
                 tampered = replace(
                     record,

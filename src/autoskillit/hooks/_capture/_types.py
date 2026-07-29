@@ -12,7 +12,7 @@ class CaptureCleanupOutcome:
     examined: int = 0
     deleted: int = 0
     deleted_bytes: int = 0
-    writer_live: int = 0
+    carrier_lease_live: int = 0
     not_due: int = 0
     tampered: int = 0
     errors: int = 0
@@ -29,7 +29,7 @@ class ObservedArtifact:
     size: int
 
 
-class WriterLive(Exception):
+class CarrierLeaseLive(Exception):
     pass
 
 

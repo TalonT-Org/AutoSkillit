@@ -193,13 +193,19 @@ def test_manifest_wire_decode_is_strict_and_non_authoritative(tmp_path: Path) ->
         os.close(fd)
 
 
-def test_package_and_isolated_import_orders_share_one_snapshot_module() -> None:
+def test_package_and_isolated_import_orders_share_authority_modules() -> None:
     hooks_dir = Path(__file__).parents[2] / "src" / "autoskillit" / "hooks"
     code = (
         "import importlib,sys;"
         f"sys.path.insert(0,{str(hooks_dir)!r});"
         "a=importlib.import_module('_capture._snapshot');"
         "b=importlib.import_module('autoskillit.hooks._capture._snapshot');"
+        "assert a is b;"
+        "a=importlib.import_module('_capture._reader');"
+        "b=importlib.import_module('autoskillit.hooks._capture._reader');"
+        "assert a is b;"
+        "a=importlib.import_module('_capture._resolver');"
+        "b=importlib.import_module('autoskillit.hooks._capture._resolver');"
         "assert a is b"
     )
     completed = subprocess.run(

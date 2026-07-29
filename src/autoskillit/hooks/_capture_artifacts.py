@@ -47,6 +47,8 @@ if TYPE_CHECKING:
         CaptureMeasurement,
         CaptureWriteAuthority,
         CommandOutcome,
+        FinalizedCapture,
+        VerifiedCaptureReader,
         VerifiedCaptureSnapshot,
         verify_capture_snapshot,
     )
@@ -83,6 +85,8 @@ else:
         CaptureMeasurement,
         CaptureWriteAuthority,
         CommandOutcome,
+        FinalizedCapture,
+        VerifiedCaptureReader,
         VerifiedCaptureSnapshot,
         verify_capture_snapshot,
     )
@@ -141,6 +145,7 @@ class CaptureArtifact:
     identity: FileIdentity
     lease_fd: int
     authority: CaptureWriteAuthority
+    drain_writer_fd: int = -1
     _factory_token: InitVar[object | None] = None
 
     def __post_init__(self, _factory_token: object | None) -> None:
@@ -151,13 +156,46 @@ class CaptureArtifact:
         """Close only the artifact data descriptor; keep the writer lease held."""
 
         if self.fd >= 0:
-            os.close(self.fd)
+            descriptor = self.fd
             object.__setattr__(self, "fd", -1)
+            os.close(descriptor)
 
     def release_lease(self) -> None:
         if self.lease_fd >= 0:
-            os.close(self.lease_fd)
+            descriptor = self.lease_fd
             object.__setattr__(self, "lease_fd", -1)
+            os.close(descriptor)
+
+    def close_drain_writer(self) -> None:
+        if self.drain_writer_fd >= 0:
+            descriptor = self.drain_writer_fd
+            object.__setattr__(self, "drain_writer_fd", -1)
+            os.close(descriptor)
+
+    def transfer_to_reader(
+        self,
+        lifecycle: CaptureLifecycleStore,
+        finalized: FinalizedCapture,
+    ) -> VerifiedCaptureReader:
+        """Move the retained producer-exclusive carrier lease into a reader."""
+
+        if self.drain_writer_fd >= 0:
+            raise CaptureSetupError("capture drain writer is still open")
+        if self.fd < 0 or self.lease_fd < 0:
+            raise CaptureSetupError("capture artifact ownership is unavailable")
+        carrier_fd = self.fd
+        lease_fd = self.lease_fd
+        object.__setattr__(self, "fd", -1)
+        object.__setattr__(self, "lease_fd", -1)
+        try:
+            os.close(lease_fd)
+        except OSError as exc:
+            try:
+                os.close(carrier_fd)
+            except OSError:
+                pass
+            raise CaptureSetupError("cannot transfer capture carrier lease") from exc
+        return lifecycle._adopt_verified_capture(finalized, carrier_fd)
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,9 +259,12 @@ def _duplicate_artifact_writer(artifact: CaptureArtifact) -> int:
 
     writer_fd = -1
     try:
+        if artifact.fd < 0 or artifact.drain_writer_fd >= 0:
+            raise CaptureSetupError("capture drain writer ownership is unavailable")
         writer_fd = os.dup(artifact.fd)
         if not _same_identity(writer_fd, artifact.identity):
             raise CaptureSetupError("duplicated capture artifact identity changed")
+        object.__setattr__(artifact, "drain_writer_fd", writer_fd)
         return writer_fd
     except (CaptureSetupError, OSError) as exc:
         if writer_fd >= 0:
@@ -615,7 +656,6 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
     root: CaptureRoot | None = None
     lifecycle: CaptureLifecycleStore | None = None
     artifact: CaptureArtifact | None = None
-    artifact_writer_fd = -1
     process: subprocess.Popen[bytes] | None = None
     try:
         policy = read_capture_policy(anchor)
@@ -637,9 +677,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             process = _spawn_bash(anchor, bash_path, command, capture_output=True)
             failure_stage = "capture readback"
             result = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
-            writer_to_close = artifact_writer_fd
-            artifact_writer_fd = -1
-            os.close(writer_to_close)
+            artifact.close_drain_writer()
             failure_stage = "capture process wait"
             raw_returncode = process.wait()
             command_outcome = CommandOutcome.from_wait_result(raw_returncode)
@@ -676,15 +714,16 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 retention_deadline=finalized_at + 3600.0,
             )
             failure_stage = "capture finalization"
-            lifecycle.commit_verified_snapshot(
+            finalized = lifecycle.commit_verified_snapshot(
                 verified,
                 issue_reference=False,
             )
             terminal_committed = True
-            failure_stage = "capture marker verification"
-            artifact_path = current_artifact_path_if_bound(anchor, root, artifact)
-            failure_stage = "capture replay emission"
-            _emit_capture(result, artifact_path, policy.inline_bytes)
+            with artifact.transfer_to_reader(lifecycle, finalized):
+                failure_stage = "capture marker verification"
+                artifact_path = current_artifact_path_if_bound(anchor, root, artifact)
+                failure_stage = "capture replay emission"
+                _emit_capture(result, artifact_path, policy.inline_bytes)
             return returncode
         except _CAPTURE_RUNTIME_ERRORS as exc:
             recovery_detail = ""
@@ -717,9 +756,9 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 process.stdout.close()
             except _CAPTURE_RUNTIME_ERRORS:
                 pass
-        if artifact_writer_fd >= 0:
+        if artifact is not None:
             try:
-                os.close(artifact_writer_fd)
+                artifact.close_drain_writer()
             except _CAPTURE_RUNTIME_ERRORS:
                 pass
         if artifact is not None:

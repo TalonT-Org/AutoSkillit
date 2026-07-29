@@ -41,7 +41,8 @@ Hook script behavior, registration, and bridge tests.
 | `test_shell_capture_conformance.py` | Semantic conformance gate: wrapped vs raw execution agreement on exit codes and captured bytes |
 | `test_capture_artifacts.py` | Descriptor-anchored shell-capture authority, policy, collision, binding, and cleanup tests |
 | `test_capture_snapshot_authority.py` | Factory-only finalized snapshot, strict manifest codec, descriptor identity, digest, and preview authority tests |
-| `test_capture_lifecycle.py` | Durable shell-capture state, cross-process writer leases, bounded recovery, and quarantine deletion tests |
+| `test_capture_verified_reader.py` | Opaque reference resolution, bounded descriptor reads, cleanup races, and producer-exclusive lease handoff tests |
+| `test_capture_lifecycle.py` | Durable shell-capture state, cross-process carrier leases, bounded recovery, and quarantine deletion tests |
 | `test_capture_lifecycle_hook.py` | Cleanup-only SessionStart payload validation, scope, silence, and fail-open tests |
 | `test_pr_create_guard.py` | Tests for pr_create_guard.py interpreter bypass detection |
 | `test_planner_gh_discovery_guard.py` | Tests for planner_gh_discovery_guard.py interpreter bypass detection |

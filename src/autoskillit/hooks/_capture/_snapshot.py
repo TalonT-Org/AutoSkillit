@@ -19,6 +19,21 @@ from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import Any, NoReturn, SupportsIndex
 
+from ._reader import (
+    MAX_VERIFIED_READ_BYTES,
+    CaptureAuthorityError,
+    VerifiedCaptureReader,
+)
+from ._reader import (
+    _inspect_manifest_descriptor as _inspect_reader_descriptor,
+)
+from ._reader import (
+    _make_verified_reader as _make_reader,
+)
+from ._reader import (
+    _verify_manifest_descriptor as _verify_reader_descriptor,
+)
+
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._snapshot", "autoskillit.hooks._capture._snapshot"):
     _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
@@ -26,6 +41,7 @@ for _alias in ("_capture._snapshot", "autoskillit.hooks._capture._snapshot"):
         raise RuntimeError("conflicting shell-capture snapshot module identity")
 
 __all__ = [
+    "MAX_VERIFIED_READ_BYTES",
     "CaptureAuthorityError",
     "CaptureFailureEvidence",
     "CaptureFinalManifest",
@@ -41,6 +57,7 @@ __all__ = [
     "PublishedCaptureReference",
     "UnavailableCaptureReference",
     "VerifiedCaptureSnapshot",
+    "VerifiedCaptureReader",
     "decode_capture_manifest_wire",
     "encode_capture_final_manifest",
     "parse_capture_reference",
@@ -86,10 +103,6 @@ _MANIFEST_FIELDS = frozenset(
         "retention_deadline",
     }
 )
-
-
-class CaptureAuthorityError(RuntimeError):
-    """Raised when shell-capture authority cannot be proven."""
 
 
 class _NoAuthorityCopy:
@@ -939,3 +952,25 @@ def _reference_matches(token: str, manifest: CaptureFinalManifest) -> bool:
     except CaptureAuthorityError:
         return False
     return hmac.compare_digest(actual, manifest.reference_hash)
+
+
+def _inspect_manifest_descriptor(fd: int, manifest: CaptureFinalManifest) -> os.stat_result:
+    if type(manifest) is not CaptureFinalManifest:
+        raise CaptureAuthorityError("descriptor inspection requires a final manifest")
+    return _inspect_reader_descriptor(fd, manifest)
+
+
+def _verify_manifest_descriptor(fd: int, manifest: CaptureFinalManifest) -> None:
+    if type(manifest) is not CaptureFinalManifest:
+        raise CaptureAuthorityError("descriptor verification requires a final manifest")
+    _verify_reader_descriptor(fd, manifest)
+
+
+def _make_verified_reader(
+    fd: int,
+    manifest: CaptureFinalManifest,
+    revision: int,
+) -> VerifiedCaptureReader:
+    if type(manifest) is not CaptureFinalManifest:
+        raise CaptureAuthorityError("reader creation requires a final manifest")
+    return _make_reader(fd, manifest, revision)

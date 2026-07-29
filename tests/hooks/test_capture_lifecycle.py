@@ -1,4 +1,4 @@
-"""Durable lifecycle, writer-liveness, and reclamation tests."""
+"""Durable lifecycle, carrier-liveness, and reclamation tests."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import stat
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import FrozenInstanceError, asdict, replace
 from pathlib import Path
 from typing import cast
@@ -668,7 +669,7 @@ def test_quiet_live_writer_survives_past_abandonment_deadline(tmp_path: Path) ->
     try:
         clock.advance(7200)
         outcome = store.sweep(max_items=8, max_duration_seconds=1)
-        assert outcome.writer_live == 1
+        assert outcome.carrier_lease_live == 1
         assert outcome.deleted == 0
         assert (_capture_dir(project) / artifact.name).exists()
     finally:
@@ -688,21 +689,21 @@ def test_live_writer_sweep_closes_observation_descriptor(
     artifact = create_capture_artifact(root, _CAPTURE_ID, store)
     observed_fd = -1
 
-    def writer_live(observed: capture_lifecycle._ObservedArtifact) -> None:
+    def carrier_lease_live(observed: capture_lifecycle._ObservedArtifact) -> None:
         nonlocal observed_fd
         observed_fd = observed.fd
-        raise capture_lifecycle._WriterLive
+        raise capture_lifecycle._CarrierLeaseLive
 
     try:
         clock.advance(7200)
         monkeypatch.setattr(
             CaptureLifecycleStore,
             "_try_artifact_lease",
-            staticmethod(writer_live),
+            staticmethod(carrier_lease_live),
         )
         outcome = store.sweep(max_items=8, max_duration_seconds=1)
 
-        assert outcome.writer_live == 1
+        assert outcome.carrier_lease_live == 1
         assert observed_fd >= 0
         with pytest.raises(OSError):
             os.fstat(observed_fd)
@@ -795,7 +796,7 @@ def test_observe_open_operational_failure_is_retried(
         assert outcome.errors == 1
         assert outcome.tampered == 0
         assert record is not None
-        assert record.state is CaptureState.DELETING
+        assert record.state is CaptureState.FINALIZED
         assert record.manifest is not None
         assert record.manifest.sha256 == hashlib.sha256(b"captured").hexdigest()
         assert record.retry_count == 1
@@ -1202,7 +1203,12 @@ def test_cleanup_outcome_counts_retries_per_sweep(
     artifact.release_lease()
     clock.advance(3601)
 
-    def fail_delete(_record: CaptureLifecycleRecord) -> int:
+    def fail_delete(
+        _record: CaptureLifecycleRecord,
+        authorize_delete: Callable[[], None] | None = None,
+    ) -> int:
+        if authorize_delete is not None:
+            authorize_delete()
         raise OSError("injected deletion failure")
 
     try:
@@ -1258,10 +1264,15 @@ def test_sweep_continues_after_failed_due_record(
     completed_id = f"{2:016x}"
     real_delete = store._quarantine_delete
 
-    def fail_first(record: CaptureLifecycleRecord) -> int:
+    def fail_first(
+        record: CaptureLifecycleRecord,
+        authorize_delete: Callable[[], None] | None = None,
+    ) -> int:
         if record.capture_id == failed_id:
+            if authorize_delete is not None:
+                authorize_delete()
             raise OSError("injected first-row failure")
-        return real_delete(record)
+        return real_delete(record, authorize_delete)
 
     try:
         artifact_names = _seed_finalized_captures(root, store, count=2)

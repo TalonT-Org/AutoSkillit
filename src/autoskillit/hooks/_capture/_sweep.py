@@ -239,6 +239,7 @@ def quarantine_delete(
     root_fd: int,
     observe: Callable[..., ObservedArtifact | None],
     try_lease: Callable[[ObservedArtifact], None],
+    authorize_delete: Callable[[], None] | None = None,
     public_name_pattern: object,
     quarantine_name_pattern: object,
 ) -> int:
@@ -263,6 +264,8 @@ def quarantine_delete(
             valid_name=quarantine_name_pattern,
         )
         if public is None and quarantine is None:
+            if authorize_delete is not None:
+                authorize_delete()
             return record.size
         lease_target = public or quarantine
         if lease_target is not None:
@@ -274,7 +277,9 @@ def quarantine_delete(
                 or quarantine.nlink != 2
             ):
                 raise Tampered
-        elif public is not None:
+        if authorize_delete is not None:
+            authorize_delete()
+        if public is not None and quarantine is None:
             linked = create_verified_recovery_link(
                 link=lambda: os.link(
                     record.public_name,
@@ -341,7 +346,7 @@ def run_bounded_sweep(
     sweep_one: Callable[[str], tuple[str, int, int]],
 ) -> CaptureCleanupOutcome:
     started = monotonic()
-    examined = deleted = deleted_bytes = writer_live = 0
+    examined = deleted = deleted_bytes = carrier_lease_live = 0
     not_due = tampered = errors = retry_count = 0
     try:
         pending = due_ids(wall_clock())
@@ -364,8 +369,8 @@ def run_bounded_sweep(
         retry_count += retries
         if result == "deleted":
             deleted += 1
-        elif result == "writer_live":
-            writer_live += 1
+        elif result == "carrier_lease_live":
+            carrier_lease_live += 1
         elif result == "tampered":
             tampered += 1
         elif result == "error":
@@ -383,7 +388,7 @@ def run_bounded_sweep(
         examined=examined,
         deleted=deleted,
         deleted_bytes=deleted_bytes,
-        writer_live=writer_live,
+        carrier_lease_live=carrier_lease_live,
         not_due=not_due,
         tampered=tampered,
         errors=errors,

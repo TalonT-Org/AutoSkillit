@@ -16,6 +16,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_ask_user_question_guard.py` | Tests for the ask_user_question_guard PreToolUse hook |
 | `test_background_exec_guard.py` | Tests for background_exec_guard.py PreToolUse hook — blocks run_in_background=true in skill sessions |
 | `test_branch_protection_guard.py` | Tests for hooks/branch_protection_guard.py — PreToolUse branch protection |
+| `test_canonical_json_producer_convention.py` | Producer ratchet: every `require_canonical=True` JSON consumer site must have a registered, verified server-side producer and SKILL.md reference |
 | `test_check_pyi_stub_format.py` | Unit tests for scripts/check_pyi_stub_format.py pre-commit hook — validates FunctionDef, ClassDef, and non-relative import rejection |
 | `test_check_pyi_stub_symbols.py` | Unit tests for scripts/check_pyi_stub_symbols.py pre-commit hook — validates missing symbol detection, completeness acceptance, underscore skipping, and __all__ usage |
 | `test_ci_dev_config.py` | Structural enforcement: CI workflow and pre-commit configuration must contain required quality gates |

@@ -3,9 +3,13 @@
 Zero autoskillit imports. Provides atomic filesystem writes, project temp directory
 management, and YAML load/dump helpers.
 
-All NEW on-disk JSON artifacts SHOULD use ``write_versioned_json`` so schema drift
-is detectable. Existing artifacts are tracked in
-``tests/infra/test_schema_version_convention.py`` (landed in a later phase).
+New on-disk JSON artifacts fall into two families. Default to ``write_versioned_json``
+so schema drift is detectable; existing sites are tracked in
+``tests/infra/test_schema_version_convention.py``. Use ``write_canonical_versioned_json``
+instead when the artifact's reader will call
+``decode_versioned_json_bytes(..., require_canonical=True)`` for tamper-evident,
+hash-bound content addressing — every such producer/consumer pairing must be
+registered in ``tests/infra/test_canonical_json_producer_convention.py``.
 """
 
 from __future__ import annotations

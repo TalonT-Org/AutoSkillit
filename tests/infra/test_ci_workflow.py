@@ -83,6 +83,18 @@ def _run_cli(
     )
 
 
+def _assert_cli_rejection(
+    completed: subprocess.CompletedProcess[str],
+    expected_error: str,
+) -> None:
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr.startswith("ci_target_policy: ")
+    assert expected_error in completed.stderr
+    assert completed.stderr.count("\n") == 1
+    assert "Traceback" not in completed.stderr
+
+
 @pytest.mark.parametrize(
     ("event_name", "target", "expected_runners", "expected_filter", "expected_base"),
     [
@@ -302,25 +314,47 @@ def test_resolver_fails_closed_for_malformed_or_unregistered_context(
 
 
 @pytest.mark.parametrize(
-    ("event_name", "payload", "raw_payload"),
+    ("event_name", "payload", "raw_payload", "expected_error"),
     [
-        ("pull_request", ["not", "an", "object"], None),
-        ("pull_request", None, "{invalid-json"),
-        ("pull_request", {"merge_group": {}}, None),
-        ("workflow_dispatch", _event_payload("pull_request", "develop"), None),
+        (
+            "pull_request",
+            ["not", "an", "object"],
+            None,
+            "GitHub event payload must be an object",
+        ),
+        ("pull_request", None, "{invalid-json", "Expecting property name"),
+        (
+            "pull_request",
+            {"merge_group": {}},
+            None,
+            "pull_request must be an object",
+        ),
+        (
+            "workflow_dispatch",
+            _event_payload("pull_request", "develop"),
+            None,
+            "unsupported event: 'workflow_dispatch'",
+        ),
         (
             "pull_request",
             {"pull_request": {"base": {"ref": "develop", "sha": "bad"}}},
             None,
+            "base SHA must be a 40-character lowercase commit SHA",
         ),
-        ("push", {"ref": "refs/heads/develop"}, None),
+        (
+            "push",
+            {"ref": "refs/heads/develop"},
+            None,
+            "target 'develop' is not allowed for event 'push'",
+        ),
     ],
 )
-def test_cli_failures_are_nonzero_and_silent_on_stdout(
+def test_cli_failures_use_handled_rejection_contract(
     tmp_path: Path,
     event_name: str,
     payload: object | None,
     raw_payload: str | None,
+    expected_error: str,
 ) -> None:
     completed = _run_cli(
         tmp_path,
@@ -329,26 +363,29 @@ def test_cli_failures_are_nonzero_and_silent_on_stdout(
         raw_payload=raw_payload,
     )
 
-    assert completed.returncode != 0
-    assert completed.stdout == ""
+    _assert_cli_rejection(completed, expected_error)
 
 
 @pytest.mark.parametrize(
-    ("event_name", "payload"),
+    ("event_name", "payload", "expected_error"),
     [
-        (None, _event_payload("pull_request", "develop")),
-        ("pull_request", None),
+        (
+            None,
+            _event_payload("pull_request", "develop"),
+            "GITHUB_EVENT_NAME is required",
+        ),
+        ("pull_request", None, "GITHUB_EVENT_PATH is required"),
     ],
 )
 def test_cli_requires_inherited_event_environment(
     tmp_path: Path,
     event_name: str | None,
     payload: object | None,
+    expected_error: str,
 ) -> None:
     completed = _run_cli(tmp_path, event_name=event_name, payload=payload)
 
-    assert completed.returncode != 0
-    assert completed.stdout == ""
+    _assert_cli_rejection(completed, expected_error)
 
 
 def test_cli_delegates_to_resolver_exactly_once(

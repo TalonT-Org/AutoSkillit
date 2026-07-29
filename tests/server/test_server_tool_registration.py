@@ -110,6 +110,7 @@ class TestToolRegistration:
             "reset_dispatch",
             "get_recipe_section",
             "complete_recipe_initialization",
+            "write_audit_cycle_artifact",
         }
         assert expected == tool_names
 

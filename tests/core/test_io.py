@@ -288,6 +288,52 @@ def test_atomic_write_strict_parent_fsync_failure_is_observable(tmp_path, monkey
     assert target.read_text() == "{}"
 
 
+def test_atomic_write_exclusive_raises_file_exists_error_without_overwriting(tmp_path):
+    from autoskillit.core.io import atomic_write
+
+    target = tmp_path / "claimed.json"
+    target.write_text("original content")
+
+    with pytest.raises(FileExistsError):
+        atomic_write(target, "new content", exclusive=True)
+
+    assert target.read_text() == "original content"
+
+
+def test_atomic_write_default_exclusive_false_preserves_overwrite_behavior(tmp_path):
+    from autoskillit.core.io import atomic_write
+
+    target = tmp_path / "overwritable.json"
+    target.write_text("original content")
+
+    atomic_write(target, "new content")
+
+    assert target.read_text() == "new content"
+
+
+def test_write_canonical_versioned_json_writes_canonical_bytes(tmp_path):
+    from autoskillit.core.closure_hashing import parse_canonical_json_bytes
+    from autoskillit.core.io import write_canonical_versioned_json
+
+    target = tmp_path / "canonical.json"
+    write_canonical_versioned_json(target, {"b": 2, "a": 1}, schema_version=1)
+
+    parsed = parse_canonical_json_bytes(target.read_bytes())
+    assert parsed == {"a": 1, "b": 2, "schema_version": 1}
+
+
+def test_write_canonical_versioned_json_forwards_exclusive(tmp_path):
+    from autoskillit.core.io import write_canonical_versioned_json
+
+    target = tmp_path / "canonical.json"
+    target.write_bytes(b"pre-existing")
+
+    with pytest.raises(FileExistsError):
+        write_canonical_versioned_json(target, {"a": 1}, schema_version=1, exclusive=True)
+
+    assert target.read_bytes() == b"pre-existing"
+
+
 def test_write_versioned_json_forwards_strict_durability(tmp_path, monkeypatch):
     from autoskillit.core import io as io_mod
 

@@ -90,6 +90,7 @@ _MUTATION_TOOLS = frozenset(
         "unlock_agent_pack",
         "wait_for_ci",
         "wait_for_merge_queue",
+        "write_audit_cycle_artifact",
         "write_telemetry_files",
     }
 )
@@ -392,6 +393,12 @@ _TOOL_DEFS = (
         "commit_files",
         ("paths", "message", "cwd", "step_name"),
         required=("paths", "message", "cwd"),
+    ),
+    _tool(
+        "write_audit_cycle_artifact",
+        ("kind", "path", "fields", "cwd", "step_name"),
+        required=("kind", "path", "fields", "cwd"),
+        wire_types={"fields": ToolWireType.OBJECT},
     ),
     _tool(
         "fetch_github_issue",

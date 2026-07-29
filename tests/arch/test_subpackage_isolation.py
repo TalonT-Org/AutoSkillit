@@ -950,10 +950,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 14,  # +context admission ledger +recipe initialization reducer
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 55,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery  # noqa: E501
-        "server/tools": 32,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
+        "server/tools": 33,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
+        # +tools_audit_cycle.py (server-side write_audit_cycle_artifact MCP tool, #4406)
         "hooks/guards": 32,  # -output_budget_guard (#4286)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:

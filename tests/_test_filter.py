@@ -292,8 +292,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "context_admission": frozenset({"core", "pipeline"}),
     "audit_cycle_verifier": frozenset({"core", "recipe", "server"}),
     "tool_registry": frozenset({"core", "recipe", "server"}),
-    "closure_hashing": frozenset({"core", "recipe"}),
-    "path_containment": frozenset({"core", "recipe"}),
+    "closure_hashing": frozenset({"core", "recipe", "server"}),
+    "path_containment": frozenset({"core", "recipe", "server"}),
     "closure_verifier": frozenset({"core", "execution"}),
 }
 
@@ -849,6 +849,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_pipeline_deps_derivation.py",
             "server/test_pipeline_tracker.py",
             "server/test_audit_cycle_delivery_integration.py",
+            "server/test_tools_audit_cycle.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",

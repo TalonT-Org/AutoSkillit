@@ -3,9 +3,13 @@
 Zero autoskillit imports. Provides atomic filesystem writes, project temp directory
 management, and YAML load/dump helpers.
 
-All NEW on-disk JSON artifacts SHOULD use ``write_versioned_json`` so schema drift
-is detectable. Existing artifacts are tracked in
-``tests/infra/test_schema_version_convention.py`` (landed in a later phase).
+New on-disk JSON artifacts fall into two families. Default to ``write_versioned_json``
+so schema drift is detectable; existing sites are tracked in
+``tests/infra/test_schema_version_convention.py``. Use ``write_canonical_versioned_json``
+instead when the artifact's reader will call
+``decode_versioned_json_bytes(..., require_canonical=True)`` for tamper-evident,
+hash-bound content addressing — every such producer/consumer pairing must be
+registered in ``tests/infra/test_canonical_json_producer_convention.py``.
 """
 
 from __future__ import annotations
@@ -199,27 +203,42 @@ def atomic_write(
     content: str,
     *,
     strict_durability: bool = False,
+    exclusive: bool = False,
 ) -> None:
     """Crash-safe write: write to a temp file then os.replace.
 
     Includes data fsync and directory fsync for durability on ext4/xfs.
     The directory fsync is skipped on Windows (no O_RDONLY semantics).
+
+    When ``exclusive`` is True, atomically claims ``path`` via
+    ``os.O_CREAT | os.O_EXCL`` before writing, raising ``FileExistsError``
+    with no bytes written if the destination already exists. Closes the
+    TOCTOU window between a separate existence check and the write.
     """
     import sys as _sys
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    if exclusive:
+        os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    tmp: str | None = None
     try:
+        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())  # durable data write
         os.replace(tmp, path)
     except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        if exclusive:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
         raise
     # Durable rename: fsync the parent directory on POSIX.
     # Default callers retain best-effort parent durability. Identity-bearing
@@ -390,7 +409,11 @@ def write_versioned_json(
 
 
 def write_canonical_versioned_json(
-    path: Path, payload: dict[str, Any], schema_version: int
+    path: Path,
+    payload: dict[str, Any],
+    schema_version: int,
+    *,
+    exclusive: bool = False,
 ) -> None:
     """Atomically write versioned canonical JSON for hash-bound artifacts."""
     from .closure_hashing import canonical_json_bytes
@@ -398,7 +421,7 @@ def write_canonical_versioned_json(
     if not isinstance(payload, dict):
         raise TypeError("write_canonical_versioned_json requires a dict payload")
     enriched = {**payload, "schema_version": schema_version}
-    atomic_write(path, canonical_json_bytes(enriched).decode("utf-8"))
+    atomic_write(path, canonical_json_bytes(enriched).decode("utf-8"), exclusive=exclusive)
 
 
 def decode_versioned_json_bytes(

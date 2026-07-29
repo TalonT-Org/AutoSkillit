@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (20 tool modules).
+MCP `@mcp.tool()` handlers registered on import (21 tool modules).
 
 ## Files
 
@@ -28,7 +28,8 @@ MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 | `tools_execution.py` | `run_cmd`, `run_python`, `run_skill` |
 | `tools_fleet_dispatch.py` | `dispatch_food_truck`, `record_gate_dispatch` |
 | `tools_fleet_reset.py` | `reset_dispatch` (full dispatch artifact cleanup) |
-| `tools_git.py` | `merge_worktree`, `classify_fix`, `create_unique_branch`, `create_and_publish_branch`, `check_pr_mergeable` |
+| `tools_git.py` | `merge_worktree`, `classify_fix`, `create_unique_branch`, `create_and_publish_branch`, `check_pr_mergeable`, `commit_files` |
+| `tools_audit_cycle.py` | `write_audit_cycle_artifact` — server-side construction, digest computation, and canonical write for hash-bound audit-cycle artifacts (`authority`, `inventory`, `disposition_report`, `plan_association`) |
 | `tools_github.py` | `fetch_github_issue`, `get_issue_title`, `report_bug` |
 | `tools_issue_headless.py` | `prepare_issue`, `enrich_issues` (headless session tools) |
 | `tools_issue_labels.py` | `claim_issue`, `release_issue` (GitHub label management) |

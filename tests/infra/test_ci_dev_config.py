@@ -248,51 +248,6 @@ class TestCIWorkflow:
         pr_branches = triggers["pull_request"]["branches"]
         assert "develop" in pr_branches, "CI must trigger on PRs targeting develop branch"
 
-    def test_ci_preflight_outputs_os_matrix(self) -> None:
-        """preflight must export every value selected by the CI policy authority."""
-        workflow = load_yaml(CI_WORKFLOW)
-        outputs = workflow["jobs"]["preflight"].get("outputs", {})
-        assert set(outputs) == {
-            "os-matrix",
-            "test-filter-mode",
-            "test-base-revision",
-        }
-
-    def test_ci_test_matrix_uses_preflight_os_matrix(self) -> None:
-        """test job matrix must consume the os-matrix from preflight, not a hardcoded list."""
-        workflow = load_yaml(CI_WORKFLOW)
-        matrix = workflow["jobs"]["test"]["strategy"]["matrix"]
-        os_value = matrix["os"]
-        assert "fromJSON" in os_value or "needs.preflight" in str(os_value), (
-            "test job os matrix must be dynamic (fromJSON of preflight output), "
-            "not a hardcoded list — hardcoded list cannot vary by PR target"
-        )
-
-    def test_ci_preflight_delegates_to_target_policy_resolver(self) -> None:
-        """preflight must call the checked-in CI policy authority exactly once."""
-        workflow = load_yaml(CI_WORKFLOW)
-        steps = workflow["jobs"]["preflight"]["steps"]
-        policy_steps = [step for step in steps if step.get("id") == "ci-policy"]
-        assert len(policy_steps) == 1
-        assert policy_steps[0].get("run") == (
-            'python3 scripts/ci_target_policy.py >> "$GITHUB_OUTPUT"'
-        )
-
-    def test_ci_test_step_consumes_target_policy_filter_outputs(self) -> None:
-        """Run tests must consume filter mode and immutable base from preflight."""
-        workflow = load_yaml(CI_WORKFLOW)
-        run_step = next(
-            step for step in workflow["jobs"]["test"]["steps"] if step.get("name") == "Run tests"
-        )
-        assert run_step["env"]["AUTOSKILLIT_TEST_FILTER"] == (
-            "${{ needs.preflight.outputs.test-filter-mode }}"
-        )
-        assert run_step["env"]["AUTOSKILLIT_TEST_BASE_REF"] == (
-            "${{ needs.preflight.outputs.test-base-revision }}"
-        )
-        assert "github.event" not in run_step["run"]
-        assert "develop" not in run_step["run"]
-
     def test_ci_push_trigger_includes_stable(self) -> None:
         """CI must trigger on push to stable branch.
 

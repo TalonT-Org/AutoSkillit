@@ -23,6 +23,7 @@ import pytest
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     HOOKS_DIR,
+    LIFECYCLE_CONTRACTS,
     RETIRED_SCRIPT_BASENAMES,
     HookDef,
     _canonical_registry_payload,
@@ -221,7 +222,11 @@ def test_canonical_registry_payload_includes_exempt_session_types() -> None:
     Any change to exempt_session_types on any HookDef must trigger hook drift detection
     and hooks.json regeneration.
     """
-    payload_str = _canonical_registry_payload(HOOK_REGISTRY, RETIRED_SCRIPT_BASENAMES)
+    payload_str = _canonical_registry_payload(
+        HOOK_REGISTRY,
+        RETIRED_SCRIPT_BASENAMES,
+        LIFECYCLE_CONTRACTS,
+    )
     payload = json.loads(payload_str)
     for row in payload["registry"]:
         assert "exempt_session_types" in row, (

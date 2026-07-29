@@ -15,14 +15,15 @@ jobs:
     name: Preflight checks
     runs-on: ubuntu-latest
     outputs:
-      os-matrix: ${{ steps.set-matrix.outputs.matrix }}
+      os-matrix: ${{ steps.ci-policy.outputs.os-matrix }}
+      test-filter-mode: ${{ steps.ci-policy.outputs.test-filter-mode }}
+      test-base-revision: ${{ steps.ci-policy.outputs.test-base-revision }}
     steps:
-      - name: Compute OS matrix
-        id: set-matrix
-        run: |
-          echo 'matrix=["ubuntu-latest","macos-15"]' >> "$GITHUB_OUTPUT"
-
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Resolve CI target policy
+        id: ci-policy
+        run: python3 scripts/ci_target_policy.py >> "$GITHUB_OUTPUT"
 
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
@@ -115,11 +116,10 @@ jobs:
         env:
           AUTOSKILLIT_FILTER_STATS_FILE: ${{ github.workspace }}/.autoskillit/temp/filter-stats.json
           AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
+          AUTOSKILLIT_TEST_FILTER: ${{ needs.preflight.outputs.test-filter-mode }}
+          AUTOSKILLIT_TEST_BASE_REF: ${{ needs.preflight.outputs.test-base-revision }}
         run: |
           mkdir -p .autoskillit/temp
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "develop" ]]; then
-            export AUTOSKILLIT_TEST_FILTER=conservative
-          fi
           task test-check
 
       - name: Upload filter stats

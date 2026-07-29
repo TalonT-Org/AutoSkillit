@@ -7,10 +7,12 @@ from pathlib import Path
 
 from autoskillit.core import atomic_write, is_git_worktree, pkg_root
 from autoskillit.hook_registry import (
+    LIFECYCLE_CONTRACTS,
     _build_hook_command,
     _build_hook_entry,
     _claude_settings_path,  # noqa: F401 — re-exported; cli/__init__ + _stale_check + _init_helpers import from here
     _load_settings_data,
+    validate_lifecycle_contracts,
 )
 from autoskillit.hook_registry import (
     _is_own_hook as _is_autoskillit_hook_command,
@@ -72,6 +74,11 @@ def sync_hooks_to_settings(settings_path: Path, *, force: bool = False) -> None:
             f"of 'autoskillit init' when working in a worktree."
         )
 
+    validate_lifecycle_contracts(
+        HOOK_REGISTRY,
+        LIFECYCLE_CONTRACTS,
+        backend="claude_code",
+    )
     if not force and _is_plugin_installed():
         _evict_stale_autoskillit_hooks(settings_path)
         return

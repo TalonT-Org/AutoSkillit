@@ -1,7 +1,7 @@
 # Hooks
 
-AutoSkillit registers 42 Claude Code hook scripts: 32 PreToolUse, 9 PostToolUse,
-and 1 SessionStart. Every script is stdlib-only Python so it can run before the
+AutoSkillit registers 43 Claude Code hook scripts: 32 PreToolUse, 9 PostToolUse,
+and 2 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
@@ -107,17 +107,53 @@ shape after verified policy loading.
 
 | Phase | Behavior |
 |-------|----------|
-| Creation | Runner creates the artifact relative to a verified capture-directory fd with `O_CREAT | O_EXCL | O_NOFOLLOW` and mode `0600` |
-| Retention | Artifact is always retained after command execution (both inline and spill branches) |
-| Ownership | The isolated runner retains all directory/artifact fds through measurement, replay, and marker-path identity verification |
-| Cleanup — session lifecycle | `session_start_hook.py` calls the same descriptor-anchored helper to classify stale captures. Portable Python cannot unlink by expected inode, so candidates are conservatively retained rather than deleted through a race-prone pathname |
+| Creation | Runner durably reserves a private staging name, creates it relative to the verified capture-directory fd, acquires a writer lease, and publishes the public name without replacement |
+| Retention | Finalized and failed artifacts become eligible after one hour; active artifacts remain protected by the writer lease |
+| Ownership | The isolated runner retains all directory/artifact fds and the writer lease through finalization, replay, and marker-path identity verification |
+| Cleanup — installed runner | Every valid run/reject invocation performs one bounded sweep after producer resources release |
+| Cleanup — session lifecycle | `capture_lifecycle_hook.py` performs the same bounded sweep at `SessionStart` in both interactive and headless sessions |
 | Naming contract | `shell_[0-9a-f]{16}.log` — files not matching this pattern are never deleted |
 | Safety | Capture components reject symlinks; artifacts reject collisions, symlinks, hardlinks, and world-writable entries; marker paths are emitted only while every current binding matches the opened identities |
-| Failure mode | Capture setup failure stops before the user command. SessionStart cleanup errors remain fail-open and never block reminder injection |
+| Failure mode | Capture setup failure stops before the user command. Cleanup failures are bounded and fail open without replacing the command result |
 
-Codex hook generation excludes the interactive-only SessionStart hook, so Codex
-artifacts have no automatic deletion guarantee. Lifecycle/quota reclamation must not
-weaken the descriptor and identity contract when it is added.
+The durable lifecycle is `RESERVED` → `STAGED` → `PUBLISHED_WRITING` →
+`FINALIZED` or `FAILED`. An unlocked active record becomes `ABANDONED`.
+Eligible terminal or abandoned records move through `DELETING` to `DELETED`,
+or `TAMPERED`; operational failures preserve the current phase and reschedule
+it with capped backoff. The per-artifact writer lease is held until output
+drain, process settlement, integrity verification, durable terminal
+finalization, and marker flush have finished. Finalized and failed records use
+their terminal transition as the retention clock; abandoned records use their
+durable creation time. Both clocks have a one-hour eligibility period.
+
+Eligibility is not a wall-clock scheduler. Deletion occurs on the next enabled,
+trusted installed runner-tail or cleanup-only `SessionStart` trigger. If hooks
+are disabled, no trigger runs and eligible artifacts remain. Each trigger
+bounds rows examined, monotonic duration, ledger bytes, and maintenance work.
+Contended or failed rows are durably rescheduled with capped retry backoff so
+one record cannot starve the backlog.
+
+Only lifecycle-recorded `shell_[0-9a-f]{16}.log` artifacts with revalidated
+project, capture-root, and inode identities enter quarantine deletion. Fresh
+records, live writers, nonmatching names, symlinks, FIFOs, hardlinks,
+world-writable files, identity replacements, unexpected link counts, and
+tampered entries survive. `deleted_bytes` reports logical managed bytes
+committed deleted exactly once; it is not evidence of physical block reclamation.
+
+The durability guarantee is process-termination recovery on supported local Linux and
+macOS filesystems. Ordinary `fsync()` does not establish Darwin
+OS-crash or power-loss durability. Advisory locks and identity revalidation
+provide a cooperative same-UID boundary; a hostile same-UID process that
+ignores locks remains outside the guarantee.
+
+Codex hook generation includes the cleanup-only SessionStart owner and excludes the
+separate interactive-only resume reminder. Runner-tail cleanup is the
+authoritative interactive/headless Bash owner; cleanup-only `SessionStart` is
+the supplemental startup owner. Detached-writer/coherent-snapshot behavior
+remains outside this guarantee (#4322). The durable identity, lease, state, and
+`deleted_bytes` fields are extension seams for retrieval (#4325), the broader
+publication/privacy contract (#4326), and quota accounting (#4327); those
+features are not implemented by this lifecycle.
 
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`
@@ -225,7 +261,13 @@ after the first successful `run_skill` completes. This marker is read by
 `open_kitchen_guard.py` to block mid-run recipe reloads. Idempotent —
 skips writing if the marker already exists. Fails open on all error paths.
 
-## SessionStart hook (1)
+## SessionStart hooks (2)
+
+### `capture_lifecycle_hook.py`
+Runs one bounded, cleanup-only shell-capture lifecycle sweep using the absolute
+`cwd` from the hook payload. It has no headless early exit, emits no stdout,
+and always exits zero. Cleanup errors are bounded and fail open independently
+of reminder delivery.
 
 ### `session_start_hook.py`
 Injects a reminder to call `/autoskillit:open-kitchen` when resuming a

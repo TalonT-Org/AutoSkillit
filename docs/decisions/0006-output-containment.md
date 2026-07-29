@@ -28,13 +28,14 @@ output-boundary bounding on measured bytes:
 3. **Codex native shell** — PreToolUse input-rewrite hook wraps every shell
    command in a minimal isolated runner invocation. The runner opens `cwd` first,
    establishes descriptor-relative authority for policy and capture components,
-   creates the artifact exclusively without following symlinks, and drains child
-   output through its owned fd. The bounded inline slice includes a provenance
-   marker whose path is present only after marker-time identity verification. The
-   ordinary outer-result limit remains the backstop for hook-failure paths. The
-   separately configured `CODEX_HISTORY_RETENTION_TOKEN_LIMIT` replaces the model's
-   `truncation_policy` outright, so it governs both the current-turn exec output sent
-   to the model and retained history — not later history alone.
+   durably reserves private staging before publishing the public artifact without
+   replacement, acquires a writer lease, and drains child output through its owned
+   fd. The bounded inline slice includes a provenance marker whose path is present
+   only after marker-time identity verification. The ordinary outer-result limit
+   remains the backstop for hook-failure paths. The separately configured
+   `CODEX_HISTORY_RETENTION_TOKEN_LIMIT` replaces the model's `truncation_policy`
+   outright, so it governs both the current-turn exec output sent to the model and
+   retained history — not later history alone.
 
 ### Sequencing Rule
 
@@ -59,6 +60,39 @@ The hook contract for `exec_command` is identical (tool `"Bash"`, string `comman
 so the rewrite applies there too. AutoSkillit does not enable Codex's experimental
 `unified_exec` surface in the config it writes; interactive stdin-driven sessions are
 the only case where file-redirected output would change observable behavior.
+
+### Capture Lifecycle Ownership
+
+The lifecycle store durably records `RESERVED`, `STAGED`,
+`PUBLISHED_WRITING`, `FINALIZED`, `FAILED`, `ABANDONED`, `DELETING`,
+`DELETED`, and `TAMPERED`. The writer lease spans command execution,
+drain, settlement, integrity verification, durable finalization, and marker
+flush. A finalized or failed artifact becomes eligible one hour after its
+terminal transition; an abandoned producer becomes eligible one hour after its
+durable creation time. Eligibility is reclaimed only on the next enabled,
+trusted trigger, not by a wall-clock scheduler.
+
+There are two installed cleanup roles. Every valid runner invocation performs
+one bounded tail sweep after all producer resources and the writer lease are
+released. The independent cleanup-only `capture_lifecycle_hook.py` performs a
+bounded `SessionStart` sweep in interactive and headless sessions.
+Cleanup failure is fail-open and cannot replace the mapped command result. If
+hooks are disabled, neither owner runs and eligible artifacts remain.
+
+Deletion is confined to the shared store's identity-revalidated quarantine
+transaction. Only lifecycle-recorded `shell_[0-9a-f]{16}.log` artifacts are
+eligible. Fresh records, live writers, nonmatching names, symlinks, FIFOs,
+hardlinks, world-writable files, identity replacements, unexpected link
+counts, and tampered observations survive. Row, monotonic-time, frame, ledger,
+and compaction bounds limit each sweep and its backlog; contention and operational
+failures become durable capped-backoff retries. `deleted_bytes` counts
+logical managed bytes, not evidence of physical block reclamation.
+
+The guarantee is process-termination recovery on supported local Linux and macOS filesystems.
+It does not claim Darwin OS-crash or power-loss durability
+from ordinary `fsync()`. Advisory leases and identity revalidation establish a
+cooperative same-UID boundary; a hostile same-UID process that ignores advisory
+locks is outside it.
 
 ### Future Direction
 
@@ -89,12 +123,15 @@ hook can be retired in favor of that mechanism.
 8. Same-user code inside the command can rename a verified directory entry after
    it is opened. Output, hashing, and replay remain fd-bound; if the live pathname
    chain no longer matches, the marker reports its path as `unavailable`.
-9. Portable Linux/macOS Python exposes descriptor-relative unlink but no
-   expected-inode conditional unlink. SessionStart therefore retains stale
-   candidates rather than making a security claim across a validation/deletion
-   race. Artifact quota and lifecycle reclamation remain follow-up work tracked
-   by [#4327](https://github.com/TalonT-Org/AutoSkillit/issues/4327) and
-   [#4320](https://github.com/TalonT-Org/AutoSkillit/issues/4320), respectively.
+9. Detached-writer/coherent-snapshot semantics remain outside this guarantee
+   and are tracked by [#4322](https://github.com/TalonT-Org/AutoSkillit/issues/4322).
+   Durable identities and leases are extension seams for retrieval
+   ([#4325](https://github.com/TalonT-Org/AutoSkillit/issues/4325)), the broader
+   publication/privacy contract
+   ([#4326](https://github.com/TalonT-Org/AutoSkillit/issues/4326)), and quota
+   accounting ([#4327](https://github.com/TalonT-Org/AutoSkillit/issues/4327));
+   this decision does not claim those features are implemented. Those
+   features are not implemented by this lifecycle.
 
 ## Consequences
 
@@ -107,3 +144,5 @@ hook can be retired in favor of that mechanism.
 - Complete Codex shell output is captured to mechanism-owned artifacts at
   the descriptor-anchored project capture root. A pathname is reported only
   while it still binds to the opened project, directories, and artifact.
+- One-hour lifecycle reclamation is owned by the installed runner tail and the
+  cleanup-only `SessionStart` hook, with bounded retry and quarantine recovery.

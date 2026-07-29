@@ -42,7 +42,6 @@ _IGNORE_FILES: frozenset[str] = frozenset(
         "tests/CLAUDE.md",
         "tests/AGENTS.md",
         ".github/CLAUDE.md",
-        ".github/AGENTS.md",
         # Generated/state files in .autoskillit/ that carry no test-routing signal.
         ".autoskillit/.gitignore",
         ".autoskillit/.onboarded",

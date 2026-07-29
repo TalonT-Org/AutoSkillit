@@ -13,6 +13,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_hook_config_bridge.py` | Regression tests for quota and output-budget policy serialization into the stdlib hook config bridge |
 | `test_hook_executability.py` | Tests for hook command executability — validates invocation path via subprocess |
 | `test_hook_registration_coverage.py` | Structural test: every hook script is registered in HOOK_REGISTRY |
+| `test_hook_lifecycle_contract.py` | Registry-level persistent-resource producer and cleanup-owner contracts |
 | `test_hook_registry.py` | Tests for hook_registry.py — L0 hook identity model |
 | `test_hook_settings.py` | Tests for the shared stdlib-only quota hook settings resolver |
 | `test_hook_sync.py` | Sync tests: verify parallel stdlib-only hook scripts stay aligned with server code |
@@ -39,6 +40,8 @@ Hook script behavior, registration, and bridge tests.
 | `test_shell_capture_hook.py` | Tests for shell_capture_hook.py PreToolUse input-rewrite hook — Codex scope, harness generation, fail-open |
 | `test_shell_capture_conformance.py` | Semantic conformance gate: wrapped vs raw execution agreement on exit codes and captured bytes |
 | `test_capture_artifacts.py` | Descriptor-anchored shell-capture authority, policy, collision, binding, and cleanup tests |
+| `test_capture_lifecycle.py` | Durable shell-capture state, cross-process writer leases, bounded recovery, and quarantine deletion tests |
+| `test_capture_lifecycle_hook.py` | Cleanup-only SessionStart payload validation, scope, silence, and fail-open tests |
 | `test_pr_create_guard.py` | Tests for pr_create_guard.py interpreter bypass detection |
 | `test_planner_gh_discovery_guard.py` | Tests for planner_gh_discovery_guard.py interpreter bypass detection |
 | `test_ingredient_lock_guard.py` | Tests for ingredient_lock_guard.py PreToolUse hook: deny/allow, fail-open, pipeline scoping |

@@ -16,7 +16,6 @@ import os
 import shlex
 import shutil
 import subprocess
-import time
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,15 +23,7 @@ from uuid import uuid4
 
 import pytest
 
-import autoskillit.hooks._capture_artifacts as capture_artifacts
 import autoskillit.hooks.shell_capture_hook as shell_capture_hook
-from autoskillit.hooks._capture_artifacts import (
-    _CAPTURE_FILENAME_RE,
-    _open_stale_candidate,
-    classify_stale_captures,
-    open_capture_root,
-    open_project_anchor,
-)
 from autoskillit.hooks.shell_capture_hook import _build_harness
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -160,8 +151,8 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
         report = tmp_path / ".autoskillit" / "temp" / "investigate" / "report.md"
         report.unlink(missing_ok=True)
     if label == "nested_wrap":
-        for artifact in _artifact_files(tmp_path):
-            artifact.unlink()
+        shutil.rmtree(_capture_dir(tmp_path))
+        _capture_dir(tmp_path).mkdir()
 
     wrapped = _run_wrapped(command, tmp_path)
 
@@ -513,115 +504,3 @@ def test_harness_contains_no_destructive_verbs(cmd: str) -> None:
             f"forbidden verb {first!r} found in harness line: {raw_line!r}\n"
             f"Generated from command: {cmd!r}"
         )
-
-
-def test_small_output_artifact_safely_retained_by_sweep(tmp_path: Path) -> None:
-    """Portable cleanup retains stale captures without identity-conditioned unlink."""
-    _make_project_dirs(tmp_path)
-    command = "echo hello_small"
-    wrapped = _run_wrapped(command, tmp_path)
-    assert wrapped.returncode == 0
-    artifacts = _artifact_files(tmp_path)
-    assert artifacts, "small-output harness must leave capture file on disk for sweep cleanup"
-    assert len(artifacts) == 1
-
-    target = artifacts[0]
-    os.utime(target, (0, 0))
-    deleted = classify_stale_captures(tmp_path, max_age_seconds=0)
-    assert deleted == 0
-    assert target.exists()
-
-
-def test_sweep_rejects_symlinks_and_traversals(tmp_path: Path) -> None:
-    """Sweep must not follow symlinks or operate outside the capture directory."""
-    _make_project_dirs(tmp_path)
-    capture = _capture_dir(tmp_path)
-
-    outside = tmp_path / "outside_target.log"
-    outside.write_text("must-survive")
-    symlink = capture / f"shell_{uuid4().hex[:16]}.log"
-    symlink.symlink_to(outside)
-    assert symlink.is_symlink()
-
-    deleted = classify_stale_captures(tmp_path, max_age_seconds=0)
-    assert deleted == 0
-    assert outside.exists(), "outside target file must be untouched by sweep"
-    assert outside.read_text() == "must-survive"
-    assert symlink.is_symlink(), (
-        "symlink must remain after sweep (sweep must not follow into the target)"
-    )
-
-
-def test_stale_candidate_classifier_enforces_filename_allowlist(tmp_path: Path) -> None:
-    """Only strict ``shell_<16hex>.log`` names reach stale-candidate classification."""
-    _make_project_dirs(tmp_path)
-    capture = _capture_dir(tmp_path)
-
-    valid = capture / f"shell_{uuid4().hex[:16]}.log"
-    valid.write_text("x")
-    short_uid = capture / "shell_abcd1234.log"  # 8-char format — legacy, must NOT be swept
-    short_uid.write_text("x")
-    invalid_ext = capture / "evil.sh"
-    invalid_ext.write_text("x")
-
-    anchor = open_project_anchor(str(tmp_path))
-    root = open_capture_root(anchor, create=False)
-    try:
-        candidate = _open_stale_candidate(
-            root,
-            valid.name,
-            mtime_threshold=time.time() + 1,
-        )
-        assert candidate is not None
-        candidate.close()
-        assert (
-            _open_stale_candidate(
-                root,
-                short_uid.name,
-                mtime_threshold=time.time() + 1,
-            )
-            is None
-        )
-        assert (
-            _open_stale_candidate(
-                root,
-                invalid_ext.name,
-                mtime_threshold=time.time() + 1,
-            )
-            is None
-        )
-    finally:
-        root.close()
-        anchor.close()
-
-
-def test_stale_capture_classifier_uses_wall_clock_threshold(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _make_project_dirs(tmp_path)
-    capture = _capture_dir(tmp_path)
-    stale = capture / f"shell_{uuid4().hex[:16]}.log"
-    stale.write_text("x")
-    os.utime(stale, (300, 300))
-    os.utime(capture, (499, 499))
-
-    observed_thresholds: list[float] = []
-    real_classifier = capture_artifacts._open_stale_candidate
-
-    def observe_threshold(root, name, *, mtime_threshold):
-        observed_thresholds.append(mtime_threshold)
-        return real_classifier(root, name, mtime_threshold=mtime_threshold)
-
-    monkeypatch.setattr(capture_artifacts.time, "time", lambda: 500)
-    monkeypatch.setattr(capture_artifacts, "_open_stale_candidate", observe_threshold)
-
-    assert classify_stale_captures(tmp_path, max_age_seconds=100) == 0
-    assert observed_thresholds == [400]
-
-
-def test_capture_filename_regex_consistency() -> None:
-    """The canonical helper accepts only the current capture filename contract."""
-    sample = f"shell_{uuid4().hex[:16]}.log"
-    assert _CAPTURE_FILENAME_RE.fullmatch(sample) is not None
-    assert _CAPTURE_FILENAME_RE.fullmatch("shell_deadbeef.log") is None

@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "5e547deac3484e0c1d79b53b7badfd1ecfb27ec73ea23075d9341b8f280e8818",
+  "_registry_hash": "3cf98aabcb0a1334c4ed08de5bbea684491af01b237ac86e10ffa789edef0ae6",
   "hooks": {
     "PostToolUse": [
       {
@@ -305,6 +305,18 @@
           }
         ],
         "matcher": "(mcp__.*autoskillit.*__)?reset_dispatch"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py capture_lifecycle_hook",
+            "timeout": 2,
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ]
       }
     ]
   }

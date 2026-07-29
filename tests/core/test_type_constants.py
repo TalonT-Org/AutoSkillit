@@ -405,7 +405,12 @@ def test_provider_profile_in_private_env_vars() -> None:
 def test_headless_tools_contains_expected_names():
     from autoskillit.core.types import HEADLESS_TOOLS
 
-    assert HEADLESS_TOOLS == {"test_check", "unlock_agent_pack", "commit_files"}
+    assert HEADLESS_TOOLS == {
+        "test_check",
+        "unlock_agent_pack",
+        "commit_files",
+        "write_audit_cycle_artifact",
+    }
 
 
 def test_free_range_tools_contains_expected_names():

@@ -380,6 +380,7 @@ def write_audit_cycle_artifact_sync(
         content_digest = compute_bytes_hash(Path(path).read_bytes())
         return {"success": True, "path": path, "content_digest": content_digest}
     except Exception as exc:
+        logger.error("write_audit_cycle_artifact_sync unhandled exception", exc_info=True)
         return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
 
 

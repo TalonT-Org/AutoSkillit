@@ -337,7 +337,8 @@ orchestrators can capture the plan and, in remediation mode, its verified dispos
    same REQ ID. `satisfied-by-round-N` must name the verified prior audit round. No other
    vocabulary, duplicate IDs, omitted rows, or invented padding is allowed.
 5. After the final plan bytes are stable, call
-   `write_audit_cycle_artifact(kind="disposition_report", path=..., fields={...}, cwd=...)`
+   `write_audit_cycle_artifact(kind="disposition_report", path=..., fields={...}, cwd=...)` —
+   this constructs and canonically writes the immutable `PlanDispositionReport` server-side —
    with `fields` containing `execution_generation`, `cycle_id`, `plan_set_id`, `scope_id`,
    `part_id`, `audit_round`, `current_plan_ref` (the verified plan `ArtifactRef` fields), the
    exact ordered `dispositions` rows, and `generated_at` — plus `parent_authority_digest`,

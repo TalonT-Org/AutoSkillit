@@ -33,8 +33,10 @@ from tests.server.test_tools_recipe_pull import (
     _evidence,
     _finalize_recipe_delivery,
     _ledger,
+    _payload,
     _protected_codex_backend,
     _request,
+    _test_projection,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
@@ -177,8 +179,6 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
     tool_ctx_kitchen_open,
 ) -> None:
     """REQ-033: each delivery mode places the credential at a caller-visible location."""
-    from autoskillit.recipe import load_and_validate
-    from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
     from tests.server._helpers import _credit_initialization_sections, _open_kitchen_patched
 
     monkeypatch.chdir(tmp_path)
@@ -197,20 +197,21 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
             from autoskillit.recipe._api_cache import LoadCache
 
             monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-            result = load_and_validate(
-                _RECIPE_ENVELOPE,
-                include_finalized_projection=True,
-            )
-            projection = result.pop("_finalized_projection", None)
-            assert projection is not None
-            payload = build_open_kitchen_recipe_payload(dict(result), version="0.0.0")
+            # The real ``remediation`` recipe's full payload (104 KB body +
+            # 98 KB flow_records + ~250 KB metadata) renders to ~453 KB —
+            # far above Codex's authoritative attested budget of 56_750 bytes.
+            # Use a synthetic small payload that fits the ATTESTED_INLINE
+            # window while still exercising the real finalize path with a
+            # non-trivial body, projection, and flow records.
+            payload = _payload("remediation body\n" + ("x" * 30_000))
+            payload["recipe_name"] = _RECIPE_ENVELOPE
             tool_ctx_kitchen_open.backend = _protected_codex_backend()
             finalized = _finalize_recipe_delivery(
                 payload,
                 surface="open_kitchen",
                 recipe_name=_RECIPE_ENVELOPE,
                 tool_ctx=tool_ctx_kitchen_open,
-                finalized_projection=projection,
+                finalized_projection=_test_projection(),
                 delivery_request=_request(),
                 attestation=_attestation(),
                 supported_evidence=_evidence(),

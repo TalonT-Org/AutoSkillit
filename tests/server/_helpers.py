@@ -86,7 +86,12 @@ async def _pull_step_section(envelope: dict[str, Any], step_name: str) -> dict[s
     assert isinstance(body, str) and body, f"step section {step_name!r} came back empty"
     parsed = load_yaml(body)
     assert isinstance(parsed, dict), f"step section {step_name!r} is not a mapping"
-    return parsed
+    assert step_name in parsed, (
+        f"step section {step_name!r} not present in section body; got keys {sorted(parsed)}"
+    )
+    step_obj = parsed[step_name]
+    assert isinstance(step_obj, dict), f"step section {step_name!r} body is not a mapping"
+    return step_obj
 
 
 def _with_finalized_projection(

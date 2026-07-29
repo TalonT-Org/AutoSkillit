@@ -1152,3 +1152,102 @@ async def test_claim_issue_returns_investigation_complete_success(
     )
     assert "investigation_complete" in result
     assert result["investigation_complete"] is True
+
+
+@pytest.mark.anyio
+async def test_claim_issue_investigation_complete_false_when_marker_in_code_fence(
+    tool_ctx_kitchen_open,
+) -> None:
+    """A marker quoted in a fenced code block is not an investigation signal."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+        return_value={
+            "success": True,
+            "state": "closed",
+            "labels": [],
+            "body": "```\n<!-- investigation_complete: true -->\n```\nSome prose.",
+        }
+    )
+
+    result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+    assert result["investigation_complete"] is False
+
+
+@pytest.mark.anyio
+async def test_claim_issue_investigation_complete_false_when_marker_in_inline_span(
+    tool_ctx_kitchen_open,
+) -> None:
+    """A marker quoted in an inline code span is not an investigation signal."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+        return_value={
+            "success": True,
+            "state": "closed",
+            "labels": [],
+            "body": "Check `<!-- investigation_complete: true -->` for details.",
+        }
+    )
+
+    result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+    assert result["investigation_complete"] is False
+
+
+@pytest.mark.anyio
+async def test_claim_issue_investigation_complete_true_with_genuine_and_quoted_marker(
+    tool_ctx_kitchen_open,
+) -> None:
+    """A genuine marker remains effective when another copy is fenced."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+        return_value={
+            "success": True,
+            "state": "closed",
+            "labels": [],
+            "body": (
+                "## Investigation\n\n"
+                "<!-- investigation_complete: true -->\n\n"
+                "```\n<!-- investigation_complete: true -->\n```"
+            ),
+        }
+    )
+
+    result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+    assert result["investigation_complete"] is True
+
+
+@pytest.mark.anyio
+async def test_claim_issue_review_approach_false_when_marker_in_code_fence(
+    tool_ctx_kitchen_open,
+) -> None:
+    """A review marker quoted in a fenced code block is ignored."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+        return_value={
+            "success": True,
+            "state": "closed",
+            "labels": [],
+            "body": "```\n<!-- review_approach: true -->\n```\nSome prose.",
+        }
+    )
+
+    result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+    assert result["review_approach_recommended"] is False
+
+
+@pytest.mark.anyio
+async def test_claim_issue_review_approach_false_when_marker_in_inline_span(
+    tool_ctx_kitchen_open,
+) -> None:
+    """A review marker quoted in an inline code span is ignored."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+        return_value={
+            "success": True,
+            "state": "closed",
+            "labels": [],
+            "body": "Check `<!-- review_approach: true -->` for details.",
+        }
+    )
+
+    result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+    assert result["review_approach_recommended"] is False

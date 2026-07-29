@@ -183,8 +183,9 @@ When the in-progress context is empty, omit Step 2b entirely — `cross_assessme
 #### Investigation-Complete Detection (unconditional)
 
 For each issue, check whether the issue body contains the `<!-- investigation_complete: true -->`
-HTML comment marker. Set `investigation_complete: true` or `false` per issue. This is a simple
-substring check — no LLM assessment required.
+HTML comment marker **outside of markdown code regions** (fenced code blocks and inline code spans).
+Markers that appear only inside code examples are documentation references, not real markers.
+Set `investigation_complete: true` or `false` per issue.
 
 Emit a terminal token when at least one issue has the marker:
 ```

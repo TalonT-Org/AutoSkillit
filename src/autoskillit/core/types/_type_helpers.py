@@ -30,11 +30,13 @@ __all__ = [
     "extract_path_arg",
     "extract_positional_args",
     "extract_skill_name",
+    "detect_body_marker",
     "fleet_error",
     "render_target_skill_command",
     "resolve_skill_name",
     "resolve_target_skill",
     "session_type",
+    "strip_markdown_code_regions",
     "truncate_text",
 ]
 
@@ -426,6 +428,25 @@ def truncate_text(text: str, max_len: int = 5000) -> str:
     if len(text) <= max_len:
         return text
     return f"...[truncated {len(text) - max_len} chars]...\n" + text[-max_len:]
+
+
+_CODE_BLOCK_RE = re.compile(r"(```|~~~).*?\1", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+
+
+def strip_markdown_code_regions(text: str) -> str:
+    """Remove fenced code blocks and inline code spans from markdown text."""
+    while True:
+        stripped = _CODE_BLOCK_RE.sub("", text)
+        stripped = _INLINE_CODE_RE.sub("", stripped)
+        if stripped == text:
+            return stripped
+        text = stripped
+
+
+def detect_body_marker(body: str, marker: str) -> bool:
+    """Check whether *marker* appears in *body* outside markdown code regions."""
+    return marker in strip_markdown_code_regions(body)
 
 
 def fleet_error(

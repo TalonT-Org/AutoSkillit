@@ -394,6 +394,48 @@ class TestClaimAndResolveIssue:
         result = json.loads(await claim_and_resolve_issue("owner/repo#42"))
         assert result["investigation_complete"] is False
 
+    @pytest.mark.anyio
+    async def test_claim_and_resolve_investigation_complete_false_when_marker_in_code_fence(
+        self, tool_ctx_kitchen_open
+    ):
+        """A fenced investigation marker does not set investigation_complete."""
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+            return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+        )
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+            return_value={
+                "success": True,
+                "state": "closed",
+                "labels": [],
+                "body": "```\n<!-- investigation_complete: true -->\n```\nSome prose.",
+            }
+        )
+
+        result = json.loads(await claim_and_resolve_issue("owner/repo#42"))
+        assert result["investigation_complete"] is False
+
+    @pytest.mark.anyio
+    async def test_claim_and_resolve_review_approach_false_when_marker_in_code_fence(
+        self, tool_ctx_kitchen_open
+    ):
+        """A fenced review marker does not set review_approach_recommended."""
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+            return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+        )
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+            return_value={
+                "success": True,
+                "state": "closed",
+                "labels": [],
+                "body": "```\n<!-- review_approach: true -->\n```\nSome prose.",
+            }
+        )
+
+        result = json.loads(await claim_and_resolve_issue("owner/repo#42"))
+        assert result["review_approach_recommended"] is False
+
 
 class TestCreateAndPublishBranch:
     @pytest.mark.anyio

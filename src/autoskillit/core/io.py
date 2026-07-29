@@ -220,18 +220,20 @@ def atomic_write(
     path.parent.mkdir(parents=True, exist_ok=True)
     if exclusive:
         os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    tmp: str | None = None
     try:
+        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())  # durable data write
         os.replace(tmp, path)
     except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
         if exclusive:
             try:
                 os.unlink(path)

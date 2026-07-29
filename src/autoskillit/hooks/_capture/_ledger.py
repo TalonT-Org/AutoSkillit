@@ -9,6 +9,7 @@ import math
 import os
 import re
 import struct
+import sys
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, cast
@@ -19,6 +20,12 @@ from ._snapshot import (
     CaptureFinalManifest,
     LegacyCleanupOnly,
 )
+
+_THIS_MODULE = sys.modules[__name__]
+for _alias in ("_capture._ledger", "autoskillit.hooks._capture._ledger"):
+    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
+    if _existing is not _THIS_MODULE:
+        raise RuntimeError("conflicting shell-capture ledger module identity")
 
 __all__ = [
     "CURRENT_FORMAT_VERSION",
@@ -75,6 +82,7 @@ class CaptureReferenceStatus(StrEnum):
     ISSUED = "issued"
     PUBLISHED = "published"
     UNAVAILABLE = "unavailable"
+    UNKNOWN = "unknown"
     EXPIRED = "expired"
     REVOKED = "revoked"
 

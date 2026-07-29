@@ -1,5 +1,3 @@
-"""Descriptor-relative durable lifecycle for retained shell captures."""
-
 from __future__ import annotations
 
 import errno
@@ -9,13 +7,21 @@ import os
 import re
 import secrets
 import stat
+import sys
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+_THIS_MODULE = sys.modules[__name__]
+for _alias in ("_capture_lifecycle", "autoskillit.hooks._capture_lifecycle"):
+    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
+    if _existing is not _THIS_MODULE:
+        raise RuntimeError("conflicting shell-capture lifecycle module identity")
+
 if TYPE_CHECKING:
+    from autoskillit.hooks._capture import _delivery as _capture_delivery
     from autoskillit.hooks._capture import _ledger as _capture_ledger
     from autoskillit.hooks._capture import _resolver as _capture_resolver
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
@@ -23,6 +29,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _types as _capture_types
 else:
     _CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
+    _capture_delivery = importlib.import_module(f"{_CAPTURE_PACKAGE}._delivery")
     _capture_ledger = importlib.import_module(f"{_CAPTURE_PACKAGE}._ledger")
     _capture_resolver = importlib.import_module(f"{_CAPTURE_PACKAGE}._resolver")
     _capture_snapshot = importlib.import_module(f"{_CAPTURE_PACKAGE}._snapshot")
@@ -61,11 +68,9 @@ __all__ = [
 FRAME_MAGIC = _capture_ledger.FRAME_MAGIC
 LEDGER_NAME = ".capture-lifecycle.ledger"
 LOCK_NAME = ".capture-lifecycle.lock"
-MAX_FRAME_BYTES = _capture_ledger.MAX_FRAME_BYTES
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
 MAX_ACTIVE_RECORDS = 4096
 
-_FORMAT_VERSION = _capture_ledger.CURRENT_FORMAT_VERSION
 _RETENTION_SECONDS = 3600.0
 _REFERENCE_LIFETIME_SECONDS = 1800.0
 _MAX_RETRY_SECONDS = 3600.0
@@ -85,11 +90,11 @@ _UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
 
 
 class CaptureLifecycleError(RuntimeError):
-    """Raised when lifecycle authority or state cannot be established safely."""
+    pass
 
 
 class CaptureLedgerError(CaptureLifecycleError):
-    """Raised when durable lifecycle state is corrupt or exceeds a bound."""
+    pass
 
 
 CaptureState = _capture_ledger.CaptureState
@@ -152,8 +157,6 @@ def _validate_control_file(fd: int, name: str) -> None:
 
 
 class CaptureLifecycleStore:
-    """Root-bound lifecycle state, liveness, recovery, and deletion authority."""
-
     def __init__(
         self,
         root_fd: int,
@@ -519,8 +522,6 @@ class CaptureLifecycleStore:
         self,
         capture_id: str,
     ) -> tuple[int, int, str, tuple[int, int], CaptureWriteAuthority]:
-        """Create, lease, and durably publish one capture artifact."""
-
         record = self.reserve_capture(capture_id)
         authority = self._authority_for(record)
         fd = -1
@@ -697,28 +698,12 @@ class CaptureLifecycleStore:
             self._append_locked(candidate, records, compaction_epoch, size)
         return finalized
 
-    def publish_reference(
-        self,
-        finalized: FinalizedCapture,
-    ) -> PublishedCaptureReference:
-        if type(finalized) is not FinalizedCapture or finalized.issuance is None:
-            raise CaptureLifecycleError("publication requires an issued finalized capture")
-        issuance = finalized.issuance
-        authority = _capture_snapshot._make_write_authority(
-            issuance.snapshot.manifest.capture_id,
-            issuance.snapshot.manifest.incarnation,
-            finalized.finalized_at_revision,
+    def publish_reference(self, finalized: FinalizedCapture) -> PublishedCaptureReference:
+        return _capture_delivery.publish_reference(
+            self,
+            finalized,
+            lifecycle_error=CaptureLifecycleError,
         )
-        self._transition(
-            authority,
-            allowed_states={CaptureState.FINALIZED},
-            transform=lambda record: replace(
-                record,
-                reference_status=CaptureReferenceStatus.PUBLISHED,
-                revision=record.revision + 1,
-            ),
-        )
-        return _capture_snapshot._make_published_reference(issuance)
 
     def mark_reference_unavailable(
         self,
@@ -726,23 +711,41 @@ class CaptureLifecycleStore:
         *,
         reason_code: str,
     ) -> UnavailableCaptureReference:
-        if type(finalized) is not FinalizedCapture:
-            raise CaptureLifecycleError("unavailable transition requires finalized capture")
-        snapshot = finalized.snapshot
-        record = self.get_record(snapshot.manifest.capture_id)
-        if record is None:
-            raise CaptureLifecycleError("finalized capture record is unavailable")
-        authority = self._authority_for(record)
-        self._transition(
-            authority,
-            allowed_states={CaptureState.FINALIZED},
-            transform=lambda current: replace(
-                current,
-                reference_status=CaptureReferenceStatus.UNAVAILABLE,
-                revision=current.revision + 1,
-            ),
+        return _capture_delivery.mark_reference_unavailable(
+            self,
+            finalized,
+            reason_code=reason_code,
+            lifecycle_error=CaptureLifecycleError,
         )
-        return _capture_snapshot._make_unavailable_reference(snapshot, reason_code)
+
+    def transition_delivery(
+        self,
+        value: _capture_delivery.DeliveryValue,
+        *,
+        expected: CaptureDeliveryStatus,
+        target: CaptureDeliveryStatus,
+    ) -> CaptureLifecycleRecord:
+        return _capture_delivery.transition_delivery(
+            self,
+            value,
+            expected=expected,
+            target=target,
+            lifecycle_error=CaptureLifecycleError,
+        )
+
+    def mark_delivery_unknown(
+        self, value: _capture_delivery.DeliveryValue
+    ) -> CaptureLifecycleRecord:
+        return _capture_delivery.mark_delivery_unknown(
+            self,
+            value,
+            lifecycle_error=CaptureLifecycleError,
+        )
+
+    def recover_interrupted_delivery(self, capture_id: str) -> CaptureLifecycleRecord:
+        return _capture_delivery.recover_interrupted_delivery(
+            self, capture_id, lifecycle_error=CaptureLifecycleError
+        )
 
     def get_record(self, capture_id: str) -> CaptureLifecycleRecord | None:
         with self._locked():
@@ -750,7 +753,6 @@ class CaptureLifecycleStore:
             return records.get(capture_id)
 
     def open_verified_capture(self, token: str) -> _capture_snapshot.VerifiedCaptureReader:
-        """Resolve #4325's opaque retrieval seam under a retained shared lease."""
         return _capture_resolver.open_verified_capture(
             self,
             token,
@@ -758,9 +760,7 @@ class CaptureLifecycleStore:
         )
 
     def _adopt_verified_capture(
-        self,
-        finalized: FinalizedCapture,
-        fd: int,
+        self, finalized: FinalizedCapture, fd: int
     ) -> _capture_snapshot.VerifiedCaptureReader:
         return _capture_resolver.adopt_verified_capture(
             self,

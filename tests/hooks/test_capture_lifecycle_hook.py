@@ -87,6 +87,35 @@ def test_standalone_authority_uses_standalone_lifecycle_identity() -> None:
     assert completed.stdout == ""
 
 
+@pytest.mark.parametrize(
+    "prelude",
+    ("", "import autoskillit.hooks._capture._types\n"),
+    ids=("standalone-first", "package-first"),
+)
+def test_package_cleanup_hook_preserves_direct_capture_package_imports(
+    prelude: str,
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                prelude + "import autoskillit.hooks.capture_lifecycle_hook\n"
+                "import autoskillit.hooks._capture._reader as reader\n"
+                "assert reader.__name__ in "
+                "{'_capture._reader', 'autoskillit.hooks._capture._reader'}\n"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == ""
+
+
 def _run_hook(
     project: Path,
     payload: object,

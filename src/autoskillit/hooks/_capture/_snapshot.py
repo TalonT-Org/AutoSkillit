@@ -1,8 +1,4 @@
-"""Factory-only descriptor authority for finalized shell captures.
-
-This module is stdlib-only and intentionally supports both package imports and
-the isolated hook runner's ``_capture`` import spelling.
-"""
+"""Factory-only descriptor authority for finalized shell captures."""
 
 from __future__ import annotations
 
@@ -17,7 +13,7 @@ import stat
 import sys
 from dataclasses import InitVar, dataclass
 from enum import StrEnum
-from typing import Any, NoReturn, SupportsIndex
+from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
 from ._reader import (
     MAX_VERIFIED_READ_BYTES,
@@ -33,6 +29,17 @@ from ._reader import (
 from ._reader import (
     _verify_manifest_descriptor as _verify_reader_descriptor,
 )
+from ._snapshot_v2 import capture_v2_fields as _capture_v2_fields
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._capture_contract import (
+        CaptureV2Fields,
+        CaptureV2Renderable,
+    )
+elif __package__ == "_capture":
+    from _capture_contract import CaptureV2Fields, CaptureV2Renderable
+else:
+    from .._capture_contract import CaptureV2Fields, CaptureV2Renderable
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._snapshot", "autoskillit.hooks._capture._snapshot"):
@@ -392,7 +399,7 @@ class IssuedCaptureReference(_NoAuthorityCopy):
 
 
 @dataclass(frozen=True, slots=True)
-class PublishedCaptureReference(_NoAuthorityCopy):
+class PublishedCaptureReference(_NoAuthorityCopy, CaptureV2Renderable):
     snapshot: VerifiedCaptureSnapshot
     token: str
     _factory_token: InitVar[object | None] = None
@@ -407,9 +414,17 @@ class PublishedCaptureReference(_NoAuthorityCopy):
         ):
             raise CaptureAuthorityError("published reference does not match snapshot")
 
+    def capture_v2_fields(self) -> CaptureV2Fields:
+        return _capture_v2_fields(
+            self.snapshot,
+            reference_status="published",
+            reference=self.token,
+            unavailable_reason=None,
+        )
+
 
 @dataclass(frozen=True, slots=True)
-class UnavailableCaptureReference(_NoAuthorityCopy):
+class UnavailableCaptureReference(_NoAuthorityCopy, CaptureV2Renderable):
     snapshot: VerifiedCaptureSnapshot
     reason_code: str
     _factory_token: InitVar[object | None] = None
@@ -422,6 +437,14 @@ class UnavailableCaptureReference(_NoAuthorityCopy):
             or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", self.reason_code)
         ):
             raise CaptureAuthorityError("invalid unavailable capture reference")
+
+    def capture_v2_fields(self) -> CaptureV2Fields:
+        return _capture_v2_fields(
+            self.snapshot,
+            reference_status="unavailable",
+            reference=None,
+            unavailable_reason=self.reason_code,
+        )
 
 
 @dataclass(frozen=True, slots=True)

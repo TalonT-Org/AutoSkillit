@@ -1,9 +1,4 @@
-"""Descriptor-anchored shell-capture authority and isolated runner.
-
-This module is stdlib-only and is executable under Python isolated mode. It
-owns the trust boundary for capture policy reads, artifact publication, and
-replay.  Durable state and reclamation live in ``_capture_lifecycle``.
-"""
+"""Descriptor-anchored shell-capture authority and isolated runner."""
 
 from __future__ import annotations
 
@@ -26,6 +21,8 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 if TYPE_CHECKING:
+    from autoskillit.hooks._capture import _delivery as _capture_delivery
+    from autoskillit.hooks._capture import _replay as _capture_replay
     from autoskillit.hooks._capture._authority import (
         _DIRECTORY_FLAGS,
         _READ_FLAGS,
@@ -48,12 +45,18 @@ if TYPE_CHECKING:
         CaptureWriteAuthority,
         CommandOutcome,
         FinalizedCapture,
+        IssuedCaptureReference,
+        PublishedCaptureReference,
+        UnavailableCaptureReference,
         VerifiedCaptureReader,
-        VerifiedCaptureSnapshot,
         verify_capture_snapshot,
     )
-    from autoskillit.hooks._capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
+    from autoskillit.hooks._capture_contract import (
+        _CAPTURE_ID_RE,
+        _MAX_COMMAND_BYTES,
+    )
     from autoskillit.hooks._capture_lifecycle import (
+        CaptureDeliveryStatus,
         CaptureLifecycleError,
         CaptureLifecycleStore,
     )
@@ -62,8 +65,9 @@ if TYPE_CHECKING:
         HOOK_CONFIG_OVERLAY_FILENAME,
         merge_hook_configs,
     )
-    from autoskillit.hooks._policy_event import PolicyEvent, render_capture_marker
 else:
+    from _capture import _delivery as _capture_delivery
+    from _capture import _replay as _capture_replay
     from _capture._authority import (
         _DIRECTORY_FLAGS,
         _READ_FLAGS,
@@ -86,18 +90,39 @@ else:
         CaptureWriteAuthority,
         CommandOutcome,
         FinalizedCapture,
+        IssuedCaptureReference,
+        PublishedCaptureReference,
+        UnavailableCaptureReference,
         VerifiedCaptureReader,
-        VerifiedCaptureSnapshot,
         verify_capture_snapshot,
     )
-    from _capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
-    from _capture_lifecycle import CaptureLifecycleError, CaptureLifecycleStore
+    from _capture_contract import (
+        _CAPTURE_ID_RE,
+        _MAX_COMMAND_BYTES,
+    )
+    from _capture_lifecycle import (
+        CaptureDeliveryStatus,
+        CaptureLifecycleError,
+        CaptureLifecycleStore,
+    )
     from _hook_settings import (
         HOOK_CONFIG_FILENAME,
         HOOK_CONFIG_OVERLAY_FILENAME,
         merge_hook_configs,
     )
-    from _policy_event import PolicyEvent, render_capture_marker
+
+_RunnerSettlementEvidence = _capture_replay.RunnerSettlementEvidence
+_PROCESS_SETTLE_TIMEOUT_SECONDS = _capture_replay._PROCESS_SETTLE_TIMEOUT_SECONDS
+_bounded_detail = _capture_replay._bounded_detail
+_capture_failure_return = _capture_replay.capture_failure_return
+_failure_stage = _capture_replay._failure_stage
+_failure_transport = _capture_replay.failure_transport
+_render_inline_capture = _capture_replay.render_inline_capture
+_render_oversized_capture = _capture_replay.render_oversized_capture
+_runner_failure = _capture_replay.runner_failure
+_settle_failed_capture = _capture_replay.settle_failed_capture
+_write_all_stream = _capture_replay.write_all_stream
+_write_and_flush_hook_stdout = _capture_replay.write_and_flush_hook_stdout
 
 __all__ = [
     "CAPTURE_PATH_COMPONENTS",
@@ -107,12 +132,12 @@ __all__ = [
     "CaptureSetupError",
     "ProjectAnchor",
     "create_capture_artifact",
-    "current_artifact_path_if_bound",
     "open_capture_lifecycle",
     "open_capture_root",
     "open_project_anchor",
     "read_capture_policy",
     "run_capture",
+    "verify_reference_publication_binding",
 ]
 
 _DEFAULT_INLINE_BYTES = 12_000
@@ -120,8 +145,6 @@ _MAX_INLINE_BYTES = 1_000_000
 _MAX_POLICY_FILE_BYTES = 64 * 1024
 _MAX_ENCODED_COMMAND_BYTES = ((_MAX_COMMAND_BYTES + 2) // 3) * 4
 _DRAIN_CHUNK_BYTES = 64 * 1024
-_CAPTURE_FAILURE_RETURN_CODE = 1
-_PROCESS_SETTLE_TIMEOUT_SECONDS = 2
 _MAX_CLEANUP_DETAIL_BYTES = 240
 _TRUSTED_BASH_CANDIDATES = ("/bin/bash", "/usr/bin/bash")
 _EXECUTABLE_MODE_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
@@ -138,8 +161,6 @@ _ARTIFACT_FACTORY_TOKEN = object()
 
 @dataclass(frozen=True, slots=True)
 class CaptureArtifact:
-    """Exclusive capture artifact retained by descriptor."""
-
     fd: int
     name: str
     identity: FileIdentity
@@ -153,8 +174,6 @@ class CaptureArtifact:
             raise CaptureSetupError("CaptureArtifact must be created by create_capture_artifact")
 
     def close_artifact_fd(self) -> None:
-        """Close only the artifact data descriptor; keep the writer lease held."""
-
         if self.fd >= 0:
             descriptor = self.fd
             object.__setattr__(self, "fd", -1)
@@ -177,8 +196,6 @@ class CaptureArtifact:
         lifecycle: CaptureLifecycleStore,
         finalized: FinalizedCapture,
     ) -> VerifiedCaptureReader:
-        """Move the retained producer-exclusive carrier lease into a reader."""
-
         if self.drain_writer_fd >= 0:
             raise CaptureSetupError("capture drain writer is still open")
         if self.fd < 0 or self.lease_fd < 0:
@@ -209,34 +226,12 @@ class _DrainResult:
     measurement: CaptureMeasurement
     write_error: OSError | None
 
-    @property
-    def total_bytes(self) -> int:
-        return self.measurement.total_bytes
-
-    @property
-    def sha256(self) -> str:
-        return self.measurement.sha256
-
-    @property
-    def inline(self) -> bytes:
-        return self.measurement.inline
-
-    @property
-    def head(self) -> bytes:
-        return self.measurement.head
-
-    @property
-    def tail(self) -> bytes:
-        return self.measurement.tail
-
 
 def create_capture_artifact(
     root: CaptureRoot,
     capture_id: str,
     lifecycle: CaptureLifecycleStore,
 ) -> CaptureArtifact:
-    """Stage and publish a managed artifact beneath an open capture root."""
-
     if not _CAPTURE_ID_RE.fullmatch(capture_id):
         raise CaptureSetupError("invalid capture id")
     try:
@@ -255,8 +250,6 @@ def create_capture_artifact(
 
 
 def _duplicate_artifact_writer(artifact: CaptureArtifact) -> int:
-    """Duplicate the artifact fd for the drain stage without transferring it to Bash."""
-
     writer_fd = -1
     try:
         if artifact.fd < 0 or artifact.drain_writer_fd >= 0:
@@ -311,8 +304,6 @@ def _policy_inline_bytes(value: object) -> int:
 
 
 def read_capture_policy(anchor: ProjectAnchor) -> CapturePolicy:
-    """Read output policy only through verified project/temp directory descriptors."""
-
     autoskillit_fd = -1
     temp_fd = -1
     try:
@@ -360,50 +351,61 @@ def _open_and_match_directory(parent_fd: int, name: str, expected: FileIdentity)
     return fd
 
 
-def current_artifact_path_if_bound(
+def verify_reference_publication_binding(
     anchor: ProjectAnchor,
     root: CaptureRoot,
     artifact: CaptureArtifact,
-) -> str | None:
-    """Return a path only if the current pathname chain still binds to all opened fds."""
+    issuance: IssuedCaptureReference,
+) -> bool:
+    """Verify that an issued tuple still resolves through the retained authorities."""
 
+    if type(issuance) is not IssuedCaptureReference:
+        raise CaptureSetupError("publication binding requires an issued reference")
+    manifest = issuance.snapshot.manifest
+    if (
+        manifest.project_identity != (anchor.identity.device, anchor.identity.inode)
+        or manifest.root_identity != (root.identity.device, root.identity.inode)
+        or manifest.carrier_name != artifact.name
+        or manifest.carrier_identity != (artifact.identity.device, artifact.identity.inode)
+    ):
+        return False
     opened: list[int] = []
     try:
         try:
-            marker_physical_path = Path(os.path.realpath(anchor.supplied_path))
+            project_path = Path(os.path.realpath(anchor.supplied_path))
             project_fd = os.open(
-                marker_physical_path,
+                project_path,
                 _DIRECTORY_FLAGS,
             )
         except OSError:
-            return None
+            return False
         opened.append(project_fd)
         if not _same_identity(project_fd, anchor.identity):
-            return None
+            return False
 
         autoskillit_fd = _open_and_match_directory(
             project_fd, CAPTURE_PATH_COMPONENTS[0], root.autoskillit_identity
         )
         if autoskillit_fd < 0:
-            return None
+            return False
         opened.append(autoskillit_fd)
 
         temp_fd = _open_and_match_directory(
             autoskillit_fd, CAPTURE_PATH_COMPONENTS[1], root.temp_identity
         )
         if temp_fd < 0:
-            return None
+            return False
         opened.append(temp_fd)
 
         capture_fd = _open_and_match_directory(temp_fd, CAPTURE_PATH_COMPONENTS[2], root.identity)
         if capture_fd < 0:
-            return None
+            return False
         opened.append(capture_fd)
 
         try:
             current_artifact_fd = os.open(artifact.name, _READ_FLAGS, dir_fd=capture_fd)
         except OSError:
-            return None
+            return False
         opened.append(current_artifact_fd)
         current_value = os.fstat(current_artifact_fd)
         if (
@@ -412,8 +414,8 @@ def current_artifact_path_if_bound(
             or current_value.st_nlink != 1
             or current_value.st_mode & stat.S_IWOTH
         ):
-            return None
-        return str(marker_physical_path.joinpath(*CAPTURE_PATH_COMPONENTS, artifact.name))
+            return False
+        return True
     finally:
         for fd in reversed(opened):
             os.close(fd)
@@ -530,57 +532,6 @@ def _normalized_returncode(returncode: int) -> int:
     return 128 + (-returncode) if returncode < 0 else returncode
 
 
-def _capture_event(reason_code: str, decision: str) -> PolicyEvent:
-    return PolicyEvent(
-        hook_id="shell_capture_hook",
-        hook_version=1,
-        event="PreToolUse",
-        decision=decision,
-        reason_code=reason_code,
-    )
-
-
-def _emit_failure(detail: str) -> None:
-    prefix = render_capture_marker(_capture_event("CAPTURE_FAILED", "deny"))
-    safe_detail = " ".join(detail.split()).replace("]", "\\u005d")[:240]
-    sys.stderr.write(f"{prefix} {safe_detail}]\n")
-
-
-def _capture_failure_return(detail: str, returncode: int | None) -> int:
-    try:
-        _emit_failure(detail)
-    except _CAPTURE_RUNTIME_ERRORS:
-        return _CAPTURE_FAILURE_RETURN_CODE
-    if returncode is None or returncode == 0:
-        return _CAPTURE_FAILURE_RETURN_CODE
-    return returncode
-
-
-def _encode_marker_path(path: str) -> str:
-    """Return a single-line path that cannot terminate the provenance marker."""
-
-    return json.dumps(path, ensure_ascii=True)[1:-1].replace("]", "\\u005d")
-
-
-def _emit_capture(
-    result: _DrainResult,
-    artifact_path: str | None,
-    inline_bytes: int,
-) -> None:
-    if result.total_bytes <= inline_bytes:
-        payload = result.inline
-    else:
-        prefix = render_capture_marker(_capture_event("SHELL_OUTPUT_CAPTURED", "input rewrite"))
-        path = _encode_marker_path(artifact_path) if artifact_path is not None else "unavailable"
-        marker = (
-            f"\n{prefix} full output {result.total_bytes} bytes -> {path} "
-            f"sha256={result.sha256} complete=true]\n"
-        ).encode()
-        payload = result.head + marker + result.tail
-    sys.stdout.buffer.write(payload)
-    sys.stdout.buffer.flush()
-
-
 def _resolve_bash() -> str:
     for candidate in _TRUSTED_BASH_CANDIDATES:
         if not os.path.isabs(candidate):
@@ -605,37 +556,147 @@ def _resolve_bash() -> str:
     raise CaptureSetupError("trusted bash executable unavailable")
 
 
-def _settle_failed_capture(process: subprocess.Popen[bytes]) -> int | None:
-    if process.stdout is not None:
-        try:
-            process.stdout.close()
-        except _CAPTURE_RUNTIME_ERRORS:
-            pass
+def _reference_result_after_transition(
+    lifecycle: CaptureLifecycleStore,
+    finalized: FinalizedCapture,
+    *,
+    unavailable_reason: str,
+) -> PublishedCaptureReference | UnavailableCaptureReference | None:
+    record = lifecycle.get_record(finalized.snapshot.manifest.capture_id)
+    return _capture_delivery.reference_result(
+        finalized,
+        record,
+        unavailable_reason=unavailable_reason,
+        lifecycle_error=CaptureLifecycleError,
+    )
+
+
+def _invalidate_lost_reference(
+    lifecycle: CaptureLifecycleStore,
+    finalized: FinalizedCapture,
+    *,
+    reason_code: str,
+) -> None:
     try:
-        running = process.poll() is None
+        lifecycle.mark_reference_unavailable(
+            finalized,
+            reason_code=reason_code,
+        )
+        return
     except _CAPTURE_RUNTIME_ERRORS:
-        running = True
-    if running:
-        try:
-            process.terminate()
-        except _CAPTURE_RUNTIME_ERRORS:
-            try:
-                process.kill()
-            except _CAPTURE_RUNTIME_ERRORS:
-                pass
+        pass
     try:
-        return process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        try:
-            process.kill()
-        except _CAPTURE_RUNTIME_ERRORS:
-            pass
-        try:
-            return process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS)
-        except _CAPTURE_RUNTIME_ERRORS:
-            return None
+        current = _reference_result_after_transition(
+            lifecycle,
+            finalized,
+            unavailable_reason=reason_code,
+        )
+        if current is not None:
+            return
+        _capture_delivery.mark_reference_unknown(
+            lifecycle,
+            finalized,
+            lifecycle_error=CaptureLifecycleError,
+        )
     except _CAPTURE_RUNTIME_ERRORS:
+        pass
+
+
+def _publish_oversized_capture(
+    anchor: ProjectAnchor,
+    root: CaptureRoot,
+    artifact: CaptureArtifact,
+    lifecycle: CaptureLifecycleStore,
+    finalized: FinalizedCapture,
+) -> PublishedCaptureReference | UnavailableCaptureReference:
+    issuance = finalized.issuance
+    if issuance is None:
+        raise CaptureSetupError("oversized capture lacks issued reference")
+    if not verify_reference_publication_binding(
+        anchor,
+        root,
+        artifact,
+        issuance,
+    ):
+        reason = "PUBLICATION_BINDING_UNAVAILABLE"
+        try:
+            return lifecycle.mark_reference_unavailable(
+                finalized,
+                reason_code=reason,
+            )
+        except _CAPTURE_RUNTIME_ERRORS:
+            reconciled = _reference_result_after_transition(
+                lifecycle,
+                finalized,
+                unavailable_reason=reason,
+            )
+            if type(reconciled) is UnavailableCaptureReference:
+                return reconciled
+            raise
+    try:
+        return lifecycle.publish_reference(finalized)
+    except _CAPTURE_RUNTIME_ERRORS:
+        reconciled = _reference_result_after_transition(
+            lifecycle,
+            finalized,
+            unavailable_reason="PUBLICATION_FAILED",
+        )
+        if type(reconciled) is PublishedCaptureReference:
+            return reconciled
+        _invalidate_lost_reference(
+            lifecycle,
+            finalized,
+            reason_code="PUBLICATION_FAILED",
+        )
+        raise
+
+
+def _delivery_status(
+    lifecycle: CaptureLifecycleStore,
+    value: (FinalizedCapture | PublishedCaptureReference | UnavailableCaptureReference),
+) -> CaptureDeliveryStatus | None:
+    record = lifecycle.get_record(value.snapshot.manifest.capture_id)
+    if record is None or record.manifest != value.snapshot.manifest:
         return None
+    return record.delivery_status
+
+
+def _transition_delivery_checked(
+    lifecycle: CaptureLifecycleStore,
+    value: (FinalizedCapture | PublishedCaptureReference | UnavailableCaptureReference),
+    *,
+    expected: CaptureDeliveryStatus,
+    target: CaptureDeliveryStatus,
+) -> None:
+    try:
+        lifecycle.transition_delivery(
+            value,
+            expected=expected,
+            target=target,
+        )
+    except _CAPTURE_RUNTIME_ERRORS:
+        if _delivery_status(lifecycle, value) == target:
+            return
+        raise
+
+
+def _record_delivery_failure(
+    lifecycle: CaptureLifecycleStore,
+    value: (FinalizedCapture | PublishedCaptureReference | UnavailableCaptureReference),
+) -> None:
+    try:
+        _transition_delivery_checked(
+            lifecycle,
+            value,
+            expected=CaptureDeliveryStatus.ATTEMPTING,
+            target=CaptureDeliveryStatus.FAILED,
+        )
+    except _CAPTURE_RUNTIME_ERRORS:
+        try:
+            if _delivery_status(lifecycle, value) == CaptureDeliveryStatus.ATTEMPTING:
+                lifecycle.mark_delivery_unknown(value)
+        except _CAPTURE_RUNTIME_ERRORS:
+            pass
 
 
 def run_capture(command: str, cwd: str, capture_id: str) -> int:
@@ -668,9 +729,14 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         lifecycle = CaptureLifecycleStore.from_open_authorities(anchor, root)
         artifact = create_capture_artifact(root, capture_id, lifecycle)
         artifact_writer_fd = _duplicate_artifact_writer(artifact)
-        raw_returncode: int | None = None
-        result: _DrainResult | None = None
-        verified: VerifiedCaptureSnapshot | None = None
+        command_outcome: CommandOutcome | None = None
+        command_returncode: int | None = None
+        settlement: _RunnerSettlementEvidence | None = None
+        delivery_value: (
+            FinalizedCapture | PublishedCaptureReference | UnavailableCaptureReference | None
+        ) = None
+        delivery_attempting = False
+        delivery_bytes_flushed = False
         terminal_committed = False
         failure_stage = "capture process spawn"
         try:
@@ -679,9 +745,8 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             result = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
             artifact.close_drain_writer()
             failure_stage = "capture process wait"
-            raw_returncode = process.wait()
-            command_outcome = CommandOutcome.from_wait_result(raw_returncode)
-            returncode = command_outcome.shell_returncode
+            command_outcome = CommandOutcome.from_wait_result(process.wait())
+            command_returncode = command_outcome.shell_returncode
             if result.write_error is not None:
                 failure_stage = "capture failed-state commit"
                 lifecycle.commit_capture_failure(
@@ -693,7 +758,14 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                     observed_size=max(0, os.fstat(artifact.fd).st_size),
                 )
                 terminal_committed = True
-                return _capture_failure_return("capture artifact write failed", returncode)
+                return _capture_failure_return(
+                    _failure_transport(
+                        stage="artifact_write",
+                        detail="capture artifact write failed",
+                        shell_returncode=command_returncode,
+                        settlement=None,
+                    )
+                )
             failure_stage = "capture artifact integrity verification"
             finalized_at = time.time()
             verified = verify_capture_snapshot(
@@ -716,27 +788,66 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             failure_stage = "capture finalization"
             finalized = lifecycle.commit_verified_snapshot(
                 verified,
-                issue_reference=False,
+                issue_reference=result.measurement.total_bytes > policy.inline_bytes,
             )
             terminal_committed = True
             with artifact.transfer_to_reader(lifecycle, finalized):
-                failure_stage = "capture marker verification"
-                artifact_path = current_artifact_path_if_bound(anchor, root, artifact)
-                failure_stage = "capture replay emission"
-                _emit_capture(result, artifact_path, policy.inline_bytes)
-            return returncode
+                if finalized.issuance is None:
+                    delivery_value = finalized
+                else:
+                    failure_stage = "capture reference publication"
+                    delivery_value = _publish_oversized_capture(
+                        anchor,
+                        root,
+                        artifact,
+                        lifecycle,
+                        finalized,
+                    )
+                failure_stage = "capture delivery begin"
+                _transition_delivery_checked(
+                    lifecycle,
+                    delivery_value,
+                    expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+                    target=CaptureDeliveryStatus.ATTEMPTING,
+                )
+                delivery_attempting = True
+                failure_stage = "capture replay rendering"
+                if isinstance(delivery_value, FinalizedCapture):
+                    payload = _render_inline_capture(delivery_value)
+                elif isinstance(
+                    delivery_value,
+                    (PublishedCaptureReference, UnavailableCaptureReference),
+                ):
+                    payload = _render_oversized_capture(delivery_value)
+                else:
+                    raise CaptureSetupError("capture delivery value is unavailable")
+                failure_stage = "capture stdout write and flush"
+                _write_and_flush_hook_stdout(payload)
+                delivery_bytes_flushed = True
+                failure_stage = "capture delivery finish"
+                _transition_delivery_checked(
+                    lifecycle,
+                    delivery_value,
+                    expected=CaptureDeliveryStatus.ATTEMPTING,
+                    target=CaptureDeliveryStatus.DELIVERED,
+                )
+                delivery_attempting = False
+            return command_returncode
         except _CAPTURE_RUNTIME_ERRORS as exc:
             recovery_detail = ""
-            if raw_returncode is None and process is not None:
-                raw_returncode = _settle_failed_capture(process)
+            if command_outcome is None and process is not None:
+                settlement = _settle_failed_capture(process)
             if not terminal_committed:
                 try:
+                    failure_detail = _bounded_detail(f"{type(exc).__name__}: {exc}")
                     lifecycle.commit_capture_failure(
                         artifact.authority,
                         CaptureFailureEvidence(
-                            stage=failure_stage.replace(" ", "_")[:64],
-                            detail=(f"{type(exc).__name__}: {exc}")[:240],
-                            settlement_returncode=raw_returncode,
+                            stage=_failure_stage(failure_stage),
+                            detail=failure_detail,
+                            settlement_returncode=(
+                                None if settlement is None else settlement.returncode
+                            ),
                         ),
                         observed_size=max(0, os.fstat(artifact.fd).st_size),
                     )
@@ -746,9 +857,17 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                         "; failed-state recovery also failed: "
                         f"{type(recovery_error).__name__}: {recovery_error}"
                     )
+            elif delivery_attempting and not delivery_bytes_flushed and delivery_value is not None:
+                _record_delivery_failure(lifecycle, delivery_value)
             return _capture_failure_return(
-                f"{failure_stage} failed: {type(exc).__name__}: {exc}{recovery_detail}",
-                (None if raw_returncode is None else _normalized_returncode(raw_returncode)),
+                _failure_transport(
+                    stage=failure_stage,
+                    detail=(
+                        f"{failure_stage} failed: {type(exc).__name__}: {exc}{recovery_detail}"
+                    ),
+                    shell_returncode=command_returncode,
+                    settlement=settlement,
+                )
             )
     finally:
         if process is not None and process.stdout is not None:
@@ -802,17 +921,19 @@ def _dispatch_runner(
     capture_id: str,
 ) -> int:
     if verb == "reject":
-        _emit_failure("capture request rejected before command execution")
-        return 1
+        return _capture_failure_return(
+            _runner_failure(
+                "capture_request",
+                "capture request rejected before command execution",
+            )
+        )
     try:
         command = _decode_command(payload)
         return run_capture(command, requested_cwd, capture_id)
     except CaptureSetupError as exc:
-        _emit_failure(str(exc))
-        return 1
+        return _capture_failure_return(_runner_failure("capture_setup", str(exc)))
     except (OSError, subprocess.SubprocessError):
-        _emit_failure("capture runner failed")
-        return 1
+        return _capture_failure_return(_runner_failure("capture_runner", "capture runner failed"))
 
 
 def _emit_cleanup_failure(detail: str) -> None:
@@ -844,8 +965,9 @@ def _sweep_after_runner(requested_cwd: str) -> None:
 def _main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 4:
-        _emit_failure("invalid capture runner invocation")
-        return 1
+        return _capture_failure_return(
+            _runner_failure("capture_invocation", "invalid capture runner invocation")
+        )
     verb, payload, requested_cwd, capture_id = args
     if (
         verb not in {"run", "reject"}
@@ -855,15 +977,17 @@ def _main(argv: list[str] | None = None) -> int:
         or not os.path.isabs(requested_cwd)
         or "\x00" in requested_cwd
     ):
-        _emit_failure("invalid capture runner invocation")
-        return 1
+        return _capture_failure_return(
+            _runner_failure("capture_invocation", "invalid capture runner invocation")
+        )
     if not _CAPTURE_ID_RE.fullmatch(capture_id):
-        _emit_failure("invalid capture id")
-        return 1
+        return _capture_failure_return(_runner_failure("capture_invocation", "invalid capture id"))
     try:
         user_result = _dispatch_runner(verb, payload, requested_cwd, capture_id)
     except _CAPTURE_RUNTIME_ERRORS:
-        user_result = _capture_failure_return("capture runner failed", None)
+        user_result = _capture_failure_return(
+            _runner_failure("capture_runner", "capture runner failed")
+        )
     _sweep_after_runner(requested_cwd)
     return user_result
 

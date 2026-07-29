@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RecipeArtifactGeneration,
+    RecipeExecutionCredential,
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
     ToolInitializationOperation,
@@ -289,7 +290,7 @@ def _render_completion_receipt(
     recipe_name: str,
     artifact_generation: RecipeArtifactGeneration,
     flow_generation: RecipeFlowGeneration,
-    snapshot: RecipeExecutionSnapshot,
+    credential: RecipeExecutionCredential,
 ) -> str:
     return json.dumps(
         {
@@ -299,9 +300,7 @@ def _render_completion_receipt(
             "recipe_name": recipe_name,
             "recipe_pull": artifact_generation.pull_identity(),
             "recipe_flow": flow_generation.identity(),
-            RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY: build_recipe_execution_credential(
-                snapshot
-            ).as_wire_block(),
+            RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY: credential.as_wire_block(),
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -328,7 +327,7 @@ def build_completion_response(
                 recipe_name=state.recipe_name,
                 artifact_generation=state.artifact_generation,
                 flow_generation=state.flow_generation,
-                snapshot=state.installed_execution.snapshot,
+                credential=build_recipe_execution_credential(state.installed_execution.snapshot),
             )
             return rendered
         if (
@@ -347,7 +346,7 @@ def build_completion_response(
             recipe_name=state.recipe_name,
             artifact_generation=state.artifact_generation,
             flow_generation=state.flow_generation,
-            snapshot=state.staged_snapshot,
+            credential=build_recipe_execution_credential(state.staged_snapshot),
         )
         return FinalizedRecipeInitializationResponse(
             rendered=rendered,

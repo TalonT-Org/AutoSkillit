@@ -91,6 +91,11 @@ _REGISTRY_EXEMPTIONS: dict[str, str] = {
         "it via GATED_TOOLS membership (see test_canonical_constant_consumption.py "
         "test_fleet_dispatch_tools_subset_of_gated_tools)"
     ),
+    "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY": (
+        "test-consumed: architectural ratchet imported by "
+        "test_execution_install_delivery.py to bind every execution-install site "
+        "to its credential-delivering response builder; no runtime consumer needed"
+    ),
 }
 
 

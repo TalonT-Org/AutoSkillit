@@ -313,6 +313,26 @@ def test_resolver_fails_closed_for_malformed_or_unregistered_context(
         ci_target_policy.resolve_ci_profile(event_name, payload)
 
 
+def test_resolver_rejects_allowed_target_without_registered_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    allowed_targets = {
+        **ci_target_policy.ALLOWED_TARGETS_BY_EVENT,
+        "push": ci_target_policy.ALLOWED_TARGETS_BY_EVENT["push"] | frozenset({"unregistered"}),
+    }
+    monkeypatch.setattr(
+        ci_target_policy,
+        "ALLOWED_TARGETS_BY_EVENT",
+        allowed_targets,
+    )
+
+    with pytest.raises(ValueError, match="has no registered policy"):
+        ci_target_policy.resolve_ci_profile(
+            "push",
+            _event_payload("push", "unregistered"),
+        )
+
+
 @pytest.mark.parametrize(
     ("event_name", "payload", "raw_payload", "expected_error"),
     [

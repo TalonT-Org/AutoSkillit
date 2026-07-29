@@ -107,7 +107,11 @@ def resolve_ci_profile(
 
     if target not in allowed_targets:
         raise ValueError(f"target {target!r} is not allowed for event {event_name!r}")
-    policy = CI_TARGET_POLICIES[target]
+    policy = CI_TARGET_POLICIES.get(target)
+    if policy is None:
+        raise ValueError(
+            f"target {target!r} is allowed for event {event_name!r} but has no registered policy"
+        )
 
     base_revision = ""
     if policy.filter_mode == "conservative":

@@ -1,6 +1,6 @@
 ---
 name: make-plan
-uses_capabilities: [agent_model, agent_subagent]
+uses_capabilities: [agent_model, agent_subagent, write_audit_cycle_artifact]
 activate_deps: [write-recipe]
 description: Planning executor. ALWAYS invoke this skill when instructed to create, devise, or write an implementation plan. Do not explore the codebase or draft a plan directly — use this skill first to load the planning workflow.
 hooks:
@@ -336,15 +336,27 @@ orchestrators can capture the plan and, in remediation mode, its verified dispos
    `carried@step` must cite the concrete current `Step N`/`Step N.M` that implements the
    same REQ ID. `satisfied-by-round-N` must name the verified prior audit round. No other
    vocabulary, duplicate IDs, omitted rows, or invented padding is allowed.
-5. After the final plan bytes are stable, create a canonical immutable
-   `PlanDispositionReport` bound to the parent authority digest, full cycle identity,
-   verified plan `ArtifactRef`, exact ordered disposition rows, timestamp, and report digest.
-   Verify the report against the plan with the production inventory-admission evaluator.
-6. In the current cycle directory, write exactly one immutable association at
-   `associations/{verified_plan_content_digest}.json`. It contains exactly the verified
-   plan ref, disposition ref, parent authority digest, schema version, and association
-   digest. Refuse an existing different record; never search for or synthesize a latest
-   report.
+5. After the final plan bytes are stable, call
+   `write_audit_cycle_artifact(kind="disposition_report", path=..., fields={...}, cwd=...)`
+   with `fields` containing `execution_generation`, `cycle_id`, `plan_set_id`, `scope_id`,
+   `part_id`, `audit_round`, `current_plan_ref` (the verified plan `ArtifactRef` fields), the
+   exact ordered `dispositions` rows, and `generated_at` — plus `parent_authority_digest`,
+   `inventory_digest`, and `findings_digest` sourced directly from the parent
+   `AuditCycleAuthority` object verified in Step 2 above (respectively
+   `authority.authority_digest`, `authority.inventory_ref.content_digest`, and
+   `authority.findings_digest`). These three digests are not derivable from
+   `current_plan_ref`/`dispositions` alone — the tool requires them as explicit mandatory
+   fields, and rejects a payload that misvalues any of them. Verify the returned report
+   against the plan with the production inventory-admission evaluator.
+6. Call
+   `write_audit_cycle_artifact(kind="plan_association", path="associations/{verified_plan_content_digest}.json", fields={...}, cwd=...)`
+   in the current cycle directory, with `fields` containing `plan_ref` (the verified plan
+   `ArtifactRef` fields),
+   `disposition_ref` (referencing the disposition report just written in step 5), and
+   `parent_authority_digest`. The tool computes the association digest server-side and
+   writes exactly the five canonical keys (`schema_version`, `plan_ref`, `disposition_ref`,
+   `parent_authority_digest`, `association_digest`). Refuse an existing different record;
+   never search for or synthesize a latest report.
 7. Absence, duplication, evaluator rejection, or Markdown/report drift is an output-contract
    failure. Do not emit successful structured tokens.
 

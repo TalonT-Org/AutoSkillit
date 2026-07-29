@@ -1,7 +1,7 @@
 ---
 name: audit-impl
 categories: [audit]
-uses_capabilities: [agent_model, agent_subagent]
+uses_capabilities: [agent_model, agent_subagent, write_audit_cycle_artifact]
 description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates remediation file for retry). Final gate before merge in any implementation pipeline.
 hooks:
   PreToolUse:
@@ -74,7 +74,11 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Spawn all subagents via `Agent(model="sonnet")`
 - Resolve all plan files before starting (abort early if any are missing)
 - Issue all Task calls in a single message to maximize parallelism
-- On every verdict, write one immutable `AuditCycleAuthority` and emit its **absolute path**
+- On every verdict, call `write_audit_cycle_artifact(kind="authority", path=..., fields={...},
+  cwd=...)` with the full field list (execution_generation, cycle_id, plan_set_id, scope_id,
+  part_id, audit_round, parent_authority_digest, audited_plan_refs, inventory_ref,
+  assessments, verdict, remediation_ref, generated_at) — the tool computes every digest and
+  writes byte-exact canonical JSON server-side. Emit the returned `path` as **absolute path**
   as `audit_cycle_path`. On `NO GO`, also emit the remediation path:
   ```
   verdict = NO GO
@@ -228,6 +232,7 @@ Each Explore subagent returns:
   "schema_version": 1,
   "generated_at": "ISO-8601",
   "plan_set_id": "identity derived from the explicit ordered audited plan refs",
+  "requirement_ids": ["REQ-001"],
   "requirements": [
     {
       "id": "REQ-001",
@@ -240,17 +245,32 @@ Each Explore subagent returns:
 }
 ```
 
-Write inventory, remediation (when any), closure report (when any), and authority under:
+`requirement_ids` must be the ordered list of every `requirements[*].id`, in the same order.
+
+Write remediation (when any) and closure report (when any) as plain files, and the
+inventory and authority via `write_audit_cycle_artifact(...)`, under:
 
 ```
 {{AUTOSKILLIT_TEMP}}/audit-impl/cycles/{execution_generation}/{plan_set_id}/{scope_id}/{part_id}/round-{N}/
 ```
 
-The `AuditCycleAuthority` must include the explicit execution generation, cycle ID,
-plan-set/scope/part IDs, round, parent authority digest, audited plan refs, inventory ref,
-ordered assessment rows, findings digest, verdict, generated timestamp, and authority
-digest. `NO GO` requires a remediation `ArtifactRef`; `GO` requires `remediation_ref=null`.
-Never rewrite an authority after hashing it.
+In this order (the authority's `inventory_ref` must reference an already-written inventory
+file so the tool can hash it):
+
+1. Call `write_audit_cycle_artifact(kind="inventory", path=".../round-{N}/inventory.json",
+   fields={...}, cwd=...)` with `fields` containing `schema_version`, `generated_at`,
+   `plan_set_id`, `requirement_ids`, and `requirements` per the schema above.
+2. Call `write_audit_cycle_artifact(kind="authority", path=".../round-{N}/authority.json",
+   fields={...}, cwd=...)` with `fields` containing the explicit execution generation, cycle
+   ID, plan-set/scope/part IDs, round, parent authority digest, audited plan refs,
+   `inventory_ref` (referencing the inventory file just written in step 1), ordered
+   assessment rows, verdict, remediation ref, and generated timestamp. `NO GO` requires a
+   non-null `remediation_ref`; `GO` requires `remediation_ref=null`.
+
+The tool computes `findings_digest` and `authority_digest` internally from the
+`assessments`/`verdict` fields and rejects any semantically inconsistent payload before
+writing — never hand-assemble these digests. Never rewrite an authority after it has
+been written.
 
 ### Step 2 — Load Implementation Diff
 

@@ -273,6 +273,7 @@ _STATIC_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     "agent_model": (re.compile(r"Agent\(\s*model\s*="),),
     "claude_dir": (re.compile(r"\.claude/"),),
     "commit_files": (re.compile(r"\bcommit_files\s*\("),),
+    "write_audit_cycle_artifact": (re.compile(r"\bwrite_audit_cycle_artifact\s*\("),),
     "git_metadata_write": (
         re.compile(r"create_impl_worktree\.sh|git worktree add\b[ \t]+\S|git checkout -b"),
         re.compile(r"\bgit\s+(?:-C\s+\S+\s+)?commit(?:\s|$)"),
@@ -490,6 +491,7 @@ def _classify_context(
             "Agent(",
             ".claude/",
             "commit_files",
+            "write_audit_cycle_artifact",
             "git ",
             "gh ",
             "open_kitchen",

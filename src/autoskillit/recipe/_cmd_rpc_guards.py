@@ -11,6 +11,9 @@ from pathlib import Path
 import regex as re
 
 from autoskillit.core import (
+    _MAX_ASSOCIATION_FILES,
+    _PLAN_ASSOCIATION_DOMAIN,
+    _PLAN_ASSOCIATION_KEYS,
     AUDIT_CYCLE_SCHEMA_VERSION,
     ArtifactRef,
     AuditCycleVerifier,
@@ -212,19 +215,6 @@ def _normalize_plan_parts(plan_parts: str) -> list[str] | None:
             return None
         items.append(item)
     return items
-
-
-_PLAN_ASSOCIATION_DOMAIN = "autoskillit:audit-cycle:plan-association:v1:sha256"
-_PLAN_ASSOCIATION_KEYS = frozenset(
-    {
-        "schema_version",
-        "plan_ref",
-        "disposition_ref",
-        "parent_authority_digest",
-        "association_digest",
-    }
-)
-_MAX_ASSOCIATION_FILES = 256
 
 
 def _log_plan_disposition_rejection(

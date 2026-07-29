@@ -215,6 +215,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "unlock_agent_pack",
             "wait_for_ci",
             "wait_for_merge_queue",
+            "write_audit_cycle_artifact",
             "write_telemetry_files",
         },
     }

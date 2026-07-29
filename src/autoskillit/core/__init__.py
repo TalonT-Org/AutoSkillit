@@ -18,6 +18,10 @@ _PRIVATE_REEXPORTS = frozenset(
         "_collect_disabled_feature_tags",
         "_AUTOSKILLIT_GITIGNORE_ENTRIES",
         "_COMMITTED_BY_DESIGN",
+        "_MAX_ASSOCIATION_FILES",
+        "_MAX_REFERENCED_ARTIFACTS_PER_CALL",
+        "_PLAN_ASSOCIATION_DOMAIN",
+        "_PLAN_ASSOCIATION_KEYS",
     }
 )
 __all__ = [n for n in __all__ if n not in _PRIVATE_REEXPORTS]

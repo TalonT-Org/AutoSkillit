@@ -199,15 +199,23 @@ def atomic_write(
     content: str,
     *,
     strict_durability: bool = False,
+    exclusive: bool = False,
 ) -> None:
     """Crash-safe write: write to a temp file then os.replace.
 
     Includes data fsync and directory fsync for durability on ext4/xfs.
     The directory fsync is skipped on Windows (no O_RDONLY semantics).
+
+    When ``exclusive`` is True, atomically claims ``path`` via
+    ``os.O_CREAT | os.O_EXCL`` before writing, raising ``FileExistsError``
+    with no bytes written if the destination already exists. Closes the
+    TOCTOU window between a separate existence check and the write.
     """
     import sys as _sys
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    if exclusive:
+        os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -390,7 +398,11 @@ def write_versioned_json(
 
 
 def write_canonical_versioned_json(
-    path: Path, payload: dict[str, Any], schema_version: int
+    path: Path,
+    payload: dict[str, Any],
+    schema_version: int,
+    *,
+    exclusive: bool = False,
 ) -> None:
     """Atomically write versioned canonical JSON for hash-bound artifacts."""
     from .closure_hashing import canonical_json_bytes
@@ -398,7 +410,7 @@ def write_canonical_versioned_json(
     if not isinstance(payload, dict):
         raise TypeError("write_canonical_versioned_json requires a dict payload")
     enriched = {**payload, "schema_version": schema_version}
-    atomic_write(path, canonical_json_bytes(enriched).decode("utf-8"))
+    atomic_write(path, canonical_json_bytes(enriched).decode("utf-8"), exclusive=exclusive)
 
 
 def decode_versioned_json_bytes(

@@ -232,6 +232,11 @@ def atomic_write(
             os.unlink(tmp)
         except OSError:
             pass
+        if exclusive:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
         raise
     # Durable rename: fsync the parent directory on POSIX.
     # Default callers retain best-effort parent durability. Identity-bearing

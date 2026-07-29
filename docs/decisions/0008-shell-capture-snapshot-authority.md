@@ -147,8 +147,9 @@ fails closed rather than being served.
   `capture_v2_worst_case_bytes()`; `shell_max_rendered_bytes` is not implemented
   here.
 - [#4325](https://github.com/TalonT-Org/AutoSkillit/issues/4325) owns bounded MCP
-  retrieval. It consumes `open_verified_capture()` and the publication-binding
-  verifier; no public retrieval tool is implemented here.
+  retrieval. It consumes `open_verified_capture()` and
+  `verify_reference_publication_binding()`; no public retrieval tool is
+  implemented here.
 - [#4326](https://github.com/TalonT-Org/AutoSkillit/issues/4326) owns private
   publication policy. V2 supplies an opaque reference, but broader access and
   disclosure policy is not implemented here.

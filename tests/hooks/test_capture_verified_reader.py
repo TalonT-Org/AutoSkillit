@@ -7,21 +7,26 @@ import errno
 import fcntl
 import os
 import pickle
-from dataclasses import replace
+import subprocess
+import sys
+import threading
 from pathlib import Path
 
 import pytest
 
+import autoskillit.hooks._capture._descriptor as capture_descriptor
 import autoskillit.hooks._capture._reader as capture_reader
 import autoskillit.hooks._capture_artifacts as capture_artifacts
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
-from autoskillit.hooks._capture._snapshot import (
+from autoskillit.hooks._capture._reader import (
     MAX_VERIFIED_READ_BYTES,
+    VerifiedCaptureReader,
+)
+from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
     CaptureFinalManifest,
     CaptureMeasurement,
     CommandOutcome,
-    VerifiedCaptureReader,
     verify_capture_snapshot,
 )
 from autoskillit.hooks._capture_artifacts import (
@@ -32,10 +37,10 @@ from autoskillit.hooks._capture_artifacts import (
     open_project_anchor,
 )
 from autoskillit.hooks._capture_lifecycle import (
+    CaptureDeliveryStatus,
     CaptureLifecycleError,
     CaptureLifecycleStore,
     CaptureReferenceStatus,
-    CaptureState,
 )
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -124,7 +129,7 @@ def test_published_reference_returns_self_contained_bounded_reader(
 ) -> None:
     data = b"0123456789abcdefghijklmnopqrstuvwxyz"
     clock = _Clock()
-    anchor, root, store, artifact, _finalized, published = _publish(
+    anchor, root, store, artifact, finalized, published = _publish(
         tmp_path / "project",
         clock,
         data,
@@ -374,37 +379,104 @@ def test_mutation_before_resolution_fails_closed(tmp_path: Path) -> None:
         anchor.close()
 
 
+def test_fifo_substitution_is_rejected_without_blocking(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    anchor, root, _store, artifact, _finalized, published = _publish(
+        project,
+        _Clock(),
+        b"fifo",
+    )
+    _close_artifact(artifact)
+    carrier = _capture_dir(project) / artifact.name
+    carrier.unlink()
+    os.mkfifo(carrier, 0o600)
+    code = (
+        "import sys;"
+        "from autoskillit.hooks._capture_artifacts import open_capture_lifecycle;"
+        "from autoskillit.hooks._capture_lifecycle import CaptureLifecycleError;"
+        "\ntry:\n"
+        "  with open_capture_lifecycle(sys.argv[1],create=False) as lifecycle:\n"
+        "    lifecycle.open_verified_capture(sys.argv[2])\n"
+        "except (CaptureLifecycleError,OSError):\n"
+        "  raise SystemExit(0)\n"
+        "raise SystemExit(2)\n"
+    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-I", "-c", code, str(project), published.token],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        assert completed.returncode == 0, completed.stderr
+    finally:
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize("unsafe_metadata", ("link_count", "mode", "owner"))
+def test_resolver_rejects_unsafe_carrier_metadata(
+    unsafe_metadata: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store, artifact, _finalized, published = _publish(
+        project,
+        _Clock(),
+        b"unsafe",
+    )
+    _close_artifact(artifact)
+    carrier = _capture_dir(project) / artifact.name
+    extra_link = carrier.with_suffix(".link")
+    if unsafe_metadata == "link_count":
+        os.link(carrier, extra_link)
+    elif unsafe_metadata == "mode":
+        carrier.chmod(0o640)
+    else:
+        real_fstat = os.fstat
+        carrier_value = carrier.stat()
+        carrier_identity = (carrier_value.st_dev, carrier_value.st_ino)
+
+        def report_wrong_owner(fd: int) -> os.stat_result:
+            value = real_fstat(fd)
+            if (value.st_dev, value.st_ino) == carrier_identity:
+                fields = list(value)
+                fields[4] = value.st_uid + 1
+                return os.stat_result(fields)
+            return value
+
+        monkeypatch.setattr(capture_descriptor.os, "fstat", report_wrong_owner)
+    try:
+        with pytest.raises(CaptureAuthorityError, match="metadata changed"):
+            store.open_verified_capture(published.token)
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_reference_transition_during_verification_rejects_stale_reader(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = _Clock()
-    anchor, root, store, artifact, _finalized, published = _publish(
+    anchor, root, store, artifact, finalized, published = _publish(
         tmp_path / "project",
         clock,
         b"linearized",
     )
     _close_artifact(artifact)
     resolver_snapshot = capture_lifecycle._capture_resolver._snapshot
-    real_verify = resolver_snapshot._verify_manifest_descriptor
+    real_verify = resolver_snapshot.verify_capture_descriptor
 
     def verify_then_revoke(fd: int, manifest: CaptureFinalManifest) -> None:
         real_verify(fd, manifest)
-        record = store.get_record(_CAPTURE_ID)
-        assert record is not None
-        store._transition(
-            store._authority_for(record),
-            allowed_states={CaptureState.FINALIZED},
-            transform=lambda current: replace(
-                current,
-                reference_status=CaptureReferenceStatus.REVOKED,
-                revision=current.revision + 1,
-            ),
-        )
+        store.revoke_reference(finalized)
 
     monkeypatch.setattr(
         resolver_snapshot,
-        "_verify_manifest_descriptor",
+        "verify_capture_descriptor",
         verify_then_revoke,
     )
     try:
@@ -483,6 +555,95 @@ def test_producer_transfer_retains_exclusive_lease_until_reader_close(
     anchor.close()
 
 
+def test_queued_exclusive_waiter_stays_blocked_through_delivery_commit(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    project = tmp_path / "project"
+    anchor, root, store, artifact, finalized = _finalize(
+        project,
+        clock,
+        b"producer",
+    )
+    waiter_fd = os.open(
+        _capture_dir(project) / artifact.name,
+        os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW,
+    )
+    waiter_started = threading.Event()
+    waiter_acquired = threading.Event()
+    release_waiter = threading.Event()
+    reader = None
+
+    def wait_for_exclusive_lease() -> None:
+        try:
+            waiter_started.set()
+            fcntl.flock(waiter_fd, fcntl.LOCK_EX)
+            waiter_acquired.set()
+            release_waiter.wait(timeout=5)
+        finally:
+            os.close(waiter_fd)
+
+    waiter = threading.Thread(target=wait_for_exclusive_lease)
+    waiter.start()
+    try:
+        assert waiter_started.wait(timeout=5)
+        assert not waiter_acquired.wait(timeout=0.05)
+        reader = artifact.transfer_to_reader(store, finalized)
+        published = store.publish_reference(finalized)
+        store.transition_delivery(
+            published,
+            expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+            target=CaptureDeliveryStatus.ATTEMPTING,
+        )
+        store.transition_delivery(
+            published,
+            expected=CaptureDeliveryStatus.ATTEMPTING,
+            target=CaptureDeliveryStatus.DELIVERED,
+        )
+        assert not waiter_acquired.wait(timeout=0.05)
+        reader.close()
+        reader = None
+        assert waiter_acquired.wait(timeout=5)
+    finally:
+        if reader is not None:
+            reader.close()
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        release_waiter.set()
+        waiter.join(timeout=5)
+        root.close()
+        anchor.close()
+    assert not waiter.is_alive()
+
+
+def test_store_reopen_does_not_normalize_live_producer_reference(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, _store, artifact, finalized = _finalize(
+        tmp_path / "project",
+        clock,
+        b"producer",
+    )
+    try:
+        reopened = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=clock.wall,
+            monotonic=clock.monotonic,
+        )
+        current = reopened.get_record(_CAPTURE_ID)
+
+        assert finalized.issuance is not None
+        assert current is not None
+        assert current.reference_status is CaptureReferenceStatus.ISSUED
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
 def test_producer_transfer_accepts_not_requested_reference_state(
     tmp_path: Path,
 ) -> None:
@@ -525,7 +686,84 @@ def test_transfer_requires_artifact_owned_drain_writer_to_be_closed(
         anchor.close()
 
 
+def test_transfer_invalidates_descriptors_before_ambiguous_lease_close_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    anchor, root, store, artifact, finalized = _finalize(
+        tmp_path / "project",
+        _Clock(),
+        b"ownership",
+    )
+    carrier_fd = artifact.fd
+    lease_fd = artifact.lease_fd
+    real_close = os.close
+    injected = False
+
+    def close_then_report_failure(fd: int) -> None:
+        nonlocal injected
+        if fd == lease_fd and not injected:
+            injected = True
+            real_close(fd)
+            raise OSError("injected ambiguous lease close")
+        real_close(fd)
+
+    monkeypatch.setattr(capture_artifacts.os, "close", close_then_report_failure)
+    try:
+        with pytest.raises(CaptureSetupError, match="transfer capture carrier lease"):
+            artifact.transfer_to_reader(store, finalized)
+
+        assert artifact.fd == artifact.lease_fd == -1
+        with pytest.raises(OSError):
+            os.fstat(carrier_fd)
+        with pytest.raises(OSError):
+            os.fstat(lease_fd)
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_transfer_adoption_failure_closes_all_transferred_descriptors(
+    tmp_path: Path,
+) -> None:
+    anchor, root, store, artifact, finalized = _finalize(
+        tmp_path / "project",
+        _Clock(),
+        b"ownership",
+    )
+    carrier_fd = artifact.fd
+    lease_fd = artifact.lease_fd
+    os.pwrite(carrier_fd, b"MUTATION!", 0)
+    os.fsync(carrier_fd)
+    try:
+        with pytest.raises(CaptureAuthorityError, match="content changed"):
+            artifact.transfer_to_reader(store, finalized)
+
+        assert artifact.fd == artifact.lease_fd == -1
+        with pytest.raises(OSError):
+            os.fstat(carrier_fd)
+        with pytest.raises(OSError):
+            os.fstat(lease_fd)
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        (lambda fd: os.pwrite(fd, b"MUTATION", 0), "content changed"),
+        (lambda fd: os.write(fd, b"!"), "metadata changed"),
+        (lambda fd: os.ftruncate(fd, 1), "metadata changed"),
+    ),
+)
 def test_post_transfer_mutation_is_rejected_by_later_resolver(
+    mutation,
+    message: str,
     tmp_path: Path,
 ) -> None:
     clock = _Clock()
@@ -543,12 +781,13 @@ def test_post_transfer_mutation_is_rejected_by_later_resolver(
     )
     try:
         fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        os.pwrite(contender, b"MUTATION", 0)
+        os.lseek(contender, 0, os.SEEK_END)
+        mutation(contender)
         os.fsync(contender)
     finally:
         os.close(contender)
     try:
-        with pytest.raises(CaptureAuthorityError, match="content changed"):
+        with pytest.raises(CaptureAuthorityError, match=message):
             store.open_verified_capture(published.token)
     finally:
         root.close()

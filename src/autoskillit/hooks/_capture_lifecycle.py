@@ -23,6 +23,7 @@ for _alias in ("_capture_lifecycle", "autoskillit.hooks._capture_lifecycle"):
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _delivery as _capture_delivery
     from autoskillit.hooks._capture import _ledger as _capture_ledger
+    from autoskillit.hooks._capture import _reader as _capture_reader
     from autoskillit.hooks._capture import _resolver as _capture_resolver
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
     from autoskillit.hooks._capture import _sweep as _capture_sweep
@@ -31,6 +32,7 @@ else:
     _CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
     _capture_delivery = importlib.import_module(f"{_CAPTURE_PACKAGE}._delivery")
     _capture_ledger = importlib.import_module(f"{_CAPTURE_PACKAGE}._ledger")
+    _capture_reader = importlib.import_module(f"{_CAPTURE_PACKAGE}._reader")
     _capture_resolver = importlib.import_module(f"{_CAPTURE_PACKAGE}._resolver")
     _capture_snapshot = importlib.import_module(f"{_CAPTURE_PACKAGE}._snapshot")
     _capture_sweep = importlib.import_module(f"{_CAPTURE_PACKAGE}._sweep")
@@ -39,7 +41,6 @@ else:
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 _ObservedArtifact = _capture_types.ObservedArtifact
 _LockContended = _capture_types.LockContended
-_Tampered = _capture_types.Tampered
 _CarrierLeaseLive = _capture_types.CarrierLeaseLive
 
 CaptureAuthorityError = _capture_snapshot.CaptureAuthorityError
@@ -62,6 +63,8 @@ __all__ = [
     "CaptureLifecycleStore",
     "CaptureReferenceStatus",
     "CaptureRetentionPhase",
+    "CaptureSnapshotStatus",
+    "CaptureStatus",
     "CaptureState",
 ]
 
@@ -87,6 +90,7 @@ _CONTROL_FLAGS = os.O_RDWR | os.O_CREAT | _CLOEXEC | _NOFOLLOW
 _OBSERVE_FLAGS = os.O_RDWR | _CLOEXEC | _NOFOLLOW | _NONBLOCK
 _ARTIFACT_FLAGS = os.O_RDWR | os.O_CREAT | os.O_EXCL | _CLOEXEC | _NOFOLLOW
 _UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
+_STORE_FACTORY_TOKEN = object()
 
 
 class CaptureLifecycleError(RuntimeError):
@@ -101,6 +105,8 @@ CaptureState = _capture_ledger.CaptureState
 CaptureReferenceStatus = _capture_ledger.CaptureReferenceStatus
 CaptureDeliveryStatus = _capture_ledger.CaptureDeliveryStatus
 CaptureRetentionPhase = _capture_ledger.CaptureRetentionPhase
+CaptureSnapshotStatus = _capture_ledger.CaptureSnapshotStatus
+CaptureStatus = _capture_ledger.CaptureStatus
 CaptureLifecycleRecord = _capture_ledger.CaptureLifecycleRecord
 
 
@@ -125,6 +131,16 @@ def _record_from_dict(value: object) -> CaptureLifecycleRecord:
 def _validate_record(record: CaptureLifecycleRecord) -> None:
     try:
         _capture_ledger.validate_record(record)
+    except _capture_ledger.LedgerCodecError as exc:
+        raise CaptureLedgerError(str(exc)) from exc
+
+
+def _validate_successor(
+    previous: CaptureLifecycleRecord,
+    candidate: CaptureLifecycleRecord,
+) -> None:
+    try:
+        _capture_ledger.validate_successor(previous, candidate)
     except _capture_ledger.LedgerCodecError as exc:
         raise CaptureLedgerError(str(exc)) from exc
 
@@ -165,7 +181,10 @@ class CaptureLifecycleStore:
         root_identity: tuple[int, int],
         wall_clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
+        _factory_token: object | None = None,
     ) -> None:
+        if _factory_token is not _STORE_FACTORY_TOKEN:
+            raise CaptureLifecycleError("CaptureLifecycleStore must be factory-created")
         self._root_fd = root_fd
         self._project_identity = project_identity
         self._root_identity = root_identity
@@ -183,12 +202,23 @@ class CaptureLifecycleStore:
     ) -> CaptureLifecycleStore:
         anchor_identity = getattr(anchor, "identity")
         root_identity = getattr(root, "identity")
-        return cls(
+        store = cls(
             getattr(root, "fd"),
             project_identity=(anchor_identity.device, anchor_identity.inode),
             root_identity=(root_identity.device, root_identity.inode),
             wall_clock=wall_clock,
             monotonic=monotonic,
+            _factory_token=_STORE_FACTORY_TOKEN,
+        )
+        store._normalize_interrupted_deliveries()
+        return store
+
+    def _normalize_interrupted_deliveries(self) -> None:
+        _capture_delivery.normalize_interrupted_deliveries(
+            self,
+            lifecycle_error=CaptureLifecycleError,
+            lease_live=_CarrierLeaseLive,
+            tampered=_capture_types.Tampered,
         )
 
     def _validate_root(self) -> None:
@@ -256,7 +286,9 @@ class CaptureLifecycleStore:
                 os.fsync(fd)
                 size = decoded.truncate_at
             records: dict[str, CaptureLifecycleRecord] = {}
+            source_versions: dict[str, int] = {}
             compaction_epoch = 1
+            saw_legacy = False
             for frame in decoded.frames:
                 if frame.compaction_epoch < compaction_epoch:
                     raise CaptureLedgerError("lifecycle compaction epoch regressed")
@@ -264,6 +296,9 @@ class CaptureLifecycleStore:
                 raw_capture_id = frame.record.get("capture_id")
                 previous = records.get(raw_capture_id) if isinstance(raw_capture_id, str) else None
                 if frame.format_version == 1:
+                    if previous is not None and source_versions[previous.capture_id] != 1:
+                        raise CaptureLedgerError("legacy frame follows current lifecycle state")
+                    saw_legacy = True
                     record = _legacy_record_from_dict(
                         frame.record,
                         revision=1 if previous is None else previous.revision + 1,
@@ -274,15 +309,13 @@ class CaptureLifecycleStore:
                         _record_from_dict(frame.record),
                         compaction_epoch=frame.compaction_epoch,
                     )
-                if previous is not None:
-                    if record.revision != previous.revision + 1:
-                        raise CaptureLedgerError("lifecycle record revision gap")
-                    if (
-                        previous.manifest_bytes
-                        and record.manifest_bytes != previous.manifest_bytes
-                    ):
-                        raise CaptureLedgerError("immutable FINAL manifest changed")
+                if previous is not None and frame.format_version != 1:
+                    _validate_successor(previous, record)
                 records[record.capture_id] = record
+                source_versions[record.capture_id] = frame.format_version
+            if saw_legacy:
+                self._compact_locked(records, compaction_epoch + 1)
+                return self._load_locked()
             return records, compaction_epoch, size
         finally:
             os.close(fd)
@@ -299,14 +332,8 @@ class CaptureLifecycleStore:
         if previous is None:
             if record.revision != 1:
                 raise CaptureLedgerError("new lifecycle record must start at revision one")
-        elif record.revision != previous.revision + 1:
-            raise CaptureLedgerError("stale lifecycle record revision")
-        if (
-            previous is not None
-            and previous.manifest_bytes
-            and record.manifest_bytes != previous.manifest_bytes
-        ):
-            raise CaptureLedgerError("immutable FINAL manifest changed")
+        else:
+            _validate_successor(previous, record)
         try:
             frame = _capture_ledger.encode_frame(
                 _record_to_dict(record),
@@ -444,6 +471,28 @@ class CaptureLifecycleStore:
                 compaction_epoch=compaction_epoch,
                 ledger_size=size,
                 authority=authority,
+                allowed_states=allowed_states,
+                transform=transform,
+            )
+
+    def _transition_current(
+        self,
+        capture_id: str,
+        incarnation: str,
+        *,
+        allowed_states: set[CaptureState],
+        transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
+    ) -> CaptureLifecycleRecord:
+        with self._locked():
+            records, compaction_epoch, size = self._load_locked()
+            previous = records.get(capture_id)
+            if previous is None or previous.incarnation != incarnation:
+                raise CaptureLifecycleError("capture transition authority is unavailable")
+            return self._transition_locked(
+                records=records,
+                compaction_epoch=compaction_epoch,
+                ledger_size=size,
+                authority=self._authority_for(previous),
                 allowed_states=allowed_states,
                 transform=transform,
             )
@@ -630,6 +679,8 @@ class CaptureLifecycleStore:
                 next_attempt_at=now + _RETENTION_SECONDS,
                 observed_size=observed_size,
                 failure=evidence,
+                capture_status=CaptureStatus.FAILED,
+                snapshot_status=CaptureSnapshotStatus.ABSENT,
                 retention_phase=CaptureRetentionPhase.ACTIVE,
                 revision=record.revision + 1,
             ),
@@ -644,58 +695,91 @@ class CaptureLifecycleStore:
         if type(verified) is not VerifiedCaptureSnapshot or not isinstance(issue_reference, bool):
             raise CaptureLifecycleError("invalid verified finalization request")
         base = verified.manifest
-        with self._locked():
-            records, compaction_epoch, size = self._load_locked()
-            previous = records.get(base.capture_id)
-            if (
-                previous is None
-                or previous.state is not CaptureState.PUBLISHED_WRITING
-                or previous.incarnation != base.incarnation
-                or previous.revision + 1 != base.finalized_at_revision
-                or previous.project_identity != base.project_identity
-                or previous.root_identity != base.root_identity
-                or previous.public_name != base.carrier_name
-                or previous.artifact_identity != base.carrier_identity
-            ):
-                raise CaptureLifecycleError("verified snapshot does not match write authority")
-            token: str | None = None
-            reference_hash: str | None = None
-            reference_expiry: float | None = None
-            if issue_reference:
-                reference_expiry = min(
-                    base.finalized_at + _REFERENCE_LIFETIME_SECONDS,
-                    base.retention_deadline,
-                )
-                token, reference_hash = _capture_snapshot._issue_capture_reference(
+        candidate: CaptureLifecycleRecord | None = None
+        finalized: FinalizedCapture | None = None
+        try:
+            with self._locked():
+                records, compaction_epoch, size = self._load_locked()
+                previous = records.get(base.capture_id)
+                if (
+                    previous is None
+                    or previous.state is not CaptureState.PUBLISHED_WRITING
+                    or previous.incarnation != base.incarnation
+                    or previous.revision + 1 != base.finalized_at_revision
+                    or previous.project_identity != base.project_identity
+                    or previous.root_identity != base.root_identity
+                    or previous.public_name != base.carrier_name
+                    or previous.artifact_identity != base.carrier_identity
+                ):
+                    raise CaptureLifecycleError("verified snapshot does not match write authority")
+                token: str | None = None
+                reference_hash: str | None = None
+                reference_expiry: float | None = None
+                if issue_reference:
+                    reference_expiry = min(
+                        base.finalized_at + _REFERENCE_LIFETIME_SECONDS,
+                        base.retention_deadline,
+                    )
+                    token, reference_hash = _capture_snapshot._issue_capture_reference(
+                        verified,
+                        expiry=reference_expiry,
+                    )
+                finalized = _capture_snapshot._bind_finalized_snapshot(
                     verified,
-                    expiry=reference_expiry,
+                    reference_token=token,
+                    reference_hash=reference_hash,
+                    reference_expiry=reference_expiry,
                 )
-            finalized = _capture_snapshot._bind_finalized_snapshot(
-                verified,
-                reference_token=token,
-                reference_hash=reference_hash,
-                reference_expiry=reference_expiry,
-            )
-            manifest = finalized.snapshot.manifest
-            manifest_bytes = _capture_snapshot.encode_capture_final_manifest(manifest)
-            candidate = replace(
-                previous,
-                state=CaptureState.FINALIZED,
-                revision=previous.revision + 1,
-                finalized_at_revision=manifest.finalized_at_revision,
-                retention_at=manifest.finalized_at,
-                next_attempt_at=manifest.retention_deadline,
-                manifest=manifest,
-                manifest_bytes=manifest_bytes,
-                reference_status=(
-                    CaptureReferenceStatus.ISSUED
-                    if finalized.issuance is not None
-                    else CaptureReferenceStatus.NOT_REQUESTED
-                ),
-                delivery_status=CaptureDeliveryStatus.NOT_ATTEMPTED,
-                retention_phase=CaptureRetentionPhase.ACTIVE,
-            )
-            self._append_locked(candidate, records, compaction_epoch, size)
+                manifest = finalized.snapshot.manifest
+                candidate = replace(
+                    previous,
+                    state=CaptureState.FINALIZED,
+                    revision=previous.revision + 1,
+                    finalized_at_revision=manifest.finalized_at_revision,
+                    retention_at=manifest.finalized_at,
+                    next_attempt_at=manifest.retention_deadline,
+                    manifest=manifest,
+                    manifest_bytes=_capture_snapshot.encode_capture_final_manifest(manifest),
+                    capture_status=CaptureStatus.COMPLETE,
+                    snapshot_status=CaptureSnapshotStatus.VERIFIED,
+                    reference_status=(
+                        CaptureReferenceStatus.ISSUED
+                        if finalized.issuance is not None
+                        else CaptureReferenceStatus.NOT_REQUESTED
+                    ),
+                    delivery_status=CaptureDeliveryStatus.NOT_ATTEMPTED,
+                    retention_phase=CaptureRetentionPhase.ACTIVE,
+                )
+                self._transition_locked(
+                    records=records,
+                    compaction_epoch=compaction_epoch,
+                    ledger_size=size,
+                    authority=self._authority_for(previous),
+                    allowed_states={CaptureState.PUBLISHED_WRITING},
+                    transform=lambda _current: candidate,
+                )
+        except (RuntimeError, OSError) as commit_error:
+            if candidate is not None and finalized is not None:
+                try:
+                    current = self.get_record(base.capture_id)
+                except (RuntimeError, OSError) as recovery_error:
+                    commit_error.add_note(
+                        "FINAL reconciliation failed: "
+                        f"{type(recovery_error).__name__}: {recovery_error}"
+                    )
+                else:
+                    if (
+                        current is not None
+                        and replace(
+                            current,
+                            compaction_epoch=candidate.compaction_epoch,
+                        )
+                        == candidate
+                    ):
+                        return finalized
+            raise
+        if finalized is None:
+            raise CaptureLifecycleError("verified finalization produced no authority")
         return finalized
 
     def publish_reference(self, finalized: FinalizedCapture) -> PublishedCaptureReference:
@@ -715,6 +799,13 @@ class CaptureLifecycleStore:
             self,
             finalized,
             reason_code=reason_code,
+            lifecycle_error=CaptureLifecycleError,
+        )
+
+    def revoke_reference(self, finalized: FinalizedCapture) -> CaptureLifecycleRecord:
+        return _capture_delivery.revoke_reference(
+            self,
+            finalized,
             lifecycle_error=CaptureLifecycleError,
         )
 
@@ -752,7 +843,7 @@ class CaptureLifecycleStore:
             records, _compaction_epoch, _size = self._load_locked()
             return records.get(capture_id)
 
-    def open_verified_capture(self, token: str) -> _capture_snapshot.VerifiedCaptureReader:
+    def open_verified_capture(self, token: str) -> _capture_reader.VerifiedCaptureReader:
         return _capture_resolver.open_verified_capture(
             self,
             token,
@@ -761,7 +852,7 @@ class CaptureLifecycleStore:
 
     def _adopt_verified_capture(
         self, finalized: FinalizedCapture, fd: int
-    ) -> _capture_snapshot.VerifiedCaptureReader:
+    ) -> _capture_reader.VerifiedCaptureReader:
         return _capture_resolver.adopt_verified_capture(
             self,
             finalized,
@@ -805,6 +896,9 @@ class CaptureLifecycleStore:
     def _normalize_abandoned(
         self,
         record: CaptureLifecycleRecord,
+        *,
+        preleased: _ObservedArtifact | None = None,
+        lease_checked: bool = False,
     ) -> tuple[CaptureLifecycleRecord, _ObservedArtifact | None]:
         return _capture_sweep.normalize_abandoned(
             record,
@@ -814,6 +908,21 @@ class CaptureLifecycleStore:
             staging_name_pattern=_STAGING_NAME_RE,
             public_name_pattern=_PUBLIC_NAME_RE,
             wall_clock=self._wall_clock,
+            preleased=preleased,
+            lease_checked=lease_checked,
+        )
+
+    def _acquire_cleanup_lease(
+        self,
+        record: CaptureLifecycleRecord,
+    ) -> _ObservedArtifact | None:
+        return _capture_sweep.acquire_cleanup_lease(
+            record,
+            observe=self._observe,
+            try_lease=self._try_artifact_lease,
+            staging_name_pattern=_STAGING_NAME_RE,
+            public_name_pattern=_PUBLIC_NAME_RE,
+            quarantine_name_pattern=_QUARANTINE_NAME_RE,
         )
 
     def _deleting_record(
@@ -829,6 +938,9 @@ class CaptureLifecycleStore:
         self,
         record: CaptureLifecycleRecord,
         authorize_delete: Callable[[], None] | None = None,
+        *,
+        preleased: _ObservedArtifact | None = None,
+        lease_checked: bool = False,
     ) -> int:
         return _capture_sweep.quarantine_delete(
             record,
@@ -838,138 +950,17 @@ class CaptureLifecycleStore:
             authorize_delete=authorize_delete,
             public_name_pattern=_PUBLIC_NAME_RE,
             quarantine_name_pattern=_QUARANTINE_NAME_RE,
-        )
-
-    def _retry(self, record: CaptureLifecycleRecord) -> CaptureLifecycleRecord:
-        return _capture_sweep.retry_record(
-            record,
-            now=self._wall_clock(),
-            max_retry_seconds=_MAX_RETRY_SECONDS,
+            preleased=preleased,
+            lease_checked=lease_checked,
         )
 
     def _sweep_one(self, capture_id: str) -> tuple[str, int, int]:
-        with self._locked(blocking=False):
-            records, compaction_epoch, size = self._load_locked()
-            record = records.get(capture_id)
-            now = self._wall_clock()
-            if (
-                record is None
-                or record.state in {CaptureState.DELETED, CaptureState.TAMPERED}
-                or record.next_attempt_at > now
-            ):
-                return ("not_due", 0, 0)
-            try:
-                if (
-                    record.project_identity != self._project_identity
-                    or record.root_identity != self._root_identity
-                ):
-                    raise _Tampered
-                if record.state in {
-                    CaptureState.RESERVED,
-                    CaptureState.STAGED,
-                    CaptureState.PUBLISHED_WRITING,
-                }:
-                    record, lease = self._normalize_abandoned(record)
-                    if lease is not None:
-                        os.close(lease.fd)
-                    if record.state is CaptureState.DELETED:
-                        self._append_locked(record, records, compaction_epoch, size)
-                        return ("deleted", 0, 0)
-                    self._append_locked(record, records, compaction_epoch, size)
-                    records, compaction_epoch, size = self._load_locked()
-                    record = records[capture_id]
-
-                if (
-                    record.reference_status
-                    in {
-                        CaptureReferenceStatus.ISSUED,
-                        CaptureReferenceStatus.PUBLISHED,
-                    }
-                    and record.manifest is not None
-                    and record.manifest.reference_expiry is not None
-                    and now >= record.manifest.reference_expiry
-                ):
-                    expired = replace(
-                        record,
-                        reference_status=CaptureReferenceStatus.EXPIRED,
-                        revision=record.revision + 1,
-                    )
-                    self._append_locked(
-                        expired,
-                        records,
-                        compaction_epoch,
-                        size,
-                    )
-                    records, compaction_epoch, size = self._load_locked()
-                    record = records[capture_id]
-                deleting = self._deleting_record(record)
-
-                def authorize_delete() -> None:
-                    nonlocal record, records, compaction_epoch, size
-                    if deleting is not record:
-                        self._append_locked(
-                            deleting,
-                            records,
-                            compaction_epoch,
-                            size,
-                        )
-                        records, compaction_epoch, size = self._load_locked()
-                        record = records[capture_id]
-
-                deleted_bytes = self._quarantine_delete(
-                    deleting,
-                    authorize_delete,
-                )
-                deleted = replace(
-                    record,
-                    state=CaptureState.DELETED,
-                    next_attempt_at=now,
-                    retention_phase=CaptureRetentionPhase.DELETED,
-                    revision=record.revision + 1,
-                )
-                self._append_locked(
-                    deleted,
-                    records,
-                    compaction_epoch,
-                    size,
-                )
-                return ("deleted", deleted_bytes, 0)
-            except _CarrierLeaseLive:
-                live = replace(
-                    record,
-                    next_attempt_at=now + 30.0,
-                    revision=record.revision + 1,
-                )
-                self._append_locked(
-                    live,
-                    records,
-                    compaction_epoch,
-                    size,
-                )
-                return ("carrier_lease_live", 0, 0)
-            except _Tampered:
-                tampered = replace(
-                    record,
-                    state=CaptureState.TAMPERED,
-                    retention_phase=CaptureRetentionPhase.TAMPERED,
-                    revision=record.revision + 1,
-                )
-                self._append_locked(
-                    tampered,
-                    records,
-                    compaction_epoch,
-                    size,
-                )
-                return ("tampered", 0, 0)
-            except (CaptureLifecycleError, OSError):
-                retry = self._retry(record)
-                self._append_locked(
-                    retry,
-                    records,
-                    compaction_epoch,
-                    size,
-                )
-                return ("error", 0, 1)
+        return _capture_sweep.sweep_one(
+            self,
+            capture_id,
+            lifecycle_error=CaptureLifecycleError,
+            max_retry_seconds=_MAX_RETRY_SECONDS,
+        )
 
     def _due_ids(self, now: float) -> list[str]:
         with self._locked(blocking=False):

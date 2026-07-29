@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import errno
 import hashlib
 import json
@@ -9,6 +10,7 @@ import os
 import stat
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import FrozenInstanceError, asdict, replace
@@ -19,7 +21,9 @@ import pytest
 
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture._snapshot import (
+    CaptureFailureEvidence,
     CaptureMeasurement,
+    CaptureStatus,
     CommandOutcome,
     verify_capture_snapshot,
 )
@@ -31,9 +35,14 @@ from autoskillit.hooks._capture_artifacts import (
     open_project_anchor,
 )
 from autoskillit.hooks._capture_lifecycle import (
+    CaptureDeliveryStatus,
     CaptureLedgerError,
+    CaptureLifecycleError,
     CaptureLifecycleRecord,
     CaptureLifecycleStore,
+    CaptureReferenceStatus,
+    CaptureRetentionPhase,
+    CaptureSnapshotStatus,
     CaptureState,
 )
 
@@ -78,6 +87,36 @@ def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> N
         capture_lifecycle._record_from_dict(serialized)
 
 
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    (
+        ({"capture_status": CaptureStatus.COMPLETE}, "complete capture"),
+        ({"retention_phase": CaptureRetentionPhase.DELETED}, "deleted retention"),
+        ({"state": CaptureState.DELETING}, "deleting retention"),
+        ({"snapshot_status": CaptureSnapshotStatus.VERIFIED}, "snapshot status"),
+    ),
+)
+def test_ledger_rejects_invalid_outcome_projection_combinations(
+    changes: dict[str, object],
+    message: str,
+) -> None:
+    record = CaptureLifecycleRecord(
+        capture_id=_CAPTURE_ID,
+        state=CaptureState.RESERVED,
+        staging_name=f".capture-staging-{_CAPTURE_ID}-0000000000000000",
+        public_name=f"shell_{_CAPTURE_ID}.log",
+        project_identity=(1, 2),
+        root_identity=(3, 4),
+        created_at=1.0,
+        next_attempt_at=2.0,
+        incarnation="1" * 32,
+        revision=1,
+    )
+
+    with pytest.raises(CaptureLedgerError, match=message):
+        capture_lifecycle._record_to_dict(replace(record, **changes))
+
+
 def _open_store(project: Path, clock: _Clock):
     project.mkdir(exist_ok=True)
     anchor = open_project_anchor(str(project))
@@ -99,7 +138,185 @@ def _capture_dir(project: Path) -> Path:
     return project.joinpath(*CAPTURE_PATH_COMPONENTS)
 
 
-def _commit_verified(
+def _frame_from_payload(payload: bytes) -> bytes:
+    return (
+        capture_lifecycle.FRAME_MAGIC
+        + len(payload).to_bytes(4, "big")
+        + payload
+        + hashlib.sha256(payload).digest()
+    )
+
+
+def _legacy_frame(record: dict[str, object], *, generation: int = 1) -> bytes:
+    payload = capture_lifecycle._capture_ledger.canonical_json(
+        {
+            "format_version": 1,
+            "generation": generation,
+            "record": record,
+        }
+    )
+    return _frame_from_payload(payload)
+
+
+def _legacy_record(
+    *,
+    capture_id: str,
+    state: CaptureState,
+    project_identity: tuple[int, int],
+    root_identity: tuple[int, int],
+    artifact_identity: tuple[int, int] | None,
+    observed_size: int,
+) -> dict[str, object]:
+    return {
+        "artifact_identity": (list(artifact_identity) if artifact_identity is not None else None),
+        "capture_id": capture_id,
+        "created_at": 1_000_000.0,
+        "deletion_nonce": "",
+        "next_attempt_at": 2_000_000.0,
+        "project_identity": list(project_identity),
+        "public_name": f"shell_{capture_id}.log",
+        "quarantine_name": "",
+        "retention_at": None,
+        "retry_count": 0,
+        "root_identity": list(root_identity),
+        "sha256": hashlib.sha256(b"captured").hexdigest(),
+        "size": observed_size,
+        "staging_name": f".capture-staging-{capture_id}-{'1' * 16}",
+        "state": state.value,
+    }
+
+
+def _race_calls(*calls: Callable[[], object]) -> list[object]:
+    barrier = threading.Barrier(len(calls) + 1)
+
+    def invoke(call: Callable[[], object]) -> object:
+        barrier.wait(timeout=5)
+        try:
+            return call()
+        except (CaptureLifecycleError, OSError) as exc:
+            return exc
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(calls)) as executor:
+        futures = [executor.submit(invoke, call) for call in calls]
+        barrier.wait(timeout=5)
+        return [future.result(timeout=5) for future in futures]
+
+
+def test_lifecycle_store_rejects_direct_construction(tmp_path: Path) -> None:
+    anchor, root, _store = _open_store(tmp_path / "project", _Clock())
+    try:
+        with pytest.raises(CaptureLifecycleError, match="factory-created"):
+            CaptureLifecycleStore(
+                root.fd,
+                project_identity=(anchor.identity.device, anchor.identity.inode),
+                root_identity=(root.identity.device, root.identity.inode),
+            )
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_mixed_legacy_history_migrates_once_without_manufacturing_final_authority(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor = open_project_anchor(str(project))
+    root = open_capture_root(anchor, create=True)
+    project_identity = (anchor.identity.device, anchor.identity.inode)
+    root_identity = (root.identity.device, root.identity.inode)
+    carrier = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
+    carrier.write_bytes(b"captured")
+    carrier.chmod(0o600)
+    carrier_value = carrier.stat()
+    artifact_identity = (carrier_value.st_dev, carrier_value.st_ino)
+    other_id = "1111111111111111"
+    current = CaptureLifecycleRecord(
+        capture_id=other_id,
+        state=CaptureState.RESERVED,
+        staging_name=f".capture-staging-{other_id}-{'2' * 16}",
+        public_name=f"shell_{other_id}.log",
+        project_identity=project_identity,
+        root_identity=root_identity,
+        created_at=1_000_000.0,
+        next_attempt_at=2_000_000.0,
+        incarnation="2" * 32,
+        revision=1,
+    )
+    frames = [
+        _legacy_frame(
+            _legacy_record(
+                capture_id=_CAPTURE_ID,
+                state=CaptureState.RESERVED,
+                project_identity=project_identity,
+                root_identity=root_identity,
+                artifact_identity=None,
+                observed_size=0,
+            )
+        ),
+        _legacy_frame(
+            _legacy_record(
+                capture_id=_CAPTURE_ID,
+                state=CaptureState.STAGED,
+                project_identity=project_identity,
+                root_identity=root_identity,
+                artifact_identity=artifact_identity,
+                observed_size=len(b"captured"),
+            )
+        ),
+        _legacy_frame(
+            _legacy_record(
+                capture_id=_CAPTURE_ID,
+                state=CaptureState.FINALIZED,
+                project_identity=project_identity,
+                root_identity=root_identity,
+                artifact_identity=artifact_identity,
+                observed_size=len(b"captured"),
+            )
+        ),
+        capture_lifecycle._capture_ledger.encode_frame(
+            capture_lifecycle._record_to_dict(current),
+            compaction_epoch=1,
+        ),
+    ]
+    ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+    ledger.write_bytes(b"".join(frames))
+    ledger.chmod(0o600)
+    try:
+        store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=lambda: 1_000_000.0,
+        )
+        migrated = store.get_record(_CAPTURE_ID)
+        preserved = store.get_record(other_id)
+        first_bytes = ledger.read_bytes()
+        reopened = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=lambda: 1_000_000.0,
+        )
+
+        assert migrated is not None
+        assert migrated.state is CaptureState.ABANDONED
+        assert migrated.capture_status is CaptureStatus.LEGACY_CLEANUP_ONLY
+        assert migrated.snapshot_status is CaptureSnapshotStatus.ABSENT
+        assert migrated.manifest is None
+        assert migrated.legacy_cleanup is not None
+        assert migrated.legacy_cleanup.observed_size == len(b"captured")
+        assert migrated.revision == 3
+        assert preserved == reopened.get_record(other_id)
+        assert ledger.read_bytes() == first_bytes
+        decoded = capture_lifecycle._capture_ledger.decode_ledger(first_bytes)
+        assert decoded.frames
+        assert {frame.format_version for frame in decoded.frames} == {2}
+        assert {frame.compaction_epoch for frame in decoded.frames} == {2}
+    finally:
+        root.close()
+        anchor.close()
+
+
+def _verified_snapshot(
     store: CaptureLifecycleStore,
     artifact,
     data: bytes,
@@ -109,7 +326,7 @@ def _commit_verified(
         data,
         inline_bytes=max(1, len(data)),
     )
-    snapshot = verify_capture_snapshot(
+    return verify_capture_snapshot(
         fd=artifact.fd,
         capture_id=artifact.authority.capture_id,
         incarnation=artifact.authority.incarnation,
@@ -123,7 +340,18 @@ def _commit_verified(
         finalized_at=clock.wall(),
         retention_deadline=clock.wall() + 3600.0,
     )
-    return store.commit_verified_snapshot(snapshot, issue_reference=False)
+
+
+def _commit_verified(
+    store: CaptureLifecycleStore,
+    artifact,
+    data: bytes,
+    clock: _Clock,
+):
+    return store.commit_verified_snapshot(
+        _verified_snapshot(store, artifact, data, clock),
+        issue_reference=False,
+    )
 
 
 def _finalized_capture(project: Path, clock: _Clock, capture_id: str = _CAPTURE_ID):
@@ -132,6 +360,263 @@ def _finalized_capture(project: Path, clock: _Clock, capture_id: str = _CAPTURE_
     os.write(artifact.fd, b"captured")
     _commit_verified(store, artifact, b"captured", clock)
     return anchor, root, store, artifact
+
+
+def test_final_commit_reconciles_durable_append_after_reported_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    snapshot = _verified_snapshot(store, artifact, b"captured", clock)
+    real_append = store._append_locked
+    injected = False
+
+    def append_then_fail(record, records, compaction_epoch, size):
+        nonlocal injected
+        real_append(record, records, compaction_epoch, size)
+        if record.state is CaptureState.FINALIZED and not injected:
+            injected = True
+            raise OSError("post-FINAL append fault")
+
+    monkeypatch.setattr(store, "_append_locked", append_then_fail)
+    try:
+        finalized = store.commit_verified_snapshot(snapshot, issue_reference=True)
+        durable = store.get_record(_CAPTURE_ID)
+
+        assert injected
+        assert finalized.issuance is not None
+        assert durable is not None
+        assert durable.state is CaptureState.FINALIZED
+        assert durable.manifest == finalized.snapshot.manifest
+        assert durable.revision == finalized.finalized_at_revision
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_verified_final_and_failure_commits_have_one_winner(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    snapshot = _verified_snapshot(store, artifact, b"captured", clock)
+    try:
+        results = _race_calls(
+            lambda: store.commit_verified_snapshot(snapshot, issue_reference=False),
+            lambda: store.commit_capture_failure(
+                artifact.authority,
+                CaptureFailureEvidence(stage="race", detail="failure won"),
+                observed_size=8,
+            ),
+        )
+        durable = store.get_record(_CAPTURE_ID)
+
+        assert sum(not isinstance(result, Exception) for result in results) == 1
+        assert durable is not None
+        assert durable.state in {CaptureState.FINALIZED, CaptureState.FAILED}
+        assert durable.revision == artifact.authority.expected_revision + 1
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_conflicting_final_commits_do_not_issue_twice(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    snapshot = _verified_snapshot(store, artifact, b"captured", clock)
+    try:
+        results = _race_calls(
+            lambda: store.commit_verified_snapshot(snapshot, issue_reference=False),
+            lambda: store.commit_verified_snapshot(snapshot, issue_reference=True),
+        )
+        durable = store.get_record(_CAPTURE_ID)
+
+        assert sum(not isinstance(result, Exception) for result in results) == 1
+        assert durable is not None
+        assert durable.state is CaptureState.FINALIZED
+        assert durable.reference_status in {
+            CaptureReferenceStatus.NOT_REQUESTED,
+            CaptureReferenceStatus.ISSUED,
+        }
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_reference_publication_and_revocation_race_ends_revoked(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    finalized = store.commit_verified_snapshot(
+        _verified_snapshot(store, artifact, b"captured", clock),
+        issue_reference=True,
+    )
+    try:
+        results = _race_calls(
+            lambda: store.publish_reference(finalized),
+            lambda: store.revoke_reference(finalized),
+        )
+        durable = store.get_record(_CAPTURE_ID)
+
+        assert not isinstance(results[1], Exception)
+        assert durable is not None
+        assert durable.reference_status is CaptureReferenceStatus.REVOKED
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_delivery_transition_rejects_illegal_predecessor_target_pair(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    finalized = _commit_verified(store, artifact, b"captured", clock)
+    try:
+        with pytest.raises(CaptureLifecycleError, match="not allowed"):
+            store.transition_delivery(
+                finalized,
+                expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+                target=CaptureDeliveryStatus.DELIVERED,
+            )
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_delivered_reference_cannot_be_reclassified_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    finalized = store.commit_verified_snapshot(
+        _verified_snapshot(store, artifact, b"captured", clock),
+        issue_reference=True,
+    )
+    published = store.publish_reference(finalized)
+    store.transition_delivery(
+        published,
+        expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+        target=CaptureDeliveryStatus.ATTEMPTING,
+    )
+    store.transition_delivery(
+        published,
+        expected=CaptureDeliveryStatus.ATTEMPTING,
+        target=CaptureDeliveryStatus.DELIVERED,
+    )
+    try:
+        with pytest.raises(CaptureLifecycleError, match="invalid lifecycle successor"):
+            store.mark_reference_unavailable(
+                finalized,
+                reason_code="TOO_LATE",
+            )
+        durable = store.get_record(_CAPTURE_ID)
+        assert durable is not None
+        assert durable.reference_status is CaptureReferenceStatus.PUBLISHED
+        assert durable.delivery_status is CaptureDeliveryStatus.DELIVERED
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_carrier_fsync_precedes_final_ledger_append(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    carrier_identity = (artifact.identity.device, artifact.identity.inode)
+    events: list[str] = []
+    real_fsync = os.fsync
+    real_write_all = capture_lifecycle._capture_ledger.write_all
+
+    def recording_fsync(fd: int) -> None:
+        value = os.fstat(fd)
+        if (value.st_dev, value.st_ino) == carrier_identity:
+            events.append("carrier_fsync")
+        real_fsync(fd)
+
+    def recording_write_all(fd: int, payload: bytes) -> None:
+        events.append("ledger_append")
+        real_write_all(fd, payload)
+
+    monkeypatch.setattr(capture_lifecycle._capture_snapshot.os, "fsync", recording_fsync)
+    monkeypatch.setattr(
+        capture_lifecycle._capture_ledger,
+        "write_all",
+        recording_write_all,
+    )
+    try:
+        verified = _verified_snapshot(store, artifact, b"captured", clock)
+        store.commit_verified_snapshot(verified, issue_reference=False)
+
+        assert events.count("carrier_fsync") == 1
+        assert events.index("carrier_fsync") < events.index("ledger_append")
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_deleted_capture_id_starts_a_new_incarnation_at_revision_one(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(
+        tmp_path / "project",
+        clock,
+    )
+    old = store.get_record(_CAPTURE_ID)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    clock.advance(3601)
+    try:
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        tombstone = store.get_record(_CAPTURE_ID)
+        replacement = store.reserve_capture(_CAPTURE_ID)
+
+        assert outcome.deleted == 1
+        assert old is not None
+        assert tombstone is not None
+        assert tombstone.state is CaptureState.DELETED
+        assert replacement.state is CaptureState.RESERVED
+        assert replacement.revision == 1
+        assert replacement.incarnation != old.incarnation
+        assert store.get_record(_CAPTURE_ID) == replacement
+    finally:
+        root.close()
+        anchor.close()
 
 
 def _seed_finalized_captures(
@@ -714,6 +1199,108 @@ def test_live_writer_sweep_closes_observation_descriptor(
         anchor.close()
 
 
+def test_cleanup_revalidates_revision_after_carrier_lease_handoff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    clock.advance(3601)
+    real_acquire = store._acquire_cleanup_lease
+    observed_fd = -1
+
+    def acquire_then_advance(record: CaptureLifecycleRecord):
+        nonlocal observed_fd
+        lease = real_acquire(record)
+        assert lease is not None
+        observed_fd = lease.fd
+        current = store.get_record(record.capture_id)
+        assert current is not None
+        store._transition(
+            store._authority_for(current),
+            allowed_states={current.state},
+            transform=lambda value: replace(
+                value,
+                next_attempt_at=clock.wall() + 60,
+                revision=value.revision + 1,
+            ),
+        )
+        return lease
+
+    monkeypatch.setattr(store, "_acquire_cleanup_lease", acquire_then_advance)
+    try:
+        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        current = store.get_record(_CAPTURE_ID)
+
+        assert outcome.not_due == 1
+        assert outcome.deleted == 0
+        assert current is not None
+        assert current.state is CaptureState.FINALIZED
+        assert (_capture_dir(project) / artifact.name).exists()
+        with pytest.raises(OSError):
+            os.fstat(observed_fd)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_cleanup_handoff_loses_to_verified_final_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    verified = _verified_snapshot(store, artifact, b"captured", clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    clock.advance(3601)
+    real_acquire = store._acquire_cleanup_lease
+    lease_acquired = threading.Event()
+    continue_cleanup = threading.Event()
+
+    def pause_after_lease(record: CaptureLifecycleRecord):
+        lease = real_acquire(record)
+        lease_acquired.set()
+        if not continue_cleanup.wait(timeout=5):
+            if lease is not None:
+                os.close(lease.fd)
+            raise TimeoutError("cleanup handoff was not released")
+        return lease
+
+    monkeypatch.setattr(store, "_acquire_cleanup_lease", pause_after_lease)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            store.sweep,
+            max_items=8,
+            max_duration_seconds=1,
+        )
+        try:
+            assert lease_acquired.wait(timeout=5)
+            finalized = store.commit_verified_snapshot(
+                verified,
+                issue_reference=False,
+            )
+        finally:
+            continue_cleanup.set()
+        outcome = future.result(timeout=5)
+
+    try:
+        durable = store.get_record(_CAPTURE_ID)
+        assert outcome.not_due == 1
+        assert durable is not None
+        assert durable.state is CaptureState.FINALIZED
+        assert durable.manifest == finalized.snapshot.manifest
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_observe_closes_descriptor_when_fstat_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1206,7 +1793,11 @@ def test_cleanup_outcome_counts_retries_per_sweep(
     def fail_delete(
         _record: CaptureLifecycleRecord,
         authorize_delete: Callable[[], None] | None = None,
+        *,
+        preleased: capture_lifecycle._ObservedArtifact | None = None,
+        lease_checked: bool = False,
     ) -> int:
+        del preleased, lease_checked
         if authorize_delete is not None:
             authorize_delete()
         raise OSError("injected deletion failure")
@@ -1267,12 +1858,20 @@ def test_sweep_continues_after_failed_due_record(
     def fail_first(
         record: CaptureLifecycleRecord,
         authorize_delete: Callable[[], None] | None = None,
+        *,
+        preleased: capture_lifecycle._ObservedArtifact | None = None,
+        lease_checked: bool = False,
     ) -> int:
         if record.capture_id == failed_id:
             if authorize_delete is not None:
                 authorize_delete()
             raise OSError("injected first-row failure")
-        return real_delete(record, authorize_delete)
+        return real_delete(
+            record,
+            authorize_delete,
+            preleased=preleased,
+            lease_checked=lease_checked,
+        )
 
     try:
         artifact_names = _seed_finalized_captures(root, store, count=2)
@@ -1576,5 +2175,124 @@ def test_bad_ledger_checksum_fails_closed(tmp_path: Path) -> None:
         with pytest.raises(CaptureLedgerError, match="checksum"):
             store.get_record(_CAPTURE_ID)
     finally:
+        root.close()
+        anchor.close()
+
+
+def test_ledger_decoder_rejects_strict_json_and_version_violations() -> None:
+    nested = b"[" * 20 + b"0" + b"]" * 20
+    cases = (
+        (
+            b'{"compaction_epoch":1,"format_version":99,"record":{}}',
+            "metadata",
+        ),
+        (
+            b'{"compaction_epoch":1, "format_version":2,"record":{}}',
+            "noncanonical",
+        ),
+        (
+            b'{"compaction_epoch":1,"format_version":2,"format_version":2,"record":{}}',
+            "duplicate",
+        ),
+        (
+            b'{"compaction_epoch":1,"format_version":2,"record":{"value":NaN}}',
+            "payload",
+        ),
+        (
+            b'{"compaction_epoch":1,"extra":0,"format_version":2,"record":{}}',
+            "schema",
+        ),
+        (
+            b'{"compaction_epoch":1,"format_version":2,"record":' + nested + b"}",
+            "structural bound",
+        ),
+    )
+    for payload, message in cases:
+        with pytest.raises(
+            capture_lifecycle._capture_ledger.LedgerCodecError,
+            match=message,
+        ):
+            capture_lifecycle._capture_ledger.decode_ledger(_frame_from_payload(payload))
+
+
+def test_invalid_complete_middle_frame_is_not_treated_as_a_crash_tail() -> None:
+    record = CaptureLifecycleRecord(
+        capture_id=_CAPTURE_ID,
+        state=CaptureState.RESERVED,
+        staging_name=f".capture-staging-{_CAPTURE_ID}-{'1' * 16}",
+        public_name=f"shell_{_CAPTURE_ID}.log",
+        project_identity=(1, 2),
+        root_identity=(3, 4),
+        created_at=1.0,
+        next_attempt_at=2.0,
+        incarnation="1" * 32,
+        revision=1,
+    )
+    valid = capture_lifecycle._capture_ledger.encode_frame(
+        capture_lifecycle._record_to_dict(record),
+        compaction_epoch=1,
+    )
+    invalid = bytearray(valid)
+    invalid[-1] ^= 0x01
+
+    with pytest.raises(
+        capture_lifecycle._capture_ledger.LedgerCodecError,
+        match="checksum",
+    ):
+        capture_lifecycle._capture_ledger.decode_ledger(valid + bytes(invalid) + valid)
+
+
+def test_ledger_reload_rejects_revision_gap(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    try:
+        record = store.reserve_capture(_CAPTURE_ID)
+        forged = replace(record, revision=record.revision + 2)
+        frame = capture_lifecycle._capture_ledger.encode_frame(
+            capture_lifecycle._record_to_dict(forged),
+            compaction_epoch=record.compaction_epoch,
+        )
+        ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+        with ledger.open("ab") as stream:
+            stream.write(frame)
+
+        with pytest.raises(CaptureLedgerError, match="invalid lifecycle successor"):
+            store.get_record(_CAPTURE_ID)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_ledger_reload_rejects_conflicting_final_manifest(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    try:
+        record = store.get_record(_CAPTURE_ID)
+        assert record is not None and record.manifest is not None
+        primitive = json.loads(record.manifest_bytes)
+        primitive["sha256"] = "f" * 64
+        conflicting_bytes = capture_lifecycle._capture_ledger.canonical_json(primitive)
+        wire = capture_lifecycle._capture_snapshot.decode_capture_manifest_wire(conflicting_bytes)
+        conflicting = capture_lifecycle._capture_snapshot._restore_capture_final_manifest(wire)
+        forged = replace(
+            record,
+            revision=record.revision + 1,
+            manifest=conflicting,
+            manifest_bytes=conflicting_bytes,
+        )
+        frame = capture_lifecycle._capture_ledger.encode_frame(
+            capture_lifecycle._record_to_dict(forged),
+            compaction_epoch=record.compaction_epoch,
+        )
+        ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+        with ledger.open("ab") as stream:
+            stream.write(frame)
+
+        with pytest.raises(CaptureLedgerError, match="immutable FINAL authority"):
+            store.get_record(_CAPTURE_ID)
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
         root.close()
         anchor.close()

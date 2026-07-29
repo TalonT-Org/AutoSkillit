@@ -62,7 +62,7 @@ def test_published_marker_is_canonical_and_round_trips() -> None:
     assert parsed == fields
     assert parsed.schema_version == CAPTURE_V2_SCHEMA_VERSION
     assert parsed.producer == CAPTURE_V2_PRODUCER
-    assert parsed.capture_status == "finalized"
+    assert parsed.capture_status == "complete"
     assert parsed.snapshot_status == "verified"
     assert encoded.startswith(b"[AutoSkillit shell capture v2:{")
     assert encoded.endswith(b"}]")

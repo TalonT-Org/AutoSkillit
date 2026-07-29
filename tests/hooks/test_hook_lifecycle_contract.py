@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import dataclasses
+from pathlib import Path
 
 import pytest
 
+import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
@@ -103,6 +106,40 @@ def test_snapshot_reference_and_reader_reuse_one_registered_resource_owner() -> 
     assert {LEDGER_NAME, LOCK_NAME} == {
         ".capture-lifecycle.ledger",
         ".capture-lifecycle.lock",
+    }
+
+
+def test_every_shell_capture_persistent_path_constant_is_registered() -> None:
+    hooks_dir = Path(capture_lifecycle.__file__).resolve().parent
+    capture_dir = hooks_dir / "_capture"
+    observed: set[tuple[str, str]] = set()
+    for path in (*capture_dir.glob("*.py"), hooks_dir / "_capture_lifecycle.py"):
+        for node in ast.parse(path.read_text()).body:
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                name = target.id
+                if (
+                    name == "CAPTURE_PATH_COMPONENTS"
+                    or name.endswith("_NAME")
+                    or name.endswith("_NAME_RE")
+                ):
+                    observed.add((path.name, name))
+
+    assert observed == {
+        ("_authority.py", "CAPTURE_PATH_COMPONENTS"),
+        ("_ledger.py", "_PUBLIC_NAME_RE"),
+        ("_ledger.py", "_QUARANTINE_NAME_RE"),
+        ("_ledger.py", "_STAGING_NAME_RE"),
+        ("_snapshot.py", "_CARRIER_NAME_RE"),
+        ("_capture_lifecycle.py", "LEDGER_NAME"),
+        ("_capture_lifecycle.py", "LOCK_NAME"),
+        ("_capture_lifecycle.py", "_PUBLIC_NAME_RE"),
+        ("_capture_lifecycle.py", "_QUARANTINE_NAME_RE"),
+        ("_capture_lifecycle.py", "_STAGING_NAME_RE"),
     }
 
 

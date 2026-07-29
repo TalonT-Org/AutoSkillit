@@ -14,7 +14,7 @@ owners. Modules must remain importable when the hooks directory alone is on
 | `_replay.py` | Checked hook-output replay, bounded failure transport, and runner settlement |
 | `_resolver.py` | Lifecycle-linearized published-reference resolution and producer-exclusive reader adoption |
 | `_delivery.py` | Transactional reference publication and hook-stdout delivery-state transitions |
+| `_descriptor.py` | Stdlib-only retained-descriptor metadata and digest verification |
 | `_snapshot.py` | Factory-only descriptor verification, immutable FINAL manifest, and opaque reference authority |
-| `_snapshot_v2.py` | Structural adapter from verified snapshots to capture-V2 transport fields |
 | `_sweep.py` | Bounded cleanup sweep and verified recovery-operation orchestration |
 | `_types.py` | Lifecycle outcome, observation, and internal signal types |

@@ -135,6 +135,7 @@ def test_authority_apis_named_by_the_decision_are_executable(
         "render_capture_v2()",
         "parse_capture_v2()",
         "open_verified_capture(token)",
+        "verify_reference_publication_binding()",
         "capture_v2_encoded_length()",
         "capture_v2_worst_case_bytes()",
     ):

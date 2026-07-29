@@ -17,6 +17,12 @@ from dataclasses import InitVar, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+_THIS_MODULE = sys.modules[__name__]
+for _alias in ("_capture._authority", "autoskillit.hooks._capture._authority"):
+    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
+    if _existing is not _THIS_MODULE:
+        raise RuntimeError("conflicting shell-capture authority module identity")
+
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)

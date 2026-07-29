@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
-import stat
 import sys
 from dataclasses import InitVar, dataclass, field
 from typing import NoReturn, Protocol, SupportsIndex
+
+from ._snapshot import CaptureAuthorityError
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._reader", "autoskillit.hooks._capture._reader"):
@@ -25,12 +24,7 @@ __all__ = [
 MAX_VERIFIED_READ_BYTES = 64 * 1024
 _MAX_OFFSET = (1 << 63) - 1
 _READ_CHUNK_BYTES = 64 * 1024
-_UNTRUSTED_MODE_BITS = stat.S_IRWXG | stat.S_IRWXO
 _READER_FACTORY_TOKEN = object()
-
-
-class CaptureAuthorityError(RuntimeError):
-    """Raised when shell-capture authority cannot be proven."""
 
 
 class CaptureManifest(Protocol):
@@ -136,48 +130,6 @@ class VerifiedCaptureReader:
             descriptor = self._descriptor
             object.__setattr__(self, "_descriptor", -1)
             os.close(descriptor)
-
-
-def _inspect_manifest_descriptor(
-    fd: int,
-    manifest: CaptureManifest,
-) -> os.stat_result:
-    try:
-        value = os.fstat(fd)
-    except OSError as exc:
-        raise CaptureAuthorityError("cannot inspect capture carrier") from exc
-    if (
-        (value.st_dev, value.st_ino) != manifest.carrier_identity
-        or not stat.S_ISREG(value.st_mode)
-        or value.st_nlink != 1
-        or value.st_uid != os.geteuid()
-        or value.st_mode & _UNTRUSTED_MODE_BITS
-        or value.st_size != manifest.total_bytes
-    ):
-        raise CaptureAuthorityError("capture carrier metadata changed")
-    return value
-
-
-def _verify_manifest_descriptor(fd: int, manifest: CaptureManifest) -> None:
-    _inspect_manifest_descriptor(fd, manifest)
-    digest = hashlib.sha256()
-    offset = 0
-    while offset < manifest.total_bytes:
-        try:
-            chunk = os.pread(
-                fd,
-                min(_READ_CHUNK_BYTES, manifest.total_bytes - offset),
-                offset,
-            )
-        except OSError as exc:
-            raise CaptureAuthorityError("capture carrier readback failed") from exc
-        if not chunk:
-            raise CaptureAuthorityError("capture carrier readback ended early")
-        digest.update(chunk)
-        offset += len(chunk)
-    if not hmac.compare_digest(digest.hexdigest(), manifest.sha256):
-        raise CaptureAuthorityError("capture carrier content changed")
-    _inspect_manifest_descriptor(fd, manifest)
 
 
 def _make_verified_reader(

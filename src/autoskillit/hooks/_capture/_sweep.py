@@ -5,16 +5,30 @@ from __future__ import annotations
 import errno
 import os
 import stat
+import sys
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import replace
-from typing import Protocol
+from typing import Any, Protocol
 
 from ._ledger import (
     CaptureLifecycleRecord,
+    CaptureReferenceStatus,
     CaptureRetentionPhase,
     CaptureState,
 )
-from ._types import CaptureCleanupOutcome, LockContended, ObservedArtifact, Tampered
+from ._types import (
+    CaptureCleanupOutcome,
+    CarrierLeaseLive,
+    LockContended,
+    ObservedArtifact,
+    Tampered,
+)
+
+_THIS_MODULE = sys.modules[__name__]
+for _alias in ("_capture._sweep", "autoskillit.hooks._capture._sweep"):
+    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
+    if _existing is not _THIS_MODULE:
+        raise RuntimeError("conflicting shell-capture sweep module identity")
 
 
 class SweepRecord(Protocol):
@@ -124,6 +138,54 @@ def observe_artifact(
         raise
 
 
+def acquire_cleanup_lease(
+    record: CaptureLifecycleRecord,
+    *,
+    observe: Callable[..., ObservedArtifact | None],
+    try_lease: Callable[[ObservedArtifact], None],
+    staging_name_pattern: object,
+    public_name_pattern: object,
+    quarantine_name_pattern: object,
+) -> ObservedArtifact | None:
+    names = [
+        (record.public_name, public_name_pattern),
+    ]
+    if record.state in {
+        CaptureState.RESERVED,
+        CaptureState.STAGED,
+        CaptureState.PUBLISHED_WRITING,
+    }:
+        names.insert(0, (record.staging_name, staging_name_pattern))
+    if record.state is CaptureState.DELETING and record.quarantine_name:
+        names.append((record.quarantine_name, quarantine_name_pattern))
+
+    observed: list[ObservedArtifact] = []
+    retained: ObservedArtifact | None = None
+    try:
+        for name, pattern in names:
+            value = observe(
+                name,
+                record.artifact_identity,
+                valid_name=pattern,
+            )
+            if value is not None:
+                observed.append(value)
+        if not observed:
+            return None
+        if record.artifact_identity is None:
+            raise Tampered
+        if any(value.identity != observed[0].identity for value in observed[1:]):
+            raise Tampered
+        candidate = observed[0]
+        try_lease(candidate)
+        retained = candidate
+        return retained
+    finally:
+        for value in observed:
+            if value is not retained:
+                os.close(value.fd)
+
+
 def normalize_abandoned(
     record: CaptureLifecycleRecord,
     *,
@@ -133,6 +195,8 @@ def normalize_abandoned(
     staging_name_pattern: object,
     public_name_pattern: object,
     wall_clock: Callable[[], float],
+    preleased: ObservedArtifact | None = None,
+    lease_checked: bool = False,
 ) -> tuple[CaptureLifecycleRecord, ObservedArtifact | None]:
     staging: ObservedArtifact | None = None
     public: ObservedArtifact | None = None
@@ -153,6 +217,8 @@ def normalize_abandoned(
             raise Tampered
         lease_target = public or staging
         if lease_target is None:
+            if preleased is not None:
+                raise Tampered
             return (
                 replace(
                     record,
@@ -162,7 +228,15 @@ def normalize_abandoned(
                 ),
                 None,
             )
-        try_lease(lease_target)
+        if preleased is None:
+            if lease_checked:
+                raise CarrierLeaseLive
+            try_lease(lease_target)
+            returned_lease = lease_target
+        else:
+            if preleased.identity != lease_target.identity:
+                raise Tampered
+            returned_lease = preleased
         identity = lease_target.identity
         if staging is not None and public is not None:
             if staging.identity != public.identity or staging.nlink != 2 or public.nlink != 2:
@@ -206,9 +280,9 @@ def normalize_abandoned(
                 retention_phase=CaptureRetentionPhase.ELIGIBLE,
                 revision=record.revision + 1,
             ),
-            lease_target,
+            returned_lease,
         )
-        lease_transferred = True
+        lease_transferred = preleased is None
         return result
     finally:
         for observed in (staging, public):
@@ -242,6 +316,8 @@ def quarantine_delete(
     authorize_delete: Callable[[], None] | None = None,
     public_name_pattern: object,
     quarantine_name_pattern: object,
+    preleased: ObservedArtifact | None = None,
+    lease_checked: bool = False,
 ) -> int:
     expected = record.artifact_identity
     if expected is None:
@@ -264,12 +340,22 @@ def quarantine_delete(
             valid_name=quarantine_name_pattern,
         )
         if public is None and quarantine is None:
+            if preleased is not None:
+                raise Tampered
             if authorize_delete is not None:
                 authorize_delete()
             return record.size
         lease_target = public or quarantine
-        if lease_target is not None:
+        if preleased is None and lease_target is not None:
+            if lease_checked:
+                raise Tampered
             try_lease(lease_target)
+        elif (
+            preleased is not None
+            and lease_target is not None
+            and preleased.identity != lease_target.identity
+        ):
+            raise Tampered
         if public is not None and quarantine is not None:
             if (
                 public.identity != quarantine.identity
@@ -334,6 +420,197 @@ def retry_record(
         next_attempt_at=now + delay,
         revision=record.revision + 1,
     )
+
+
+def _same_record(
+    expected: CaptureLifecycleRecord,
+    current: CaptureLifecycleRecord | None,
+) -> bool:
+    return (
+        current is not None
+        and replace(
+            current,
+            compaction_epoch=expected.compaction_epoch,
+        )
+        == expected
+    )
+
+
+def _transition_if_current(
+    store: Any,
+    expected: CaptureLifecycleRecord,
+    transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
+) -> CaptureLifecycleRecord | None:
+    with store._locked(blocking=False):
+        records, compaction_epoch, size = store._load_locked()
+        current = records.get(expected.capture_id)
+        if not _same_record(expected, current):
+            return None
+        return store._transition_locked(
+            records=records,
+            compaction_epoch=compaction_epoch,
+            ledger_size=size,
+            authority=store._authority_for(expected),
+            allowed_states={expected.state},
+            transform=transform,
+        )
+
+
+def sweep_one(
+    store: Any,
+    capture_id: str,
+    *,
+    lifecycle_error: type[RuntimeError],
+    max_retry_seconds: float,
+) -> tuple[str, int, int]:
+    expected: CaptureLifecycleRecord | None = None
+    lease: ObservedArtifact | None = None
+    try:
+        with store._locked(blocking=False):
+            records, compaction_epoch, size = store._load_locked()
+            record = records.get(capture_id)
+            now = store._wall_clock()
+            if (
+                record is None
+                or record.state in {CaptureState.DELETED, CaptureState.TAMPERED}
+                or record.next_attempt_at > now
+            ):
+                return ("not_due", 0, 0)
+            expected = record
+            if record.reference_status in {
+                CaptureReferenceStatus.ISSUED,
+                CaptureReferenceStatus.PUBLISHED,
+            }:
+                if (
+                    record.manifest is None
+                    or record.manifest.reference_expiry is None
+                    or now < record.manifest.reference_expiry
+                ):
+                    return ("not_due", 0, 0)
+                expired = replace(
+                    record,
+                    reference_status=CaptureReferenceStatus.EXPIRED,
+                    revision=record.revision + 1,
+                )
+                expected = store._transition_locked(
+                    records=records,
+                    compaction_epoch=compaction_epoch,
+                    ledger_size=size,
+                    authority=store._authority_for(record),
+                    allowed_states={record.state},
+                    transform=lambda _current: expired,
+                )
+        if (
+            expected.project_identity != store._project_identity
+            or expected.root_identity != store._root_identity
+        ):
+            raise Tampered
+        lease = store._acquire_cleanup_lease(expected)
+        with store._locked(blocking=False):
+            records, compaction_epoch, size = store._load_locked()
+            record = records.get(capture_id)
+            now = store._wall_clock()
+            if (
+                record is None
+                or not _same_record(expected, record)
+                or record.next_attempt_at > now
+            ):
+                return ("not_due", 0, 0)
+            if record.state in {
+                CaptureState.RESERVED,
+                CaptureState.STAGED,
+                CaptureState.PUBLISHED_WRITING,
+            }:
+                normalized, normalized_lease = store._normalize_abandoned(
+                    record,
+                    preleased=lease,
+                    lease_checked=True,
+                )
+                if normalized_lease is not lease:
+                    raise lifecycle_error("abandoned normalization changed lease ownership")
+                record = store._transition_locked(
+                    records=records,
+                    compaction_epoch=compaction_epoch,
+                    ledger_size=size,
+                    authority=store._authority_for(record),
+                    allowed_states={record.state},
+                    transform=lambda _current: normalized,
+                )
+                expected = record
+                if record.state is CaptureState.DELETED:
+                    return ("deleted", 0, 0)
+                records, compaction_epoch, size = store._load_locked()
+                record = records[capture_id]
+            deleting = store._deleting_record(record)
+            if deleting is not record:
+                record = store._transition_locked(
+                    records=records,
+                    compaction_epoch=compaction_epoch,
+                    ledger_size=size,
+                    authority=store._authority_for(record),
+                    allowed_states={record.state},
+                    transform=lambda _current: deleting,
+                )
+                expected = record
+            deleting = record
+        deleted_bytes = store._quarantine_delete(
+            deleting,
+            preleased=lease,
+            lease_checked=True,
+        )
+        with store._locked(blocking=False):
+            records, compaction_epoch, size = store._load_locked()
+            current = records.get(capture_id)
+            if not _same_record(deleting, current):
+                raise lifecycle_error("cleanup authority changed during deletion")
+            deleted = replace(
+                deleting,
+                state=CaptureState.DELETED,
+                next_attempt_at=now,
+                retention_phase=CaptureRetentionPhase.DELETED,
+                revision=deleting.revision + 1,
+            )
+            store._transition_locked(
+                records=records,
+                compaction_epoch=compaction_epoch,
+                ledger_size=size,
+                authority=store._authority_for(deleting),
+                allowed_states={CaptureState.DELETING},
+                transform=lambda _current: deleted,
+            )
+        return ("deleted", deleted_bytes, 0)
+    except CarrierLeaseLive:
+        return ("carrier_lease_live", 0, 0)
+    except Tampered:
+        if expected is not None:
+            _transition_if_current(
+                store,
+                expected,
+                lambda record: replace(
+                    record,
+                    state=CaptureState.TAMPERED,
+                    retention_phase=CaptureRetentionPhase.TAMPERED,
+                    revision=record.revision + 1,
+                ),
+            )
+        return ("tampered", 0, 0)
+    except (lifecycle_error, OSError):
+        retries = 0
+        if expected is not None:
+            retry = _transition_if_current(
+                store,
+                expected,
+                lambda record: retry_record(
+                    record,
+                    now=store._wall_clock(),
+                    max_retry_seconds=max_retry_seconds,
+                ),
+            )
+            retries = int(retry is not None)
+        return ("error", 0, retries)
+    finally:
+        if lease is not None:
+            os.close(lease.fd)
 
 
 def run_bounded_sweep(

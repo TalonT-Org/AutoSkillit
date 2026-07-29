@@ -18,6 +18,7 @@ from . import _snapshot
 from ._snapshot import (
     CaptureFailureEvidence,
     CaptureFinalManifest,
+    CaptureStatus,
     LegacyCleanupOnly,
 )
 
@@ -36,6 +37,8 @@ __all__ = [
     "CaptureLifecycleRecord",
     "CaptureReferenceStatus",
     "CaptureRetentionPhase",
+    "CaptureSnapshotStatus",
+    "CaptureStatus",
     "CaptureState",
     "DecodedLedger",
     "LedgerCodecError",
@@ -46,6 +49,7 @@ __all__ = [
     "legacy_record_from_dict",
     "record_from_dict",
     "record_to_dict",
+    "validate_successor",
     "validate_record",
     "write_all",
 ]
@@ -103,6 +107,11 @@ class CaptureRetentionPhase(StrEnum):
     DELETED = "deleted"
 
 
+class CaptureSnapshotStatus(StrEnum):
+    ABSENT = "absent"
+    VERIFIED = "verified"
+
+
 _CAPTURE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
 _INCARNATION_RE = re.compile(r"^[0-9a-f]{32}$")
 _PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
@@ -131,6 +140,8 @@ class CaptureLifecycleRecord:
     manifest_bytes: bytes = b""
     failure: CaptureFailureEvidence | None = None
     legacy_cleanup: LegacyCleanupOnly | None = None
+    capture_status: CaptureStatus = CaptureStatus.PENDING
+    snapshot_status: CaptureSnapshotStatus = CaptureSnapshotStatus.ABSENT
     reference_status: CaptureReferenceStatus = CaptureReferenceStatus.NOT_REQUESTED
     delivery_status: CaptureDeliveryStatus = CaptureDeliveryStatus.NOT_ATTEMPTED
     retention_phase: CaptureRetentionPhase = CaptureRetentionPhase.ACTIVE
@@ -199,6 +210,7 @@ def record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:
             list(record.artifact_identity) if record.artifact_identity is not None else None
         ),
         "capture_id": record.capture_id,
+        "capture_status": record.capture_status.value,
         "created_at": record.created_at,
         "deletion_nonce": record.deletion_nonce,
         "delivery_status": record.delivery_status.value,
@@ -234,6 +246,7 @@ def record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:
         "root_identity": list(record.root_identity),
         "staging_name": record.staging_name,
         "state": record.state.value,
+        "snapshot_status": record.snapshot_status.value,
     }
 
 
@@ -243,6 +256,7 @@ def record_from_dict(value: object) -> CaptureLifecycleRecord:
     expected_fields = {
         "artifact_identity",
         "capture_id",
+        "capture_status",
         "created_at",
         "deletion_nonce",
         "delivery_status",
@@ -264,11 +278,14 @@ def record_from_dict(value: object) -> CaptureLifecycleRecord:
         "root_identity",
         "staging_name",
         "state",
+        "snapshot_status",
     }
     if set(value) != expected_fields:
         raise LedgerCodecError("lifecycle record fields do not match schema")
     try:
         record_state = CaptureState(value["state"])
+        capture_status = CaptureStatus(value["capture_status"])
+        snapshot_status = CaptureSnapshotStatus(value["snapshot_status"])
         reference_status = CaptureReferenceStatus(value["reference_status"])
         delivery_status = CaptureDeliveryStatus(value["delivery_status"])
         retention_phase = CaptureRetentionPhase(value["retention_phase"])
@@ -309,6 +326,8 @@ def record_from_dict(value: object) -> CaptureLifecycleRecord:
             manifest_bytes=manifest_bytes,
             failure=_failure_from_dict(value["failure"]),
             legacy_cleanup=(None if legacy_size is None else LegacyCleanupOnly(legacy_size)),
+            capture_status=capture_status,
+            snapshot_status=snapshot_status,
             reference_status=reference_status,
             delivery_status=delivery_status,
             retention_phase=retention_phase,
@@ -358,6 +377,17 @@ def validate_record(record: CaptureLifecycleRecord) -> None:
         or any(not _plain_int(part) for part in record.artifact_identity)
     ):
         raise LedgerCodecError("invalid artifact identity")
+    if (record.state is CaptureState.RESERVED and record.artifact_identity is not None) or (
+        record.state in {CaptureState.STAGED, CaptureState.PUBLISHED_WRITING}
+        and record.artifact_identity is None
+    ):
+        raise LedgerCodecError("artifact identity does not match lifecycle state")
+    if (
+        type(record.capture_status) is not CaptureStatus
+        or type(record.snapshot_status) is not CaptureSnapshotStatus
+        or record.capture_status is CaptureStatus.PARTIAL
+    ):
+        raise LedgerCodecError("invalid capture outcome axes")
     if record.manifest is None:
         if record.manifest_bytes or record.finalized_at_revision is not None:
             raise LedgerCodecError("manifest fields exist without FINAL authority")
@@ -381,6 +411,29 @@ def validate_record(record: CaptureLifecycleRecord) -> None:
         }
     ):
         raise LedgerCodecError("invalid immutable FINAL manifest")
+    if (record.manifest is None) != (record.snapshot_status is CaptureSnapshotStatus.ABSENT):
+        raise LedgerCodecError("snapshot status does not match immutable authority")
+    if (record.manifest is None) != (record.capture_status is not CaptureStatus.COMPLETE):
+        raise LedgerCodecError("complete capture outcome does not match FINAL authority")
+    if record.manifest is not None and (
+        record.capture_status is not CaptureStatus.COMPLETE
+        or record.manifest.capture_status is not CaptureStatus.COMPLETE
+    ):
+        raise LedgerCodecError("FINAL manifest does not carry complete capture status")
+    if record.state is CaptureState.FINALIZED and (
+        record.capture_status is not CaptureStatus.COMPLETE
+        or record.snapshot_status is not CaptureSnapshotStatus.VERIFIED
+    ):
+        raise LedgerCodecError("FINALIZED state lacks verified complete outcome")
+    if record.state in {
+        CaptureState.RESERVED,
+        CaptureState.STAGED,
+        CaptureState.PUBLISHED_WRITING,
+    } and (
+        record.capture_status is not CaptureStatus.PENDING
+        or record.snapshot_status is not CaptureSnapshotStatus.ABSENT
+    ):
+        raise LedgerCodecError("pending lifecycle state carries terminal outcome")
     if record.state is CaptureState.FAILED and record.failure is None:
         raise LedgerCodecError("FAILED capture lacks failure evidence")
     if record.failure is not None and record.state not in {
@@ -390,23 +443,265 @@ def validate_record(record: CaptureLifecycleRecord) -> None:
         CaptureState.TAMPERED,
     }:
         raise LedgerCodecError("failure evidence exists outside FAILED state")
+    if (record.failure is None) != (record.capture_status is not CaptureStatus.FAILED):
+        raise LedgerCodecError("failed capture outcome is inconsistent")
     if record.legacy_cleanup is not None and record.manifest is not None:
         raise LedgerCodecError("legacy cleanup evidence cannot carry authority")
+    if (record.legacy_cleanup is None) != (
+        record.capture_status is not CaptureStatus.LEGACY_CLEANUP_ONLY
+    ):
+        raise LedgerCodecError("legacy cleanup outcome is inconsistent")
+    if record.capture_status is CaptureStatus.PENDING and any(
+        value is not None for value in (record.manifest, record.failure, record.legacy_cleanup)
+    ):
+        raise LedgerCodecError("pending capture carries terminal evidence")
     if record.reference_status is CaptureReferenceStatus.NOT_REQUESTED:
         if record.manifest is not None and record.manifest.reference_hash is not None:
             raise LedgerCodecError("issued manifest has not-requested reference state")
     elif record.manifest is None or record.manifest.reference_hash is None:
         raise LedgerCodecError("reference state lacks an issued manifest binding")
+    if record.manifest is None and (
+        record.delivery_status is not CaptureDeliveryStatus.NOT_ATTEMPTED
+        or record.reference_status is not CaptureReferenceStatus.NOT_REQUESTED
+    ):
+        raise LedgerCodecError("non-FINAL capture carries delivery authority")
     if (
-        record.retention_phase is CaptureRetentionPhase.DELETED
-        and record.state is not CaptureState.DELETED
+        record.reference_status is CaptureReferenceStatus.ISSUED
+        and record.delivery_status is not CaptureDeliveryStatus.NOT_ATTEMPTED
+    ):
+        raise LedgerCodecError("issued reference cannot have begun delivery")
+    if (record.retention_phase is CaptureRetentionPhase.DELETED) != (
+        record.state is CaptureState.DELETED
     ):
         raise LedgerCodecError("deleted retention state is inconsistent")
-    if (
-        record.retention_phase is CaptureRetentionPhase.TAMPERED
-        and record.state is not CaptureState.TAMPERED
+    if (record.retention_phase is CaptureRetentionPhase.TAMPERED) != (
+        record.state is CaptureState.TAMPERED
     ):
         raise LedgerCodecError("tampered retention state is inconsistent")
+    if (record.retention_phase is CaptureRetentionPhase.DELETING) != (
+        record.state is CaptureState.DELETING
+    ):
+        raise LedgerCodecError("deleting retention state is inconsistent")
+
+
+_STATE_SUCCESSORS = {
+    CaptureState.RESERVED: {
+        CaptureState.RESERVED,
+        CaptureState.STAGED,
+        CaptureState.FAILED,
+        CaptureState.ABANDONED,
+        CaptureState.DELETED,
+        CaptureState.TAMPERED,
+    },
+    CaptureState.STAGED: {
+        CaptureState.STAGED,
+        CaptureState.PUBLISHED_WRITING,
+        CaptureState.FAILED,
+        CaptureState.ABANDONED,
+        CaptureState.DELETED,
+        CaptureState.TAMPERED,
+    },
+    CaptureState.PUBLISHED_WRITING: {
+        CaptureState.PUBLISHED_WRITING,
+        CaptureState.FINALIZED,
+        CaptureState.FAILED,
+        CaptureState.ABANDONED,
+        CaptureState.DELETED,
+        CaptureState.TAMPERED,
+    },
+    CaptureState.FINALIZED: {
+        CaptureState.FINALIZED,
+        CaptureState.DELETING,
+        CaptureState.TAMPERED,
+    },
+    CaptureState.FAILED: {
+        CaptureState.FAILED,
+        CaptureState.DELETING,
+        CaptureState.TAMPERED,
+    },
+    CaptureState.ABANDONED: {
+        CaptureState.ABANDONED,
+        CaptureState.DELETING,
+        CaptureState.DELETED,
+        CaptureState.TAMPERED,
+    },
+    CaptureState.DELETING: {
+        CaptureState.DELETING,
+        CaptureState.DELETED,
+        CaptureState.TAMPERED,
+    },
+    CaptureState.TAMPERED: {CaptureState.TAMPERED},
+    CaptureState.DELETED: {CaptureState.DELETED},
+}
+
+_REFERENCE_SUCCESSORS = {
+    CaptureReferenceStatus.NOT_REQUESTED: {CaptureReferenceStatus.NOT_REQUESTED},
+    CaptureReferenceStatus.ISSUED: {
+        CaptureReferenceStatus.ISSUED,
+        CaptureReferenceStatus.PUBLISHED,
+        CaptureReferenceStatus.UNAVAILABLE,
+        CaptureReferenceStatus.UNKNOWN,
+        CaptureReferenceStatus.EXPIRED,
+        CaptureReferenceStatus.REVOKED,
+    },
+    CaptureReferenceStatus.PUBLISHED: {
+        CaptureReferenceStatus.PUBLISHED,
+        CaptureReferenceStatus.UNAVAILABLE,
+        CaptureReferenceStatus.UNKNOWN,
+        CaptureReferenceStatus.EXPIRED,
+        CaptureReferenceStatus.REVOKED,
+    },
+    CaptureReferenceStatus.UNAVAILABLE: {
+        CaptureReferenceStatus.UNAVAILABLE,
+        CaptureReferenceStatus.EXPIRED,
+        CaptureReferenceStatus.REVOKED,
+    },
+    CaptureReferenceStatus.UNKNOWN: {
+        CaptureReferenceStatus.UNKNOWN,
+        CaptureReferenceStatus.EXPIRED,
+        CaptureReferenceStatus.REVOKED,
+    },
+    CaptureReferenceStatus.EXPIRED: {CaptureReferenceStatus.EXPIRED},
+    CaptureReferenceStatus.REVOKED: {CaptureReferenceStatus.REVOKED},
+}
+
+_DELIVERY_SUCCESSORS = {
+    CaptureDeliveryStatus.NOT_ATTEMPTED: {
+        CaptureDeliveryStatus.NOT_ATTEMPTED,
+        CaptureDeliveryStatus.ATTEMPTING,
+        CaptureDeliveryStatus.UNKNOWN,
+    },
+    CaptureDeliveryStatus.ATTEMPTING: {
+        CaptureDeliveryStatus.ATTEMPTING,
+        CaptureDeliveryStatus.DELIVERED,
+        CaptureDeliveryStatus.FAILED,
+        CaptureDeliveryStatus.UNKNOWN,
+    },
+    CaptureDeliveryStatus.DELIVERED: {CaptureDeliveryStatus.DELIVERED},
+    CaptureDeliveryStatus.FAILED: {CaptureDeliveryStatus.FAILED},
+    CaptureDeliveryStatus.UNKNOWN: {CaptureDeliveryStatus.UNKNOWN},
+}
+
+_RETENTION_SUCCESSORS = {
+    CaptureRetentionPhase.ACTIVE: {
+        CaptureRetentionPhase.ACTIVE,
+        CaptureRetentionPhase.ELIGIBLE,
+        CaptureRetentionPhase.DELETING,
+        CaptureRetentionPhase.TAMPERED,
+        CaptureRetentionPhase.DELETED,
+    },
+    CaptureRetentionPhase.ELIGIBLE: {
+        CaptureRetentionPhase.ELIGIBLE,
+        CaptureRetentionPhase.DELETING,
+        CaptureRetentionPhase.TAMPERED,
+        CaptureRetentionPhase.DELETED,
+    },
+    CaptureRetentionPhase.DELETING: {
+        CaptureRetentionPhase.DELETING,
+        CaptureRetentionPhase.TAMPERED,
+        CaptureRetentionPhase.DELETED,
+    },
+    CaptureRetentionPhase.TAMPERED: {CaptureRetentionPhase.TAMPERED},
+    CaptureRetentionPhase.DELETED: {CaptureRetentionPhase.DELETED},
+}
+
+
+def validate_successor(
+    previous: CaptureLifecycleRecord,
+    candidate: CaptureLifecycleRecord,
+) -> None:
+    validate_record(previous)
+    validate_record(candidate)
+    if (
+        previous.state is CaptureState.DELETED
+        and candidate.state is CaptureState.RESERVED
+        and candidate.capture_id == previous.capture_id
+        and candidate.incarnation != previous.incarnation
+        and candidate.revision == 1
+        and candidate.project_identity == previous.project_identity
+        and candidate.root_identity == previous.root_identity
+        and candidate.public_name == previous.public_name
+        and candidate.artifact_identity is None
+        and candidate.observed_size == 0
+        and candidate.retry_count == 0
+        and not candidate.deletion_nonce
+        and not candidate.quarantine_name
+    ):
+        return
+    reference_successor = candidate.reference_status in _REFERENCE_SUCCESSORS[
+        previous.reference_status
+    ] or (
+        previous.state is CaptureState.PUBLISHED_WRITING
+        and candidate.state is CaptureState.FINALIZED
+        and previous.reference_status is CaptureReferenceStatus.NOT_REQUESTED
+        and candidate.reference_status
+        in {
+            CaptureReferenceStatus.NOT_REQUESTED,
+            CaptureReferenceStatus.ISSUED,
+        }
+    )
+    mutable_axis_changes = sum(
+        (
+            candidate.reference_status is not previous.reference_status,
+            candidate.delivery_status is not previous.delivery_status,
+            candidate.retention_phase is not previous.retention_phase,
+        )
+    )
+    if (
+        candidate.capture_id != previous.capture_id
+        or candidate.incarnation != previous.incarnation
+        or candidate.revision != previous.revision + 1
+        or candidate.state not in _STATE_SUCCESSORS[previous.state]
+        or not reference_successor
+        or candidate.delivery_status not in _DELIVERY_SUCCESSORS[previous.delivery_status]
+        or candidate.retention_phase not in _RETENTION_SUCCESSORS[previous.retention_phase]
+        or candidate.project_identity != previous.project_identity
+        or candidate.root_identity != previous.root_identity
+        or candidate.staging_name != previous.staging_name
+        or candidate.public_name != previous.public_name
+        or candidate.created_at != previous.created_at
+        or (candidate.state is previous.state and mutable_axis_changes > 1)
+        or (
+            candidate.reference_status is not previous.reference_status
+            and candidate.reference_status
+            in {
+                CaptureReferenceStatus.UNAVAILABLE,
+                CaptureReferenceStatus.UNKNOWN,
+            }
+            and previous.delivery_status is not CaptureDeliveryStatus.NOT_ATTEMPTED
+        )
+    ):
+        raise LedgerCodecError("invalid lifecycle successor")
+    if candidate.artifact_identity != previous.artifact_identity and not (
+        previous.state is CaptureState.RESERVED
+        and candidate.state is CaptureState.STAGED
+        and previous.artifact_identity is None
+        and candidate.artifact_identity is not None
+    ):
+        raise LedgerCodecError("artifact identity changed across lifecycle successor")
+    if previous.deletion_nonce and (
+        candidate.deletion_nonce != previous.deletion_nonce
+        or candidate.quarantine_name != previous.quarantine_name
+    ):
+        raise LedgerCodecError("deletion authority changed")
+    if previous.manifest is not None and (
+        candidate.manifest_bytes != previous.manifest_bytes
+        or candidate.manifest != previous.manifest
+        or candidate.finalized_at_revision != previous.finalized_at_revision
+        or candidate.capture_status is not previous.capture_status
+        or candidate.snapshot_status is not previous.snapshot_status
+    ):
+        raise LedgerCodecError("immutable FINAL authority changed")
+    if previous.failure is not None and (
+        candidate.failure != previous.failure
+        or candidate.capture_status is not previous.capture_status
+    ):
+        raise LedgerCodecError("failure outcome changed")
+    if previous.legacy_cleanup is not None and (
+        candidate.legacy_cleanup != previous.legacy_cleanup
+        or candidate.capture_status is not previous.capture_status
+    ):
+        raise LedgerCodecError("legacy cleanup outcome changed")
 
 
 def legacy_record_from_dict(
@@ -476,6 +771,8 @@ def legacy_record_from_dict(
             ),
             observed_size=observed_size,
             legacy_cleanup=LegacyCleanupOnly(observed_size),
+            capture_status=CaptureStatus.LEGACY_CLEANUP_ONLY,
+            snapshot_status=CaptureSnapshotStatus.ABSENT,
             retention_phase=retention_phase,
             retry_count=value["retry_count"],
             deletion_nonce=value["deletion_nonce"],
@@ -546,7 +843,7 @@ def canonical_json(value: object) -> bytes:
             ensure_ascii=True,
             allow_nan=False,
         ).encode("ascii")
-    except (TypeError, ValueError, UnicodeError) as exc:
+    except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
         raise LedgerCodecError("lifecycle frame is not canonically encodable") from exc
 
 

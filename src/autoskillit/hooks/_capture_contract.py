@@ -24,6 +24,7 @@ __all__ = [
     "CaptureV2Fields",
     "CaptureV2Renderable",
     "capture_v2_encoded_length",
+    "capture_v2_fields",
     "capture_v2_worst_case_bytes",
     "parse_capture_failure_v2",
     "parse_capture_v2",
@@ -104,7 +105,7 @@ class CaptureV2Fields:
 
     @property
     def capture_status(self) -> str:
-        return "finalized"
+        return "complete"
 
     @property
     def snapshot_status(self) -> str:
@@ -113,6 +114,66 @@ class CaptureV2Fields:
 
 class CaptureV2Renderable(Protocol):
     def capture_v2_fields(self) -> CaptureV2Fields: ...
+
+
+class _OutcomeKind(Protocol):
+    @property
+    def value(self) -> str: ...
+
+
+class _CommandOutcome(Protocol):
+    @property
+    def kind(self) -> _OutcomeKind: ...
+
+    @property
+    def value(self) -> int: ...
+
+    @property
+    def shell_returncode(self) -> int: ...
+
+
+class _CaptureManifest(Protocol):
+    @property
+    def capture_id(self) -> str: ...
+
+    @property
+    def finalized_at_revision(self) -> int: ...
+
+    @property
+    def total_bytes(self) -> int: ...
+
+    @property
+    def sha256(self) -> str: ...
+
+    @property
+    def command_outcome(self) -> _CommandOutcome: ...
+
+
+class _CaptureSnapshot(Protocol):
+    @property
+    def manifest(self) -> _CaptureManifest: ...
+
+
+def capture_v2_fields(
+    snapshot: _CaptureSnapshot,
+    *,
+    reference_status: str,
+    reference: str | None,
+    unavailable_reason: str | None,
+) -> CaptureV2Fields:
+    manifest = snapshot.manifest
+    return CaptureV2Fields(
+        capture_id=manifest.capture_id,
+        finalized_at_revision=manifest.finalized_at_revision,
+        total_bytes=manifest.total_bytes,
+        sha256=manifest.sha256,
+        command_outcome_kind=manifest.command_outcome.kind.value,
+        command_outcome_value=manifest.command_outcome.value,
+        shell_returncode=manifest.command_outcome.shell_returncode,
+        reference_status=reference_status,
+        reference=reference,
+        unavailable_reason=unavailable_reason,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,7 +383,7 @@ def parse_capture_v2(value: bytes) -> CaptureV2Fields:
     if (
         decoded["schema_version"] != CAPTURE_V2_SCHEMA_VERSION
         or decoded["producer"] != CAPTURE_V2_PRODUCER
-        or decoded["capture_status"] != "finalized"
+        or decoded["capture_status"] != "complete"
         or decoded["snapshot_status"] != "verified"
     ):
         raise CaptureContractError("capture transport status does not match V2")

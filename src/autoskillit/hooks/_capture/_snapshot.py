@@ -15,31 +15,18 @@ from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
-from ._reader import (
-    MAX_VERIFIED_READ_BYTES,
-    CaptureAuthorityError,
-    VerifiedCaptureReader,
-)
-from ._reader import (
-    _inspect_manifest_descriptor as _inspect_reader_descriptor,
-)
-from ._reader import (
-    _make_verified_reader as _make_reader,
-)
-from ._reader import (
-    _verify_manifest_descriptor as _verify_reader_descriptor,
-)
-from ._snapshot_v2 import capture_v2_fields as _capture_v2_fields
+from . import _descriptor
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture_contract import (
         CaptureV2Fields,
         CaptureV2Renderable,
+        capture_v2_fields,
     )
 elif __package__ == "_capture":
-    from _capture_contract import CaptureV2Fields, CaptureV2Renderable
+    from _capture_contract import CaptureV2Fields, CaptureV2Renderable, capture_v2_fields
 else:
-    from .._capture_contract import CaptureV2Fields, CaptureV2Renderable
+    from .._capture_contract import CaptureV2Fields, CaptureV2Renderable, capture_v2_fields
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._snapshot", "autoskillit.hooks._capture._snapshot"):
@@ -48,8 +35,8 @@ for _alias in ("_capture._snapshot", "autoskillit.hooks._capture._snapshot"):
         raise RuntimeError("conflicting shell-capture snapshot module identity")
 
 __all__ = [
-    "MAX_VERIFIED_READ_BYTES",
     "CaptureAuthorityError",
+    "CaptureStatus",
     "CaptureFailureEvidence",
     "CaptureFinalManifest",
     "CaptureManifestWire",
@@ -64,10 +51,10 @@ __all__ = [
     "PublishedCaptureReference",
     "UnavailableCaptureReference",
     "VerifiedCaptureSnapshot",
-    "VerifiedCaptureReader",
     "decode_capture_manifest_wire",
     "encode_capture_final_manifest",
     "parse_capture_reference",
+    "verify_capture_descriptor",
     "verify_capture_snapshot",
 ]
 
@@ -102,6 +89,7 @@ _MANIFEST_FIELDS = frozenset(
         "inline_length",
         "head_length",
         "tail_length",
+        "capture_status",
         "command_outcome_kind",
         "command_outcome_value",
         "finalized_at",
@@ -112,20 +100,24 @@ _MANIFEST_FIELDS = frozenset(
 )
 
 
+CaptureAuthorityError = _descriptor.CaptureAuthorityError
+_canonical_json = _descriptor.canonical_json
+
+
 class _NoAuthorityCopy:
-    def __copy__(self) -> None:
+    def __copy__(self) -> NoReturn:
         raise CaptureAuthorityError("capture authority cannot be copied")
 
-    def __deepcopy__(self, memo: object) -> None:
+    def __deepcopy__(self, memo: object) -> NoReturn:
         del memo
-        raise CaptureAuthorityError("capture authority cannot be deep-copied")
+        self.__copy__()
 
     def __reduce__(self) -> NoReturn:
         raise CaptureAuthorityError("capture authority cannot be pickled")
 
     def __reduce_ex__(self, protocol: SupportsIndex) -> NoReturn:
         del protocol
-        raise CaptureAuthorityError("capture authority cannot be pickled")
+        self.__reduce__()
 
 
 def _require_factory(value: object | None, type_name: str) -> None:
@@ -137,19 +129,15 @@ def _is_plain_int(value: object, *, minimum: int = 0) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= minimum
 
 
-def _identity(value: object, field: str) -> tuple[int, int]:
+def _identity(
+    value: object,
+    field: str,
+    *,
+    wire: bool = False,
+) -> tuple[int, int]:
     if (
-        not isinstance(value, tuple)
-        or len(value) != 2
-        or any(not _is_plain_int(part) for part in value)
-    ):
-        raise CaptureAuthorityError(f"invalid {field}")
-    return value
-
-
-def _wire_identity(value: object, field: str) -> tuple[int, int]:
-    if (
-        not isinstance(value, list)
+        not isinstance(value, (list, tuple))
+        or isinstance(value, list) != wire
         or len(value) != 2
         or any(not _is_plain_int(part) for part in value)
     ):
@@ -170,6 +158,14 @@ def _finite(value: object, field: str) -> float:
 class CommandOutcomeKind(StrEnum):
     EXITED = "exited"
     SIGNALED = "signaled"
+
+
+class CaptureStatus(StrEnum):
+    PENDING = "pending"
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    LEGACY_CLEANUP_ONLY = "legacy_cleanup_only"
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +208,7 @@ class CommandOutcome:
 class CaptureMeasurement:
     total_bytes: int
     sha256: str
+    inline_bytes: int
     inline: bytes
     head: bytes
     tail: bytes
@@ -221,9 +218,18 @@ class CaptureMeasurement:
             raise CaptureAuthorityError("invalid capture measurement size")
         if not isinstance(self.sha256, str) or not _SHA256_RE.fullmatch(self.sha256):
             raise CaptureAuthorityError("invalid capture measurement digest")
+        if not _is_plain_int(self.inline_bytes, minimum=1):
+            raise CaptureAuthorityError("invalid capture measurement inline bound")
+        head_limit = (2 * self.inline_bytes) // 3
+        tail_limit = self.inline_bytes - head_limit
+        expected_lengths = {
+            "inline": min(self.total_bytes, self.inline_bytes + 1),
+            "head": min(self.total_bytes, head_limit),
+            "tail": min(self.total_bytes, tail_limit),
+        }
         for field_name in ("inline", "head", "tail"):
             value = getattr(self, field_name)
-            if not isinstance(value, bytes) or len(value) > self.total_bytes:
+            if not isinstance(value, bytes) or len(value) != expected_lengths[field_name]:
                 raise CaptureAuthorityError(f"invalid capture measurement {field_name}")
 
     @classmethod
@@ -237,6 +243,7 @@ class CaptureMeasurement:
         return cls(
             total_bytes=len(data),
             sha256=hashlib.sha256(data).hexdigest(),
+            inline_bytes=inline_bytes,
             inline=data[: inline_bytes + 1],
             head=data[:head_limit],
             tail=data[-tail_limit:] if tail_limit else b"",
@@ -285,6 +292,7 @@ class CaptureManifestWire:
     inline_length: int
     head_length: int
     tail_length: int
+    capture_status: CaptureStatus
     command_outcome_kind: CommandOutcomeKind
     command_outcome_value: int
     finalized_at: float
@@ -314,6 +322,7 @@ class CaptureFinalManifest(_NoAuthorityCopy):
     inline_length: int
     head_length: int
     tail_length: int
+    capture_status: CaptureStatus
     command_outcome: CommandOutcome
     finalized_at: float
     reference_hash: str | None
@@ -415,7 +424,7 @@ class PublishedCaptureReference(_NoAuthorityCopy, CaptureV2Renderable):
             raise CaptureAuthorityError("published reference does not match snapshot")
 
     def capture_v2_fields(self) -> CaptureV2Fields:
-        return _capture_v2_fields(
+        return capture_v2_fields(
             self.snapshot,
             reference_status="published",
             reference=self.token,
@@ -439,7 +448,7 @@ class UnavailableCaptureReference(_NoAuthorityCopy, CaptureV2Renderable):
             raise CaptureAuthorityError("invalid unavailable capture reference")
 
     def capture_v2_fields(self) -> CaptureV2Fields:
-        return _capture_v2_fields(
+        return capture_v2_fields(
             self.snapshot,
             reference_status="unavailable",
             reference=None,
@@ -489,6 +498,7 @@ def _validate_manifest(value: CaptureFinalManifest | CaptureManifestWire) -> Non
         or value.inline_length > value.total_bytes
         or value.head_length > value.total_bytes
         or value.tail_length > value.total_bytes
+        or value.capture_status is not CaptureStatus.COMPLETE
     ):
         raise CaptureAuthorityError("invalid capture manifest fields")
     _identity(value.project_identity, "project identity")
@@ -545,6 +555,7 @@ def _make_manifest(
         inline_length=len(measurement.inline),
         head_length=len(measurement.head),
         tail_length=len(measurement.tail),
+        capture_status=CaptureStatus.COMPLETE,
         command_outcome=command_outcome,
         finalized_at=finalized_at,
         reference_hash=reference_hash,
@@ -575,6 +586,16 @@ def _make_snapshot(
         manifest=manifest,
         measurement=measurement,
         _factory_token=_AUTHORITY_FACTORY_TOKEN,
+    )
+
+
+def verify_capture_descriptor(fd: int, manifest: CaptureFinalManifest) -> None:
+    if not _is_plain_int(fd) or type(manifest) is not CaptureFinalManifest:
+        raise CaptureAuthorityError("invalid capture descriptor authority")
+    _descriptor.verify_capture_descriptor(
+        fd,
+        manifest,
+        error_type=CaptureAuthorityError,
     )
 
 
@@ -619,7 +640,6 @@ def verify_capture_snapshot(
         or before.st_size != measurement.total_bytes
     ):
         raise CaptureAuthorityError("capture artifact metadata changed")
-
     digest = hashlib.sha256()
     head = bytearray()
     inline = bytearray()
@@ -669,7 +689,6 @@ def verify_capture_snapshot(
         os.fsync(fd)
     except OSError as exc:
         raise CaptureAuthorityError("cannot sync completed capture artifact") from exc
-
     manifest = _make_manifest(
         capture_id=capture_id,
         incarnation=incarnation,
@@ -686,19 +705,6 @@ def verify_capture_snapshot(
         retention_deadline=_finite(retention_deadline, "retention deadline"),
     )
     return _make_snapshot(manifest, measurement)
-
-
-def _canonical_json(value: object) -> bytes:
-    try:
-        return json.dumps(
-            value,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        ).encode("ascii")
-    except (TypeError, ValueError, UnicodeError) as exc:
-        raise CaptureAuthorityError("manifest is not canonically encodable") from exc
 
 
 def _manifest_primitive(manifest: CaptureFinalManifest) -> dict[str, object]:
@@ -718,6 +724,7 @@ def _manifest_primitive(manifest: CaptureFinalManifest) -> dict[str, object]:
         "inline_length": manifest.inline_length,
         "head_length": manifest.head_length,
         "tail_length": manifest.tail_length,
+        "capture_status": manifest.capture_status.value,
         "command_outcome_kind": manifest.command_outcome.kind.value,
         "command_outcome_value": manifest.command_outcome.value,
         "finalized_at": manifest.finalized_at,
@@ -780,16 +787,21 @@ def decode_capture_manifest_wire(data: bytes) -> CaptureManifestWire:
             capture_id=primitive["capture_id"],
             incarnation=primitive["incarnation"],
             finalized_at_revision=primitive["finalized_at_revision"],
-            project_identity=_wire_identity(primitive["project_identity"], "project identity"),
-            root_identity=_wire_identity(primitive["root_identity"], "root identity"),
+            project_identity=_identity(
+                primitive["project_identity"], "project identity", wire=True
+            ),
+            root_identity=_identity(primitive["root_identity"], "root identity", wire=True),
             carrier_name=primitive["carrier_name"],
-            carrier_identity=_wire_identity(primitive["carrier_identity"], "carrier identity"),
+            carrier_identity=_identity(
+                primitive["carrier_identity"], "carrier identity", wire=True
+            ),
             stream_domain=primitive["stream_domain"],
             total_bytes=primitive["total_bytes"],
             sha256=primitive["sha256"],
             inline_length=primitive["inline_length"],
             head_length=primitive["head_length"],
             tail_length=primitive["tail_length"],
+            capture_status=CaptureStatus(primitive["capture_status"]),
             command_outcome_kind=CommandOutcomeKind(primitive["command_outcome_kind"]),
             command_outcome_value=primitive["command_outcome_value"],
             finalized_at=primitive["finalized_at"],
@@ -823,6 +835,7 @@ def _restore_capture_final_manifest(wire: CaptureManifestWire) -> CaptureFinalMa
         inline_length=wire.inline_length,
         head_length=wire.head_length,
         tail_length=wire.tail_length,
+        capture_status=wire.capture_status,
         command_outcome=wire.command_outcome,
         finalized_at=wire.finalized_at,
         reference_hash=wire.reference_hash,
@@ -833,9 +846,13 @@ def _restore_capture_final_manifest(wire: CaptureManifestWire) -> CaptureFinalMa
 
 
 def parse_capture_reference(token: str) -> CaptureReferenceHint:
-    if not isinstance(token, str) or len(token.encode("ascii", errors="ignore")) > (
-        MAX_REFERENCE_TOKEN_BYTES
-    ):
+    if not isinstance(token, str):
+        raise CaptureAuthorityError("invalid capture reference")
+    try:
+        encoded = token.encode("ascii", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise CaptureAuthorityError("invalid capture reference") from exc
+    if len(encoded) > MAX_REFERENCE_TOKEN_BYTES:
         raise CaptureAuthorityError("invalid capture reference")
     matched = _REFERENCE_RE.fullmatch(token)
     if matched is None:
@@ -975,25 +992,3 @@ def _reference_matches(token: str, manifest: CaptureFinalManifest) -> bool:
     except CaptureAuthorityError:
         return False
     return hmac.compare_digest(actual, manifest.reference_hash)
-
-
-def _inspect_manifest_descriptor(fd: int, manifest: CaptureFinalManifest) -> os.stat_result:
-    if type(manifest) is not CaptureFinalManifest:
-        raise CaptureAuthorityError("descriptor inspection requires a final manifest")
-    return _inspect_reader_descriptor(fd, manifest)
-
-
-def _verify_manifest_descriptor(fd: int, manifest: CaptureFinalManifest) -> None:
-    if type(manifest) is not CaptureFinalManifest:
-        raise CaptureAuthorityError("descriptor verification requires a final manifest")
-    _verify_reader_descriptor(fd, manifest)
-
-
-def _make_verified_reader(
-    fd: int,
-    manifest: CaptureFinalManifest,
-    revision: int,
-) -> VerifiedCaptureReader:
-    if type(manifest) is not CaptureFinalManifest:
-        raise CaptureAuthorityError("reader creation requires a final manifest")
-    return _make_reader(fd, manifest, revision)

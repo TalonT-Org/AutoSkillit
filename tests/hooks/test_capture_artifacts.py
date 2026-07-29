@@ -1177,26 +1177,43 @@ def test_oversized_delivery_publishes_parseable_resolvable_v2(
 @pytest.mark.parametrize(
     "command,kind,value",
     (
-        ("exit 143", "exited", 143),
-        ("kill -TERM $$", "signaled", 15),
+        ("printf 0123456789abcdef; exit 143", "exited", 143),
+        ("printf 0123456789abcdef; kill -TERM $$", "signaled", 15),
     ),
 )
-def test_raw_wait_outcome_remains_distinct_from_shell_return(
+def test_oversized_v2_preserves_distinct_raw_wait_outcome(
     command: str,
     kind: str,
     value: int,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
+    monkeypatch.setattr(
+        capture_artifacts,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(inline_bytes=8),
+    )
 
     assert run_capture(command, str(project), _CAPTURE_ID) == 143
 
+    parsed = _single_v2_marker(capfd.readouterr().out)
     record = _capture_record(project)
     assert record.manifest is not None
+    assert parsed.command_outcome_kind == kind
+    assert parsed.command_outcome_value == value
+    assert parsed.shell_returncode == 143
+    assert parsed.reference_status == "published"
+    assert parsed.reference is not None
     assert record.manifest.command_outcome.kind.value == kind
     assert record.manifest.command_outcome.value == value
     assert record.manifest.command_outcome.shell_returncode == 143
+    assert record.delivery_status is CaptureDeliveryStatus.DELIVERED
+    with open_capture_lifecycle(str(project), create=False) as lifecycle:
+        with lifecycle.open_verified_capture(parsed.reference) as reader:
+            assert reader.read(0, 16) == b"0123456789abcdef"
 
 
 def test_bash_resolution_ignores_ambient_path(
@@ -1591,6 +1608,71 @@ def test_begin_delivery_failure_emits_no_capture_bytes(
     assert record.delivery_status is CaptureDeliveryStatus.NOT_ATTEMPTED
 
 
+def test_oversized_begin_failure_invalidates_unemitted_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"oversized")
+    real_transition = CaptureLifecycleStore.transition_delivery
+
+    def fail_begin(self, value, *, expected, target):
+        if target is CaptureDeliveryStatus.ATTEMPTING:
+            raise OSError("begin delivery failed")
+        return real_transition(self, value, expected=expected, target=target)
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        capture_artifacts,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(inline_bytes=1),
+    )
+    monkeypatch.setattr(CaptureLifecycleStore, "transition_delivery", fail_begin)
+
+    assert run_capture("printf oversized", str(project), _CAPTURE_ID) == 1
+
+    captured = capfd.readouterr()
+    record = _capture_record(project)
+    assert captured.out == ""
+    assert _single_failure_marker(captured.err).stage == "capture_delivery_begin"
+    assert record.state is CaptureState.FINALIZED
+    assert record.reference_status is CaptureReferenceStatus.UNAVAILABLE
+    assert record.delivery_status is CaptureDeliveryStatus.NOT_ATTEMPTED
+
+
+def test_transfer_failure_invalidates_issued_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"oversized")
+
+    def fail_transfer(_self, _lifecycle, _finalized):
+        raise OSError("transfer failed")
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        capture_artifacts,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(inline_bytes=1),
+    )
+    monkeypatch.setattr(capture_artifacts.CaptureArtifact, "transfer_to_reader", fail_transfer)
+
+    assert run_capture("printf oversized", str(project), _CAPTURE_ID) == 1
+
+    captured = capfd.readouterr()
+    record = _capture_record(project)
+    assert captured.out == ""
+    assert _single_failure_marker(captured.err).stage == "capture_reader_transfer"
+    assert record.state is CaptureState.FINALIZED
+    assert record.reference_status is CaptureReferenceStatus.UNAVAILABLE
+    assert record.delivery_status is CaptureDeliveryStatus.NOT_ATTEMPTED
+
+
 def test_render_failure_after_begin_records_failed_delivery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1643,7 +1725,7 @@ def test_finish_delivery_failure_preserves_attempting_after_flushed_bytes(
     assert _single_failure_marker(captured.err).stage == "capture_delivery_finish"
     assert record.state is CaptureState.FINALIZED
     assert record.reference_status is CaptureReferenceStatus.NOT_REQUESTED
-    assert record.delivery_status is CaptureDeliveryStatus.ATTEMPTING
+    assert record.delivery_status is CaptureDeliveryStatus.UNKNOWN
 
 
 def test_oversized_finish_failure_leaves_flushed_marker_and_resolvable_token(
@@ -1679,7 +1761,7 @@ def test_oversized_finish_failure_leaves_flushed_marker_and_resolvable_token(
     assert _single_failure_marker(captured.err).stage == "capture_delivery_finish"
     assert record.state is CaptureState.FINALIZED
     assert record.reference_status is CaptureReferenceStatus.PUBLISHED
-    assert record.delivery_status is CaptureDeliveryStatus.ATTEMPTING
+    assert record.delivery_status is CaptureDeliveryStatus.UNKNOWN
     with open_capture_lifecycle(str(project), create=False) as lifecycle:
         with lifecycle.open_verified_capture(parsed.reference) as reader:
             assert reader.read(0, parsed.total_bytes) == b"oversized"
@@ -1811,8 +1893,8 @@ def test_restart_normalization_never_reissues_or_reemits_reference(
             root,
             wall_clock=lambda: 1_000_001.0,
         )
-        recovered = restarted.recover_interrupted_delivery(_CAPTURE_ID)
         after = restarted.get_record(_CAPTURE_ID)
+        recovered = restarted.recover_interrupted_delivery(_CAPTURE_ID)
 
         assert after == recovered
         assert after is not None and after.manifest is not None
@@ -2028,9 +2110,13 @@ def test_publication_binding_failure_emits_typed_failure(
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
+    record = _capture_record(project)
     assert '"status":"capture_failed"' in captured.err
     assert "shell capture v2:" not in captured.out + captured.err
-    assert len(observed_fds) == 6
+    assert record.state is CaptureState.FINALIZED
+    assert record.reference_status is CaptureReferenceStatus.UNAVAILABLE
+    assert record.delivery_status is CaptureDeliveryStatus.NOT_ATTEMPTED
+    assert len(observed_fds) >= 6
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)

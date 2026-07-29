@@ -89,11 +89,11 @@ and compaction bounds limit each sweep and its backlog; contention and operation
 failures become durable capped-backoff retries. `deleted_bytes` counts
 logical managed bytes, not evidence of physical block reclamation.
 
-The guarantee is process-termination recovery on supported local Linux and macOS filesystems.
-It does not claim Darwin OS-crash or power-loss durability
-from ordinary `fsync()`. Advisory leases and identity revalidation establish a
-cooperative same-UID boundary; a hostile same-UID process that ignores advisory
-locks is outside it.
+The guarantee is process-termination recovery on native local Linux filesystems.
+It does not extend the advisory-lease contract to macOS/Darwin or claim OS-crash
+or power-loss durability from ordinary `fsync()`. Advisory leases and identity
+revalidation establish a cooperative same-UID boundary; a hostile same-UID
+process that ignores advisory locks is outside it.
 
 ### Future Direction
 

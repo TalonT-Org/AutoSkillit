@@ -93,16 +93,18 @@ def test_decision_limits_retry_and_deleted_byte_claims(decision_text: str) -> No
 
 
 def test_decision_pins_durability_and_same_uid_boundary(decision_text: str) -> None:
+    normalized = " ".join(decision_text.split())
     for required in (
         "process-termination recovery",
-        "supported local Linux and macOS filesystems",
+        "native local Linux filesystems",
         "Darwin",
         "power-loss durability",
         "ordinary `fsync()`",
         "cooperative same-UID boundary",
         "hostile same-UID process",
     ):
-        assert required in decision_text
+        assert required in normalized
+    assert "Linux and macOS" not in normalized
 
 
 def test_decision_delegates_snapshot_authority_without_duplication(

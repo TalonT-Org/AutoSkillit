@@ -10,7 +10,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol
 
-from . import _ledger, _snapshot
+from . import _descriptor, _ledger, _reader, _snapshot
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._resolver", "autoskillit.hooks._capture._resolver"):
@@ -18,7 +18,7 @@ for _alias in ("_capture._resolver", "autoskillit.hooks._capture._resolver"):
     if _existing is not _THIS_MODULE:
         raise RuntimeError("conflicting shell-capture resolver module identity")
 
-_READ_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+_READ_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
 
 
 class _LifecycleStore(Protocol):
@@ -160,13 +160,13 @@ def open_verified_capture(
     token: str,
     *,
     lifecycle_error: type[Exception],
-) -> _snapshot.VerifiedCaptureReader:
+) -> _reader.VerifiedCaptureReader:
     """Resolve a published reference under a retained shared carrier lease."""
 
-    hint = _snapshot.parse_capture_reference(token)
     fd = -1
     try:
         with store._locked():
+            hint = _snapshot.parse_capture_reference(token)
             records, _epoch, _size = store._load_locked()
             record = records.get(hint.capture_id)
             manifest = _published_manifest(
@@ -181,12 +181,16 @@ def open_verified_capture(
                 fd = os.open(manifest.carrier_name, _READ_FLAGS, dir_fd=store._root_fd)
             except OSError as exc:
                 raise lifecycle_error("capture carrier is unavailable") from exc
-            _snapshot._inspect_manifest_descriptor(fd, manifest)
+            _descriptor.inspect_capture_descriptor(
+                fd,
+                manifest,
+                error_type=_snapshot.CaptureAuthorityError,
+            )
             _acquire_shared_lease(fd, lifecycle_error)
             revision = record.revision if record is not None else -1
             manifest_bytes = record.manifest_bytes if record is not None else b""
 
-        _snapshot._verify_manifest_descriptor(fd, manifest)
+        _snapshot.verify_capture_descriptor(fd, manifest)
 
         with store._locked():
             records, _epoch, _size = store._load_locked()
@@ -206,7 +210,7 @@ def open_verified_capture(
                 or current_manifest != manifest
             ):
                 raise lifecycle_error("verified capture changed during resolution")
-        reader = _snapshot._make_verified_reader(fd, manifest, revision)
+        reader = _reader._make_verified_reader(fd, manifest, revision)
         fd = -1
         return reader
     finally:
@@ -220,7 +224,7 @@ def adopt_verified_capture(
     fd: int,
     *,
     lifecycle_error: type[Exception],
-) -> _snapshot.VerifiedCaptureReader:
+) -> _reader.VerifiedCaptureReader:
     """Adopt a producer's already-exclusive carrier open file description."""
 
     try:
@@ -236,11 +240,15 @@ def adopt_verified_capture(
                 finalized,
                 lifecycle_error=lifecycle_error,
             )
-            _snapshot._inspect_manifest_descriptor(fd, current_manifest)
+            _descriptor.inspect_capture_descriptor(
+                fd,
+                current_manifest,
+                error_type=_snapshot.CaptureAuthorityError,
+            )
             revision = record.revision if record is not None else -1
             manifest_bytes = record.manifest_bytes if record is not None else b""
 
-        _snapshot._verify_manifest_descriptor(fd, current_manifest)
+        _snapshot.verify_capture_descriptor(fd, current_manifest)
 
         with store._locked():
             records, _epoch, _size = store._load_locked()
@@ -258,7 +266,7 @@ def adopt_verified_capture(
                 or rechecked_manifest != current_manifest
             ):
                 raise lifecycle_error("producer capture changed during verification")
-        return _snapshot._make_verified_reader(fd, current_manifest, revision)
+        return _reader._make_verified_reader(fd, current_manifest, revision)
     except BaseException:
         os.close(fd)
         raise

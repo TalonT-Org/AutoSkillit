@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         open_capture_root,
         open_project_anchor,
     )
+    from autoskillit.hooks._capture._reader import VerifiedCaptureReader
     from autoskillit.hooks._capture._snapshot import (
         CaptureFailureEvidence,
         CaptureMeasurement,
@@ -48,7 +49,6 @@ if TYPE_CHECKING:
         IssuedCaptureReference,
         PublishedCaptureReference,
         UnavailableCaptureReference,
-        VerifiedCaptureReader,
         verify_capture_snapshot,
     )
     from autoskillit.hooks._capture_contract import (
@@ -84,6 +84,7 @@ else:
         open_capture_root,
         open_project_anchor,
     )
+    from _capture._reader import VerifiedCaptureReader
     from _capture._snapshot import (
         CaptureFailureEvidence,
         CaptureMeasurement,
@@ -93,7 +94,6 @@ else:
         IssuedCaptureReference,
         PublishedCaptureReference,
         UnavailableCaptureReference,
-        VerifiedCaptureReader,
         verify_capture_snapshot,
     )
     from _capture_contract import (
@@ -520,6 +520,7 @@ def _drain_capture(
         measurement=CaptureMeasurement(
             total_bytes=total,
             sha256=digest.hexdigest(),
+            inline_bytes=inline_bytes,
             inline=bytes(inline),
             head=bytes(head),
             tail=bytes(tail),
@@ -571,37 +572,6 @@ def _reference_result_after_transition(
     )
 
 
-def _invalidate_lost_reference(
-    lifecycle: CaptureLifecycleStore,
-    finalized: FinalizedCapture,
-    *,
-    reason_code: str,
-) -> None:
-    try:
-        lifecycle.mark_reference_unavailable(
-            finalized,
-            reason_code=reason_code,
-        )
-        return
-    except _CAPTURE_RUNTIME_ERRORS:
-        pass
-    try:
-        current = _reference_result_after_transition(
-            lifecycle,
-            finalized,
-            unavailable_reason=reason_code,
-        )
-        if current is not None:
-            return
-        _capture_delivery.mark_reference_unknown(
-            lifecycle,
-            finalized,
-            lifecycle_error=CaptureLifecycleError,
-        )
-    except _CAPTURE_RUNTIME_ERRORS:
-        pass
-
-
 def _publish_oversized_capture(
     anchor: ProjectAnchor,
     root: CaptureRoot,
@@ -612,12 +582,23 @@ def _publish_oversized_capture(
     issuance = finalized.issuance
     if issuance is None:
         raise CaptureSetupError("oversized capture lacks issued reference")
-    if not verify_reference_publication_binding(
-        anchor,
-        root,
-        artifact,
-        issuance,
-    ):
+    try:
+        binding_valid = verify_reference_publication_binding(
+            anchor,
+            root,
+            artifact,
+            issuance,
+        )
+    except _CAPTURE_RUNTIME_ERRORS:
+        _capture_delivery.invalidate_lost_reference(
+            lifecycle,
+            finalized,
+            reason_code="PUBLICATION_BINDING_FAILED",
+            lifecycle_error=CaptureLifecycleError,
+            runtime_errors=_CAPTURE_RUNTIME_ERRORS,
+        )
+        raise
+    if not binding_valid:
         reason = "PUBLICATION_BINDING_UNAVAILABLE"
         try:
             return lifecycle.mark_reference_unavailable(
@@ -643,60 +624,14 @@ def _publish_oversized_capture(
         )
         if type(reconciled) is PublishedCaptureReference:
             return reconciled
-        _invalidate_lost_reference(
+        _capture_delivery.invalidate_lost_reference(
             lifecycle,
             finalized,
             reason_code="PUBLICATION_FAILED",
+            lifecycle_error=CaptureLifecycleError,
+            runtime_errors=_CAPTURE_RUNTIME_ERRORS,
         )
         raise
-
-
-def _delivery_status(
-    lifecycle: CaptureLifecycleStore,
-    value: (FinalizedCapture | PublishedCaptureReference | UnavailableCaptureReference),
-) -> CaptureDeliveryStatus | None:
-    record = lifecycle.get_record(value.snapshot.manifest.capture_id)
-    if record is None or record.manifest != value.snapshot.manifest:
-        return None
-    return record.delivery_status
-
-
-def _transition_delivery_checked(
-    lifecycle: CaptureLifecycleStore,
-    value: (FinalizedCapture | PublishedCaptureReference | UnavailableCaptureReference),
-    *,
-    expected: CaptureDeliveryStatus,
-    target: CaptureDeliveryStatus,
-) -> None:
-    try:
-        lifecycle.transition_delivery(
-            value,
-            expected=expected,
-            target=target,
-        )
-    except _CAPTURE_RUNTIME_ERRORS:
-        if _delivery_status(lifecycle, value) == target:
-            return
-        raise
-
-
-def _record_delivery_failure(
-    lifecycle: CaptureLifecycleStore,
-    value: (FinalizedCapture | PublishedCaptureReference | UnavailableCaptureReference),
-) -> None:
-    try:
-        _transition_delivery_checked(
-            lifecycle,
-            value,
-            expected=CaptureDeliveryStatus.ATTEMPTING,
-            target=CaptureDeliveryStatus.FAILED,
-        )
-    except _CAPTURE_RUNTIME_ERRORS:
-        try:
-            if _delivery_status(lifecycle, value) == CaptureDeliveryStatus.ATTEMPTING:
-                lifecycle.mark_delivery_unknown(value)
-        except _CAPTURE_RUNTIME_ERRORS:
-            pass
 
 
 def run_capture(command: str, cwd: str, capture_id: str) -> int:
@@ -738,6 +673,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         delivery_attempting = False
         delivery_bytes_flushed = False
         terminal_committed = False
+        finalized_capture: FinalizedCapture | None = None
         failure_stage = "capture process spawn"
         try:
             process = _spawn_bash(anchor, bash_path, command, capture_output=True)
@@ -790,7 +726,9 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 verified,
                 issue_reference=result.measurement.total_bytes > policy.inline_bytes,
             )
+            finalized_capture = finalized
             terminal_committed = True
+            failure_stage = "capture reader transfer"
             with artifact.transfer_to_reader(lifecycle, finalized):
                 if finalized.issuance is None:
                     delivery_value = finalized
@@ -804,11 +742,13 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                         finalized,
                     )
                 failure_stage = "capture delivery begin"
-                _transition_delivery_checked(
+                _capture_delivery.transition_delivery_checked(
                     lifecycle,
                     delivery_value,
                     expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
                     target=CaptureDeliveryStatus.ATTEMPTING,
+                    lifecycle_error=CaptureLifecycleError,
+                    runtime_errors=_CAPTURE_RUNTIME_ERRORS,
                 )
                 delivery_attempting = True
                 failure_stage = "capture replay rendering"
@@ -825,11 +765,13 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 _write_and_flush_hook_stdout(payload)
                 delivery_bytes_flushed = True
                 failure_stage = "capture delivery finish"
-                _transition_delivery_checked(
+                _capture_delivery.transition_delivery_checked(
                     lifecycle,
                     delivery_value,
                     expected=CaptureDeliveryStatus.ATTEMPTING,
                     target=CaptureDeliveryStatus.DELIVERED,
+                    lifecycle_error=CaptureLifecycleError,
+                    runtime_errors=_CAPTURE_RUNTIME_ERRORS,
                 )
                 delivery_attempting = False
             return command_returncode
@@ -857,8 +799,16 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                         "; failed-state recovery also failed: "
                         f"{type(recovery_error).__name__}: {recovery_error}"
                     )
-            elif delivery_attempting and not delivery_bytes_flushed and delivery_value is not None:
-                _record_delivery_failure(lifecycle, delivery_value)
+            elif finalized_capture is not None:
+                _capture_delivery.settle_finalized_failure(
+                    lifecycle,
+                    finalized_capture,
+                    delivery_value,
+                    delivery_attempting=delivery_attempting,
+                    delivery_bytes_flushed=delivery_bytes_flushed,
+                    lifecycle_error=CaptureLifecycleError,
+                    runtime_errors=_CAPTURE_RUNTIME_ERRORS,
+                )
             return _capture_failure_return(
                 _failure_transport(
                     stage=failure_stage,

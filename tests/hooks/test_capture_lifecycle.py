@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import json
 import os
 import stat
@@ -11,10 +12,16 @@ import sys
 import time
 from dataclasses import FrozenInstanceError, asdict, replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
+from autoskillit.hooks._capture._snapshot import (
+    CaptureMeasurement,
+    CommandOutcome,
+    verify_capture_snapshot,
+)
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CaptureRoot,
@@ -32,7 +39,6 @@ from autoskillit.hooks._capture_lifecycle import (
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _CAPTURE_ID = "0123456789abcdef"
-_DIGEST = "0" * 64
 
 
 class _Clock:
@@ -61,6 +67,8 @@ def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> N
         root_identity=(3, 4),
         created_at=1.0,
         next_attempt_at=2.0,
+        incarnation="1" * 32,
+        revision=1,
     )
     serialized = capture_lifecycle._record_to_dict(record)
     serialized[field_name] = value
@@ -90,12 +98,38 @@ def _capture_dir(project: Path) -> Path:
     return project.joinpath(*CAPTURE_PATH_COMPONENTS)
 
 
+def _commit_verified(
+    store: CaptureLifecycleStore,
+    artifact,
+    data: bytes,
+    clock: _Clock,
+):
+    measurement = CaptureMeasurement.from_bytes(
+        data,
+        inline_bytes=max(1, len(data)),
+    )
+    snapshot = verify_capture_snapshot(
+        fd=artifact.fd,
+        capture_id=artifact.authority.capture_id,
+        incarnation=artifact.authority.incarnation,
+        project_identity=store._project_identity,
+        root_identity=store._root_identity,
+        carrier_name=artifact.name,
+        carrier_identity=(artifact.identity.device, artifact.identity.inode),
+        measurement=measurement,
+        command_outcome=CommandOutcome.exited(0),
+        expected_revision=artifact.authority.expected_revision,
+        finalized_at=clock.wall(),
+        retention_deadline=clock.wall() + 3600.0,
+    )
+    return store.commit_verified_snapshot(snapshot, issue_reference=False)
+
+
 def _finalized_capture(project: Path, clock: _Clock, capture_id: str = _CAPTURE_ID):
     anchor, root, store = _open_store(project, clock)
     artifact = create_capture_artifact(root, capture_id, store)
     os.write(artifact.fd, b"captured")
-    os.fsync(artifact.fd)
-    store.finalize_capture(capture_id, size=8, sha256=_DIGEST, failed=False)
+    _commit_verified(store, artifact, b"captured", clock)
     return anchor, root, store, artifact
 
 
@@ -109,7 +143,9 @@ def _seed_finalized_captures(
     for index in range(count):
         capture_id = f"{index + 1:016x}"
         artifact = create_capture_artifact(root, capture_id, store)
-        store.finalize_capture(capture_id, size=index + 1, sha256=_DIGEST, failed=False)
+        data = bytes([index % 251]) * (index + 1)
+        os.write(artifact.fd, data)
+        _commit_verified(store, artifact, data, _Clock(store._wall_clock()))
         names.append(artifact.name)
         artifact.close_artifact_fd()
         artifact.release_lease()
@@ -158,12 +194,15 @@ def test_mark_staged_rejects_invalid_artifact_identity(
     clock = _Clock()
     anchor, root, store = _open_store(project, clock)
     try:
-        store.reserve_capture(_CAPTURE_ID)
+        reserved = store.reserve_capture(_CAPTURE_ID)
         with pytest.raises(
             capture_lifecycle.CaptureLifecycleError,
             match="invalid staged artifact identity",
         ):
-            store.mark_staged(_CAPTURE_ID, identity)  # type: ignore[arg-type]
+            store.mark_staged(
+                store._authority_for(reserved),
+                cast(tuple[int, int], identity),
+            )
 
         record = store.get_record(_CAPTURE_ID)
         assert record is not None
@@ -226,22 +265,21 @@ def test_creation_failure_preserves_failed_state_recovery_error(
     clock = _Clock()
     anchor, root, store = _open_store(project, clock)
 
-    def fail_mark_staged(_capture_id: str, _identity: tuple[int, int]) -> None:
+    def fail_mark_staged(_authority, _identity: tuple[int, int]) -> None:
         raise capture_lifecycle.CaptureLifecycleError("primary creation failure")
 
     def fail_recovery(
-        _capture_id: str,
+        _authority,
+        _evidence,
         *,
-        size: int,
-        sha256: str,
-        failed: bool,
+        observed_size: int,
     ) -> None:
-        del size, sha256, failed
+        del observed_size
         raise capture_lifecycle.CaptureLifecycleError("secondary recovery failure")
 
     try:
         monkeypatch.setattr(store, "mark_staged", fail_mark_staged)
-        monkeypatch.setattr(store, "finalize_capture", fail_recovery)
+        monkeypatch.setattr(store, "commit_capture_failure", fail_recovery)
         with pytest.raises(
             capture_lifecycle.CaptureLifecycleError,
             match="primary creation failure",
@@ -478,7 +516,10 @@ def test_normalization_rolls_back_unverified_public_link(tmp_path: Path) -> None
     staging = _capture_dir(project) / record.staging_name
     staging.write_bytes(b"staged")
     identity = staging.stat()
-    store.mark_staged(_CAPTURE_ID, (identity.st_dev, identity.st_ino))
+    store.mark_staged(
+        store._authority_for(record),
+        (identity.st_dev, identity.st_ino),
+    )
     external = tmp_path / "external-link"
     os.link(staging, external)
 
@@ -592,17 +633,27 @@ def test_foreign_ledger_authority_preserves_artifact_as_tampered(
     artifact.release_lease()
     record = store.get_record(_CAPTURE_ID)
     assert record is not None
-    foreign = replace(record, **{binding: (record.root_identity[0] + 1, 1)})
-    store._commit(foreign)
 
     try:
-        clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        with pytest.raises(
+            CaptureLedgerError,
+            match="FINAL manifest",
+        ):
+            store._transition(
+                store._authority_for(record),
+                allowed_states={CaptureState.FINALIZED},
+                transform=lambda current: replace(
+                    current,
+                    **{
+                        binding: (current.root_identity[0] + 1, 1),
+                        "revision": current.revision + 1,
+                    },
+                ),
+            )
 
         current = store.get_record(_CAPTURE_ID)
-        assert outcome.tampered == 1
         assert current is not None
-        assert current.state is CaptureState.TAMPERED
+        assert current == record
         assert (_capture_dir(project) / artifact.name).read_bytes() == b"captured"
     finally:
         root.close()
@@ -744,7 +795,9 @@ def test_observe_open_operational_failure_is_retried(
         assert outcome.errors == 1
         assert outcome.tampered == 0
         assert record is not None
-        assert record.state is CaptureState.FINALIZED
+        assert record.state is CaptureState.DELETING
+        assert record.manifest is not None
+        assert record.manifest.sha256 == hashlib.sha256(b"captured").hexdigest()
         assert record.retry_count == 1
         assert (_capture_dir(project) / artifact.name).exists()
     finally:
@@ -763,7 +816,10 @@ def test_normalize_closes_first_observation_when_second_fails(
     staging = _capture_dir(project) / record.staging_name
     staging.write_bytes(b"staged")
     identity = staging.stat()
-    store.mark_staged(_CAPTURE_ID, (identity.st_dev, identity.st_ino))
+    store.mark_staged(
+        store._authority_for(record),
+        (identity.st_dev, identity.st_ino),
+    )
     staged = store.get_record(_CAPTURE_ID)
     assert staged is not None
     real_observe = store._observe
@@ -946,43 +1002,12 @@ def test_finalized_capture_ttl_begins_at_terminal_commit(tmp_path: Path) -> None
         anchor.close()
 
 
-@pytest.mark.parametrize(
-    ("size", "sha256", "failed"),
-    [
-        (-1, _DIGEST, False),
-        (True, _DIGEST, False),
-        (1.5, _DIGEST, False),
-        (0, "", False),
-        (0, "0" * 63, False),
-        (0, "G" * 64, False),
-        (0, "invalid", True),
-        (0, _DIGEST, 1),
-        (0, "", 0),
-    ],
-)
-def test_finalize_rejects_invalid_integrity_metadata(
-    tmp_path: Path,
-    size: int,
-    sha256: str,
-    *,
-    failed: object,
-) -> None:
+def test_raw_integrity_finalization_api_is_absent(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store = _open_store(project, clock)
     try:
-        store.reserve_capture(_CAPTURE_ID)
-        with pytest.raises(
-            capture_lifecycle.CaptureLifecycleError,
-            match="invalid terminal capture",
-        ):
-            store.finalize_capture(
-                _CAPTURE_ID,
-                size=size,
-                sha256=sha256,
-                failed=failed,  # type: ignore[arg-type]
-            )
-        assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
+        assert not hasattr(store, "finalize_capture")
     finally:
         root.close()
         anchor.close()
@@ -997,25 +1022,46 @@ def test_successful_finalize_requires_published_identity(
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store = _open_store(project, clock)
+    fd = -1
     try:
         record = store.reserve_capture(_CAPTURE_ID)
+        staging = _capture_dir(project) / record.staging_name
+        fd = os.open(staging, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
+        os.write(fd, b"staged")
+        value = os.fstat(fd)
         if mark_staged:
-            staging = _capture_dir(project) / record.staging_name
-            staging.write_bytes(b"staged")
-            value = staging.stat()
-            store.mark_staged(_CAPTURE_ID, (value.st_dev, value.st_ino))
+            staged = store.mark_staged(
+                store._authority_for(record),
+                (value.st_dev, value.st_ino),
+            )
+            record = staged
+
+        snapshot = verify_capture_snapshot(
+            fd=fd,
+            capture_id=_CAPTURE_ID,
+            incarnation=record.incarnation,
+            project_identity=store._project_identity,
+            root_identity=store._root_identity,
+            carrier_name=f"shell_{_CAPTURE_ID}.log",
+            carrier_identity=(value.st_dev, value.st_ino),
+            measurement=CaptureMeasurement.from_bytes(
+                b"staged",
+                inline_bytes=6,
+            ),
+            command_outcome=CommandOutcome.exited(0),
+            expected_revision=record.revision,
+            finalized_at=clock.wall(),
+            retention_deadline=clock.wall() + 3600.0,
+        )
 
         with pytest.raises(
             capture_lifecycle.CaptureLifecycleError,
-            match="invalid successful capture finalization",
+            match="does not match write authority",
         ):
-            store.finalize_capture(
-                _CAPTURE_ID,
-                size=0,
-                sha256=_DIGEST,
-                failed=False,
-            )
+            store.commit_verified_snapshot(snapshot, issue_reference=False)
     finally:
+        if fd >= 0:
+            os.close(fd)
         root.close()
         anchor.close()
 
@@ -1050,7 +1096,10 @@ def test_staging_normalization_retry_preserves_phase(
     fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         identity = os.fstat(fd)
-        store.mark_staged(_CAPTURE_ID, (identity.st_dev, identity.st_ino))
+        store.mark_staged(
+            store._authority_for(record),
+            (identity.st_dev, identity.st_ino),
+        )
     finally:
         os.close(fd)
 

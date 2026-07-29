@@ -16,6 +16,7 @@ import os
 import stat
 import subprocess
 import sys
+import time
 from dataclasses import InitVar, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -40,6 +41,14 @@ if TYPE_CHECKING:
         open_capture_lifecycle,
         open_capture_root,
         open_project_anchor,
+    )
+    from autoskillit.hooks._capture._snapshot import (
+        CaptureFailureEvidence,
+        CaptureMeasurement,
+        CaptureWriteAuthority,
+        CommandOutcome,
+        VerifiedCaptureSnapshot,
+        verify_capture_snapshot,
     )
     from autoskillit.hooks._capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
     from autoskillit.hooks._capture_lifecycle import (
@@ -68,6 +77,14 @@ else:
         open_capture_lifecycle,
         open_capture_root,
         open_project_anchor,
+    )
+    from _capture._snapshot import (
+        CaptureFailureEvidence,
+        CaptureMeasurement,
+        CaptureWriteAuthority,
+        CommandOutcome,
+        VerifiedCaptureSnapshot,
+        verify_capture_snapshot,
     )
     from _capture_contract import _CAPTURE_ID_RE, _MAX_COMMAND_BYTES
     from _capture_lifecycle import CaptureLifecycleError, CaptureLifecycleStore
@@ -123,6 +140,7 @@ class CaptureArtifact:
     name: str
     identity: FileIdentity
     lease_fd: int
+    authority: CaptureWriteAuthority
     _factory_token: InitVar[object | None] = None
 
     def __post_init__(self, _factory_token: object | None) -> None:
@@ -150,12 +168,28 @@ class CapturePolicy:
 
 @dataclass(frozen=True, slots=True)
 class _DrainResult:
-    total_bytes: int
-    sha256: str
-    inline: bytes
-    head: bytes
-    tail: bytes
+    measurement: CaptureMeasurement
     write_error: OSError | None
+
+    @property
+    def total_bytes(self) -> int:
+        return self.measurement.total_bytes
+
+    @property
+    def sha256(self) -> str:
+        return self.measurement.sha256
+
+    @property
+    def inline(self) -> bytes:
+        return self.measurement.inline
+
+    @property
+    def head(self) -> bytes:
+        return self.measurement.head
+
+    @property
+    def tail(self) -> bytes:
+        return self.measurement.tail
 
 
 def create_capture_artifact(
@@ -168,13 +202,14 @@ def create_capture_artifact(
     if not _CAPTURE_ID_RE.fullmatch(capture_id):
         raise CaptureSetupError("invalid capture id")
     try:
-        fd, lease_fd, public_name, raw_identity = lifecycle.create_artifact(capture_id)
+        fd, lease_fd, public_name, raw_identity, authority = lifecycle.create_artifact(capture_id)
         identity = FileIdentity(device=raw_identity[0], inode=raw_identity[1])
         return CaptureArtifact(
             fd=fd,
             name=public_name,
             identity=identity,
             lease_fd=lease_fd,
+            authority=authority,
             _factory_token=_ARTIFACT_FACTORY_TOKEN,
         )
     except (CaptureLifecycleError, OSError) as exc:
@@ -439,41 +474,15 @@ def _drain_capture(
                 del tail[:-tail_limit]
 
     return _DrainResult(
-        total_bytes=total,
-        sha256=digest.hexdigest(),
-        inline=bytes(inline),
-        head=bytes(head),
-        tail=bytes(tail),
+        measurement=CaptureMeasurement(
+            total_bytes=total,
+            sha256=digest.hexdigest(),
+            inline=bytes(inline),
+            head=bytes(head),
+            tail=bytes(tail),
+        ),
         write_error=write_error,
     )
-
-
-def _verify_capture_artifact(artifact: CaptureArtifact, result: _DrainResult) -> None:
-    """Verify persisted bytes through the retained artifact descriptor."""
-
-    value = os.fstat(artifact.fd)
-    if (
-        FileIdentity.from_stat(value) != artifact.identity
-        or not stat.S_ISREG(value.st_mode)
-        or value.st_nlink != 1
-        or value.st_size != result.total_bytes
-    ):
-        raise CaptureSetupError("capture artifact metadata changed")
-
-    digest = hashlib.sha256()
-    offset = 0
-    while offset < result.total_bytes:
-        chunk = os.pread(
-            artifact.fd,
-            min(_DRAIN_CHUNK_BYTES, result.total_bytes - offset),
-            offset,
-        )
-        if not chunk:
-            raise CaptureSetupError("capture artifact readback ended early")
-        digest.update(chunk)
-        offset += len(chunk)
-    if digest.hexdigest() != result.sha256:
-        raise CaptureSetupError("capture artifact content changed")
 
 
 def _normalized_returncode(returncode: int) -> int:
@@ -574,14 +583,14 @@ def _settle_failed_capture(process: subprocess.Popen[bytes]) -> int | None:
             except _CAPTURE_RUNTIME_ERRORS:
                 pass
     try:
-        return _normalized_returncode(process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS))
+        return process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         try:
             process.kill()
         except _CAPTURE_RUNTIME_ERRORS:
             pass
         try:
-            return _normalized_returncode(process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS))
+            return process.wait(timeout=_PROCESS_SETTLE_TIMEOUT_SECONDS)
         except _CAPTURE_RUNTIME_ERRORS:
             return None
     except _CAPTURE_RUNTIME_ERRORS:
@@ -619,34 +628,57 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         lifecycle = CaptureLifecycleStore.from_open_authorities(anchor, root)
         artifact = create_capture_artifact(root, capture_id, lifecycle)
         artifact_writer_fd = _duplicate_artifact_writer(artifact)
-        returncode: int | None = None
+        raw_returncode: int | None = None
         result: _DrainResult | None = None
+        verified: VerifiedCaptureSnapshot | None = None
         terminal_committed = False
         failure_stage = "capture process spawn"
         try:
             process = _spawn_bash(anchor, bash_path, command, capture_output=True)
             failure_stage = "capture readback"
             result = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
+            writer_to_close = artifact_writer_fd
+            artifact_writer_fd = -1
+            os.close(writer_to_close)
             failure_stage = "capture process wait"
-            returncode = _normalized_returncode(process.wait())
+            raw_returncode = process.wait()
+            command_outcome = CommandOutcome.from_wait_result(raw_returncode)
+            returncode = command_outcome.shell_returncode
             if result.write_error is not None:
                 failure_stage = "capture failed-state commit"
-                lifecycle.finalize_capture(
-                    capture_id,
-                    size=result.total_bytes,
-                    sha256=result.sha256,
-                    failed=True,
+                lifecycle.commit_capture_failure(
+                    artifact.authority,
+                    CaptureFailureEvidence(
+                        stage="artifact_write",
+                        detail="capture artifact write failed",
+                    ),
+                    observed_size=max(0, os.fstat(artifact.fd).st_size),
                 )
                 terminal_committed = True
                 return _capture_failure_return("capture artifact write failed", returncode)
             failure_stage = "capture artifact integrity verification"
-            _verify_capture_artifact(artifact, result)
+            finalized_at = time.time()
+            verified = verify_capture_snapshot(
+                fd=artifact.fd,
+                capture_id=artifact.authority.capture_id,
+                incarnation=artifact.authority.incarnation,
+                project_identity=(
+                    anchor.identity.device,
+                    anchor.identity.inode,
+                ),
+                root_identity=(root.identity.device, root.identity.inode),
+                carrier_name=artifact.name,
+                carrier_identity=(artifact.identity.device, artifact.identity.inode),
+                measurement=result.measurement,
+                command_outcome=command_outcome,
+                expected_revision=artifact.authority.expected_revision,
+                finalized_at=finalized_at,
+                retention_deadline=finalized_at + 3600.0,
+            )
             failure_stage = "capture finalization"
-            lifecycle.finalize_capture(
-                capture_id,
-                size=result.total_bytes,
-                sha256=result.sha256,
-                failed=False,
+            lifecycle.commit_verified_snapshot(
+                verified,
+                issue_reference=False,
             )
             terminal_committed = True
             failure_stage = "capture marker verification"
@@ -656,19 +688,18 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
             return returncode
         except _CAPTURE_RUNTIME_ERRORS as exc:
             recovery_detail = ""
-            if returncode is None and process is not None:
-                returncode = _settle_failed_capture(process)
+            if raw_returncode is None and process is not None:
+                raw_returncode = _settle_failed_capture(process)
             if not terminal_committed:
                 try:
-                    lifecycle.finalize_capture(
-                        capture_id,
-                        size=(
-                            result.total_bytes
-                            if result is not None
-                            else max(0, os.fstat(artifact.fd).st_size)
+                    lifecycle.commit_capture_failure(
+                        artifact.authority,
+                        CaptureFailureEvidence(
+                            stage=failure_stage.replace(" ", "_")[:64],
+                            detail=(f"{type(exc).__name__}: {exc}")[:240],
+                            settlement_returncode=raw_returncode,
                         ),
-                        sha256=result.sha256 if result is not None else "",
-                        failed=True,
+                        observed_size=max(0, os.fstat(artifact.fd).st_size),
                     )
                     terminal_committed = True
                 except _CAPTURE_RUNTIME_ERRORS as recovery_error:
@@ -678,7 +709,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                     )
             return _capture_failure_return(
                 f"{failure_stage} failed: {type(exc).__name__}: {exc}{recovery_detail}",
-                returncode,
+                (None if raw_returncode is None else _normalized_returncode(raw_returncode)),
             )
     finally:
         if process is not None and process.stdout is not None:

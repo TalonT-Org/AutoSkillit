@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 import autoskillit.hooks._capture_artifacts as capture_artifacts
+from autoskillit.hooks._capture._snapshot import CaptureMeasurement
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CapturePolicy,
@@ -78,6 +79,7 @@ def test_capture_authorities_are_factory_only_and_externally_immutable(tmp_path:
             name="shell.log",
             identity=identity,
             lease_fd=-1,
+            authority=None,  # type: ignore[arg-type]
         )
 
     anchor = open_project_anchor(str(tmp_path))
@@ -152,7 +154,7 @@ def _record_artifact_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     return observed_fds
 
 
-def test_settle_failed_capture_escalates_after_terminate_timeout() -> None:
+def test_settle_failed_capture_preserves_raw_kill_result_after_timeout() -> None:
     class StubbornProcess(_FakeCaptureProcess):
         def __init__(self) -> None:
             super().__init__(b"")
@@ -166,7 +168,7 @@ def test_settle_failed_capture_escalates_after_terminate_timeout() -> None:
 
     process = StubbornProcess()
 
-    assert capture_artifacts._settle_failed_capture(process) == 137
+    assert capture_artifacts._settle_failed_capture(process) == -9
     assert process.terminated
     assert process.killed
     assert process.wait_timeouts == [
@@ -585,11 +587,13 @@ def test_capture_marker_encodes_path_control_characters(
     capfd: pytest.CaptureFixture[str],
 ) -> None:
     result = capture_artifacts._DrainResult(
-        total_bytes=2,
-        sha256="a" * 64,
-        inline=b"",
-        head=b"h",
-        tail=b"t",
+        measurement=CaptureMeasurement(
+            total_bytes=2,
+            sha256="a" * 64,
+            inline=b"",
+            head=b"h",
+            tail=b"t",
+        ),
         write_error=None,
     )
 
@@ -892,7 +896,11 @@ def test_spawn_failure_reports_failed_state_recovery_error(
         raise capture_artifacts.CaptureLifecycleError("secondary recovery failure")
 
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", fail_spawn)
-    monkeypatch.setattr(capture_artifacts.CaptureLifecycleStore, "finalize_capture", fail_recovery)
+    monkeypatch.setattr(
+        capture_artifacts.CaptureLifecycleStore,
+        "commit_capture_failure",
+        fail_recovery,
+    )
 
     assert run_capture("printf never", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()

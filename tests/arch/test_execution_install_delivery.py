@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import RECIPE_EXECUTION_INSTALL_SITE_REGISTRY
+from autoskillit.core import RECIPE_EXECUTION_INSTALL_SITE_REGISTRY, all_tool_names
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
@@ -118,3 +118,16 @@ class TestExecutionInstallDelivery:
         )
         with pytest.raises(AssertionError, match="fake_install_module"):
             self.test_every_install_site_is_registered()
+
+    def test_registered_delivery_surfaces_are_real_tools(self) -> None:
+        registered_tools = all_tool_names()
+        assert registered_tools, "tool registry returned no names"
+        assert RECIPE_EXECUTION_INSTALL_SITE_REGISTRY, "install-site registry is empty"
+        unknown = sorted(
+            entry.delivery_surface
+            for entry in RECIPE_EXECUTION_INSTALL_SITE_REGISTRY.values()
+            if entry.delivery_surface not in registered_tools
+        )
+        assert not unknown, (
+            f"delivery_surface values that are not registered MCP tool names: {unknown}"
+        )

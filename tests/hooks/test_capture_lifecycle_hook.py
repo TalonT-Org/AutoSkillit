@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import io
 import json
 import os
@@ -22,7 +23,11 @@ from autoskillit.hooks._capture._authority import (
     open_project_anchor,
 )
 from autoskillit.hooks._capture_artifacts import create_capture_artifact
-from autoskillit.hooks._capture_lifecycle import LEDGER_NAME, CaptureLifecycleStore
+from autoskillit.hooks._capture_lifecycle import (
+    LEDGER_NAME,
+    CaptureLifecycleError,
+    CaptureLifecycleStore,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -32,12 +37,49 @@ _CAPTURE_ID = "0123456789abcdef"
 
 def test_cleanup_hook_imports_minimal_shared_authority() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
-    assert "from _capture._authority import" in source
-    assert "from _capture_artifacts import" not in source
+    tree = ast.parse(source)
+    imports = [
+        node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.level == 0
+    ]
+    authority_imports = [node for node in imports if node.module == "_capture._authority"]
+
+    assert len(authority_imports) == 1
+    assert {alias.name for alias in authority_imports[0].names} == {
+        "CaptureLifecycleError",
+        "CaptureSetupError",
+        "CaptureStoreAbsentError",
+        "open_capture_lifecycle",
+    }
+    assert all(node.module not in {"_capture_artifacts", "_capture_lifecycle"} for node in imports)
 
 
 def test_package_authority_uses_package_lifecycle_identity() -> None:
     assert _authority.CaptureLifecycleStore is CaptureLifecycleStore
+    assert _authority.CaptureLifecycleError is CaptureLifecycleError
+    assert "CaptureLifecycleError" in _authority.__all__
+
+
+def test_standalone_authority_uses_standalone_lifecycle_identity() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from _capture import _authority\n"
+                "import _capture_lifecycle\n"
+                "assert _authority.CaptureLifecycleError "
+                "is _capture_lifecycle.CaptureLifecycleError\n"
+                "assert 'CaptureLifecycleError' in _authority.__all__\n"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=SCRIPT.parent,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == ""
 
 
 def _run_hook(

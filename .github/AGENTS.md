@@ -40,6 +40,14 @@ wheel cache consumed by downstream jobs:
 Jobs that run `uv sync --locked` may omit `enable-cache` (defaults to `auto`, enabled on
 GitHub-hosted runners).
 
+## Branch-targeted test policy
+
+`scripts/ci_target_policy.py` is the executable CI policy authority, and
+`docs/developer/contributing.md` is its durable contributor-facing record. Feature and
+fix work must not incidentally broaden or narrow CI runners or filtering. Any change
+requires an explicit CI-policy task and matching behavior-table tests in
+`tests/infra/test_ci_workflow.py`.
+
 ## Rust toolchain scope
 
 `dtolnay/rust-toolchain` is only needed in jobs that compile native Python extensions

@@ -13,12 +13,10 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _capture._authority import (  # type: ignore[import-not-found]  # noqa: E402
+    CaptureLifecycleError,
     CaptureSetupError,
     CaptureStoreAbsentError,
     open_capture_lifecycle,
-)
-from _capture_lifecycle import (  # type: ignore[import-not-found]  # noqa: E402
-    CaptureLifecycleError,
 )
 
 _MAX_INPUT_BYTES = 64 * 1024

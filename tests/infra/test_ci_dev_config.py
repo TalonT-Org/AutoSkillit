@@ -248,38 +248,6 @@ class TestCIWorkflow:
         pr_branches = triggers["pull_request"]["branches"]
         assert "develop" in pr_branches, "CI must trigger on PRs targeting develop branch"
 
-    def test_ci_preflight_outputs_os_matrix(self) -> None:
-        """preflight job must export the required cross-platform os-matrix."""
-        workflow = load_yaml(CI_WORKFLOW)
-        outputs = workflow["jobs"]["preflight"].get("outputs", {})
-        assert "os-matrix" in outputs, (
-            "preflight must export os-matrix so the test job runs on both supported systems"
-        )
-
-    def test_ci_test_matrix_uses_preflight_os_matrix(self) -> None:
-        """test job matrix must consume the os-matrix from preflight, not a hardcoded list."""
-        workflow = load_yaml(CI_WORKFLOW)
-        matrix = workflow["jobs"]["test"]["strategy"]["matrix"]
-        os_value = matrix["os"]
-        assert "fromJSON" in os_value or "needs.preflight" in str(os_value), (
-            "test job os matrix must be dynamic (fromJSON of preflight output), "
-            "not a hardcoded list — hardcoded list cannot vary by PR target"
-        )
-
-    def test_ci_preflight_always_computes_dual_os_matrix(self) -> None:
-        """Every branch context must exercise the supported Linux/macOS contract."""
-        workflow = load_yaml(CI_WORKFLOW)
-        steps = workflow["jobs"]["preflight"]["steps"]
-        matrix_steps = [s for s in steps if s.get("id") == "set-matrix"]
-        assert len(matrix_steps) == 1
-        run = str(matrix_steps[0].get("run", ""))
-        assert run.strip() == (
-            'echo \'matrix=["ubuntu-latest","macos-15"]\' >> "$GITHUB_OUTPUT"'
-        ), (
-            "preflight must emit exactly the supported Linux/macOS matrix, "
-            "without conditional branches or additional platforms"
-        )
-
     def test_ci_push_trigger_includes_stable(self) -> None:
         """CI must trigger on push to stable branch.
 

@@ -22,17 +22,22 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
+    from autoskillit.hooks._capture_lifecycle import (
+        CaptureLifecycleError,
+        CaptureLifecycleStore,
+    )
 else:
     _capture_lifecycle = importlib.import_module(
         f"{__package__.rpartition('.')[0]}._capture_lifecycle"
         if __package__.startswith("autoskillit.")
         else "_capture_lifecycle"
     )
+    CaptureLifecycleError = _capture_lifecycle.CaptureLifecycleError
     CaptureLifecycleStore = _capture_lifecycle.CaptureLifecycleStore
 
 __all__ = [
     "CAPTURE_PATH_COMPONENTS",
+    "CaptureLifecycleError",
     "CaptureRoot",
     "CaptureSetupError",
     "CaptureStoreAbsentError",

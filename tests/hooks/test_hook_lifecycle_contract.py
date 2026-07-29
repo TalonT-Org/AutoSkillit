@@ -19,6 +19,8 @@ from autoskillit.hook_registry import (
     hook_applies_to_backend,
     validate_lifecycle_contracts,
 )
+from autoskillit.hooks._capture_artifacts import CAPTURE_PATH_COMPONENTS
+from autoskillit.hooks._capture_lifecycle import LEDGER_NAME, LOCK_NAME
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -73,6 +75,35 @@ def test_real_lifecycle_contract_passes_every_generator_boundary() -> None:
     validate_lifecycle_contracts(HOOK_REGISTRY, LIFECYCLE_CONTRACTS, backend="claude_code")
     assert generate_codex_hooks_config()
     assert generate_hooks_json()["hooks"]
+
+
+def test_snapshot_reference_and_reader_reuse_one_registered_resource_owner() -> None:
+    capture_contracts = [
+        contract for contract in LIFECYCLE_CONTRACTS if contract.resource == _RESOURCE
+    ]
+    assert len(capture_contracts) == 1
+    assert capture_contracts[0].required_owner_roles == {
+        "same_runner",
+        "session_start",
+    }
+    capture_hooks = [
+        hook
+        for hook in HOOK_REGISTRY
+        if _RESOURCE
+        in (hook.produces_resources | hook.reclaims_resources | hook.self_reclaims_resources)
+    ]
+    assert {script for hook in capture_hooks for script in hook.scripts} == {
+        "shell_capture_hook.py",
+        "capture_lifecycle_hook.py",
+    }
+    assert {resource for hook in capture_hooks for resource in hook.produces_resources} == {
+        _RESOURCE
+    }
+    assert CAPTURE_PATH_COMPONENTS == (".autoskillit", "temp", "shell_capture")
+    assert {LEDGER_NAME, LOCK_NAME} == {
+        ".capture-lifecycle.ledger",
+        ".capture-lifecycle.lock",
+    }
 
 
 @pytest.mark.parametrize(

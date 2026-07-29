@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import json
 import uuid
 from pathlib import Path
@@ -11,9 +12,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.core import SubprocessResult, TerminationReason
+from autoskillit.core import CapturedStream, SubprocessResult, TerminationReason
 from autoskillit.execution.process import CaptureReadError, CaptureSetupError, summarize_capture
 from autoskillit.server._response_budget import RESPONSE_SPILL_METADATA_KEY
+from autoskillit.server.tools import _execution_helpers as execution_helpers
 from autoskillit.server.tools.tools_execution import run_cmd, run_python, run_skill
 from tests.conftest import _make_result
 
@@ -70,6 +72,65 @@ async def test_run_cmd_spills_large_stdout_under_calling_project(tool_ctx_kitche
     assert "tail-sentinel" in data["stdout"]
     assert data["success"] is True
     assert data["exit_code"] == 0
+
+
+@pytest.mark.anyio
+async def test_run_cmd_equal_length_post_summary_mutation_bridge(
+    tool_ctx_kitchen_open,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    source = b"a" * 10_000
+    mutated = b"b" * len(source)
+    capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
+    real_process_capture = execution_helpers._process_capture_stream
+    mutation_seen = False
+
+    async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
+        return _write_capture_result(capture_dir, stdout=source.decode())
+
+    def _mutate_then_promote(
+        result: dict[str, object],
+        stream_name: str,
+        capture: CapturedStream,
+    ) -> None:
+        nonlocal mutation_seen
+        if stream_name == "stdout":
+            assert capture.path.stat().st_size == len(source)
+            capture.path.write_bytes(mutated)
+            mutation_seen = True
+        real_process_capture(result, stream_name, capture)
+
+    monkeypatch.setattr(
+        execution_helpers,
+        "_process_capture_stream",
+        _mutate_then_promote,
+    )
+    with patch(
+        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+        new=AsyncMock(side_effect=_fake_captured),
+    ):
+        data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
+
+    assert mutation_seen
+    assert data["success"] is True
+    artifact = Path(data["stdout_artifact_path"])
+    persisted = artifact.read_bytes()
+    assert persisted == mutated
+    advertised = (
+        data["stdout_total_bytes"],
+        data["stdout_sha256"],
+    )
+    actual = (len(persisted), hashlib.sha256(persisted).hexdigest())
+    request.node.add_marker(
+        pytest.mark.xfail(
+            strict=True,
+            raises=AssertionError,
+            reason="run_cmd promotion needs general snapshot authority tracked by #4335",
+        )
+    )
+    assert advertised == actual
 
 
 @pytest.mark.anyio

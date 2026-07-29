@@ -1,4 +1,4 @@
-"""Ratchet the installed shell-capture lifecycle documented by ADR-0006."""
+"""Ratchet ADR-0006 as the historical output-containment decision."""
 
 from __future__ import annotations
 
@@ -54,8 +54,7 @@ def test_decision_pins_liveness_retention_and_trigger_semantics(
     decision_text: str,
 ) -> None:
     for required in (
-        "writer lease",
-        "durable finalization",
+        "[ADR-0008](0008-shell-capture-snapshot-authority.md)",
         "one hour",
         "next enabled",
         "trusted trigger",
@@ -106,13 +105,15 @@ def test_decision_pins_durability_and_same_uid_boundary(decision_text: str) -> N
         assert required in decision_text
 
 
-def test_decision_keeps_future_features_outside_the_guarantee(
+def test_decision_delegates_snapshot_authority_without_duplication(
     decision_text: str,
 ) -> None:
-    for issue in ("#4322", "#4325", "#4326", "#4327"):
-        assert issue in decision_text
-    assert "does not claim those features are implemented" in decision_text
-    assert "features are not implemented by this lifecycle" in decision_text
+    assert "[ADR-0008](0008-shell-capture-snapshot-authority.md)" in decision_text
+    assert "normative contract" in decision_text
+    assert "opaque V2 reference" in decision_text
+    assert "never an authoritative pathname" in decision_text
+    for delegated_issue in ("#4322", "#4325", "#4326", "#4327"):
+        assert delegated_issue not in decision_text
 
 
 def test_obsolete_cleanup_claims_are_removed(decision_text: str) -> None:
@@ -120,5 +121,8 @@ def test_obsolete_cleanup_claims_are_removed(decision_text: str) -> None:
         "SessionStart therefore retains stale candidates",
         "Artifact quota and lifecycle reclamation remain follow-up work",
         "SessionStart classifies stale artifacts but conservatively retains them",
+        "`disown` is the fire-and-forget escape",
+        "marker reports its path",
+        "path is present",
     ):
         assert obsolete not in decision_text

@@ -163,12 +163,13 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_result_parser.py` | Tests for CodexResultParser |
 | `test_codex_config.py` | Tests for TOML read/write primitives, _is_autoskillit_registered, and ensure_codex_mcp_registered |
 | `test_codex_config_validation.py` | Tests for locked Codex source-config composition, snapshots, and exact native-validation context |
-| `test_codex_capture_lifecycle_integration.py` | Generated-home Codex hook snapshot execution against a separate physical project root |
+| `test_codex_capture_lifecycle_integration.py` | Interactive/headless generated-hook V2 resolution, physical-project binding, reader release, expiry, and cleanup |
+| `test_shell_capture_marker_authority.py` | Deterministic production V2 marker/parser/resolver authority with forged, stale, and decoy controls |
 | `test_codex_recipe_delivery.py` | Protected Codex recipe-delivery attestation and durable receipt-ledger tests |
 | `test_codex_recipe_delivery_fixtures.py` | Protected and diagnostic Codex recipe-delivery fixture ratchets |
 | `test_codex_recipe_delivery_conformance.py` | Dedicated recipe-delivery conformance matrix plus credentialed Code Mode envelope/pull retention probe |
 | `test_codex_deterministic_conformance.py` | Sealed-enum vocabulary, hook event format, and config.toml schema template conformance tests with --update-fixtures review gate |
 | `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |
 | `test_coding_agent_backend_conformance.py` | Parametrized conformance tests for all CodingAgentBackend implementations via BackendContractBase |
-| `test_cli_conformance_probes.py` | Live backend CLI conformance probes: schema checks, isolated output-budget denial, generated Codex child delivery/linkage, and isolated Codex local-skill versus recipe-delegation selection |
+| `test_cli_conformance_probes.py` | Live backend CLI probes, including exact completed-command V2 resolution against physical project authority |
 | `test_probe_cache.py` | Versioned probe-cache tests: CLI/policy identity invalidation, TTL, schema, and write preservation |

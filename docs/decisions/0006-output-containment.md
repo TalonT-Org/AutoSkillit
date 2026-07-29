@@ -30,9 +30,11 @@ output-boundary bounding on measured bytes:
    establishes descriptor-relative authority for policy and capture components,
    durably reserves private staging before publishing the public artifact without
    replacement, acquires a writer lease, and drains child output through its owned
-   fd. The bounded inline slice includes a provenance marker whose path is present
-   only after marker-time identity verification. The ordinary outer-result limit
-   remains the backstop for hook-failure paths. The separately configured
+   fd. Small output remains inline and oversized output uses a bounded transport.
+   [ADR-0008](0008-shell-capture-snapshot-authority.md) is the normative contract
+   for pipe EOF, verified FINAL snapshots, opaque V2 references, output delivery,
+   and reader leases. The ordinary outer-result limit remains the backstop for
+   hook-failure paths. The separately configured
    `CODEX_HISTORY_RETENTION_TOKEN_LIMIT` replaces the model's `truncation_policy`
    outright, so it governs both the current-turn exec output sent to the model and
    retained history — not later history alone.
@@ -63,11 +65,10 @@ the only case where file-redirected output would change observable behavior.
 
 ### Capture Lifecycle Ownership
 
-The lifecycle store durably records `RESERVED`, `STAGED`,
-`PUBLISHED_WRITING`, `FINALIZED`, `FAILED`, `ABANDONED`, `DELETING`,
-`DELETED`, and `TAMPERED`. The writer lease spans command execution,
-drain, settlement, integrity verification, durable finalization, and marker
-flush. A finalized or failed artifact becomes eligible one hour after its
+The lifecycle store records `RESERVED`, `STAGED`, `PUBLISHED_WRITING`,
+`FINALIZED`, `FAILED`, `ABANDONED`, `DELETING`, `DELETED`, and `TAMPERED`.
+The immutable FINAL, reference, delivery, and reader semantics belong to
+ADR-0008. A finalized or failed artifact becomes eligible one hour after its
 terminal transition; an abandoned producer becomes eligible one hour after its
 durable creation time. Eligibility is reclaimed only on the next enabled,
 trusted trigger, not by a wall-clock scheduler.
@@ -102,36 +103,21 @@ hook can be retired in favor of that mechanism.
 
 ## Accepted Gaps
 
-1. `disown`ed/job-table-detached children are outside the `wait` drain guarantee.
-   Their post-exit writes into the artifact are best-effort — mirrors native
-   detached-output semantics.
-2. Fatal self-signals (e.g. `kill -TERM $$`) are reported as the shell-compatible
-   `128 + signal` status by the runner. Output drained before termination remains
-   available inline and in the retained artifact. SIGKILL remains untrappable.
-3. Head/tail slices are byte-cut and may split multibyte UTF-8 at slice edges. The
-   artifact is authoritative.
-4. Draining non-detached background jobs makes the harness synchronous for their
-   duration, bounded by the tool timeout. `disown` is the fire-and-forget escape.
-5. A bare trailing backslash at EOF loses its literal backslash from output under
+1. The historical containment decision does not establish snapshot or marker
+   authority. ADR-0008 replaces those claims and makes actual pipe EOF, including
+   descendant-writer liveness, part of the managed-stream contract.
+2. Head and tail slices remain byte-cut and may split multibyte UTF-8 at slice
+   edges. Verified bytes are available only through the opaque-reference reader.
+3. A bare trailing backslash at EOF loses its literal backslash from output under
    continuation semantics. Exit code is preserved.
-6. Vendored-tree version discrepancy: the checkout tag is `rust-v0.143.0-alpha.10`
+4. Vendored-tree version discrepancy: the checkout tag is `rust-v0.143.0-alpha.10`
    vs the 0.144.1 description in the issue/ADR. The hook contract must be re-verified
    against the deployed Codex version before shipping.
-7. A supplied symlink spelling of `cwd` is accepted only by opening it first as
+5. A supplied symlink spelling of `cwd` is accepted only by opening it first as
    the `ProjectAnchor`; `.autoskillit`, `temp`, and `shell_capture` symlinks are
    rejected. Physical path strings are display hints, not filesystem authority.
-8. Same-user code inside the command can rename a verified directory entry after
-   it is opened. Output, hashing, and replay remain fd-bound; if the live pathname
-   chain no longer matches, the marker reports its path as `unavailable`.
-9. Detached-writer/coherent-snapshot semantics remain outside this guarantee
-   and are tracked by [#4322](https://github.com/TalonT-Org/AutoSkillit/issues/4322).
-   Durable identities and leases are extension seams for retrieval
-   ([#4325](https://github.com/TalonT-Org/AutoSkillit/issues/4325)), the broader
-   publication/privacy contract
-   ([#4326](https://github.com/TalonT-Org/AutoSkillit/issues/4326)), and quota
-   accounting ([#4327](https://github.com/TalonT-Org/AutoSkillit/issues/4327));
-   this decision does not claim those features are implemented. Those
-   features are not implemented by this lifecycle.
+6. General retrieval, publication/privacy policy, quota accounting, and upstream
+   live visibility remain downstream work identified by ADR-0008.
 
 ## Consequences
 
@@ -141,8 +127,8 @@ hook can be retired in favor of that mechanism.
 - Configuration surface reduces: `small_file_max_bytes` is removed (existed solely
   for the classifier's literal-small-JSONL exception).
 - `shell_max_inline_bytes` survives with its new capture-threshold meaning.
-- Complete Codex shell output is captured to mechanism-owned artifacts at
-  the descriptor-anchored project capture root. A pathname is reported only
-  while it still binds to the opened project, directories, and artifact.
+- Complete Codex shell output is captured to a descriptor-anchored carrier.
+  Oversized replay reports an opaque V2 reference or an unavailable status,
+  never an authoritative pathname.
 - One-hour lifecycle reclamation is owned by the installed runner tail and the
   cleanup-only `SessionStart` hook, with bounded retry and quarantine recovery.

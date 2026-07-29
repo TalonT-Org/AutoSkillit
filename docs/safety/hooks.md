@@ -86,45 +86,67 @@ in `.hook_config.json` for future recipes that legitimately need these operation
 
 ### `shell_capture_hook.py`
 **Matched tool:** `Bash`
-**Scope:** Codex sessions only (#4286 / ADR-0006); Claude Code is unaffected.
+**Scope:** Codex sessions only (#4286 / ADR-0006 / ADR-0008); Claude Code is unaffected.
 PreToolUse input-rewrite hook that wraps every native shell command on Codex in a
 minimal isolated-Python runner. The runner opens the supplied `cwd` as a
 `ProjectAnchor` directory descriptor before deriving a physical path, then opens or
 creates `.autoskillit`, `temp`, and `shell_capture` relative to retained directory
 descriptors without following symlinks. It reads output policy through the verified
 `temp` descriptor and creates `shell_<uuid16>.log` exclusively with no-follow
-semantics. The child sends combined stdout+stderr through a pipe; the runner writes,
-measures, hashes, and replays bytes through owned descriptors. Only a bounded inline
-slice enters context: full content when small, otherwise head + provenance marker
-(bytes, sha256, verified path or `unavailable`) + tail. The user-facing configuration
-uses `output_budget.guard_enabled` and `output_budget.shell_max_inline_bytes`. The
-server serializes those values into the stdlib hook bridge as
-`output_budget_policy.disabled` (the inverse of `guard_enabled`) and
-`output_budget_policy.shell_max_inline_bytes`; the runner reads that internal bridge
-shape after verified policy loading.
+semantics.
+
+The child sends merged stdout+stderr through one pipe. The runner measures the byte
+order observed from that pipe; it does not claim application-causal ordering for
+concurrent writes. Actual EOF is the only completion boundary. Direct-shell exit,
+`setsid()`, job detachment, silence, and elapsed time do not finalize while a
+descendant retains a writer. A descendant that closes or redirects every inherited
+writer does not delay capture. There is no capture-local deadline; an outer timeout
+produces failure evidence.
+
+The drain computes bytes, SHA-256, inline, head, and tail in one pass. After EOF the
+runner closes its drain writer, preserves the raw exited-or-signaled outcome, verifies
+the retained carrier descriptor, and syncs it before committing immutable FINAL.
+Small captures replay only verified bytes and issue no token. Oversized captures emit
+verified head and tail plus one canonical V2 marker containing an opaque published
+reference or explicit unavailable state. V2 contains no path and no
+`complete=true` authority.
+
+The user-facing configuration uses `output_budget.guard_enabled` and
+`output_budget.shell_max_inline_bytes`. The server serializes those values into the
+stdlib hook bridge as `output_budget_policy.disabled` (the inverse of
+`guard_enabled`) and `output_budget_policy.shell_max_inline_bytes`; the runner reads
+that internal bridge shape after verified policy loading. No rendered-marker ceiling
+is implemented.
 
 #### Capture Artifact Lifecycle
 
 | Phase | Behavior |
 |-------|----------|
 | Creation | Runner durably reserves a private staging name, creates it relative to the verified capture-directory fd, acquires a writer lease, and publishes the public name without replacement |
-| Retention | Finalized and failed artifacts become eligible after one hour; active artifacts remain protected by the writer lease |
-| Ownership | The isolated runner retains all directory/artifact fds and the writer lease through finalization, replay, and marker-path identity verification |
+| FINAL | Only `verify_capture_snapshot()` can produce the value accepted by `commit_verified_snapshot()`; the completed carrier is synced first and later transitions preserve exact manifest bytes |
+| Publication | Oversized FINAL issues one bearer token and stores only its bound hash; publication verifies that tuple and can return published or unavailable but cannot mint another token |
+| Delivery | Checked write-all rejects invalid/no-progress writes and flushes hook stdout before `delivered`; this boundary does not prove host, UI, history, or model visibility |
+| Reader | `open_verified_capture()` authenticates the token, takes a shared lease, revalidates the descriptor, and exposes exact bounded reads without a path, descriptor, or write API |
+| Retention | References expire no later than the one-hour retention deadline; active producer-exclusive and reader-shared leases block cleanup |
+| Ownership | The producer transfers the retained carrier while preserving exclusive ownership through initial publication and delivery |
 | Cleanup — installed runner | Every valid run/reject invocation performs one bounded sweep after producer resources release |
 | Cleanup — session lifecycle | `capture_lifecycle_hook.py` performs the same bounded sweep at `SessionStart` in both interactive and headless sessions |
 | Naming contract | `shell_[0-9a-f]{16}.log` — files not matching this pattern are never deleted |
-| Safety | Capture components reject symlinks; artifacts reject collisions, symlinks, hardlinks, and world-writable entries; marker paths are emitted only while every current binding matches the opened identities |
-| Failure mode | Capture setup failure stops before the user command. Cleanup failures are bounded and fail open without replacing the command result |
+| Safety | Capture components reject symlinks; artifacts reject collisions, hardlinks, unsafe modes, and identity changes; a hostile same-UID process that ignores advisory locks is excluded |
+| Failure mode | Pre-FINAL failure has no manifest/reference/success marker; post-FINAL failure preserves FINAL and changes only reference or delivery state; cleanup remains bounded and fail open |
 
 The durable lifecycle is `RESERVED` → `STAGED` → `PUBLISHED_WRITING` →
 `FINALIZED` or `FAILED`. An unlocked active record becomes `ABANDONED`.
 Eligible terminal or abandoned records move through `DELETING` to `DELETED`,
 or `TAMPERED`; operational failures preserve the current phase and reschedule
-it with capped backoff. The per-artifact writer lease is held until output
-drain, process settlement, integrity verification, durable terminal
-finalization, and marker flush have finished. Finalized and failed records use
-their terminal transition as the retention clock; abandoned records use their
-durable creation time. Both clocks have a one-hour eligibility period.
+it with capped backoff. FINAL also carries independent reference
+(`not_requested`, `issued`, `published`, `unavailable`, `unknown`, `expired`,
+`revoked`) and
+delivery (`not_attempted`, `attempting`, `delivered`, `failed`, `unknown`) states.
+Lost pre-delivery tokens become unavailable; an interrupted attempting delivery
+becomes unknown and is never re-emitted. Finalized and failed records use their
+terminal transition as the retention clock; abandoned records use their durable
+creation time.
 
 Eligibility is not a wall-clock scheduler. Deletion occurs on the next enabled,
 trusted installed runner-tail or cleanup-only `SessionStart` trigger. If hooks
@@ -140,20 +162,23 @@ world-writable files, identity replacements, unexpected link counts, and
 tampered entries survive. `deleted_bytes` reports logical managed bytes
 committed deleted exactly once; it is not evidence of physical block reclamation.
 
-The durability guarantee is process-termination recovery on supported local Linux and
-macOS filesystems. Ordinary `fsync()` does not establish Darwin
-OS-crash or power-loss durability. Advisory locks and identity revalidation
-provide a cooperative same-UID boundary; a hostile same-UID process that
-ignores locks remains outside the guarantee.
+Ledger frames are bounded canonical JSON with revisions and checksums. Recovery
+truncates only an incomplete final frame and rejects corrupt middle frames,
+revision gaps, unknown versions, and conflicting manifests. The checksum is not an
+authenticated head: clean suffix truncation, old-ledger replay, and a hostile
+same-UID payload/checksum rewrite remain outside detection. Native local Linux
+`fcntl.flock` behavior is the tested cooperative lease boundary; network filesystems
+and processes that ignore advisory locks are excluded. Ordered sync supports
+process-termination recovery, not universal OS-crash or power-loss durability.
 
 Codex hook generation includes the cleanup-only SessionStart owner and excludes the
 separate interactive-only resume reminder. Runner-tail cleanup is the
 authoritative interactive/headless Bash owner; cleanup-only `SessionStart` is
-the supplemental startup owner. Detached-writer/coherent-snapshot behavior
-remains outside this guarantee (#4322). The durable identity, lease, state, and
-`deleted_bytes` fields are extension seams for retrieval (#4325), the broader
-publication/privacy contract (#4326), and quota accounting (#4327); those
-features are not implemented by this lifecycle.
+the supplemental startup owner. ADR-0008 resolves #4322 for Codex shell capture
+only. Trap isolation (#4323), a rendered ceiling (#4324), public bounded retrieval
+(#4325), broader private-publication policy (#4326), partial/quota accounting
+(#4327), upstream live visibility (#4329), and general producer adoption (#4335)
+remain downstream work.
 
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`

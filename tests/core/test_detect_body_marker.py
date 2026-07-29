@@ -64,6 +64,13 @@ def test_detect_body_marker_marker_in_tilde_fence() -> None:
     assert detect_body_marker(body, INVESTIGATION_COMPLETE_MARKER) is False
 
 
+def test_detect_body_marker_survives_stray_backtick_on_other_line() -> None:
+    body = (
+        f"Use the `--foo flag (typo).\n\n{INVESTIGATION_COMPLETE_MARKER}\n\nAlso see `--bar` here."
+    )
+    assert detect_body_marker(body, INVESTIGATION_COMPLETE_MARKER) is True
+
+
 @given(st.text())
 def test_strip_markdown_code_regions_is_idempotent(text: str) -> None:
     stripped = strip_markdown_code_regions(text)

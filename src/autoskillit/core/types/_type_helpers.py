@@ -431,7 +431,7 @@ def truncate_text(text: str, max_len: int = 5000) -> str:
 
 
 _CODE_BLOCK_RE = re.compile(r"(```|~~~).*?\1", re.DOTALL)
-_INLINE_CODE_RE = re.compile(r"`[^`]*`")
+_INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 
 
 def strip_markdown_code_regions(text: str) -> str:

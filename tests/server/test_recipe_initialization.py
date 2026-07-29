@@ -135,7 +135,12 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
     assert isinstance(finalized, FinalizedRecipeInitializationResponse)
     assert isinstance(minimal_ctx.recipe_initialization_state, InitializingRecipe)
 
-    assert complete_initialization_response(finalized, "substituted") == "substituted"
+    altered = complete_initialization_response(finalized, "substituted")
+    altered_parsed = json.loads(altered)
+    assert altered_parsed["success"] is False
+    assert altered_parsed["error"] == "recipe_initialization_receipt_altered"
+    assert altered_parsed["initialization_id"] == finalized.initialization_id
+    assert "user_visible_message" in altered_parsed
     assert isinstance(minimal_ctx.recipe_initialization_state, InitializingRecipe)
 
     assert complete_initialization_response(finalized, finalized.rendered) == finalized.rendered
@@ -143,6 +148,15 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
 
     replay = build_completion_response(minimal_ctx, "initialization")
     assert replay == finalized.rendered
+
+    parsed_initial = json.loads(finalized.rendered)
+    parsed_replay = json.loads(replay)
+    assert set(parsed_initial["recipe_execution"].keys()) == {
+        "execution_id",
+        "invocation_template_digests",
+        "snapshot_digest",
+    }
+    assert parsed_initial["recipe_execution"] == parsed_replay["recipe_execution"]
 
 
 def test_completion_rejects_stale_or_altered_initialization_id(

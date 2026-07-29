@@ -8,6 +8,7 @@ payload's eventual hash.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -31,11 +32,16 @@ __all__ = [
     "InvocationTemplate",
     "PreflightEvidence",
     "PreflightKind",
+    "RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS",
+    "RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY",
+    "RUN_SKILL_ATTESTATION_PARAMS",
+    "RecipeExecutionCredential",
     "RecipeExecutionFactory",
     "RecipeExecutionLock",
     "RecipeExecutionSnapshot",
     "VerifiedInputPreflightRequest",
     "VerifiedInputPreflightResult",
+    "build_recipe_execution_credential",
     "compute_invocation_template_digest",
     "compute_recipe_execution_snapshot_digest",
     "compute_runtime_binding_digest",
@@ -191,6 +197,45 @@ class RecipeExecutionSnapshot:
         return MappingProxyType(
             {name: template.template_digest for name, template in self.templates.items()}
         )
+
+
+RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY: str = "recipe_execution"
+
+RUN_SKILL_ATTESTATION_PARAMS: frozenset[str] = frozenset(
+    {"recipe_execution_id", "invocation_template_digest"}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeExecutionCredential:
+    """The caller-visible identity of one installed recipe execution."""
+
+    execution_id: str
+    snapshot_digest: str
+    invocation_template_digests: Mapping[str, str]
+
+    def as_wire_block(self) -> dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "invocation_template_digests": dict(self.invocation_template_digests),
+            "snapshot_digest": self.snapshot_digest,
+        }
+
+
+RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS: frozenset[str] = frozenset(
+    f.name for f in dataclasses.fields(RecipeExecutionCredential)
+)
+
+
+def build_recipe_execution_credential(
+    snapshot: RecipeExecutionSnapshot,
+) -> RecipeExecutionCredential:
+    """Project the sole caller-visible credential for an execution snapshot."""
+    return RecipeExecutionCredential(
+        execution_id=snapshot.execution_id,
+        snapshot_digest=snapshot.snapshot_digest,
+        invocation_template_digests=dict(snapshot.template_digests),
+    )
 
 
 class PreflightKind(StrEnum):

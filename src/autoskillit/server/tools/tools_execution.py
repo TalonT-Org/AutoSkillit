@@ -23,6 +23,8 @@ from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
+    RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
+    RECIPE_EXECUTION_INACTIVE_MESSAGE,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     BoundScalar,
@@ -885,10 +887,7 @@ async def run_skill(
             if not recipe_execution_id or not invocation_template_digest:
                 return _recipe_execution_deny(
                     "recipe_execution_attestation_missing",
-                    (
-                        "an active recipe requires recipe_execution_id and "
-                        "invocation_template_digest"
-                    ),
+                    RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
                 )
             if not step_name:
                 return _recipe_execution_deny(
@@ -967,7 +966,7 @@ async def run_skill(
         elif _claims_recipe_execution:
             return _recipe_execution_deny(
                 "recipe_execution_inactive",
-                "standalone mode cannot claim recipe attestation",
+                RECIPE_EXECUTION_INACTIVE_MESSAGE,
             )
         elif not resume_session_id:
             try:

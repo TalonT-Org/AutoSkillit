@@ -860,3 +860,30 @@ class TestWorktreePathPersistenceContract:
             "implement-worktree/SKILL.md must clarify that "
             "{{AUTOSKILLIT_TEMP}}/worktrees/ is metadata, not the worktree path"
         )
+
+
+class TestRunSkillAttestationParamDocumentation:
+    """run_skill attestation parameters must be documented in instruction surfaces."""
+
+    def test_run_skill_attestation_params_are_documented(self) -> None:
+        from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
+        from autoskillit.core import RUN_SKILL_ATTESTATION_PARAMS
+
+        for param in RUN_SKILL_ATTESTATION_PARAMS:
+            assert param in _MCP_RETRY_INSTRUCTION, (
+                f"_MCP_RETRY_INSTRUCTION must document {param!r}"
+            )
+
+        skill_md = (
+            Path(__file__).resolve().parents[2]
+            / "src"
+            / "autoskillit"
+            / "skills"
+            / "sous-chef"
+            / "SKILL.md"
+        )
+        sous_chef_text = skill_md.read_text()
+        for param in RUN_SKILL_ATTESTATION_PARAMS:
+            assert param in sous_chef_text, f"sous-chef SKILL.md must document {param!r}"
+        assert "complete_recipe_initialization" in _MCP_RETRY_INSTRUCTION
+        assert "complete_recipe_initialization" in sous_chef_text

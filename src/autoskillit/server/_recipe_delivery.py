@@ -27,6 +27,7 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_DELIVERY_SURFACE_REGISTRY,
+    RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RECIPE_FLOW_SCHEMA_VERSION,
     RECIPE_SECTION_PAGINATION_VERSION,
     RECIPE_SECTION_REGISTRY_DIGEST,
@@ -41,6 +42,7 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
     atomic_write,
+    build_recipe_execution_credential,
     fast_dumps,
     get_logger,
     load_yaml,
@@ -246,11 +248,9 @@ def build_canonical_recipe_artifact_payload(
     )
     candidate_payload["flow_records"] = list(flow_generation.records)
     candidate_payload["recipe_flow"] = flow_generation.identity()
-    candidate_payload["recipe_execution"] = {
-        "execution_id": execution_snapshot.execution_id,
-        "invocation_template_digests": dict(execution_snapshot.template_digests),
-        "snapshot_digest": execution_snapshot.snapshot_digest,
-    }
+    candidate_payload[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY] = build_recipe_execution_credential(
+        execution_snapshot
+    ).as_wire_block()
     return candidate_payload
 
 
@@ -900,7 +900,7 @@ def finalize_recipe_delivery(
     for generation_field in (
         "finalized_recipe_projection",
         "flow_records",
-        "recipe_execution",
+        RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
         "recipe_flow",
     ):
         surface_payload[generation_field] = candidate_payload[generation_field]

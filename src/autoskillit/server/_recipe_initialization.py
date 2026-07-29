@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RecipeArtifactGeneration,
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
     ToolInitializationOperation,
+    build_recipe_execution_credential,
     get_logger,
     get_tool_def,
 )
@@ -212,7 +215,35 @@ def complete_initialization_response(
 ) -> Any:
     """Install the staged snapshot and READY state after exact enforcement."""
     if enforced != finalized.rendered:
-        return enforced
+        _budget_error = ""
+        if isinstance(enforced, str):
+            with suppress(ValueError, TypeError):
+                _parsed = json.loads(enforced)
+                if isinstance(_parsed, dict):
+                    _budget_error = str(_parsed.get("error", ""))
+        logger.warning(
+            "recipe_initialization_receipt_altered",
+            initialization_id=finalized.initialization_id,
+            response_budget_error=_budget_error,
+        )
+        return json.dumps(
+            {
+                "success": False,
+                "error": "recipe_initialization_receipt_altered",
+                "initialization_id": finalized.initialization_id,
+                "response_budget_error": _budget_error,
+                "user_visible_message": (
+                    "The completion receipt was rewritten by the response boundary, "
+                    "so no recipe execution was installed and the recipe is still "
+                    "INITIALIZING. This is a response-budget failure, not a transient "
+                    "one: the receipt for this recipe does not fit the active "
+                    "delivery bound. Close the kitchen and re-open with a smaller "
+                    "recipe, or raise output_budget.response_max_bytes."
+                ),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
     tool_ctx = finalized.tool_ctx
     try:
         prepared = prepare_recipe_execution(
@@ -251,6 +282,33 @@ def complete_initialization_response(
     return enforced
 
 
+def _render_completion_receipt(
+    *,
+    initialization_id: str,
+    completion_receipt: str,
+    recipe_name: str,
+    artifact_generation: RecipeArtifactGeneration,
+    flow_generation: RecipeFlowGeneration,
+    snapshot: RecipeExecutionSnapshot,
+) -> str:
+    return json.dumps(
+        {
+            "success": True,
+            "initialization_id": initialization_id,
+            "completion_receipt": completion_receipt,
+            "recipe_name": recipe_name,
+            "recipe_pull": artifact_generation.pull_identity(),
+            "recipe_flow": flow_generation.identity(),
+            RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY: build_recipe_execution_credential(
+                snapshot
+            ).as_wire_block(),
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
 def build_completion_response(
     tool_ctx: ToolContext,
     initialization_id: str,
@@ -264,18 +322,13 @@ def build_completion_response(
                     {"success": False, "error": "recipe_initialization_stale"},
                     separators=(",", ":"),
                 )
-            rendered = json.dumps(
-                {
-                    "success": True,
-                    "initialization_id": initialization_id,
-                    "completion_receipt": state.completion_receipt,
-                    "recipe_name": state.recipe_name,
-                    "recipe_pull": state.artifact_generation.pull_identity(),
-                    "recipe_flow": state.flow_generation.identity(),
-                },
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
+            rendered = _render_completion_receipt(
+                initialization_id=initialization_id,
+                completion_receipt=state.completion_receipt,
+                recipe_name=state.recipe_name,
+                artifact_generation=state.artifact_generation,
+                flow_generation=state.flow_generation,
+                snapshot=state.installed_execution.snapshot,
             )
             return rendered
         if (
@@ -288,18 +341,13 @@ def build_completion_response(
                 separators=(",", ":"),
             )
         completion_receipt = _receipt(initialization_id, state.artifact_generation)
-        rendered = json.dumps(
-            {
-                "success": True,
-                "initialization_id": initialization_id,
-                "completion_receipt": completion_receipt,
-                "recipe_name": state.recipe_name,
-                "recipe_pull": state.artifact_generation.pull_identity(),
-                "recipe_flow": state.flow_generation.identity(),
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
+        rendered = _render_completion_receipt(
+            initialization_id=initialization_id,
+            completion_receipt=completion_receipt,
+            recipe_name=state.recipe_name,
+            artifact_generation=state.artifact_generation,
+            flow_generation=state.flow_generation,
+            snapshot=state.staged_snapshot,
         )
         return FinalizedRecipeInitializationResponse(
             rendered=rendered,

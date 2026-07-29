@@ -26,6 +26,13 @@ _MANIFEST_PATH = _REPO_ROOT / ".autoskillit" / "test-filter-manifest.yaml"
 # Registry: test directory name -> frozenset of manifest patterns that directory's
 # tests consume. Each entry declares a dependency that the manifest must satisfy.
 _SOURCE_DEPENDENCIES: dict[str, frozenset[str]] = {
+    "infra": frozenset(
+        {
+            ".github/AGENTS.md",
+            "docs/developer/contributing.md",
+            "scripts/ci_target_policy.py",
+        }
+    ),
     "workspace": frozenset(
         {
             "src/autoskillit/skills/*/SKILL.md",

@@ -113,6 +113,9 @@ src/autoskillit/agents/**:
 .github/workflows/*.yml:
   - infra/
 
+.github/AGENTS.md:
+  - infra/
+
 CLAUDE.md:
   - infra/
   - contracts/
@@ -130,6 +133,10 @@ Taskfile.yml:
   - infra/
 
 .gitleaks.toml:
+  - infra/
+
+docs/developer/contributing.md:
+  - docs/
   - infra/
 
 docs/**/*.md:
@@ -255,6 +262,8 @@ scripts/regen_contracts.py:
 scripts/check_pyi_stub_format.py:
   - infra/
 scripts/check_pyi_stub_symbols.py:
+  - infra/
+scripts/ci_target_policy.py:
   - infra/
 scripts/measure_codex_read_repetition.py:
   - infra/

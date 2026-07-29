@@ -249,13 +249,14 @@ class TestCIWorkflow:
         assert "develop" in pr_branches, "CI must trigger on PRs targeting develop branch"
 
     def test_ci_preflight_outputs_os_matrix(self) -> None:
-        """preflight job must export an os-matrix output computed from base_ref."""
+        """preflight must export every value selected by the CI policy authority."""
         workflow = load_yaml(CI_WORKFLOW)
         outputs = workflow["jobs"]["preflight"].get("outputs", {})
-        assert "os-matrix" in outputs, (
-            "preflight must export os-matrix so the test job can vary runners "
-            "based on PR target branch"
-        )
+        assert set(outputs) == {
+            "os-matrix",
+            "test-filter-mode",
+            "test-base-revision",
+        }
 
     def test_ci_test_matrix_uses_preflight_os_matrix(self) -> None:
         """test job matrix must consume the os-matrix from preflight, not a hardcoded list."""
@@ -267,36 +268,30 @@ class TestCIWorkflow:
             "not a hardcoded list — hardcoded list cannot vary by PR target"
         )
 
-    def test_ci_preflight_computes_matrix_from_branch_context(self) -> None:
-        """preflight must contain a step that computes os matrix based on branch context.
-
-        Uses github.base_ref for pull_request events and github.ref for push events,
-        since github.base_ref is empty on direct push events.
-        """
+    def test_ci_preflight_delegates_to_target_policy_resolver(self) -> None:
+        """preflight must call the checked-in CI policy authority exactly once."""
         workflow = load_yaml(CI_WORKFLOW)
         steps = workflow["jobs"]["preflight"]["steps"]
-        matrix_steps = [
-            s
-            for s in steps
-            if any(kw in str(s.get("run", "")) for kw in ("base_ref", "github.ref"))
-            and "stable" in str(s.get("run", ""))
-        ]
-        assert matrix_steps, (
-            "preflight must have a step that branches on github.base_ref (for PRs) "
-            "or github.ref (for pushes) to produce the os-matrix output"
+        policy_steps = [step for step in steps if step.get("id") == "ci-policy"]
+        assert len(policy_steps) == 1
+        assert policy_steps[0].get("run") == (
+            'python3 scripts/ci_target_policy.py >> "$GITHUB_OUTPUT"'
         )
 
-    def test_ci_stable_target_produces_dual_os_matrix(self) -> None:
-        """The stable branch must produce a dual-element ubuntu+macos matrix."""
+    def test_ci_test_step_consumes_target_policy_filter_outputs(self) -> None:
+        """Run tests must consume filter mode and immutable base from preflight."""
         workflow = load_yaml(CI_WORKFLOW)
-        steps = workflow["jobs"]["preflight"]["steps"]
-        for step in steps:
-            run = step.get("run", "")
-            if "stable" in run and ("base_ref" in run or "github.ref" in run):
-                assert "macos" in run, "When branch targets stable, matrix must include macOS"
-                break
-        else:
-            pytest.fail("No step computes stable-specific matrix in preflight")
+        run_step = next(
+            step for step in workflow["jobs"]["test"]["steps"] if step.get("name") == "Run tests"
+        )
+        assert run_step["env"]["AUTOSKILLIT_TEST_FILTER"] == (
+            "${{ needs.preflight.outputs.test-filter-mode }}"
+        )
+        assert run_step["env"]["AUTOSKILLIT_TEST_BASE_REF"] == (
+            "${{ needs.preflight.outputs.test-base-revision }}"
+        )
+        assert "github.event" not in run_step["run"]
+        assert "develop" not in run_step["run"]
 
     def test_ci_push_trigger_includes_stable(self) -> None:
         """CI must trigger on push to stable branch.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import io
 import json
 import os
@@ -36,16 +37,20 @@ _CAPTURE_ID = "0123456789abcdef"
 
 def test_cleanup_hook_imports_minimal_shared_authority() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
-    assert "from _capture._authority import" in source
-    assert "from _capture_artifacts import" not in source
-    assert "from _capture_lifecycle import" not in source
-    for lifecycle_name in (
+    tree = ast.parse(source)
+    imports = [
+        node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.level == 0
+    ]
+    authority_imports = [node for node in imports if node.module == "_capture._authority"]
+
+    assert len(authority_imports) == 1
+    assert {alias.name for alias in authority_imports[0].names} == {
         "CaptureLifecycleError",
         "CaptureSetupError",
         "CaptureStoreAbsentError",
         "open_capture_lifecycle",
-    ):
-        assert lifecycle_name in source
+    }
+    assert all(node.module not in {"_capture_artifacts", "_capture_lifecycle"} for node in imports)
 
 
 def test_package_authority_uses_package_lifecycle_identity() -> None:

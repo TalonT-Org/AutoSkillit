@@ -58,7 +58,6 @@ MAX_MANIFEST_BYTES = 8 * 1024
 MAX_REFERENCE_TOKEN_BYTES = 192
 
 _AUTHORITY_FACTORY_TOKEN = object()
-_CARRIER_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
 _UNTRUSTED_MODE_BITS = stat.S_IRWXG | stat.S_IRWXO
 _READ_CHUNK_BYTES = 64 * 1024
 _MANIFEST_FIELDS = frozenset(
@@ -434,7 +433,7 @@ def _validate_manifest(value: CaptureFinalManifest | CaptureManifestWire) -> Non
         or not _syntax.CAPTURE_ID_RE.fullmatch(value.capture_id)
         or not _syntax.INCARNATION_RE.fullmatch(value.incarnation)
         or not _is_plain_int(value.finalized_at_revision, minimum=1)
-        or not _CARRIER_NAME_RE.fullmatch(value.carrier_name)
+        or not _syntax.PUBLIC_NAME_RE.fullmatch(value.carrier_name)
         or value.carrier_name != f"shell_{value.capture_id}.log"
         or value.stream_domain != MANAGED_STREAM_DOMAIN
         or not _is_plain_int(value.total_bytes)

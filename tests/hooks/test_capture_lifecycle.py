@@ -28,6 +28,7 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
+from autoskillit.hooks._capture._syntax import PUBLIC_NAME_RE
 from autoskillit.hooks._capture._types import CaptureFailureEvidence
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
@@ -1643,7 +1644,7 @@ def test_observe_closes_descriptor_when_fstat_fails(
             store._observe(
                 artifact.name,
                 (artifact.identity.device, artifact.identity.inode),
-                valid_name=capture_lifecycle._PUBLIC_NAME_RE,
+                valid_name=PUBLIC_NAME_RE,
             )
 
         assert observed_fd >= 0

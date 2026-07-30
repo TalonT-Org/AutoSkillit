@@ -7,7 +7,6 @@ import hashlib
 import json
 import math
 import os
-import re
 import struct
 from dataclasses import dataclass, replace
 from typing import Any, cast
@@ -34,6 +33,15 @@ from ._syntax import (
 )
 from ._syntax import (
     INCARNATION_RE as _INCARNATION_RE,
+)
+from ._syntax import (
+    PUBLIC_NAME_RE as _PUBLIC_NAME_RE,
+)
+from ._syntax import (
+    QUARANTINE_NAME_RE as _QUARANTINE_NAME_RE,
+)
+from ._syntax import (
+    STAGING_NAME_RE as _STAGING_NAME_RE,
 )
 from ._types import CaptureFailureEvidence, LegacyCleanupOnly
 
@@ -88,11 +96,6 @@ class LedgerCodecError(RuntimeError):
 
 class CaptureTransitionCommittedError(RuntimeError):
     """Raised only after a lifecycle transition frame was durably synced."""
-
-
-_PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
-_STAGING_NAME_RE = re.compile(r"^\.capture-staging-[0-9a-f]{16}-[0-9a-f]{16}$")
-_QUARANTINE_NAME_RE = re.compile(r"^\.capture-quarantine-[0-9a-f]{16}-[0-9a-f]{16}$")
 
 
 @dataclass(frozen=True, slots=True)

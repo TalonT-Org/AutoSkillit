@@ -156,15 +156,11 @@ def test_every_shell_capture_persistent_path_constant_is_registered() -> None:
 
     assert observed == {
         ("_authority.py", "CAPTURE_PATH_COMPONENTS"),
-        ("_ledger.py", "_PUBLIC_NAME_RE"),
-        ("_ledger.py", "_QUARANTINE_NAME_RE"),
-        ("_ledger.py", "_STAGING_NAME_RE"),
-        ("_snapshot.py", "_CARRIER_NAME_RE"),
+        ("_syntax.py", "PUBLIC_NAME_RE"),
+        ("_syntax.py", "QUARANTINE_NAME_RE"),
+        ("_syntax.py", "STAGING_NAME_RE"),
         ("_capture_lifecycle.py", "LEDGER_NAME"),
         ("_capture_lifecycle.py", "LOCK_NAME"),
-        ("_capture_lifecycle.py", "_PUBLIC_NAME_RE"),
-        ("_capture_lifecycle.py", "_QUARANTINE_NAME_RE"),
-        ("_capture_lifecycle.py", "_STAGING_NAME_RE"),
     }
 
 

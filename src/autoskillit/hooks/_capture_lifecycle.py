@@ -81,9 +81,6 @@ _COMPACTION_THRESHOLD_BYTES = 3 * 1024 * 1024
 _MAX_COMPACTION_BYTES = 4 * 1024 * 1024
 _MAX_TOMBSTONES = 256
 _CAPTURE_ID_RE = _capture_syntax.CAPTURE_ID_RE
-_PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
-_STAGING_NAME_RE = re.compile(r"^\.capture-staging-[0-9a-f]{16}-[0-9a-f]{16}$")
-_QUARANTINE_NAME_RE = re.compile(r"^\.capture-quarantine-[0-9a-f]{16}-[0-9a-f]{16}$")
 _CLOEXEC, _NOFOLLOW, _NONBLOCK = os.O_CLOEXEC, os.O_NOFOLLOW, os.O_NONBLOCK
 _CONTROL_FLAGS = os.O_RDWR | os.O_CREAT | _CLOEXEC | _NOFOLLOW
 _OBSERVE_FLAGS = os.O_RDWR | _CLOEXEC | _NOFOLLOW | _NONBLOCK
@@ -912,8 +909,8 @@ class CaptureLifecycleStore:
             root_fd=self._root_fd,
             observe=self._observe,
             try_lease=self._try_artifact_lease,
-            staging_name_pattern=_STAGING_NAME_RE,
-            public_name_pattern=_PUBLIC_NAME_RE,
+            staging_name_pattern=_capture_syntax.STAGING_NAME_RE,
+            public_name_pattern=_capture_syntax.PUBLIC_NAME_RE,
             wall_clock=self._wall_clock,
             preleased=preleased,
             lease_checked=lease_checked,
@@ -927,9 +924,9 @@ class CaptureLifecycleStore:
             record,
             observe=self._observe,
             try_lease=self._try_artifact_lease,
-            staging_name_pattern=_STAGING_NAME_RE,
-            public_name_pattern=_PUBLIC_NAME_RE,
-            quarantine_name_pattern=_QUARANTINE_NAME_RE,
+            staging_name_pattern=_capture_syntax.STAGING_NAME_RE,
+            public_name_pattern=_capture_syntax.PUBLIC_NAME_RE,
+            quarantine_name_pattern=_capture_syntax.QUARANTINE_NAME_RE,
         )
 
     def _deleting_record(
@@ -955,8 +952,8 @@ class CaptureLifecycleStore:
             observe=self._observe,
             try_lease=self._try_artifact_lease,
             authorize_delete=authorize_delete,
-            public_name_pattern=_PUBLIC_NAME_RE,
-            quarantine_name_pattern=_QUARANTINE_NAME_RE,
+            public_name_pattern=_capture_syntax.PUBLIC_NAME_RE,
+            quarantine_name_pattern=_capture_syntax.QUARANTINE_NAME_RE,
             preleased=preleased,
             lease_checked=lease_checked,
         )

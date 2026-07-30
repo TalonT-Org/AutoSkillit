@@ -323,7 +323,7 @@ class TestCLIDoctor:
             "stale_entry_points",  # ★ new
             "dual_mcp_registration",  # ★ new
             "plugin_cache_exists",
-            "installed_plugins_entry",
+            "install_state_consistency",
             "ambient_session_type_skill",
             "ambient_session_type_orchestrator",
             "ambient_session_type_fleet",
@@ -587,20 +587,23 @@ def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
     assert checks[0]["severity"] == "warning"
 
 
-def test_doctor_checks_installed_plugins_entry(tmp_path, monkeypatch, capsys):
-    """Doctor must report when installed_plugins.json is missing the autoskillit entry."""
+def test_doctor_does_not_run_a_duplicate_installed_plugins_check(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """Registry state is reported only through the shared install-state authority."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
-    # Create installed_plugins.json without the autoskillit entry
     plugins_dir = tmp_path / ".claude" / "plugins"
     plugins_dir.mkdir(parents=True)
     (plugins_dir / "installed_plugins.json").write_text("{}")
     cli.doctor_cmd(output_json=True)
     captured = capsys.readouterr()
     data = json.loads(captured.out)
-    checks = [r for r in data["results"] if r["check"] == "installed_plugins_entry"]
-    assert len(checks) == 1, "Expected an installed_plugins_entry check"
-    assert checks[0]["severity"] == "warning"
+    checks = {result["check"]: result for result in data["results"]}
+    assert "installed_plugins_entry" not in checks
+    assert checks["install_state_consistency"]["severity"] == "ok"
 
 
 def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):

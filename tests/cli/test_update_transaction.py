@@ -14,16 +14,25 @@ from typing import Any
 
 import pytest
 
-from autoskillit.cli._install_contract import InstallOutcome, InstallProcessStatus
+from autoskillit.cli._install_contract import (
+    InstallFailureKind,
+    InstallOutcome,
+    InstallProcessStatus,
+)
 from autoskillit.cli._install_info import InstallInfo, InstallType
 from autoskillit.cli.update._transaction import (
     IRREVERSIBLE_PIVOT_PHASE,
     UPDATE_TRANSACTION_PHASES,
+    UpdateProcessStatus,
     UpdateTransactionOutcome,
     UpdateTransactionPhase,
     run_update_transaction,
 )
 from autoskillit.core import Severity
+from tests.fixtures.plugin_artifact_state import (
+    PluginArtifactStateKind,
+    build_plugin_artifact_state,
+)
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -569,16 +578,88 @@ def _isolated_child_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     ):
         directory.mkdir()
 
+    installed_version = importlib.metadata.version("autoskillit")
     fake_claude = fake_bin / "claude"
     fake_claude.write_text(
-        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$HOME/fake-claude-calls"\nexit 0\n',
+        f"""#!{sys.executable}
+import json
+import os
+import signal
+import sys
+from pathlib import Path
+
+home = Path(os.environ["HOME"])
+behavior_path = home / "fake-claude-behavior"
+behavior = (
+    behavior_path.read_text(encoding="utf-8").strip()
+    if behavior_path.exists()
+    else "success"
+)
+argv = sys.argv[1:]
+with (home / "fake-claude-calls.jsonl").open("a", encoding="utf-8") as trace:
+    trace.write(json.dumps({{
+        "argv": argv,
+        "cwd": str(Path.cwd()),
+        "home": os.environ["HOME"],
+        "xdg_config_home": os.environ.get("XDG_CONFIG_HOME"),
+        "claudecode": os.environ.get("CLAUDECODE"),
+        "backend": os.environ.get("AUTOSKILLIT_AGENT_BACKEND__BACKEND"),
+    }}) + "\\n")
+
+if behavior == "signal" and argv[:3] == ["plugin", "marketplace", "add"]:
+    os.kill(os.getppid(), signal.SIGTERM)
+    raise SystemExit(0)
+if argv[:2] != ["plugin", "install"]:
+    raise SystemExit(0)
+if behavior == "child-failure":
+    raise SystemExit(9)
+if behavior == "missing-artifact":
+    raise SystemExit(0)
+
+version = {installed_version!r}
+root = home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / version
+metadata = root / ".claude-plugin" / "plugin.json"
+hooks = root / "hooks" / "hooks.json"
+metadata.parent.mkdir(parents=True, exist_ok=True)
+hooks.parent.mkdir(parents=True, exist_ok=True)
+metadata.write_text(
+    json.dumps({{"name": "autoskillit", "version": version}}),
+    encoding="utf-8",
+)
+hooks.write_text(json.dumps({{"hooks": {{}}}}), encoding="utf-8")
+registry = home / ".claude" / "plugins" / "installed_plugins.json"
+registry.parent.mkdir(parents=True, exist_ok=True)
+registry.write_text(
+    json.dumps({{
+        "version": 2,
+        "plugins": {{
+            "autoskillit@autoskillit-local": [{{
+                "installPath": str(root),
+                "scope": "user",
+            }}],
+        }},
+    }}),
+    encoding="utf-8",
+)
+""",
         encoding="utf-8",
     )
     fake_claude.chmod(0o755)
 
     autoskillit_entrypoint = fake_bin / "autoskillit"
+    child_bootstrap = (
+        "import runpy,sys;"
+        "import autoskillit.cli._marketplace as marketplace;"
+        "marketplace.is_git_worktree=lambda _path:False;"
+        "sys.argv[0]='autoskillit';"
+        "runpy.run_module('autoskillit',run_name='__main__')"
+    )
     autoskillit_entrypoint.write_text(
-        f'#!/bin/sh\nexec {shlex.quote(sys.executable)} -m autoskillit "$@"\n',
+        (
+            "#!/bin/sh\n"
+            'if [ -f "$HOME/fake-install-unknown-status" ]; then exit 99; fi\n'
+            f'exec {shlex.quote(sys.executable)} -c {shlex.quote(child_bootstrap)} "$@"\n'
+        ),
         encoding="utf-8",
     )
     autoskillit_entrypoint.chmod(0o755)
@@ -595,6 +676,21 @@ def _isolated_child_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
     }
     return home, env
+
+
+def _seed_pre_update_installed_mode(home: Path) -> None:
+    build_plugin_artifact_state(
+        home,
+        PluginArtifactStateKind.VALID_CURRENT,
+        expected_version="0.0.0",
+    )
+
+
+def _read_fake_claude_calls(home: Path) -> list[dict[str, Any]]:
+    trace = home / "fake-claude-calls.jsonl"
+    if not trace.exists():
+        return []
+    return [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines() if line]
 
 
 def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
@@ -639,42 +735,59 @@ def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
     assert maintenance_env["PATH"] == base_env["PATH"]
     assert "AUTOSKILLIT_AGENT_BACKEND__BACKEND" not in maintenance_env
     assert not Path(install_kwargs["cwd"]).exists()
-    assert not (home / "fake-claude-calls").exists()
+    assert not (home / "fake-claude-calls.jsonl").exists()
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
 
 
 @pytest.mark.parametrize(
-    ("child_behavior", "expected_outcome", "expected_install_outcome"),
+    (
+        "claude_behavior",
+        "expected_status",
+        "expected_outcome",
+        "expected_install_outcome",
+        "expected_failure_kind",
+    ),
     [
         (
-            "launch-failure",
+            "success",
+            int(InstallProcessStatus.SUCCESS),
+            UpdateTransactionOutcome.COMPLETED,
+            InstallOutcome.COMPLETED,
+            None,
+        ),
+        (
+            "child-failure",
+            int(InstallProcessStatus.FAILED_CHILD),
             UpdateTransactionOutcome.FAILED_INSTALL,
             InstallOutcome.FAILED,
+            InstallFailureKind.CHILD,
         ),
         (
-            "signal",
-            UpdateTransactionOutcome.INDETERMINATE,
-            InstallOutcome.INDETERMINATE,
-        ),
-        (
-            "unknown-status",
-            UpdateTransactionOutcome.INDETERMINATE,
-            InstallOutcome.INDETERMINATE,
+            "missing-artifact",
+            int(InstallProcessStatus.FAILED_POSTCONDITION),
+            UpdateTransactionOutcome.FAILED_POSTCONDITION,
+            InstallOutcome.FAILED,
+            InstallFailureKind.POSTCONDITION,
         ),
     ],
 )
-def test_child_boundary_launch_signal_and_unknown_statuses_never_advance_to_verification(
+def test_registered_plugin_crosses_real_install_cli_with_typed_statuses(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    child_behavior: str,
+    claude_behavior: str,
+    expected_status: int,
     expected_outcome: UpdateTransactionOutcome,
     expected_install_outcome: InstallOutcome,
+    expected_failure_kind: InstallFailureKind | None,
 ) -> None:
     _prepare(monkeypatch)
     home, base_env = _isolated_child_environment(tmp_path)
+    _seed_pre_update_installed_mode(home)
+    (home / "fake-claude-behavior").write_text(claude_behavior, encoding="utf-8")
     installed_version = importlib.metadata.version("autoskillit")
     versions = iter(["0.0.0", installed_version])
     calls: list[tuple[list[str], dict[str, Any]]] = []
+    install_statuses: list[int] = []
 
     def runner(
         cmd: list[str],
@@ -682,12 +795,117 @@ def test_child_boundary_launch_signal_and_unknown_statuses_never_advance_to_veri
     ) -> subprocess.CompletedProcess[Any]:
         calls.append((list(cmd), kwargs))
         assert set(kwargs) == {"check", "env", "cwd"}
+        assert kwargs["check"] is False
+        if len(calls) == 1:
+            return subprocess.CompletedProcess(cmd, 0)
+        completed = subprocess.run(cmd, **kwargs)
+        install_statuses.append(completed.returncode)
+        return completed
+
+    result = run_update_transaction(
+        home=home,
+        base_env=base_env,
+        version_reader=lambda _name: next(versions),
+        process_runner=runner,
+    )
+
+    assert result.outcome is expected_outcome
+    assert result.install_result is not None
+    assert result.install_result.outcome is expected_install_outcome
+    assert result.install_result.failure_kind is expected_failure_kind
+    assert install_statuses == [expected_status]
+    assert "--require-registered-plugin" in calls[1][0]
+    assert calls[0][1]["env"] is calls[1][1]["env"]
+    assert calls[0][1]["cwd"] == calls[1][1]["cwd"]
+    claude_calls = _read_fake_claude_calls(home)
+    assert [call["argv"][:2] for call in claude_calls] == [
+        ["plugin", "marketplace"],
+        ["plugin", "install"],
+    ]
+    assert all(call["cwd"] == str(calls[1][1]["cwd"]) for call in claude_calls)
+    assert all(call["home"] == str(home) for call in claude_calls)
+    assert all(call["xdg_config_home"] == base_env["XDG_CONFIG_HOME"] for call in claude_calls)
+    assert all(call["claudecode"] is None for call in claude_calls)
+    assert all(call["backend"] is None for call in claude_calls)
+    if expected_outcome is UpdateTransactionOutcome.COMPLETED:
+        assert result.phase_history == UPDATE_TRANSACTION_PHASES
+        assert result.verified_identity == f"{_PLUGIN_REF}:{installed_version}"
+    else:
+        _assert_terminal_history(
+            result,
+            UpdateTransactionPhase.INSTALL_STATUS_RECONSTRUCTION,
+        )
+        assert UpdateTransactionPhase.POST_UPDATE_ARTIFACT_VERIFICATION not in result.phase_history
+    assert not Path(calls[1][1]["cwd"]).exists()
+
+
+@pytest.mark.parametrize(
+    (
+        "child_behavior",
+        "expected_process_status",
+        "expected_outcome",
+        "expected_install_outcome",
+        "expected_failure_kind",
+    ),
+    [
+        (
+            "launch-failure",
+            None,
+            UpdateTransactionOutcome.FAILED_INSTALL,
+            InstallOutcome.FAILED,
+            InstallFailureKind.CHILD,
+        ),
+        (
+            "signal",
+            -15,
+            UpdateTransactionOutcome.INDETERMINATE,
+            InstallOutcome.INDETERMINATE,
+            None,
+        ),
+        (
+            "unknown-status",
+            99,
+            UpdateTransactionOutcome.INDETERMINATE,
+            InstallOutcome.INDETERMINATE,
+            None,
+        ),
+    ],
+)
+def test_real_install_process_launch_signal_and_unknown_statuses_stop_verification(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    child_behavior: str,
+    expected_process_status: int | None,
+    expected_outcome: UpdateTransactionOutcome,
+    expected_install_outcome: InstallOutcome,
+    expected_failure_kind: InstallFailureKind | None,
+) -> None:
+    _prepare(monkeypatch)
+    home, base_env = _isolated_child_environment(tmp_path)
+    _seed_pre_update_installed_mode(home)
+    if child_behavior == "signal":
+        (home / "fake-claude-behavior").write_text("signal", encoding="utf-8")
+    elif child_behavior == "unknown-status":
+        (home / "fake-install-unknown-status").touch()
+    installed_version = importlib.metadata.version("autoskillit")
+    versions = iter(["0.0.0", installed_version])
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+    install_statuses: list[int] = []
+
+    def runner(
+        cmd: list[str],
+        **kwargs: Any,
+    ) -> subprocess.CompletedProcess[Any]:
+        calls.append((list(cmd), kwargs))
+        assert set(kwargs) == {"check", "env", "cwd"}
+        assert kwargs["check"] is False
         if len(calls) == 1:
             return subprocess.CompletedProcess(cmd, 0)
         if child_behavior == "launch-failure":
-            raise OSError("isolated launch failure")
-        returncode = -15 if child_behavior == "signal" else 99
-        return subprocess.CompletedProcess(cmd, returncode)
+            (tmp_path / "bin" / "autoskillit").unlink()
+        completed = subprocess.run(cmd, **kwargs)
+        install_statuses.append(completed.returncode)
+        return completed
 
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
@@ -703,6 +921,11 @@ def test_child_boundary_launch_signal_and_unknown_statuses_never_advance_to_veri
     assert result.outcome is expected_outcome
     assert result.install_result is not None
     assert result.install_result.outcome is expected_install_outcome
+    assert result.install_result.failure_kind is expected_failure_kind
+    assert install_statuses == (
+        [] if expected_process_status is None else [expected_process_status]
+    )
+    assert "--require-registered-plugin" in calls[1][0]
     assert calls[0][1]["env"] is calls[1][1]["env"]
     assert calls[0][1]["cwd"] == calls[1][1]["cwd"]
     _assert_terminal_history(
@@ -711,4 +934,150 @@ def test_child_boundary_launch_signal_and_unknown_statuses_never_advance_to_veri
     )
     assert UpdateTransactionPhase.POST_UPDATE_ARTIFACT_VERIFICATION not in result.phase_history
     assert not Path(calls[1][1]["cwd"]).exists()
-    assert not (home / "fake-claude-calls").exists()
+    if child_behavior == "signal":
+        assert [call["argv"][:3] for call in _read_fake_claude_calls(home)] == [
+            ["plugin", "marketplace", "add"]
+        ]
+    else:
+        assert not _read_fake_claude_calls(home)
+
+
+@pytest.mark.parametrize("consumer", ["explicit", "automatic"])
+@pytest.mark.parametrize("claude_behavior", ["success", "child-failure"])
+def test_update_consumers_compose_with_registered_real_child_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    consumer: str,
+    claude_behavior: str,
+) -> None:
+    from autoskillit.cli.update import _update, _update_checks
+
+    _prepare(monkeypatch)
+    home, base_env = _isolated_child_environment(tmp_path)
+    _seed_pre_update_installed_mode(home)
+    (home / "fake-claude-behavior").write_text(claude_behavior, encoding="utf-8")
+    installed_version = importlib.metadata.version("autoskillit")
+    versions = iter(["0.0.0", installed_version])
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+    results: list[Any] = []
+    effects: list[tuple[str, Path, dict[str, object] | None]] = []
+    dismiss_reads: list[Path] = []
+    install_statuses: list[int] = []
+
+    def runner(
+        cmd: list[str],
+        **kwargs: Any,
+    ) -> subprocess.CompletedProcess[Any]:
+        calls.append((list(cmd), kwargs))
+        assert set(kwargs) == {"check", "env", "cwd"}
+        if len(calls) == 1:
+            return subprocess.CompletedProcess(cmd, 0)
+        completed = subprocess.run(cmd, **kwargs)
+        install_statuses.append(completed.returncode)
+        return completed
+
+    def configured_transaction(
+        *,
+        home: Path,
+        process_runner: Callable[..., subprocess.CompletedProcess[Any]],
+    ) -> Any:
+        assert home == Path(base_env["HOME"])
+        assert process_runner is subprocess.run
+        result = run_update_transaction(
+            home=home,
+            base_env=base_env,
+            version_reader=lambda _name: next(versions),
+            process_runner=runner,
+        )
+        results.append(result)
+        return result
+
+    initial_state: dict[str, object] = {
+        "update_prompt": {"dismissed_version": "0.0.0"},
+        "binary_snoozed": True,
+    }
+
+    def read_dismiss_state(target_home: Path) -> dict[str, object]:
+        dismiss_reads.append(target_home)
+        return dict(initial_state)
+
+    monkeypatch.setattr(
+        _update_checks,
+        "_read_dismiss_state",
+        read_dismiss_state,
+    )
+    monkeypatch.setattr(
+        _update_checks,
+        "_write_dismiss_state",
+        lambda target_home, state: effects.append(("write", target_home, dict(state))),
+    )
+    monkeypatch.setattr(
+        _update_checks,
+        "invalidate_fetch_cache",
+        lambda target_home: effects.append(("invalidate", target_home, None)),
+    )
+
+    if consumer == "explicit":
+        monkeypatch.setattr(_update, "run_update_transaction", configured_transaction)
+        monkeypatch.setattr(
+            _update,
+            "perform_restart",
+            lambda: effects.append(("restart", home, None)),
+        )
+        if claude_behavior == "success":
+            _update.run_update_command(home=home)
+        else:
+            with pytest.raises(SystemExit) as exc_info:
+                _update.run_update_command(home=home)
+            assert exc_info.value.code == int(UpdateProcessStatus.FAILED_INSTALL)
+    else:
+        monkeypatch.setattr(
+            _update_checks,
+            "run_update_transaction",
+            configured_transaction,
+        )
+        monkeypatch.setattr(
+            _update_checks,
+            "perform_restart",
+            lambda: effects.append(("restart", home, None)),
+        )
+        automatic_state = dict(initial_state)
+        assert (
+            _update_checks._run_update_sequence(
+                _info(),
+                "0.0.0",
+                home,
+                automatic_state,
+            )
+            is None
+        )
+        assert automatic_state == ({} if claude_behavior == "success" else initial_state)
+
+    assert len(results) == 1
+    assert results[0].install_result is not None
+    assert "--require-registered-plugin" in calls[1][0]
+    assert install_statuses == [
+        int(
+            InstallProcessStatus.SUCCESS
+            if claude_behavior == "success"
+            else InstallProcessStatus.FAILED_CHILD
+        )
+    ]
+    if claude_behavior == "success":
+        assert results[0].outcome is UpdateTransactionOutcome.COMPLETED
+        assert results[0].install_result.outcome is InstallOutcome.COMPLETED
+        assert [effect[0] for effect in effects] == ["write", "invalidate", "restart"]
+        assert all(effect[1] == home for effect in effects)
+        assert effects[0][2] == {}
+        assert dismiss_reads == ([home] if consumer == "explicit" else [])
+    else:
+        assert results[0].outcome is UpdateTransactionOutcome.FAILED_INSTALL
+        assert results[0].install_result.outcome is InstallOutcome.FAILED
+        assert results[0].install_result.failure_kind is InstallFailureKind.CHILD
+        assert not effects
+        assert not dismiss_reads
+    assert [call["argv"][:2] for call in _read_fake_claude_calls(home)] == [
+        ["plugin", "marketplace"],
+        ["plugin", "install"],
+    ]
+    assert not Path(calls[1][1]["cwd"]).exists()

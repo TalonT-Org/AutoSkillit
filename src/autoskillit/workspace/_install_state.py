@@ -29,6 +29,7 @@ the stdlib reader that exists precisely so any layer can ask this question.
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import shutil
 from pathlib import Path
@@ -94,26 +95,29 @@ def _read_json_version(path: Path, *, key: str) -> str | None:
     return version if isinstance(version, str) else None
 
 
+def _current_install_state_spec() -> InstallStateSpec:
+    """Build the diagnostic spec from current metadata and registry evidence."""
+    from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
+
+    home = _home()
+    return InstallStateSpec(
+        home=home,
+        plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
+        expected_version=importlib.metadata.version("autoskillit"),
+        require_registered_plugin=bool(registered_install_paths(home)),
+        require_shared_lease=True,
+    )
+
+
 def verify_install_state() -> tuple[InstallStateFinding, ...]:
     """Return every violated install-state invariant, most actionable first."""
-    from autoskillit import __version__
-
     findings: list[InstallStateFinding] = []
 
     # 1. Registry obligation and exact current-artifact identity. Registry paths
     #    are evidence only; the shared authority derives the sole managed root
     #    from the trusted home/plugin/version tuple.
-    from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
-
-    exact = verify_installed_plugin_artifact(
-        InstallStateSpec(
-            home=_home(),
-            plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
-            expected_version=__version__,
-            require_registered_plugin=False,
-            require_shared_lease=True,
-        )
-    )
+    current_spec = _current_install_state_spec()
+    exact = verify_installed_plugin_artifact(current_spec)
     findings.extend(exact.findings)
     if exact.lease is not None:
         exact.lease.close()
@@ -197,7 +201,7 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
                 )
 
     # 4. Version agreement, one finding per derived file (see module docstring).
-    findings.extend(_derived_version_findings(__version__))
+    findings.extend(_derived_version_findings(current_spec.expected_version))
 
     return tuple(findings)
 

@@ -25,25 +25,21 @@ pytestmark = [pytest.mark.medium]
 
 SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
-#: Modules permitted to read a plugin root out of `installed_plugins.json`.
-#: There is exactly one, and it is a *reporting* primitive — no execution path
-#: may derive a plugin source from it.
+#: Exact modules permitted to read `installed_plugins.json`. Every reader treats
+#: registry data as evidence only; no execution path may derive a plugin source
+#: or managed root from it.
 REGISTRY_READ_ALLOWLIST: dict[str, str] = {
     "core/_plugin_ids.py": (
-        "Defines registered_install_paths() itself — the diagnostics-only reader. "
-        "Its docstring states the constraint that no resolution path may use it."
+        "Defines registered_install_paths(), the stdlib evidence parser. Its output "
+        "cannot authorize a source, launch path, or managed artifact root."
     ),
     "workspace/_install_state.py": (
-        "verify_install_state() reports registry/filesystem disagreement. Reporting a "
-        "dangling installPath is the point; nothing here resolves a source from it."
+        "Builds the current diagnostic obligation and compares exact retirement "
+        "records with live registration evidence; trusted inputs derive every root."
     ),
     "workspace/_installed_artifact.py": (
-        "The shared verifier reads registry paths only as obligation evidence; its exact "
-        "managed root is derived independently from trusted home/plugin/version inputs."
-    ),
-    "cli/doctor/_doctor_mcp.py": (
-        "The doctor check that dereferences installPath. Returning OK for a merely "
-        "present key is the inversion this ratchet exists to prevent recurring."
+        "The shared verifier rereads registry paths under the exact artifact lease only "
+        "as obligation evidence; trusted home/plugin/version inputs derive its root."
     ),
 }
 

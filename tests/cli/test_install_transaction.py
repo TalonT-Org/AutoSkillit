@@ -105,6 +105,17 @@ def _sealed_env() -> dict[str, str]:
     return {"PATH": "/usr/bin", "SEALED": "yes"}
 
 
+def _configure_direct_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = SimpleNamespace(
+        capabilities=SimpleNamespace(plugin_install_capable=True),
+    )
+    config = SimpleNamespace(
+        agent_backend=SimpleNamespace(backend="claude-code"),
+    )
+    monkeypatch.setattr("autoskillit.config.load_config", lambda _path: config)
+    monkeypatch.setattr("autoskillit.execution.get_backend", lambda _name: backend)
+
+
 def test_claude_lookup_uses_sealed_path_once_without_ambient_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -334,14 +345,7 @@ def test_failure_after_every_persistent_mutation_stage_restores_prestate(
             "_ensure_workspace_ready",
             lambda **_kwargs: mutate_then_raise(),
         )
-        backend = SimpleNamespace(
-            capabilities=SimpleNamespace(plugin_install_capable=True),
-        )
-        config = SimpleNamespace(
-            agent_backend=SimpleNamespace(backend="claude-code"),
-        )
-        monkeypatch.setattr("autoskillit.config.load_config", lambda _path: config)
-        monkeypatch.setattr("autoskillit.execution.get_backend", lambda _name: backend)
+        _configure_direct_backend(monkeypatch)
     elif stage == "fetch_cache_invalidation":
         monkeypatch.setattr(
             _update_checks,
@@ -395,6 +399,115 @@ def test_failure_after_every_persistent_mutation_stage_restores_prestate(
     if stage == "exact_postcondition_verification":
         assert verification_events == ["verified"]
     assert "Plugin installed:" not in capsys.readouterr().out
+
+
+def test_direct_install_failure_removes_transaction_created_workspace_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, project_cwd = _configure_transaction(tmp_path, monkeypatch)
+    _configure_direct_backend(monkeypatch)
+    project_state = project_cwd / ".autoskillit"
+    project_state.mkdir()
+    project_gitignore = project_state / ".gitignore"
+    project_gitignore.write_text("preexisting\n", encoding="utf-8")
+    project_temp = project_state / "temp"
+    assert not project_temp.exists()
+    workspace_prepared = False
+
+    def fail_child_after_workspace_preparation(argv, **_kwargs):
+        nonlocal workspace_prepared
+        workspace_prepared = True
+        assert project_temp.is_dir()
+        assert (project_temp / ".gitignore").is_file()
+        assert project_gitignore.read_text(encoding="utf-8") != "preexisting\n"
+        return subprocess.CompletedProcess(
+            argv,
+            7,
+            stdout="",
+            stderr="injected child failure",
+        )
+
+    monkeypatch.setattr(
+        marketplace,
+        "_run_claude_admin",
+        fail_child_after_workspace_preparation,
+    )
+
+    result = marketplace.install(
+        request=InstallRequest(
+            scope="user",
+            mode=InstallMode.DIRECT,
+            require_registered_plugin=True,
+            expected_version=_VERSION,
+        ),
+        child_env=_sealed_env(),
+        child_cwd=project_cwd,
+    )
+
+    assert workspace_prepared
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert project_gitignore.read_text(encoding="utf-8") == "preexisting\n"
+    assert not project_temp.exists()
+
+
+def test_direct_install_temp_shape_restore_failure_requires_recovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, project_cwd = _configure_transaction(tmp_path, monkeypatch)
+    _configure_direct_backend(monkeypatch)
+    project_state = project_cwd / ".autoskillit"
+    project_state.mkdir()
+    project_gitignore = project_state / ".gitignore"
+    project_gitignore.write_text("preexisting\n", encoding="utf-8")
+    project_temp = project_state / "temp"
+    assert not project_temp.exists()
+    residual = project_temp / "uncovered-residual.txt"
+
+    def fail_child_with_uncovered_workspace_residual(argv, **_kwargs):
+        assert (project_temp / ".gitignore").is_file()
+        residual.write_text("preserve for recovery", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv,
+            7,
+            stdout="",
+            stderr="injected child failure",
+        )
+
+    monkeypatch.setattr(
+        marketplace,
+        "_run_claude_admin",
+        fail_child_with_uncovered_workspace_residual,
+    )
+
+    result = marketplace.install(
+        request=InstallRequest(
+            scope="user",
+            mode=InstallMode.DIRECT,
+            require_registered_plugin=True,
+            expected_version=_VERSION,
+        ),
+        child_env=_sealed_env(),
+        child_cwd=project_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.RECOVERY_REQUIRED
+    assert result.failure_kind is InstallFailureKind.ROLLBACK
+    assert any(
+        finding.startswith(f"rollback failed for {project_temp}:") for finding in result.findings
+    )
+    evidence_finding = next(
+        finding
+        for finding in result.findings
+        if finding.startswith("recovery evidence preserved at ")
+    )
+    evidence_dir = Path(evidence_finding.removeprefix("recovery evidence preserved at "))
+    assert evidence_dir.is_dir()
+    assert residual.read_text(encoding="utf-8") == "preserve for recovery"
+    assert project_gitignore.read_text(encoding="utf-8") == "preexisting\n"
 
 
 def test_child_failure_restores_every_staged_shared_surface(
@@ -702,7 +815,6 @@ def test_direct_mode_snapshots_caller_env_and_cwd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     marketplace, _neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
-    from unittest.mock import MagicMock
 
     from autoskillit import __version__ as installed_version
 
@@ -712,12 +824,7 @@ def test_direct_mode_snapshots_caller_env_and_cwd(
     changed_cwd.mkdir()
     monkeypatch.chdir(caller_cwd)
     monkeypatch.setenv("DIRECT_SNAPSHOT", "original")
-    cfg = MagicMock()
-    cfg.agent_backend.backend = "claude-code"
-    backend = MagicMock()
-    backend.capabilities.plugin_install_capable = True
-    monkeypatch.setattr("autoskillit.config.load_config", lambda _path: cfg)
-    monkeypatch.setattr("autoskillit.execution.get_backend", lambda _name: backend)
+    _configure_direct_backend(monkeypatch)
     monkeypatch.setattr(marketplace, "_ensure_workspace_ready", lambda **_kwargs: None)
     calls: list[tuple[dict[str, str], Path]] = []
 

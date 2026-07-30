@@ -231,47 +231,6 @@ def _check_plugin_cache_exists(cache_dir: Path | None = None) -> DoctorResult:
     )
 
 
-def _check_installed_plugins_entry(plugins_json_path: Path | None = None) -> DoctorResult:
-    """Check that installed_plugins.json names a plugin directory that exists.
-
-    Key presence alone used to be enough to report OK, so on a machine whose
-    ``installPath`` named a deleted directory — the exact state that crashed
-    ``cook`` and MCP startup — ``doctor`` affirmatively reassured the user.
-    Dereferencing the path is the whole point of the check.
-    """
-    from autoskillit.cli._installed_plugins import InstalledPluginsFile
-
-    store = InstalledPluginsFile(plugins_json_path)
-    if not store.path.exists():
-        return DoctorResult(
-            Severity.WARNING,
-            "installed_plugins_entry",
-            "installed_plugins.json not found. Run `autoskillit install`.",
-        )
-    if not store.contains("autoskillit@autoskillit-local"):
-        return DoctorResult(
-            Severity.WARNING,
-            "installed_plugins_entry",
-            "autoskillit entry missing from installed_plugins.json. "
-            "Run `autoskillit install` to fix.",
-        )
-    from autoskillit.core import registered_install_paths
-
-    dangling = [str(p) for p in registered_install_paths() if not p.is_dir()]
-    if dangling:
-        return DoctorResult(
-            Severity.ERROR,
-            "installed_plugins_entry",
-            "installed_plugins.json names installPath(s) that do not exist: "
-            f"{', '.join(dangling)}. Run `autoskillit install` to reinstall the plugin.",
-        )
-    return DoctorResult(
-        Severity.OK,
-        "installed_plugins_entry",
-        "autoskillit entry present and its installPath resolves",
-    )
-
-
 def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult:
     """Validate that plugin cache hooks.json paths resolve to real files.
 

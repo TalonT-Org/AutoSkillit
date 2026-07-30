@@ -56,7 +56,6 @@ from ._doctor_mcp import (
     _check_codex_mcp_timeouts,
     _check_dual_mcp_registration,
     _check_install_state_consistency,
-    _check_installed_plugins_entry,
     _check_mcp_server_registered,
     _check_plugin_cache_exists,
     _check_plugin_cache_integrity,
@@ -110,13 +109,10 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 2c: Plugin cache directory exists
     results.append(_check_plugin_cache_exists())
 
-    # Check 2d: installed_plugins.json has autoskillit entry
-    results.append(_check_installed_plugins_entry())
-
-    # Check 2e: Plugin cache hooks.json paths resolve to real files
+    # Check 2d: Plugin cache hooks.json paths resolve to real files
     results.append(_check_plugin_cache_integrity())
 
-    # Check 2f: Install artifacts, registry, and derived versions agree
+    # Check 2e: Install artifacts, registry, and derived versions agree
     results.extend(_check_install_state_consistency())
 
     # Check 3: autoskillit command on PATH

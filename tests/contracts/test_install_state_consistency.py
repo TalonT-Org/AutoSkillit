@@ -1,13 +1,9 @@
 """One authority reports every install-state invariant, and doctor believes it.
 
-Two doctor checks returned `OK` on the machine that could not start:
-`_check_installed_plugins_entry` never dereferenced `installPath`, and
-`_check_plugin_cache_integrity` treated "the cache directory is absent" as
-"nothing is broken". So the diagnostic layer affirmatively reassured the user
-while `cook` crashed on every launch. There was no failing signal to codify.
-
-`verify_install_state()` is the one place those invariants live, wired into
-`doctor`, MCP server startup, and post-install verification so it cannot rot.
+The old doctor registry check and cache-integrity check could each report `OK`
+for a machine that could not start. ``verify_install_state()`` now owns the
+registry obligation and exact current-artifact decision, wired into doctor,
+MCP server startup, and post-install verification so it cannot rot.
 """
 
 from __future__ import annotations
@@ -130,7 +126,33 @@ class TestVerifyInstallState:
         real = home / "cache" / "1.0.0"
         real.mkdir(parents=True)
         _write_registry(home, real)
-        assert "installed_plugins_install_path" in _checks(home)
+        checks = _checks(home)
+        assert "installed_plugins_install_path" in checks
+        assert "installed_plugin_registry_missing" in checks
+
+    def test_current_spec_uses_fresh_metadata_and_live_obligation(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.workspace._install_state as install_state
+
+        fresh_version = "9.8.7-fresh"
+        monkeypatch.setattr(
+            install_state.importlib.metadata,
+            "version",
+            lambda package: fresh_version if package == "autoskillit" else "",
+        )
+
+        clean_spec = install_state._current_install_state_spec()
+        assert clean_spec.expected_version == fresh_version
+        assert clean_spec.require_registered_plugin is False
+
+        _write_registry(home, home / "cache" / "older")
+        obligated_spec = install_state._current_install_state_spec()
+        assert obligated_spec.expected_version == fresh_version
+        assert obligated_spec.require_registered_plugin is True
+        assert obligated_spec.managed_root.name == fresh_version
 
     def test_retired_artifact_shape_still_on_disk(self, home: Path) -> None:
         from tests.cli._upgrade_fixtures import seed_legacy_home
@@ -288,23 +310,6 @@ class TestVerifyInstallState:
 class TestDoctorReportsTheBrokenState:
     """The diagnostic inversion: OK on a machine that cannot start."""
 
-    def test_installed_plugins_entry_errors_on_a_dangling_path(self, home: Path) -> None:
-        from autoskillit.cli.doctor._doctor_mcp import _check_installed_plugins_entry
-
-        _write_registry(home, home / "does" / "not" / "exist")
-        result = _check_installed_plugins_entry()
-        assert result.severity is Severity.ERROR, (
-            "doctor reported OK for a registry entry whose installPath does not exist"
-        )
-
-    def test_installed_plugins_entry_is_ok_when_the_path_resolves(self, home: Path) -> None:
-        from autoskillit.cli.doctor._doctor_mcp import _check_installed_plugins_entry
-
-        real = home / "cache" / "1.0.0"
-        real.mkdir(parents=True)
-        _write_registry(home, real)
-        assert _check_installed_plugins_entry().severity is Severity.OK
-
     def test_cache_integrity_is_not_ok_when_the_cache_is_absent(self, home: Path) -> None:
         """`[]` from the validator means "nothing checked", not "nothing broken"."""
         from autoskillit.cli.doctor._doctor_mcp import _check_plugin_cache_integrity
@@ -318,6 +323,38 @@ class TestDoctorReportsTheBrokenState:
         results = _check_install_state_consistency()
         assert results
         assert all(r.severity is Severity.ERROR for r in results)
+        assert {result.check for result in results} >= {
+            "install_state:installed_plugins_install_path",
+            "install_state:installed_plugin_registry_missing",
+        }
+
+    def test_install_state_check_names_fresh_current_root(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.workspace._install_state as install_state
+        from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency
+
+        fresh_version = "9.8.7-fresh"
+        monkeypatch.setattr(
+            install_state.importlib.metadata,
+            "version",
+            lambda package: fresh_version if package == "autoskillit" else "",
+        )
+        _write_registry(home, home / "cache" / "older")
+
+        results = _check_install_state_consistency()
+        expected_root = (
+            home
+            / ".claude"
+            / "plugins"
+            / "cache"
+            / "autoskillit-local"
+            / "autoskillit"
+            / fresh_version
+        )
+        assert any(str(expected_root) in result.message for result in results)
 
     def test_install_state_check_is_ok_on_a_clean_machine(self, home: Path) -> None:
         from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency

@@ -54,6 +54,8 @@ class _InstallSnapshot:
         self._artifact_manifest_path = installed_artifact_manifest_path(self._target_root)
         self._lease_path = installed_artifact_lock_path(self._target_root)
         settings = settings_path or home / ".claude" / "settings.json"
+        self._workspace_temp_dir: Path | None = None
+        self._workspace_temp_shape: str | None = None
         paths = [
             home / ".autoskillit" / "marketplace",
             home / ".claude" / "plugins" / "known_marketplaces.json",
@@ -68,6 +70,7 @@ class _InstallSnapshot:
         ]
         if workspace_cwd is not None:
             project_state = Path(workspace_cwd) / ".autoskillit"
+            self._workspace_temp_dir = project_state / "temp"
             paths.extend(
                 (
                     project_state / ".gitignore",
@@ -105,6 +108,23 @@ class _InstallSnapshot:
             shutil.rmtree(path)
         else:
             path.unlink()
+
+    @classmethod
+    def _restore_workspace_temp_shape(cls, path: Path, shape: str) -> None:
+        current_shape = cls._shape(path)
+        if current_shape == shape:
+            return
+        if shape == "missing" and current_shape == "directory":
+            path.rmdir()
+        elif shape == "directory" and current_shape == "missing":
+            path.mkdir()
+        else:
+            raise OSError(f"workspace temp {path} has shape {current_shape}, expected {shape}")
+        restored_shape = cls._shape(path)
+        if restored_shape != shape:
+            raise OSError(
+                f"restored workspace temp {path} has shape {restored_shape}, expected {shape}"
+            )
 
     @classmethod
     def _restore_entry(
@@ -229,6 +249,8 @@ class _InstallSnapshot:
         """Copy every covered surface before reconciliation or mutation."""
         if self._staged:
             return
+        if self._workspace_temp_dir is not None:
+            self._workspace_temp_shape = self._shape(self._workspace_temp_dir)
         self._stage_dir.mkdir(parents=True, mode=0o700)
         try:
             for index, path in enumerate(self._paths):
@@ -252,6 +274,7 @@ class _InstallSnapshot:
             )
             shutil.rmtree(self._stage_dir, ignore_errors=True)
             self._entries.clear()
+            self._workspace_temp_shape = None
             raise
 
     def track_retirement(self, _record_id: str) -> None:
@@ -303,6 +326,30 @@ class _InstallSnapshot:
                     f"residual state for {path}: expected {shape}, "
                     f"observed {residual_shape}; {comparison}"
                 )
+        if self._workspace_temp_dir is not None and self._workspace_temp_shape is not None:
+            path = self._workspace_temp_dir
+            shape = self._workspace_temp_shape
+            try:
+                self._restore_workspace_temp_shape(path, shape)
+            except BaseException as exc:
+                logger.warning(
+                    "install_snapshot_workspace_temp_restore_failed",
+                    path=str(path),
+                    exc_info=True,
+                )
+                diagnostics.append(f"rollback failed for {path}: {exc}")
+                try:
+                    residual_shape = self._shape(path)
+                except BaseException as residual_exc:
+                    logger.warning(
+                        "install_snapshot_workspace_temp_shape_inspection_failed",
+                        path=str(path),
+                        exc_info=True,
+                    )
+                    residual_shape = f"unreadable ({residual_exc})"
+                diagnostics.append(
+                    f"residual state for {path}: expected {shape}, observed {residual_shape}"
+                )
         if owned_lease_fd is not None:
             if lease_entry is None:
                 diagnostics.append(
@@ -347,6 +394,7 @@ class _InstallSnapshot:
                 diagnostics.append(f"recovery evidence preserved at {self._stage_dir}")
             return tuple(diagnostics)
         self._entries.clear()
+        self._workspace_temp_shape = None
         self._staged = False
         return tuple(diagnostics)
 
@@ -356,6 +404,7 @@ class _InstallSnapshot:
             return
         self._remove(self._stage_dir)
         self._entries.clear()
+        self._workspace_temp_shape = None
         self._staged = False
 
     def commit(self) -> None:
@@ -365,4 +414,5 @@ class _InstallSnapshot:
         shutil.rmtree(self._stage_dir)
         self._committed = True
         self._entries.clear()
+        self._workspace_temp_shape = None
         self._staged = False

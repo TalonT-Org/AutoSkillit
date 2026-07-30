@@ -538,8 +538,8 @@ from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocation
 from .types import EnvPolicy as EnvPolicy
 from .types import EpochClosedEffect as EpochClosedEffect
 from .types import EpochFenceProof as EpochFenceProof
-from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExecutableLaunchBinding as ExecutableLaunchBinding
+from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
 from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
 from .types import FailureRecord as FailureRecord

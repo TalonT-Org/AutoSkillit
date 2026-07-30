@@ -246,6 +246,8 @@ def _marketplace_manifest_path() -> Path:
 def _settings_path(scope: str, cwd: Path) -> Path:
     if scope == "user":
         return Path.home() / ".claude" / "settings.json"
+    if scope == "local":
+        return cwd / ".claude" / "settings.local.json"
     return cwd / ".claude" / "settings.json"
 
 

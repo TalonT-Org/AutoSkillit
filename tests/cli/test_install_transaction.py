@@ -32,6 +32,27 @@ def _maintenance_request(*, required: bool = True) -> InstallRequest:
     )
 
 
+@pytest.mark.parametrize(
+    ("scope", "relative_path"),
+    [
+        ("user", Path(".claude/settings.json")),
+        ("project", Path("project/.claude/settings.json")),
+        ("local", Path("project/.claude/settings.local.json")),
+    ],
+)
+def test_settings_path_preserves_claude_scope_distinctions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scope: str,
+    relative_path: Path,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert _marketplace._settings_path(scope, tmp_path / "project") == (tmp_path / relative_path)
+
+
 def _configure_transaction(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
